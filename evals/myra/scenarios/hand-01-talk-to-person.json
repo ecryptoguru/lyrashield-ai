@@ -1,0 +1,18 @@
+{
+  "id": "hand-01-talk-to-person",
+  "title": "Explicit human request — immediate case-composer offer, no extra diagnostic loops",
+  "category": "handoff",
+  "persona": "anonymous",
+  "surface": "MARKETING",
+  "input": "I want to talk to a person, not a bot.",
+  "expect": {
+    "anyOf": [
+      { "proposalRequired": true },
+      { "components": ["support_case_preview"] },
+      { "outcome": "escalated" },
+      { "mustContain": ["support"] }
+    ],
+    "toolsNotUsed": ["start_guided_flow", "advance_guided_flow", "book_demo"]
+  },
+  "note": "Spec §6/§10 'Human handoff' — a person request offers handoff immediately; Myra must not force another diagnostic loop or a sales detour."
+}

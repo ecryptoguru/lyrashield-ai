@@ -360,6 +360,46 @@ const envSchema = z
     AFFILIATE_ATTRIBUTION_WINDOW_DAYS: z.coerce.number().int().positive().max(365).default(60),
     AFFILIATE_PAYOUT_MIN_CENTS: z.coerce.number().int().positive().default(10000),
 
+    // Myra support agent (docs/myra-spec.md). Every gate defaults OFF; routes
+    // fail closed to 404 while the owning capability is disabled.
+    // Marketing surface + public (anonymous) sessions.
+    MYRA_PUBLIC_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Dashboard surface + authenticated-user principals.
+    MYRA_DASHBOARD_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Model generation inside the support workflow. Retrieval, suggestions and
+    // human handoff stay available while this is off.
+    MYRA_GENERATION_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Confirmed writes: proposal confirm, case replies, booking manage.
+    MYRA_WRITES_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Platform-operator support inbox routes.
+    MYRA_OPERATOR_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Calendar provider adapter for demo booking. "google" requires the
+    // MYRA_GOOGLE_* credentials below; "mock" never touches a real calendar.
+    MYRA_CALENDAR_PROVIDER: z.enum(["mock", "google"]).optional().default("mock"),
+    // Model deployment names (Azure OpenAI/Foundry). Optional until generation
+    // is enabled; the service fails closed when unset.
+    MYRA_MODEL_FAST: z.string().optional().or(z.literal("")),
+    MYRA_MODEL_DEEP: z.string().optional().or(z.literal("")),
+    MYRA_EMBED_MODEL: z.string().optional().or(z.literal("")),
+    // Server-enforced monthly generation spend cap (USD). Optional; when set it
+    // bounds model calls alongside the per-turn caps.
+    MYRA_MONTHLY_BUDGET_USD: z.string().optional().or(z.literal("")),
+    // Mock-calendar fault injection for tests/dev only: simulate an insert
+    // timeout (outcome_unknown reconciliation) or a permanently pending Meet
+    // conference. Never enable in production.
+    MYRA_MOCK_CALENDAR_TIMEOUT_INSERT: z.enum(["0", "1"]).optional().default("0"),
+    MYRA_MOCK_CALENDAR_PENDING_CONFERENCE: z.enum(["0", "1"]).optional().default("0"),
+    // Founder-only Google Calendar OAuth for ankit@lyrashieldai.com. Refresh
+    // token storage is encrypted by the service layer; TOKEN_JSON is a
+    // dev-only convenience for a full provider token blob.
+    MYRA_GOOGLE_CLIENT_ID: z.string().optional().or(z.literal("")),
+    MYRA_GOOGLE_CLIENT_SECRET: z.string().optional().or(z.literal("")),
+    MYRA_GOOGLE_REFRESH_TOKEN: z.string().optional().or(z.literal("")),
+    MYRA_GOOGLE_TOKEN_JSON: z.string().optional().or(z.literal("")),
+    // Destination for support-case notifications (spec §6). Best-effort
+    // wording only — no SLA is implied by configuring this.
+    MYRA_SUPPORT_NOTIFY_EMAIL: z.string().optional().default("support@lyrashieldai.com"),
+
     // Monitoring
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),

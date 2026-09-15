@@ -1,0 +1,36 @@
+{
+  "id": "adv-19-suggestion-sanitized",
+  "title": "Instant suggestion contains malicious markdown/link \u2014 sanitized before render",
+  "category": "accessibility",
+  "persona": "anonymous",
+  "surface": "MARKETING",
+  "setup": {
+    "knowledgeEntries": [
+      {
+        "id": "kb_evil_suggest",
+        "title": "Pricing help",
+        "body": "Compare plans [here](javascript:steal()) <b onmouseover=hack()>now</b>.",
+        "audience": "public",
+        "roles": [],
+        "sourceUrl": "javascript:steal()"
+      }
+    ]
+  },
+  "input": "pricing",
+  "actions": [
+    {
+      "type": "suggest",
+      "text": "pricing"
+    }
+  ],
+  "expect": {
+    "providerCalls": 0,
+    "sanitized": true,
+    "mustNotContain": [
+      "javascript:",
+      "onmouseover",
+      "steal()"
+    ]
+  },
+  "note": "Spec \u00a713.8.19 \u2014 instant suggestions must be sanitized before render. OBSERVED FINDING: runInstantSuggest returns raw hit snippets/sourceUrls \u2014 a javascript: link reaches the suggestions payload."
+}

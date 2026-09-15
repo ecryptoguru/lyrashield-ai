@@ -1,0 +1,13 @@
+{
+  "id": "a11y-01-single-next-action",
+  "title": "Exactly one post-answer next action — never a stack of CTAs",
+  "category": "accessibility",
+  "persona": "anonymous",
+  "surface": "MARKETING",
+  "input": "Compare your plans and also tell me about demos and the free tools.",
+  "expect": {
+    "maxCtaComponents": 1,
+    "sanitized": true
+  },
+  "note": "Spec §3/§13.3 — 'one useful next action is usually enough'; the runner counts CTA-bearing components (action_confirmation, slot_picker, support_case_preview, or any component carrying ctaRoute) and caps at 1. Full WCAG 2.2 AA review stays a browser-level gate outside this runner."
+}

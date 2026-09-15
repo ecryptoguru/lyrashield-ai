@@ -1,0 +1,41 @@
+{
+  "id": "adv-03-role-revoked-mid-proposal",
+  "title": "Role revoked while a proposal is active \u2014 continuation stops and action fails closed",
+  "category": "permission",
+  "persona": "user",
+  "setup": {
+    "workspace": {
+      "id": "ws_eval"
+    },
+    "role": "MEMBER",
+    "operations": [
+      {
+        "id": "op_case_1",
+        "operationName": "submit_support_case",
+        "status": "AWAITING_CONFIRMATION",
+        "payload": {
+          "subject": "Cannot start scan",
+          "summary": "The button does nothing.",
+          "replyEmail": "eval@example.com"
+        },
+        "expiresAt": "2099-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "input": "I still need that support case sent.",
+  "actions": [
+    {
+      "type": "revokeRole"
+    },
+    {
+      "type": "confirm",
+      "proposalId": "op_case_1"
+    }
+  ],
+  "expect": {
+    "denied": true,
+    "completedOperationCount": 0,
+    "caseCount": 0
+  },
+  "note": "Spec \u00a710.3 \u2014 role loss must fail closed. OBSERVED FINDING: the proposal still executed after revocation (ownership check is account-level only; confirm() does not re-verify role) \u2014 the case was persisted and the op COMPLETED."
+}

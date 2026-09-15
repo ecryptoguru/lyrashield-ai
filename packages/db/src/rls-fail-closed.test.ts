@@ -220,6 +220,24 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       PlatformAdminChallengeLimit: "Owner-only operator challenge rate limit",
     }
     const accountTables = ["account_acquisitions"]
+    // Myra support-agent tables (20260915000000_myra_support_agent): dual-owner
+    // (accountId/publicSessionId) tables plus child/append-only/system tables.
+    // All FORCE RLS like account/tenant tables — unbound is the trusted path.
+    const myraTables = [
+      "demo_bookings",
+      "myra_audit_events",
+      "myra_conversations",
+      "myra_flow_sessions",
+      "myra_identity_verifications",
+      "myra_knowledge_entries",
+      "myra_knowledge_releases",
+      "myra_memories",
+      "myra_messages",
+      "myra_operations",
+      "myra_public_sessions",
+      "support_case_replies",
+      "support_cases",
+    ]
     const rows = await restricted.$queryRaw<
       Array<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>
     >`
@@ -239,7 +257,9 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         .filter((row) => row.relrowsecurity)
         .map((row) => row.relname)
         .sort()
-    ).toEqual([...tenantTables, ...accountTables, ...Object.keys(systemOnly)].sort())
+    ).toEqual(
+      [...tenantTables, ...accountTables, ...myraTables, ...Object.keys(systemOnly)].sort()
+    )
     for (const table of tenantTables) {
       expect(
         rows.find((row) => row.relname === table),
@@ -253,6 +273,15 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       ).toMatchObject({ relrowsecurity: true, relforcerowsecurity: false })
     }
     for (const table of accountTables) {
+      expect(
+        rows.find((row) => row.relname === table),
+        table
+      ).toMatchObject({
+        relrowsecurity: true,
+        relforcerowsecurity: true,
+      })
+    }
+    for (const table of myraTables) {
       expect(
         rows.find((row) => row.relname === table),
         table

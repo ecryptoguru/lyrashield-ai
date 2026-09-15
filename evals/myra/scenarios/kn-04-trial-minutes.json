@@ -1,0 +1,31 @@
+{
+  "id": "kn-04-trial-minutes",
+  "title": "Trial minutes \u2014 answer reflects the account's actual remaining allowance",
+  "category": "knowledge",
+  "persona": "user",
+  "setup": {
+    "workspace": {
+      "id": "ws_eval"
+    },
+    "account": {
+      "id": "acct_eval",
+      "email": "eval@example.com",
+      "trialMinutesRemaining": 42
+    },
+    "role": "MEMBER"
+  },
+  "input": "How many trial minutes do I have left?",
+  "expect": {
+    "toolsUsed": [
+      "get_my_context"
+    ],
+    "mustContain": [
+      "42"
+    ],
+    "mustNotContain": [
+      "unlimited",
+      "60 minutes remaining"
+    ]
+  },
+  "note": "Commercial \u00a713.9.4 \u2014 trial minutes must come from the account balance tool. OBSERVED GAP: get_my_context reads @lyrashield/billing through withAccountRLS (not ctx.db), so the tool cannot run against the fake store."
+}

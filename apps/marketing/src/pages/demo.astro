@@ -1,0 +1,702 @@
+---
+import Base from "@layouts/Base.astro"
+import { MYRA_COPY, MYRA_LIMITS } from "@lyrashield/myra"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/demo", origin).toString()
+const description =
+  "Book a 30-minute walkthrough of LyraShield AI with the founder — how evidence, retests and release records fit your app."
+---
+
+<Base title="Book a demo | LyraShield AI" description={description} canonical={canonical}>
+  <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+    <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">
+      Talk to the founder
+    </p>
+    <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">
+      See how LyraShield fits your app.
+    </h1>
+    <p class="mt-6 text-lg leading-8 text-text-muted">
+      Walk through the product with Ankit. Discuss what you are shipping, how the evidence and
+      retest workflow works and where a review would fit your release process.
+    </p>
+    <p class="mt-4 text-sm leading-6 text-text-muted">
+      Choose a time in your timezone. We will send a calendar invite once your booking is
+      confirmed.
+    </p>
+    <p class="mt-2 text-xs leading-5 text-text-muted">{MYRA_COPY.demoLimit}</p>
+
+    <div id="demo-booking" class="mt-10 rounded-xl border border-border bg-bg-raised p-5 sm:p-6">
+      <section id="demo-step-slot" aria-labelledby="demo-slot-heading">
+        <h2 id="demo-slot-heading" class="text-base font-semibold text-text">Pick a time</h2>
+        <div class="mt-3">
+          <label for="demo-tz" class="block text-sm font-medium text-text">Your timezone</label>
+          <select
+            id="demo-tz"
+            class="mt-2 w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          ></select>
+          <p class="mt-2 font-mono text-xs text-text-muted">
+            Host timezone: {MYRA_LIMITS.demo.hostTimezone} · {MYRA_LIMITS.demo.durationMinutes} min
+          </p>
+        </div>
+        <div
+          id="demo-slots"
+          role="group"
+          aria-label="Available times"
+          class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3"
+        ></div>
+        <p id="demo-slots-status" role="status" aria-live="polite" class="mt-3 text-sm text-text-muted">
+          Loading times…
+        </p>
+        <div id="demo-no-slots" hidden class="mt-4 flex flex-wrap items-center gap-3">
+          <p class="text-sm text-text">{MYRA_COPY.demoNoSlots}</p>
+          <a
+            href="/support"
+            class="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >Request a time instead</a
+          >
+        </div>
+        <button
+          type="button"
+          id="demo-later"
+          hidden
+          class="mt-4 inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          Later dates
+        </button>
+      </section>
+
+      <section id="demo-step-details" hidden aria-labelledby="demo-details-heading">
+        <h2 id="demo-details-heading" class="text-base font-semibold text-text">Your details</h2>
+        <p id="demo-chosen" class="mt-2 text-sm text-text-muted"></p>
+        <div class="mt-4 space-y-4">
+          <div>
+            <label for="demo-name" class="block text-sm font-medium text-text">Name</label>
+            <input
+              id="demo-name"
+              type="text"
+              autocomplete="name"
+              maxlength="120"
+              class="mt-2 w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            />
+          </div>
+          <div>
+            <label for="demo-email" class="block text-sm font-medium text-text">Email</label>
+            <input
+              id="demo-email"
+              type="email"
+              autocomplete="email"
+              maxlength="320"
+              class="mt-2 w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              placeholder="you@example.com"
+            />
+          </div>
+          <div>
+            <label for="demo-context" class="block text-sm font-medium text-text">
+              What are you shipping? <span class="text-text-muted">(optional)</span>
+            </label>
+            <textarea
+              id="demo-context"
+              rows="3"
+              maxlength="2000"
+              class="mt-2 w-full resize-none rounded-lg border border-border bg-bg px-4 py-3 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            ></textarea>
+          </div>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            id="demo-details-continue"
+            class="inline-flex min-h-11 items-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised disabled:opacity-60"
+            >Continue</button
+          >
+          <button
+            type="button"
+            id="demo-details-back"
+            class="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >Change time</button
+          >
+        </div>
+        <p id="demo-details-error" role="alert" class="mt-2 hidden text-sm text-danger"></p>
+      </section>
+
+      <section id="demo-step-verify" hidden aria-labelledby="demo-verify-heading">
+        <h2 id="demo-verify-heading" class="text-base font-semibold text-text">
+          Confirm it's your email
+        </h2>
+        <p id="demo-verify-sent" class="mt-2 text-sm text-text-muted"></p>
+        <div class="mt-4">
+          <label for="demo-code" class="block text-sm font-medium text-text">Code</label>
+          <input
+            id="demo-code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="12"
+            class="mt-2 w-full max-w-48 rounded-lg border border-border bg-bg px-4 py-3 font-mono text-sm text-text focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          />
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            id="demo-verify-confirm"
+            class="inline-flex min-h-11 items-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised disabled:opacity-60"
+            >Verify</button
+          >
+          <button
+            type="button"
+            id="demo-verify-resend"
+            class="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >Send a new code</button
+          >
+        </div>
+        <p id="demo-verify-error" role="alert" class="mt-2 hidden text-sm text-danger"></p>
+      </section>
+
+      <section id="demo-step-review" hidden aria-labelledby="demo-review-heading">
+        <h2 id="demo-review-heading" class="text-base font-semibold text-text">
+          Review your booking
+        </h2>
+        <dl id="demo-review-list" class="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[9rem_1fr]">
+        </dl>
+        <div class="mt-5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            id="demo-book-confirm"
+            class="inline-flex min-h-11 items-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised disabled:opacity-60"
+            >Book a demo</button
+          >
+          <button
+            type="button"
+            id="demo-review-back"
+            class="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >Back</button
+          >
+        </div>
+        <p id="demo-book-error" role="alert" class="mt-2 hidden text-sm text-danger"></p>
+      </section>
+
+      <section id="demo-step-done" hidden aria-labelledby="demo-done-heading">
+        <h2 id="demo-done-heading" tabindex="-1" class="text-base font-semibold text-text">
+          Booking status
+        </h2>
+        <p id="demo-done-text" role="status" class="mt-2 text-sm leading-6 text-text"></p>
+        <p id="demo-done-sub" class="mt-1 text-sm text-text-muted"></p>
+        <a
+          id="demo-done-meet"
+          hidden
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-3 inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium text-accent hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >Open Meet link</a
+        >
+        <div id="demo-done-retry" hidden class="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            id="demo-retry-slots"
+            class="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >Choose another slot</button
+          >
+        </div>
+        <div id="demo-done-back" hidden class="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            id="demo-back-details"
+            class="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >Back to your details</button
+          >
+        </div>
+      </section>
+
+      <noscript>
+        <p class="mt-4 text-sm text-text-muted">
+          Booking needs JavaScript. You can also reach us through the
+          <a href="/support" class="text-accent underline underline-offset-4">support page</a>.
+        </p>
+      </noscript>
+    </div>
+  </article>
+</Base>
+
+<script>
+  import { createMyraClient, MYRA_COPY, MYRA_LIMITS } from "@lyrashield/myra"
+  import {
+    ensureMyraSession,
+    getMyraSessionId,
+    getMyraToken,
+    getTurnstileToken,
+    myraApiBase,
+    myraHeaders,
+    readMyraError,
+  } from "../components/myra/myra-session"
+
+  const apiBase = myraApiBase()
+  const hostTz = MYRA_LIMITS.demo.hostTimezone
+  const durationMin = MYRA_LIMITS.demo.durationMinutes
+  const horizonDays = MYRA_LIMITS.demo.horizonDays
+
+  // Workerd Element.append shadows ParentNode.append in this project's types —
+  // appendChild is unambiguous.
+  const add = (parent: Node, ...kids: (Node | string)[]) => {
+    for (const kid of kids) {
+      parent.appendChild(typeof kid === "string" ? document.createTextNode(kid) : kid)
+    }
+  }
+
+  const $ = <T = HTMLElement,>(id: string) =>
+    document.getElementById(id) as unknown as T | null
+
+  const tzSelect = $<HTMLSelectElement>("demo-tz")
+  const slotsEl = $("demo-slots")
+  const slotsStatus = $("demo-slots-status")
+  const noSlotsEl = $("demo-no-slots")
+  const laterBtn = $<HTMLButtonElement>("demo-later")
+  const stepSlot = $("demo-step-slot")
+  const stepDetails = $("demo-step-details")
+  const stepVerify = $("demo-step-verify")
+  const stepReview = $("demo-step-review")
+  const stepDone = $("demo-step-done")
+  const chosenEl = $("demo-chosen")
+  const nameInput = $<HTMLInputElement>("demo-name")
+  const emailInput = $<HTMLInputElement>("demo-email")
+  const contextInput = $<HTMLTextAreaElement>("demo-context")
+  const detailsError = $("demo-details-error")
+  const verifySent = $("demo-verify-sent")
+  const codeInput = $<HTMLInputElement>("demo-code")
+  const verifyError = $("demo-verify-error")
+  const reviewList = $("demo-review-list")
+  const bookError = $("demo-book-error")
+  const doneText = $("demo-done-text")
+  const doneSub = $("demo-done-sub")
+  const doneMeet = $<HTMLAnchorElement>("demo-done-meet")
+  const doneRetry = $("demo-done-retry")
+  const doneBack = $("demo-done-back")
+
+  interface Slot {
+    id: string
+    startsAt: string
+    endsAt: string
+  }
+
+  let visitorTz = "UTC"
+  try {
+    visitorTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+  } catch {
+    /* keep UTC */
+  }
+  let selectedTz = visitorTz
+  let selectedSlot: Slot | null = null
+  let windowFrom = new Date()
+  let verified = false
+
+  function toDateParam(d: Date): string {
+    return d.toISOString().slice(0, 10)
+  }
+
+  function formatInTz(iso: string, tz: string): string {
+    const d = new Date(iso)
+    if (Number.isNaN(d.valueOf())) return iso
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZoneName: "short",
+        timeZone: tz,
+      }).format(d)
+    } catch {
+      return d.toLocaleString()
+    }
+  }
+
+  function populateTimezones() {
+    if (!tzSelect) return
+    let zones: string[] = []
+    try {
+      zones = Intl.supportedValuesOf("timeZone")
+    } catch {
+      zones = [
+        "UTC",
+        "Asia/Kolkata",
+        "America/New_York",
+        "America/Chicago",
+        "America/Denver",
+        "America/Los_Angeles",
+        "Europe/London",
+        "Europe/Berlin",
+        "Asia/Dubai",
+        "Asia/Singapore",
+        "Asia/Tokyo",
+        "Australia/Sydney",
+      ]
+    }
+    const ordered = [visitorTz, hostTz, ...zones.filter((z) => z !== visitorTz && z !== hostTz)]
+    for (const z of ordered) {
+      const opt = document.createElement("option")
+      opt.value = z
+      opt.textContent = z.replace(/_/g, " ")
+      add(tzSelect, opt)
+    }
+    tzSelect.value = visitorTz
+  }
+
+  function showStep(step: HTMLElement | null) {
+    for (const s of [stepSlot, stepDetails, stepVerify, stepReview, stepDone]) {
+      if (s) s.hidden = s !== step
+    }
+  }
+
+  async function fetchSlots() {
+    if (!slotsEl || !slotsStatus) return
+    slotsEl.textContent = ""
+    slotsStatus.textContent = "Loading times…"
+    noSlotsEl?.setAttribute("hidden", "")
+    laterBtn?.setAttribute("hidden", "")
+    try {
+      await ensureMyraSession(apiBase).catch(() => {})
+      const res = await fetch(`${apiBase}/api/myra/demo/slots`, {
+        method: "POST",
+        credentials: "include",
+        headers: myraHeaders(),
+        body: JSON.stringify({ timezone: selectedTz, from: toDateParam(windowFrom) }),
+      })
+      if (!res.ok) await readMyraError(res)
+      const json = (await res.json()) as { data?: { slots?: Slot[] } | Slot[] }
+      const payload = json.data ?? ({} as { slots?: Slot[] })
+      const slots = ((Array.isArray(payload) ? payload : payload.slots) ?? []).slice(0, 24)
+      if (!slots.length) {
+        slotsStatus.textContent = ""
+        noSlotsEl?.removeAttribute("hidden")
+        const daysIn = Math.round(
+          (windowFrom.valueOf() - Date.now()) / 86_400_000
+        )
+        if (laterBtn && daysIn + 7 < horizonDays) laterBtn.removeAttribute("hidden")
+        return
+      }
+      slotsStatus.textContent = `${slots.length} open times · times shown in ${selectedTz}`
+      for (const slot of slots) {
+        const btn = document.createElement("button")
+        btn.type = "button"
+        btn.className =
+          "inline-flex min-h-11 flex-col items-start rounded-lg border border-border px-3 py-2 text-left text-sm text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        const local = document.createElement("span")
+        local.textContent = formatInTz(slot.startsAt, selectedTz)
+        add(btn, local)
+        if (selectedTz !== hostTz) {
+          const host = document.createElement("span")
+          host.className = "font-mono text-xs text-text-muted"
+          host.textContent = formatInTz(slot.startsAt, hostTz)
+          add(btn, host)
+        }
+        btn.addEventListener("click", () => {
+          selectedSlot = slot
+          if (chosenEl) {
+            chosenEl.textContent = `${formatInTz(slot.startsAt, selectedTz)} · ${formatInTz(
+              slot.startsAt,
+              hostTz
+            )} host time · ${durationMin} min`
+          }
+          showStep(stepDetails)
+          nameInput?.focus()
+        })
+        add(slotsEl, btn)
+      }
+      const daysIn = Math.round((windowFrom.valueOf() - Date.now()) / 86_400_000)
+      if (laterBtn && daysIn + 7 < horizonDays) laterBtn.removeAttribute("hidden")
+    } catch {
+      slotsStatus.textContent = "Times could not be loaded. Check your connection and try again."
+    }
+  }
+
+  async function requestCode() {
+    const turnstileToken = await getTurnstileToken()
+    const res = await fetch(`${apiBase}/api/myra/identity/request`, {
+      method: "POST",
+      credentials: "include",
+      headers: myraHeaders(),
+      body: JSON.stringify({
+        email: emailInput?.value.trim() ?? "",
+        purpose: "demo_booking",
+        ...(getMyraSessionId() ? { publicSessionId: getMyraSessionId() } : {}),
+        ...(turnstileToken ? { turnstileToken } : {}),
+      }),
+    })
+    if (!res.ok) await readMyraError(res)
+  }
+
+  async function confirmCode() {
+    const res = await fetch(`${apiBase}/api/myra/identity/confirm`, {
+      method: "POST",
+      credentials: "include",
+      headers: myraHeaders(),
+      body: JSON.stringify({
+        email: emailInput?.value.trim() ?? "",
+        purpose: "demo_booking",
+        code: codeInput?.value.trim() ?? "",
+      }),
+    })
+    if (!res.ok) await readMyraError(res)
+  }
+
+  function setError(el: HTMLElement | null, msg: string | null) {
+    if (!el) return
+    if (msg) {
+      el.textContent = msg
+      el.classList.remove("hidden")
+    } else {
+      el.textContent = ""
+      el.classList.add("hidden")
+    }
+  }
+
+  function fillReview() {
+    if (!reviewList || !selectedSlot) return
+    reviewList.textContent = ""
+    const rows: [string, string][] = [
+      ["When", formatInTz(selectedSlot.startsAt, selectedTz)],
+      ["Host time", `${formatInTz(selectedSlot.startsAt, hostTz)} (${hostTz})`],
+      ["Duration", `${durationMin} minutes`],
+      ["Name", nameInput?.value.trim() ?? ""],
+      ["Invite goes to", emailInput?.value.trim() ?? ""],
+    ]
+    const context = contextInput?.value.trim()
+    if (context) rows.push(["Context", context])
+    for (const [k, v] of rows) {
+      const dt = document.createElement("dt")
+      dt.className = "font-mono text-xs font-semibold tracking-[.08em] text-text-muted uppercase"
+      dt.textContent = k
+      const dd = document.createElement("dd")
+      dd.className = "text-text"
+      dd.textContent = v
+      add(reviewList, dt, dd)
+    }
+  }
+
+  type DoneKind = "confirmed" | "meet-pending" | "unknown" | "conflict" | "failure"
+
+  function showDone(kind: DoneKind, meetUrl?: string | null) {
+    showStep(stepDone)
+    if (!doneText || !doneSub) return
+    doneSub.textContent = ""
+    doneMeet?.setAttribute("hidden", "")
+    doneRetry?.setAttribute("hidden", "")
+    doneBack?.setAttribute("hidden", "")
+    const when = selectedSlot ? formatInTz(selectedSlot.startsAt, selectedTz) : ""
+    if (kind === "confirmed") {
+      doneText.textContent = MYRA_COPY.demoConfirmed(when)
+      if (meetUrl) {
+        doneMeet?.removeAttribute("hidden")
+        if (doneMeet) doneMeet.href = meetUrl
+      }
+    } else if (kind === "meet-pending") {
+      doneText.textContent = MYRA_COPY.demoMeetPending
+    } else if (kind === "unknown") {
+      doneText.textContent = MYRA_COPY.demoUnknown
+    } else if (kind === "conflict") {
+      doneText.textContent = MYRA_COPY.demoConflict
+      doneRetry?.removeAttribute("hidden")
+    } else {
+      doneText.textContent = MYRA_COPY.demoFailure
+      doneBack?.removeAttribute("hidden")
+    }
+    stepDone?.querySelector("h2")?.focus()
+  }
+
+  // Booking runs through the same proposal/confirm path as the Myra panel:
+  // the message turn produces a bound book_demo proposal; confirming executes
+  // it. There is no anonymous book endpoint — confirmation binds the payload.
+  const client = createMyraClient({
+    apiBase,
+    surface: "MARKETING",
+    getPublicToken: getMyraToken,
+    routeContext: "/demo",
+  })
+
+  interface BookResult {
+    status?: string
+    result?: {
+      status?: string
+      meetLink?: string | null
+      conferenceState?: string
+      startsAt?: string
+      copy?: string
+    } | null
+  }
+
+  async function book() {
+    if (!selectedSlot) return
+    const name = nameInput?.value.trim() ?? ""
+    const email = emailInput?.value.trim() ?? ""
+    const context = contextInput?.value.trim() ?? ""
+    const lines = [
+      `Book a demo at ${selectedSlot.startsAt} (${selectedTz}).`,
+      `My name is ${name}.`,
+      `Email: ${email}.`,
+      ...(context ? [`Context: ${context}`] : []),
+    ].join("\n")
+
+    let proposalId: string | undefined
+    for await (const ev of client.sendMessage({ text: lines })) {
+      if (ev.type === "proposal" && ev.proposal.operationName === "book_demo") {
+        proposalId = ev.proposal.id
+      } else if (ev.type === "error") {
+        const code = ev.error.code
+        if (code === "SLOT_UNAVAILABLE") {
+          showDone("conflict")
+        } else if (code === "VERIFICATION_REQUIRED" || code === "VERIFICATION_FAILED") {
+          verified = false
+          showStep(stepVerify)
+          setError(verifyError, "We need to verify your email again — request a new code.")
+        } else {
+          showDone("failure")
+        }
+        return
+      }
+    }
+    if (!proposalId) {
+      showDone("failure")
+      return
+    }
+
+    let raw: unknown
+    try {
+      raw = await client.confirmProposal(proposalId)
+    } catch (e) {
+      const code = (e as Error & { code?: string }).code
+      if (code === "SLOT_UNAVAILABLE") {
+        showDone("conflict")
+      } else if (code === "VERIFICATION_REQUIRED" || code === "VERIFICATION_FAILED") {
+        verified = false
+        showStep(stepVerify)
+        setError(verifyError, "We need to verify your email again — request a new code.")
+      } else if (code === "PROPOSAL_EXPIRED" || code === "PROPOSAL_STATE_INVALID") {
+        showDone("failure")
+      } else {
+        showDone("failure")
+      }
+      return
+    }
+
+    const data = (
+      raw && typeof raw === "object" && "data" in raw
+        ? (raw as { data: BookResult }).data
+        : (raw as BookResult)
+    ) as BookResult | undefined
+    const status = data?.status
+    const result = data?.result ?? undefined
+    if (status === "OUTCOME_UNKNOWN") {
+      showDone("unknown")
+    } else if (status === "COMPLETED" && result?.status === "CONFIRMED") {
+      const meetPending = result.conferenceState === "pending" || !result.meetLink
+      showDone(meetPending ? "meet-pending" : "confirmed", result.meetLink ?? null)
+    } else {
+      showDone("failure")
+    }
+  }
+
+  // ── Wiring ──
+
+  populateTimezones()
+
+  tzSelect?.addEventListener("change", () => {
+    selectedTz = tzSelect.value || visitorTz
+    windowFrom = new Date()
+    void fetchSlots()
+  })
+
+  laterBtn?.addEventListener("click", () => {
+    windowFrom = new Date(windowFrom.valueOf() + 7 * 86_400_000)
+    void fetchSlots()
+  })
+
+  $("demo-details-back")?.addEventListener("click", () => showStep(stepSlot))
+  $("demo-retry-slots")?.addEventListener("click", () => {
+    showStep(stepSlot)
+    void fetchSlots()
+  })
+  $("demo-review-back")?.addEventListener("click", () => showStep(stepDetails))
+  $("demo-back-details")?.addEventListener("click", () => showStep(stepReview))
+
+  $("demo-details-continue")?.addEventListener("click", async () => {
+    const name = nameInput?.value.trim() ?? ""
+    const email = emailInput?.value.trim() ?? ""
+    if (!name) {
+      setError(detailsError, "Enter your name.")
+      nameInput?.focus()
+      return
+    }
+    if (!email.includes("@")) {
+      setError(detailsError, "Enter a valid email address.")
+      emailInput?.focus()
+      return
+    }
+    setError(detailsError, null)
+    if (verified) {
+      fillReview()
+      showStep(stepReview)
+      return
+    }
+    const btn = $("demo-details-continue") as HTMLButtonElement | null
+    if (btn) btn.disabled = true
+    try {
+      await requestCode()
+      if (verifySent) verifySent.textContent = `We emailed a short code to ${email}.`
+      setError(verifyError, null)
+      showStep(stepVerify)
+      codeInput?.focus()
+    } catch {
+      setError(detailsError, "We could not send a verification code. Try again in a minute.")
+    } finally {
+      if (btn) btn.disabled = false
+    }
+  })
+
+  $("demo-verify-resend")?.addEventListener("click", async () => {
+    try {
+      await requestCode()
+      setError(verifyError, null)
+      if (verifySent) verifySent.textContent = `We sent a new code to ${emailInput?.value.trim()}.`
+    } catch {
+      setError(verifyError, "We could not send a code. Try again in a minute.")
+    }
+  })
+
+  $("demo-verify-confirm")?.addEventListener("click", async () => {
+    const code = codeInput?.value.trim() ?? ""
+    if (code.length < 4) {
+      setError(verifyError, "Enter the code from the email.")
+      return
+    }
+    const btn = $("demo-verify-confirm") as HTMLButtonElement | null
+    if (btn) btn.disabled = true
+    try {
+      await confirmCode()
+      verified = true
+      setError(verifyError, null)
+      fillReview()
+      showStep(stepReview)
+    } catch {
+      setError(verifyError, "That code did not work. Try again.")
+    } finally {
+      if (btn) btn.disabled = false
+    }
+  })
+
+  $("demo-book-confirm")?.addEventListener("click", async () => {
+    const btn = $("demo-book-confirm") as HTMLButtonElement | null
+    if (btn) btn.disabled = true
+    setError(bookError, null)
+    try {
+      await book()
+    } catch {
+      showDone("failure")
+    } finally {
+      if (btn) btn.disabled = false
+    }
+  })
+
+  void ensureMyraSession(apiBase).catch(() => {})
+  void fetchSlots()
+</script>
