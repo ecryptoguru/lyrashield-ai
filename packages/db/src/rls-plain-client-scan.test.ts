@@ -95,6 +95,22 @@ const FORCE_RLS_ACCESSORS = new Set([
   "licenseKey",
   "licenseRevocation",
   "syncCursor",
+  // v18 1.3: growth + Myra tables under FORCE RLS.
+  "accountAcquisition",
+  "myraPublicSession",
+  "myraConversation",
+  "myraMessage",
+  "myraFlowSession",
+  "supportCase",
+  "supportCaseReply",
+  "myraOperation",
+  "demoBooking",
+  "myraKnowledgeRelease",
+  "myraKnowledgeEntry",
+  "myraMemory",
+  "myraIdentityVerification",
+  "myraAuditEvent",
+  "myraGenerationReservation",
 ])
 
 const RLS_CONTEXT_MARKERS = [
@@ -200,6 +216,11 @@ const ALLOWLIST: Record<string, string> = {
     "targetDomainVerification read under requirePermission-bound context (extension-wrapped)",
   "apps/web/src/app/api/targets/route.ts":
     "project/integration/target reads under requireWorkspaceAccess/requirePermission-bound context (extension-wrapped)",
+  // v18 1.3: Myra operator surface. requirePlatformAdminIdentity is the
+  // boundary — the read runs on the unbound trusted path by design (the
+  // v18 operator-RLS hardening binds it through app.myra_operator_id).
+  "apps/web/src/app/api/myra/operator/operations/route.ts":
+    "myraOperation stuck-ledger read under requirePlatformAdminIdentity — the platform-admin gate is the boundary and the unbound trusted path is intentional",
 }
 
 const READ_OPS = ["findMany", "findFirst", "findUnique", "count", "aggregate", "groupBy"]
@@ -211,6 +232,7 @@ const READ_OPS = ["findMany", "findFirst", "findUnique", "count", "aggregate", "
 const ROOTS = [
   __dirname, // packages/db/src
   join(__dirname, "..", "..", "billing", "src"),
+  join(__dirname, "..", "..", "myra", "src"),
   join(__dirname, "..", "..", "..", "apps", "worker", "src"),
   join(__dirname, "..", "..", "..", "apps", "web", "src", "app", "api"),
 ] as const
