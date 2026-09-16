@@ -1,10 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lucide-react"
-import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
+import { Button } from "@lyrashield/ui"
 import {
   githubReposSchema,
   idSchema,
@@ -16,12 +14,7 @@ import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { ACQUISITION_COOKIE, track } from "@/lib/analytics"
 import { presentOperationFailure, type OperationFailurePresentation } from "@/lib/operation-failure"
 import { planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
-import {
-  RUN_SINGULAR,
-  TARGET_DETAILS_LABEL,
-  TARGET_NAME_LABEL,
-  TARGET_SINGULAR,
-} from "@/lib/terminology"
+import { TARGET_SINGULAR } from "@/lib/terminology"
 import {
   buildUrlTargetPayload,
   displayStepForPath,
@@ -29,12 +22,20 @@ import {
   getOnboardingReviewOptions,
   nextStepForPath,
   onboardingPathForTargetType,
-  pathLabel,
   pathNeedsRepo,
   stepModelForPath,
   targetNameFromUrl,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
+import {
+  OnboardingAlerts,
+  PathChooserView,
+  RepoSelectView,
+  StepProgress,
+  TargetDetailsView,
+  UrlTargetView,
+  type Repo,
+} from "./onboarding-step-views"
 
 interface OnboardingData {
   updatedAt?: string
@@ -47,27 +48,6 @@ interface OnboardingData {
   buildTool?: string | null
   targetType?: string | null
   targetName?: string | null
-}
-
-/** Bounded "how are you building?" options — context only, never gates flow. */
-const BUILD_TOOLS = [
-  ["codex", "Codex"],
-  ["cursor", "Cursor"],
-  ["claude_code", "Claude Code"],
-  ["lovable", "Lovable"],
-  ["copilot", "Copilot"],
-  ["other", "Other"],
-] as const
-
-interface Repo {
-  id: number
-  fullName: string
-  name: string
-  owner: string
-  defaultBranch: string
-  private: boolean
-  htmlUrl: string
-  installationId: string
 }
 
 export function OnboardingWizard({
@@ -576,489 +556,99 @@ export function OnboardingWizard({
   // a step (W2-01): the server provisions the workspace.
   const steps = stepModelForPath(path)
   const displayStep = displayStepForPath(step, path)
+  const eyebrow = `Step ${step} of ${steps.length} · ${
+    steps[Math.min(displayStep, steps.length - 1)]!.label
+  }`
 
   return (
     <div className="w-full max-w-2xl">
-      <ol
-        className={`mb-2 grid border-y ${steps.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}
-        aria-label="Getting started progress"
-      >
-        {steps.map((entry, index) => {
-          const label = entry.label
-          const current = index === displayStep
-          const done = index < displayStep
-          return (
-            <li
-              key={label}
-              className={`min-h-16 border-l-2 px-2 py-3 text-xs font-semibold ${
-                current
-                  ? "border-primary bg-primary/8 text-primary"
-                  : "text-muted-foreground border-transparent"
-              }`}
-              aria-current={current ? "step" : undefined}
-            >
-              <span className="mb-1 flex size-5 items-center justify-center border text-[10px]">
-                {done ? <Check className="size-3" aria-hidden="true" /> : index + 1}
-              </span>
-              {/* Always name the current step on every breakpoint; the rest stay
-                  desktop-only to avoid crowding phones. A bare "1-2-3-4" gave
-                  mobile users no idea where they were. */}
-              <span className={current ? "inline" : "hidden sm:inline"}>{label}</span>
-            </li>
-          )
-        })}
-      </ol>
-      <p className="text-muted-foreground mb-4 text-xs sm:hidden" aria-live="polite">
-        Step {displayStep + 1} of {steps.length}
-      </p>
-
-      {failure && (
-        <div
-          role="alert"
-          className="border-destructive bg-destructive/10 mb-4 space-y-2 border-l-2 p-4 text-sm"
-        >
-          <p className="font-medium">{failure.presentation.cause}</p>
-          <p className="text-muted-foreground">{failure.presentation.effect}</p>
-          <p>{failure.presentation.recovery}</p>
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            {failure.retry && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={loading}
-                onClick={() => {
-                  setFailure(null)
-                  failure.retry?.()
-                }}
-              >
-                Try again
-              </Button>
-            )}
-            {failure.presentation.recoveryHref && (
-              <Link
-                href={failure.presentation.recoveryHref}
-                className="text-primary text-xs font-medium underline underline-offset-4"
-              >
-                Open the recovery page
-              </Link>
-            )}
-            <a
-              href="mailto:support@lyrashieldai.com"
-              className="text-muted-foreground text-xs underline underline-offset-4"
-            >
-              Contact support
-            </a>
-          </div>
-        </div>
-      )}
-      {error && !failure && (
-        <p
-          role="alert"
-          className="border-destructive bg-destructive/10 mb-4 border-l-2 p-3 text-sm"
-        >
-          {error}
-        </p>
-      )}
+      <StepProgress steps={steps} displayStep={displayStep} />
+      <OnboardingAlerts
+        failure={failure}
+        error={error}
+        loading={loading}
+        onRetryFailure={(retry) => {
+          setFailure(null)
+          retry()
+        }}
+      />
 
       <section className="rounded-xl border p-5 sm:p-7" aria-live="polite">
         {step === 1 && path !== "url" && path !== "api" && (
-          <div className="space-y-5">
-            <div>
-              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step {step} of {steps.length} · {steps[0]!.label}
-              </p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight">Add your first target</h2>
-              <p className="text-muted-foreground mt-2 text-sm">
-                Choose what LyraShield reviews first. You can connect GitHub, point at a live app or
-                API, or set this up later.
-              </p>
-            </div>
-
-            {/* Optional context — which agent built the app. Never blocks a
-                path choice; persists best-effort only. */}
-            <fieldset className="space-y-2">
-              <legend className="text-muted-foreground text-xs">
-                How are you building? <span className="italic">(optional)</span>
-              </legend>
-              <div className="flex flex-wrap gap-2">
-                {BUILD_TOOLS.map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={buildTool === value}
-                    onClick={() => {
-                      const next = buildTool === value ? null : value
-                      setBuildTool(next)
-                      if (next) track("onboarding_context", { tool: next })
-                      persist({ buildTool: next }).catch(() => {})
-                    }}
-                    className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                      buildTool === value
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "hover:bg-accent text-muted-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => choosePath("github")}
-                disabled={loading || githubUnavailable}
-                className="hover:bg-accent rounded-lg border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <GithubIcon className="mb-2 size-6" aria-hidden="true" />
-                <span className="block text-sm font-medium">Connect GitHub</span>
-                <span className="text-muted-foreground mt-1 block text-xs">
-                  {githubUnavailable
-                    ? "Unavailable right now — pick another option."
-                    : "Review a repository. Connect an authorized repository. Scans inspect code; fixes and pull requests are separate actions."}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => choosePath("url")}
-                disabled={loading}
-                className="hover:bg-accent rounded-lg border p-4 text-left transition-colors disabled:opacity-60"
-              >
-                <Globe className="text-primary mb-2 size-6" aria-hidden="true" />
-                <span className="block text-sm font-medium">Add an app URL</span>
-                <span className="text-muted-foreground mt-1 block text-xs">
-                  Scan a live web app over HTTP — no repo access needed.
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => choosePath("api")}
-                disabled={loading}
-                className="hover:bg-accent rounded-lg border p-4 text-left transition-colors disabled:opacity-60"
-              >
-                <Globe className="text-primary mb-2 size-6" aria-hidden="true" />
-                <span className="block text-sm font-medium">Add an API</span>
-                <span className="text-muted-foreground mt-1 block text-xs">
-                  Scan an API&apos;s public surface — no repo access needed.
-                </span>
-              </button>
-            </div>
-          </div>
+          <PathChooserView
+            eyebrow={eyebrow}
+            buildTool={buildTool}
+            onBuildTool={(next) => {
+              setBuildTool(next)
+              if (next) track("onboarding_context", { tool: next })
+              persist({ buildTool: next }).catch(() => {})
+            }}
+            loading={loading}
+            githubUnavailable={githubUnavailable}
+            onChoosePath={choosePath}
+          />
         )}
 
         {step === 1 && (path === "url" || path === "api") && (
-          <form
-            className="space-y-5"
-            onSubmit={(e) => {
-              e.preventDefault()
-              continueWithUrlTarget()
+          <UrlTargetView
+            eyebrow={eyebrow}
+            path={path}
+            productName={productName}
+            onProductNameChange={setProductName}
+            url={urlForm.url}
+            ownershipAttested={urlForm.ownershipAttested}
+            onUrlChange={(url) => {
+              setUrlForm({ ...urlForm, url })
+              // W2-02: selection and naming are one step — the name prefills
+              // from the parsed host and stays editable.
+              if (
+                !productName ||
+                productName === "Staging Site" ||
+                productName === "Production API"
+              ) {
+                const fromHost = targetNameFromUrl(url)
+                if (fromHost) setProductName(fromHost)
+              }
             }}
-          >
-            <div>
-              {/* Same step model as the progress list — the eyebrow and the
-                  highlighted item always describe the same step (v16 3.1). */}
-              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step {step} of {steps.length} · {steps[0]!.label}
-              </p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight">
-                {path === "api" ? "Add your API" : "Add your app URL"}
-              </h2>
-              <p className="text-muted-foreground mt-2 text-sm">
-                {path === "api"
-                  ? "Point LyraShield at the API's base URL. Scans run over HTTP against the public surface."
-                  : "Point LyraShield at the app's URL. Scans run over HTTP against the public surface."}{" "}
-                You can connect GitHub later from Connections.
-              </p>
-            </div>
-
-            {/* The name asked here is the name saved: the details step shows it
-                read-only instead of asking again (v16 3.1). */}
-            <FormField label={TARGET_NAME_LABEL} htmlFor="url-name">
-              <Input
-                id="url-name"
-                type="text"
-                value={productName}
-                onChange={(e) => setProductName(e.target.value)}
-                maxLength={100}
-                autoFocus
-                placeholder={path === "api" ? "Production API" : "Staging Site"}
-              />
-            </FormField>
-
-            <FormField label="URL" htmlFor="url-input">
-              <Input
-                id="url-input"
-                type="url"
-                value={urlForm.url}
-                onChange={(e) => {
-                  const url = e.target.value
-                  setUrlForm({ ...urlForm, url })
-                  // W2-02: selection and naming are one step — the name prefills
-                  // from the parsed host and stays editable.
-                  if (
-                    !productName ||
-                    productName === "Staging Site" ||
-                    productName === "Production API"
-                  ) {
-                    const fromHost = targetNameFromUrl(e.target.value)
-                    if (fromHost) setProductName(fromHost)
-                  }
-                }}
-                placeholder={
-                  path === "api" ? "https://api.example.com" : "https://staging.example.com"
-                }
-              />
-            </FormField>
-
-            <div className="flex items-start gap-2">
-              <input
-                id="ownership-check"
-                type="checkbox"
-                name="ownershipAttested"
-                checked={urlForm.ownershipAttested}
-                onChange={(e) => setUrlForm({ ...urlForm, ownershipAttested: e.target.checked })}
-                required
-                aria-required="true"
-                aria-describedby="ownership-help"
-                className="border-border text-primary focus:ring-ring mt-1 h-4 w-4 rounded focus:ring-2"
-              />
-              <div className="flex-1">
-                <label htmlFor="ownership-check" className="text-sm">
-                  I own or am authorized to scan this target.
-                </label>
-                <p id="ownership-help" className="text-muted-foreground text-xs">
-                  This confirms you have permission to test this target.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-between gap-3">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setPath(null)}
-                disabled={loading}
-              >
-                <ChevronLeft className="size-4" /> Back
-              </Button>
-              <Button type="submit" disabled={loading || !urlForm.ownershipAttested}>
-                {loading ? (
-                  <Spinner className="mr-2" />
-                ) : (
-                  <ChevronRight className="size-4" aria-hidden="true" />
-                )}
-                Continue
-              </Button>
-            </div>
-          </form>
+            onOwnershipChange={(attested) =>
+              setUrlForm({ ...urlForm, ownershipAttested: attested })
+            }
+            loading={loading}
+            onBack={() => setPath(null)}
+            onSubmit={continueWithUrlTarget}
+          />
         )}
 
         {step === 2 && (
-          <div className="space-y-5">
-            <div>
-              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step {step} of {steps.length} · {steps[1]!.label}
-              </p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight">Select a repository</h2>
-              <p className="text-muted-foreground mt-2 text-sm">
-                Choose the repository you want to review first.
-              </p>
-            </div>
-
-            {repos.length === 0 && (
-              <div className="space-y-3">
-                <p className="text-sm">
-                  {error
-                    ? "We couldn't load repositories. You may need to reconnect GitHub or check the installation."
-                    : reposLoaded
-                      ? "No repositories are available. Check which repositories your GitHub installation can access, then load them again."
-                      : "After you finish the GitHub install, click below to load repositories."}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="secondary" onClick={loadRepos} disabled={loading}>
-                    {loading ? <Spinner /> : <RefreshCwIcon />}
-                    Load repositories
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={connectGitHub}
-                    disabled={loading}
-                  >
-                    <GithubIcon className="size-4" aria-hidden="true" />
-                    Reconnect GitHub
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {repos.length > 0 && (
-              <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border p-1">
-                {repos.map((repo) => (
-                  <button
-                    type="button"
-                    key={repo.id}
-                    onClick={() => setSelectedRepo(repo)}
-                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                      selectedRepo?.id === repo.id ? "bg-primary/8 text-primary" : "hover:bg-accent"
-                    }`}
-                  >
-                    <span className="truncate font-medium">{repo.fullName}</span>
-                    {repo.private && <Badge variant="muted">Private</Badge>}
-                    {selectedRepo?.id === repo.id && (
-                      <Check className="size-4" aria-hidden="true" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="flex justify-between gap-3">
-              <Button type="button" variant="ghost" onClick={() => setStep(1)} disabled={loading}>
-                <ChevronLeft className="size-4" /> Back
-              </Button>
-              <Button
-                type="button"
-                onClick={confirmRepoAndContinue}
-                disabled={loading || !selectedRepo}
-              >
-                <ChevronRight className="size-4" /> Continue
-              </Button>
-            </div>
-          </div>
+          <RepoSelectView
+            eyebrow={eyebrow}
+            repos={repos}
+            reposLoaded={reposLoaded}
+            selectedRepoId={selectedRepo?.id ?? null}
+            onSelectRepo={setSelectedRepo}
+            loading={loading}
+            loadFailed={Boolean(error)}
+            onLoadRepos={loadRepos}
+            onReconnect={connectGitHub}
+            onBack={() => setStep(1)}
+            onContinue={confirmRepoAndContinue}
+          />
         )}
 
         {step === 3 && (
-          <div className="space-y-5">
-            <div>
-              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step {step} of {steps.length} · {steps[steps.length - 1]!.label}
-              </p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight">{TARGET_DETAILS_LABEL}</h2>
-              <p className="text-muted-foreground mt-2 text-sm">
-                {retryingExistingTarget
-                  ? `Retry the review for ${productName || `this ${TARGET_SINGULAR.toLowerCase()}`}. The target stays locked so the retry cannot create or scan a different target.`
-                  : pathNeedsRepo(path)
-                    ? `Name your ${TARGET_SINGULAR.toLowerCase()}. You can classify its environment later in target settings.`
-                    : `Reviewing your ${pathLabel(path)}. Confirm the details and choose what you need from this ${RUN_SINGULAR.toLowerCase()}.`}
-              </p>
-            </div>
-
-            {retryingExistingTarget ? (
-              <div className="bg-muted/40 rounded-lg border p-4">
-                <p className="text-sm font-medium">
-                  {productName || `Existing ${TARGET_SINGULAR}`}
-                </p>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  Existing {pathLabel(path)} · target details are locked for this retry
-                </p>
-              </div>
-            ) : pathNeedsRepo(path) ? (
-              // GitHub flow: the name is chosen here (v16 3.1 — asked once).
-              <FormField label={TARGET_NAME_LABEL} htmlFor="product-name">
-                <Input
-                  id="product-name"
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
-                  placeholder="My web app"
-                />
-              </FormField>
-            ) : (
-              // URL/API flow: the name was asked on the previous screen and is
-              // the name saved — shown here for confirmation only.
-              <div className="bg-muted/40 rounded-lg border p-4">
-                <p className="text-muted-foreground text-xs font-medium">{TARGET_NAME_LABEL}</p>
-                <p className="mt-1 text-sm font-medium">{productName || "Unnamed target"}</p>
-              </div>
-            )}
-
-            {/* W2-04: one recommended eligible review, with alternatives behind
-                an explicit "Change review" toggle. Essential scope, limitation,
-                and usage information stays outside the collapsed details. */}
-            <fieldset>
-              <legend className="mb-2 text-sm font-medium">
-                Recommended review for this {pathLabel(path)}
-              </legend>
-              {selectedReview && (
-                <div className="border-primary bg-primary/8 rounded-lg border p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium">{selectedReview.label}</span>
-                    <Badge variant="info">
-                      ~{selectedReview.estimate.low}–{selectedReview.estimate.high} min
-                    </Badge>
-                  </div>
-                  <p className="text-muted-foreground mt-1 text-sm">{selectedReview.description}</p>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    Depth: {selectedReview.mode.toLowerCase()} · runs within your workspace plan,
-                    budgets, and target authorization. A clean result is not a security guarantee.
-                  </p>
-                </div>
-              )}
-              <details className="mt-2">
-                <summary className="text-muted-foreground cursor-pointer text-sm font-medium">
-                  Change review
-                </summary>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {reviewOptions.map((option) => (
-                    <button
-                      type="button"
-                      key={option.id}
-                      onClick={() => setSelectedGoal(option.goal)}
-                      aria-pressed={selectedReview?.id === option.id}
-                      className={`rounded-lg border p-3 text-left text-sm transition-colors ${
-                        selectedReview?.id === option.id
-                          ? "border-primary bg-primary/8"
-                          : "hover:bg-accent"
-                      }`}
-                    >
-                      <span className="block font-medium">{option.label}</span>
-                      <span className="text-muted-foreground text-xs">{option.description}</span>
-                      <span className="text-muted-foreground mt-1 block text-xs">
-                        ~{option.estimate.low}-{option.estimate.high} min ·{" "}
-                        {option.mode.toLowerCase()}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </details>
-              {path === "api" && (
-                <p className="text-muted-foreground mt-2 text-xs">
-                  Add an OpenAPI document after setup to unlock Contract and Contract Behavior
-                  reviews.
-                </p>
-              )}
-            </fieldset>
-
-            <p className="border-warning bg-warning/10 border-l-2 p-3 text-sm">
-              A {RUN_SINGULAR.toLowerCase()} reports evidence and limitations. A clean result is not
-              a universal security guarantee.
-            </p>
-
-            <div className="flex justify-between gap-3">
-              {/* GitHub path backs into repo-select (step 2); URL/API back into
-                  the URL form (step 1, path kept). */}
-              {retryingExistingTarget ? (
-                <span />
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setStep(pathNeedsRepo(path) ? 2 : 1)}
-                  disabled={loading}
-                >
-                  <ChevronLeft className="size-4" /> Back
-                </Button>
-              )}
-              <Button type="button" onClick={createTargetAndStart} disabled={loading}>
-                <ShieldCheck className="size-4" />
-                {loading ? "Starting…" : `Start ${selectedReview?.label.toLowerCase() ?? "review"}`}
-              </Button>
-            </div>
-          </div>
+          <TargetDetailsView
+            eyebrow={eyebrow}
+            path={path}
+            productName={productName}
+            onProductNameChange={setProductName}
+            retryingExistingTarget={retryingExistingTarget}
+            reviewOptions={reviewOptions}
+            selectedReview={selectedReview}
+            onSelectGoal={setSelectedGoal}
+            loading={loading}
+            onBack={() => setStep(pathNeedsRepo(path) ? 2 : 1)}
+            onStart={createTargetAndStart}
+          />
         )}
 
         <div className="mt-6 flex justify-center border-t pt-4">
@@ -1074,28 +664,5 @@ export function OnboardingWizard({
         </div>
       </section>
     </div>
-  )
-}
-
-function RefreshCwIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="size-4"
-      aria-hidden="true"
-    >
-      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-      <path d="M21 3v5h-5" />
-      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-      <path d="M3 21v-5h5" />
-    </svg>
   )
 }

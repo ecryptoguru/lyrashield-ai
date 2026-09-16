@@ -25,6 +25,14 @@ vi.mock("react", async (original) => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }))
 import { OnboardingWizard } from "./onboarding-wizard"
+import {
+  OnboardingAlerts,
+  PathChooserView,
+  RepoSelectView,
+  StepProgress,
+  TargetDetailsView,
+  UrlTargetView,
+} from "./onboarding-step-views"
 
 type Element = ReactElement<{
   children?: ReactNode
@@ -33,11 +41,28 @@ type Element = ReactElement<{
   onChange?: (event: { target: { value?: string; checked?: boolean } }) => void
   onSubmit?: (event: { preventDefault: () => void }) => void
 }>
+
+// Step views are plain presentational functions (no hooks). Descend into
+// exactly those so assertions still see the inputs they render; library
+// components (Button/Input/etc.) stay opaque leaf elements.
+const VIEW_COMPONENTS = new Set<unknown>([
+  OnboardingAlerts,
+  PathChooserView,
+  RepoSelectView,
+  StepProgress,
+  TargetDetailsView,
+  UrlTargetView,
+])
+
 function elements(node: ReactNode): Element[] {
   if (Array.isArray(node)) return node.flatMap(elements)
   if (!node || typeof node !== "object" || !("props" in node)) return []
   const element = node as Element
-  return [element, ...elements(element.props.children)]
+  const inner =
+    typeof element.type === "function" && VIEW_COMPONENTS.has(element.type)
+      ? (element.type as (props: unknown) => ReactNode)(element.props)
+      : element.props.children
+  return [element, ...elements(inner)]
 }
 function render(targetType: string) {
   hooks.cursor = 0
