@@ -638,12 +638,13 @@ export async function deleteUserAccount(
       // The dual-owner Myra tables keep accountId as a bare scalar with no
       // FK to users, so tx.user.delete leaves every conversation, operation,
       // case, booking and audit row behind. These statements run on this same
-      // transaction through the unbound trusted path — this transaction never
-      // binds app.current_account_id or app.myra_public_session_id and the
-      // workspace GUC it does set is irrelevant to the dual-owner policies.
-      // myra_memories is the exception: its RESTRICTIVE owner boundary needs
-      // app.current_account_id bound, so it is bound only for that one delete
-      // after every unbound-path write has already run.
+      // transaction through the operator-bound trusted path: the dual-owner
+      // RESTRICTIVE boundary (v18 1.3) admits unbound work only when
+      // app.myra_operator_id is set, so this transaction declares the
+      // erasure sentinel. myra_memories is the exception: its RESTRICTIVE
+      // owner boundary needs app.current_account_id bound, so it is bound
+      // only for that one delete after every operator-context write has run.
+      await tx.$executeRaw`SELECT set_config('app.myra_operator_id', 'myra:account-deletion', true)`
       const myraBookingsToCancel = await tx.$queryRaw<Array<{ providerEventId: string }>>`
         SELECT "providerEventId" FROM "demo_bookings"
         WHERE "accountId" = ${userId}

@@ -13,7 +13,7 @@ import { err } from "../errors"
 import { createProposal } from "../operations"
 import type { ExecutorOutcome, OperationContext } from "../operations"
 import { findVerifiedEmail } from "../verify"
-import { ownerWhere, withOwnerScope } from "../db"
+import { ownerWhere, withOwnerScope, withTrustedScope, MYRA_TRUSTED_INTERNAL } from "../db"
 import type { MyraDb } from "../db"
 import type { MyraToolContext, MyraToolResult, ProposalSummary } from "./types"
 
@@ -243,9 +243,14 @@ async function notifyCaseCreated(
     [process.env.MYRA_SUPPORT_NOTIFY_EMAIL || SUPPORT_INBOX]
   ).catch(() => false)
   const state = sent ? "sent" : "failed"
-  await db.supportCase
-    .update({ where: { id: caseId }, data: { notificationState: state } })
-    .catch(() => {})
+  // Marks the case notified after the email attempt — an ambient caller
+  // reaches this with no owner context bound, so the write declares itself
+  // through the internal trusted path (v18 1.3).
+  await withTrustedScope(
+    MYRA_TRUSTED_INTERNAL,
+    (tx) => tx.supportCase.update({ where: { id: caseId }, data: { notificationState: state } }),
+    db
+  ).catch(() => {})
   return state
 }
 

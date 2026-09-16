@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { randomUUID } from "node:crypto"
 import { prisma } from "./client"
+import { withAccountRLS } from "./rls"
 import { getSystemPrisma } from "./system-client"
 import { verifyAuditChain } from "./audit-hash"
 import {
@@ -862,17 +863,23 @@ describe("account deletion", () => {
     const conversation = await prisma.myraConversation.create({
       data: { surface: "DASHBOARD", accountId: myraUserId, expiresAt },
     })
-    await prisma.myraMessage.create({
-      data: {
-        conversationId: conversation.id,
-        role: "USER",
-        content: "hello",
-        traceId: `t-${suffix}`,
-      },
-    })
-    await prisma.myraFlowSession.create({
-      data: { conversationId: conversation.id, flowId: "cancel_scan", status: "ACTIVE" },
-    })
+    // Child-row fixtures go through the owner-bound path: the RESTRICTIVE
+    // trusted boundary (v18 1.3) denies context-free writes.
+    await withAccountRLS(myraUserId, (tx) =>
+      tx.myraMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "USER",
+          content: "hello",
+          traceId: `t-${suffix}`,
+        },
+      })
+    )
+    await withAccountRLS(myraUserId, (tx) =>
+      tx.myraFlowSession.create({
+        data: { conversationId: conversation.id, flowId: "cancel_scan", status: "ACTIVE" },
+      })
+    )
     const supportCase = await prisma.supportCase.create({
       data: {
         reference: `LS-${suffix.slice(0, 6).toUpperCase()}`,
@@ -882,9 +889,11 @@ describe("account deletion", () => {
         replyEmail: `${myraUserId}@example.com`,
       },
     })
-    await prisma.supportCaseReply.create({
-      data: { caseId: supportCase.id, authorType: "USER", body: "more detail" },
-    })
+    await withAccountRLS(myraUserId, (tx) =>
+      tx.supportCaseReply.create({
+        data: { caseId: supportCase.id, authorType: "USER", body: "more detail" },
+      })
+    )
     await prisma.myraOperation.create({
       data: {
         operationName: "book_demo",

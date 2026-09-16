@@ -29,7 +29,12 @@ import { err, MyraServiceError } from "../errors"
 import { createProposal, OutcomeUnknownError } from "../operations"
 import type { ExecutorOutcome, OperationContext } from "../operations"
 import { findVerifiedEmail } from "../verify"
-import { withOwnerScope } from "../db"
+import {
+  withOwnerScope,
+  withTrustedScope,
+  MYRA_TRUSTED_INTERNAL,
+  MYRA_TRUSTED_MANAGE_TOKEN,
+} from "../db"
 import type { MyraDb } from "../db"
 import type { MyraToolContext, MyraToolResult } from "./types"
 
@@ -72,15 +77,22 @@ async function overlapsHeld(
 ): Promise<boolean> {
   const busy = await adapter.listBusy(holdStart, holdEnd)
   if (busy.some((b) => b.start < holdEnd && b.end > holdStart)) return true
-  const conflict = await db.demoBooking.findFirst({
-    where: {
-      status: { in: [...ACTIVE_BOOKING_STATUSES] },
-      holdStartsAt: { lt: holdEnd },
-      holdEndsAt: { gt: holdStart },
-      ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
-    },
-    select: { id: true },
-  })
+  // Slot conflict reads span every owner's bookings — trusted-path work on
+  // an ambient client, declared through the internal sentinel (v18 1.3).
+  const conflict = await withTrustedScope(
+    MYRA_TRUSTED_INTERNAL,
+    (tx) =>
+      tx.demoBooking.findFirst({
+        where: {
+          status: { in: [...ACTIVE_BOOKING_STATUSES] },
+          holdStartsAt: { lt: holdEnd },
+          holdEndsAt: { gt: holdStart },
+          ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+        },
+        select: { id: true },
+      }),
+    db
+  )
   return conflict !== null
 }
 
@@ -111,14 +123,21 @@ export async function computeDemoSlots(
   const rangeStart = new Date(minStart - D.bufferMinutes * 60_000)
   const rangeEnd = new Date(horizonEnd + D.bufferMinutes * 60_000)
   const busy = await adapter.listBusy(rangeStart, rangeEnd)
-  const held = await db.demoBooking.findMany({
-    where: {
-      status: { in: [...ACTIVE_BOOKING_STATUSES] },
-      holdStartsAt: { lt: rangeEnd },
-      holdEndsAt: { gt: rangeStart },
-    },
-    select: { holdStartsAt: true, holdEndsAt: true },
-  })
+  // Public slot availability reads hold windows across owners — trusted-path
+  // work on an ambient client, declared through the internal sentinel.
+  const held = await withTrustedScope(
+    MYRA_TRUSTED_INTERNAL,
+    (tx) =>
+      tx.demoBooking.findMany({
+        where: {
+          status: { in: [...ACTIVE_BOOKING_STATUSES] },
+          holdStartsAt: { lt: rangeEnd },
+          holdEndsAt: { gt: rangeStart },
+        },
+        select: { holdStartsAt: true, holdEndsAt: true },
+      }),
+    db
+  )
   const blocked = [
     ...busy.map((b) => ({ start: b.start, end: b.end })),
     ...held.map((b) => ({ start: b.holdStartsAt, end: b.holdEndsAt })),
@@ -271,15 +290,22 @@ export function isManageTokenActive(
 
 async function cancelBookingAndRevokeManageToken(db: MyraDb, bookingId: string): Promise<void> {
   const now = new Date()
-  await db.demoBooking.update({
-    where: { id: bookingId },
-    data: {
-      status: "CANCELED",
-      canceledAt: now,
-      manageTokenHash: null,
-      manageTokenRevokedAt: now,
-    },
-  })
+  // Trusted-path write: manage-token flows carry no owner context, so an
+  // ambient `db` binds the manage-token sentinel (v18 1.3).
+  await withTrustedScope(
+    MYRA_TRUSTED_MANAGE_TOKEN,
+    (tx) =>
+      tx.demoBooking.update({
+        where: { id: bookingId },
+        data: {
+          status: "CANCELED",
+          canceledAt: now,
+          manageTokenHash: null,
+          manageTokenRevokedAt: now,
+        },
+      }),
+    db
+  )
 }
 
 export async function executeBookDemo(
@@ -394,10 +420,15 @@ export async function executeBookDemo(
     // Timeout after provider submission: the event may exist. Mark the
     // booking unknown and let the engine record OUTCOME_UNKNOWN — reconcile
     // by event id, never insert a second event.
-    await db.demoBooking.update({
-      where: { id: bookingId },
-      data: { status: "OUTCOME_UNKNOWN" },
-    })
+    await withTrustedScope(
+      MYRA_TRUSTED_INTERNAL,
+      (tx) =>
+        tx.demoBooking.update({
+          where: { id: bookingId },
+          data: { status: "OUTCOME_UNKNOWN" },
+        }),
+      db
+    )
     if (e instanceof CalendarTimeoutError || e instanceof OutcomeUnknownError) {
       throw new OutcomeUnknownError(MYRA_COPY.demoUnknown)
     }
@@ -415,21 +446,33 @@ export async function reconcileDemoBooking(
   db: MyraDb = prisma,
   adapter: CalendarAdapter = getCalendarAdapter()
 ): Promise<{ status: string; copy?: string }> {
-  const booking = await db.demoBooking.findUnique({ where: { id: bookingId } })
+  // Reconcile runs without an owner context (called from the ambient
+  // turn and the operator surfaces) — each read/write declares the internal
+  // trusted path so provider calls never sit inside a held transaction.
+  const booking = await withTrustedScope(
+    MYRA_TRUSTED_INTERNAL,
+    (tx) => tx.demoBooking.findUnique({ where: { id: bookingId } }),
+    db
+  )
   if (!booking) throw err("NOT_FOUND", "Booking not found.")
   if (booking.status !== "OUTCOME_UNKNOWN" || !booking.providerEventId) {
     return { status: booking.status }
   }
   const existing = await adapter.getEvent(booking.providerEventId).catch(() => null)
   if (existing) {
-    await db.demoBooking.update({
-      where: { id: bookingId },
-      data: {
-        status: "CONFIRMED",
-        meetLink: existing.meetLink,
-        conferenceState: existing.conferenceState,
-      },
-    })
+    await withTrustedScope(
+      MYRA_TRUSTED_INTERNAL,
+      (tx) =>
+        tx.demoBooking.update({
+          where: { id: bookingId },
+          data: {
+            status: "CONFIRMED",
+            meetLink: existing.meetLink,
+            conferenceState: existing.conferenceState,
+          },
+        }),
+      db
+    )
     return {
       status: "CONFIRMED",
       copy:
@@ -451,14 +494,19 @@ export async function reconcileDemoBooking(
       conferenceRequestId: bookingId,
       requestMeet: true,
     })
-    await db.demoBooking.update({
-      where: { id: bookingId },
-      data: {
-        status: "CONFIRMED",
-        meetLink: event.meetLink,
-        conferenceState: event.conferenceState,
-      },
-    })
+    await withTrustedScope(
+      MYRA_TRUSTED_INTERNAL,
+      (tx) =>
+        tx.demoBooking.update({
+          where: { id: bookingId },
+          data: {
+            status: "CONFIRMED",
+            meetLink: event.meetLink,
+            conferenceState: event.conferenceState,
+          },
+        }),
+      db
+    )
     return {
       status: "CONFIRMED",
       copy:
@@ -536,7 +584,11 @@ export async function readOwnBookings(
       const res = await reconcileDemoBooking(b.id, db, adapter).catch(() => null)
       if (res?.status === "CONFIRMED") {
         status = "CONFIRMED"
-        const fresh = await db.demoBooking.findUnique({ where: { id: b.id } })
+        const fresh = await withTrustedScope(
+          MYRA_TRUSTED_INTERNAL,
+          (tx) => tx.demoBooking.findUnique({ where: { id: b.id } }),
+          db
+        )
         conferenceState = fresh?.conferenceState ?? conferenceState
         meetLink = fresh?.meetLink ?? meetLink
       }
@@ -561,11 +613,22 @@ export async function runManageOwnDemo(
   input: unknown
 ): Promise<MyraToolResult> {
   const { bookingId, manageToken, action, newSlotStart } = manageOwnDemoInput.parse(input)
+  // The manage token is the credential — the hash lookup happens before any
+  // owner context exists, so it declares the manage-token trusted path.
   const booking = bookingId
-    ? await (ctx.db ?? prisma).demoBooking.findUnique({ where: { id: bookingId } })
-    : await (ctx.db ?? prisma).demoBooking
-        .findUnique({ where: { manageTokenHash: hashManageToken(manageToken) } })
-        .catch(() => null)
+    ? await withTrustedScope(
+        MYRA_TRUSTED_MANAGE_TOKEN,
+        (tx) => tx.demoBooking.findUnique({ where: { id: bookingId } }),
+        ctx.db
+      )
+    : await withTrustedScope(
+        MYRA_TRUSTED_MANAGE_TOKEN,
+        (tx) =>
+          tx.demoBooking
+            .findUnique({ where: { manageTokenHash: hashManageToken(manageToken) } })
+            .catch(() => null),
+        ctx.db
+      )
   if (
     !booking ||
     !isManageTokenActive(booking) ||
@@ -636,12 +699,22 @@ export async function executeManageDemo(
   const db = ctx.db ?? prisma
   const adapter = getCalendarAdapter()
   // Resolve by id or by token hash — the manage token IS the credential, and
-  // a foreign token must deny, never throw uncoded.
+  // a foreign token must deny, never throw uncoded. The lookup precedes any
+  // owner context, so it declares the manage-token trusted path.
   const booking = parsed.bookingId
-    ? await db.demoBooking.findUnique({ where: { id: parsed.bookingId } })
-    : await db.demoBooking
-        .findUnique({ where: { manageTokenHash: hashManageToken(parsed.manageToken) } })
-        .catch(() => null)
+    ? await withTrustedScope(
+        MYRA_TRUSTED_MANAGE_TOKEN,
+        (tx) => tx.demoBooking.findUnique({ where: { id: parsed.bookingId } }),
+        db
+      )
+    : await withTrustedScope(
+        MYRA_TRUSTED_MANAGE_TOKEN,
+        (tx) =>
+          tx.demoBooking
+            .findUnique({ where: { manageTokenHash: hashManageToken(parsed.manageToken) } })
+            .catch(() => null),
+        db
+      )
   if (
     !booking ||
     !isManageTokenActive(booking) ||
@@ -679,30 +752,35 @@ export async function executeManageDemo(
   const newBookingId = randomUUID()
   const newEventId = `myra-demo-${newBookingId}`
   const newToken = randomBytes(32).toString("base64url")
-  await db.demoBooking.create({
-    data: {
-      id: newBookingId,
-      status: "HELD",
-      attendeeEmail: booking.attendeeEmail,
-      attendeeName: booking.attendeeName,
-      attendeeContext: booking.attendeeContext,
-      attendeeVerifiedAt: booking.attendeeVerifiedAt,
-      startsAt: newStart,
-      endsAt: newEnd,
-      holdStartsAt: holdStart,
-      holdEndsAt: holdEnd,
-      timezone: booking.timezone,
-      organizerEmail: booking.organizerEmail,
-      providerEventId: newEventId,
-      manageTokenHash: hashManageToken(newToken),
-      manageTokenExpiresAt: manageTokenExpiresAt(newEnd),
-      idempotencyKey: `resched:${newEventId}`,
-      accountId: booking.accountId,
-      publicSessionId: booking.publicSessionId,
-      conversationId: ctx.conversationId ?? booking.conversationId,
-      rescheduledFromId: booking.id,
-    },
-  })
+  await withTrustedScope(
+    MYRA_TRUSTED_MANAGE_TOKEN,
+    (tx) =>
+      tx.demoBooking.create({
+        data: {
+          id: newBookingId,
+          status: "HELD",
+          attendeeEmail: booking.attendeeEmail,
+          attendeeName: booking.attendeeName,
+          attendeeContext: booking.attendeeContext,
+          attendeeVerifiedAt: booking.attendeeVerifiedAt,
+          startsAt: newStart,
+          endsAt: newEnd,
+          holdStartsAt: holdStart,
+          holdEndsAt: holdEnd,
+          timezone: booking.timezone,
+          organizerEmail: booking.organizerEmail,
+          providerEventId: newEventId,
+          manageTokenHash: hashManageToken(newToken),
+          manageTokenExpiresAt: manageTokenExpiresAt(newEnd),
+          idempotencyKey: `resched:${newEventId}`,
+          accountId: booking.accountId,
+          publicSessionId: booking.publicSessionId,
+          conversationId: ctx.conversationId ?? booking.conversationId,
+          rescheduledFromId: booking.id,
+        },
+      }),
+    db
+  )
   try {
     const event = await adapter.insertEvent({
       eventId: newEventId,
@@ -716,23 +794,33 @@ export async function executeManageDemo(
       conferenceRequestId: newBookingId,
       requestMeet: true,
     })
-    await db.demoBooking.update({
-      where: { id: newBookingId },
-      data: {
-        status: "CONFIRMED",
-        meetLink: event.meetLink,
-        conferenceState: event.conferenceState,
-      },
-    })
+    await withTrustedScope(
+      MYRA_TRUSTED_MANAGE_TOKEN,
+      (tx) =>
+        tx.demoBooking.update({
+          where: { id: newBookingId },
+          data: {
+            status: "CONFIRMED",
+            meetLink: event.meetLink,
+            conferenceState: event.conferenceState,
+          },
+        }),
+      db
+    )
   } catch (e) {
     if (e instanceof CalendarConflictError) {
       await cancelBookingAndRevokeManageToken(db, newBookingId)
       throw new MyraServiceError("SLOT_UNAVAILABLE", MYRA_COPY.demoConflict)
     }
-    await db.demoBooking.update({
-      where: { id: newBookingId },
-      data: { status: "OUTCOME_UNKNOWN" },
-    })
+    await withTrustedScope(
+      MYRA_TRUSTED_MANAGE_TOKEN,
+      (tx) =>
+        tx.demoBooking.update({
+          where: { id: newBookingId },
+          data: { status: "OUTCOME_UNKNOWN" },
+        }),
+      db
+    )
     throw new OutcomeUnknownError(MYRA_COPY.demoUnknown)
   }
 

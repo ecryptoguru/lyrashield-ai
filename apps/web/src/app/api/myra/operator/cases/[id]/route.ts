@@ -6,6 +6,7 @@
  * pass through withCookieMutation so the browser-session origin check applies.
  */
 import { requirePlatformAdmin, requirePlatformAdminIdentity } from "@lyrashield/auth/server"
+import { withMyraOperatorRLS } from "@lyrashield/db"
 import {
   getOperatorCase,
   operatorAssign,
@@ -52,7 +53,9 @@ async function get(
 
   const { id } = await params
   try {
-    const result = await getOperatorCase(operator.userId, id)
+    const result = await withMyraOperatorRLS(operator.userId, (tx) =>
+      getOperatorCase(operator.userId, id, tx)
+    )
     return myraOperatorPrivate(apiSuccess(result))
   } catch (error) {
     const failure = myraServiceFailure(request, error)
@@ -93,30 +96,29 @@ async function patch(
 
   const { id } = await params
   const { action, status, handoffSummary } = parsed.data
+  if (action === "release" && !handoffSummary) {
+    return myraOperatorPrivate(
+      apiError("VALIDATION_ERROR", "A reviewed handoff summary is required", 400)
+    )
+  }
   try {
-    let result: unknown
-    switch (action) {
-      case "takeover":
-        // Takeover pauses Myra replies and invalidates unexecuted proposals
-        // for that conversation (service-side, spec §6).
-        result = await operatorTakeover(operator.userId, id)
-        break
-      case "release":
-        if (!handoffSummary) {
-          return myraOperatorPrivate(
-            apiError("VALIDATION_ERROR", "A reviewed handoff summary is required", 400)
-          )
-        }
-        result = await operatorRelease(operator.userId, id, handoffSummary)
-        break
-      case "resolve":
-        result = await operatorSetStatus(operator.userId, id, status ?? "RESOLVED")
-        break
-      case "assign": {
-        result = await operatorAssign(operator.userId, id)
-        break
+    // Operator-bound trusted path: requirePlatformAdmin above is the
+    // authorization, the binding declares it to the dual-owner tables'
+    // RESTRICTIVE boundary (v18 1.3).
+    const result = await withMyraOperatorRLS(operator.userId, async (tx) => {
+      switch (action) {
+        case "takeover":
+          // Takeover pauses Myra replies and invalidates unexecuted proposals
+          // for that conversation (service-side, spec §6).
+          return operatorTakeover(operator.userId, id, tx)
+        case "release":
+          return operatorRelease(operator.userId, id, handoffSummary!, tx)
+        case "resolve":
+          return operatorSetStatus(operator.userId, id, status ?? "RESOLVED", tx)
+        case "assign":
+          return operatorAssign(operator.userId, id, tx)
       }
-    }
+    })
     return myraOperatorPrivate(apiSuccess(result))
   } catch (error) {
     const failure = myraServiceFailure(request, error)

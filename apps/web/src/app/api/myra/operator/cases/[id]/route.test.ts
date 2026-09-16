@@ -10,6 +10,11 @@ const operatorSetStatus = vi.fn()
 const operatorAssign = vi.fn()
 
 vi.mock("@lyrashield/config", () => ({ env }))
+vi.mock("@lyrashield/db", () => ({
+  // The operator routes run reads and writes on the bound RLS transaction
+  // (v18 1.3) — the service fns are mocked so a passthrough tx suffices.
+  withMyraOperatorRLS: (_operatorId: string, fn: (tx: unknown) => unknown) => fn({}),
+}))
 vi.mock("@lyrashield/auth/server", () => ({
   requirePlatformAdminIdentity,
   requirePlatformAdmin,

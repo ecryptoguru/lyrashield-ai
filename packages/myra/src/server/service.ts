@@ -17,7 +17,7 @@ import type {
 } from "../contracts"
 import { screenSecrets } from "../sanitize"
 import { err, toMyraError } from "./errors"
-import { withOwnerScope, ownerWhere } from "./db"
+import { withOwnerScope, ownerWhere, withTrustedScope, MYRA_TRUSTED_MANAGE_TOKEN } from "./db"
 import type { MyraDb } from "./db"
 import type { ResolvedMyraRequest } from "./context"
 import { newTraceId, runTaskLoop } from "./loop"
@@ -393,9 +393,13 @@ export async function manageBooking(
   db: MyraDb = prisma
 ) {
   const tokenHash = hashManageToken(manageToken)
-  const booking = await db.demoBooking
-    .findUnique({ where: { manageTokenHash: tokenHash } })
-    .catch(() => null)
+  // The manage token IS the credential — the hash lookup precedes any owner
+  // context, so it declares the manage-token trusted path (v18 1.3).
+  const booking = await withTrustedScope(
+    MYRA_TRUSTED_MANAGE_TOKEN,
+    (tx) => tx.demoBooking.findUnique({ where: { manageTokenHash: tokenHash } }).catch(() => null),
+    db
+  )
   if (!booking || !isManageTokenActive(booking)) {
     throw err("FORBIDDEN", "Invalid or expired booking management link.")
   }
@@ -404,7 +408,11 @@ export async function manageBooking(
     if (booking.status === "OUTCOME_UNKNOWN") {
       const res = await reconcileDemoBooking(booking.id, db).catch(() => null)
       if (res?.status === "CONFIRMED") {
-        const fresh = await db.demoBooking.findUnique({ where: { id: booking.id } })
+        const fresh = await withTrustedScope(
+          MYRA_TRUSTED_MANAGE_TOKEN,
+          (tx) => tx.demoBooking.findUnique({ where: { id: booking.id } }),
+          db
+        )
         return { booking: toBookingView(fresh ?? booking), copy: res.copy }
       }
       return { booking: toBookingView(booking), copy: res?.copy }
@@ -447,7 +455,11 @@ export async function manageBooking(
     typeof result.bookingId === "string" && result.status !== "CANCELED"
       ? result.bookingId
       : booking.id
-  const fresh = await db.demoBooking.findUnique({ where: { id: freshId } })
+  const fresh = await withTrustedScope(
+    MYRA_TRUSTED_MANAGE_TOKEN,
+    (tx) => tx.demoBooking.findUnique({ where: { id: freshId } }),
+    db
+  )
   return {
     booking: toBookingView(fresh ?? booking),
     result: outcome.result,

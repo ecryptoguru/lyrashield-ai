@@ -5,6 +5,7 @@
  * session, 30-minute TOTP elevation, cookie-session CSRF check.
  */
 import { requirePlatformAdmin } from "@lyrashield/auth/server"
+import { withMyraOperatorRLS } from "@lyrashield/db"
 import { operatorReply } from "@lyrashield/myra/server"
 import { caseReplyRequestSchema } from "@lyrashield/myra"
 import { logger } from "@lyrashield/logger"
@@ -44,7 +45,9 @@ async function post(
 
   const { id } = await params
   try {
-    const result = await operatorReply(operator.userId, id, parsed.data.body)
+    const result = await withMyraOperatorRLS(operator.userId, (tx) =>
+      operatorReply(operator.userId, id, parsed.data.body, tx)
+    )
     return myraOperatorPrivate(apiSuccess(result))
   } catch (error) {
     const failure = myraServiceFailure(request, error)

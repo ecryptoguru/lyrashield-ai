@@ -4,9 +4,9 @@
  * events 90d; expired public sessions and stale identity verifications are
  * removed too.
  */
-import { Prisma, prisma } from "@lyrashield/db"
+import { Prisma, prisma, withMyraOperatorRLS } from "@lyrashield/db"
 import { MYRA_LIMITS } from "../contracts"
-import type { MyraDb } from "./db"
+import { MYRA_TRUSTED_RETENTION, type MyraDb } from "./db"
 
 export interface RetentionCounts {
   conversations: number
@@ -20,6 +20,13 @@ export interface RetentionCounts {
 }
 
 export async function pruneMyraRetention(db: MyraDb = prisma): Promise<RetentionCounts> {
+  // The sweep is trusted-path work: it touches every owner's rows. The
+  // dual-owner RESTRICTIVE boundary (v18 1.3) denies context-free statements,
+  // so an ambient `db` runs through the retention sentinel — the scheduler
+  // caller is the authorization, the binding declares the path.
+  if (db === prisma) {
+    return withMyraOperatorRLS(MYRA_TRUSTED_RETENTION, (tx) => pruneMyraRetention(tx))
+  }
   const now = new Date()
   const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const caseCutoff = new Date(now.getTime() - MYRA_LIMITS.caseRetentionDays * 86_400_000)

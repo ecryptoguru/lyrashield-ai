@@ -94,6 +94,36 @@ export async function withMyraPublicRLS<T>(
   }, options)
 }
 
+/**
+ * Run a callback inside a transaction bound to a Myra operator/trusted
+ * context. The dual-owner tables' RESTRICTIVE boundary admits this path —
+ * and only this path — when neither owner context is set: the boundary
+ * expression requires one of the three settings to be non-empty, so an
+ * operator-bound transaction reads across owners while a context-free read
+ * fails closed.
+ *
+ * Callers: the platform-operator routes (operatorId = the verified admin's
+ * user id, authorized by requirePlatformAdmin*) and named internal paths
+ * trusted across owners — retention sweeps, manage-token booking reads,
+ * account deletion — each binding its own sentinel id. Workspace, account
+ * and public-session settings are explicitly cleared so a stale or claimed
+ * owner context can never merge with the operator one; the bind is
+ * transaction-local and the ALS account context is cleared for the
+ * callback's duration.
+ */
+export async function withMyraOperatorRLS<T>(
+  operatorId: string,
+  fn: (tx: ScopedTransaction) => Promise<T>
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.current_workspace_id', '', true)`
+    await tx.$executeRaw`SELECT set_config('app.current_account_id', '', true)`
+    await tx.$executeRaw`SELECT set_config('app.myra_public_session_id', '', true)`
+    await tx.$executeRaw`SELECT set_config('app.myra_operator_id', ${operatorId}, true)`
+    return runWithDatabaseRLSContext(null, () => fn(tx), null)
+  })
+}
+
 /** Transactional Prisma client as passed to `withWorkspaceRLS`/`withAccountRLS` callbacks. */
 export type ScopedTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 

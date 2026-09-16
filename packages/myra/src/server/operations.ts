@@ -19,7 +19,7 @@ import { prisma } from "@lyrashield/db"
 import { MYRA_LIMITS } from "../contracts"
 import type { MyraOperationStatus, MyraPrincipal } from "../contracts"
 import { err } from "./errors"
-import { ownerWhere, withOwnerScope } from "./db"
+import { ownerWhere, withOwnerScope, withTrustedScope, MYRA_TRUSTED_INTERNAL } from "./db"
 import type { MyraDb } from "./db"
 
 const TERMINAL: ReadonlySet<MyraOperationStatus> = new Set([
@@ -289,21 +289,34 @@ export async function invalidateForConversation(
   conversationId: string,
   db: MyraDb = prisma
 ): Promise<number> {
-  const res = await db.myraOperation.updateMany({
-    where: { conversationId, status: { in: ["DRAFT", "AWAITING_CONFIRMATION"] } },
-    data: { status: "CANCELED" },
-  })
+  // Cross-owner sweep for one conversation — trusted-path work. When called
+  // inside an already-bound transaction `db` is reused; the ambient path
+  // declares itself through the internal sentinel (v18 1.3).
+  const res = await withTrustedScope(
+    MYRA_TRUSTED_INTERNAL,
+    (tx) =>
+      tx.myraOperation.updateMany({
+        where: { conversationId, status: { in: ["DRAFT", "AWAITING_CONFIRMATION"] } },
+        data: { status: "CANCELED" },
+      }),
+    db
+  )
   return res.count
 }
 
 /** Sweep proposals past expiry into EXPIRED. Returns the count updated. */
 export async function expireSweep(db: MyraDb = prisma): Promise<number> {
-  const res = await db.myraOperation.updateMany({
-    where: {
-      status: { in: ["DRAFT", "AWAITING_CONFIRMATION"] },
-      expiresAt: { lt: new Date() },
-    },
-    data: { status: "EXPIRED" },
-  })
+  const res = await withTrustedScope(
+    MYRA_TRUSTED_INTERNAL,
+    (tx) =>
+      tx.myraOperation.updateMany({
+        where: {
+          status: { in: ["DRAFT", "AWAITING_CONFIRMATION"] },
+          expiresAt: { lt: new Date() },
+        },
+        data: { status: "EXPIRED" },
+      }),
+    db
+  )
   return res.count
 }
