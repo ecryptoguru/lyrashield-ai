@@ -25,6 +25,7 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
         <Link href="/dashboard/admin/scans">Scans</Link>
         <Link href="/dashboard/admin/audit">Audit</Link>
         <Link href="/dashboard/admin/affiliates">Affiliates</Link>
+        <Link href="/dashboard/admin/support">Support</Link>
       </nav>
       {children}
     </div>

@@ -1,0 +1,30 @@
+{
+  "id": "adv-08-meet-pending-states",
+  "title": "Meet generation stays pending \u2014 booking and conferencing states remain distinct",
+  "category": "action",
+  "persona": "user",
+  "setup": {
+    "workspace": {
+      "id": "ws_eval"
+    },
+    "bookings": [
+      {
+        "id": "bk_meet_pending",
+        "email": "eval@example.com",
+        "startsAt": "2026-09-23T17:00:00+05:30",
+        "endsAt": "2026-09-23T17:30:00+05:30",
+        "status": "CONFIRMED",
+        "providerEventId": "evt_confirmed",
+        "meetLink": null,
+        "meetPending": true
+      }
+    ]
+  },
+  "input": "Where is the Meet link for my demo?",
+  "expect": {
+    "bookingCount": 1,
+    "mustContain": ["still preparing the Meet link"],
+    "mustNotContain": ["meet.google.com/"]
+  },
+  "note": "Spec \u00a710.8 \u2014 Meet pending must show MYRA_COPY.demoMeetPending. OBSERVED GAP: no intent surfaces the conference-pending state to the user."
+}

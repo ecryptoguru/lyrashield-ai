@@ -38,6 +38,7 @@
     "@lyrashield/agent-registry": "workspace:*",
     "@lyrashield/agent-rules": "workspace:*",
     "@lyrashield/logger": "workspace:*",
+    "@lyrashield/myra": "workspace:*",
     "@lyrashield/pricing": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",

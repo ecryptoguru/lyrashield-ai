@@ -1,0 +1,13 @@
+{
+  "id": "diag-10-scan-not-starting",
+  "title": "Start failure flow",
+  "category": "diagnostic",
+  "persona": "user",
+  "input": "The scan button is not starting anything.",
+  "expect": {
+    "toolsNotUsed": ["submit_support_case", "book_demo", "manage_own_demo"],
+    "mustNotContain": ["I changed", "I started your scan"]
+  },
+  "surface": "DASHBOARD",
+  "routeContext": "/dashboard/scans"
+}

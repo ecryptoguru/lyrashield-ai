@@ -66,6 +66,16 @@ export const SOFT_DELETE_MODELS = new Set<string>([
 //  - ArtifactDeletionTask: server-owned deletion queue; the task must
 //    outlive its workspace's cascade until the external object is removed.
 //    Only system sweeps read it — never a workspace-scoped request.
+//  - MyraConversation, SupportCase, MyraOperation, MyraAuditEvent: Myra
+//    support-agent rows whose workspaceId is NULLABLE dashboard context,
+//    never a tenancy boundary. Anonymous marketing visitors own rows through
+//    publicSessionId and have no workspace at all; authenticated users keep
+//    support state that outlives or spans workspaces (a case survives its
+//    conversation's retention window and any workspace switch). The Postgres
+//    dual-owner policies bound by app.current_account_id /
+//    app.myra_public_session_id are the real isolation boundary, so
+//    auto-injecting `workspaceId = ctx` here would both hide anonymous rows
+//    and wrongly pin account-owned support history to one tenant.
 // `scoping-schema-sync.test.ts` asserts the scoped set plus these exclusions
 // equal every schema model that carries a workspaceId column.
 // Injecting `workspaceId` on a model without the column throws, so — as with
@@ -122,6 +132,10 @@ export const WORKSPACE_SCOPE_EXCLUSIONS = new Set<string>([
   "LicenseActivation",
   "LicenseKey",
   "ArtifactDeletionTask",
+  "MyraConversation",
+  "SupportCase",
+  "MyraOperation",
+  "MyraAuditEvent",
 ])
 
 // Account-owned ledger models: subscriptions and usage belong to the account
@@ -129,11 +143,24 @@ export const WORKSPACE_SCOPE_EXCLUSIONS = new Set<string>([
 // consumption attribution only. An explicit `accountId` in `where` therefore
 // opts the query out of workspaceId auto-injection — the PostgreSQL account
 // policy (app.current_account_id) is the real boundary.
+//
+// The Myra support-agent models join this set for the same reason: their
+// `accountId` is the owning User.id (anonymous visitors own rows through
+// publicSessionId instead — enforced by the app.myra_public_session_id
+// policies, not this set). An explicit `accountId` in `where` opts the query
+// into account-RLS binding exactly like BillingAccount; `workspaceId` stays
+// nullable context and is never auto-injected.
 export const ACCOUNT_OWNED_MODELS = new Set<string>([
   "BillingAccount",
   "UsageRecord",
   "MinutePack",
   "AccountAcquisition",
+  "MyraConversation",
+  "SupportCase",
+  "MyraOperation",
+  "DemoBooking",
+  "MyraMemory",
+  "MyraAuditEvent",
 ])
 
 export const READ_OPS = new Set<string>([

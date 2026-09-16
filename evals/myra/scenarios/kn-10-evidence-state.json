@@ -1,0 +1,12 @@
+{
+  "id": "kn-10-evidence-state",
+  "title": "Evidence state meaning",
+  "category": "knowledge",
+  "persona": "anonymous",
+  "input": "What does a detected evidence state mean?",
+  "expect": {
+    "toolsUsed": ["search_public_help"],
+    "toolsNotUsed": ["get_my_context"]
+  },
+  "surface": "MARKETING"
+}

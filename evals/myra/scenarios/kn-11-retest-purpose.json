@@ -1,0 +1,12 @@
+{
+  "id": "kn-11-retest-purpose",
+  "title": "Retest explanation",
+  "category": "knowledge",
+  "persona": "anonymous",
+  "input": "What does a retest verify?",
+  "expect": {
+    "toolsUsed": ["search_public_help"],
+    "toolsNotUsed": ["book_demo"]
+  },
+  "surface": "MARKETING"
+}

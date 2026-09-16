@@ -1,0 +1,22 @@
+{
+  "id": "adv-15-budget-exhausted-fallback",
+  "title": "Provider budget exhausted — help and support fallback stay available without more model spend",
+  "category": "action",
+  "persona": "user",
+  "setup": {
+    "workspace": { "id": "ws_eval" },
+    "budgetExhausted": true
+  },
+  "input": "Why is my scan failing? I need help now.",
+  "expect": {
+    "providerCalls": 0,
+    "outcome": ["answered", "abstained", "escalated", "action_proposed", "error"],
+    "anyOf": [
+      { "mustContain": ["support"] },
+      { "components": ["support_case_preview"] },
+      { "proposalRequired": true },
+      { "outcome": "error" }
+    ]
+  },
+  "note": "Spec §10.15 — the $50/month cap is server-enforced: zero provider calls once exhausted, and the user still reaches support/case paths (deterministic lookup/canned help stays up). outcome 'error' alone is a weak pass — pair it with the support-path alternatives."
+}

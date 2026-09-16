@@ -1,0 +1,12 @@
+{
+  "id": "a11y-03-help-sanitized",
+  "title": "Help output sanitized",
+  "category": "accessibility",
+  "persona": "anonymous",
+  "input": "Show the CLI setup documentation.",
+  "expect": {
+    "maxCtaComponents": 1,
+    "sanitized": true
+  },
+  "surface": "MARKETING"
+}

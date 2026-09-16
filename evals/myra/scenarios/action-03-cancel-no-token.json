@@ -1,0 +1,14 @@
+{
+  "id": "action-03-cancel-no-token",
+  "title": "Cancellation without credential",
+  "category": "action",
+  "persona": "anonymous",
+  "input": "Cancel my demo booking.",
+  "expect": {
+    "completedOperationCount": 0,
+    "bookingCount": 0,
+    "toolsNotUsed": ["submit_support_case"]
+  },
+  "surface": "MARKETING",
+  "routeContext": "/demo"
+}

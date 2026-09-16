@@ -64,4 +64,15 @@ describe("forward database constraints", () => {
     }
     expect(sql).toContain('"clientCredentialsScopes" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]')
   })
+
+  it("keeps Myra generation reservations restricted to unbound service work", () => {
+    const sql = migration("../prisma/migrations/20260915000000_myra_support_agent/migration.sql")
+    expect(sql).toContain('ALTER TABLE "myra_generation_reservations" FORCE ROW LEVEL SECURITY')
+    expect(sql).toContain("CREATE POLICY myra_generation_reservations_unbound")
+    expect(sql).toContain("myra_generation_reservations_status_check")
+    expect(sql).toContain("myra_generation_reservations_reserved_nonnegative")
+    expect(sql).toContain(
+      "app.current_account_id() IS NULL AND app.myra_public_session_id() IS NULL"
+    )
+  })
 })

@@ -22,3 +22,9 @@ e02853f094dd61f5732b539b81143e6cc49f647d:codebase.md:generic-api-key:290
 
 # Historical relay unit-test signing value; current fixture uses randomBytes.
 1387dc86e2804ae72d232dfc626b221172014064:packages/security/src/relay-grant.test.ts:generic-api-key:13
+
+# Synthetic screenSecrets() fixtures in the Myra sanitizer tests — the literals
+# were rewritten to runtime-built strings; these fingerprints cover the
+# original commit's snapshot inside the PR range.
+3b911644a7439f77fe9e4661438b2a3b2c9716e0:packages/myra/src/sanitize.test.ts:generic-api-key:169
+3b911644a7439f77fe9e4661438b2a3b2c9716e0:packages/myra/src/sanitize.test.ts:private-key:190

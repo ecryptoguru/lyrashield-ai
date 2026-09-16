@@ -1,6 +1,29 @@
 import { z } from "zod"
 import { APPROVED_PLATFORM_ADMIN_EMAILS, normalizePlatformAdminEmails } from "./platform-admin"
 
+/**
+ * Literal-loopback http check for bearer-grant URLs: the host must be exactly
+ * 127.0.0.1 or [::1], with an optional port and at most a bare trailing slash —
+ * no path, query, fragment or userinfo. Parsed structurally rather than by
+ * regex so the rule cannot be bypassed by crafted strings.
+ */
+function isLiteralLoopbackHttpUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw)
+    return (
+      url.protocol === "http:" &&
+      (url.hostname === "127.0.0.1" || url.hostname === "[::1]") &&
+      url.pathname === "/" &&
+      url.search === "" &&
+      url.hash === "" &&
+      url.username === "" &&
+      url.password === ""
+    )
+  } catch {
+    return false
+  }
+}
+
 const envSchema = z
   .object({
     // Database
@@ -360,6 +383,71 @@ const envSchema = z
     AFFILIATE_ATTRIBUTION_WINDOW_DAYS: z.coerce.number().int().positive().max(365).default(60),
     AFFILIATE_PAYOUT_MIN_CENTS: z.coerce.number().int().positive().default(10000),
 
+    // Myra support agent (docs/myra-spec.md). Every gate defaults OFF; routes
+    // fail closed to 404 while the owning capability is disabled.
+    // Marketing surface + public (anonymous) sessions.
+    MYRA_PUBLIC_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Dashboard surface + authenticated-user principals.
+    MYRA_DASHBOARD_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Model generation inside the support workflow. Retrieval, suggestions and
+    // human handoff stay available while this is off.
+    MYRA_GENERATION_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Confirmed writes: proposal confirm, case replies, booking manage.
+    MYRA_WRITES_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Platform-operator support inbox routes.
+    MYRA_OPERATOR_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Calendar provider adapter for demo booking. "google" requires the
+    // MYRA_GOOGLE_* credentials below; "mock" never touches a real calendar.
+    MYRA_CALENDAR_PROVIDER: z.enum(["mock", "google"]).optional().default("mock"),
+    // Model provider: "mock" (default, deterministic local composition) or
+    // "azure" (Azure OpenAI/Foundry chat deployments). "azure" without
+    // endpoint+key fails closed.
+    MYRA_PROVIDER: z.enum(["mock", "azure"]).optional().default("mock"),
+    // Azure OpenAI/Foundry account endpoint + key. The endpoint is the
+    // account URL (https://<account>.openai.azure.com or a Foundry
+    // services endpoint); the key belongs in a secret store in deployed
+    // environments. API key auth is the v1 path — managed-identity auth can
+    // replace it without a contract change.
+    MYRA_AZURE_OPENAI_ENDPOINT: z.string().url().optional().or(z.literal("")),
+    MYRA_AZURE_OPENAI_API_KEY: z.string().optional().or(z.literal("")),
+    // Fallback chat deployment when MYRA_MODEL_FAST/DEEP are unset.
+    MYRA_AZURE_OPENAI_DEPLOYMENT: z.string().optional().or(z.literal("")),
+    // Model deployment names (Azure OpenAI/Foundry). Optional until generation
+    // is enabled; the service fails closed when unset.
+    MYRA_MODEL_FAST: z.string().optional().or(z.literal("")),
+    MYRA_MODEL_DEEP: z.string().optional().or(z.literal("")),
+    MYRA_EMBED_MODEL: z.string().optional().or(z.literal("")),
+    // Server-enforced monthly generation spend cap (USD). Optional; when set it
+    // bounds model calls alongside the per-turn caps.
+    MYRA_MONTHLY_BUDGET_USD: z.string().optional().or(z.literal("")),
+    // Mock-calendar fault injection for tests/dev only: simulate an insert
+    // timeout (outcome_unknown reconciliation), a permanently pending Meet
+    // conference, or an external slot conflict. Never enable in production.
+    MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT: z.enum(["0", "1"]).optional().default("0"),
+    MYRA_MOCK_CALENDAR_PENDING_CONFERENCE: z.enum(["0", "1"]).optional().default("0"),
+    MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT: z.enum(["0", "1"]).optional().default("0"),
+    // Per-1K-token USD rates for the configured deployments — the monthly
+    // budget cap derives real spend from usage tokens against these. The
+    // generic pair prices the fast tier; MYRA_DEEP_* overrides price the
+    // deep tier (falls back to the generic pair when unset).
+    MYRA_COST_PER_1K_INPUT_USD: z.string().optional().or(z.literal("")),
+    MYRA_COST_PER_1K_OUTPUT_USD: z.string().optional().or(z.literal("")),
+    MYRA_DEEP_COST_PER_1K_INPUT_USD: z.string().optional().or(z.literal("")),
+    MYRA_DEEP_COST_PER_1K_OUTPUT_USD: z.string().optional().or(z.literal("")),
+    // Founder-only Google Calendar OAuth for ankit@lyrashieldai.com. Refresh
+    // token storage is encrypted by the service layer; TOKEN_JSON is a
+    // dev-only convenience for a full provider token blob.
+    MYRA_GOOGLE_CLIENT_ID: z.string().optional().or(z.literal("")),
+    MYRA_GOOGLE_CLIENT_SECRET: z.string().optional().or(z.literal("")),
+    MYRA_GOOGLE_REFRESH_TOKEN: z.string().optional().or(z.literal("")),
+    MYRA_GOOGLE_TOKEN_JSON: z.string().optional().or(z.literal("")),
+    // Calendar ID to book on; "primary" targets the OAuth user's primary
+    // calendar (ankit@lyrashieldai.com).
+    MYRA_GOOGLE_CALENDAR_ID: z.string().optional().or(z.literal("")),
+    // Destination for support-case notifications (spec §6). Best-effort
+    // wording only — no SLA is implied by configuring this.
+    MYRA_SUPPORT_NOTIFY_EMAIL: z.string().optional().default("support@lyrashieldai.com"),
+
     // Monitoring
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),
@@ -439,7 +527,7 @@ const envSchema = z
     (val) =>
       !val.LYRASHIELD_TARGET_RELAY_URL ||
       val.LYRASHIELD_TARGET_RELAY_URL.startsWith("https://") ||
-      /^http:\/\/(?:127\.0\.0\.1|\[::1\])(?::\d+)?\/?$/.test(val.LYRASHIELD_TARGET_RELAY_URL),
+      isLiteralLoopbackHttpUrl(val.LYRASHIELD_TARGET_RELAY_URL),
     {
       path: ["LYRASHIELD_TARGET_RELAY_URL"],
       message:
@@ -537,6 +625,43 @@ const envSchema = z
         message:
           "required Cloudflare origin mTLS needs AOP and deployment probe SHA-256 fingerprints",
       })
+    }
+    if (val.MYRA_GENERATION_ENABLED === "1" && val.MYRA_PROVIDER === "azure") {
+      const requiredProviderValues = [
+        ["MYRA_AZURE_OPENAI_ENDPOINT", val.MYRA_AZURE_OPENAI_ENDPOINT],
+        ["MYRA_AZURE_OPENAI_API_KEY", val.MYRA_AZURE_OPENAI_API_KEY],
+      ] as const
+      for (const [key, value] of requiredProviderValues) {
+        if (!value) {
+          ctx.addIssue({
+            code: "custom",
+            path: [key],
+            message: `${key} is required when Azure Myra generation is enabled`,
+          })
+        }
+      }
+      if (!val.MYRA_AZURE_OPENAI_DEPLOYMENT && (!val.MYRA_MODEL_FAST || !val.MYRA_MODEL_DEEP)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["MYRA_AZURE_OPENAI_DEPLOYMENT"],
+          message:
+            "Set MYRA_AZURE_OPENAI_DEPLOYMENT or both MYRA_MODEL_FAST and MYRA_MODEL_DEEP when Azure Myra generation is enabled",
+        })
+      }
+      const requiredRates = [
+        ["MYRA_COST_PER_1K_INPUT_USD", val.MYRA_COST_PER_1K_INPUT_USD],
+        ["MYRA_COST_PER_1K_OUTPUT_USD", val.MYRA_COST_PER_1K_OUTPUT_USD],
+      ] as const
+      for (const [key, raw] of requiredRates) {
+        const rate = Number(raw)
+        if (!Number.isFinite(rate) || rate <= 0) {
+          ctx.addIssue({
+            code: "custom",
+            path: [key],
+            message: `${key} must be a positive number when Azure Myra generation is enabled`,
+          })
+        }
+      }
     }
   })
 
