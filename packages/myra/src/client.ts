@@ -155,6 +155,16 @@ export function createMyraClient(options: MyraClientOptions) {
       return res.json()
     },
 
+    async clearMemory() {
+      const res = await fetchImpl(`${options.apiBase}/api/myra/memory`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: headers({ accept: "application/json" }),
+      })
+      if (!res.ok) await readError(res)
+      return res.json()
+    },
+
     async listCases() {
       const res = await fetchImpl(`${options.apiBase}/api/myra/cases`, {
         credentials: "include",
