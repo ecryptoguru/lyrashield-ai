@@ -6,7 +6,7 @@
  */
 import { randomBytes } from "node:crypto"
 import { MYRA_LIMITS } from "../contracts"
-import type { MyraStreamEvent, MyraToolName, TaskRecord } from "../contracts"
+import type { BookingRequest, MyraStreamEvent, MyraToolName, TaskRecord } from "../contracts"
 import {
   checkBudget,
   maximumTurnCostUsd,
@@ -35,6 +35,8 @@ export interface LoopArgs {
   traceId: string
   provider?: ModelProvider
   sessionMemory?: Record<string, string>
+  /** Structured slot-picker submission — drives book_demo without text parsing. */
+  bookingRequest?: BookingRequest
 }
 
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.]{2,}/
@@ -141,14 +143,49 @@ interface StepOutcome {
 
 type RunStep = (name: MyraToolName, input: unknown) => Promise<MyraToolResult | null>
 
-async function runDemoIntent(text: string, run: RunStep): Promise<void> {
+async function runDemoIntent(
+  text: string,
+  step: StepOutcome,
+  run: RunStep,
+  bookingRequest?: BookingRequest
+): Promise<void> {
+  // Structured slot-picker submission (item 1.5): fields arrive validated by
+  // postMessageRequestSchema, so the booking proposal runs directly — no
+  // name/email extraction from free text, no slot list needed.
+  if (bookingRequest) {
+    await run("book_demo", {
+      slotStart: bookingRequest.slotStart,
+      timezone: bookingRequest.timezone,
+      name: bookingRequest.name,
+      email: bookingRequest.email,
+      ...(bookingRequest.context ? { context: bookingRequest.context } : {}),
+    }).catch((e) => {
+      // Anonymous attendees without a verified email keep the existing
+      // verification-required flow instead of a hard error.
+      if (
+        e &&
+        typeof e === "object" &&
+        "code" in e &&
+        (e as { code: string }).code === "VERIFICATION_REQUIRED"
+      ) {
+        step.toolOutputs.push({
+          name: "book_demo",
+          output: { verificationRequired: true },
+        })
+        return null
+      }
+      throw e
+    })
+    return
+  }
   const timezone = "UTC"
   await run("get_demo_slots", {
     timezone,
     from: new Date().toISOString().slice(0, 10),
   })
-  // Only draft a booking proposal when the message already carries an
-  // explicit slot instant plus attendee identity — never invent a slot.
+  // Regex fallback for plain text: only draft a booking proposal when the
+  // message already carries an explicit slot instant plus attendee identity —
+  // never invent a slot.
   const email = EMAIL_RE.exec(text)?.[0]
   const name = NAME_RE.exec(text)?.[1]?.trim()
   const iso = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.exec(text)?.[0]
@@ -277,7 +314,10 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
     return
   }
 
-  const intent = classifyIntent(text, isUser)
+  // A structured slot-picker submission is a demo action regardless of the
+  // accompanying text — bypass classification so the request always reaches
+  // book_demo.
+  const intent = args.bookingRequest ? "demo" : classifyIntent(text, isUser)
   const step: StepOutcome = { toolOutputs: [], components: [], proposals: [], toolsUsed: [] }
   const budget = await checkBudget(db)
 
@@ -319,7 +359,7 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
         break
       }
       case "demo":
-        await runDemoIntent(text, run)
+        await runDemoIntent(text, step, run, args.bookingRequest)
         break
       case "demo_status":
         await runDemoStatusIntent(ctx, step)
@@ -363,7 +403,7 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
   // Prose answer — budget-gated. Deterministic intents keep working when
   // generation is off: a fixed explanation replaces the model call.
   let answerText: string
-  const verificationRequired = step.toolOutputs.some((t) => t.output.verificationRequired === true)
+  const verification = step.toolOutputs.find((t) => t.output.verificationRequired === true)
   if (!budget.allowed && provider.name !== "mock") {
     yield {
       type: "error",
@@ -422,8 +462,11 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
     yield { type: "error", error: toMyraError(e) }
     return
   }
-  if (verificationRequired) {
-    answerText += " Verify your reply email first — I'll send a 6-digit code."
+  if (verification) {
+    answerText +=
+      verification.name === "book_demo"
+        ? " Verify your email to book the demo — I'll send a 6-digit code."
+        : " Verify your reply email first — I'll send a 6-digit code."
   }
 
   for (const chunk of chunkText(answerText)) {

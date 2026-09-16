@@ -2,7 +2,12 @@
  * Headless Myra client — fetch + SSE parsing only. Runs in the Next.js
  * dashboard bundle AND the Astro/Cloudflare marketing island. No Node APIs.
  */
-import { myraStreamEventSchema, type MyraStreamEvent, type MyraSurface } from "./contracts"
+import {
+  myraStreamEventSchema,
+  type BookingRequest,
+  type MyraStreamEvent,
+  type MyraSurface,
+} from "./contracts"
 
 export interface MyraClientOptions {
   /** Absolute API base, e.g. https://app.lyrashieldai.com (marketing) or "" (same-origin dashboard). */
@@ -21,6 +26,8 @@ export interface SendMessageInput {
   text: string
   conversationId?: string
   signal?: AbortSignal
+  /** Structured slot-picker submission — drives book_demo without text parsing. */
+  bookingRequest?: BookingRequest
 }
 
 export class MyraClientError extends Error {
@@ -105,6 +112,7 @@ export function createMyraClient(options: MyraClientOptions) {
           conversationId: input.conversationId,
           routeContext: options.routeContext,
           surface: options.surface,
+          ...(input.bookingRequest ? { bookingRequest: input.bookingRequest } : {}),
           ...(sessionMemory ? { sessionMemory } : {}),
         }),
       })

@@ -1,5 +1,6 @@
 import {
   MYRA_LIMITS,
+  type BookingRequest,
   type MyraClient,
   type MyraClientError,
   type MyraStreamEvent,
@@ -24,7 +25,7 @@ interface Turn {
 }
 
 export interface MyraConversation {
-  send: (text: string) => Promise<void>
+  send: (text: string, bookingRequest?: BookingRequest) => Promise<void>
   stopStream: () => void
   stopAndMark: () => void
   markActionCompleted: () => void
@@ -214,7 +215,7 @@ export function createMyraConversation(options: {
     }
   }
 
-  async function send(text: string) {
+  async function send(text: string, bookingRequest?: BookingRequest) {
     const trimmed = text.trim().slice(0, MYRA_LIMITS.messageMaxChars)
     if (!trimmed) return
     if (streamAbort) {
@@ -241,6 +242,7 @@ export function createMyraConversation(options: {
           text: trimmed,
           conversationId,
           signal: streamAbort.signal,
+          bookingRequest,
         })) {
           received = true
           handleEvent(ev, turn)

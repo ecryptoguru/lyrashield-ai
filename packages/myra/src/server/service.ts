@@ -10,6 +10,7 @@ import { prisma } from "@lyrashield/db"
 import { sendNotification } from "@lyrashield/integrations"
 import { MYRA_LIMITS } from "../contracts"
 import type {
+  BookingRequest,
   MyraComponent,
   MyraStreamEvent,
   MyraSurface,
@@ -43,6 +44,8 @@ export interface HandleMessageInput {
   text: string
   routeContext?: string
   surface: MyraSurface
+  /** Structured slot-picker submission — drives book_demo without text parsing. */
+  bookingRequest?: BookingRequest
   sessionMemory?: {
     preferred_timezone?: string
     preferred_locale?: string
@@ -202,6 +205,7 @@ export async function* handleMessage(
       ctx: toolCtx,
       text: screened,
       routeContext: input.routeContext,
+      bookingRequest: input.bookingRequest,
       sessionMemory: ctx.principal.kind === "anonymous" ? input.sessionMemory : undefined,
       assistantMessageId,
       traceId,

@@ -130,7 +130,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
         platformAdminHref={platformAdminHref}
       />
       <InvitationAcceptBridge />
-      <MyraPanel enabled={myraDashboardEnabled} />
+      <MyraPanel
+        enabled={myraDashboardEnabled}
+        accountEmail={session.userEmail}
+        accountName={session.userName}
+      />
     </div>
   )
 }

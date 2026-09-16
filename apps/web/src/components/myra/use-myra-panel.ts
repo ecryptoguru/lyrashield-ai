@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   createMyraClient,
   MYRA_LIMITS,
+  type BookingRequest,
   type MyraClient,
   type MyraComponent,
   type MyraStreamEvent,
@@ -41,7 +42,10 @@ interface Suggestion {
   sourceUrl?: string
 }
 
-export function useMyraPanel(routeContext: string | undefined) {
+export function useMyraPanel(
+  routeContext: string | undefined,
+  account?: { email?: string | null; name?: string | null }
+) {
   const [turns, setTurns] = useState<Turn[]>([])
   const [proposalStates, setProposalStates] = useState<
     Record<string, { state: ProposalState; statusText?: string }>
@@ -195,7 +199,7 @@ export function useMyraPanel(routeContext: string | undefined) {
   )
 
   const send = useCallback(
-    async (rawText: string) => {
+    async (rawText: string, bookingRequest?: BookingRequest) => {
       const text = rawText.trim().slice(0, MYRA_LIMITS.messageMaxChars)
       if (!text) return
       if (streamAbortRef.current) {
@@ -219,6 +223,7 @@ export function useMyraPanel(routeContext: string | undefined) {
           text,
           conversationId: conversationIdRef.current,
           signal: abort.signal,
+          bookingRequest,
         })) {
           received = true
           handleEvent(ev, turnId)
@@ -462,7 +467,12 @@ export function useMyraPanel(routeContext: string | undefined) {
   )
 
   const componentContext: MyraComponentContext = {
-    onPickSlot: (startsAt) => void send(`Book the demo slot that starts at ${startsAt}`),
+    onBookSlot: (request) =>
+      void send(`Book the demo slot that starts at ${request.slotStart}`, request),
+    attendee: {
+      email: account?.email ?? undefined,
+      name: account?.name ?? undefined,
+    },
     onConfirm: (proposalId) => void confirmProposalAction(proposalId),
     onCancel: (proposalId) => void cancelProposalAction(proposalId),
     onForgetMemory: () => {

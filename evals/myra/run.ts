@@ -107,6 +107,14 @@ interface Scenario {
   routeContext?: string
   setup?: ScenarioSetup
   input: string
+  /** Structured slot-picker submission sent alongside `input` (item 1.5). */
+  bookingRequest?: {
+    slotStart: string
+    timezone: string
+    name?: string
+    email?: string
+    context?: string
+  }
   actions?: ScenarioAction[]
   expect: ScenarioExpect
   note?: string
@@ -129,6 +137,14 @@ interface MessageArgs {
   db: FakeMyraStore
   provider: MockProvider
   input: { text: string; conversationId?: string }
+  /** Structured slot-picker booking request (item 1.5). */
+  bookingRequest?: {
+    slotStart: string
+    timezone: string
+    name?: string
+    email?: string
+    context?: string
+  }
   surface: string
   routeContext: string | null
   /** External-boundary seams (billing fakes, notification flag). */
@@ -286,6 +302,7 @@ async function loadPipeline(): Promise<PipelineStatus> {
           text: args.input.text,
           routeContext: args.routeContext ?? undefined,
           surface: args.surface,
+          bookingRequest: args.bookingRequest,
         } as never,
         { db: args.db, provider: args.provider } as never
       )
@@ -308,6 +325,7 @@ async function loadPipeline(): Promise<PipelineStatus> {
         },
         text: screened,
         routeContext: args.routeContext,
+        bookingRequest: args.bookingRequest,
         assistantMessageId: `msg_eval_${Math.random().toString(36).slice(2, 10)}`,
         traceId: `tr_eval_${Math.random().toString(36).slice(2, 10)}`,
         provider: args.provider,
@@ -550,6 +568,8 @@ function absorbEvent(turn: TurnResult, raw: unknown): void {
     case "proposal":
       turn.proposalCount += 1
       turn.surfaceText +=
+        event.proposal.operationName +
+        "\n" +
         event.proposal.title +
         "\n" +
         event.proposal.description +
@@ -1089,6 +1109,7 @@ async function main(): Promise<number> {
           db: store,
           provider,
           input: { text: scenario.input, conversationId },
+          ...(scenario.bookingRequest ? { bookingRequest: scenario.bookingRequest } : {}),
           surface,
           routeContext: scenario.routeContext ?? null,
           deps,

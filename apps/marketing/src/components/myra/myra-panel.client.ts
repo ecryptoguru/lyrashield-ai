@@ -72,7 +72,7 @@ export function initMyraPanel() {
     client,
     apiBase,
     announce,
-    send: (text) => void conversation.send(text),
+    send: (text, bookingRequest) => void conversation.send(text, bookingRequest),
     markActionCompleted: () => conversation.markActionCompleted(),
     setLastTraceId: (traceId) => conversation.setLastTraceId(traceId),
   }

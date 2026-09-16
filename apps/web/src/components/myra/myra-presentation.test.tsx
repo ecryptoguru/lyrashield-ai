@@ -8,7 +8,7 @@ import {
 } from "./myra-presentation"
 
 const context: MyraComponentContext = {
-  onPickSlot: () => {},
+  onBookSlot: () => {},
   onConfirm: () => {},
   onCancel: () => {},
   onForgetMemory: () => {},

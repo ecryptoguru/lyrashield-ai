@@ -36,7 +36,16 @@ function routeContextFor(pathname: string, surface: "marketing" | "app"): string
 
 // ─── Panel ──────────────────────────────────────────────────────────────────
 
-export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
+export function MyraPanel({
+  enabled = true,
+  accountEmail,
+  accountName,
+}: {
+  enabled?: boolean
+  /** Signed-in account identity — prefills the demo-booking attendee step. */
+  accountEmail?: string | null
+  accountName?: string | null
+}) {
   const pathname = usePathname()
   const routeContext = routeContextFor(pathname ?? "/", "app")
 
@@ -62,7 +71,7 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
     pickSuggestion,
     submitCaseForm,
     componentContext,
-  } = useMyraPanel(routeContext)
+  } = useMyraPanel(routeContext, { email: accountEmail, name: accountName })
 
   const starters = [
     { label: "Help with this page", send: "Help with this page" },
