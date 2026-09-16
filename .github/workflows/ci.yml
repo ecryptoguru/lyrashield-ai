@@ -394,6 +394,18 @@ jobs:
           fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
+      # The TRIAL_INTEGRATION_TEST suites assert their DATABASE_URL is a
+      # localhost, non-superuser, NOBYPASSRLS role — the app_runtime_ci role
+      # provisioned above is exactly that. They run in a dedicated invocation
+      # because the suite-wide DATABASE_URL is the owner role.
+      - name: Trial integration tests (restricted runtime role)
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        run: >
+          DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" TRIAL_INTEGRATION_TEST=1
+          pnpm exec vitest run
+          packages/billing/src/trial-integration.test.ts
+          apps/web/src/app/api/workspaces/route-integration.test.ts
+
       - name: Test worker egress pin rotation
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: sh ops/worker/refresh-egress.test.sh
