@@ -6,7 +6,7 @@
  * reveal whether the address already has cases or bookings. Internal send
  * failures are logged, not surfaced, for the same reason.
  */
-import { requestIdentityCode } from "@lyrashield/myra/server"
+import { requestIdentityCode, resolveMyraRequest } from "@lyrashield/myra/server"
 import { identityRequestSchema } from "@lyrashield/myra"
 import { logger } from "@lyrashield/logger"
 import { verifyTurnstile } from "@/lib/turnstile"
@@ -41,6 +41,11 @@ async function post(request: Request): Promise<Response> {
   } catch {
     return myraFail(request, "VALIDATION_ERROR", "Invalid request body", 400)
   }
+  // The session binds through the verified public token, never the body — a
+  // client-asserted publicSessionId is dropped so older clients keep working.
+  if (body !== null && typeof body === "object" && !Array.isArray(body)) {
+    delete (body as Record<string, unknown>).publicSessionId
+  }
   const parsed = identityRequestSchema.safeParse(body)
   if (!parsed.success) {
     return myraFail(request, "VALIDATION_ERROR", "Invalid request", 400)
@@ -51,7 +56,10 @@ async function post(request: Request): Promise<Response> {
   }
 
   try {
-    await requestIdentityCode(parsed.data.email, parsed.data.purpose, parsed.data.publicSessionId)
+    const resolved = await resolveMyraRequest(request)
+    const publicSessionId =
+      resolved?.principal.kind === "anonymous" ? resolved.principal.publicSessionId : undefined
+    await requestIdentityCode(parsed.data.email, parsed.data.purpose, publicSessionId)
   } catch (error) {
     // Never reveal existence or send failures through this surface — the
     // caller-visible contract is identical either way.

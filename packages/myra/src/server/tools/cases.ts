@@ -41,15 +41,40 @@ async function accountEmail(accountId: string, db: MyraDb): Promise<string | nul
   return user?.email ?? null
 }
 
+/**
+ * Signed-in users may redirect replies only to their account email or to an
+ * address verified within the window — a client-asserted foreign replyEmail
+ * is never trusted on its own.
+ */
+async function resolveUserReplyEmail(
+  account: string | null,
+  requestedRaw: string | undefined,
+  db: MyraDb
+): Promise<{ replyEmail: string; verifiedAt: Date | null }> {
+  const requested = requestedRaw?.trim().toLowerCase()
+  if (requested && requested !== account?.trim().toLowerCase()) {
+    const verified = await findVerifiedEmail(requested, "support_case", null, db)
+    if (!verified) {
+      throw err("VERIFICATION_REQUIRED", "Verify your reply email to send a case.")
+    }
+    return { replyEmail: requested, verifiedAt: verified.consumedAt }
+  }
+  const replyEmail = requested ?? account
+  if (!replyEmail) throw err("VERIFICATION_REQUIRED", "Your account has no reply email.")
+  return { replyEmail, verifiedAt: null }
+}
+
 async function resolveReplyDestination(
   ctx: MyraToolContext,
   payload: SubmitCasePayload
 ): Promise<{ replyEmail: string; verifiedAt: Date | null }> {
   if (ctx.principal.kind === "user") {
-    const email =
-      payload.replyEmail ?? (await accountEmail(ctx.principal.accountId, ctx.db ?? prisma))
-    if (!email) throw err("VERIFICATION_REQUIRED", "Your account has no reply email.")
-    return { replyEmail: email, verifiedAt: null }
+    const db = ctx.db ?? prisma
+    return resolveUserReplyEmail(
+      await accountEmail(ctx.principal.accountId, db),
+      payload.replyEmail,
+      db
+    )
   }
   // Anonymous: a verified reply destination is mandatory before any case
   // preview. Never reveals whether the address already has cases.
@@ -156,9 +181,14 @@ export async function executeSubmitSupportCase(
   let replyEmail: string | null = null
   let emailVerifiedAt: Date | null = null
   if (ctx.principal.kind === "user") {
-    replyEmail =
-      parsed.replyEmail ?? (await accountEmail(ctx.principal.accountId, ctx.db ?? prisma))
-    if (!replyEmail) throw err("VERIFICATION_REQUIRED", "Your account has no reply email.")
+    const db = ctx.db ?? prisma
+    const resolved = await resolveUserReplyEmail(
+      await accountEmail(ctx.principal.accountId, db),
+      parsed.replyEmail,
+      db
+    )
+    replyEmail = resolved.replyEmail
+    emailVerifiedAt = resolved.verifiedAt
   } else if (ctx.principal.kind === "anonymous") {
     const email = parsed.replyEmail?.trim().toLowerCase()
     if (!email) throw err("VERIFICATION_REQUIRED", "Verify your reply email first.")

@@ -103,7 +103,9 @@ export async function confirmIdentityCode(
 /**
  * The latest consumed verification for (email, purpose), or null. When
  * `publicSessionId` is given, a session-bound code must match that session;
- * unbound consumed codes are accepted as already-verified.
+ * unbound consumed codes are accepted as already-verified. A consumed code
+ * counts only for four code lifetimes (one hour) — retention cleanup is not
+ * the verification bound.
  */
 export async function findVerifiedEmail(
   email: string,
@@ -112,8 +114,13 @@ export async function findVerifiedEmail(
   db: MyraDb = prisma
 ): Promise<{ consumedAt: Date | null } | null> {
   const normalized = email.trim().toLowerCase()
+  const verifiedSince = new Date(Date.now() - MYRA_LIMITS.identityCodeTtlMinutes * 4 * 60 * 1000)
   const row = await db.myraIdentityVerification.findFirst({
-    where: { email: normalized, purpose, consumedAt: { not: null } },
+    where: {
+      email: normalized,
+      purpose,
+      consumedAt: { not: null, gte: verifiedSince },
+    },
     orderBy: { consumedAt: "desc" },
     select: { publicSessionId: true, consumedAt: true },
   })

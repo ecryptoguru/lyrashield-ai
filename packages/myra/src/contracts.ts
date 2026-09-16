@@ -447,11 +447,13 @@ export type BookDemoPayload = z.infer<typeof bookDemoPayloadSchema>
 
 export const caseReplyRequestSchema = z.object({ body: z.string().min(1).max(4000) }).strict()
 
+// No publicSessionId field: the session binds through the verified
+// `x-myra-session` token in the route, never through a client-asserted body
+// value.
 export const identityRequestSchema = z
   .object({
     email: z.email().max(320),
     purpose: z.enum(["support_case", "demo_booking"]),
-    publicSessionId: z.string().max(80).optional(),
     turnstileToken: z.string().max(4096).optional(),
   })
   .strict()
