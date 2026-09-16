@@ -8,7 +8,7 @@
     "alt": "A monitoring path feeding a recovery loop around a production core",
     "sourceHash": "sha256:8222cb1fcb4097fcf17ec9f8ff5076f87b188fb373d0aa874513b4f3dfabb729",
     "cropNotes": "Keep the loop complete in landscape and portrait crops",
-    "usageCount": 2,
+    "usageCount": 3,
     "approved": true
   },
   {
@@ -20,7 +20,7 @@
     "alt": "An incident signal contained before entering a retest path",
     "sourceHash": "sha256:88fadac28eb1897950c4bc810a2360d340dfd49fb802612c0b17d620fc59a006",
     "cropNotes": "Keep containment and retest stages separate and inside the protected center",
-    "usageCount": 2,
+    "usageCount": 3,
     "approved": true
   },
   {
@@ -56,7 +56,7 @@
     "alt": "A protected data chamber separated from an external assistant path",
     "sourceHash": "sha256:d4e070a2021276fc97fbf54b6befd9aa7caeff2491ec9c18f8abb04c52b39b92",
     "cropNotes": "Keep the privacy boundary and both sides visible; avoid depicting real user data",
-    "usageCount": 2,
+    "usageCount": 3,
     "approved": true
   },
   {
@@ -104,7 +104,7 @@
     "alt": "A compact system connected to a backup artifact and verified restore path",
     "sourceHash": "sha256:6fd8119b21a108ad8d615a825086c7455eb9a2d355b8bd74ce0a845c7fe5b3f0",
     "cropNotes": "Keep the system, backup, and restore path visible in the central safe area",
-    "usageCount": 2,
+    "usageCount": 3,
     "approved": true
   },
   {
@@ -188,7 +188,7 @@
     "alt": "An incident signal contained before entering a retest path",
     "sourceHash": "sha256:88fadac28eb1897950c4bc810a2360d340dfd49fb802612c0b17d620fc59a006",
     "cropNotes": "Keep containment and retest stages separate and inside the protected center",
-    "usageCount": 2,
+    "usageCount": 3,
     "approved": true
   }
 ]
