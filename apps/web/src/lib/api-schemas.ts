@@ -46,6 +46,56 @@ const githubRepoSchema = z
 
 export const githubReposSchema = z.array(githubRepoSchema)
 
+export const findingPrioritySchema = z
+  .object({
+    score: z.number(),
+    band: z.enum(["urgent", "high", "normal", "low"]),
+    reasons: z.array(z.string()),
+    limitations: z.array(z.string()),
+  })
+  .passthrough()
+
+export const findingListItemSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    summary: z.string(),
+    severity: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]),
+    status: z.string(),
+    verified: z.boolean(),
+    verificationStatus: z.string(),
+    verificationMethod: z.string().nullable().optional(),
+    verificationReason: z.string().nullable().optional(),
+    confidence: z.string(),
+    cwe: z.string().nullable().optional(),
+    cvssScore: z.number().nullable().optional(),
+    businessImpact: z.string().nullable().optional(),
+    exploitability: z.string().nullable().optional(),
+    target: z
+      .object({
+        id: z.string(),
+        name: z.string(),
+        type: z.string(),
+        environment: z.string().nullable().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    _count: z
+      .object({
+        evidence: z.number(),
+        fixProposals: z.number(),
+      })
+      .passthrough()
+      .optional(),
+    priority: findingPrioritySchema.optional(),
+    firstSeenAt: dateString,
+    lastSeenAt: dateString,
+  })
+  .passthrough()
+
+export const findingsPaginatedSchema = paginatedResponseSchema(findingListItemSchema)
+
 export const targetSchema = z
   .object({
     domainVerificationStatus: z.string().optional(),
