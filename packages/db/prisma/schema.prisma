@@ -2566,6 +2566,7 @@ model SupportCase {
   replies SupportCaseReply[]
 
   @@index([status, createdAt])
+  @@index([createdAt])
   @@index([accountId])
   @@index([publicSessionId])
   @@index([workspaceId])
@@ -2614,6 +2615,7 @@ model MyraOperation {
   @@index([accountId])
   @@index([publicSessionId])
   @@index([status, expiresAt])
+  @@index([status, updatedAt])
   @@map("myra_operations")
 }
 
@@ -2654,6 +2656,7 @@ model DemoBooking {
   @@index([status])
   @@index([attendeeEmail])
   @@index([manageTokenExpiresAt])
+  @@index([createdAt])
   @@map("demo_bookings")
 }
 

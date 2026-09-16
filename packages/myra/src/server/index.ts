@@ -81,7 +81,12 @@ export {
   type ModelGenerateOutput,
 } from "./provider"
 export { runTaskLoop, newTraceId, classifyIntent, type LoopArgs } from "./loop"
-export { pruneMyraRetention, type RetentionCounts } from "./retention"
+export {
+  pruneMyraRetention,
+  recoverMyraState,
+  type RetentionCounts,
+  type RecoveryCounts,
+} from "./retention"
 export {
   handleMessage,
   suggest,
