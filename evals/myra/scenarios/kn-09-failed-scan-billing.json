@@ -1,0 +1,12 @@
+{
+  "id": "kn-09-failed-scan-billing",
+  "title": "Failed scan billing",
+  "category": "knowledge",
+  "persona": "anonymous",
+  "input": "Do failed scans consume billed minutes?",
+  "expect": {
+    "toolsUsed": ["search_public_help"],
+    "toolsNotUsed": ["book_demo"]
+  },
+  "surface": "MARKETING"
+}

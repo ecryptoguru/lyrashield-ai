@@ -42,12 +42,12 @@ test.describe("AI App Security scanner tool", () => {
     ).toHaveLength(0)
   })
 
-  test("keyboard navigates tabs and runs the scan", async ({ page, isMobile }) => {
-    test.skip(isMobile, "Mobile WebKit has no hardware Tab key")
+  test("keyboard navigates tabs and runs the scan", async ({ page }) => {
     await page.goto("/tools/ai-app-security-scanner")
+    // WAI-ARIA tablist contract: roving tabindex, arrow keys move between tabs.
     await page.locator("#ai-app-files-tab").focus()
     await expect(page.locator("#ai-app-files-tab")).toBeFocused()
-    await page.keyboard.press("Tab")
+    await page.keyboard.press("ArrowRight")
     await expect(page.locator("#ai-app-paste-tab")).toBeFocused()
     await page.keyboard.press("Enter")
     await expect(page.locator("#ai-app-paste-panel")).not.toHaveClass(/hidden/)

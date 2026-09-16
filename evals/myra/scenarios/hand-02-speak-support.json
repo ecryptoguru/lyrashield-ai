@@ -1,0 +1,25 @@
+{
+  "id": "hand-02-speak-support",
+  "title": "Speak to support",
+  "category": "handoff",
+  "persona": "anonymous",
+  "input": "Please connect me with human support.",
+  "expect": {
+    "anyOf": [
+      {
+        "proposalRequired": true
+      },
+      {
+        "components": ["support_case_preview"]
+      },
+      {
+        "outcome": "escalated"
+      },
+      {
+        "mustContain": ["support"]
+      }
+    ],
+    "toolsNotUsed": ["book_demo", "manage_own_demo"]
+  },
+  "surface": "MARKETING"
+}

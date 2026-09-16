@@ -1,0 +1,13 @@
+{
+  "id": "kn-06-agency-price",
+  "title": "Agency current price",
+  "category": "knowledge",
+  "persona": "anonymous",
+  "input": "Compare Agency with Pro pricing.",
+  "expect": {
+    "toolsUsed": ["read_product_catalog"],
+    "components": ["plan_comparison"]
+  },
+  "surface": "MARKETING",
+  "routeContext": "/pricing"
+}

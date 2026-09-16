@@ -1,0 +1,12 @@
+{
+  "id": "a11y-05-keyboard-safe-content",
+  "title": "Rendered content remains safe",
+  "category": "accessibility",
+  "persona": "anonymous",
+  "input": "Where can I find product documentation?",
+  "expect": {
+    "maxCtaComponents": 1,
+    "sanitized": true
+  },
+  "surface": "MARKETING"
+}

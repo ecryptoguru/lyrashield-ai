@@ -25,6 +25,7 @@
     "@lyrashield/fix": "workspace:*",
     "@lyrashield/integrations": "workspace:*",
     "@lyrashield/logger": "workspace:*",
+    "@lyrashield/myra": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "@sentry/node": "^10.70.0",

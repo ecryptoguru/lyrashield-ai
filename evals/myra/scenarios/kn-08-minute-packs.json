@@ -1,0 +1,11 @@
+{
+  "id": "kn-08-minute-packs",
+  "title": "Minute pack source",
+  "category": "knowledge",
+  "persona": "anonymous",
+  "input": "What is the current minute pack pricing?",
+  "expect": {
+    "toolsUsed": ["read_product_catalog"]
+  },
+  "surface": "MARKETING"
+}

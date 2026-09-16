@@ -457,6 +457,35 @@ export async function checkAffiliateLinkRateLimit(affiliateId: string) {
   )
 }
 
+// ─── Myra support agent rate limits ─────────────────────────────────────────
+//
+// Buckets per docs/myra-spec.md §9 (per-session/user rate limits). `key` is a
+// principal-stable identifier chosen by the route: publicSessionId for
+// anonymous sessions, accountId for authenticated users, or the client IP for
+// credential-minting / verification surfaces before a principal exists.
+const MYRA_MESSAGE_MAX = readIntEnv("RATE_LIMIT_MYRA_MESSAGE_MAX", 20)
+const MYRA_SUGGEST_MAX = readIntEnv("RATE_LIMIT_MYRA_SUGGEST_MAX", 60)
+const MYRA_VERIFY_MAX = readIntEnv("RATE_LIMIT_MYRA_VERIFY_MAX", 5)
+
+export type MyraRateLimitKind = "message" | "suggest" | "verify"
+
+const MYRA_MAX_BY_KIND: Record<MyraRateLimitKind, number> = {
+  // Chat turns and confirmed writes — each can trigger model spend.
+  message: MYRA_MESSAGE_MAX,
+  // Type-ahead retrieval only — no model call, so a looser budget.
+  suggest: MYRA_SUGGEST_MAX,
+  // Public-session mints and identity-code request/confirm attempts.
+  verify: MYRA_VERIFY_MAX,
+}
+
+export async function checkMyraRateLimit(kind: MyraRateLimitKind, key: string) {
+  const max = MYRA_MAX_BY_KIND[kind]
+  const identifier = `myra-${kind}:${key}`
+  const upstash = await checkUpstash(max, "60 s", identifier)
+  if (upstash) return upstash
+  return checkInMemory(identifier, max, WINDOW_MS)
+}
+
 /**
  * Bounds the read-only scan-eligibility preflight per workspace. The composer
  * calls this on interaction, so it needs its own (looser) budget distinct from

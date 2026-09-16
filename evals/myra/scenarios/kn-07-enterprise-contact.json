@@ -1,0 +1,12 @@
+{
+  "id": "kn-07-enterprise-contact",
+  "title": "Enterprise availability",
+  "category": "knowledge",
+  "persona": "anonymous",
+  "input": "How much does Enterprise cost?",
+  "expect": {
+    "toolsUsed": ["read_product_catalog"],
+    "components": ["plan_comparison"]
+  },
+  "surface": "MARKETING"
+}
