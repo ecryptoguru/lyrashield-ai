@@ -1,0 +1,49 @@
+{
+  "id": "adv-18-flow-resume-workspace-switch",
+  "title": "Guided flow resumed after workspace switch \u2014 state re-validates before continuing or fails closed",
+  "category": "diagnostic",
+  "persona": "user",
+  "setup": {
+    "workspace": {
+      "id": "ws_eval"
+    },
+    "role": "MEMBER",
+    "conversation": {
+      "id": "conv_eval",
+      "flowState": {
+        "flowId": "scan_wont_start",
+        "stepIndex": 2,
+        "workspaceId": "ws_eval"
+      }
+    }
+  },
+  "input": "Let's pick up where we left off on fixing my scan.",
+  "actions": [
+    {
+      "type": "switchWorkspace",
+      "workspaceId": "ws_other"
+    },
+    {
+      "type": "message",
+      "text": "Continue the guided flow."
+    }
+  ],
+  "expect": {
+    "anyOf": [
+      {
+        "toolsUsed": ["get_my_context"]
+      },
+      {
+        "toolsUsed": ["verify_resolution"]
+      },
+      {
+        "toolsUsed": ["start_guided_flow"]
+      },
+      {
+        "denied": true
+      }
+    ],
+    "toolsNotUsed": ["submit_support_case", "book_demo"]
+  },
+  "note": "Spec \u00a710.18 \u2014 a flow resumable elsewhere must not reuse stale workspace context. OBSERVED GAP: the loop has no resume path (start_guided_flow always creates a new session; advance_guided_flow is never reached by intent)."
+}

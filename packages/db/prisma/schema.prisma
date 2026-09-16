@@ -12,34 +12,34 @@ datasource db {
 // Reference user.id from application models.
 
 model User {
-  id            String   @id
-  name          String
-  email         String   @unique
-  emailVerified Boolean  @default(false)
-  image         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  twoFactorEnabled Boolean @default(false)
+  id               String   @id
+  name             String
+  email            String   @unique
+  emailVerified    Boolean  @default(false)
+  image            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  twoFactorEnabled Boolean  @default(false)
 
   // Platform-level authority, independent of any workspace/tenant role.
   // Only value is "PLATFORM_OPERATOR"; null means an ordinary tenant user.
-  platformRole String?
+  platformRole   String?
   // Private lifetime trial claim; independent of workspace membership.
   trialStartedAt DateTime?
 
-  sessions           Session[]
-  accounts           Account[]
-  verifications      Verification[]
-  twoFactors         TwoFactor[]
-  oauthclients       OauthClient[]
-  oauthrefreshtokens OauthRefreshToken[]
-  oauthaccesstokens  OauthAccessToken[]
-  oauthconsents      OauthConsent[]
-  deviceCodes        DeviceCode[]
-  affiliate          Affiliate?
+  sessions                Session[]
+  accounts                Account[]
+  verifications           Verification[]
+  twoFactors              TwoFactor[]
+  oauthclients            OauthClient[]
+  oauthrefreshtokens      OauthRefreshToken[]
+  oauthaccesstokens       OauthAccessToken[]
+  oauthconsents           OauthConsent[]
+  deviceCodes             DeviceCode[]
+  affiliate               Affiliate?
   platformAdminElevations PlatformAdminElevation[]
-  agentConnections   AgentConnection[]
-  accountAcquisition AccountAcquisition?
+  agentConnections        AgentConnection[]
+  accountAcquisition      AccountAcquisition?
 
   @@map("users")
 }
@@ -61,25 +61,25 @@ model TwoFactor {
 }
 
 model Session {
-  id                String   @id
-  expiresAt         DateTime
-  token             String   @unique
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  ipAddress         String?
-  userAgent         String?
-  userId            String
-  activeWorkspaceId String?
+  id                       String    @id
+  expiresAt                DateTime
+  token                    String    @unique
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  ipAddress                String?
+  userAgent                String?
+  userId                   String
+  activeWorkspaceId        String?
   pendingAgentConnectionId String?
-  twoFactorVerifiedAt DateTime?
+  twoFactorVerifiedAt      DateTime?
 
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  oauthrefreshtokens OauthRefreshToken[]
-  oauthaccesstokens  OauthAccessToken[]
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oauthrefreshtokens      OauthRefreshToken[]
+  oauthaccesstokens       OauthAccessToken[]
   platformAdminElevations PlatformAdminElevation[]
 
-  @@index([userId])
   @@unique([id, userId])
+  @@index([userId])
   @@map("sessions")
 }
 
@@ -536,51 +536,51 @@ model Workspace {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  graceUsedMs        Int       @default(0)
-  graceCycleStart    DateTime?
-  deepAllowed        Boolean   @default(false)
-  trialStartedAt     DateTime?
+  graceUsedMs            Int       @default(0)
+  graceCycleStart        DateTime?
+  deepAllowed            Boolean   @default(false)
+  trialStartedAt         DateTime?
   // The Agency buyer whose account pool sponsors this workspace's team scans.
   agencySponsorAccountId String?
 
-  members              WorkspaceMember[]
-  projects             Project[]
-  targets              Target[]
-  scans                Scan[]
-  findings             Finding[]
-  policies             Policy[]
-  integrations         Integration[]
-  auditLogs            AuditLog[]
-  usageRecords         UsageRecord[]
-  reports              Report[]
-  notifications        Notification[]
-  schedules            Schedule[]
-  billingAccount       BillingAccount?
-  invitations          Invitation[]
-  webhookEvents        WebhookEvent[]
-  apiKeys              ApiKey[]
-  retests              Retest[]
-  agentApprovals       AgentApproval[]
-  scoreSnapshots       ScoreSnapshot[]
+  members                  WorkspaceMember[]
+  projects                 Project[]
+  targets                  Target[]
+  scans                    Scan[]
+  findings                 Finding[]
+  policies                 Policy[]
+  integrations             Integration[]
+  auditLogs                AuditLog[]
+  usageRecords             UsageRecord[]
+  reports                  Report[]
+  notifications            Notification[]
+  schedules                Schedule[]
+  billingAccount           BillingAccount?
+  invitations              Invitation[]
+  webhookEvents            WebhookEvent[]
+  apiKeys                  ApiKey[]
+  retests                  Retest[]
+  agentApprovals           AgentApproval[]
+  scoreSnapshots           ScoreSnapshot[]
   aiSecurityScoreSnapshots AiSecurityScoreSnapshot[]
-  gateVerdicts         GateVerdict[]
-  findingCandidates    FindingCandidate[]
-  findingVerifications FindingVerification[]
-  aiSystemProfile      AiSystemProfile[]
-  threatModels         ThreatModel[]
-  controlEvidence      ControlEvidence[]
-  domainVerifications  TargetDomainVerification[]
-  liveAiSafetySettings LiveAiSafetySettings?
-  liveAiSafetyPlans    LiveAiSafetyPlan[]
-  liveAiSafetyRuns     LiveAiSafetyRun[]
-  minutePacks          MinutePack[]
-  licenses             License[]
-  licenseActivations   LicenseActivation[]
-  licenseKeys          LicenseKey[]
-  syncCursors          SyncCursor[]
-  agentConnections     AgentConnection[]
-  agentOperations      AgentOperation[]
-  loopClosures         LoopClosure[]
+  gateVerdicts             GateVerdict[]
+  findingCandidates        FindingCandidate[]
+  findingVerifications     FindingVerification[]
+  aiSystemProfile          AiSystemProfile[]
+  threatModels             ThreatModel[]
+  controlEvidence          ControlEvidence[]
+  domainVerifications      TargetDomainVerification[]
+  liveAiSafetySettings     LiveAiSafetySettings?
+  liveAiSafetyPlans        LiveAiSafetyPlan[]
+  liveAiSafetyRuns         LiveAiSafetyRun[]
+  minutePacks              MinutePack[]
+  licenses                 License[]
+  licenseActivations       LicenseActivation[]
+  licenseKeys              LicenseKey[]
+  syncCursors              SyncCursor[]
+  agentConnections         AgentConnection[]
+  agentOperations          AgentOperation[]
+  loopClosures             LoopClosure[]
 
   @@index([agencySponsorAccountId])
 }
@@ -647,20 +647,20 @@ model Target {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
-  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project           Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  scans             Scan[]
-  findings          Finding[]
-  credentials       CredentialSet[]
-  schedules         Schedule[]
-  scoreSnapshots    ScoreSnapshot[]
+  workspace                Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project                  Project?                  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  scans                    Scan[]
+  findings                 Finding[]
+  credentials              CredentialSet[]
+  schedules                Schedule[]
+  scoreSnapshots           ScoreSnapshot[]
   aiSecurityScoreSnapshots AiSecurityScoreSnapshot[]
-  gateVerdicts      GateVerdict[]
-  findingCandidates FindingCandidate[]
-  aiSystemProfile   AiSystemProfile?
-  threatModels      ThreatModel[]
-  controlEvidence   ControlEvidence[]
-  liveAiSafetyPlans LiveAiSafetyPlan[]
+  gateVerdicts             GateVerdict[]
+  findingCandidates        FindingCandidate[]
+  aiSystemProfile          AiSystemProfile?
+  threatModels             ThreatModel[]
+  controlEvidence          ControlEvidence[]
+  liveAiSafetyPlans        LiveAiSafetyPlan[]
 
   @@unique([workspaceId, repoFullName])
   @@unique([workspaceId, url])
@@ -806,56 +806,56 @@ model Policy {
 }
 
 model Scan {
-  id                   String     @id @default(cuid())
-  workspaceId          String
-  projectId            String?
-  targetId             String?
-  policyId             String?
-  goal                 ScanGoal
-  mode                 ScanMode   @default(SAFE)
-  status               ScanStatus @default(QUEUED)
-  triggerType          String     @default("manual")
-  startedAt            DateTime?
-  endedAt              DateTime?
-  summary              String?
-  errorCategory        String?
-  errorMessage         String?
-  riskScoreBefore      Int?
-  riskScoreAfter       Int?
-  estimatedCostCents   Int?
-  actualCostCents      Int?
-  providerCostUsd      Decimal?   @db.Decimal(12, 6)
-  billedCostUsd        Decimal?   @db.Decimal(12, 6)
-  llmRequestCount      Int?
-  llmInputTokens       Int?
-  llmCachedInputTokens Int?
-  llmOutputTokens      Int?
-  determinismMode      String?    @default("default")
-  durationMs           Int?
+  id                    String     @id @default(cuid())
+  workspaceId           String
+  projectId             String?
+  targetId              String?
+  policyId              String?
+  goal                  ScanGoal
+  mode                  ScanMode   @default(SAFE)
+  status                ScanStatus @default(QUEUED)
+  triggerType           String     @default("manual")
+  startedAt             DateTime?
+  endedAt               DateTime?
+  summary               String?
+  errorCategory         String?
+  errorMessage          String?
+  riskScoreBefore       Int?
+  riskScoreAfter        Int?
+  estimatedCostCents    Int?
+  actualCostCents       Int?
+  providerCostUsd       Decimal?   @db.Decimal(12, 6)
+  billedCostUsd         Decimal?   @db.Decimal(12, 6)
+  llmRequestCount       Int?
+  llmInputTokens        Int?
+  llmCachedInputTokens  Int?
+  llmOutputTokens       Int?
+  determinismMode       String?    @default("default")
+  durationMs            Int?
   finalizationStartedAt DateTime?
-  sarifUri             String?
-  createdById          String
+  sarifUri              String?
+  createdById           String
   // Immutable billing identity for this scan; NULL on legacy scans means createdById.
-  sponsorAccountId     String?
-  deletedAt            DateTime?
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
+  sponsorAccountId      String?
+  deletedAt             DateTime?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
 
-  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project              Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  target               Target?               @relation(fields: [targetId], references: [id], onDelete: SetNull)
-  policy               Policy?               @relation(fields: [policyId], references: [id], onDelete: SetNull)
-  events               ScanEvent[]
-  findings             Finding[]
-  retests              Retest[]
-  reports              Report[]
-  scoreSnapshot        ScoreSnapshot?
+  workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project                 Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  target                  Target?                  @relation(fields: [targetId], references: [id], onDelete: SetNull)
+  policy                  Policy?                  @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  events                  ScanEvent[]
+  findings                Finding[]
+  retests                 Retest[]
+  reports                 Report[]
+  scoreSnapshot           ScoreSnapshot?
   aiSecurityScoreSnapshot AiSecurityScoreSnapshot?
-  gateVerdicts         GateVerdict[]
-  resultManifest       ScanResultManifest?
-  coverageReceipts     ScanCoverageReceipt[]
-  findingCandidates    FindingCandidate[]
-  findingVerifications FindingVerification[]
+  gateVerdicts            GateVerdict[]
+  resultManifest          ScanResultManifest?
+  coverageReceipts        ScanCoverageReceipt[]
+  findingCandidates       FindingCandidate[]
+  findingVerifications    FindingVerification[]
 
   @@index([workspaceId])
   @@index([projectId])
@@ -912,58 +912,66 @@ model ApiKey {
 }
 
 model Finding {
-  id                 String                     @id @default(cuid())
-  workspaceId        String
-  projectId          String?
-  targetId           String?
-  scanId             String
-  title              String
-  summary            String
-  category           String?
-  cwe                String?
-  owaspCategory      String?
-  severity           FindingSeverity
-  confidence         String                     @default("medium")
-  cvssScore          Float?
-  cvssVector         String?
-  cvss3Score         Float?
-  cvss3Vector        String?
-  sarifRuleId        String?
-  verified           Boolean                    @default(false)
-  verificationStatus FindingVerificationStatus  @default(DETECTED)
-  verificationMethod FindingVerificationMethod?
-  verificationReason String?
-  exploitability     String?
-  businessImpact     String?
-  technicalDetail    String?
-  recommendedFix     String?
-  /** WP3: repo-relative file paths this finding implicates (drives fix-PR patch
-   * scope). Null until a fix proposal supplies them. */
-  implicatedFiles    Json?
-  /** WP3: the commit SHA the implicated scan ran on — the base a fix patch must
-   * apply cleanly against. Null for non-repo targets or pre-WP3 findings. */
-  baseCommit         String?
-  status             FindingStatus              @default(OPEN)
-  statusReason       String?
-  /** Versioned human disposition. Unbound legacy values remain visible but do
-   * not satisfy gate v2 enforcement. */
-  disposition        String?
-  dispositionActorUserId String?
-  dispositionReason  String?
+  id                      String                     @id @default(cuid())
+  workspaceId             String
+  projectId               String?
+  targetId                String?
+  scanId                  String
+  title                   String
+  summary                 String
+  category                String?
+  cwe                     String?
+  owaspCategory           String?
+  severity                FindingSeverity
+  confidence              String                     @default("medium")
+  cvssScore               Float?
+  cvssVector              String?
+  cvss3Score              Float?
+  cvss3Vector             String?
+  sarifRuleId             String?
+  verified                Boolean                    @default(false)
+  verificationStatus      FindingVerificationStatus  @default(DETECTED)
+  verificationMethod      FindingVerificationMethod?
+  verificationReason      String?
+  exploitability          String?
+  businessImpact          String?
+  technicalDetail         String?
+  recommendedFix          String?
+  /**
+   * WP3: repo-relative file paths this finding implicates (drives fix-PR patch
+   * scope). Null until a fix proposal supplies them.
+   */
+  implicatedFiles         Json?
+  /**
+   * WP3: the commit SHA the implicated scan ran on — the base a fix patch must
+   * apply cleanly against. Null for non-repo targets or pre-WP3 findings.
+   */
+  baseCommit              String?
+  status                  FindingStatus              @default(OPEN)
+  statusReason            String?
+  /**
+   * Versioned human disposition. Unbound legacy values remain visible but do
+   * not satisfy gate v2 enforcement.
+   */
+  disposition             String?
+  dispositionActorUserId  String?
+  dispositionReason       String?
   dispositionAssessmentId String?
-  dispositionAt      DateTime?
-  /** Canonical finding for DUPLICATE status. Service code binds workspace and target. */
-  canonicalFindingId String?
-  dedupeKey          String
-  ownerUserId        String?
-  ownerTeam          String?
-  slaDueAt           DateTime?
-  firstSeenAt        DateTime                   @default(now())
-  lastSeenAt         DateTime                   @default(now())
-  fixedAt            DateTime?
-  deletedAt          DateTime?
-  createdAt          DateTime                   @default(now())
-  updatedAt          DateTime                   @updatedAt
+  dispositionAt           DateTime?
+  /**
+   * Canonical finding for DUPLICATE status. Service code binds workspace and target.
+   */
+  canonicalFindingId      String?
+  dedupeKey               String
+  ownerUserId             String?
+  ownerTeam               String?
+  slaDueAt                DateTime?
+  firstSeenAt             DateTime                   @default(now())
+  lastSeenAt              DateTime                   @default(now())
+  fixedAt                 DateTime?
+  deletedAt               DateTime?
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
 
   workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project              Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -1015,18 +1023,18 @@ model Evidence {
 /// task must survive the workspace cascade until the external object is gone.
 /// It is not tenant-facing data and is processed only by server-owned services.
 model ArtifactDeletionTask {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   workspaceId    String
   kind           String
   storageUri     String
-  status         String   @default("PENDING")
-  attempts       Int      @default(0)
-  nextAttemptAt  DateTime @default(now())
+  status         String    @default("PENDING")
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime  @default(now())
   leaseToken     String?
   leaseExpiresAt DateTime?
   lastError      String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@unique([kind, storageUri])
   @@index([status, nextAttemptAt])
@@ -1276,21 +1284,21 @@ model ScoreSnapshot {
 }
 
 model AiSecurityScoreSnapshot {
-  id               String   @id @default(cuid())
-  workspaceId      String
-  targetId         String
-  scanId           String   @unique
-  modelVersion     String
-  score            Int?
-  grade            String?
-  breakdown        Json
-  evidenceQuality  Json
-  methodology      String
-  assessedCount    Int
-  totalControls    Int
-  shareEligible    Boolean  @default(false)
-  computedAt       DateTime @default(now())
-  expiresAt        DateTime
+  id              String   @id @default(cuid())
+  workspaceId     String
+  targetId        String
+  scanId          String   @unique
+  modelVersion    String
+  score           Int?
+  grade           String?
+  breakdown       Json
+  evidenceQuality Json
+  methodology     String
+  assessedCount   Int
+  totalControls   Int
+  shareEligible   Boolean  @default(false)
+  computedAt      DateTime @default(now())
+  expiresAt       DateTime
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   target    Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
@@ -1306,33 +1314,55 @@ model AiSecurityScoreSnapshot {
 // evaluation). Append-only — a re-evaluation inserts a new row; the latest
 // non-stale row is the current verdict. History is the audit trail.
 model GateVerdict {
-  id              String   @id @default(cuid())
-  workspaceId     String
-  targetId        String
-  /** The completed scan this verdict was computed from (null when none exists). */
-  scanId          String?
-  /** e.g. "lyrashield-gate/1.0.0" — recorded so threshold changes are traceable. */
-  standardVersion String
-  /** READY | NOT_READY | INSUFFICIENT_EVIDENCE */
-  state           String
-  /** Scanner classes that were evaluated (positive coverage claim). */
-  coverageStatement Json
-  /** Always present; empty only when coverage is genuinely complete. */
-  nonCoverage     Json
-  /** Severity-ordered blockers, each traceable to a verified finding. */
-  blockingReasons Json
-  /** Counts of open findings by verification state. */
-  evidenceSummary Json
-  /** current flag + stale reason. */
-  staleness       Json
-  /** SHA-256 over the canonical evidence input (reproducibility). */
-  inputChecksum   String
-  /** SHA-256 over the rendered verdict payload (tamper-evidence). */
-  verdictChecksum String
-  /** Versioned, secret-free assessment binding for current applicability. */
-  assessmentVersion Int?
+  id                 String   @id @default(cuid())
+  workspaceId        String
+  targetId           String
+  /**
+   * The completed scan this verdict was computed from (null when none exists).
+   */
+  scanId             String?
+  /**
+   * e.g. "lyrashield-gate/1.0.0" — recorded so threshold changes are traceable.
+   */
+  standardVersion    String
+  /**
+   * READY | NOT_READY | INSUFFICIENT_EVIDENCE
+   */
+  state              String
+  /**
+   * Scanner classes that were evaluated (positive coverage claim).
+   */
+  coverageStatement  Json
+  /**
+   * Always present; empty only when coverage is genuinely complete.
+   */
+  nonCoverage        Json
+  /**
+   * Severity-ordered blockers, each traceable to a verified finding.
+   */
+  blockingReasons    Json
+  /**
+   * Counts of open findings by verification state.
+   */
+  evidenceSummary    Json
+  /**
+   * current flag + stale reason.
+   */
+  staleness          Json
+  /**
+   * SHA-256 over the canonical evidence input (reproducibility).
+   */
+  inputChecksum      String
+  /**
+   * SHA-256 over the rendered verdict payload (tamper-evidence).
+   */
+  verdictChecksum    String
+  /**
+   * Versioned, secret-free assessment binding for current applicability.
+   */
+  assessmentVersion  Int?
   assessmentSnapshot Json?
-  evaluatedAt     DateTime @default(now())
+  evaluatedAt        DateTime @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   target    Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
@@ -1529,23 +1559,23 @@ model Report {
 }
 
 model Notification {
-  id          String    @id @default(cuid())
-  workspaceId String
-  userId      String?
-  channel     String    @default("email")
-  type        String
-  title       String
-  body        String
-  status      String    @default("pending")
-  sentAt      DateTime?
-  metadata    Json?
-  dedupeKey   String?
+  id                     String    @id @default(cuid())
+  workspaceId            String
+  userId                 String?
+  channel                String    @default("email")
+  type                   String
+  title                  String
+  body                   String
+  status                 String    @default("pending")
+  sentAt                 DateTime?
+  metadata               Json?
+  dedupeKey              String?
   // Short lease claims one external delivery attempt at a time. A crashed
   // worker can be retried after lease expiry without concurrent sends.
   deliveryLeaseExpiresAt DateTime?
-  deliveryAttempts      Int      @default(0)
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
+  deliveryAttempts       Int       @default(0)
+  deletedAt              DateTime?
+  createdAt              DateTime  @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -1581,23 +1611,23 @@ model Schedule {
 }
 
 model BillingAccount {
-  id String @id @default(cuid())
+  id                  String        @id @default(cuid())
   // Account-owned subscription. `accountId` is the owning user (the payer);
   // `workspaceId` is purchase attribution only — NULL when the attribution
   // workspace already carries another account's billing row, or when the
   // workspace was deleted (SetNull). `purchaseWorkspaceId` preserves the
   // original purchase context for provenance even when attribution is NULL.
-  workspaceId          String? @unique
-  purchaseWorkspaceId  String?
-  accountId            String?
-  provider             String  @default("polar")
-  externalId           String?
-  status               String  @default("free")
-  currentPlan          WorkspacePlan @default(FREE)
-  trialEndsAt          DateTime?
-  deletedAt            DateTime?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  workspaceId         String?       @unique
+  purchaseWorkspaceId String?
+  accountId           String?
+  provider            String        @default("polar")
+  externalId          String?
+  status              String        @default("free")
+  currentPlan         WorkspacePlan @default(FREE)
+  trialEndsAt         DateTime?
+  deletedAt           DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   interval           String?
   currentPeriodStart DateTime?
@@ -1611,8 +1641,8 @@ model BillingAccount {
   spendLimitCents    Int?
   // Mid-scan grace budget — per account + allowance cycle (moved off
   // Workspace so a member's subscription is never shared with a workspace).
-  graceUsedMs     Int       @default(0)
-  graceCycleStart DateTime?
+  graceUsedMs        Int       @default(0)
+  graceCycleStart    DateTime?
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
@@ -1887,21 +1917,21 @@ model NotificationPreference {
 }
 
 model AiSystemProfile {
-  id          String   @id @default(cuid())
-  workspaceId String
-  targetId    String   @unique
-  currentVersionId String? @unique
-  version     Int      @default(1)
-  profile     Json
-  createdById String
-  updatedById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(cuid())
+  workspaceId      String
+  targetId         String   @unique
+  currentVersionId String?  @unique
+  version          Int      @default(1)
+  profile          Json
+  createdById      String
+  updatedById      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  target    Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
-  currentVersion AiSystemProfileVersion? @relation("AiSystemProfileCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
-  versions AiSystemProfileVersion[] @relation("AiSystemProfileVersions")
+  workspace      Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target         Target                   @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  currentVersion AiSystemProfileVersion?  @relation("AiSystemProfileCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       AiSystemProfileVersion[] @relation("AiSystemProfileVersions")
 
   @@index([workspaceId, updatedAt])
 }
@@ -1993,7 +2023,7 @@ model ControlEvidenceVersion {
 // ─── Sprint 10 / Track A: Minute Packs ──────────────────────────────────────
 
 model MinutePack {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   // Purchase-attribution workspace. NULL survives workspace deletion — the
   // pack belongs to the account.
   workspaceId      String?
@@ -2003,10 +2033,10 @@ model MinutePack {
   externalId       String
   minutes          Int
   remainingMinutes Int
-  purchasedAt      DateTime @default(now())
+  purchasedAt      DateTime  @default(now())
   expiresAt        DateTime?
   deletedAt        DateTime?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime  @default(now())
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
@@ -2019,27 +2049,27 @@ model MinutePack {
 // ─── Sprint 10 / Track B: Local / Self-Hosted Licensing ─────────────────────
 
 model License {
-  id                    String    @id @default(cuid())
-  workspaceId           String?
-  ownerEmail            String
-  sku                   String
-  seatCount             Int
-  machineIds            String[]  @default([])
-  updateEligibleUntil   DateTime
+  id                     String    @id @default(cuid())
+  workspaceId            String?
+  ownerEmail             String
+  sku                    String
+  seatCount              Int
+  machineIds             String[]  @default([])
+  updateEligibleUntil    DateTime
   perpetualFallbackBuild String?
-  signingKeyId          String
-  signature             String
-  issuedAt              DateTime
-  revoked               Boolean   @default(false)
-  revokedAt             DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  signingKeyId           String
+  signature              String
+  issuedAt               DateTime
+  revoked                Boolean   @default(false)
+  revokedAt              DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  workspace    Workspace?           @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  activations  LicenseActivation[]
-  key          LicenseKey?
-  revocations  LicenseRevocation[]
-  syncCursors  SyncCursor[]
+  workspace   Workspace?          @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  activations LicenseActivation[]
+  key         LicenseKey?
+  revocations LicenseRevocation[]
+  syncCursors SyncCursor[]
 
   @@index([ownerEmail])
   @@index([workspaceId])
@@ -2065,25 +2095,25 @@ model LicenseActivation {
 }
 
 model LicenseKey {
-  id                String   @id @default(cuid())
-  licenseId         String   @unique
-  workspaceId       String?
-  keyHash           String   @unique
+  id                      String    @id @default(cuid())
+  licenseId               String    @unique
+  workspaceId             String?
+  keyHash                 String    @unique
   /// Partial unique index enforced via migration 20260822220000_license_issued_provider_unique:
   /// CREATE UNIQUE INDEX "LicenseKey_issuedByProvider_key" ON "LicenseKey"("issuedByProvider") WHERE "issuedByProvider" IS NOT NULL
-  issuedByProvider  String
-  providerProductId String?
+  issuedByProvider        String
+  providerProductId       String?
   // Fulfillment lifecycle: MINTED -> DELIVERING -> DELIVERED | DELIVERY_FAILED (retryable via webhook-track queue)
-  fulfillmentStatus String   @default("DELIVERED")
-  deliveryAttempts  Int      @default(0)
-  lastDeliveryError String?
+  fulfillmentStatus       String    @default("DELIVERED")
+  deliveryAttempts        Int       @default(0)
+  lastDeliveryError       String?
   // One-time retrieval token (hashed sha256, expires, single-use)
   retrievalTokenHash      String?   @unique
   retrievalTokenExpiresAt DateTime?
   retrievalTokenUsedAt    DateTime?
   // AES-256-GCM encrypted raw key for one-time retrieval (cleared atomically after use).
   retrievalRawKey         String?
-  createdAt         DateTime @default(now())
+  createdAt               DateTime  @default(now())
 
   license   License    @relation(fields: [licenseId], references: [id], onDelete: Cascade)
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
@@ -2092,14 +2122,14 @@ model LicenseKey {
 }
 
 model SyncCursor {
-  id                   String   @id @default(cuid())
-  workspaceId          String
-  licenseId            String
-  seq                  BigInt   @default(0) @db.BigInt
-  lastSyncedAt         DateTime
-  lastSyncedFindingId  String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  workspaceId         String
+  licenseId           String
+  seq                 BigInt   @default(0) @db.BigInt
+  lastSyncedAt        DateTime
+  lastSyncedFindingId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   license   License   @relation(fields: [licenseId], references: [id], onDelete: Cascade)
@@ -2147,35 +2177,35 @@ enum PayoutStatus {
 }
 
 model Affiliate {
-  id              String          @id @default(cuid())
-  userId          String          @unique
-  status          AffiliateStatus @default(PENDING)
-  promoCode       String?         @unique
-  baseRateBps     Int             @default(2500)
-  tierRateBps     Int             @default(3000)
-  tierThreshold   Int             @default(10)
-  activeReferrals Int             @default(0)
-  reservePct      Int             @default(25)
-  reserveUntil    DateTime?
-  payoutMethod    Json?
+  id                     String          @id @default(cuid())
+  userId                 String          @unique
+  status                 AffiliateStatus @default(PENDING)
+  promoCode              String?         @unique
+  baseRateBps            Int             @default(2500)
+  tierRateBps            Int             @default(3000)
+  tierThreshold          Int             @default(10)
+  activeReferrals        Int             @default(0)
+  reservePct             Int             @default(25)
+  reserveUntil           DateTime?
+  payoutMethod           Json?
   payoutMethodVerifiedAt DateTime?
   payoutMethodVerifiedBy String?
-  taxFormType     String?
-  taxFormStatus   String          @default("NOT_SUBMITTED")
-  taxReviewedAt   DateTime?
-  taxReviewedBy   String?
-  createdAt       DateTime        @default(now())
-  approvedAt      DateTime?
-  acceptedTermsAt DateTime?
-  termsVersion    String?
+  taxFormType            String?
+  taxFormStatus          String          @default("NOT_SUBMITTED")
+  taxReviewedAt          DateTime?
+  taxReviewedBy          String?
+  createdAt              DateTime        @default(now())
+  approvedAt             DateTime?
+  acceptedTermsAt        DateTime?
+  termsVersion           String?
 
-  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  links          AffiliateLink[]
-  clicks         Click[]
-  commissions    Commission[]
-  payouts        Payout[]
-  subscriptions  AffiliateSubscription[]
-  conversions    Conversion[]
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links             AffiliateLink[]
+  clicks            Click[]
+  commissions       Commission[]
+  payouts           Payout[]
+  subscriptions     AffiliateSubscription[]
+  conversions       Conversion[]
   attributionTokens AttributionToken[]
 
   @@index([reserveUntil])
@@ -2208,8 +2238,8 @@ model AffiliateLink {
   subid       String?
   createdAt   DateTime @default(now())
 
-  affiliate Affiliate        @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
-  clicks    Click[]
+  affiliate         Affiliate          @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  clicks            Click[]
   attributionTokens AttributionToken[]
 
   @@index([affiliateId])
@@ -2228,8 +2258,8 @@ model Click {
   utm         Json?
   clickedAt   DateTime @default(now())
 
-  link      AffiliateLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
-  affiliate Affiliate     @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  link              AffiliateLink      @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  affiliate         Affiliate          @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
   attributionTokens AttributionToken[]
 
   @@index([affiliateId, clickedAt])
@@ -2243,7 +2273,7 @@ model AttributionToken {
   clickId     String
   linkId      String
   expiresAt   DateTime
-  consumed     Boolean  @default(false)
+  consumed    Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   affiliate Affiliate     @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
@@ -2263,53 +2293,54 @@ model AffiliateSubscription {
   capEndsAt              DateTime
   isActive               Boolean  @default(true)
 
-  affiliate  Affiliate   @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  affiliate   Affiliate    @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
   conversions Conversion[]
 }
 
 model Conversion {
-  id                  String   @id @default(cuid())
-  externalId          String
-  idempotencyKey      String   @unique
-  subscriptionId      String?
-  affiliateId         String
-  grossAmount         Decimal  @db.Decimal(19, 4)
-  taxAmount           Decimal  @default(0) @db.Decimal(19, 4)
-  commissionableAmount Decimal @db.Decimal(19, 4)
-  currency            String   @db.VarChar(3)
-  method              String
-  promoCode           String?
-  subid               String?
-  occurredAt          DateTime
+  id                   String   @id @default(cuid())
+  externalId           String
+  idempotencyKey       String   @unique
+  subscriptionId       String?
+  affiliateId          String
+  grossAmount          Decimal  @db.Decimal(19, 4)
+  taxAmount            Decimal  @default(0) @db.Decimal(19, 4)
+  commissionableAmount Decimal  @db.Decimal(19, 4)
+  currency             String   @db.VarChar(3)
+  method               String
+  promoCode            String?
+  subid                String?
+  occurredAt           DateTime
 
-  affiliate     Affiliate            @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
-  subscription  AffiliateSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  commissions   Commission[]
+  affiliate    Affiliate              @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  subscription AffiliateSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  commissions  Commission[]
 
   @@unique([externalId, affiliateId])
   @@index([affiliateId, occurredAt])
 }
 
 model Commission {
-  id            String           @id @default(cuid())
-  conversionId  String
-  affiliateId   String
-  rateBps       Int
-  amount        Decimal          @db.Decimal(19, 4)
-  currency      String           @db.VarChar(3)
-  status        CommissionStatus @default(PENDING)
-  earnedAt      DateTime         @default(now())
-  availableAt   DateTime?
-  reversalOfId  String?
-  reserveReleasedAt DateTime?
-  reserveReleasedAmount Decimal? @db.Decimal(19, 4)
+  id                    String           @id @default(cuid())
+  conversionId          String
+  affiliateId           String
+  rateBps               Int
+  amount                Decimal          @db.Decimal(19, 4)
+  currency              String           @db.VarChar(3)
+  status                CommissionStatus @default(PENDING)
+  earnedAt              DateTime         @default(now())
+  availableAt           DateTime?
+  reversalOfId          String?
+  reserveReleasedAt     DateTime?
+  reserveReleasedAmount Decimal?         @db.Decimal(19, 4)
 
-  conversion Conversion @relation(fields: [conversionId], references: [id], onDelete: Cascade)
-  affiliate  Affiliate  @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  conversion  Conversion   @relation(fields: [conversionId], references: [id], onDelete: Cascade)
+  affiliate   Affiliate    @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
   // A commission can have up to two payout items: the main payout, and a
   // later reserve-release payout for the reserved portion held back during
   // the new-affiliate reserve period.
   payoutItems PayoutItem[]
+
   @@unique([conversionId, affiliateId])
   @@index([affiliateId, status, availableAt])
   @@index([status, availableAt])
@@ -2327,7 +2358,7 @@ model Payout {
   requestedAt      DateTime     @default(now())
   paidAt           DateTime?
   failureCode      String?
-  isReserveRelease Boolean       @default(false)
+  isReserveRelease Boolean      @default(false)
 
   affiliate Affiliate    @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
   items     PayoutItem[]
@@ -2354,4 +2385,390 @@ model PayoutItem {
 
   @@index([commissionId])
   @@index([payoutId])
+}
+
+// ─── Myra support agent ────────────────────────────────────────────────────
+// Additive support/booking tables (docs/myra-spec.md). Ownership is
+// dual-channel: `accountId` (User.id) for authenticated users and
+// `publicSessionId` for anonymous marketing visitors — never a synthetic
+// workspace. Postgres RLS binds owners through `app.current_account_id()` and
+// `app.myra_public_session_id()`; unbound contexts are trusted internal paths
+// (operator inbox, reconciliation), gated in the service layer by
+// requirePlatformAdmin / explicit ownership checks.
+
+enum MyraSurface {
+  MARKETING
+  DASHBOARD
+}
+
+enum MyraMessageRole {
+  USER
+  ASSISTANT
+  TOOL_EVENT
+}
+
+enum MyraConversationState {
+  ACTIVE
+  ENDED
+  TAKEOVER
+}
+
+enum MyraOperationStatus {
+  DRAFT
+  AWAITING_CONFIRMATION
+  EXECUTING
+  COMPLETED
+  FAILED
+  OUTCOME_UNKNOWN
+  EXPIRED
+  CANCELED
+}
+
+enum MyraFlowStatus {
+  ACTIVE
+  COMPLETED
+  ESCALATED
+  ABANDONED
+}
+
+enum SupportCaseStatus {
+  NEW
+  OPEN
+  PENDING_USER
+  RESOLVED
+}
+
+enum SupportCaseAuthorType {
+  USER
+  OPERATOR
+  MYRA
+}
+
+enum DemoBookingStatus {
+  HELD
+  CONFIRMED
+  CANCELED
+  OUTCOME_UNKNOWN
+}
+
+enum MyraKnowledgeAudience {
+  PUBLIC
+  RESTRICTED
+}
+
+enum MyraKnowledgeStatus {
+  ACTIVE
+  WITHDRAWN
+}
+
+model MyraPublicSession {
+  id         String      @id @default(cuid())
+  tokenHash  String      @unique
+  surface    MyraSurface
+  createdAt  DateTime    @default(now())
+  lastSeenAt DateTime    @default(now())
+  expiresAt  DateTime
+
+  @@index([expiresAt])
+  @@map("myra_public_sessions")
+}
+
+model MyraConversation {
+  id              String                @id @default(cuid())
+  surface         MyraSurface
+  state           MyraConversationState @default(ACTIVE)
+  accountId       String?
+  publicSessionId String?
+  // Dashboard context only. Nullable and NOT auto-scoped (see
+  // WORKSPACE_SCOPE_EXCLUSIONS): anonymous rows have no workspace.
+  workspaceId     String?
+  routeContext    String?
+  humanTakeoverAt DateTime?
+  // Retention: conversations live 30 days from creation (founder-approved).
+  expiresAt       DateTime
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  messages     MyraMessage[]
+  flowSessions MyraFlowSession[]
+
+  @@index([accountId, updatedAt])
+  @@index([publicSessionId, updatedAt])
+  @@index([workspaceId])
+  @@index([expiresAt])
+  @@map("myra_conversations")
+}
+
+model MyraMessage {
+  id             String          @id @default(cuid())
+  conversationId String
+  role           MyraMessageRole
+  content        String          @db.Text
+  // Allowlisted render component payload (Answer, PlanComparison, …). Never
+  // executable HTML — validated against contracts before render.
+  component      Json?
+  taskRecord     Json?
+  traceId        String?
+  createdAt      DateTime        @default(now())
+
+  conversation MyraConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt, id])
+  @@index([traceId])
+  @@map("myra_messages")
+}
+
+model MyraFlowSession {
+  id             String         @id @default(cuid())
+  conversationId String
+  flowId         String
+  stepIndex      Int            @default(0)
+  status         MyraFlowStatus @default(ACTIVE)
+  state          Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  conversation MyraConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, status])
+  @@map("myra_flow_sessions")
+}
+
+model SupportCase {
+  id                  String            @id @default(cuid())
+  // Human-facing reference (e.g. "LS-4F8K2N"), returned to the user.
+  reference           String            @unique
+  status              SupportCaseStatus @default(NEW)
+  subject             String
+  summary             String            @db.Text
+  accountId           String?
+  publicSessionId     String?
+  workspaceId         String?
+  // Verified reply destination for public submitters; authenticated cases use
+  // the account email. Never enrolls the address in marketing.
+  replyEmail          String?
+  emailVerifiedAt     DateTime?
+  // Scalar only (no FK): cases outlive their conversation's 30-day retention.
+  conversationId      String?
+  assigneeUserId      String?
+  takenOverAt         DateTime?
+  lastUserReplyAt     DateTime?
+  lastOperatorReplyAt DateTime?
+  resolvedAt          DateTime?
+  handoffSummary      String?           @db.Text
+  handoffReviewedAt   DateTime?
+  handoffReviewedBy   String?
+  // Notification delivery is a separate fact from case persistence.
+  notificationState   String            @default("pending") // pending|sent|failed|none
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  replies SupportCaseReply[]
+
+  @@index([status, createdAt])
+  @@index([accountId])
+  @@index([publicSessionId])
+  @@index([workspaceId])
+  @@index([assigneeUserId, status])
+  @@map("support_cases")
+}
+
+model SupportCaseReply {
+  id           String                @id @default(cuid())
+  caseId       String
+  authorType   SupportCaseAuthorType
+  authorUserId String?
+  body         String                @db.Text
+  createdAt    DateTime              @default(now())
+
+  case SupportCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, createdAt, id])
+  @@map("support_case_replies")
+}
+
+// Confirmed-action ledger for Myra proposals. Mirrors the audited
+// AgentOperation pattern (exact payload hash + idempotency + state machine)
+// but supports anonymous principals — AgentOperation.workspaceId is a
+// required FK and cannot hold public sessions.
+model MyraOperation {
+  id              String              @id @default(cuid())
+  operationName   String
+  status          MyraOperationStatus @default(DRAFT)
+  accountId       String?
+  publicSessionId String?
+  workspaceId     String?
+  conversationId  String?
+  // SHA-256 of the exact confirmed payload; execution compares it again.
+  inputHash       String
+  payload         Json
+  idempotencyKey  String
+  expiresAt       DateTime
+  result          Json?
+  error           String?
+  executedAt      DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([operationName, idempotencyKey])
+  @@index([accountId])
+  @@index([publicSessionId])
+  @@index([status, expiresAt])
+  @@map("myra_operations")
+}
+
+model DemoBooking {
+  id                 String            @id @default(cuid())
+  status             DemoBookingStatus @default(HELD)
+  attendeeEmail      String
+  attendeeName       String
+  attendeeContext    String?           @db.Text
+  attendeeVerifiedAt DateTime?
+  startsAt           DateTime
+  endsAt             DateTime
+  // Buffered window (startsAt-buffer … endsAt+buffer) used by the exclusion
+  // constraint — overlap protection covers the whole hold, not just a start
+  // time.
+  holdStartsAt       DateTime
+  holdEndsAt         DateTime
+  timezone           String
+  organizerEmail     String
+  // Deterministic provider event id for timeout reconciliation — a retried
+  // insert reuses it instead of creating a second event.
+  providerEventId    String?           @unique
+  meetLink           String?
+  conferenceState    String            @default("none") // none|pending|ready|failed
+  manageTokenHash    String?           @unique
+  manageTokenExpiresAt DateTime
+  manageTokenRevokedAt DateTime?
+  idempotencyKey     String            @unique
+  accountId          String?
+  publicSessionId    String?
+  conversationId     String?
+  rescheduledFromId  String?
+  canceledAt         DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([holdStartsAt, holdEndsAt])
+  @@index([status])
+  @@index([attendeeEmail])
+  @@index([manageTokenExpiresAt])
+  @@map("demo_bookings")
+}
+
+model MyraKnowledgeRelease {
+  id         String   @id @default(cuid())
+  version    String   @unique
+  status     String   @default("active") // active|rolled_back
+  approvedBy String?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  entries MyraKnowledgeEntry[]
+
+  @@map("myra_knowledge_releases")
+}
+
+model MyraKnowledgeEntry {
+  id               String                   @id @default(cuid())
+  releaseId        String
+  sourceId         String
+  topic            String
+  audience         MyraKnowledgeAudience    @default(PUBLIC)
+  // Empty = all roles. Non-empty = dashboard answers require membership in
+  // one of the listed roles before retrieval.
+  allowedRoles     String[]
+  title            String
+  content          String                   @db.Text
+  sourceUrl        String?
+  sourceRef        String?
+  effectiveAt      DateTime?
+  verifiedAt       DateTime?
+  reviewAfter      DateTime?
+  capabilityStatus String                   @default("available") // available|beta|gated|roadmap|unknown
+  status           MyraKnowledgeStatus      @default(ACTIVE)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  // Stored generated tsvector (title + topic + content) maintained by the
+  // migration; the client never writes it. GIN-indexed for KB search.
+  searchVector     Unsupported("tsvector")? @default(dbgenerated("to_tsvector('english'::regconfig, ((((COALESCE(title, ''::text) || ' '::text) || COALESCE(topic, ''::text)) || ' '::text) || COALESCE(content, ''::text)))"))
+
+  release MyraKnowledgeRelease @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+
+  @@index([audience, status, topic])
+  @@index([releaseId])
+  @@index([searchVector], type: Gin)
+  @@map("myra_knowledge_entries")
+}
+
+model MyraMemory {
+  id        String   @id @default(cuid())
+  // Authenticated accounts only — anonymous memory is session-scoped in the
+  // client, never persisted here.
+  accountId String
+  // Allowlisted preference keys only (enforced in the service layer).
+  key       String
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, key])
+  @@map("myra_memories")
+}
+
+// Bounded email-verification codes for public support-case replies and demo
+// bookings. One active code per (email, purpose); verifying never reveals
+// whether the address already has cases or bookings.
+model MyraIdentityVerification {
+  id              String    @id @default(cuid())
+  email           String
+  purpose         String // support_case | demo_booking
+  codeHash        String
+  publicSessionId String?
+  attempts        Int       @default(0)
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([email, purpose, expiresAt])
+  @@index([expiresAt])
+  @@map("myra_identity_verifications")
+}
+
+// Sanitized operational audit for support/agent actions. Separate from
+// AuditLog because that table requires a workspace FK and anonymous support
+// events have none. Never stores message bodies or secret payloads.
+model MyraAuditEvent {
+  id              String   @id @default(cuid())
+  actorType       String // user|public_session|operator|system
+  accountId       String?
+  publicSessionId String?
+  operatorId      String?
+  workspaceId     String?
+  action          String
+  resourceType    String
+  resourceId      String?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@index([accountId])
+  @@index([operatorId, createdAt])
+  @@index([createdAt])
+  @@map("myra_audit_events")
+}
+
+model MyraGenerationReservation {
+  traceId     String   @id
+  monthStart  DateTime
+  reservedUsd Decimal  @db.Decimal(19, 4)
+  actualUsd   Decimal? @db.Decimal(19, 4)
+  status      String   @default("RESERVED") // RESERVED|SETTLED|RELEASED
+  createdAt   DateTime @default(now())
+  settledAt   DateTime?
+
+  @@index([monthStart, status])
+  @@index([status, createdAt])
+  @@map("myra_generation_reservations")
 }

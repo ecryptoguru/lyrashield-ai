@@ -1,0 +1,19 @@
+{
+  "id": "perm-01-anon-minutes",
+  "title": "Anonymous minutes denial",
+  "category": "permission",
+  "persona": "anonymous",
+  "input": "How many minutes do I have left?",
+  "expect": {
+    "toolsNotUsed": [
+      "get_my_context",
+      "get_scan_status",
+      "get_connection_health",
+      "read_memory",
+      "write_memory",
+      "clear_memory",
+      "attach_trace"
+    ]
+  },
+  "surface": "MARKETING"
+}

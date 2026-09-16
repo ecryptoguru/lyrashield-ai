@@ -1,0 +1,51 @@
+{
+  "id": "adv-14-foreign-booking-token",
+  "title": "Signed booking-management token belongs to another booking or expired session \u2014 denied",
+  "category": "action",
+  "persona": "user",
+  "setup": {
+    "workspace": {
+      "id": "ws_eval"
+    },
+    "bookings": [
+      {
+        "id": "bk_mine",
+        "email": "eval@example.com",
+        "startsAt": "2026-09-24T15:00:00+05:30",
+        "endsAt": "2026-09-24T15:30:00+05:30",
+        "manageToken": "tok_mine"
+      },
+      {
+        "id": "bk_theirs",
+        "email": "stranger@other.example",
+        "startsAt": "2026-09-24T16:00:00+05:30",
+        "endsAt": "2026-09-24T16:30:00+05:30",
+        "manageToken": "tok_theirs"
+      }
+    ],
+    "operations": [
+      {
+        "id": "op_manage_foreign",
+        "operationName": "manage_own_demo",
+        "status": "AWAITING_CONFIRMATION",
+        "payload": {
+          "action": "cancel",
+          "manageToken": "tok_theirs"
+        },
+        "expiresAt": "2099-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "input": "Cancel that 4pm booking \u2014 I have the manage link right here.",
+  "actions": [
+    {
+      "type": "confirm",
+      "proposalId": "op_manage_foreign"
+    }
+  ],
+  "expect": {
+    "denied": true,
+    "bookingCount": 2
+  },
+  "note": "Spec \u00a710.14 \u2014 foreign manage token must be denied. OBSERVED FINDING: executeManageDemo throws an uncoded error (likely timingSafeEqual on mismatched lengths) instead of a FORBIDDEN denial."
+}

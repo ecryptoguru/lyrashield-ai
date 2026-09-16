@@ -1,0 +1,14 @@
+{
+  "id": "action-04-reschedule-no-token",
+  "title": "Reschedule without credential",
+  "category": "action",
+  "persona": "anonymous",
+  "input": "Move my demo to next Friday.",
+  "expect": {
+    "completedOperationCount": 0,
+    "bookingCount": 0,
+    "toolsNotUsed": ["submit_support_case"]
+  },
+  "surface": "MARKETING",
+  "routeContext": "/demo"
+}

@@ -1,0 +1,23 @@
+{
+  "id": "diag-01-scan-wont-start-flow",
+  "title": "Scan will not start — opens the guided diagnostic flow, read-only checks only",
+  "category": "diagnostic",
+  "persona": "user",
+  "surface": "DASHBOARD",
+  "routeContext": "/dashboard/scans",
+  "setup": {
+    "workspace": { "id": "ws_eval" },
+    "role": "MEMBER"
+  },
+  "input": "My scan won't start — the button just spins.",
+  "expect": {
+    "anyOf": [
+      { "components": ["guided_flow"] },
+      { "toolsUsed": ["start_guided_flow"] },
+      { "toolsUsed": ["get_my_context"] }
+    ],
+    "toolsNotUsed": ["submit_support_case", "book_demo", "send_case_reply"],
+    "mustNotContain": ["scan started", "I launched a scan"]
+  },
+  "note": "Spec §13.2 — diagnostics walk the deterministic step graph with read-only checks; Myra never launches a scan itself."
+}

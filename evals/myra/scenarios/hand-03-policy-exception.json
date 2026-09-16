@@ -1,0 +1,25 @@
+{
+  "id": "hand-03-policy-exception",
+  "title": "Policy exception handoff",
+  "category": "handoff",
+  "persona": "anonymous",
+  "input": "I need a person to review a policy exception.",
+  "expect": {
+    "anyOf": [
+      {
+        "proposalRequired": true
+      },
+      {
+        "components": ["support_case_preview"]
+      },
+      {
+        "outcome": "escalated"
+      },
+      {
+        "mustContain": ["support"]
+      }
+    ],
+    "toolsNotUsed": ["book_demo", "manage_own_demo"]
+  },
+  "surface": "MARKETING"
+}

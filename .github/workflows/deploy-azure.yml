@@ -697,6 +697,39 @@ jobs:
             --output none
           echo "Evidence storage Key Vault references synced to the app Container App."
 
+      # Myra support agent (docs/myra-spec.md). All MYRA_* flags default off;
+      # these secrets are synced only when the GitHub secret is configured, so
+      # enabling stays a vars/secrets change with no workflow edit.
+      # Secret names must stay <=20 chars (Container Apps limit).
+      - name: Sync Myra secrets to app Container App
+        env:
+          MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
+          MYRA_GOOGLE_CLIENT_SECRET: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET }}
+          MYRA_GOOGLE_REFRESH_TOKEN: ${{ secrets.MYRA_GOOGLE_REFRESH_TOKEN }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+        run: |
+          if [ -z "$AZURE_APP_CONTAINER_APP_NAME" ]; then
+            exit 0
+          fi
+          set_myra_secret() {
+            local name="$1" value="$2"
+            if [ -z "$value" ]; then
+              return 0
+            fi
+            if ! timeout --foreground 180s az containerapp secret set \
+              --only-show-errors \
+              --name "$AZURE_APP_CONTAINER_APP_NAME" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --secrets "${name}=${value}"; then
+              echo "::error::Failed to sync Myra secret ${name}."
+              exit 1
+            fi
+          }
+          set_myra_secret "myra-aoai-key" "$MYRA_AZURE_OPENAI_API_KEY"
+          set_myra_secret "myra-g-secret" "$MYRA_GOOGLE_CLIENT_SECRET"
+          set_myra_secret "myra-g-refresh" "$MYRA_GOOGLE_REFRESH_TOKEN"
+
       # secretref: below requires the Container App to already define secrets named
       # upstash-redis-rest-url / upstash-redis-rest-token. Nothing provisioned those, so the
       # secretref would fail az containerapp update outright on a fresh app. This step
@@ -900,6 +933,9 @@ jobs:
           RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
+          MYRA_GOOGLE_CLIENT_SECRET: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET }}
+          MYRA_GOOGLE_REFRESH_TOKEN: ${{ secrets.MYRA_GOOGLE_REFRESH_TOKEN }}
         run: |
           # A secretref to a secret the Container App does not define is a hard
           # failure, so these are referenced only when the sync step above
@@ -911,6 +947,16 @@ jobs:
           EMAIL_ENV=()
           if [ "$EMAIL_VERIFICATION_REQUIRED" = "1" ]; then
             EMAIL_ENV=("BREVO_API_KEY=secretref:brevo-api-key")
+          fi
+          MYRA_ENV=()
+          if [ -n "${MYRA_AZURE_OPENAI_API_KEY}" ]; then
+            MYRA_ENV+=("MYRA_AZURE_OPENAI_API_KEY=secretref:myra-aoai-key")
+          fi
+          if [ -n "${MYRA_GOOGLE_CLIENT_SECRET}" ]; then
+            MYRA_ENV+=("MYRA_GOOGLE_CLIENT_SECRET=secretref:myra-g-secret")
+          fi
+          if [ -n "${MYRA_GOOGLE_REFRESH_TOKEN}" ]; then
+            MYRA_ENV+=("MYRA_GOOGLE_REFRESH_TOKEN=secretref:myra-g-refresh")
           fi
           probe_dir=$(mktemp -d)
           trap 'rm -rf "$probe_dir"' EXIT
@@ -1024,6 +1070,27 @@ jobs:
               "GITHUB_APP_SLUG=secretref:github-app-slug" \
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
               "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret" \
+              "MYRA_PUBLIC_ENABLED=${{ vars.MYRA_PUBLIC_ENABLED || '0' }}" \
+              "MYRA_DASHBOARD_ENABLED=${{ vars.MYRA_DASHBOARD_ENABLED || '0' }}" \
+              "MYRA_OPERATOR_ENABLED=${{ vars.MYRA_OPERATOR_ENABLED || '0' }}" \
+              "MYRA_WRITES_ENABLED=${{ vars.MYRA_WRITES_ENABLED || '0' }}" \
+              "MYRA_GENERATION_ENABLED=${{ vars.MYRA_GENERATION_ENABLED || '0' }}" \
+              "MYRA_PROVIDER=${{ vars.MYRA_PROVIDER || 'mock' }}" \
+              "MYRA_CALENDAR_PROVIDER=${{ vars.MYRA_CALENDAR_PROVIDER || 'mock' }}" \
+              "MYRA_AZURE_OPENAI_ENDPOINT=${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}" \
+              "MYRA_AZURE_OPENAI_DEPLOYMENT=${{ vars.MYRA_AZURE_OPENAI_DEPLOYMENT }}" \
+              "MYRA_MODEL_FAST=${{ vars.MYRA_MODEL_FAST }}" \
+              "MYRA_MODEL_DEEP=${{ vars.MYRA_MODEL_DEEP }}" \
+              "MYRA_EMBED_MODEL=${{ vars.MYRA_EMBED_MODEL }}" \
+              "MYRA_MONTHLY_BUDGET_USD=${{ vars.MYRA_MONTHLY_BUDGET_USD }}" \
+              "MYRA_COST_PER_1K_INPUT_USD=${{ vars.MYRA_COST_PER_1K_INPUT_USD }}" \
+              "MYRA_COST_PER_1K_OUTPUT_USD=${{ vars.MYRA_COST_PER_1K_OUTPUT_USD }}" \
+              "MYRA_DEEP_COST_PER_1K_INPUT_USD=${{ vars.MYRA_DEEP_COST_PER_1K_INPUT_USD }}" \
+              "MYRA_DEEP_COST_PER_1K_OUTPUT_USD=${{ vars.MYRA_DEEP_COST_PER_1K_OUTPUT_USD }}" \
+              "MYRA_GOOGLE_CLIENT_ID=${{ vars.MYRA_GOOGLE_CLIENT_ID }}" \
+              "MYRA_GOOGLE_CALENDAR_ID=${{ vars.MYRA_GOOGLE_CALENDAR_ID }}" \
+              "MYRA_SUPPORT_NOTIFY_EMAIL=${{ vars.MYRA_SUPPORT_NOTIFY_EMAIL || 'support@lyrashieldai.com' }}" \
+              "${MYRA_ENV[@]}" \
               "${EMAIL_ENV[@]}" \
               "${OAUTH_ENV[@]}" \
             --output none

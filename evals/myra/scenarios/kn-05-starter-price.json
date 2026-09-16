@@ -1,0 +1,13 @@
+{
+  "id": "kn-05-starter-price",
+  "title": "Starter current price",
+  "category": "knowledge",
+  "persona": "anonymous",
+  "input": "What does Starter cost?",
+  "expect": {
+    "toolsUsed": ["read_product_catalog"],
+    "components": ["plan_comparison"]
+  },
+  "surface": "MARKETING",
+  "routeContext": "/pricing"
+}

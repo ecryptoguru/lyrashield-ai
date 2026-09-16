@@ -1,0 +1,12 @@
+{
+  "id": "a11y-04-evidence-next-action",
+  "title": "Evidence answer has one next action",
+  "category": "accessibility",
+  "persona": "anonymous",
+  "input": "Explain inconclusive evidence and what I should do.",
+  "expect": {
+    "maxCtaComponents": 1,
+    "sanitized": true
+  },
+  "surface": "MARKETING"
+}

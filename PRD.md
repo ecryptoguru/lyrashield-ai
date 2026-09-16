@@ -443,6 +443,8 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 - Public paid-launch timing and final publishable pricing.
 - Confirm the intended current public Cloud-admission posture and authorize bounded live checkout/refund proof per rail; Local admissions remain off.
 - Authorized provider/model and target for first controlled Deep/Terra scan.
+- Decide whether repository-level MCP/WebMCP scanner findings should remain visible on Trial and Starter. Current behavior intentionally keeps them available on every plan; a Pro+ entitlement would remove existing visibility and requires an explicit product decision.
+- Approve any public release-identity confirmation contract before implementation. Current public report verification does not disclose or confirm a stored commit or artifact identity; any future endpoint must avoid existence leaks and define token, expiry, revocation, rate-limit, and mismatch behavior.
 
 ## 11. Success measures
 

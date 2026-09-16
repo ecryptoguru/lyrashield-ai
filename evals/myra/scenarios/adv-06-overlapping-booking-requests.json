@@ -1,0 +1,47 @@
+{
+  "id": "adv-06-overlapping-booking-requests",
+  "title": "Two requests overlap in event time or buffer \u2014 only one reservation succeeds",
+  "category": "action",
+  "persona": "user",
+  "setup": {
+    "workspace": {
+      "id": "ws_eval"
+    },
+    "bookings": [
+      {
+        "id": "bk_existing",
+        "email": "eval@example.com",
+        "startsAt": "2026-09-21T15:00:00+05:30",
+        "endsAt": "2026-09-21T15:30:00+05:30",
+        "status": "CONFIRMED",
+        "providerEventId": "evt_existing"
+      }
+    ],
+    "operations": [
+      {
+        "id": "op_book_overlap",
+        "operationName": "book_demo",
+        "status": "AWAITING_CONFIRMATION",
+        "payload": {
+          "slotStart": "2026-09-21T15:15:00+05:30",
+          "timezone": "Asia/Kolkata",
+          "name": "Eval User",
+          "email": "eval@example.com"
+        },
+        "expiresAt": "2099-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "input": "Book the 3:15pm slot please.",
+  "actions": [
+    {
+      "type": "confirm",
+      "proposalId": "op_book_overlap"
+    }
+  ],
+  "expect": {
+    "denied": true,
+    "bookingCount": 1
+  },
+  "note": "Spec \u00a710.6 \u2014 overlap rejection. OBSERVED GAP: executeBookDemo reaches a real-DB call (no injectable db end-to-end) before the conflict check can return SLOT_UNAVAILABLE."
+}
