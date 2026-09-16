@@ -2,9 +2,13 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 describe("manual repository target form", () => {
-  // apps/web has no component test harness; preserve the exact-ref UI/request contract here.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const source = readFileSync(new URL("./targets-client.tsx", import.meta.url), "utf8")
+  // apps/web has no component test harness; preserve the exact-ref UI/request
+  // contract here. The screen is split across a coordinator (targets-client.tsx)
+  // plus form/table views, so contract greps read all of them.
+  const source = ["targets-client.tsx", "targets-form.tsx", "targets-table.tsx"]
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    .map((file) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8"))
+    .join("\n")
 
   it("exposes an accessible optional branch or tag input", () => {
     expect(source).toContain('label="Branch or tag (optional)" htmlFor="repo-ref"')

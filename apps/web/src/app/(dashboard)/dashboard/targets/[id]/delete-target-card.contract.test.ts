@@ -12,7 +12,7 @@ describe("target delete confirmation copy", () => {
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8")
   // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const table = readFileSync(new URL("../targets-client.tsx", import.meta.url), "utf8")
+  const table = readFileSync(new URL("../targets-table.tsx", import.meta.url), "utf8")
 
   it("names the target and states what is retained", () => {
     expect(card).toContain("Delete {targetName}")
