@@ -1,20 +1,10 @@
+import { LoadingShell, LoadingShellHeader } from "@/components/loading-shell"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export default function Loading() {
   return (
-    <div
-      className="space-y-6"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-      aria-label="Loading page"
-    >
-      <h1 className="sr-only">Loading page</h1>
-      <div className="space-y-3">
-        <Skeleton className="bg-muted h-3 w-28 rounded-none" />
-        <Skeleton className="bg-muted h-9 w-72 max-w-full rounded-none" />
-        <Skeleton className="bg-muted h-4 w-96 max-w-full rounded-none" />
-      </div>
+    <LoadingShell className="space-y-6">
+      <LoadingShellHeader />
       <div className="space-y-3">
         {[0, 1, 2, 3].map((item) => (
           <div key={item} className="bg-card border-border h-28 rounded-lg border p-4">
@@ -27,6 +17,6 @@ export default function Loading() {
           </div>
         ))}
       </div>
-    </div>
+    </LoadingShell>
   )
 }

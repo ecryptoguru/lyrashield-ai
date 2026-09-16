@@ -1,41 +1,23 @@
 ---
 import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
+import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const canonical = new URL("/docs/integrations/kilo-code", origin).toString()
 const title = "LyraShield MCP for Kilo Code — Setup Guide"
 const description =
   'Connect LyraShield to Kilo Code. Configure kilo.jsonc with the mcp key and type:"local". Uses the same single-brace {env:VAR} interpolation as OpenCode.'
 const updatedDate = "2026-08-13"
 
-const jsonLd: unknown[] = [
-  {
-    "@context": "https://schema.org",
-    "@type": "TechArticle",
-    headline: title,
-    description,
-    url: canonical,
-    dateModified: updatedDate,
-    author: { "@id": `${origin}/#organization` },
-    publisher: { "@id": `${origin}/#organization` },
-    inLanguage: "en-US",
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: "Integrations",
-        item: `${origin}/docs/integrations`,
-      },
-      { "@type": "ListItem", position: 3, name: "Kilo Code", item: canonical },
-    ],
-  },
-]
+const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
+  origin,
+  path: "/docs/integrations/kilo-code",
+  title,
+  description,
+  updatedDate,
+  breadcrumbLabel: "Kilo Code",
+})
+const jsonLd: unknown[] = [techArticle, breadcrumbList]
 ---
 
 <DocsLayout

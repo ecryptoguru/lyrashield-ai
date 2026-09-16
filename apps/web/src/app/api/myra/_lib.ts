@@ -121,6 +121,20 @@ export function myraRateLimited(request: Request, retryAfter: number): Response 
   })
 }
 
+// ─── Operator private responses ─────────────────────────────────────────────
+
+/**
+ * Every /api/myra/operator response — success, mapped auth error, or failure —
+ * carries the same private/no-store headers. The operator inbox is a
+ * cross-workspace boundary served to allowlisted PLATFORM_OPERATOR browser
+ * sessions, so nothing about it may be stored by a shared cache.
+ */
+export function myraOperatorPrivate<T extends Response>(response: T): T {
+  response.headers.set("Cache-Control", "private, no-store")
+  response.headers.set("Referrer-Policy", "no-referrer")
+  return response
+}
+
 // ─── Service error mapping ──────────────────────────────────────────────────
 
 const MYRA_ERROR_STATUS: Record<MyraErrorCode, number> = {

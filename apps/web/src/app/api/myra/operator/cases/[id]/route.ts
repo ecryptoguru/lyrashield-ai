@@ -18,14 +18,9 @@ import { logger } from "@lyrashield/logger"
 import { z } from "zod"
 import { authErrorResponse, withApiRequest, withCookieMutation } from "@/lib/api-auth"
 import { apiError, apiSuccess } from "@/lib/api-response"
-import { myraOperatorEnabled, myraServiceFailure } from "../../../_lib"
+import { myraOperatorEnabled, myraOperatorPrivate, myraServiceFailure } from "../../../_lib"
 
 export const dynamic = "force-dynamic"
-
-const PRIVATE_HEADERS = {
-  "Cache-Control": "private, no-store",
-  "Referrer-Policy": "no-referrer",
-}
 
 const patchSchema = z
   .object({
@@ -37,11 +32,8 @@ const patchSchema = z
 
 function operatorAuthFailure(error: unknown): Response {
   const authError = authErrorResponse(error)
-  if (authError) {
-    for (const [name, value] of Object.entries(PRIVATE_HEADERS)) authError.headers.set(name, value)
-    return authError
-  }
-  return apiError("FORBIDDEN", "Forbidden", 403, PRIVATE_HEADERS)
+  if (authError) return myraOperatorPrivate(authError)
+  return myraOperatorPrivate(apiError("FORBIDDEN", "Forbidden", 403))
 }
 
 async function get(
@@ -49,7 +41,7 @@ async function get(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   if (!myraOperatorEnabled()) {
-    return apiError("NOT_FOUND", "Not found", 404, PRIVATE_HEADERS)
+    return myraOperatorPrivate(apiError("NOT_FOUND", "Not found", 404))
   }
   let operator
   try {
@@ -61,19 +53,14 @@ async function get(
   const { id } = await params
   try {
     const result = await getOperatorCase(operator.userId, id)
-    const response = apiSuccess(result)
-    for (const [name, value] of Object.entries(PRIVATE_HEADERS)) response.headers.set(name, value)
-    return response
+    return myraOperatorPrivate(apiSuccess(result))
   } catch (error) {
     const failure = myraServiceFailure(request, error)
-    if (failure) {
-      for (const [name, value] of Object.entries(PRIVATE_HEADERS)) failure.headers.set(name, value)
-      return failure
-    }
+    if (failure) return myraOperatorPrivate(failure)
     logger.error("Myra operator case read failed", {
       error: error instanceof Error ? error.name : "unknown_error",
     })
-    return apiError("INTERNAL_ERROR", "Could not load that case", 500, PRIVATE_HEADERS)
+    return myraOperatorPrivate(apiError("INTERNAL_ERROR", "Could not load that case", 500))
   }
 }
 
@@ -82,7 +69,7 @@ async function patch(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   if (!myraOperatorEnabled()) {
-    return apiError("NOT_FOUND", "Not found", 404, PRIVATE_HEADERS)
+    return myraOperatorPrivate(apiError("NOT_FOUND", "Not found", 404))
   }
 
   let operator
@@ -97,11 +84,11 @@ async function patch(
   try {
     body = await request.json()
   } catch {
-    return apiError("VALIDATION_ERROR", "Invalid JSON", 400, PRIVATE_HEADERS)
+    return myraOperatorPrivate(apiError("VALIDATION_ERROR", "Invalid JSON", 400))
   }
   const parsed = patchSchema.safeParse(body)
   if (!parsed.success) {
-    return apiError("VALIDATION_ERROR", "Invalid request", 400, PRIVATE_HEADERS)
+    return myraOperatorPrivate(apiError("VALIDATION_ERROR", "Invalid request", 400))
   }
 
   const { id } = await params
@@ -116,11 +103,8 @@ async function patch(
         break
       case "release":
         if (!handoffSummary) {
-          return apiError(
-            "VALIDATION_ERROR",
-            "A reviewed handoff summary is required",
-            400,
-            PRIVATE_HEADERS
+          return myraOperatorPrivate(
+            apiError("VALIDATION_ERROR", "A reviewed handoff summary is required", 400)
           )
         }
         result = await operatorRelease(operator.userId, id, handoffSummary)
@@ -133,19 +117,14 @@ async function patch(
         break
       }
     }
-    const response = apiSuccess(result)
-    for (const [name, value] of Object.entries(PRIVATE_HEADERS)) response.headers.set(name, value)
-    return response
+    return myraOperatorPrivate(apiSuccess(result))
   } catch (error) {
     const failure = myraServiceFailure(request, error)
-    if (failure) {
-      for (const [name, value] of Object.entries(PRIVATE_HEADERS)) failure.headers.set(name, value)
-      return failure
-    }
+    if (failure) return myraOperatorPrivate(failure)
     logger.error("Myra operator case mutation failed", {
       error: error instanceof Error ? error.name : "unknown_error",
     })
-    return apiError("INTERNAL_ERROR", "Could not update that case", 500, PRIVATE_HEADERS)
+    return myraOperatorPrivate(apiError("INTERNAL_ERROR", "Could not update that case", 500))
   }
 }
 

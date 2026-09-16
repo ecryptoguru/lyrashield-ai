@@ -1,25 +1,23 @@
 ---
 import DocsLayout from "@layouts/DocsLayout.astro"
+import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const canonical = new URL("/docs/integrations/github-action", origin).toString()
 const title = "LyraShield GitHub Action — Diff-Aware CI Security Gate"
 const description =
   "Add the LyraShield GitHub Action to your workflow for a one-step, diff-aware security gate: secret detection, risky-pattern checks, and SARIF output. Runs entirely in your own runner — no LyraShield account or API key required."
 const updatedDate = "2026-07-31"
 
+const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
+  origin,
+  path: "/docs/integrations/github-action",
+  title,
+  description,
+  updatedDate,
+  breadcrumbLabel: "GitHub Action",
+})
 const jsonLd: unknown[] = [
-  {
-    "@context": "https://schema.org",
-    "@type": "TechArticle",
-    headline: title,
-    description,
-    url: canonical,
-    dateModified: updatedDate,
-    author: { "@id": `${origin}/#organization` },
-    publisher: { "@id": `${origin}/#organization` },
-    inLanguage: "en-US",
-  },
+  techArticle,
   {
     "@context": "https://schema.org",
     "@type": "HowTo",
@@ -45,20 +43,7 @@ const jsonLd: unknown[] = [
       },
     ],
   },
-  {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: "Integrations",
-        item: `${origin}/docs/integrations`,
-      },
-      { "@type": "ListItem", position: 3, name: "GitHub Action", item: canonical },
-    ],
-  },
+  breadcrumbList,
 ]
 ---
 

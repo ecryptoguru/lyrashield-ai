@@ -29,11 +29,314 @@ const GitHubPullRequestEventSchema = z.object({
   }),
 })
 
+type SystemPrisma = ReturnType<typeof getSystemPrisma>
+type PullRequestPayload = z.infer<typeof GitHubPullRequestEventSchema>["pull_request"]
+
 function invalidPayloadResponse() {
   return NextResponse.json(
     { success: false, error: { code: "INVALID_PAYLOAD", message: "Webhook payload is invalid" } },
     { status: 400 }
   )
+}
+
+/**
+ * Prisma unique-constraint violation. Both event branches hit this when two
+ * concurrent redeliveries race past the delivery pre-check: the unique
+ * (provider, externalId) constraint on WebhookEvent rejects the second insert.
+ */
+function isUniqueConstraintError(err: unknown): boolean {
+  return Boolean(err) && typeof err === "object" && (err as { code?: string }).code === "P2002"
+}
+
+/**
+ * installation.deleted: durably record the delivery, disconnect the GitHub
+ * integration, and soft-delete its imported targets inside one transaction.
+ * The audit row is written through the extended client afterwards — never
+ * inside the provider mutation transaction.
+ *
+ * Returns a response only for the early exits (invalid payload, concurrent
+ * duplicate); `null` lets the coordinator emit the standard processed result.
+ */
+async function handleInstallationDeleted(
+  systemPrisma: SystemPrisma,
+  deliveryId: string,
+  body: unknown
+): Promise<NextResponse | null> {
+  const parsedEvent = GitHubInstallationDeletedEventSchema.safeParse(body)
+  if (!parsedEvent.success) return invalidPayloadResponse()
+  const { installation } = parsedEvent.data
+  const integration = await systemPrisma.integration.findFirst({
+    where: { type: "GITHUB", externalId: String(installation.id) },
+  })
+
+  if (!integration) return null
+
+  try {
+    await systemPrisma.$transaction(async (tx) => {
+      // Persist the unique delivery before side effects so retries cannot
+      // duplicate the disconnect audit event or target mutation.
+      await tx.webhookEvent.create({
+        data: {
+          workspaceId: integration.workspaceId,
+          provider: "github",
+          eventType: "installation.deleted",
+          externalId: deliveryId,
+          payload: {
+            installationId: installation.id,
+            accountLogin: installation.account.login,
+          },
+        },
+      })
+
+      await tx.integration.update({
+        where: { id: integration.id },
+        data: { status: "disconnected", deletedAt: new Date() },
+      })
+
+      // Match targets that were imported from the same GitHub App
+      // installation. This is precise and avoids the previous
+      // `startsWith` owner-prefix bug (e.g. "acme" matching
+      // "acme-corp/other" or "not-acme/repo").
+      //
+      // Targets created before Target.installationId existed have a
+      // NULL value and would never match the precise predicate, so they
+      // would survive an App uninstall and stay scannable after the
+      // customer revoked access. Cover that legacy cohort by falling
+      // back to an exact owner match (not `startsWith`) for NULL rows.
+      await tx.target.updateMany({
+        where: {
+          workspaceId: integration.workspaceId,
+          repoProvider: "github",
+          OR: [
+            { installationId: String(installation.id) },
+            { installationId: null, repoOwner: installation.account.login },
+          ],
+        },
+        data: { deletedAt: new Date() },
+      })
+    })
+
+    try {
+      // The extended client owns the advisory-locked audit chain.
+      // Never create audit rows through the broader provider mutation
+      // transaction or a raw/system client.
+      await prisma.auditLog.create({
+        data: {
+          workspaceId: integration.workspaceId,
+          action: "integration.github.disconnected",
+          resourceType: "integration",
+          resourceId: integration.id,
+          metadata: {
+            installationId: installation.id,
+            deliveryId,
+            reason: "installation.deleted",
+          },
+        },
+      })
+    } catch (auditError) {
+      // Let GitHub retry the idempotent provider mutation if the audit
+      // chain could not be retained. Removing only this delivery marker
+      // avoids accepting an unaudited disconnect as complete.
+      await systemPrisma.webhookEvent.deleteMany({
+        where: { provider: "github", externalId: deliveryId },
+      })
+      throw auditError
+    }
+  } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      logger.info("Concurrent duplicate GitHub delivery ignored", { deliveryId })
+      return NextResponse.json({
+        success: true,
+        data: { processed: true, duplicate: true },
+      })
+    }
+    throw err
+  }
+
+  logger.info("GitHub installation deleted, targets disabled", {
+    installationId: installation.id,
+  })
+  return null
+}
+
+/**
+ * pull_request: record the delivery, then run the WP3 loop-closure when a
+ * LyraShield fix branch merged. Returns a response only for an invalid
+ * payload; `null` lets the coordinator emit the standard processed result.
+ */
+async function handlePullRequestEvent(
+  systemPrisma: SystemPrisma,
+  deliveryId: string,
+  body: unknown
+): Promise<NextResponse | null> {
+  const parsedEvent = GitHubPullRequestEventSchema.safeParse(body)
+  if (!parsedEvent.success) return invalidPayloadResponse()
+  const { action, pull_request: pullRequest, repository, installation } = parsedEvent.data
+
+  const integration = await systemPrisma.integration.findFirst({
+    where: { type: "GITHUB", externalId: String(installation.id) },
+  })
+
+  if (!integration) return null
+
+  try {
+    await systemPrisma.webhookEvent.create({
+      data: {
+        workspaceId: integration.workspaceId,
+        provider: "github",
+        eventType: `pull_request.${action}`,
+        externalId: `${deliveryId}`,
+        payload: {
+          action,
+          repoFullName: repository.full_name,
+          repoId: repository.id,
+          prNumber: pullRequest.number,
+          headRef: pullRequest.head.ref,
+          baseRef: pullRequest.base.ref,
+          installationId: installation.id,
+        },
+      },
+    })
+
+    logger.info("Pull request webhook stored", {
+      deliveryId,
+      repo: repository.full_name,
+      prNumber: pullRequest.number,
+      action,
+    })
+
+    // WP3 loop-closure: a LyraShield fix branch merged. Mark the PR merged,
+    // queue a retest of the finding on the new head, and re-evaluate the
+    // gate so a merged fix moves the verdict toward READY. Unknown or
+    // foreign branches are a no-op (handleFixPrMerged returns null).
+    if (
+      action === "closed" &&
+      pullRequest.merged === true &&
+      pullRequest.head.ref.startsWith("lyrashield/fix-")
+    ) {
+      await handleMergedFixPullRequest(
+        systemPrisma,
+        integration.workspaceId,
+        deliveryId,
+        pullRequest,
+        repository.full_name
+      )
+    }
+  } catch (err) {
+    // Handle the race where two concurrent redeliveries both pass the
+    // pre-check above: the unique (provider, externalId) constraint
+    // rejects the second insert (P2002). Treat as an idempotent no-op.
+    if (isUniqueConstraintError(err)) {
+      logger.info("Concurrent duplicate GitHub delivery ignored", { deliveryId })
+    } else {
+      throw err
+    }
+  }
+  return null
+}
+
+/**
+ * Merged `lyrashield/fix-*` pull request: close the loop by enqueuing the
+ * retest scan the db-layer association produced. A deferrable failure
+ * (concurrency cap, active scan, worker unavailability, entitlement) persists
+ * a durable LoopClosure record the worker sweep retries with backoff; only
+ * genuinely unexpected errors clear the delivery marker and rethrow so a
+ * manual redelivery can resume the merge/retest association.
+ */
+async function handleMergedFixPullRequest(
+  systemPrisma: SystemPrisma,
+  workspaceId: string,
+  deliveryId: string,
+  pullRequest: PullRequestPayload,
+  repoFullName: string
+): Promise<void> {
+  let loopClosureDelivered = false
+  try {
+    const { handleFixPrMergedAndReevaluate } = await import("@lyrashield/db")
+    const outcome = await handleFixPrMergedAndReevaluate(
+      workspaceId,
+      pullRequest.head.ref,
+      pullRequest.number,
+      async (mode, sponsorAccountId, tx) => {
+        const entitlement = await assertScanAllowed(workspaceId, mode, sponsorAccountId, tx)
+        if (!entitlement.allowed) throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
+        await assertScanWorkerAvailable()
+      },
+      repoFullName
+    )
+    if (outcome) {
+      // The retest scan exists but is not queued yet — packages/db
+      // cannot reach the scan queue. Enqueue it here; a queue
+      // outage defers into the durable LoopClosure sweep instead
+      // of relying on a GitHub redelivery that never comes.
+      await enqueueScanJob({
+        scanId: outcome.retestScanId,
+        workspaceId,
+        targetId: outcome.targetId,
+        goal: outcome.goal,
+        mode: outcome.mode,
+        ...(outcome.policyId ? { policyId: outcome.policyId } : {}),
+      })
+      loopClosureDelivered = true
+      const { completeLoopClosure } = await import("@lyrashield/db")
+      await completeLoopClosure(workspaceId, repoFullName, pullRequest.number)
+      logger.info("Fix PR merge closed the loop", {
+        retestId: outcome.retestId,
+        findingId: outcome.findingId,
+        retestScanId: outcome.retestScanId,
+      })
+    } else {
+      loopClosureDelivered = true
+    }
+  } catch (loopErr) {
+    // GitHub never redelivers a failed delivery automatically. A
+    // deferrable failure (concurrency cap, active scan, worker
+    // unavailability, entitlement) persists a durable LoopClosure
+    // record the worker sweep retries with backoff; the delivery is
+    // acknowledged so the merge webhook is not lost to a rethrow.
+    // Only genuinely unexpected errors still rethrow.
+    const { recordDeferredLoopClosure, classifyLoopClosureError } = await import("@lyrashield/db")
+    const reason = classifyLoopClosureError(loopErr)
+    if (reason !== "UNEXPECTED_ERROR") {
+      try {
+        await recordDeferredLoopClosure({
+          workspaceId,
+          repoFullName,
+          branchName: pullRequest.head.ref,
+          prNumber: pullRequest.number,
+          reason,
+        })
+        loopClosureDelivered = true
+        logger.warn("Fix PR loop-closure deferred to the worker sweep", {
+          workspaceId,
+          branchName: pullRequest.head.ref,
+          reason,
+        })
+      } catch (persistErr) {
+        logger.error("Failed to persist deferred loop closure", {
+          workspaceId,
+          branchName: pullRequest.head.ref,
+          reason,
+          error: String(persistErr),
+        })
+      }
+    } else {
+      logger.error("Fix PR loop-closure failed (marker cleared for redelivery)", {
+        error: String(loopErr),
+      })
+    }
+    if (!loopClosureDelivered) {
+      // Clear the incomplete delivery marker and return 5xx so a
+      // manual redelivery can resume the durable merge/retest
+      // association for this genuinely unexpected error.
+      await systemPrisma.webhookEvent
+        .deleteMany({
+          where: { provider: "github", externalId: deliveryId },
+        })
+        .catch(() => undefined)
+      throw loopErr
+    }
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -100,256 +403,12 @@ export async function POST(request: NextRequest) {
       const action = event.action as string
 
       if (action === "deleted") {
-        const parsedEvent = GitHubInstallationDeletedEventSchema.safeParse(body)
-        if (!parsedEvent.success) return invalidPayloadResponse()
-        const { installation } = parsedEvent.data
-        const integration = await systemPrisma.integration.findFirst({
-          where: { type: "GITHUB", externalId: String(installation.id) },
-        })
-
-        if (integration) {
-          try {
-            await systemPrisma.$transaction(async (tx) => {
-              // Persist the unique delivery before side effects so retries cannot
-              // duplicate the disconnect audit event or target mutation.
-              await tx.webhookEvent.create({
-                data: {
-                  workspaceId: integration.workspaceId,
-                  provider: "github",
-                  eventType: "installation.deleted",
-                  externalId: deliveryId,
-                  payload: {
-                    installationId: installation.id,
-                    accountLogin: installation.account.login,
-                  },
-                },
-              })
-
-              await tx.integration.update({
-                where: { id: integration.id },
-                data: { status: "disconnected", deletedAt: new Date() },
-              })
-
-              // Match targets that were imported from the same GitHub App
-              // installation. This is precise and avoids the previous
-              // `startsWith` owner-prefix bug (e.g. "acme" matching
-              // "acme-corp/other" or "not-acme/repo").
-              //
-              // Targets created before Target.installationId existed have a
-              // NULL value and would never match the precise predicate, so they
-              // would survive an App uninstall and stay scannable after the
-              // customer revoked access. Cover that legacy cohort by falling
-              // back to an exact owner match (not `startsWith`) for NULL rows.
-              await tx.target.updateMany({
-                where: {
-                  workspaceId: integration.workspaceId,
-                  repoProvider: "github",
-                  OR: [
-                    { installationId: String(installation.id) },
-                    { installationId: null, repoOwner: installation.account.login },
-                  ],
-                },
-                data: { deletedAt: new Date() },
-              })
-            })
-
-            try {
-              // The extended client owns the advisory-locked audit chain.
-              // Never create audit rows through the broader provider mutation
-              // transaction or a raw/system client.
-              await prisma.auditLog.create({
-                data: {
-                  workspaceId: integration.workspaceId,
-                  action: "integration.github.disconnected",
-                  resourceType: "integration",
-                  resourceId: integration.id,
-                  metadata: {
-                    installationId: installation.id,
-                    deliveryId,
-                    reason: "installation.deleted",
-                  },
-                },
-              })
-            } catch (auditError) {
-              // Let GitHub retry the idempotent provider mutation if the audit
-              // chain could not be retained. Removing only this delivery marker
-              // avoids accepting an unaudited disconnect as complete.
-              await systemPrisma.webhookEvent.deleteMany({
-                where: { provider: "github", externalId: deliveryId },
-              })
-              throw auditError
-            }
-          } catch (err) {
-            if (err && typeof err === "object" && (err as { code?: string }).code === "P2002") {
-              logger.info("Concurrent duplicate GitHub delivery ignored", { deliveryId })
-              return NextResponse.json({
-                success: true,
-                data: { processed: true, duplicate: true },
-              })
-            }
-            throw err
-          }
-
-          logger.info("GitHub installation deleted, targets disabled", {
-            installationId: installation.id,
-          })
-        }
+        const response = await handleInstallationDeleted(systemPrisma, deliveryId, body)
+        if (response) return response
       }
     } else if (eventType === "pull_request") {
-      const parsedEvent = GitHubPullRequestEventSchema.safeParse(body)
-      if (!parsedEvent.success) return invalidPayloadResponse()
-      const { action, pull_request: pullRequest, repository, installation } = parsedEvent.data
-
-      const integration = await systemPrisma.integration.findFirst({
-        where: { type: "GITHUB", externalId: String(installation.id) },
-      })
-
-      if (integration) {
-        try {
-          await systemPrisma.webhookEvent.create({
-            data: {
-              workspaceId: integration.workspaceId,
-              provider: "github",
-              eventType: `pull_request.${action}`,
-              externalId: `${deliveryId}`,
-              payload: {
-                action,
-                repoFullName: repository.full_name,
-                repoId: repository.id,
-                prNumber: pullRequest.number,
-                headRef: pullRequest.head.ref,
-                baseRef: pullRequest.base.ref,
-                installationId: installation.id,
-              },
-            },
-          })
-
-          logger.info("Pull request webhook stored", {
-            deliveryId,
-            repo: repository.full_name,
-            prNumber: pullRequest.number,
-            action,
-          })
-
-          // WP3 loop-closure: a LyraShield fix branch merged. Mark the PR merged,
-          // queue a retest of the finding on the new head, and re-evaluate the
-          // gate so a merged fix moves the verdict toward READY. Unknown or
-          // foreign branches are a no-op (handleFixPrMerged returns null).
-          if (
-            action === "closed" &&
-            pullRequest.merged === true &&
-            pullRequest.head.ref.startsWith("lyrashield/fix-")
-          ) {
-            let loopClosureDelivered = false
-            try {
-              const { handleFixPrMergedAndReevaluate } = await import("@lyrashield/db")
-              const outcome = await handleFixPrMergedAndReevaluate(
-                integration.workspaceId,
-                pullRequest.head.ref,
-                pullRequest.number,
-                async (mode, sponsorAccountId, tx) => {
-                  const entitlement = await assertScanAllowed(
-                    integration.workspaceId,
-                    mode,
-                    sponsorAccountId,
-                    tx
-                  )
-                  if (!entitlement.allowed)
-                    throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
-                  await assertScanWorkerAvailable()
-                },
-                repository.full_name
-              )
-              if (outcome) {
-                // The retest scan exists but is not queued yet — packages/db
-                // cannot reach the scan queue. Enqueue it here; a queue
-                // outage defers into the durable LoopClosure sweep instead
-                // of relying on a GitHub redelivery that never comes.
-                await enqueueScanJob({
-                  scanId: outcome.retestScanId,
-                  workspaceId: integration.workspaceId,
-                  targetId: outcome.targetId,
-                  goal: outcome.goal,
-                  mode: outcome.mode,
-                  ...(outcome.policyId ? { policyId: outcome.policyId } : {}),
-                })
-                loopClosureDelivered = true
-                const { completeLoopClosure } = await import("@lyrashield/db")
-                await completeLoopClosure(
-                  integration.workspaceId,
-                  repository.full_name,
-                  pullRequest.number
-                )
-                logger.info("Fix PR merge closed the loop", {
-                  retestId: outcome.retestId,
-                  findingId: outcome.findingId,
-                  retestScanId: outcome.retestScanId,
-                })
-              } else {
-                loopClosureDelivered = true
-              }
-            } catch (loopErr) {
-              // GitHub never redelivers a failed delivery automatically. A
-              // deferrable failure (concurrency cap, active scan, worker
-              // unavailability, entitlement) persists a durable LoopClosure
-              // record the worker sweep retries with backoff; the delivery is
-              // acknowledged so the merge webhook is not lost to a rethrow.
-              // Only genuinely unexpected errors still rethrow.
-              const { recordDeferredLoopClosure, classifyLoopClosureError } =
-                await import("@lyrashield/db")
-              const reason = classifyLoopClosureError(loopErr)
-              if (reason !== "UNEXPECTED_ERROR") {
-                try {
-                  await recordDeferredLoopClosure({
-                    workspaceId: integration.workspaceId,
-                    repoFullName: repository.full_name,
-                    branchName: pullRequest.head.ref,
-                    prNumber: pullRequest.number,
-                    reason,
-                  })
-                  loopClosureDelivered = true
-                  logger.warn("Fix PR loop-closure deferred to the worker sweep", {
-                    workspaceId: integration.workspaceId,
-                    branchName: pullRequest.head.ref,
-                    reason,
-                  })
-                } catch (persistErr) {
-                  logger.error("Failed to persist deferred loop closure", {
-                    workspaceId: integration.workspaceId,
-                    branchName: pullRequest.head.ref,
-                    reason,
-                    error: String(persistErr),
-                  })
-                }
-              } else {
-                logger.error("Fix PR loop-closure failed (marker cleared for redelivery)", {
-                  error: String(loopErr),
-                })
-              }
-              if (!loopClosureDelivered) {
-                // Clear the incomplete delivery marker and return 5xx so a
-                // manual redelivery can resume the durable merge/retest
-                // association for this genuinely unexpected error.
-                await systemPrisma.webhookEvent
-                  .deleteMany({
-                    where: { provider: "github", externalId: deliveryId },
-                  })
-                  .catch(() => undefined)
-                throw loopErr
-              }
-            }
-          }
-        } catch (err) {
-          // Handle the race where two concurrent redeliveries both pass the
-          // pre-check above: the unique (provider, externalId) constraint
-          // rejects the second insert (P2002). Treat as an idempotent no-op.
-          if (err && typeof err === "object" && (err as { code?: string }).code === "P2002") {
-            logger.info("Concurrent duplicate GitHub delivery ignored", { deliveryId })
-          } else {
-            throw err
-          }
-        }
-      }
+      const response = await handlePullRequestEvent(systemPrisma, deliveryId, body)
+      if (response) return response
     } else {
       logger.debug("Unhandled GitHub webhook event type", { eventType, deliveryId })
     }

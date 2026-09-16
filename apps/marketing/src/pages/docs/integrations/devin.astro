@@ -1,26 +1,21 @@
 ---
 import DocsLayout from "@layouts/DocsLayout.astro"
+import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const canonical = new URL("/docs/integrations/devin", origin).toString()
 const title = "LyraShield MCP for Devin — Setup Guide"
 const description =
   "Connect LyraShield to Devin through its MCP Marketplace using a remote Streamable HTTP server."
 const updatedDate = "2026-09-09"
 
-const jsonLd: unknown[] = [
-  {
-    "@context": "https://schema.org",
-    "@type": "TechArticle",
-    headline: title,
-    description,
-    url: canonical,
-    dateModified: updatedDate,
-    author: { "@id": `${origin}/#organization` },
-    publisher: { "@id": `${origin}/#organization` },
-    inLanguage: "en-US",
-  },
-]
+const { canonical, techArticle } = buildDocsJsonLd({
+  origin,
+  path: "/docs/integrations/devin",
+  title,
+  description,
+  updatedDate,
+})
+const jsonLd: unknown[] = [techArticle]
 ---
 
 <DocsLayout

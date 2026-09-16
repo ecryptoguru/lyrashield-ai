@@ -14,31 +14,22 @@ import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse, withApiRequest } from "@/lib/api-auth"
 import { apiError, apiSuccess } from "@/lib/api-response"
-import { myraOperatorEnabled } from "../../_lib"
+import { myraOperatorEnabled, myraOperatorPrivate } from "../../_lib"
 
 export const dynamic = "force-dynamic"
-
-const PRIVATE_HEADERS = {
-  "Cache-Control": "private, no-store",
-  "Referrer-Policy": "no-referrer",
-}
 
 const PAGE_SIZE = 100
 
 async function get(request: Request): Promise<Response> {
   if (!myraOperatorEnabled()) {
-    return apiError("NOT_FOUND", "Not found", 404, PRIVATE_HEADERS)
+    return myraOperatorPrivate(apiError("NOT_FOUND", "Not found", 404))
   }
   try {
     await requirePlatformAdminIdentity()
   } catch (error) {
     const authError = authErrorResponse(error)
-    if (authError) {
-      for (const [name, value] of Object.entries(PRIVATE_HEADERS))
-        authError.headers.set(name, value)
-      return authError
-    }
-    return apiError("FORBIDDEN", "Forbidden", 403, PRIVATE_HEADERS)
+    if (authError) return myraOperatorPrivate(authError)
+    return myraOperatorPrivate(apiError("FORBIDDEN", "Forbidden", 403))
   }
 
   const { searchParams } = new URL(request.url)
@@ -73,17 +64,19 @@ async function get(request: Request): Promise<Response> {
       },
     })
     const nextCursor = items.length > PAGE_SIZE ? items[PAGE_SIZE]!.id : null
-    const response = apiSuccess({
-      items: items.slice(0, PAGE_SIZE),
-      nextCursor,
-    })
-    for (const [name, value] of Object.entries(PRIVATE_HEADERS)) response.headers.set(name, value)
-    return response
+    return myraOperatorPrivate(
+      apiSuccess({
+        items: items.slice(0, PAGE_SIZE),
+        nextCursor,
+      })
+    )
   } catch (error) {
     logger.error("Myra operator stuck-operations list failed", {
       error: error instanceof Error ? error.name : "unknown_error",
     })
-    return apiError("INTERNAL_ERROR", "Could not load the operations list", 500, PRIVATE_HEADERS)
+    return myraOperatorPrivate(
+      apiError("INTERNAL_ERROR", "Could not load the operations list", 500)
+    )
   }
 }
 

@@ -1,22 +1,19 @@
 ---
 import DocsLayout from "@layouts/DocsLayout.astro"
+import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const canonical = new URL("/docs/integrations/aider", origin).toString()
 const title = "LyraShield for Aider — Standalone CLI Guide"
 const description = "Use LyraShield alongside Aider through the standalone CLI and CI. Aider does not currently document native MCP client support."
 const updatedDate = "2026-09-08"
-const jsonLd = [{
-  "@context": "https://schema.org",
-  "@type": "TechArticle",
-  headline: title,
+const { canonical, techArticle } = buildDocsJsonLd({
+  origin,
+  path: "/docs/integrations/aider",
+  title,
   description,
-  url: canonical,
-  dateModified: updatedDate,
-  author: { "@id": `${origin}/#organization` },
-  publisher: { "@id": `${origin}/#organization` },
-  inLanguage: "en-US",
-}]
+  updatedDate,
+})
+const jsonLd = [techArticle]
 ---
 
 <DocsLayout title={`${title} | LyraShield AI`} description={description} canonical={canonical} jsonLd={jsonLd} updatedDate={updatedDate} currentPath="/docs/integrations/aider">
