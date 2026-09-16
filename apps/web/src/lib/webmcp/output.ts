@@ -78,7 +78,7 @@ export interface WebMcpJsonSchemaProperty {
   items?: WebMcpJsonSchemaProperty
 }
 
-export interface WebMcpObjectSchema {
+interface WebMcpObjectSchema {
   type: "object"
   description?: string
   properties: Record<string, WebMcpJsonSchemaProperty>
@@ -125,7 +125,7 @@ function enforceSchemaProperty(prop: WebMcpJsonSchemaProperty): WebMcpJsonSchema
   return bounded
 }
 
-export interface WebMcpStructuredOutput<T = unknown> {
+interface WebMcpStructuredOutput<T = unknown> {
   ok: boolean
   output?: T
   error?: string

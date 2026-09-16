@@ -45,7 +45,7 @@ import {
 import { resolve } from "path"
 import { mkdir } from "fs/promises"
 
-export interface ScannerOrchestratorConfig {
+interface ScannerOrchestratorConfig {
   scanId: string
   workspaceId: string
   targetId: string
@@ -66,7 +66,7 @@ export interface ScannerOrchestratorConfig {
   urlProfile?: UrlScanProfile
 }
 
-export interface ScannerOrchestratorResult {
+interface ScannerOrchestratorResult {
   allFindings: NormalizedFinding[]
   engineFindings: NormalizedFinding[]
   scaFindings: NormalizedFinding[]

@@ -14,7 +14,7 @@ import type { ReadinessVerdict } from "./launch-readiness"
  * target lacks usable, non-expired evidence.
  */
 
-export type DashboardCoverageState = "NONE" | "PARTIAL" | "COMPLETE"
+type DashboardCoverageState = "NONE" | "PARTIAL" | "COMPLETE"
 
 export interface DashboardOverview {
   targets: {
@@ -85,7 +85,7 @@ export interface DashboardOverview {
   activeScan: { id: string; targetName: string | null } | null
 }
 
-export interface DashboardRecentRun {
+interface DashboardRecentRun {
   id: string
   targetName: string | null
   status: string
@@ -128,7 +128,7 @@ export function coverageStateFromReceipts(receiptStatuses: string[]): DashboardC
   return applicable.every((status) => status === "COMPLETED") ? "COMPLETE" : "PARTIAL"
 }
 
-export interface DashboardTargetVerdictInput {
+interface DashboardTargetVerdictInput {
   total: number
   assessed: number
   partiallyAssessed: number
@@ -202,7 +202,7 @@ export interface ScanRowLike {
   _count?: { findings?: number } | null
 }
 
-export interface DashboardFindingGroup {
+interface DashboardFindingGroup {
   severity: FindingSeverity
   status: FindingStatus
   verified: boolean

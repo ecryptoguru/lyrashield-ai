@@ -28,7 +28,7 @@ type KevEntry = {
   knownRansomwareCampaignUse?: unknown
 }
 
-export interface ThreatIntelligenceFetchOptions {
+interface ThreatIntelligenceFetchOptions {
   fetchFn?: typeof fetch
   cisaFetchFn?: typeof fetch
   /** Injectable DNS resolver for safe-fetch tests. */

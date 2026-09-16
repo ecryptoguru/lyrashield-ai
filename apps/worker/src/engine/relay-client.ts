@@ -20,7 +20,7 @@ import {
  * grant on any terminal scan state.
  */
 
-export interface RelayRuntimeConfig {
+interface RelayRuntimeConfig {
   url: string
   signingSecret: string
   /** Admin secret shared with the egress proxy's audit/revoke endpoints. */
@@ -56,7 +56,7 @@ const GRANT_GRACE_MS = 5 * 60 * 1000
 const SAFE_METHODS = ["GET", "HEAD", "OPTIONS", "POST"]
 const DESTRUCTIVE_METHODS = ["PUT", "PATCH", "DELETE"]
 
-export interface MintRelayGrantInput {
+interface MintRelayGrantInput {
   scanId: string
   /** Review depth — selects the relay rate/byte/request cap profile. */
   mode: "STANDARD" | "DEEP"

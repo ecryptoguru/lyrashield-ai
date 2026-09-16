@@ -38,13 +38,13 @@ export type LicenseStatus =
   | { state: "revoked" }
   | { state: "none" }
 
-export interface EngineInfo {
+interface EngineInfo {
   found: boolean
   path: string | null
   version: string | null
 }
 
-export interface DockerInfo {
+interface DockerInfo {
   found: boolean
   running: boolean
   version: string | null

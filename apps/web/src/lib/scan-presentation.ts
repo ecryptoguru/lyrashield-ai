@@ -15,7 +15,7 @@ type ScanStatus =
 
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
 
-export interface ScanPresentation {
+interface ScanPresentation {
   label: string
   headline: string
   description: string
@@ -57,7 +57,7 @@ export const SCAN_STATE_FILTERS = [
 
 export type ScanStateFilter = (typeof SCAN_STATE_FILTERS)[number]
 
-export const SCAN_STATE_STATUSES: Record<Exclude<ScanStateFilter, "ALL">, string[]> = {
+const SCAN_STATE_STATUSES: Record<Exclude<ScanStateFilter, "ALL">, string[]> = {
   ACTIVE: ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"],
   COMPLETED: ["COMPLETED", "PARTIAL"],
   NEEDS_ATTENTION: ["FAILED", "STOPPED_BUDGET", "TIMED_OUT"],

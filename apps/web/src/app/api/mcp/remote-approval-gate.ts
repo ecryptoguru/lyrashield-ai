@@ -100,7 +100,7 @@ async function resolveDelegatedScope(
   return {}
 }
 
-export interface RemoteApprovalGateOptions {
+interface RemoteApprovalGateOptions {
   apiKeyInfo: {
     workspaceId: string
     scopes: string[]

@@ -13,7 +13,7 @@ export const OPERATIONAL_ALERT_THRESHOLDS = {
   workerCpuPercent: 85,
 } as const
 
-export type OperationalAlertCode =
+type OperationalAlertCode =
   | "scan_readiness_unavailable"
   | "scan_worker_lease_expired"
   | "scan_queue_depth_high"
@@ -44,7 +44,7 @@ export interface OperationalHealthSnapshot {
   workerCpuPercent?: number
 }
 
-export interface OperationalAlertState {
+interface OperationalAlertState {
   code: OperationalAlertCode
   value: number
   threshold: number

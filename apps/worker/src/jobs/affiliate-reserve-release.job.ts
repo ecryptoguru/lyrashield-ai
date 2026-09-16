@@ -1,14 +1,12 @@
 import { releaseReserve, type ReserveReleaseResult } from "@lyrashield/affiliate"
 import { logger } from "@lyrashield/logger"
 
-export const AFFILIATE_RESERVE_RELEASE_QUEUE = "affiliate-reserve-release"
-
-export interface AffiliateReserveReleaseJobData {
+interface AffiliateReserveReleaseJobData {
   /** ISO timestamp for the scheduled run. */
   scheduledAt: string
 }
 
-export interface AffiliateReserveReleaseJobResult {
+interface AffiliateReserveReleaseJobResult {
   affiliatesReleased: number
   commissionsReleased: number
 }

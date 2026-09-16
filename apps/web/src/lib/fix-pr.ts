@@ -66,7 +66,7 @@ export interface FixPrRequest {
   authorization?: { kind: "oauth-connection" | "api-key"; id: string }
 }
 
-export interface FixPrOutcome {
+interface FixPrOutcome {
   status: "pending_approval" | "opened" | "rejected" | "failed"
   approvalId?: string
   approvalUrl?: string

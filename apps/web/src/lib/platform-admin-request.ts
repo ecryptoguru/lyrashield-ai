@@ -2,7 +2,7 @@ import { env } from "@lyrashield/config"
 
 const ELEVATION_NONCE = /^[A-Za-z0-9_-]{43}$/
 
-export type PlatformAdminRequestValidation =
+type PlatformAdminRequestValidation =
   { ok: true; elevationNonce?: string } | { ok: false; code: string; message: string }
 
 export function validatePlatformAdminActionRequest(

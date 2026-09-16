@@ -169,7 +169,7 @@ export function collectEngineFailureType(
   return { window, failureType: extractEngineFailureType(window) }
 }
 
-export interface KillableChild {
+interface KillableChild {
   kill(signal?: NodeJS.Signals): boolean
 }
 
@@ -1038,7 +1038,6 @@ export {
   flushEngineStreamTail,
   redactEngineTailLine,
 }
-export type { EngineStreamTail }
 
 function appendEngineStreamTail(tail: EngineStreamTail, chunk: Buffer): void {
   const text = tail.pending + chunk.toString("utf8")
@@ -1317,7 +1316,7 @@ export async function runEngine(
   }
 }
 
-export interface EngineTriageRunResult {
+interface EngineTriageRunResult {
   artifact: EngineTriageArtifact | null
   /** Bounded private usage receipt, normalized by the worker before accounting. */
   llmUsage?: Record<string, unknown>

@@ -2,7 +2,6 @@ import {
   getUrlModeAvailability,
   getUrlScanProfile,
   type UrlScanMode,
-  type UrlScanProfile,
   type UrlTargetType,
 } from "@lyrashield/types"
 import { estimateRunMinutes } from "./estimator"
@@ -38,9 +37,9 @@ export const SCAN_PRESETS = {
   },
 } as const
 
-export type ScanPresetId = keyof typeof SCAN_PRESETS
+type ScanPresetId = keyof typeof SCAN_PRESETS
 
-export const SCAN_PRESET_ORDER: ScanPresetId[] = [
+const SCAN_PRESET_ORDER: ScanPresetId[] = [
   "RELEASE_CHECK",
   "CODE_REVIEW",
   "DEEP_REVIEW",
@@ -151,19 +150,4 @@ export function getScanPreset(id: string) {
 
 export function getScanPresetEstimate(id: string) {
   return estimateRunMinutes(getScanPreset(id).mode)
-}
-
-export function isScanPresetId(id: string): id is ScanPresetId {
-  return (Object.keys(SCAN_PRESETS) as ScanPresetId[]).includes(id as ScanPresetId)
-}
-
-export function getUrlProfileFromOption(option: ManualScanOption): UrlScanProfile | null {
-  try {
-    return getUrlScanProfile(
-      option.id.startsWith("API") ? "API" : "WEB_APP",
-      option.mode as UrlScanMode
-    )
-  } catch {
-    return null
-  }
 }

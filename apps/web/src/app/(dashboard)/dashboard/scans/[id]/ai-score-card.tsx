@@ -1,7 +1,7 @@
 import { Card } from "@lyrashield/ui"
 import { Brain } from "lucide-react"
 
-export interface AiSecurityScoreData {
+interface AiSecurityScoreData {
   score: number | null
   methodology: string
   assessedCount: number

@@ -13,8 +13,8 @@ export const SCORECARD_CHANNELS = [
   "embed",
 ] as const
 export const REFERRAL_SOURCES = ["scorecard", ...SCORECARD_CHANNELS] as const
-export type ScorecardChannel = (typeof SCORECARD_CHANNELS)[number]
-export type ReferralSource = (typeof REFERRAL_SOURCES)[number]
+type ScorecardChannel = (typeof SCORECARD_CHANNELS)[number]
+type ReferralSource = (typeof REFERRAL_SOURCES)[number]
 export type ShareChannel = Exclude<ScorecardChannel, "native" | "copy" | "download" | "embed">
 
 export function isReferralSource(value: string): value is ReferralSource {

@@ -24,7 +24,7 @@ import {
 import { enqueueScan, assertScanWorkerAvailable } from "@lyrashield/integrations"
 import { assertScanAllowed } from "@lyrashield/billing"
 
-export interface LoopClosureSweepResult {
+interface LoopClosureSweepResult {
   claimed: number
   completed: number
   deferred: number

@@ -7,7 +7,7 @@ import {
   type AISecuritySignal,
 } from "@lyrashield/security/ai-security"
 
-export const AI_APP_SECURITY_FREE_LIMITS: AIScanLimits = {
+const AI_APP_SECURITY_FREE_LIMITS: AIScanLimits = {
   maxFiles: 25,
   maxFileBytes: 1024 * 1024,
   maxTotalBytes: 5 * 1024 * 1024,
@@ -24,7 +24,7 @@ export const AI_APP_SECURITY_FREE_CONTROLS = [
   "AI-08",
 ] as const
 
-export type AiAppSecurityUiSignal = {
+type AiAppSecurityUiSignal = {
   controlId: string
   controlTitle: string
   owasp: string
@@ -37,7 +37,7 @@ export type AiAppSecurityUiSignal = {
   evidenceSource: string
 }
 
-export type AiAppSecuritySummary = {
+type AiAppSecuritySummary = {
   detected: number
   noFinding: number
   inconclusive: number

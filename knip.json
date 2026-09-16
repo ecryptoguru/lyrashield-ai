@@ -1,0 +1,25 @@
+{
+  "comment": "Informational dead-code audit config. Knip output is candidate evidence only — every deletion must be re-verified by reference tracing (framework-discovered files, dynamic imports, public package exports are false-positive prone).",
+  "entry": [
+    "apps/web/next.config.*",
+    "apps/web/src/middleware.ts",
+    "apps/web/src/app/**/{page,layout,route,loading,error,not-found,template,default}.{ts,tsx}",
+    "apps/web/instrumentation*.ts",
+    "apps/marketing/astro.config.*",
+    "apps/marketing/src/pages/**/*.{ts,astro}",
+    "apps/marketing/src/middleware.ts",
+    "apps/marketing/tests-browser/**/*.e2e.ts",
+    "apps/marketing/scripts/*.mjs",
+    "apps/worker/src/index.ts",
+    "apps/desktop/frontend/src/main.tsx",
+    "e2e/**/*.spec.ts",
+    "**/playwright*.config.ts",
+    "**/vitest*.config.ts",
+    "**/wrangler*.toml",
+    "packages/*/src/index.ts"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "duplicates": "off"
+  }
+}

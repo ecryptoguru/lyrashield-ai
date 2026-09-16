@@ -67,7 +67,7 @@ function asObject(value: unknown): Record<string, unknown> {
   return {}
 }
 
-export interface ApprovalsClientProps {
+interface ApprovalsClientProps {
   workspaceId: string
   approvals: ApprovalListItem[]
   hasProposals: boolean

@@ -13,7 +13,7 @@ import {
 import { fetchThreatSignals, type ThreatSignal } from "./threat-intelligence"
 import type { ResolvedDependencyInventory } from "./resolved-dependencies"
 
-export interface ScaScanConfig {
+interface ScaScanConfig {
   repoPath: string
   workspaceDir: string
   fetchFn?: typeof fetch
@@ -533,45 +533,7 @@ async function parseDependencyFile(
   }
 }
 
-export async function queryOsv(
-  dependency: Dependency,
-  fetchFn?: typeof fetch
-): Promise<OsvVulnerability[]> {
-  const url = "https://api.osv.dev/v1/query"
-  const body = {
-    package: { name: dependency.name, ecosystem: dependency.ecosystem },
-    version: dependency.version,
-  }
-  const doFetch = fetchFn ?? fetch
-
-  try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 10_000)
-    const res = await doFetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
-    clearTimeout(timer)
-
-    if (!res.ok) {
-      logger.warn("OSV API returned non-OK status", { status: res.status, dep: dependency.name })
-      return []
-    }
-
-    const data = (await res.json()) as { vulns?: OsvVulnerability[] }
-    return data.vulns ?? []
-  } catch (err) {
-    logger.warn("OSV API query failed", {
-      dep: dependency.name,
-      error: err instanceof Error ? err.message : String(err),
-    })
-    return []
-  }
-}
-
-export async function queryOsvBatch(
+async function queryOsvBatch(
   dependencies: Dependency[],
   fetchFn?: typeof fetch,
   signal?: AbortSignal

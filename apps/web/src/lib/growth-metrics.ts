@@ -16,7 +16,7 @@
 
 import { CLOUD_PLAN_MAP } from "@lyrashield/pricing"
 
-export interface BillingMetricRow {
+interface BillingMetricRow {
   accountId: string | null
   provider: string
   status: string
@@ -27,7 +27,7 @@ export interface BillingMetricRow {
   createdAt: Date
 }
 
-export interface PaidAccountMetrics {
+interface PaidAccountMetrics {
   /** status=active, provider-backed, non-FREE, non-admin, deduped by account. */
   activePaidAccounts: number
   /** Still paying through current term: active + past_due + canceled-in-term. */

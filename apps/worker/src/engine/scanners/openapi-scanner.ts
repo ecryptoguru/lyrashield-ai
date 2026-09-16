@@ -16,13 +16,13 @@ import {
 } from "@lyrashield/types"
 import type { EngineVulnerability } from "../output-parser"
 
-export type OpenApiOperationAttempt = {
+type OpenApiOperationAttempt = {
   method: "GET" | "HEAD" | "OPTIONS"
   path: string
   url: string
 }
 
-export type OpenApiScannerResult = {
+type OpenApiScannerResult = {
   findings: EngineVulnerability[]
   signals: SurfaceSignal[]
   subjects: SurfaceSubject[]
@@ -31,7 +31,7 @@ export type OpenApiScannerResult = {
   execution: UrlExecutionSummary
 }
 
-export type OpenApiSpec = {
+type OpenApiSpec = {
   openapi?: string
   servers?: Array<{ url: string }>
   security?: Array<Record<string, unknown>>

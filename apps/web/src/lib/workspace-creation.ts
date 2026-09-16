@@ -3,7 +3,7 @@ import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { startTrial } from "@lyrashield/billing"
 import type { WorkspaceMode } from "@lyrashield/types"
 
-export interface CreatedWorkspace {
+interface CreatedWorkspace {
   id: string
   name: string
   slug: string

@@ -188,7 +188,7 @@ export function pastedCodeForWebMcp(code: string, extension?: string): WebMcpSca
   }
 }
 
-export type WebMcpUiSignal = {
+type WebMcpUiSignal = {
   controlId: string
   controlTitle: string
   ruleId: string
@@ -220,7 +220,7 @@ export function toUiSignals(result: { signals: WebMcpSignal[] }): WebMcpUiSignal
   })
 }
 
-export type WebMcpSummary = {
+type WebMcpSummary = {
   detected: number
   noFinding: number
   inconclusive: number
@@ -255,7 +255,7 @@ export function buildSummary(result: { coverage: WebMcpCoverageSummary }): WebMc
   }
 }
 
-export function boundSummary(summary: WebMcpSummary, maxFindings = 6): string {
+function boundSummary(summary: WebMcpSummary, maxFindings = 6): string {
   const findings = summary.controls.filter(
     (c) => c.state === "DETECTED" || c.state === "INCONCLUSIVE"
   )
@@ -267,8 +267,6 @@ export function boundSummary(summary: WebMcpSummary, maxFindings = 6): string {
   ].filter(Boolean)
   return lines.join("\n")
 }
-
-export type WebMcpExportFormat = "json" | "markdown" | "sarif"
 
 export function exportWebMcpJson(
   state: Pick<WebMcpAnalyzerState, "files" | "inventory" | "signals" | "coverage">
@@ -711,7 +709,7 @@ export class WebMcpAnalyzerState {
 
 export type WebMcpToolDefinition = WebMCP.ModelContextTool
 
-export interface WebMcpPublicActivity {
+interface WebMcpPublicActivity {
   toolName: string
   status: "running" | "completed" | "cancelled" | "failed"
   startedAt: string

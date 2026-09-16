@@ -43,7 +43,7 @@ export function resetScanConsumerLiveness(now = Date.now()): void {
   lastClaimAt = now
 }
 
-export interface ScanConsumerLiveness {
+interface ScanConsumerLiveness {
   /** Jobs currently waiting in the scan queue. */
   waiting: number
   /** Milliseconds since the worker last claimed a job. */

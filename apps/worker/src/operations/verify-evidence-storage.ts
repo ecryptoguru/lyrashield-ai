@@ -42,7 +42,7 @@ async function assertObjectDeleted(client: S3Client, key: string): Promise<void>
   throw new Error("Evidence proof artifact still exists after cleanup")
 }
 
-export interface EvidenceStorageProofResult {
+interface EvidenceStorageProofResult {
   encryptedRoundTrip: true
   crossWorkspaceDenied: true
   tamperRejected: true

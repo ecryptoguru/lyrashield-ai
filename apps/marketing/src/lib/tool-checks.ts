@@ -39,7 +39,7 @@ const SECRET_PATTERNS: readonly SecretPattern[] = [
   },
 ]
 
-export interface SecretObservation {
+interface SecretObservation {
   kind: string
   preview: string
 }

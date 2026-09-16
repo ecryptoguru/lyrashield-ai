@@ -16,8 +16,8 @@ import { env } from "@lyrashield/config"
  */
 
 const TTL_MS = 10 * 60 * 1000 // 10 minutes
-export const INSTALL_RETURN_DESTINATIONS = ["onboarding", "integrations"] as const
-export type InstallReturnDestination = (typeof INSTALL_RETURN_DESTINATIONS)[number]
+const INSTALL_RETURN_DESTINATIONS = ["onboarding", "integrations"] as const
+type InstallReturnDestination = (typeof INSTALL_RETURN_DESTINATIONS)[number]
 
 function b64url(input: Buffer | string): string {
   return Buffer.from(input).toString("base64url")
@@ -40,7 +40,7 @@ export function createInstallState(
   return `${payload}.${sign(payload)}`
 }
 
-export type InstallStateResult =
+type InstallStateResult =
   | {
       valid: true
       workspaceId: string
