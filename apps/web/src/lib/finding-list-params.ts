@@ -16,7 +16,7 @@ import type { SortMode } from "@/app/(dashboard)/dashboard/findings/findings-cli
  * now carries meaning.
  */
 
-export const FINDING_FILTERS = [
+const FINDING_FILTERS = [
   "ALL",
   "OPEN",
   "CRITICAL",
@@ -30,11 +30,11 @@ export const FINDING_FILTERS = [
 
 export type FindingFilter = (typeof FINDING_FILTERS)[number]
 
-export const FINDING_SORTS = ["priority", "severity", "newest"] as const
+const FINDING_SORTS = ["priority", "severity", "newest"] as const
 
-export const DEFAULT_FINDING_FILTER: FindingFilter = "OPEN"
+const DEFAULT_FINDING_FILTER: FindingFilter = "OPEN"
 
-export interface FindingListParams {
+interface FindingListParams {
   filter: FindingFilter
   sort: SortMode
   target: string

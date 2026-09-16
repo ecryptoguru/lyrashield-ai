@@ -1,7 +1,7 @@
 const APP_HOST = "app.lyrashieldai.com"
 const CERTIFICATE_SHA256 = /^[a-f0-9]{64}$/
 
-export type AppOriginTrust = "cloudflare" | "probe" | "off" | "untrusted"
+type AppOriginTrust = "cloudflare" | "probe" | "off" | "untrusted"
 
 function requestHost(request: Request): string {
   return (request.headers.get("host") ?? new URL(request.url).hostname).split(":")[0]!.toLowerCase()

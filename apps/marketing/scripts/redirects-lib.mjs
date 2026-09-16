@@ -32,7 +32,7 @@ function listDir(path) {
  * .ts endpoints and never match the .astro glob; 404 and the homepage are
  * excluded (the homepage IS its canonical form).
  */
-export function topLevelPages() {
+function topLevelPages() {
   return listDir("src/pages")
     .filter((name) => name.endsWith(".astro"))
     .map((name) => name.replace(/\.astro$/, ""))
@@ -42,7 +42,7 @@ export function topLevelPages() {
 }
 
 /** Blog post routes from the content collection filenames. */
-export function blogPosts() {
+function blogPosts() {
   return listDir("src/content/blog")
     .filter((name) => /\.(md|mdx)$/.test(name))
     .map((name) => `/blog/${name.replace(/\.(md|mdx)$/, "")}`)
@@ -50,7 +50,7 @@ export function blogPosts() {
 }
 
 /** Blog pagination pages: /blog is page 1; pages 2..N follow pageSize 10. */
-export function blogPagination(pageSize = 10) {
+function blogPagination(pageSize = 10) {
   const pageCount = Math.max(1, Math.ceil(blogPosts().length / pageSize))
   const pages = []
   for (let n = 2; n <= pageCount; n += 1) pages.push(`/blog/${n}`)
@@ -58,7 +58,7 @@ export function blogPagination(pageSize = 10) {
 }
 
 /** Tag hub routes from the category ids in src/lib/blog-categories.ts. */
-export function tagHubs() {
+function tagHubs() {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Repository-owned source file.
   const source = readFileUtf8("src/lib/blog-categories.ts")
   const ids = new Set()
@@ -71,7 +71,7 @@ export function tagHubs() {
 }
 
 /** Comparison pages from the content collection filenames. */
-export function comparePages() {
+function comparePages() {
   return listDir("src/content/compare")
     .filter((name) => /\.(md|mdx)$/.test(name))
     .map((name) => `/compare/${name.replace(/\.(md|mdx)$/, "")}`)
@@ -79,7 +79,7 @@ export function comparePages() {
 }
 
 /** Tool routes from the slug entries in src/lib/tools.ts. */
-export function toolPages() {
+function toolPages() {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Repository-owned source file.
   const source = readFileUtf8("src/lib/tools.ts")
   return [...source.matchAll(/^\s+slug: "([a-z0-9-]+)",?$/gm)]
@@ -88,7 +88,7 @@ export function toolPages() {
 }
 
 /** Docs tree routes from the .astro files under src/pages/docs (index.astro -> the folder route). */
-export function docsPages() {
+function docsPages() {
   const routes = []
   const walk = (dir, prefix) => {
     for (const entry of listDir(dir)) {

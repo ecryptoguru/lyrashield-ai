@@ -1,9 +1,9 @@
-export interface ScanReviewEvent {
+interface ScanReviewEvent {
   stage: string
   metadata?: Record<string, unknown> | null
 }
 
-export interface ScanReviewProfile {
+interface ScanReviewProfile {
   model: string | null
   reasoningEffort: string | null
 }

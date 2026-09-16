@@ -9,7 +9,7 @@ import {
   type ScannerDiscovery,
 } from "../scanner-coverage"
 
-export interface AgentConfigScanConfig {
+interface AgentConfigScanConfig {
   repoPath: string
   coverageIssues?: ScannerCoverageIssue[]
   signal?: AbortSignal

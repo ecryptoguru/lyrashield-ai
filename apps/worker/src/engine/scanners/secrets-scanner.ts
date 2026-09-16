@@ -9,7 +9,7 @@ import {
   type ScannerDiscovery,
 } from "../scanner-coverage"
 
-export interface SecretsScanConfig {
+interface SecretsScanConfig {
   repoPath: string
   workspaceDir: string
   signal?: AbortSignal

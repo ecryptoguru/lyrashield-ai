@@ -1,7 +1,7 @@
 import { getCurrentGateVerdicts, parseAssessmentSnapshot, withWorkspaceRLS } from "@lyrashield/db"
 import type { GateReadinessTarget } from "./launch-readiness"
 
-export interface ReadinessIdentityOptions {
+interface ReadinessIdentityOptions {
   expectedCommit?: string
   expectedArtifactDigest?: string
 }

@@ -1,7 +1,7 @@
 import { getSystemPrisma } from "@lyrashield/db"
 import type { PlatformAdminIdentity } from "@lyrashield/auth/server"
 
-export const PLATFORM_ADMIN_PAGE_SIZE = 25
+const PLATFORM_ADMIN_PAGE_SIZE = 25
 
 export function parseAdminCursor(value: string | undefined): string | undefined {
   return value && /^[A-Za-z0-9_-]{1,128}$/.test(value) ? value : undefined

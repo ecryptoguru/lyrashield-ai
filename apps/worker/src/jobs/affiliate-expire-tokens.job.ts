@@ -1,13 +1,11 @@
 import { expireAttributionTokens, type ExpireResult } from "@lyrashield/affiliate"
 import { logger } from "@lyrashield/logger"
 
-export const AFFILIATE_EXPIRE_TOKENS_QUEUE = "affiliate-expire-tokens"
-
-export interface AffiliateExpireTokensJobData {
+interface AffiliateExpireTokensJobData {
   scheduledAt: string
 }
 
-export interface AffiliateExpireTokensJobResult {
+interface AffiliateExpireTokensJobResult {
   deleted: number
 }
 

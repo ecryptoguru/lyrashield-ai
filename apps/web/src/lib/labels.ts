@@ -1,6 +1,6 @@
 import type { ScanMode, FindingSeverity, FindingStatus } from "@lyrashield/types"
 
-export const GOAL_OPTIONS = [
+const GOAL_OPTIONS = [
   {
     value: "CHECK_PR",
     label: "Check a PR",
@@ -33,14 +33,8 @@ export const GOAL_OPTIONS = [
   },
 ] as const
 
-export type GoalValue = (typeof GOAL_OPTIONS)[number]["value"]
-
 export function getGoalLabel(value: string): string {
   return GOAL_OPTIONS.find((g) => g.value === value)?.label ?? value
-}
-
-export function getGoalDescription(value: string): string {
-  return GOAL_OPTIONS.find((g) => g.value === value)?.description ?? ""
 }
 
 /**
@@ -128,11 +122,6 @@ export function modeLabel(value: string | null | undefined): string {
 export function severityLabel(value: string | null | undefined): string {
   if (!value) return "Unknown"
   return SEVERITY_LABELS[value as FindingSeverity] ?? humanizeToken(value)
-}
-
-export function findingStatusLabel(value: string | null | undefined): string {
-  if (!value) return "Unknown"
-  return FINDING_STATUS_LABELS[value as FindingStatus] ?? humanizeToken(value)
 }
 
 // MemberRole labels keyed on the schema enum (packages/auth permissions

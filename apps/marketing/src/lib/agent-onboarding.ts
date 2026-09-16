@@ -19,14 +19,14 @@ const STRATEGY_ORDER: ReadonlyArray<AgentEntry["installStrategy"]> = [
   "guided-manual",
 ]
 
-export interface AgentOnboardingClient {
+interface AgentOnboardingClient {
   name: string
   href: string
   strategy: AgentEntry["installStrategy"]
   strategyLabel: string
 }
 
-export interface AgentOnboardingClientGroup {
+interface AgentOnboardingClientGroup {
   strategy: AgentEntry["installStrategy"]
   label: string
   clients: AgentOnboardingClient[]

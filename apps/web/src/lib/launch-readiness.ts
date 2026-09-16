@@ -1,6 +1,6 @@
 import type { FindingSeverity, FindingStatus } from "@lyrashield/types"
 
-export interface FindingForReadiness {
+interface FindingForReadiness {
   id: string
   severity: FindingSeverity
   status: FindingStatus
@@ -25,7 +25,7 @@ export type ReadinessVerdict =
  * scores such a run 100/100 and returns GO, which is a false all-clear on the
  * one screen a customer forwards to their team.
  */
-export interface ReadinessCoverage {
+interface ReadinessCoverage {
   /** True when at least one scanner successfully evaluated the target. */
   evaluated: boolean
   /** Operator-facing explanation shown when `evaluated` is false. */
@@ -58,7 +58,7 @@ export interface LaunchReadinessReport {
   recommendations: string[]
 }
 
-export type CanonicalLaunchReadinessReport = Omit<LaunchReadinessReport, "score"> & {
+type CanonicalLaunchReadinessReport = Omit<LaunchReadinessReport, "score"> & {
   state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
   score: null
   triageScore: number | null
@@ -93,7 +93,7 @@ export interface GateReadinessTarget {
   assessedIdentity?: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null
 }
 
-export interface FindingReadinessAggregate {
+interface FindingReadinessAggregate {
   severity: FindingSeverity
   status: FindingStatus
   verified: boolean
@@ -116,18 +116,6 @@ const BLOCKING_STATUSES = new Set<string>([
   "FIXED_PENDING_RETEST",
 ])
 
-/**
- * Coverage-receipt statuses that mean a scanner applied to the target but did
- * not finish. NOT_APPLICABLE is deliberately absent (it says nothing about
- * coverage) and so is COMPLETED. Shared so every readiness caller counts the
- * same thing; mirrors APPLICABLE_RECEIPT_STATUSES in dashboard-overview.
- */
-export const INCOMPLETE_APPLICABLE_RECEIPT_STATUSES = [
-  "PARTIAL",
-  "BLOCKED",
-  "TIMED_OUT",
-  "FAILED",
-] as const
 
 export function generateLaunchReadinessReport(
   findings: FindingForReadiness[],
@@ -378,7 +366,7 @@ export function resolveReleaseCheckTargetId(
   )
 }
 
-export type ReleaseCheckMatch = "match" | "mismatch" | "cannot_confirm"
+type ReleaseCheckMatch = "match" | "mismatch" | "cannot_confirm"
 
 export interface ReleaseCheckResult {
   /** The target the check ran against (null when the id resolves to nothing). */

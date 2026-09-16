@@ -1,11 +1,11 @@
-export type ScannerCoverageStatus = "partial" | "unsupported" | "bounded"
+type ScannerCoverageStatus = "partial" | "unsupported" | "bounded"
 
 /**
  * Standardized per-scanner discovery receipt — what the scanner actually
  * enumerated versus skipped, with the reasons. Renders on the scan's coverage
  * receipts so a small scan is provably small, not silently thin.
  */
-export interface ScannerDiscoveryReceipt {
+interface ScannerDiscoveryReceipt {
   filesScanned: number
   bytesScanned: number
   skippedByReason: Record<string, number>

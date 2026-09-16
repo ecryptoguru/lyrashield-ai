@@ -34,7 +34,7 @@ export const EVENT_ALLOWLIST = {
   notification_opened: ["event_type"],
 } as const
 
-export type EventName = keyof typeof EVENT_ALLOWLIST
+type EventName = keyof typeof EVENT_ALLOWLIST
 const pendingEvents: Array<[EventName, Record<string, unknown>]> = []
 const MAX_PENDING_EVENTS = 20
 
@@ -120,7 +120,7 @@ export function attributionProps(a: SignupAttribution): Record<string, unknown> 
 
 /** First-touch acquisition cookie. Consumed once by the onboarding claim. */
 export const ACQUISITION_COOKIE = "lyrashield-acq"
-export const ACQUISITION_COOKIE_MAX_AGE = 30 * 24 * 60 * 60
+const ACQUISITION_COOKIE_MAX_AGE = 30 * 24 * 60 * 60
 
 export function analyticsOptedOut(
   dnt: string | null | undefined,

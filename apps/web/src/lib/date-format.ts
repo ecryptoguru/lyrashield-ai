@@ -55,7 +55,7 @@ export function formatLocalDate(value: DateInput) {
   return localDateFormatter.format(parseDate(value))
 }
 
-export function formatLocalTime(value: DateInput) {
+function formatLocalTime(value: DateInput) {
   return localTimeFormatter.format(parseDate(value))
 }
 

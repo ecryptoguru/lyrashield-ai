@@ -321,7 +321,7 @@ function findUsageMetric(
   return visited.truncated ? undefined : total
 }
 
-export function normalizeLlmUsage(value: unknown): Record<string, unknown> | undefined {
+function normalizeLlmUsage(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
   const inputTokenDetails =

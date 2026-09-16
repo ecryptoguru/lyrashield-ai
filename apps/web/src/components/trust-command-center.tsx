@@ -32,7 +32,7 @@ interface PostureVerdict {
   scope: string
 }
 
-export interface GatePosture {
+interface GatePosture {
   state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE"
   /** Human summary of assessment freshness/coverage across active targets. */
   coverageLabel: string
@@ -44,7 +44,7 @@ export interface GatePosture {
  * score — always presented with the target and date it describes — is scope
  * context, never the decision.
  */
-export function postureVerdict(
+function postureVerdict(
   gate: GatePosture | null,
   latestScore: {
     score: number

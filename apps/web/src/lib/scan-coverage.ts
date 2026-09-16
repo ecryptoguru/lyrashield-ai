@@ -1,13 +1,13 @@
 export const SCANNER_COVERAGE_EVENT_MESSAGE = "Deterministic scanner coverage incomplete"
 
-export interface ScanCoverageEvent {
+interface ScanCoverageEvent {
   stage: string
   level: string
   message: string
   metadata?: Record<string, unknown> | null
 }
 
-export interface ScannerCoverageWarning {
+interface ScannerCoverageWarning {
   scanner: string
   status: string
   subject?: string

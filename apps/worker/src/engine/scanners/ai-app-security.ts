@@ -34,7 +34,7 @@ import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 import { resolveExactDependencies, type ResolvedDependencyInventory } from "./resolved-dependencies"
 
-export interface AiAppSecurityScanConfig {
+interface AiAppSecurityScanConfig {
   repoPath: string
   workspaceDir: string
   coverageIssues?: ScannerCoverageIssue[]
@@ -91,7 +91,7 @@ export interface AiAppSecurityDiscoveryReceipt {
   limitsReached: AIScanLimit[]
 }
 
-export interface Ai03CoverageReceipt {
+interface Ai03CoverageReceipt {
   state: AISecuritySignalState
   advisoryStatus: AdvisoryBatchResult["status"]
   resolutionStatus: "COMPLETE" | "PARTIAL" | "UNSUPPORTED"
@@ -186,7 +186,7 @@ const LOW_PRIORITY_SEGMENTS = new Set([
   "tests",
 ])
 
-export function resolveAiAppSecurityDiscoveryMode(
+function resolveAiAppSecurityDiscoveryMode(
   mode?: string
 ): AiAppSecurityDiscoveryReceipt["mode"] {
   switch (mode?.trim().toUpperCase()) {

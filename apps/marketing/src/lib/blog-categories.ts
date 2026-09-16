@@ -16,9 +16,9 @@ import { getCollection, type CollectionEntry } from "astro:content"
 type BlogEntry = CollectionEntry<"blog">
 
 /** Union of the six tag slugs, derived from the content collection schema. */
-export type CategoryId = BlogEntry["data"]["tags"][number]
+type CategoryId = BlogEntry["data"]["tags"][number]
 
-export interface BlogCategory {
+interface BlogCategory {
   id: CategoryId
   label: string
   description: string
@@ -75,10 +75,6 @@ const categoriesById = new Map<string, BlogCategory>(
   BLOG_CATEGORIES.map((category) => [category.id, category])
 )
 
-/** Look up a category by its slug. Returns undefined for unknown slugs. */
-export function getCategory(slug: string): BlogCategory | undefined {
-  return categoriesById.get(slug)
-}
 
 /** Human label for a tag slug, falling back to the raw slug. */
 export function getCategoryLabel(slug: string): string {
@@ -91,18 +87,13 @@ export function categoryHref(id: CategoryId): string {
 }
 
 /** All published (non-draft) posts, newest first. */
-export async function getPublishedPosts(): Promise<BlogEntry[]> {
+async function getPublishedPosts(): Promise<BlogEntry[]> {
   const posts = await getCollection("blog", (entry) => !entry.data.draft)
   return posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
 }
 
-/** Published posts belonging to a category, newest first. */
-export async function getPostsForCategory(id: CategoryId): Promise<BlogEntry[]> {
-  const posts = await getPublishedPosts()
-  return posts.filter((post) => post.data.tags.includes(id))
-}
 
-export interface BlogCategoryWithCount extends BlogCategory {
+interface BlogCategoryWithCount extends BlogCategory {
   count: number
 }
 

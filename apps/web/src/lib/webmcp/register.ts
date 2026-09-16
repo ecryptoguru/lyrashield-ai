@@ -38,7 +38,7 @@ export interface WebMcpToolDefinition<TInput extends Record<string, unknown>> {
   handler: (input: TInput, options: { signal: AbortSignal }) => Promise<unknown>
 }
 
-export interface WebMcpToolOptions<
+interface WebMcpToolOptions<
   TInput extends Record<string, unknown>,
 > extends WebMcpToolDefinition<TInput> {
   receiptStore: WebMcpReceiptStore

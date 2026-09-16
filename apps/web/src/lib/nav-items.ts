@@ -174,7 +174,7 @@ const WORKSPACE_NAV_ITEMS: NavItem[] = [
   },
 ]
 
-export interface NavState {
+interface NavState {
   canManageBilling?: boolean
   /**
    * Pending agent approval count for the active workspace. The Review Queue item is
@@ -264,7 +264,7 @@ export const MORE_NAV_ITEMS: NavItem[] = [
 
 // --- State-aware helpers (preferred for new callers) -----------------------
 
-export interface ResolvedNav {
+interface ResolvedNav {
   items: NavItem[]
   primary: NavItem[]
   secondary: NavItem[]

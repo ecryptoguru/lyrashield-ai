@@ -36,7 +36,7 @@ export function getOnboardingReviewOptions(path: OnboardingPath): ManualScanOpti
   return getManualScanOptions({ type, hasApiSpec: false }).filter((option) => option.available)
 }
 
-export interface UrlTargetPayload {
+interface UrlTargetPayload {
   workspaceId: string
   type: "WEB_APP" | "API"
   name: string
@@ -83,7 +83,7 @@ export function pathNeedsRepo(path: OnboardingPath): boolean {
 // headings can never drift apart again.
 // ---------------------------------------------------------------------------
 
-export interface OnboardingStepDef {
+interface OnboardingStepDef {
   /** Index used for `step` state, persistence (currentStep) and lookups. */
   readonly index: number
   /** Label in the progress list and the step eyebrow. */
@@ -96,14 +96,14 @@ const CHOOSER: OnboardingStepDef = { index: 1, label: "Add target" }
 const DETAILS: OnboardingStepDef = { index: 3, label: `${TARGET_SINGULAR} details` }
 
 /** Steps for the GitHub flow: chooser → repo-select → details. */
-export const GITHUB_STEPS = {
+const GITHUB_STEPS = {
   chooser: CHOOSER,
   repoSelect: { index: 2, label: "Select repository" },
   details: DETAILS,
 } as const
 
 /** Steps for the URL / API flows: chooser → details (no repo-select). */
-export const URL_API_STEPS = {
+const URL_API_STEPS = {
   chooser: CHOOSER,
   details: DETAILS,
 } as const

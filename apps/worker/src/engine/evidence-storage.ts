@@ -13,7 +13,7 @@ export {
   deleteEncryptedArtifact,
 }
 
-export interface UploadEvidenceParams {
+interface UploadEvidenceParams {
   workspaceId: string
   findingId: string
   type: string
@@ -22,7 +22,7 @@ export interface UploadEvidenceParams {
   contentType?: string
 }
 
-export interface UploadEvidenceResult {
+interface UploadEvidenceResult {
   storageUri: string
   checksum: string
   encryptionKeyRef: string

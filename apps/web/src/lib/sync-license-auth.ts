@@ -23,7 +23,7 @@ export async function checkSyncEntitlement(sku: LocalSkuId, accountId: string): 
   return (billing?.effectivePlan ?? "FREE") !== "FREE"
 }
 
-export type SyncCredentialResult =
+type SyncCredentialResult =
   | { ok: true; license: SyncLicense; legacyLicenseKey: boolean }
   | {
       ok: false

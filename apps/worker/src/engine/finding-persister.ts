@@ -13,7 +13,7 @@ import { deleteEncryptedArtifact, uploadEvidence } from "./evidence-storage"
 import { persistDetectionReceipt } from "./result-integrity"
 import { createHash } from "node:crypto"
 
-export interface PersistFindingsParams {
+interface PersistFindingsParams {
   scanId: string
   workspaceId: string
   targetId: string
@@ -29,7 +29,7 @@ export interface PersistFindingsParams {
   assertCanStart?: () => void
 }
 
-export interface PersistedFinding {
+interface PersistedFinding {
   id: string
   title: string
   severity: string

@@ -18,7 +18,7 @@ import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 import { runUrlBehaviorProbes } from "./url-behavior-probes"
 
-export interface UrlScanConfig {
+interface UrlScanConfig {
   targetUrl: string
   profile?: UrlScanProfile
   fetchFn?: typeof fetch
@@ -30,7 +30,7 @@ export interface UrlScanConfig {
   apiSpecUrl?: string | null
 }
 
-export type UrlScannerResult = {
+type UrlScannerResult = {
   findings: EngineVulnerability[]
   execution: UrlExecutionSummary
   issues: SurfaceCollectionIssue[]

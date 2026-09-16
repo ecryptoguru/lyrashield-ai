@@ -33,7 +33,7 @@ export interface ReconciliationResult {
   alerts: ReconciliationAlert[]
 }
 
-export interface ReconciliationAlert {
+interface ReconciliationAlert {
   provider: string
   externalId: string
   type: string

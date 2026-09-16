@@ -1,7 +1,7 @@
 import type { DashboardOverview } from "./dashboard-overview"
 import type { GateReadinessTarget } from "./launch-readiness"
 
-export interface HomeNextAction {
+interface HomeNextAction {
   /** Eyebrow label, e.g. "Get started" or "Next step". */
   eyebrow: string
   title: string
@@ -10,8 +10,8 @@ export interface HomeNextAction {
   cta: string
 }
 
-export const HOME_BLOCKER_HREF = "/dashboard/findings"
-export const HOME_REPORT_HREF = "/dashboard/reports"
+const HOME_BLOCKER_HREF = "/dashboard/findings"
+const HOME_REPORT_HREF = "/dashboard/reports"
 
 /**
  * W2-07: scan recommendations carry the recommended target so the composer
@@ -19,13 +19,13 @@ export const HOME_REPORT_HREF = "/dashboard/reports"
  * page re-validates the id against the workspace's active targets, so a
  * deleted or switched target degrades to the unscoped composer.
  */
-export function scanComposerHref(targetId?: string | null): string {
+function scanComposerHref(targetId?: string | null): string {
   return targetId
     ? `/dashboard/scans?new=1&target=${encodeURIComponent(targetId)}`
     : "/dashboard/scans?new=1"
 }
 
-export interface HomeDecisionInput {
+interface HomeDecisionInput {
   targets: Pick<
     DashboardOverview["targets"],
     "total" | "assessed" | "partiallyAssessed" | "unassessed" | "expiredAssessments"
@@ -42,7 +42,7 @@ export interface HomeDecisionInput {
   activeScan?: { id: string; targetName: string | null } | null
 }
 
-export interface HomeDecision {
+interface HomeDecision {
   action: HomeNextAction | null
   /** The same decision shaped for the header CTA — never a competing action. */
   primaryAction: { href: string; label: string }

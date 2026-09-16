@@ -143,9 +143,9 @@ const receiptSchema = z
     }
   })
 
-export type TerminalCostDispositionReceipt = z.infer<typeof receiptSchema>
+type TerminalCostDispositionReceipt = z.infer<typeof receiptSchema>
 
-export interface TerminalCostScanState {
+interface TerminalCostScanState {
   workspaceId: string
   targetType: string | null
   status: ScanStatus
@@ -157,7 +157,7 @@ export interface TerminalCostScanState {
   llmUsageUnavailableEventCount: number
 }
 
-export interface TerminalCostOperatorState {
+interface TerminalCostOperatorState {
   id: string
   email: string
   emailVerified: boolean

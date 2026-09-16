@@ -10,7 +10,6 @@ export const TARGET_PLURAL = "Targets"
 
 export const TARGET_DETAILS_LABEL = `${TARGET_SINGULAR} details`
 export const TARGET_NAME_LABEL = `${TARGET_SINGULAR} name`
-export const TARGET_LIST_LABEL = "Add target"
 
 // User-facing nouns: a scan is a scan, a finding is a finding. The legacy
 // run/issue labels are retired from user-facing copy; identifiers, routes,
@@ -27,40 +26,8 @@ export const ISSUE_PLURAL = "Findings"
 // Target noun, these alias TARGET_* above; nothing else reads them — remove
 // here if still unused after the terminology sweep.
 export const PRODUCT_SINGULAR = "Target"
-export const PRODUCT_PLURAL = "Targets"
-
-export const ASSET_SINGULAR = "Asset"
-export const ASSET_PLURAL = "Assets"
-export const ENVIRONMENT_SINGULAR = "Environment"
-export const ENVIRONMENT_PLURAL = "Environments"
-
-export const PROPOSED_FIX_SINGULAR = "Proposed fix"
-export const EVIDENCE_RECORD_SINGULAR = "Evidence record"
-export const EVIDENCE_RECORD_PLURAL = "Evidence records"
-export const EVIDENCE_PLURAL = "Evidence"
-
-export const AUTOMATION_SINGULAR = "Automation"
-export const AUTOMATION_PLURAL = "Automations"
-
-export const APPROVAL_SINGULAR = "Approval"
 export const APPROVAL_PLURAL = "Approvals"
-export const APPROVAL_CENTER = "Approval Centre"
-export const REVIEW_QUEUE_LABEL = "Review Queue"
-
-export const NOTIFICATION_SINGULAR = "Notification"
 export const NOTIFICATION_PLURAL = "Notifications"
-
-export const INTEGRATION_SINGULAR = "Integration"
-export const INTEGRATION_PLURAL = "Integrations"
-
-export const TEAM_SINGULAR = "Team"
 export const TEAM_PLURAL = "Team"
 
 export const SETTINGS_PLURAL = "Settings"
-
-export const SCAN_PRESET_RELEASE_CHECK = "Release check"
-export const SCAN_PRESET_CODE_REVIEW = "Code review"
-export const SCAN_PRESET_DEEP_REVIEW = "Deep security review"
-export const SCAN_PRESET_WEEKLY_MONITOR = "Weekly monitor"
-
-export const TRUST_COMMAND_CENTER = "Trust Command Center"

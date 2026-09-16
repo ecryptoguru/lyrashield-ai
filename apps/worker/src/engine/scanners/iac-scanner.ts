@@ -10,7 +10,7 @@ import {
   type ScannerDiscovery,
 } from "../scanner-coverage"
 
-export interface IacScanConfig {
+interface IacScanConfig {
   repoPath: string
   workspaceDir: string
   signal?: AbortSignal

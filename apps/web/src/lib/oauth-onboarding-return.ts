@@ -34,7 +34,7 @@ export function createOAuthOnboardingReturn(
   return `${payload}.${sign(payload)}`
 }
 
-export type OAuthOnboardingReturnResult =
+type OAuthOnboardingReturnResult =
   | { valid: true; oauthQuery: string; userId: string }
   | { valid: false; reason: "malformed" | "bad_signature" | "expired" }
 

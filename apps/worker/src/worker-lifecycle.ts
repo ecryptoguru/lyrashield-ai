@@ -1,4 +1,4 @@
-export type WorkerRunTermination =
+type WorkerRunTermination =
   { reason: "BULLMQ_RUN_RETURNED" } | { reason: "BULLMQ_RUN_FAILURE"; error: unknown }
 
 export function observeWorkerRun(
