@@ -15,7 +15,10 @@ const systemPrisma = {
 const getJobCounts = vi.fn()
 const isScanWorkerAvailable = vi.fn()
 
-vi.mock("@lyrashield/db", () => ({ getSystemPrisma: () => systemPrisma }))
+vi.mock("@lyrashield/db", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@lyrashield/db")>()),
+  getSystemPrisma: () => systemPrisma,
+}))
 vi.mock("@lyrashield/integrations", () => ({
   getScanQueue: () => ({ getJobCounts }),
   isScanWorkerAvailable: (...args: unknown[]) => isScanWorkerAvailable(...args),
@@ -65,26 +68,41 @@ describe("getPlatformAdminOverview", () => {
     systemPrisma.user.findMany.mockResolvedValue([])
     systemPrisma.affiliate.count.mockResolvedValue(2)
     systemPrisma.payout.count.mockResolvedValue(1)
-    systemPrisma.$queryRaw.mockResolvedValue([
-      {
-        accountsCreated: 40n,
-        setupStarted: 30n,
-        validAssessments: 24n,
-        ttfvMedianMinutes: 12.5,
-        ttfvP90Minutes: 45,
-        githubConnectStarted: 25n,
-        githubConnected: 20n,
-        targetsZero: 10n,
-        targetsOne: 20n,
-        targetsTwo: 7n,
-        targetsThreePlus: 3n,
-        recoveryFailures: 20n,
-        recoverySuccesses: 12n,
-        completedAccounts: 20n,
-        repeatSevenDays: 8n,
-        repeatTwentyEightDays: 14n,
-      },
-    ])
+    const activationRow = {
+      accountsCreated: 40n,
+      setupStarted: 30n,
+      validAssessments: 24n,
+      ttfvMedianMinutes: 12.5,
+      ttfvP90Minutes: 45,
+      githubConnectStarted: 25n,
+      githubConnected: 20n,
+      targetsZero: 10n,
+      targetsOne: 20n,
+      targetsTwo: 7n,
+      targetsThreePlus: 3n,
+      recoveryFailures: 20n,
+      recoverySuccesses: 12n,
+      completedAccounts: 20n,
+      repeatSevenDays: 8n,
+      repeatTwentyEightDays: 14n,
+    }
+    systemPrisma.$queryRaw.mockImplementation((parts: TemplateStringsArray) => {
+      const text = parts.join("")
+      if (text.includes("newest_paid")) {
+        if (text.includes('GROUP BY "currentPlan"')) {
+          return Promise.resolve([{ currentPlan: "PRO", interval: "monthly", accounts: 1n }])
+        }
+        return Promise.resolve([
+          {
+            activePaidAccounts: 1n,
+            paidAccountsInTerm: 1n,
+            newPaidAccounts30d: 1n,
+            canceled30d: 0n,
+          },
+        ])
+      }
+      return Promise.resolve([activationRow])
+    })
     getJobCounts.mockResolvedValue({ wait: 2, active: 1, delayed: 0, failed: 1 })
     isScanWorkerAvailable.mockResolvedValue(true)
   })

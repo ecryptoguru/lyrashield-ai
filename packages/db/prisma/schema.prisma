@@ -1651,6 +1651,7 @@ model BillingAccount {
   @@index([workspaceId])
   @@index([accountId])
   @@index([status, currentPeriodEnd])
+  @@index([provider, status, deletedAt])
 }
 
 model Invitation {
