@@ -346,6 +346,22 @@ jobs:
           CLOUDFLARE_AOP_CERT_SHA256: ${{ env.CLOUDFLARE_AOP_CERT_SHA256 }}
         run: node .github/scripts/verify-billing-deployment-config.mjs
 
+      # Myra fail-closed check (Deep Review v18): confirmed writes require the
+      # Google calendar provider and usable credentials; the mock adapter and
+      # its fault switches must never reach production.
+      - name: Verify Myra deployment configuration
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          MYRA_WRITES_ENABLED: ${{ vars.MYRA_WRITES_ENABLED || '0' }}
+          MYRA_CALENDAR_PROVIDER: ${{ vars.MYRA_CALENDAR_PROVIDER }}
+          MYRA_GOOGLE_CLIENT_ID: ${{ vars.MYRA_GOOGLE_CLIENT_ID }}
+          MYRA_GOOGLE_CLIENT_SECRET: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET }}
+          MYRA_GOOGLE_REFRESH_TOKEN: ${{ secrets.MYRA_GOOGLE_REFRESH_TOKEN }}
+          MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT: ${{ vars.MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT }}
+          MYRA_MOCK_CALENDAR_PENDING_CONFERENCE: ${{ vars.MYRA_MOCK_CALENDAR_PENDING_CONFERENCE }}
+          MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT: ${{ vars.MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT }}
+        run: node .github/scripts/verify-myra-deployment-config.mjs
+
       - name: Log in to Azure
         # v16 4.3: OIDC federated login — no stored client secret. The
         # workload identity (client id) must carry the same role assignments
@@ -996,7 +1012,7 @@ jobs:
               "MYRA_WRITES_ENABLED=${{ vars.MYRA_WRITES_ENABLED || '0' }}" \
               "MYRA_GENERATION_ENABLED=${{ vars.MYRA_GENERATION_ENABLED || '0' }}" \
               "MYRA_PROVIDER=${{ vars.MYRA_PROVIDER || 'mock' }}" \
-              "MYRA_CALENDAR_PROVIDER=${{ vars.MYRA_CALENDAR_PROVIDER || 'mock' }}" \
+              "MYRA_CALENDAR_PROVIDER=${{ vars.MYRA_CALENDAR_PROVIDER }}" \
               "MYRA_AZURE_OPENAI_ENDPOINT=${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}" \
               "MYRA_AZURE_OPENAI_DEPLOYMENT=${{ vars.MYRA_AZURE_OPENAI_DEPLOYMENT }}" \
               "MYRA_MODEL_FAST=${{ vars.MYRA_MODEL_FAST }}" \

@@ -16,6 +16,7 @@
   "dependencies": {
     "@lyrashield/auth": "workspace:*",
     "@lyrashield/billing": "workspace:*",
+    "@lyrashield/config": "workspace:*",
     "@lyrashield/db": "workspace:*",
     "@lyrashield/integrations": "workspace:*",
     "@lyrashield/pricing": "workspace:*",

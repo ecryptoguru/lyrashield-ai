@@ -1,6 +1,10 @@
+import "./test-env"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { env } from "@lyrashield/config"
 import { AzureProvider } from "./provider"
 
+// The provider reads the validated `env` snapshot, not process.env — tests
+// mutate the snapshot fields directly and restore them afterwards.
 const ENV_KEYS = [
   "MYRA_GENERATION_ENABLED",
   "MYRA_AZURE_OPENAI_ENDPOINT",
@@ -9,26 +13,25 @@ const ENV_KEYS = [
   "MYRA_COST_PER_1K_INPUT_USD",
   "MYRA_COST_PER_1K_OUTPUT_USD",
 ] as const
+const mutableEnv = env as unknown as Record<(typeof ENV_KEYS)[number], string | undefined>
 
 describe("AzureProvider", () => {
   const original = new Map<string, string | undefined>()
 
   beforeEach(() => {
-    for (const key of ENV_KEYS) original.set(key, process.env[key])
-    process.env.MYRA_GENERATION_ENABLED = "1"
-    process.env.MYRA_AZURE_OPENAI_ENDPOINT = "https://example.openai.azure.com"
-    process.env.MYRA_AZURE_OPENAI_API_KEY = "test-key"
-    process.env.MYRA_MODEL_FAST = "fast"
-    process.env.MYRA_COST_PER_1K_INPUT_USD = "0.001"
-    process.env.MYRA_COST_PER_1K_OUTPUT_USD = "0.002"
+    for (const key of ENV_KEYS) original.set(key, mutableEnv[key])
+    mutableEnv.MYRA_GENERATION_ENABLED = "1"
+    mutableEnv.MYRA_AZURE_OPENAI_ENDPOINT = "https://example.openai.azure.com"
+    mutableEnv.MYRA_AZURE_OPENAI_API_KEY = "test-key"
+    mutableEnv.MYRA_MODEL_FAST = "fast"
+    mutableEnv.MYRA_COST_PER_1K_INPUT_USD = "0.001"
+    mutableEnv.MYRA_COST_PER_1K_OUTPUT_USD = "0.002"
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
     for (const key of ENV_KEYS) {
-      const value = original.get(key)
-      if (value === undefined) delete process.env[key]
-      else process.env[key] = value
+      mutableEnv[key] = original.get(key)
     }
   })
 
@@ -75,8 +78,8 @@ describe("AzureProvider", () => {
   })
 
   it("fails closed when live cost rates are missing", async () => {
-    delete process.env.MYRA_COST_PER_1K_INPUT_USD
-    delete process.env.MYRA_COST_PER_1K_OUTPUT_USD
+    mutableEnv.MYRA_COST_PER_1K_INPUT_USD = undefined
+    mutableEnv.MYRA_COST_PER_1K_OUTPUT_USD = undefined
     const fetchMock = vi.spyOn(globalThis, "fetch")
 
     await expect(

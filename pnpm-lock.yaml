@@ -912,6 +912,9 @@ importers:
       '@lyrashield/billing':
         specifier: workspace:*
         version: link:../billing
+      '@lyrashield/config':
+        specifier: workspace:*
+        version: link:../config
       '@lyrashield/db':
         specifier: workspace:*
         version: link:../db

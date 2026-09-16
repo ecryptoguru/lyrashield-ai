@@ -4,6 +4,7 @@
  * MYRA_LIMITS.monthlyBudgetUsd, overridable via MYRA_MONTHLY_BUDGET_USD.
  */
 import { Prisma, prisma } from "@lyrashield/db"
+import { env } from "@lyrashield/config"
 import { MYRA_LIMITS } from "../contracts"
 import { auditEvent } from "./audit"
 import { err } from "./errors"
@@ -17,7 +18,7 @@ export interface BudgetState {
 }
 
 export function monthlyBudgetCapUsd(): number {
-  const override = Number(process.env.MYRA_MONTHLY_BUDGET_USD)
+  const override = Number(env.MYRA_MONTHLY_BUDGET_USD)
   return Number.isFinite(override) && override > 0 ? override : MYRA_LIMITS.monthlyBudgetUsd
 }
 

@@ -6,6 +6,7 @@
  */
 import { randomInt } from "node:crypto"
 import { z } from "zod"
+import { env } from "@lyrashield/config"
 import { prisma } from "@lyrashield/db"
 import { sendNotification } from "@lyrashield/integrations"
 import { MYRA_COPY, submitCasePayloadSchema, type SubmitCasePayload } from "../../contracts"
@@ -240,7 +241,7 @@ async function notifyCaseCreated(
       body: "A new support case was submitted through Myra. Open the support inbox to review.",
       metadata: { caseId },
     },
-    [process.env.MYRA_SUPPORT_NOTIFY_EMAIL || SUPPORT_INBOX]
+    [env.MYRA_SUPPORT_NOTIFY_EMAIL || SUPPORT_INBOX]
   ).catch(() => false)
   const state = sent ? "sent" : "failed"
   // Marks the case notified after the email attempt — an ambient caller

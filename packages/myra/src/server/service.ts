@@ -5,6 +5,7 @@
  * (route handlers) apply requirePlatformAdmin first.
  */
 import { randomUUID } from "node:crypto"
+import { env } from "@lyrashield/config"
 import { prisma } from "@lyrashield/db"
 import { sendNotification } from "@lyrashield/integrations"
 import { MYRA_LIMITS } from "../contracts"
@@ -71,13 +72,6 @@ function toolContext(
   }
 }
 
-function disabled(): MyraStreamEvent | null {
-  if (process.env.MYRA_DISABLED === "1" || process.env.MYRA_DISABLED === "true") {
-    return { type: "error", error: { code: "MYRA_DISABLED", message: "Myra is unavailable." } }
-  }
-  return null
-}
-
 // ─── Conversations ────────────────────────────────────────────────────────
 
 async function loadOwnedConversation(ctx: ResolvedMyraRequest, conversationId: string) {
@@ -122,11 +116,9 @@ export async function* handleMessage(
   ctx: ResolvedMyraRequest,
   input: HandleMessageInput
 ): AsyncGenerator<MyraStreamEvent> {
-  const off = disabled()
-  if (off) {
-    yield off
-    return
-  }
+  // The surface gates (MYRA_PUBLIC_ENABLED / MYRA_DASHBOARD_ENABLED) are
+  // enforced upstream on the route; there is no separate env kill switch —
+  // the unvalidated MYRA_DISABLED process.env read was removed (v18).
   if (!input.text || input.text.length > MYRA_LIMITS.messageMaxChars) {
     yield {
       type: "error",
@@ -250,7 +242,9 @@ export async function confirmProposal(
   privateResult?: Record<string, unknown>
   component: MyraComponent
 }> {
-  if (process.env.MYRA_WRITES_DISABLED === "1" || process.env.MYRA_WRITES_DISABLED === "true") {
+  // Fail closed on the validated write gate — the unvalidated
+  // MYRA_WRITES_DISABLED process.env switch was removed (Deep Review v18).
+  if (env.MYRA_WRITES_ENABLED !== "1") {
     throw err("WRITES_DISABLED", "Actions are temporarily disabled.")
   }
   const proposal = await withOwnerScope(ctx.principal, (tx) =>

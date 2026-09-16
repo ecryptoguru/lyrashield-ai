@@ -5,6 +5,7 @@
  * enabled and configured. Provider output is untrusted — markdown is
  * sanitized before it becomes a component.
  */
+import { env } from "@lyrashield/config"
 import { MYRA_COPY, type MyraComponent, type MyraToolName } from "../contracts"
 import { sanitizeInstructionInput } from "@lyrashield/security"
 import { sanitizeLinkHref, sanitizeMarkdown } from "../sanitize"
@@ -180,15 +181,14 @@ export class AzureProvider implements ModelProvider {
   name = "azure"
 
   async generate(input: ModelGenerateInput): Promise<ModelGenerateOutput> {
-    if (process.env.MYRA_GENERATION_ENABLED !== "1") {
+    if (env.MYRA_GENERATION_ENABLED !== "1") {
       throw err("PROVIDER_ERROR", "Generation is disabled.")
     }
-    const endpoint = process.env.MYRA_AZURE_OPENAI_ENDPOINT
-    const apiKey = process.env.MYRA_AZURE_OPENAI_API_KEY
+    const endpoint = env.MYRA_AZURE_OPENAI_ENDPOINT
+    const apiKey = env.MYRA_AZURE_OPENAI_API_KEY
     const isDeep = input.tier === "deep"
     const deployment =
-      (isDeep ? process.env.MYRA_MODEL_DEEP : process.env.MYRA_MODEL_FAST) ??
-      process.env.MYRA_AZURE_OPENAI_DEPLOYMENT
+      (isDeep ? env.MYRA_MODEL_DEEP : env.MYRA_MODEL_FAST) ?? env.MYRA_AZURE_OPENAI_DEPLOYMENT
     if (!endpoint || !apiKey || !deployment) {
       throw err("PROVIDER_ERROR", "Generation provider is not configured.")
     }
@@ -292,12 +292,10 @@ function positiveRate(raw: string | undefined): number | null {
 
 export function resolveCostRates(isDeep: boolean): { inRate: number; outRate: number } {
   const inRate = positiveRate(
-    (isDeep ? process.env.MYRA_DEEP_COST_PER_1K_INPUT_USD : undefined) ||
-      process.env.MYRA_COST_PER_1K_INPUT_USD
+    (isDeep ? env.MYRA_DEEP_COST_PER_1K_INPUT_USD : undefined) || env.MYRA_COST_PER_1K_INPUT_USD
   )
   const outRate = positiveRate(
-    (isDeep ? process.env.MYRA_DEEP_COST_PER_1K_OUTPUT_USD : undefined) ||
-      process.env.MYRA_COST_PER_1K_OUTPUT_USD
+    (isDeep ? env.MYRA_DEEP_COST_PER_1K_OUTPUT_USD : undefined) || env.MYRA_COST_PER_1K_OUTPUT_USD
   )
   if (inRate === null || outRate === null) {
     throw err("PROVIDER_ERROR", "Generation cost rates are not configured.")
@@ -306,7 +304,6 @@ export function resolveCostRates(isDeep: boolean): { inRate: number; outRate: nu
 }
 
 export function getProvider(): ModelProvider {
-  const kind = (process.env.MYRA_PROVIDER ?? "mock").toLowerCase()
-  if (kind === "azure") return new AzureProvider()
+  if (env.MYRA_PROVIDER === "azure") return new AzureProvider()
   return new MockProvider()
 }
