@@ -1,213 +1,29 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { FileText, Share2, Trash2, Copy, CheckCircle2, Download, Plus } from "lucide-react"
-import Link from "next/link"
-import {
-  Button,
-  Badge,
-  buttonVariants,
-  Card,
-  EmptyState,
-  Spinner,
-  LoadMore,
-  Input,
-  Select,
-  FormField,
-} from "@lyrashield/ui"
-import { z } from "zod"
-import { paginatedResponseSchema } from "@/lib/api-schemas"
+import { Plus } from "lucide-react"
+import { Button, LoadMore } from "@lyrashield/ui"
+import { Skeleton } from "@/components/ui/skeleton"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
-import { LocalTime } from "@/components/local-time"
-import { formatDateTime } from "@/lib/date-format"
 import { track } from "@/lib/analytics"
-import { gateReasonSentence } from "@/lib/launch-readiness"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Skeleton } from "@/components/ui/skeleton"
-import { InlineConfirm } from "@/components/ui/inline-confirm"
-
-interface ReportItem {
-  id: string
-  title: string
-  type: string
-  status: string
-  format: string
-  shareExpiresAt: string | null
-  revokedAt: string | null
-  createdAt: string
-  scanId: string | null
-  provenance?: LaunchReportProvenance | null
-}
-
-interface LaunchReportProvenance {
-  gateVerdictId: string
-  verdictChecksum: string
-  assessmentVersion: number | null
-  assessedIdentity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null
-  assessedAt: string
-  issuedAt: string
-  applicabilityCheckedAt: string
-  applicability: "applicable" | "not_applicable" | "unknown"
-  reasonCodes: string[]
-  historicalState: string
-  effectiveState: string | null
-}
-
-const reportItemSchema = z
-  .object({
-    id: z.string(),
-    title: z.string(),
-    type: z.string(),
-    status: z.string(),
-    format: z.string(),
-    shareExpiresAt: z.string().datetime().or(z.string()).nullable(),
-    revokedAt: z.string().datetime().or(z.string()).nullable(),
-    createdAt: z.string().datetime().or(z.string()),
-    scanId: z.string().nullable(),
-  })
-  .passthrough()
-
-const reportsPaginatedSchema = paginatedResponseSchema(reportItemSchema)
-
-const reportScanSchema = z
-  .object({
-    id: z.string(),
-    target: z
-      .object({
-        name: z.string(),
-      })
-      .passthrough(),
-    status: z.string(),
-  })
-  .passthrough()
-
-const reportScansPaginatedSchema = paginatedResponseSchema(reportScanSchema)
-
-const reportShareSchema = z
-  .object({
-    token: z.string(),
-    expiresAt: z.string().datetime().or(z.string()),
-    shareUrl: z.string(),
-  })
-  .passthrough()
-
-const reportRevokeSchema = z
-  .object({
-    revoked: z.boolean(),
-    revokedAt: z.string().datetime().or(z.string()),
-  })
-  .passthrough()
-
-const REPORT_TYPE_LABEL: Record<string, string> = {
-  executive: "Executive",
-  developer: "Developer",
-  compliance: "Assurance",
-  launch_readiness: "Launch Readiness",
-}
-
-const LAUNCH_HISTORICAL_VERDICT_LABEL: Record<string, string> = {
-  READY: "Ready to launch",
-  NOT_READY: "Not ready",
-  INSUFFICIENT_EVIDENCE: "Not enough evidence",
-}
-
-const LAUNCH_APPLICABILITY_LABEL: Record<LaunchReportProvenance["applicability"], string> = {
-  applicable: "Applicable",
-  not_applicable: "Not applicable",
-  unknown: "Could not be established",
-}
-
-/**
- * Private issue-time provenance for a launch_readiness report. This surface is
- * authenticated-only; the shared public page never receives these fields.
- */
-function LaunchReportProvenanceBlock({
-  provenance,
-}: {
-  provenance: LaunchReportProvenance | null
-}) {
-  const [copiedIdentity, setCopiedIdentity] = useState(false)
-  if (!provenance) {
-    return (
-      <p className="text-muted-foreground mt-2 text-xs">
-        Release identity unavailable for this report.
-      </p>
-    )
-  }
-  const identity = provenance.assessedIdentity
-  const identityLabel = identity
-    ? identity.kind === "COMMIT"
-      ? `commit ${identity.value}`
-      : `artifact ${identity.value}`
-    : null
-  return (
-    <dl className="text-muted-foreground mt-2 space-y-1 text-xs">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <dt className="font-medium">Assessed release:</dt>
-        <dd>
-          {identityLabel ? (
-            <span className="inline-flex max-w-full items-center gap-1.5">
-              <code className="break-all">{identityLabel}</code>
-              <button
-                type="button"
-                aria-label="Copy assessed release identity"
-                className="text-foreground/70 hover:text-foreground inline-flex items-center"
-                onClick={() => {
-                  if (!identity) return
-                  void writeClipboard(identity.value)
-                    .then(() => setCopiedIdentity(true))
-                    .catch(() => {})
-                }}
-              >
-                {copiedIdentity ? (
-                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
-              </button>
-            </span>
-          ) : (
-            "Not recorded in the retained assessment."
-          )}
-        </dd>
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        <div>
-          <dt className="sr-only">Historical verdict</dt>
-          <dd>
-            Historical verdict:{" "}
-            {LAUNCH_HISTORICAL_VERDICT_LABEL[provenance.historicalState] ??
-              provenance.historicalState}
-            {provenance.effectiveState && provenance.effectiveState !== provenance.historicalState
-              ? ` · effective at issue: ${
-                  LAUNCH_HISTORICAL_VERDICT_LABEL[provenance.effectiveState] ??
-                  provenance.effectiveState
-                }`
-              : ""}
-          </dd>
-        </div>
-        <div>
-          <dt className="sr-only">Applicability when issued</dt>
-          <dd>Applicability when issued: {LAUNCH_APPLICABILITY_LABEL[provenance.applicability]}</dd>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        <dd>Assessed {formatDateTime(provenance.assessedAt)} UTC</dd>
-        <dd>Issued {formatDateTime(provenance.issuedAt)} UTC</dd>
-        <dd>Applicability checked {formatDateTime(provenance.applicabilityCheckedAt)} UTC</dd>
-      </div>
-      {provenance.reasonCodes.length > 0 && (
-        <dd>
-          {provenance.reasonCodes
-            .map((code) => gateReasonSentence({ code, message: "" }))
-            .join(" ")}
-        </dd>
-      )}
-    </dl>
-  )
-}
+import {
+  reportScansPaginatedSchema,
+  reportScanSchema,
+  reportShareSchema,
+  reportRevokeSchema,
+  reportsPaginatedSchema,
+  type ReportItem,
+} from "./reports-model"
+import {
+  ReportCard,
+  ReportCreateForm,
+  ReportsEmptyState,
+  ShareLinkCard,
+  type ReportScanOption,
+  type ReportType,
+} from "./reports-views"
 
 export function ReportsClient({
   workspaceId,
@@ -253,11 +69,9 @@ export function ReportsClient({
   const [showCreateForm, setShowCreateForm] = useState(Boolean(initialScanId))
   const [reportTitle, setReportTitle] = useState("")
   const [creatingReport, setCreatingReport] = useState(false)
-  const [scans, setScans] = useState<Array<{ id: string; targetName: string; status: string }>>([])
+  const [scans, setScans] = useState<ReportScanOption[]>([])
   const [selectedScanId, setSelectedScanId] = useState<string>(initialScanId ?? "")
-  const [reportType, setReportType] = useState<"executive" | "developer" | "compliance">(
-    "executive"
-  )
+  const [reportType, setReportType] = useState<ReportType>("executive")
 
   useEffect(() => {
     let cancelled = false
@@ -319,6 +133,13 @@ export function ReportsClient({
     }
   }, [workspaceId, initialScanId, initialTargetId])
 
+  const resetCreateForm = () => {
+    setShowCreateForm(false)
+    setReportTitle("")
+    setSelectedScanId("")
+    setReportType("executive")
+  }
+
   const handleCreateReport = async () => {
     setCreatingReport(true)
     setError(null)
@@ -330,10 +151,7 @@ export function ReportsClient({
         ...(selectedScanId ? { scanId: selectedScanId } : {}),
       })
       track("report_created", { report_kind: reportType })
-      setShowCreateForm(false)
-      setReportTitle("")
-      setSelectedScanId("")
-      setReportType("executive")
+      resetCreateForm()
       await loadReports()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create report.")
@@ -419,85 +237,18 @@ export function ReportsClient({
       </div>
 
       {showCreateForm && (
-        <Card className="mb-5 p-5 sm:p-6">
-          <div className="flex flex-col gap-5">
-            <div>
-              <h3 className="font-semibold">Generate an assurance report</h3>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Create an immutable, visual snapshot tailored to its reader and retained scan scope.
-              </p>
-            </div>
-            <Tabs
-              value={reportType}
-              onValueChange={(value) =>
-                setReportType(value as "executive" | "developer" | "compliance")
-              }
-            >
-              <TabsList className="h-12 w-full sm:w-fit">
-                <TabsTrigger className="min-h-11 px-3" value="executive">
-                  Executive
-                </TabsTrigger>
-                <TabsTrigger className="min-h-11 px-3" value="developer">
-                  Developer
-                </TabsTrigger>
-                <TabsTrigger className="min-h-11 px-3" value="compliance">
-                  Assurance
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="executive" className="text-muted-foreground text-xs">
-                Decision-first posture, score trajectory, release conditions, and priority actions.
-              </TabsContent>
-              <TabsContent value="developer" className="text-muted-foreground text-xs">
-                Technical findings, remediation state, retest outcomes, and fix guidance.
-              </TabsContent>
-              <TabsContent value="compliance" className="text-muted-foreground text-xs">
-                Evidence-oriented summary and methodology for lightweight assurance reviews.
-              </TabsContent>
-            </Tabs>
-            <FormField label="Report title" htmlFor="report-title">
-              <Input
-                id="report-title"
-                type="text"
-                placeholder="Report title (optional)"
-                value={reportTitle}
-                onChange={(e) => setReportTitle(e.target.value)}
-              />
-            </FormField>
-            {scans.length > 0 && (
-              <FormField label="Scan" htmlFor="report-scan">
-                <Select
-                  id="report-scan"
-                  value={selectedScanId}
-                  onChange={(e) => setSelectedScanId(e.target.value)}
-                >
-                  <option value="">Select a completed scan (optional)</option>
-                  {scans.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.targetName} — {s.status}
-                    </option>
-                  ))}
-                </Select>
-              </FormField>
-            )}
-            <div className="flex gap-2">
-              <Button size="sm" disabled={creatingReport} onClick={() => void handleCreateReport()}>
-                {creatingReport ? <Spinner /> : "Create"}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setShowCreateForm(false)
-                  setReportTitle("")
-                  setSelectedScanId("")
-                  setReportType("executive")
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </Card>
+        <ReportCreateForm
+          reportType={reportType}
+          onReportTypeChange={setReportType}
+          reportTitle={reportTitle}
+          onTitleChange={setReportTitle}
+          scans={scans}
+          selectedScanId={selectedScanId}
+          onScanChange={setSelectedScanId}
+          creating={creatingReport}
+          onCreate={() => void handleCreateReport()}
+          onCancel={resetCreateForm}
+        />
       )}
 
       {error && (
@@ -511,41 +262,17 @@ export function ReportsClient({
       )}
 
       {shareUrl && (
-        <Card className="mb-4 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="min-w-0 flex-1" role="status">
-              <p className="mb-1 text-sm font-medium">Share link generated (valid 30 days):</p>
-              <p className="text-muted-foreground truncate font-mono text-sm">{shareUrl}</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" onClick={() => void copyToClipboard()}>
-                {copied === "link" ? (
-                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <Copy className="h-4 w-4" aria-hidden="true" />
-                )}
-                {copied === "link" ? "Copied" : "Copy link"}
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  void writeClipboard(handoffMessage)
-                    .then(() => setCopied("handoff"))
-                    .catch(() => setError("Failed to copy client handoff."))
-                }}
-              >
-                {copied === "handoff" ? "Handoff copied" : "Copy client handoff"}
-              </Button>
-              <a
-                className="hover:bg-accent bg-card inline-flex h-11 items-center rounded-lg border px-3 text-xs font-medium"
-                href={`mailto:?subject=${encodeURIComponent("Security review ready")}&body=${encodeURIComponent(handoffMessage)}`}
-              >
-                Email client
-              </a>
-            </div>
-          </div>
-        </Card>
+        <ShareLinkCard
+          shareUrl={shareUrl}
+          copied={copied}
+          handoffMessage={handoffMessage}
+          onCopyLink={() => void copyToClipboard()}
+          onCopyHandoff={() => {
+            void writeClipboard(handoffMessage)
+              .then(() => setCopied("handoff"))
+              .catch(() => setError("Failed to copy client handoff."))
+          }}
+        />
       )}
 
       {loading && reports.length === 0 ? (
@@ -561,95 +288,17 @@ export function ReportsClient({
           ))}
         </div>
       ) : reports.length === 0 ? (
-        <EmptyState
-          icon={FileText}
-          title="No reports yet"
-          description="Generate a security report from a completed scan to share with stakeholders."
-          action={
-            <Link href="/dashboard/scans" className={buttonVariants()}>
-              Start a review
-            </Link>
-          }
-        />
+        <ReportsEmptyState />
       ) : (
         <div className="space-y-3">
           {reports.map((report) => (
-            <Card
+            <ReportCard
               key={report.id}
-              className="hover:shadow-card-hover p-4 transition-shadow duration-(--duration-base) ease-out"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center gap-2">
-                    <h3 className="truncate font-medium" title={report.title}>
-                      <a
-                        href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`View ${report.title} in a new tab`}
-                        className="underline-offset-4 hover:underline"
-                      >
-                        {report.title}
-                      </a>
-                    </h3>
-                    <Badge variant="info">{REPORT_TYPE_LABEL[report.type] ?? report.type}</Badge>
-                    <Badge
-                      variant={
-                        report.status === "generated" || report.status === "downloaded"
-                          ? "success"
-                          : "muted"
-                      }
-                    >
-                      {report.status}
-                    </Badge>
-                    {report.revokedAt && <Badge variant="muted">revoked</Badge>}
-                  </div>
-                  <p className="text-muted-foreground text-sm">
-                    Created <LocalTime value={report.createdAt} />
-                    {report.shareExpiresAt && !report.revokedAt && (
-                      <>
-                        {" "}
-                        · Expires <LocalTime value={report.shareExpiresAt} />
-                      </>
-                    )}
-                  </p>
-                  {report.type === "launch_readiness" && (
-                    <LaunchReportProvenanceBlock provenance={report.provenance ?? null} />
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}&download=1`}
-                    download
-                    aria-label={`Download ${report.title}`}
-                    className={buttonVariants({ size: "sm", variant: "ghost" })}
-                  >
-                    <Download className="h-4 w-4" aria-hidden="true" />
-                  </a>
-                  {!report.revokedAt && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      aria-label={
-                        report.shareExpiresAt ? "Regenerate share link" : "Create share link"
-                      }
-                      onClick={() => void handleShare(report.id)}
-                    >
-                      <Share2 className="h-4 w-4" aria-hidden="true" />
-                    </Button>
-                  )}
-                  {!report.revokedAt && report.shareExpiresAt && (
-                    <InlineConfirm
-                      triggerIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
-                      aria-label="Revoke share link"
-                      message="Revoke link?"
-                      confirmLabel="Revoke"
-                      onConfirm={() => handleRevoke(report.id)}
-                    />
-                  )}
-                </div>
-              </div>
-            </Card>
+              report={report}
+              workspaceId={workspaceId}
+              onShare={(reportId) => void handleShare(reportId)}
+              onRevoke={(reportId) => void handleRevoke(reportId)}
+            />
           ))}
 
           <LoadMore
