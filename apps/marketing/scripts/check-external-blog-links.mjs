@@ -12,7 +12,20 @@ import {
 } from "./blog-validation-lib.mjs"
 
 const marketingRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
-const releases = ["authority", "batch-1", "batch-2", "batch-3", "batch-4", "batch-5", "batch-6"]
+const releases = [
+  "authority",
+  "batch-1",
+  "batch-2",
+  "batch-3",
+  "batch-4",
+  "batch-5",
+  "batch-6",
+  "batch-7",
+  "batch-8",
+  "batch-9",
+  "batch-10",
+  "batch-11",
+]
 // Page-level citations live outside the blog program, so they are checked on
 // every run rather than per release.
 const pageCitations = ["src/pages/methodology.astro", "src/pages/ai-safety.astro"]
