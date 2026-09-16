@@ -4,8 +4,11 @@ Status: project `605869` connected; initial dashboard and assessment survey live
 Do not count checkout-return events as successful payment.
 Use the existing single PostHog project, anonymous device IDs, DNT/GPC opt-out,
 and the event/property allowlists in `apps/web/src/lib/analytics.ts` and
-`apps/marketing/src/layouts/Base.astro`. Do not enable autocapture, session
+`apps/marketing/src/lib/posthog-privacy.ts`. Do not enable autocapture, session
 recording, `identify()`, raw target URLs, or account IDs in client events.
+Lite Check events send no target-derived properties — no domain hash, no
+finding categories and no finding severity — so no panel may break down or
+filter by them.
 
 ## Event panels
 

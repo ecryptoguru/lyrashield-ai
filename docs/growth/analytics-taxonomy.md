@@ -6,44 +6,46 @@ admin metrics derived from Postgres (`platform-admin-overview` /
 `growth-metrics`), not in events.
 
 Client events pass through a strict allowlist + property denylist
-(`apps/web/src/lib/analytics.ts`); marketing events are hand-rolled captures
-in `Base.astro` / `scan.astro`. DNT/GPC prevents SDK initialization on both
-surfaces. The app reduces URL metadata to origins and drops pathname properties
-before capture so scan and target identifiers in routes do not reach PostHog.
-Marketing strips query strings and fragments from public page URLs.
+(`apps/web/src/lib/analytics.ts`); marketing captures pass through the
+per-event allowlist and property denylist in
+`apps/marketing/src/lib/posthog-privacy.ts`. DNT/GPC prevents SDK
+initialization on both surfaces. The app reduces URL metadata to origins and
+drops pathname properties before capture so scan and target identifiers in
+routes do not reach PostHog. Marketing strips query strings and fragments from
+public page URLs and never sends target-derived properties.
 
 ## Handoff name → implemented name
 
-| Funnel moment                | Web event                | Marketing event                            | Properties (allowlisted)                                     |
-| ---------------------------- | ------------------------ | ------------------------------------------ | ------------------------------------------------------------ |
-| Landing view                 | —                        | `landing_view`                             | utm_source, utm_medium, utm_campaign, referrer_host          |
-| CTA click                    | —                        | `cta_click`                                | cta_id                                                       |
-| Lite check started           | —                        | `scan_started`                             | target_domain_hash, device, attribution                      |
-| Lite check completed         | —                        | `scan_completed`                           | duration_ms, finding_count, categories_flagged, had_findings |
-| Lite check failed            | —                        | `scan_blocked` / `scan_error`              | reason                                                       |
-| Signup page viewed           | `signup_page_viewed`     | —                                          | source, cta, utm_*, landing_route, target_type               |
-| Signup started               | `signup_started`         | —                                          | method + attribution props                                   |
-| Account created              | `account_created`        | —                                          | method + attribution props                                   |
-| Build context chosen         | `onboarding_context`     | —                                          | tool                                                         |
-| Path chosen                  | `onboarding_path_chosen` | —                                          | path                                                         |
-| GitHub connect started       | `github_connect_started` | —                                          | —                                                            |
-| Repos loaded                 | `repos_loaded`           | —                                          | repo_count_bucket, load_ms_bucket                            |
-| Repos selected               | `repos_selected`         | —                                          | selected_count                                               |
-| Trial started                | `trial_started`          | —                                          | surface                                                      |
-| First run started            | `first_run_started`      | —                                          | preset, asset_count, estimate_low_min, estimate_high_min     |
-| Review completed             | `review_completed`       | —                                          | status                                                       |
-| Results viewed               | `results_viewed`         | —                                          | status, had_findings                                         |
-| Report created               | `report_created`         | —                                          | report_kind                                                  |
-| Billing opened               | `billing_opened`         | —                                          | plan, trial_active                                           |
-| Upgrade clicked              | `upgrade_clicked`        | —                                          | plan, interval                                               |
-| Checkout started             | `checkout_started`       | —                                          | plan, interval                                               |
-| Checkout return              | `checkout_completed`     | —                                          | provider, outcome (success\|processing)                      |
-| Share created                | `share_created`          | —                                          | variant, channel                                             |
-| Scorecard (lite)             | —                        | `scorecard_generated` / `scorecard_shared` | referral_code present/absent, channel                        |
-| Waitlist join (lite)         | —                        | `waitlist_joined`                          | source                                                       |
-| Referral visit/signup (lite) | —                        | `referral_visit` / `referral_signup`       | source                                                       |
-| Notification opened          | `notification_opened`    | —                                          | event_type                                                   |
-| FAQ open                     | —                        | `faq_open`                                 | question_id                                                  |
+| Funnel moment                | Web event                | Marketing event                            | Properties (allowlisted)                                 |
+| ---------------------------- | ------------------------ | ------------------------------------------ | -------------------------------------------------------- |
+| Landing view                 | —                        | `landing_view`                             | utm_source, utm_medium, utm_campaign, referrer_host      |
+| CTA click                    | —                        | `cta_click`                                | cta_id                                                   |
+| Lite check started           | —                        | `scan_started`                             | device, attribution                                      |
+| Lite check completed         | —                        | `scan_completed`                           | duration_ms, finding_count, had_findings                 |
+| Lite check failed            | —                        | `scan_blocked` / `scan_error`              | reason                                                   |
+| Signup page viewed           | `signup_page_viewed`     | —                                          | source, cta, utm_*, landing_route, target_type           |
+| Signup started               | `signup_started`         | —                                          | method + attribution props                               |
+| Account created              | `account_created`        | —                                          | method + attribution props                               |
+| Build context chosen         | `onboarding_context`     | —                                          | tool                                                     |
+| Path chosen                  | `onboarding_path_chosen` | —                                          | path                                                     |
+| GitHub connect started       | `github_connect_started` | —                                          | —                                                        |
+| Repos loaded                 | `repos_loaded`           | —                                          | repo_count_bucket, load_ms_bucket                        |
+| Repos selected               | `repos_selected`         | —                                          | selected_count                                           |
+| Trial started                | `trial_started`          | —                                          | surface                                                  |
+| First run started            | `first_run_started`      | —                                          | preset, asset_count, estimate_low_min, estimate_high_min |
+| Review completed             | `review_completed`       | —                                          | status                                                   |
+| Results viewed               | `results_viewed`         | —                                          | status, had_findings                                     |
+| Report created               | `report_created`         | —                                          | report_kind                                              |
+| Billing opened               | `billing_opened`         | —                                          | plan, trial_active                                       |
+| Upgrade clicked              | `upgrade_clicked`        | —                                          | plan, interval                                           |
+| Checkout started             | `checkout_started`       | —                                          | plan, interval                                           |
+| Checkout return              | `checkout_completed`     | —                                          | provider, outcome (success\|processing)                  |
+| Share created                | `share_created`          | —                                          | variant, channel                                         |
+| Scorecard (lite)             | —                        | `scorecard_generated` / `scorecard_shared` | referral_code present/absent, channel                    |
+| Waitlist join (lite)         | —                        | `waitlist_joined`                          | source                                                   |
+| Referral visit/signup (lite) | —                        | `referral_visit` / `referral_signup`       | source                                                   |
+| Notification opened          | `notification_opened`    | —                                          | event_type                                               |
+| FAQ open                     | —                        | `faq_open`                                 | question_id                                              |
 
 ## Server-truth metrics (not events)
 

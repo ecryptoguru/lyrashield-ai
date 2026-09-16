@@ -1,4 +1,5 @@
 import type { EvidenceChapterId, MotionMediaManifest } from "../../lib/motion-manifest"
+import { sanitizeMarketingProperties } from "../../lib/posthog-privacy"
 
 type SourceKind = "desktop" | "portrait"
 
@@ -345,18 +346,24 @@ class EvidenceWorldElement extends HTMLElement {
     const key = `${chapterId}:${mode}`
     if (!chapterId || this.viewed.has(key)) return
     this.viewed.add(key)
-    window.posthog?.capture("cinematic_chapter_view", { chapter_id: chapterId, mode })
+    window.posthog?.capture(
+      "cinematic_chapter_view",
+      sanitizeMarketingProperties("cinematic_chapter_view", { chapter_id: chapterId, mode }) ?? {}
+    )
   }
 
   private captureError(chapterId: EvidenceChapterId, assetType: "video" | "poster") {
     const key = `${chapterId}:${assetType}`
     if (this.mediaErrors.has(key)) return
     this.mediaErrors.add(key)
-    window.posthog?.capture("cinematic_media_error", {
-      chapter_id: chapterId,
-      asset_type: assetType,
-      source_kind: this.sourceKind,
-    })
+    window.posthog?.capture(
+      "cinematic_media_error",
+      sanitizeMarketingProperties("cinematic_media_error", {
+        chapter_id: chapterId,
+        asset_type: assetType,
+        source_kind: this.sourceKind,
+      }) ?? {}
+    )
   }
 }
 
