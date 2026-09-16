@@ -71,3 +71,24 @@ export const targetSchema = z
     createdAt: dateString,
   })
   .passthrough()
+
+/**
+ * GET /api/launch-readiness report body. Shared by the dashboard client (which
+ * extends it with the optional `releaseCheck`) and the WebMCP tool, whose
+ * output stays bounded to exactly this shape.
+ */
+export const launchReadinessReportSchema = z
+  .object({
+    state: z.enum(["READY", "NOT_READY", "INSUFFICIENT_EVIDENCE"]),
+    verdict: z.enum(["NOT_EVALUATED", "INCONCLUSIVE", "GO", "GO_WITH_CONDITIONS", "NO_GO"]),
+    score: z.number().nullable(),
+    triageScore: z.number().nullable(),
+    summary: z.string(),
+    blockingFindings: z.number(),
+    totalFindings: z.number(),
+    verifiedFindings: z.number(),
+    bySeverity: z.record(z.string(), z.number()),
+    conditions: z.array(z.string()),
+    recommendations: z.array(z.string()),
+  })
+  .passthrough()

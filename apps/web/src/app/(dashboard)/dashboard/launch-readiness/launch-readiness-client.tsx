@@ -18,6 +18,7 @@ import { Card, Badge, Button, Spinner, EmptyState } from "@lyrashield/ui"
 import { PageHeader } from "@/components/page-header"
 import { z } from "zod"
 import { apiGet } from "@/lib/api-client"
+import { launchReadinessReportSchema } from "@/lib/api-schemas"
 import { ScoreGauge } from "@/components/security-visuals"
 import {
   gateReasonSentence,
@@ -59,22 +60,9 @@ const releaseCheckSchema = z
   })
   .nullable()
 
-const launchReadinessReportSchema = z
-  .object({
-    state: z.enum(["READY", "NOT_READY", "INSUFFICIENT_EVIDENCE"]),
-    verdict: z.enum(["NOT_EVALUATED", "INCONCLUSIVE", "GO", "GO_WITH_CONDITIONS", "NO_GO"]),
-    score: z.number().nullable(),
-    triageScore: z.number().nullable(),
-    summary: z.string(),
-    blockingFindings: z.number(),
-    totalFindings: z.number(),
-    verifiedFindings: z.number(),
-    bySeverity: z.record(z.string(), z.number()),
-    conditions: z.array(z.string()),
-    recommendations: z.array(z.string()),
-    releaseCheck: releaseCheckSchema.optional(),
-  })
-  .passthrough()
+const launchReadinessResponseSchema = launchReadinessReportSchema.extend({
+  releaseCheck: releaseCheckSchema.optional(),
+})
 
 const VERDICT_CONFIG = {
   // A completed run that evaluated nothing. Deliberately not styled as a pass:
@@ -215,7 +203,7 @@ export function LaunchReadinessClient({
       params.set("workspaceId", workspaceId)
       apiGet<LaunchReadinessReport & { releaseCheck?: ReleaseCheckResult | null }>(
         `/api/launch-readiness?${params.toString()}`,
-        { signal, schema: launchReadinessReportSchema }
+        { signal, schema: launchReadinessResponseSchema }
       )
         .then((data) => {
           setReport(data)

@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react"
 import { registerWebMcpTool, type WebMcpInputSchema } from "@/lib/webmcp/register"
 import { useWebMcpReceiptStore } from "@/components/webmcp/webmcp-receipt-provider"
 import { apiGet } from "@/lib/api-client"
-import { z } from "zod"
+import { launchReadinessReportSchema } from "@/lib/api-schemas"
 import type { LaunchReadinessReport } from "./launch-readiness-client"
 
 const launchReadinessInputSchema: WebMcpInputSchema = {
@@ -15,22 +15,6 @@ const launchReadinessInputSchema: WebMcpInputSchema = {
     },
   },
 }
-
-const launchReadinessReportSchema = z
-  .object({
-    state: z.enum(["READY", "NOT_READY", "INSUFFICIENT_EVIDENCE"]),
-    verdict: z.enum(["NOT_EVALUATED", "INCONCLUSIVE", "GO", "GO_WITH_CONDITIONS", "NO_GO"]),
-    score: z.number().nullable(),
-    triageScore: z.number().nullable(),
-    summary: z.string(),
-    blockingFindings: z.number(),
-    totalFindings: z.number(),
-    verifiedFindings: z.number(),
-    bySeverity: z.record(z.string(), z.number()),
-    conditions: z.array(z.string()),
-    recommendations: z.array(z.string()),
-  })
-  .passthrough()
 
 export function useLaunchReadinessWebMcp({
   workspaceId,

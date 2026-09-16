@@ -328,3 +328,145 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     expect(source).not.toMatch(/mergePullRequest|octokit\.pulls\.merge|\.merge\(/)
   })
 })
+
+function signedRequest(eventType: string, body: string, deliveryId = "delivery-x") {
+  return new Request("http://localhost/api/webhooks/github", {
+    method: "POST",
+    headers: {
+      "x-hub-signature-256": "sha256=valid",
+      "x-github-event": eventType,
+      "x-github-delivery": deliveryId,
+    },
+    body,
+  })
+}
+
+describe("GitHub webhook request validation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    verifyWebhookSignature.mockReturnValue(true)
+    systemPrisma.webhookEvent.findUnique.mockResolvedValue(null)
+  })
+
+  it("rejects an invalid signature with 401", async () => {
+    verifyWebhookSignature.mockReturnValue(false)
+    const response = await POST(signedRequest("installation", "{}") as never)
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "INVALID_SIGNATURE" },
+    })
+    expect(systemPrisma.webhookEvent.findUnique).not.toHaveBeenCalled()
+  })
+
+  it("rejects a missing event or delivery header with 400", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/webhooks/github", {
+        method: "POST",
+        headers: { "x-hub-signature-256": "sha256=valid" },
+        body: "{}",
+      }) as never
+    )
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "MISSING_HEADERS" },
+    })
+  })
+
+  it("rejects a signed non-JSON payload with 400", async () => {
+    const response = await POST(signedRequest("installation", "not-json{") as never)
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "INVALID_JSON" },
+    })
+  })
+
+  it("acknowledges an unhandled event type without side effects", async () => {
+    const response = await POST(signedRequest("push", JSON.stringify({ ref: "x" })) as never)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ data: { processed: true } })
+    expect(systemPrisma.webhookEvent.create).not.toHaveBeenCalled()
+    expect(systemPrisma.$transaction).not.toHaveBeenCalled()
+  })
+})
+
+describe("GitHub webhook event coverage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    verifyWebhookSignature.mockReturnValue(true)
+    systemPrisma.webhookEvent.findUnique.mockResolvedValue(null)
+    systemPrisma.integration.findFirst.mockResolvedValue({
+      id: "integration-1",
+      workspaceId: "workspace-1",
+    })
+    systemPrisma.$transaction.mockImplementation(async (callback) => callback(tx))
+  })
+
+  it("acknowledges a non-deleted installation action without disconnecting", async () => {
+    const response = await POST(
+      signedRequest(
+        "installation",
+        JSON.stringify({
+          action: "created",
+          installation: { id: 42, account: { login: "acme" } },
+        })
+      ) as never
+    )
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ data: { processed: true } })
+    expect(systemPrisma.$transaction).not.toHaveBeenCalled()
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
+  })
+
+  it("acknowledges installation.deleted for an unknown installation without mutating", async () => {
+    systemPrisma.integration.findFirst.mockResolvedValue(null)
+    const response = await POST(installationDeletedRequest() as never)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ data: { processed: true } })
+    expect(systemPrisma.$transaction).not.toHaveBeenCalled()
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
+  })
+
+  it("acknowledges a pull_request for an unknown installation without recording", async () => {
+    systemPrisma.integration.findFirst.mockResolvedValue(null)
+    const response = await POST(pullRequestRequest() as never)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ data: { processed: true } })
+    expect(systemPrisma.webhookEvent.create).not.toHaveBeenCalled()
+    expect(handleMerged).not.toHaveBeenCalled()
+  })
+
+  it("treats a concurrent pull_request delivery as an idempotent success", async () => {
+    systemPrisma.webhookEvent.create.mockRejectedValue({ code: "P2002" })
+    const response = await POST(pullRequestRequest() as never)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ data: { processed: true } })
+    expect(handleMerged).not.toHaveBeenCalled()
+    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+
+  it("records non-merge pull_request actions without loop closure", async () => {
+    systemPrisma.webhookEvent.create.mockResolvedValue({})
+    const response = await POST(
+      signedRequest(
+        "pull_request",
+        JSON.stringify({
+          action: "opened",
+          installation: { id: 42 },
+          repository: { full_name: "test/repo", id: 1 },
+          pull_request: {
+            number: 3,
+            head: { ref: "feature/x" },
+            base: { ref: "main" },
+          },
+        })
+      ) as never
+    )
+    expect(response.status).toBe(200)
+    expect(systemPrisma.webhookEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ eventType: "pull_request.opened" }),
+      })
+    )
+    expect(handleMerged).not.toHaveBeenCalled()
+  })
+})
