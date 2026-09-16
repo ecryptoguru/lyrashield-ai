@@ -20,6 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { severityLabel, humanizeToken } from "@/lib/labels"
+import { FINDING_STATUS_LABELS, getVerificationStatusLabel } from "@/lib/enum-labels"
 import {
   buildRemediationTimeline,
   type RemediationTimelineEvent,
@@ -361,6 +362,14 @@ function StatusActionConfirm({
 // FindingDetailDrawer
 // ---------------------------------------------------------------------------
 
+export function FindingStatusBadge({ status }: { status: string }) {
+  return (
+    <Badge variant={STATUS_BADGE[status] ?? "muted"}>
+      {FINDING_STATUS_LABELS[status] ?? humanizeToken(status)}
+    </Badge>
+  )
+}
+
 export function FindingDetailDrawer({
   canCreatePr,
   finding,
@@ -646,16 +655,16 @@ export function FindingDetailDrawer({
                 />
                 {severityLabel(finding.severity)}
               </Badge>
-              <Badge variant={STATUS_BADGE[finding.status] ?? "muted"}>
-                {finding.status.replace(/_/g, " ")}
-              </Badge>
+              <FindingStatusBadge status={finding.status} />
               {finding.verified ? (
                 <Badge variant="success">
                   <CheckCircle2 className="mr-1 h-3 w-3" aria-hidden="true" />
                   Verified
                 </Badge>
               ) : (
-                <Badge variant="muted">{finding.verificationStatus.replaceAll("_", " ")}</Badge>
+                <Badge variant="muted">
+                  {getVerificationStatusLabel(finding.verificationStatus)}
+                </Badge>
               )}
               {finding.confidence && (
                 <Badge variant="muted">{finding.confidence} evidence strength (heuristic)</Badge>
@@ -1044,7 +1053,10 @@ export function FindingDetailDrawer({
                 {isResolved && (
                   <div className="bg-muted/30 text-muted-foreground rounded-md border px-3 py-2 text-xs">
                     This finding is marked as{" "}
-                    <span className="font-medium">{finding.status.replace(/_/g, " ")}</span>.
+                    <span className="font-medium">
+                      {FINDING_STATUS_LABELS[finding.status] ?? humanizeToken(finding.status)}
+                    </span>
+                    .
                   </div>
                 )}
               </TabsContent>
@@ -1279,9 +1291,9 @@ export function FindingDetailDrawer({
                           <div key={receipt.id} className="rounded-lg border p-3 text-sm">
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant={validated ? "success" : "muted"}>
-                                {receipt.status.replaceAll("_", " ")}
+                                {getVerificationStatusLabel(receipt.status)}
                               </Badge>
-                              <Badge variant="muted">{receipt.method.replaceAll("_", " ")}</Badge>
+                              <Badge variant="muted">{humanizeToken(receipt.method)}</Badge>
                               <span className="text-muted-foreground text-xs">
                                 {formatDate(receipt.createdAt)}
                               </span>

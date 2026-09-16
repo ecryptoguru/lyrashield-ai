@@ -24,10 +24,15 @@ import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getScanReviewProfile } from "@/lib/scan-review-profile"
 import { findingDetailItemsPaginatedSchema, scanPollDataSchema } from "@/lib/api-schemas"
 import { apiGetConditional, apiGetPaginated } from "@/lib/api-client"
-import { getScanGoalLabel, getScanModeLabel, getScanTriggerLabel } from "@/lib/enum-labels"
+import {
+  getScanGoalLabel,
+  getScanModeLabel,
+  getScanTriggerLabel,
+  getVerificationStatusLabel,
+} from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
 import { AiSecurityScoreCard } from "./ai-score-card"
-import { severityLabel } from "@/lib/labels"
+import { severityLabel, humanizeToken } from "@/lib/labels"
 import { track } from "@/lib/analytics"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import { scanRecoveryHref } from "../scans-client.utils"
@@ -829,7 +834,7 @@ export function ScanDetailClient({
                                 : "warning"
                           }
                         >
-                          {receipt.status.replaceAll("_", " ")}
+                          {humanizeToken(receipt.status)}
                         </Badge>
                       </div>
                       {receipt.reason && (
@@ -967,7 +972,7 @@ export function ScanDetailClient({
                                 </p>
                               )}
                             </div>
-                            <Badge variant={badgeVariant}>{outcome.replaceAll("_", " ")}</Badge>
+                            <Badge variant={badgeVariant}>{humanizeToken(outcome)}</Badge>
                           </div>
                         )
                       })}
@@ -1029,7 +1034,9 @@ export function ScanDetailClient({
                                 <span className="text-emerald-600">Verified</span>
                               )}
                               {!finding.verified && (
-                                <span>{finding.verificationStatus.replaceAll("_", " ")}</span>
+                                <span>
+                                  {getVerificationStatusLabel(finding.verificationStatus)}
+                                </span>
                               )}
                             </div>
                           </div>
