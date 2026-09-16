@@ -125,6 +125,23 @@ export const scanItemSchema = z
   })
   .passthrough()
 
+export const findingDetailItemSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    severity: z.string(),
+    status: z.string(),
+    cwe: z.string().nullable(),
+    cvssScore: z.number().nullable(),
+    summary: z.string().nullable(),
+    verified: z.boolean(),
+    verificationStatus: z.string(),
+    verificationMethod: z.string().nullable(),
+    verificationReason: z.string().nullable(),
+    createdAt: dateString,
+  })
+  .passthrough()
+
 export const scansPaginatedSchema = paginatedResponseSchema(scanItemSchema)
 
 export const scanCancelSchema = z
@@ -143,6 +160,72 @@ export const scanEligibilitySchema = z.object({
   isTrial: z.boolean(),
   remainingMinutes: z.number(),
 })
+
+export const findingDetailItemsPaginatedSchema = paginatedResponseSchema(findingDetailItemSchema)
+
+export const scanPollEventSchema = z
+  .object({
+    id: z.string(),
+    stage: z.string(),
+    level: z.string(),
+    message: z.string(),
+    metadata: z.unknown().optional(),
+    createdAt: dateString.or(z.date()),
+  })
+  .passthrough()
+
+// Echoed by the API only when an incremental event window was actually applied
+// to the poll (see eventsAfter); lets the client prove the cursor took effect
+// before merging the tail into the full list.
+export const eventsCursorAppliedSchema = z.string().optional()
+
+export const scanPollCoverageReceiptSchema = z
+  .object({
+    scanner: z.string(),
+    controlId: z.string(),
+    status: z.string(),
+    reason: z.string().nullable().optional(),
+    subject: z.string().nullable().optional(),
+    metadata: z.unknown().optional(),
+  })
+  .passthrough()
+
+export const scanPollDataSchema = z
+  .object({
+    id: z.string(),
+    workspaceId: z.string(),
+    status: z.string(),
+    goal: z.string(),
+    mode: z.string(),
+    triggerType: z.string(),
+    startedAt: dateString.or(z.date()).nullable(),
+    endedAt: dateString.or(z.date()).nullable(),
+    summary: z.string().nullable(),
+    errorCategory: z.string().nullable(),
+    errorMessage: z.string().nullable(),
+    llmRequestCount: z.number().nullable().optional(),
+    llmInputTokens: z.number().nullable().optional(),
+    llmCachedInputTokens: z.number().nullable().optional(),
+    llmOutputTokens: z.number().nullable().optional(),
+    createdAt: dateString.or(z.date()),
+    events: z.array(scanPollEventSchema).optional(),
+    eventsCursorApplied: eventsCursorAppliedSchema,
+    resultManifest: z
+      .object({
+        checksum: z.string().nullable().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    coverageReceipts: z.array(scanPollCoverageReceiptSchema).optional(),
+    // The scan's place in the run queue while QUEUED (1-based position + total
+    // waiting), so the UI can tell the user how far from the front they are.
+    queuePosition: z
+      .object({ position: z.number().int(), waiting: z.number().int() })
+      .nullable()
+      .optional(),
+  })
+  .passthrough()
 
 export const targetSchema = z
   .object({

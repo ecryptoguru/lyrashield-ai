@@ -9,7 +9,6 @@ import {
   Radar,
   ShieldCheck,
   ShieldAlert,
-  ShieldX,
   Shield,
   Clock,
   CheckCircle2,
@@ -23,8 +22,7 @@ import { formatTime, formatDateTime } from "@/lib/date-format"
 import { getScannerCoverageWarnings } from "@/lib/scan-coverage"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getScanReviewProfile } from "@/lib/scan-review-profile"
-import { z } from "zod"
-import { paginatedResponseSchema } from "@/lib/api-schemas"
+import { findingDetailItemsPaginatedSchema, scanPollDataSchema } from "@/lib/api-schemas"
 import { apiGetConditional, apiGetPaginated } from "@/lib/api-client"
 import { getScanGoalLabel, getScanModeLabel, getScanTriggerLabel } from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
@@ -34,346 +32,23 @@ import { track } from "@/lib/analytics"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import { scanRecoveryHref } from "../scans-client.utils"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
-
-interface ScanEvent {
-  id: string
-  stage: string
-  level: string
-  message: string
-  metadata?: Record<string, unknown> | null
-  createdAt: string
-}
-
-interface ScanData {
-  id: string
-  workspaceId: string
-  status: string
-  goal: string
-  mode: string
-  triggerType: string
-  startedAt: string | null
-  endedAt: string | null
-  summary: string | null
-  errorCategory: string | null
-  errorMessage: string | null
-  createdAt: string
-  /** The scan's place in the run queue while QUEUED (1-based + total waiting). */
-  queuePosition?: { position: number; waiting: number } | null
-  target: {
-    id: string
-    name: string
-    type: string
-    url: string | null
-    repoFullName: string | null
-  } | null
-  events: ScanEvent[]
-  integrity: {
-    manifestChecksum: string | null
-    urlExecution?: Record<string, unknown> | null
-    coverage: Array<{
-      scanner: string
-      controlId: string
-      status: string
-      reason: string | null
-      subject: string | null
-      metadata: Record<string, unknown> | null
-    }>
-    standards?: Array<{
-      standardId: string
-      name: string
-      version: string
-      badge?: string
-      evaluated: number
-      requiresAttestation: number
-      notEvaluated: number
-      violationSignals: number
-      categories: Array<{
-        id: string
-        title: string
-        state: "evaluated" | "requires-attestation" | "not-evaluated"
-        violationSignals: number
-        limited?: boolean
-        attestable?: boolean
-      }>
-    }>
-  }
-  aiSecurity: {
-    score: number | null
-    methodology: string
-    assessedCount: number
-    totalControls: number
-    evidenceQuality: Record<string, number> | null
-    reason: string | null
-    ai03: unknown
-    triage: unknown
-    computedAt: string
-  } | null
-}
-
-interface ScanPollData {
-  id: string
-  workspaceId: string
-  status: string
-  goal: string
-  mode: string
-  triggerType: string
-  startedAt: string | Date | null
-  endedAt: string | Date | null
-  summary: string | null
-  errorCategory: string | null
-  errorMessage: string | null
-  llmRequestCount?: number | null
-  llmInputTokens?: number | null
-  llmCachedInputTokens?: number | null
-  llmOutputTokens?: number | null
-  createdAt: string | Date
-  events?: Array<
-    Omit<ScanEvent, "metadata" | "createdAt"> & { metadata?: unknown; createdAt: string | Date }
-  >
-  /** Echoed when an incremental event window was applied to this response. */
-  eventsCursorApplied?: string
-  resultManifest?: { checksum?: string | null } | null
-  coverageReceipts?: Array<{
-    scanner: string
-    controlId: string
-    status: string
-    reason?: string | null
-    subject?: string | null
-    metadata?: unknown
-  }>
-}
-
-const INTERNAL_ACCOUNTING_EVENT_STAGES = new Set(["budget_cap", "llm_usage", "budget_exceeded"])
-
-interface FindingItem {
-  id: string
-  title: string
-  severity: string
-  status: string
-  cwe: string | null
-  cvssScore: number | null
-  summary: string | null
-  verified: boolean
-  verificationStatus: string
-  verificationMethod: string | null
-  verificationReason: string | null
-  createdAt: string
-}
-
-interface CleanResultScorecard {
-  targetId: string
-  grade: string
-  canPublish: boolean
-  existingShare?: {
-    id: string
-    slug: string
-    url: string
-    resolvedFindings: number
-    views: number
-    shareHandoffs: number
-    referredSignups: number
-  }
-}
-
-const findingItemSchema = z
-  .object({
-    id: z.string(),
-    title: z.string(),
-    severity: z.string(),
-    status: z.string(),
-    cwe: z.string().nullable(),
-    cvssScore: z.number().nullable(),
-    summary: z.string().nullable(),
-    verified: z.boolean(),
-    verificationStatus: z.string(),
-    verificationMethod: z.string().nullable(),
-    verificationReason: z.string().nullable(),
-    createdAt: z.string().datetime().or(z.string()),
-  })
-  .passthrough()
-
-const findingsPaginatedSchema = paginatedResponseSchema(findingItemSchema)
-
-const scanPollEventSchema = z
-  .object({
-    id: z.string(),
-    stage: z.string(),
-    level: z.string(),
-    message: z.string(),
-    metadata: z.unknown().optional(),
-    createdAt: z.string().datetime().or(z.string()).or(z.date()),
-  })
-  .passthrough()
-
-// Echoed by the API only when an incremental event window was actually applied
-// to the poll (see eventsAfter); lets the client prove the cursor took effect
-// before merging the tail into the full list.
-const eventsCursorAppliedSchema = z.string().optional()
-
-const scanPollCoverageReceiptSchema = z
-  .object({
-    scanner: z.string(),
-    controlId: z.string(),
-    status: z.string(),
-    reason: z.string().nullable().optional(),
-    subject: z.string().nullable().optional(),
-    metadata: z.unknown().optional(),
-  })
-  .passthrough()
-
-const scanPollDataSchema = z
-  .object({
-    id: z.string(),
-    workspaceId: z.string(),
-    status: z.string(),
-    goal: z.string(),
-    mode: z.string(),
-    triggerType: z.string(),
-    startedAt: z.string().datetime().or(z.string()).or(z.date()).nullable(),
-    endedAt: z.string().datetime().or(z.string()).or(z.date()).nullable(),
-    summary: z.string().nullable(),
-    errorCategory: z.string().nullable(),
-    errorMessage: z.string().nullable(),
-    llmRequestCount: z.number().nullable().optional(),
-    llmInputTokens: z.number().nullable().optional(),
-    llmCachedInputTokens: z.number().nullable().optional(),
-    llmOutputTokens: z.number().nullable().optional(),
-    createdAt: z.string().datetime().or(z.string()).or(z.date()),
-    events: z.array(scanPollEventSchema).optional(),
-    eventsCursorApplied: eventsCursorAppliedSchema,
-    resultManifest: z
-      .object({
-        checksum: z.string().nullable().optional(),
-      })
-      .passthrough()
-      .nullable()
-      .optional(),
-    coverageReceipts: z.array(scanPollCoverageReceiptSchema).optional(),
-    // The scan's place in the run queue while QUEUED (1-based position + total
-    // waiting), so the UI can tell the user how far from the front they are.
-    queuePosition: z
-      .object({ position: z.number().int(), waiting: z.number().int() })
-      .nullable()
-      .optional(),
-  })
-  .passthrough()
-
-const SEVERITY_ORDER: Record<string, number> = {
-  CRITICAL: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3,
-  INFO: 4,
-}
-
-const SEVERITY_ICON: Record<string, typeof Shield> = {
-  CRITICAL: ShieldX,
-  HIGH: ShieldAlert,
-  MEDIUM: Shield,
-  LOW: ShieldCheck,
-  INFO: ShieldCheck,
-}
-
-const SEVERITY_COLOR: Record<string, string> = {
-  CRITICAL: "text-destructive",
-  HIGH: "text-orange-600 dark:text-orange-400",
-  MEDIUM: "text-amber-600 dark:text-amber-400",
-  LOW: "text-sky-600 dark:text-sky-400",
-  INFO: "text-muted-foreground",
-}
-
-const EVENT_LEVEL_COLOR: Record<string, string> = {
-  info: "text-muted-foreground",
-  warn: "text-amber-600 dark:text-amber-400",
-  warning: "text-amber-600 dark:text-amber-400",
-  error: "text-destructive",
-}
-
-const SCANNER_LABELS: Record<string, string> = {
-  engine: "Engine review",
-  agent_config: "Agent configuration",
-  sca: "Dependency scan",
-  secrets: "Secret scan",
-  url: "URL scan",
-  ai_app_security: "AI app security",
-  ml_supply_chain: "ML supply chain",
-  sast: "Static analysis",
-  iac: "Infrastructure config scan",
-  external_import: "Imported scan (third-party)",
-}
-
-const ELAPSED_TIME_INTERVAL_MS = 1_000
-const COMPLETION_NOTICE_DISMISS_MS = 6_000
-/** Matches the service's event window cap (getScanWithEvents take: 200). */
-const MAX_EVENT_WINDOW = 200
-
-/** Ticking elapsed time from a start timestamp, returning a formatted string. */
-function useElapsedTime(startedAt: string | null): string {
-  // Keep server and first client render identical; the effect starts the live clock.
-  const [elapsed, setElapsed] = useState("—")
-  useEffect(() => {
-    if (!startedAt) return
-    const tick = () => setElapsed(formatDuration(startedAt, null))
-    tick()
-    const id = window.setInterval(tick, ELAPSED_TIME_INTERVAL_MS)
-    return () => window.clearInterval(id)
-  }, [startedAt])
-  return elapsed
-}
-
-function formatDuration(start: string | null, end: string | null): string {
-  if (!start) return "—"
-  const startMs = new Date(start).getTime()
-  const endMs = end ? new Date(end).getTime() : Date.now()
-  const diffSec = Math.round((endMs - startMs) / 1000)
-  if (diffSec < 60) return `${diffSec}s`
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ${diffSec % 60}s`
-  return `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m`
-}
-
-function asIsoString(value: string | Date | null): string | null {
-  if (value === null) return null
-  return value instanceof Date ? value.toISOString() : String(value)
-}
-
-// Event ordering for the incremental merge. The API returns events newest-first
-// and the client stores them ascending; a stale full window and a fresh
-// incremental tail can interleave, so comparisons never assume response order.
-function isEventAtOrAfterCursor(event: { createdAt: string; id: string }, cursor: ScanEvent) {
-  if (event.createdAt > cursor.createdAt) return true
-  if (event.createdAt < cursor.createdAt) return false
-  return event.id >= cursor.id
-}
-
-/**
- * Merge a poll's events into the full client-side history. With a proven
- * cursor (`eventsCursorApplied` echoed by the server) the payload is a tail:
- * append strictly-new events and trim back to the 200-event window. Without
- * one — initial load, no cursor sent, unknown-cursor fallback, or a response
- * that raced a local trim — the payload is the authoritative full window and
- * replaces local state wholesale.
- */
-function mergeEvents(current: ScanEvent[], incoming: ScanEvent[], cursorApplied: boolean) {
-  if (!cursorApplied) return incoming
-  const cursor = current.at(-1)
-  if (!cursor) return incoming
-  const seen = new Set(current.map((event) => event.id))
-  // A retried poll can re-deliver the same tail; a late response from a poll
-  // started before the newest one can also arrive. Dropping ids the client
-  // already holds covers both; the at-or-after check is belt-and-braces for a
-  // malformed tail.
-  const newEvents = incoming.filter(
-    (event) => !seen.has(event.id) && isEventAtOrAfterCursor(event, cursor)
-  )
-  const merged = [...current, ...newEvents]
-  return merged.length > MAX_EVENT_WINDOW ? merged.slice(merged.length - MAX_EVENT_WINDOW) : merged
-}
-
-function asMetadata(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null
-}
+import type { CleanResultScorecard, FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
+import {
+  EVENT_LEVEL_COLOR,
+  INTERNAL_ACCOUNTING_EVENT_STAGES,
+  SCANNER_LABELS,
+  SEVERITY_COLOR,
+  SEVERITY_ICON,
+  SEVERITY_ORDER,
+} from "./scan-detail-presentation"
+import {
+  asIsoString,
+  asMetadata,
+  COMPLETION_NOTICE_DISMISS_MS,
+  formatDuration,
+  mergeEvents,
+  useElapsedTime,
+} from "./scan-detail-utils"
 
 export function ScanDetailClient({
   scan: initialScan,
@@ -537,7 +212,7 @@ export function ScanDetailClient({
           const page = await apiGetPaginated<FindingItem>(
             "/api/findings",
             { workspaceId: updated.workspaceId, scanId: scan.id, limit: "100" },
-            { signal, schema: findingsPaginatedSchema }
+            { signal, schema: findingDetailItemsPaginatedSchema }
           )
           refreshedFindings = page.items
         }
