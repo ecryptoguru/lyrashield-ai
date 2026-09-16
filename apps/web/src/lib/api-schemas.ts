@@ -96,6 +96,54 @@ export const findingListItemSchema = z
 
 export const findingsPaginatedSchema = paginatedResponseSchema(findingListItemSchema)
 
+export const scanTargetSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string(),
+    url: z.string().nullable(),
+    apiSpecUrl: z.string().nullable(),
+    repoFullName: z.string().nullable(),
+  })
+  .passthrough()
+
+export const scanItemSchema = z
+  .object({
+    id: z.string(),
+    status: z.string(),
+    goal: z.string(),
+    mode: z.string(),
+    triggerType: z.string(),
+    startedAt: dateString.nullable(),
+    endedAt: dateString.nullable(),
+    summary: z.string().nullable(),
+    errorCategory: z.string().nullable(),
+    errorMessage: z.string().nullable(),
+    findingCount: z.number().optional(),
+    target: scanTargetSchema.nullable(),
+    createdAt: dateString,
+  })
+  .passthrough()
+
+export const scansPaginatedSchema = paginatedResponseSchema(scanItemSchema)
+
+export const scanCancelSchema = z
+  .object({
+    id: z.string(),
+    status: z.string(),
+    endedAt: dateString.nullable(),
+  })
+  .passthrough()
+
+export const scanEligibilitySchema = z.object({
+  allowed: z.boolean(),
+  code: z.string().nullable(),
+  message: z.string().nullable(),
+  plan: z.string(),
+  isTrial: z.boolean(),
+  remainingMinutes: z.number(),
+})
+
 export const targetSchema = z
   .object({
     domainVerificationStatus: z.string().optional(),
