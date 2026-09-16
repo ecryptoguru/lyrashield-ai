@@ -26,7 +26,7 @@ export function isPublicOriginAllowed(request: Request): boolean {
   return origin ? trustedOrigins().has(origin) : false
 }
 
-function publicCorsHeaders(request: Request): Record<string, string> {
+export function publicCorsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("origin")
   if (!origin || !trustedOrigins().has(origin)) return {}
   return {
