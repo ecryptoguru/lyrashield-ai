@@ -16,10 +16,8 @@
   "dependencies": {
     "@lyrashield/auth": "workspace:*",
     "@lyrashield/billing": "workspace:*",
-    "@lyrashield/config": "workspace:*",
     "@lyrashield/db": "workspace:*",
     "@lyrashield/integrations": "workspace:*",
-    "@lyrashield/logger": "workspace:*",
     "@lyrashield/pricing": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "zod": "^4.0.0"

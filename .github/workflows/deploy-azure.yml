@@ -235,35 +235,10 @@ jobs:
         if: steps.build-worker.outcome == 'success'
         shell: bash
         run: |
-          is_40_hex() {
-            value=$1
-            case "$value" in
-              ''|*[!0-9a-fA-F]*) return 1 ;;
-            esac
-            [ "${#value}" -eq 40 ]
-          }
-          is_64_hex() {
-            value=$1
-            case "$value" in
-              ''|*[!0-9a-fA-F]*) return 1 ;;
-            esac
-            [ "${#value}" -eq 64 ]
-          }
-          digest="${{ steps.build-worker.outputs.digest }}"
-          case "$digest" in
-            sha256:*) ;;
-            *) echo "::error::Worker digest must be sha256:<64 hex>"; exit 1 ;;
-          esac
-          is_64_hex "${digest#sha256:}" || { echo "::error::Worker digest must be sha256:<64 hex>"; exit 1; }
-          is_40_hex "${{ env.DEPLOY_SHA }}" || { echo "::error::Product revision must be a 40-character SHA"; exit 1; }
-          is_40_hex "${{ env.ENGINE_REVISION }}" || { echo "::error::Engine revision must be a 40-character SHA"; exit 1; }
-          {
-            echo "Worker provenance record (worker VM runtime values):"
-            echo "- LYRASHIELD_PRODUCT_REVISION=${{ env.DEPLOY_SHA }}"
-            echo "- LYRASHIELD_WORKER_IMAGE_DIGEST=$digest"
-            echo "- LYRASHIELD_ENGINE_REVISION=${{ env.ENGINE_REVISION }}"
-            echo "The deploy job promotes this digest only after Container App smoke checks pass."
-          } >> "$GITHUB_STEP_SUMMARY"
+          bash .github/scripts/validate-worker-provenance.sh \
+            "${{ steps.build-worker.outputs.digest }}" \
+            "${{ env.DEPLOY_SHA }}" \
+            "${{ env.ENGINE_REVISION }}"
 
   # Every merge to main pushes new SHA-tagged images; web also re-points :latest, while workers
   # remain immutable and deploy by verified digest. Multi-arch buildx pushes leave untagged manifests
@@ -344,6 +319,13 @@ jobs:
       (vars.AZURE_RESOURCE_GROUP != '') &&
       ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
     steps:
+      # The billing configuration check below runs an extracted repo script, so
+      # the workspace must exist before the deploy job's first step.
+      - name: Checkout for deployment checks
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
       - name: Verify billing provider deployment configuration
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
@@ -362,69 +344,7 @@ jobs:
           BILLING_CANARY_WORKSPACE_IDS: ${{ env.BILLING_CANARY_WORKSPACE_IDS }}
           CLOUDFLARE_ORIGIN_MTLS: ${{ env.CLOUDFLARE_ORIGIN_MTLS }}
           CLOUDFLARE_AOP_CERT_SHA256: ${{ env.CLOUDFLARE_AOP_CERT_SHA256 }}
-        run: |
-          if [ "${POLAR_ENVIRONMENT}" != "production" ]; then
-            echo "::error::azure-production requires POLAR_ENVIRONMENT=production; Sandbox belongs only in isolated staging."
-            exit 1
-          fi
-          required=(
-            POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_ORG_ID
-            POLAR_PRODUCT_IDS POLAR_LOCAL_PRODUCT_IDS
-            RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET
-            RAZORPAY_PLAN_IDS
-          )
-          for name in "${required[@]}"; do
-            if [ -z "${!name}" ]; then
-              echo "::error::${name} is required for declarative billing configuration. Purchase admission remains off, but provider webhook and reconciliation configuration must be complete."
-              exit 1
-            fi
-          done
-          case "$POLAR_ACCESS_TOKEN" in
-            polar_oat_?*) ;;
-            *)
-              echo "::error::azure-production requires a Polar Organization Access Token; replace the protected POLAR_ACCESS_TOKEN secret."
-              exit 1
-              ;;
-          esac
-          case "$RAZORPAY_KEY_ID" in
-            rzp_live_*) ;;
-            *)
-              echo "::error::azure-production requires a Razorpay live key ID; Test Mode belongs only in isolated staging."
-              exit 1
-              ;;
-          esac
-          # JavaScript template literal below is not shell expansion.
-          # shellcheck disable=SC2016
-          node -e '
-            for (const name of ["POLAR_PRODUCT_IDS", "POLAR_LOCAL_PRODUCT_IDS", "RAZORPAY_PLAN_IDS"]) {
-              const value = JSON.parse(process.env[name]);
-              if (!value || Array.isArray(value) || typeof value !== "object" || Object.keys(value).length === 0) {
-                throw new Error(`${name} must be a non-empty JSON object`);
-              }
-            }
-            const requiredCatalogKeys = {
-              POLAR_PRODUCT_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "launch_assurance_monthly", "launch_assurance_annual", "pack_100", "pack_250", "pack_500"],
-              // Razorpay packs are quote-signed payment links, not plans. Their
-              // prices and identity come from MINUTE_PACK_MAP and webhook notes.
-              RAZORPAY_PLAN_IDS: ["starter_monthly", "starter_annual", "pro_monthly", "pro_annual", "launch_assurance_monthly", "launch_assurance_annual"],
-            };
-            for (const [name, keys] of Object.entries(requiredCatalogKeys)) {
-              const value = JSON.parse(process.env[name]);
-              for (const key of keys) if (!(key in value)) throw new Error(`${name} is missing ${key}`);
-            }
-            const modes = [process.env.POLAR_BILLING_ADMISSION, process.env.RAZORPAY_BILLING_ADMISSION];
-            if (!modes.every((mode) => ["off", "canary", "public"].includes(mode))) throw new Error("Cloud billing mode is invalid");
-            if (modes[0] !== modes[1]) throw new Error("Polar and Razorpay Cloud admissions must move jointly");
-            const allowlist = process.env.BILLING_CANARY_WORKSPACE_IDS.split(",").filter(Boolean);
-            if (modes[0] === "canary" && (!allowlist.length || !allowlist.every((id) => /^[A-Za-z0-9_-]{1,191}$/.test(id)))) {
-              throw new Error("Canary admission requires valid workspace IDs");
-            }
-            if (modes[0] !== "canary" && allowlist.length) throw new Error("Only canary admission may set a workspace allowlist");
-            if (process.env.CLOUDFLARE_ORIGIN_MTLS === "required" && !/^[a-fA-F0-9]{64}$/.test(process.env.CLOUDFLARE_AOP_CERT_SHA256)) {
-              throw new Error("Required Cloudflare origin mTLS needs a certificate fingerprint");
-            }
-          '
-          echo "Billing provider and protected admission configuration is valid."
+        run: node .github/scripts/verify-billing-deployment-config.mjs
 
       - name: Log in to Azure
         # v16 4.3: OIDC federated login — no stored client secret. The
