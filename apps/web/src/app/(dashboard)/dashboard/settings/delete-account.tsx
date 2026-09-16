@@ -14,9 +14,10 @@ export function DeleteAccount() {
       <div>
         <h2 className="font-semibold">Delete account</h2>
         <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-6">
-          Account deletion is reviewed before removal so billing, audit, security evidence, and
-          workspace ownership records are handled safely. Email support from your account address to
-          start the request.
+          Account deletion is reviewed before removal so billing, audit, security evidence,
+          workspace ownership records and Myra support data — conversations, support cases, demo
+          bookings and saved assistant preferences — are handled safely. Email support from your
+          account address to start the request.
         </p>
       </div>
       <Button

@@ -143,11 +143,13 @@ export {
 export {
   deleteUserAccount,
   getAccountDeletionPlan,
+  registerAccountDeletionHooks,
   AccountDeletionBlockedError,
   AccountDeletionConfirmationRequiredError,
   AccountDeletionActiveScanError,
   AccountDeletionUnsupportedArtifactError,
   AccountDeletionAffiliateError,
+  type AccountDeletionHooks,
   type AccountDeletionPlan,
 } from "./account-deletion"
 export {

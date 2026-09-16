@@ -9,6 +9,28 @@ import { lockWorkspaceMembership } from "./workspace-membership-lock"
 
 const DELETED_USER = "deleted-user"
 
+export interface AccountDeletionHooks {
+  /**
+   * Best-effort cancellation of a demo booking's provider calendar event.
+   * @lyrashield/db cannot import the calendar adapter (it lives in
+   * @lyrashield/myra, which depends on this package) so the Myra server
+   * entry registers it — see registerAccountDeletionHooks.
+   */
+  cancelCalendarEvent?: (providerEventId: string) => Promise<void>
+}
+
+let registeredAccountDeletionHooks: AccountDeletionHooks = {}
+
+/**
+ * Arms account deletion with provider-side cancellation. The Myra server
+ * bundle calls this on import so every environment that serves Myra cancels
+ * orphaned calendar events during erasure; an explicit `hooks` argument to
+ * deleteUserAccount takes precedence (tests).
+ */
+export function registerAccountDeletionHooks(hooks: AccountDeletionHooks): void {
+  registeredAccountDeletionHooks = hooks
+}
+
 export interface AccountDeletionWorkspace {
   id: string
   name: string
@@ -198,8 +220,11 @@ export async function getAccountDeletionPlan(userId: string): Promise<AccountDel
  */
 export async function deleteUserAccount(
   userId: string,
-  confirmation = "DELETE"
+  confirmation = "DELETE",
+  hooks: AccountDeletionHooks = {}
 ): Promise<{ workspaceIds: string[]; artifactDeletionTaskIds: string[] }> {
+  const cancelCalendarEvent =
+    hooks.cancelCalendarEvent ?? registeredAccountDeletionHooks.cancelCalendarEvent
   const plan = await getAccountDeletionPlan(userId)
 
   if (plan.blocked.length > 0) {
@@ -608,6 +633,61 @@ export async function deleteUserAccount(
         await tx.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspace.id}`
         await tx.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspace.id}`
       }
+
+      // ── Myra support-agent erasure (v18 1.1) ──────────────────────────
+      // The dual-owner Myra tables keep accountId as a bare scalar with no
+      // FK to users, so tx.user.delete leaves every conversation, operation,
+      // case, booking and audit row behind. These statements run on this same
+      // transaction through the unbound trusted path — this transaction never
+      // binds app.current_account_id or app.myra_public_session_id and the
+      // workspace GUC it does set is irrelevant to the dual-owner policies.
+      // myra_memories is the exception: its RESTRICTIVE owner boundary needs
+      // app.current_account_id bound, so it is bound only for that one delete
+      // after every unbound-path write has already run.
+      const myraBookingsToCancel = await tx.$queryRaw<Array<{ providerEventId: string }>>`
+        SELECT "providerEventId" FROM "demo_bookings"
+        WHERE "accountId" = ${userId}
+          AND "providerEventId" IS NOT NULL
+          AND "status" IN ('HELD'::"DemoBookingStatus", 'CONFIRMED'::"DemoBookingStatus", 'OUTCOME_UNKNOWN'::"DemoBookingStatus")`
+      for (const booking of myraBookingsToCancel) {
+        // Best-effort provider cancellation — the row scrub below is the
+        // durable erasure and an unreachable calendar must not roll it back.
+        await cancelCalendarEvent?.(booking.providerEventId).catch(() => {})
+      }
+      await tx.$executeRaw`DELETE FROM "myra_conversations" WHERE "accountId" = ${userId}`
+      await tx.$executeRaw`DELETE FROM "myra_operations" WHERE "accountId" = ${userId}`
+      // Cases stay for operator history: the account link and the submitter
+      // identity fields go and the scrubbed shell keeps its reference.
+      await tx.$executeRaw`
+        UPDATE "support_cases"
+        SET "accountId" = NULL, "replyEmail" = NULL,
+            "subject" = 'Deleted account', "summary" = ''
+        WHERE "accountId" = ${userId}`
+      await tx.$executeRaw`
+        UPDATE "demo_bookings"
+        SET "accountId" = NULL,
+            "status" = 'CANCELED'::"DemoBookingStatus",
+            "canceledAt" = COALESCE("canceledAt", now()),
+            "attendeeEmail" = ${`${DELETED_USER}:`} || "id",
+            "attendeeName" = 'Deleted account',
+            "attendeeContext" = NULL,
+            "manageTokenHash" = NULL,
+            "manageTokenRevokedAt" = now()
+        WHERE "accountId" = ${userId}`
+      // Audit rows stay for operator history: drop the account link and
+      // strip metadata keys matching the write-time SENSITIVE_KEY pattern in
+      // packages/myra/src/server/audit.ts.
+      await tx.$executeRaw`
+        UPDATE "myra_audit_events"
+        SET "accountId" = NULL,
+            "metadata" = CASE WHEN jsonb_typeof("metadata") = 'object' THEN (
+              SELECT jsonb_object_agg(kv.key, kv.value)
+              FROM jsonb_each("metadata") AS kv
+              WHERE kv.key !~* 'pass|secret|token|key|body|content|message|text|summary|subject|email|authorization|cookie|credential'
+            ) ELSE "metadata" END
+        WHERE "accountId" = ${userId}`
+      await tx.$executeRaw`SELECT set_config('app.current_account_id', ${userId}, true)`
+      await tx.$executeRaw`DELETE FROM "myra_memories" WHERE "accountId" = ${userId}`
 
       await tx.user.delete({ where: { id: userId } })
 

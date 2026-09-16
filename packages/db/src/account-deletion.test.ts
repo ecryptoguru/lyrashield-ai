@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { randomUUID } from "node:crypto"
 import { prisma } from "./client"
 import { getSystemPrisma } from "./system-client"
@@ -26,6 +26,7 @@ const auditFailureUserId = `audit-failure-user-${suffix}`
 const auditFailureOwnerId = `audit-failure-owner-${suffix}`
 const affiliateUserId = `affiliate-user-${suffix}`
 const licenseUserId = `license-user-${suffix}`
+const myraUserId = `myra-user-${suffix}`
 
 const deletableWorkspaceId = `deletable-ws-${suffix}`
 const retainWorkspaceId = `retain-ws-${suffix}`
@@ -82,6 +83,7 @@ async function cleanup() {
           legacyUserId,
           auditFailureUserId,
           auditFailureOwnerId,
+          myraUserId,
         ],
       },
     },
@@ -118,6 +120,26 @@ async function cleanup() {
       where: { id: { in: [affiliateUserId, licenseUserId] } },
     })
     .catch(() => {})
+  // Myra rows keep accountId as a bare scalar — no FK — so leftovers from a
+  // failed run need explicit cleanup.
+  await prisma.$executeRaw`DELETE FROM "myra_memories" WHERE "accountId" = ${myraUserId}`.catch(
+    () => {}
+  )
+  await prisma.$executeRaw`DELETE FROM "myra_operations" WHERE "accountId" = ${myraUserId}`.catch(
+    () => {}
+  )
+  await prisma.$executeRaw`DELETE FROM "myra_conversations" WHERE "accountId" = ${myraUserId}`.catch(
+    () => {}
+  )
+  await prisma.$executeRaw`DELETE FROM "support_cases" WHERE "accountId" = ${myraUserId} OR "reference" = ${`LS-${suffix.slice(0, 6).toUpperCase()}`}`.catch(
+    () => {}
+  )
+  await prisma.$executeRaw`DELETE FROM "demo_bookings" WHERE "accountId" = ${myraUserId} OR "idempotencyKey" = ${`bk-${suffix}`}`.catch(
+    () => {}
+  )
+  await prisma.$executeRaw`DELETE FROM "myra_audit_events" WHERE "accountId" = ${myraUserId} OR "resourceId" = ${`myra-${suffix}`}`.catch(
+    () => {}
+  )
 }
 
 describe("account deletion", () => {
@@ -827,5 +849,125 @@ describe("account deletion", () => {
       expect(row?.ownerEmail).toMatch(/^deleted-user:/)
       expect(row?.ownerEmail).not.toContain("example.com")
     }
+  })
+
+  it("scrubs Myra data on account deletion (v18 1.1)", async () => {
+    // The dual-owner Myra tables keep accountId as a bare scalar — the user
+    // delete leaves every conversation, case, booking, memory and audit row
+    // behind unless the deletion transaction scrubs them itself.
+    await prisma.user.create({
+      data: { id: myraUserId, name: "Myra", email: `${myraUserId}@example.com` },
+    })
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    const conversation = await prisma.myraConversation.create({
+      data: { surface: "DASHBOARD", accountId: myraUserId, expiresAt },
+    })
+    await prisma.myraMessage.create({
+      data: {
+        conversationId: conversation.id,
+        role: "USER",
+        content: "hello",
+        traceId: `t-${suffix}`,
+      },
+    })
+    await prisma.myraFlowSession.create({
+      data: { conversationId: conversation.id, flowId: "cancel_scan", status: "ACTIVE" },
+    })
+    const supportCase = await prisma.supportCase.create({
+      data: {
+        reference: `LS-${suffix.slice(0, 6).toUpperCase()}`,
+        subject: "Need help",
+        summary: "Please help me with setup",
+        accountId: myraUserId,
+        replyEmail: `${myraUserId}@example.com`,
+      },
+    })
+    await prisma.supportCaseReply.create({
+      data: { caseId: supportCase.id, authorType: "USER", body: "more detail" },
+    })
+    await prisma.myraOperation.create({
+      data: {
+        operationName: "book_demo",
+        status: "AWAITING_CONFIRMATION",
+        accountId: myraUserId,
+        inputHash: `hash-${suffix}`,
+        payload: { email: `${myraUserId}@example.com` },
+        idempotencyKey: `op-${suffix}`,
+        expiresAt,
+      },
+    })
+    // A far-future hold window so the demo-slot exclusion constraint cannot
+    // collide with bookings from any other fixture.
+    const startsAt = new Date("2035-01-04T16:00:00Z")
+    const endsAt = new Date(startsAt.getTime() + 30 * 60 * 1000)
+    const booking = await prisma.demoBooking.create({
+      data: {
+        status: "CONFIRMED",
+        accountId: myraUserId,
+        attendeeEmail: `${myraUserId}@example.com`,
+        attendeeName: "Myra User",
+        attendeeContext: "wants an Agency walkthrough",
+        startsAt,
+        endsAt,
+        holdStartsAt: new Date(startsAt.getTime() - 15 * 60 * 1000),
+        holdEndsAt: new Date(endsAt.getTime() + 15 * 60 * 1000),
+        timezone: "UTC",
+        organizerEmail: "ankit@lyrashieldai.com",
+        providerEventId: `myra-demo-${suffix}`,
+        manageTokenHash: `token-${suffix}`,
+        manageTokenExpiresAt: expiresAt,
+        idempotencyKey: `bk-${suffix}`,
+      },
+    })
+    await prisma.myraMemory.create({
+      data: { accountId: myraUserId, key: "preferred_timezone", value: "UTC" },
+    })
+    // Audit rows are written on the unbound path in production — an
+    // account-bound ORM create's RETURNING clause has no matching SELECT
+    // policy under the runtime role, so this fixture goes through the
+    // privileged client.
+    const audit = await getSystemPrisma().myraAuditEvent.create({
+      data: {
+        actorType: "user",
+        accountId: myraUserId,
+        action: "myra.test",
+        resourceType: "test",
+        resourceId: `myra-${suffix}`,
+        metadata: { email: `${myraUserId}@example.com`, retained: "yes" },
+      },
+    })
+    const cancelCalendarEvent = vi.fn(async () => {})
+
+    await deleteUserAccount(myraUserId, "DELETE", { cancelCalendarEvent })
+
+    const system = getSystemPrisma()
+    expect(await system.myraConversation.count({ where: { accountId: myraUserId } })).toBe(0)
+    expect(await system.myraMessage.count({ where: { conversationId: conversation.id } })).toBe(0)
+    expect(await system.myraFlowSession.count({ where: { conversationId: conversation.id } })).toBe(
+      0
+    )
+    expect(await system.myraOperation.count({ where: { accountId: myraUserId } })).toBe(0)
+    expect(await system.myraMemory.count({ where: { accountId: myraUserId } })).toBe(0)
+    expect(await system.myraAuditEvent.count({ where: { accountId: myraUserId } })).toBe(0)
+    const scrubbedCase = await system.supportCase.findUnique({ where: { id: supportCase.id } })
+    expect(scrubbedCase).toMatchObject({
+      accountId: null,
+      replyEmail: null,
+      subject: "Deleted account",
+      summary: "",
+    })
+    const scrubbedBooking = await system.demoBooking.findUnique({ where: { id: booking.id } })
+    expect(scrubbedBooking).toMatchObject({
+      accountId: null,
+      status: "CANCELED",
+      attendeeName: "Deleted account",
+      attendeeContext: null,
+      manageTokenHash: null,
+    })
+    expect(scrubbedBooking?.attendeeEmail).toBe(`deleted-user:${booking.id}`)
+    expect(scrubbedBooking?.manageTokenRevokedAt).not.toBeNull()
+    const scrubbedAudit = await system.myraAuditEvent.findUnique({ where: { id: audit.id } })
+    expect(scrubbedAudit?.metadata).toEqual({ retained: "yes" })
+    expect(cancelCalendarEvent).toHaveBeenCalledWith(`myra-demo-${suffix}`)
   })
 })

@@ -1,7 +1,8 @@
 /**
  * Retention sweep — founder-resolved periods: conversations 30d (cascade
- * messages + flow sessions), support cases 1y, demo bookings 1y; expired
- * public sessions and stale identity verifications are removed too.
+ * messages + flow sessions), support cases 1y, demo bookings 1y, audit
+ * events 90d; expired public sessions and stale identity verifications are
+ * removed too.
  */
 import { Prisma, prisma } from "@lyrashield/db"
 import { MYRA_LIMITS } from "../contracts"
@@ -14,6 +15,7 @@ export interface RetentionCounts {
   supportCases: number
   demoBookings: number
   operations: number
+  auditEvents: number
   generationReservations: number
 }
 
@@ -23,6 +25,7 @@ export async function pruneMyraRetention(db: MyraDb = prisma): Promise<Retention
   const caseCutoff = new Date(now.getTime() - MYRA_LIMITS.caseRetentionDays * 86_400_000)
   const bookingCutoff = new Date(now.getTime() - MYRA_LIMITS.bookingRetentionDays * 86_400_000)
   const opCutoff = new Date(now.getTime() - MYRA_LIMITS.conversationRetentionDays * 86_400_000)
+  const auditCutoff = new Date(now.getTime() - MYRA_LIMITS.auditRetentionDays * 86_400_000)
 
   // Expire pending confirmations past their TTL and fail EXECUTING rows
   // wedged by a crashed process — otherwise both would linger forever.
@@ -56,24 +59,32 @@ export async function pruneMyraRetention(db: MyraDb = prisma): Promise<Retention
     `
   )
 
-  const [conversations, publicSessions, verifications, supportCases, demoBookings, operations] =
-    await Promise.all([
-      db.myraConversation.deleteMany({ where: { expiresAt: { lt: now } } }),
-      db.myraPublicSession.deleteMany({ where: { expiresAt: { lt: now } } }),
-      db.myraIdentityVerification.deleteMany({
-        where: {
-          OR: [{ consumedAt: { lt: dayAgo } }, { consumedAt: null, expiresAt: { lt: dayAgo } }],
-        },
-      }),
-      db.supportCase.deleteMany({ where: { createdAt: { lt: caseCutoff } } }),
-      db.demoBooking.deleteMany({ where: { createdAt: { lt: bookingCutoff } } }),
-      db.myraOperation.deleteMany({
-        where: {
-          status: { in: ["EXPIRED", "CANCELED", "FAILED"] },
-          updatedAt: { lt: opCutoff },
-        },
-      }),
-    ])
+  const [
+    conversations,
+    publicSessions,
+    verifications,
+    supportCases,
+    demoBookings,
+    operations,
+    auditEvents,
+  ] = await Promise.all([
+    db.myraConversation.deleteMany({ where: { expiresAt: { lt: now } } }),
+    db.myraPublicSession.deleteMany({ where: { expiresAt: { lt: now } } }),
+    db.myraIdentityVerification.deleteMany({
+      where: {
+        OR: [{ consumedAt: { lt: dayAgo } }, { consumedAt: null, expiresAt: { lt: dayAgo } }],
+      },
+    }),
+    db.supportCase.deleteMany({ where: { createdAt: { lt: caseCutoff } } }),
+    db.demoBooking.deleteMany({ where: { createdAt: { lt: bookingCutoff } } }),
+    db.myraOperation.deleteMany({
+      where: {
+        status: { in: ["EXPIRED", "CANCELED", "FAILED"] },
+        updatedAt: { lt: opCutoff },
+      },
+    }),
+    db.myraAuditEvent.deleteMany({ where: { createdAt: { lt: auditCutoff } } }),
+  ])
   return {
     conversations: conversations.count,
     publicSessions: publicSessions.count,
@@ -81,6 +92,7 @@ export async function pruneMyraRetention(db: MyraDb = prisma): Promise<Retention
     supportCases: supportCases.count,
     demoBookings: demoBookings.count,
     operations: operations.count,
+    auditEvents: auditEvents.count,
     generationReservations: generationReservationCount,
   }
 }

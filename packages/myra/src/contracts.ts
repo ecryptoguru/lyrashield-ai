@@ -496,6 +496,7 @@ export const MYRA_LIMITS = {
   conversationRetentionDays: 30,
   caseRetentionDays: 365,
   bookingRetentionDays: 365,
+  auditRetentionDays: 90,
   manageTokenGraceDays: 7,
   proposalTtlMinutes: 15,
   publicSessionTtlDays: 30,
