@@ -1,9 +1,9 @@
 ---
 import DocsLayout from "@layouts/DocsLayout.astro"
 import spec from "../../data/openapi.json" with { type: "json" }
+import { buildDocsJsonLd } from "../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const canonical = new URL("/docs/api", origin).toString()
 const title = "LyraShield API v1 Reference"
 const description = "OpenAPI 3.1 reference for the LyraShield /api/v1 endpoints."
 const updatedDate = "2026-07-31"
@@ -29,28 +29,16 @@ const operations = Object.entries(spec.paths ?? {})
   )
   .sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method))
 
-const jsonLd: unknown[] = [
-  {
-    "@context": "https://schema.org",
-    "@type": "TechArticle",
-    headline: title,
-    description,
-    url: canonical,
-    dateModified: updatedDate,
-    author: { "@id": `${origin}/#organization` },
-    publisher: { "@id": `${origin}/#organization` },
-    inLanguage: "en-US",
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
-      { "@type": "ListItem", position: 2, name: "Docs", item: `${origin}/docs/integrations` },
-      { "@type": "ListItem", position: 3, name: "API v1", item: canonical },
-    ],
-  },
-]
+const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
+  origin,
+  path: "/docs/api",
+  title,
+  description,
+  updatedDate,
+  breadcrumbLabel: "API v1",
+  breadcrumbSection: "Docs",
+})
+const jsonLd: unknown[] = [techArticle, breadcrumbList]
 ---
 
 <DocsLayout

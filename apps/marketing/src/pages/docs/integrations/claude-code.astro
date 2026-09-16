@@ -1,26 +1,24 @@
 ---
 import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
+import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const canonical = new URL("/docs/integrations/claude-code", origin).toString()
 const title = "LyraShield MCP for Claude Code — Setup Guide"
 const description =
   "Add the LyraShield MCP server to Claude Code in under two minutes. Configure .mcp.json or use the claude mcp add command to run security checks inline while you build."
 const updatedDate = "2026-09-08"
 
+const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
+  origin,
+  path: "/docs/integrations/claude-code",
+  title,
+  description,
+  updatedDate,
+  breadcrumbLabel: "Claude Code",
+})
 const jsonLd: unknown[] = [
-  {
-    "@context": "https://schema.org",
-    "@type": "TechArticle",
-    headline: title,
-    description,
-    url: canonical,
-    dateModified: updatedDate,
-    author: { "@id": `${origin}/#organization` },
-    publisher: { "@id": `${origin}/#organization` },
-    inLanguage: "en-US",
-  },
+  techArticle,
   {
     "@context": "https://schema.org",
     "@type": "HowTo",
@@ -52,20 +50,7 @@ const jsonLd: unknown[] = [
       },
     ],
   },
-  {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: "Integrations",
-        item: `${origin}/docs/integrations`,
-      },
-      { "@type": "ListItem", position: 3, name: "Claude Code", item: canonical },
-    ],
-  },
+  breadcrumbList,
 ]
 ---
 
