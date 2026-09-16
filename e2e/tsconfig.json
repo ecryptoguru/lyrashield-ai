@@ -20,6 +20,6 @@
       "@lyrashield/billing": ["../packages/billing/src/index.ts"]
     }
   },
-  "include": ["**/*.ts"],
+  "include": ["**/*.ts", "../apps/marketing/tests-browser/marketing-*.e2e.ts"],
   "exclude": ["node_modules", "dist", ".next"]
 }
