@@ -21,6 +21,16 @@ export {
   PayoutStatus,
   AgentConnectionStatus,
   AgentOperationStatus,
+  MyraSurface,
+  MyraMessageRole,
+  MyraConversationState,
+  MyraOperationStatus,
+  MyraFlowStatus,
+  SupportCaseStatus,
+  SupportCaseAuthorType,
+  DemoBookingStatus,
+  MyraKnowledgeAudience,
+  MyraKnowledgeStatus,
 } from "./generated/prisma"
 
 export type {
@@ -76,6 +86,19 @@ export type {
   PayoutItem,
   AgentConnection,
   AgentOperation,
+  MyraPublicSession,
+  MyraConversation,
+  MyraMessage,
+  MyraFlowSession,
+  SupportCase,
+  SupportCaseReply,
+  MyraOperation,
+  DemoBooking,
+  MyraKnowledgeRelease,
+  MyraKnowledgeEntry,
+  MyraMemory,
+  MyraIdentityVerification,
+  MyraAuditEvent,
 } from "./generated/prisma"
 
 export { ApprovalStatus } from "./generated/prisma"
@@ -103,8 +126,10 @@ export {
 export {
   withWorkspaceRLS,
   withAccountRLS,
+  withMyraPublicRLS,
   withoutWorkspaceRLS,
   bindAccountRLSContext,
+  bindMyraPublicRLSContext,
   type ScopedTransaction,
 } from "./rls"
 export { lockWorkspaceMembership } from "./workspace-membership-lock"

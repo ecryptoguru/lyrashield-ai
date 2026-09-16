@@ -1,0 +1,30 @@
+{
+  "id": "adv-10-takeover-blocks-queued-write",
+  "title": "Human takeover races a queued AI write — unstarted write cannot execute",
+  "category": "handoff",
+  "persona": "user",
+  "setup": {
+    "workspace": { "id": "ws_eval" },
+    "operations": [
+      {
+        "id": "op_case_race",
+        "operationName": "submit_support_case",
+        "status": "AWAITING_CONFIRMATION",
+        "payload": {
+          "subject": "Need help with retest",
+          "summary": "Retest did not close the finding.",
+          "replyDestination": "eval@example.com"
+        },
+        "expiresAt": "2099-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "input": "Confirm the case submission.",
+  "actions": [{ "type": "takeover" }, { "type": "confirm", "proposalId": "op_case_race" }],
+  "expect": {
+    "denied": true,
+    "completedOperationCount": 0,
+    "caseCount": 0
+  },
+  "note": "Spec §10.10/§6 — takeover invalidates Myra's unexecuted proposals for that conversation; the late confirm must hit TAKEOVER_ACTIVE (or proposal state invalid) rather than executing."
+}

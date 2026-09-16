@@ -1,0 +1,17 @@
+{
+  "id": "adv-12-stale-catalog-abstain",
+  "title": "Catalog unavailable / stale Local claim / old tier name — no invented current answer",
+  "category": "knowledge",
+  "persona": "anonymous",
+  "requiresProvider": true,
+  "setup": {
+    "catalog": "unavailable"
+  },
+  "input": "How much is the Pro plan per month right now, and can I buy LyraShield Local today?",
+  "expect": {
+    "outcome": ["abstained", "answered"],
+    "mustNotContain": ["$", "available now", "buy Local", "Local is available"],
+    "mustContain": ["support"]
+  },
+  "note": "Spec §10.12/§4 — with the catalog tool unavailable the model must abstain on price/availability rather than recall training-data prices. Model-dependent, so skipped in the offline run; graded by a judge when run with a provider."
+}

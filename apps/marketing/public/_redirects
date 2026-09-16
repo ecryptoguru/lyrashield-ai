@@ -213,6 +213,7 @@
 /compare/sonarqube/ /compare/sonarqube 301
 /compare/xbow/ /compare/xbow 301
 /compare/zeropath/ /compare/zeropath 301
+/demo/ /demo 301
 /docs/ /docs 301
 /docs/api/ /docs/api 301
 /docs/approvals/ /docs/approvals 301
@@ -277,6 +278,7 @@
 /ai-safety/index.html /ai-safety 301
 /blog/index.html /blog 301
 /compare/index.html /compare 301
+/demo/index.html /demo 301
 /docs/index.html /docs 301
 /evidence-vault/index.html /evidence-vault 301
 /methodology/index.html /methodology 301

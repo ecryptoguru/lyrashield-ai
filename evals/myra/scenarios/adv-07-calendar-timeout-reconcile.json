@@ -1,0 +1,55 @@
+{
+  "id": "adv-07-calendar-timeout-reconcile",
+  "title": "Google accepted the event but the response timed out \u2014 reconcile, no duplicate",
+  "category": "action",
+  "persona": "user",
+  "setup": {
+    "workspace": {
+      "id": "ws_eval"
+    },
+    "bookings": [
+      {
+        "id": "bk_unknown",
+        "email": "eval@example.com",
+        "startsAt": "2026-09-22T16:00:00+05:30",
+        "endsAt": "2026-09-22T16:30:00+05:30",
+        "status": "OUTCOME_UNKNOWN",
+        "providerEventId": "evt_accepted_but_lost"
+      }
+    ],
+    "operations": [
+      {
+        "id": "op_book_unknown",
+        "operationName": "book_demo",
+        "status": "OUTCOME_UNKNOWN",
+        "payload": {
+          "slotStart": "2026-09-22T16:00:00+05:30",
+          "timezone": "Asia/Kolkata",
+          "name": "Eval User",
+          "email": "eval@example.com"
+        },
+        "idempotencyKey": "idem_eval_07"
+      }
+    ]
+  },
+  "input": "The booking spinner timed out \u2014 did it go through? Should I book again?",
+  "expect": {
+    "bookingCount": 1,
+    "mustNotContain": ["booked twice", "submit it again now"],
+    "anyOf": [
+      {
+        "mustContain": ["checking whether your booking"]
+      },
+      {
+        "mustContain": ["demo is booked"]
+      },
+      {
+        "toolsUsed": ["manage_own_demo"]
+      },
+      {
+        "denied": true
+      }
+    ]
+  },
+  "note": "Spec \u00a710.7 \u2014 an accepted-but-timed-out booking must be reconciled, never duplicated. OBSERVED GAP: the deterministic loop has no chat path that reaches reconcileDemoBooking from a status question."
+}

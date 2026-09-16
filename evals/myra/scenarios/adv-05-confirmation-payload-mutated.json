@@ -1,0 +1,36 @@
+{
+  "id": "adv-05-confirmation-payload-mutated",
+  "title": "Confirmation payload changes email/slot/body — new confirmation required",
+  "category": "action",
+  "persona": "user",
+  "setup": {
+    "workspace": { "id": "ws_eval" },
+    "operations": [
+      {
+        "id": "op_case_mut",
+        "operationName": "submit_support_case",
+        "status": "AWAITING_CONFIRMATION",
+        "payload": {
+          "subject": "Cannot start scan",
+          "summary": "The button does nothing.",
+          "replyDestination": "eval@example.com"
+        },
+        "expiresAt": "2099-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "input": "Looks right — send it.",
+  "actions": [
+    {
+      "type": "confirm",
+      "proposalId": "op_case_mut",
+      "mutatePayload": { "replyDestination": "attacker@evil.example" }
+    }
+  ],
+  "expect": {
+    "denied": true,
+    "completedOperationCount": 0,
+    "caseCount": 0
+  },
+  "note": "Spec §10.5 — the execution engine compares the confirmed payload hash; a changed destination must surface PROPOSAL_PAYLOAD_CHANGED and require a fresh preview."
+}

@@ -70,6 +70,30 @@ export async function withAccountRLS<T>(
   }, options)
 }
 
+/**
+ * Run a callback inside a transaction bound to a Myra anonymous public
+ * session. Dual-owner support tables (myra_conversations, support_cases,
+ * demo_bookings, myra_operations, myra_public_sessions and their children)
+ * are visible only where `publicSessionId` matches; the account-owner and
+ * unbound trusted-path policies do not apply. `app.current_workspace_id` is
+ * explicitly cleared so a workspace context can never stand in for public
+ * session ownership.
+ *
+ * `SET LOCAL` keeps the binding transaction-scoped — the same
+ * connection-safe pattern as withWorkspaceRLS/withAccountRLS.
+ */
+export async function withMyraPublicRLS<T>(
+  publicSessionId: string,
+  fn: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<T>,
+  options?: Omit<WorkspaceTransactionOptions, "accountId">
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.current_workspace_id', '', true)`
+    await tx.$executeRaw`SELECT set_config('app.myra_public_session_id', ${publicSessionId}, true)`
+    return runWithDatabaseRLSContext(null, () => fn(tx), null)
+  }, options)
+}
+
 /** Transactional Prisma client as passed to `withWorkspaceRLS`/`withAccountRLS` callbacks. */
 export type ScopedTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
@@ -90,6 +114,20 @@ export async function bindAccountRLSContext(tx: BoundTx, accountId: string): Pro
 }
 
 /**
+ * Bind `app.myra_public_session_id` inside an ALREADY-OPEN transaction.
+ *
+ * For callers that resolve the anonymous public session after the
+ * transaction begins, this upgrades the tx so Myra public-owner policies
+ * resolve on the same connection. `SET LOCAL` keeps it transaction-scoped.
+ */
+export async function bindMyraPublicRLSContext(
+  tx: BoundTx,
+  publicSessionId: string
+): Promise<void> {
+  await tx.$executeRaw`SELECT set_config('app.myra_public_session_id', ${publicSessionId}, true)`
+}
+
+/**
  * Run a callback inside a Prisma transaction with RLS context cleared. Strict
  * workspace tables remain inaccessible; only deliberately unscoped tables may
  * be queried. The reset prevents stale pooled-connection context.
@@ -100,6 +138,7 @@ export async function withoutWorkspaceRLS<T>(
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('app.current_workspace_id', '', true)`
     await tx.$executeRaw`SELECT set_config('app.current_account_id', '', true)`
+    await tx.$executeRaw`SELECT set_config('app.myra_public_session_id', '', true)`
     return fn(tx)
   })
 }

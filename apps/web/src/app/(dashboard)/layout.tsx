@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
+import { env } from "@lyrashield/config"
+import { MyraPanel } from "@/components/myra/myra-panel"
 import { V2Sidebar } from "@/components/v2-sidebar"
 import { BottomNav } from "@/components/bottom-nav"
 import { InvitationAcceptBridge } from "@/components/invitation-accept-bridge"
@@ -80,6 +82,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ? hasPermission(active.role as MemberRole, PERMISSIONS.billing.manage)
     : false
 
+  // Myra is default-off. API-key/OAuth-delegated sessions never mount it —
+  // the chat surface is for the interactive browser session only.
+  const myraDashboardEnabled =
+    env.MYRA_DASHBOARD_ENABLED === "1" && !session.apiKey && !session.oauth
+
   return (
     <div className="bg-background flex min-h-screen flex-col md:flex-row">
       <V2Sidebar
@@ -123,6 +130,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         platformAdminHref={platformAdminHref}
       />
       <InvitationAcceptBridge />
+      <MyraPanel enabled={myraDashboardEnabled} />
     </div>
   )
 }
