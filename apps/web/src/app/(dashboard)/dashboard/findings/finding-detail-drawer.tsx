@@ -1321,7 +1321,7 @@ export function FindingDetailDrawer({
                                       {retestEvidence.baseline.scanId}
                                     </Link>{" "}
                                     · manifest{" "}
-                                    <span className="font-mono">
+                                    <span className="break-all font-mono">
                                       {retestEvidence.baseline.manifestChecksum}
                                     </span>
                                   </p>
@@ -1336,7 +1336,7 @@ export function FindingDetailDrawer({
                                       {retestEvidence.retest.scanId}
                                     </Link>{" "}
                                     · manifest{" "}
-                                    <span className="font-mono">
+                                    <span className="break-all font-mono">
                                       {retestEvidence.retest.manifestChecksum}
                                     </span>
                                   </p>
@@ -1345,11 +1345,11 @@ export function FindingDetailDrawer({
                                 retestEvidence.retest?.sourceRevision ? (
                                   <p>
                                     Repository revisions: baseline{" "}
-                                    <span className="font-mono">
+                                    <span className="break-all font-mono">
                                       {retestEvidence.baseline?.sourceRevision ?? "unavailable"}
                                     </span>{" "}
                                     · retest{" "}
-                                    <span className="font-mono">
+                                    <span className="break-all font-mono">
                                       {retestEvidence.retest?.sourceRevision ?? "unavailable"}
                                     </span>
                                   </p>
@@ -1358,11 +1358,11 @@ export function FindingDetailDrawer({
                                 retestEvidence.retest?.targetUrlChecksum ? (
                                   <p>
                                     URL checksum: baseline{" "}
-                                    <span className="font-mono">
+                                    <span className="break-all font-mono">
                                       {retestEvidence.baseline?.targetUrlChecksum ?? "unavailable"}
                                     </span>{" "}
                                     · retest{" "}
-                                    <span className="font-mono">
+                                    <span className="break-all font-mono">
                                       {retestEvidence.retest?.targetUrlChecksum ?? "unavailable"}
                                     </span>
                                   </p>
@@ -1370,7 +1370,7 @@ export function FindingDetailDrawer({
                                 {retestEvidence.coverageReceiptIds.length > 0 && (
                                   <p>
                                     Coverage receipts:{" "}
-                                    <span className="font-mono">
+                                    <span className="break-all font-mono">
                                       {retestEvidence.coverageReceiptIds.join(", ")}
                                     </span>
                                   </p>

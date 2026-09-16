@@ -335,7 +335,11 @@ export function MyraPanel({
           ) : null}
         </div>
         <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-muted-foreground text-xs">Enter to send · Shift+Enter for a line</p>
+          {streaming ? (
+            <p className="text-muted-foreground text-xs">Myra is answering…</p>
+          ) : (
+            <p className="text-muted-foreground text-xs">Enter to send · Shift+Enter for a line</p>
+          )}
           <div className="flex gap-2">
             {streaming ? (
               <Button size="sm" variant="secondary" onClick={stopStream}>
@@ -343,7 +347,11 @@ export function MyraPanel({
                 Stop
               </Button>
             ) : null}
-            <Button size="sm" onClick={() => void send(input)} disabled={!input.trim()}>
+            <Button
+              size="sm"
+              onClick={() => void send(input)}
+              disabled={!input.trim() || streaming}
+            >
               <Send className="mr-1 size-3.5" aria-hidden="true" />
               Send
             </Button>

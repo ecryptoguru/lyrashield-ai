@@ -147,10 +147,18 @@ export function MyraComponentView({
             <table className="w-full text-left text-xs">
               <thead className="text-muted-foreground">
                 <tr className="border-b">
-                  <th className="py-1 pr-3 font-medium">Plan</th>
-                  <th className="py-1 pr-3 font-medium">Price</th>
-                  <th className="py-1 pr-3 font-medium">Minutes</th>
-                  <th className="py-1 font-medium">Availability</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">
+                    Plan
+                  </th>
+                  <th scope="col" className="py-1 pr-3 font-medium">
+                    Price
+                  </th>
+                  <th scope="col" className="py-1 pr-3 font-medium">
+                    Minutes
+                  </th>
+                  <th scope="col" className="py-1 font-medium">
+                    Availability
+                  </th>
                 </tr>
               </thead>
               <tbody>

@@ -460,10 +460,12 @@ export function useMyraPanel(
       }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
+        // A turn is in flight — Enter must not fire a second send.
+        if (streaming) return
         void send(input)
       }
     },
-    [input, pickSuggestion, send, suggestActive, suggestions]
+    [input, pickSuggestion, send, streaming, suggestActive, suggestions]
   )
 
   const componentContext: MyraComponentContext = {

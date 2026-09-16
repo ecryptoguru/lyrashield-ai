@@ -64,6 +64,37 @@ describe("MyraComponentView", () => {
     expect(html).toContain('href="/dashboard/billing"')
     expect(html).not.toContain("evil.example")
   })
+
+  it("scopes plan comparison headers as column headers", () => {
+    const html = renderToStaticMarkup(
+      <MyraComponentView
+        component={{
+          type: "plan_comparison",
+          checkedAt: "2026-09-16",
+          plans: [
+            {
+              id: "starter",
+              name: "Starter",
+              monthlyUsd: 29,
+              monthlyInr: null,
+              agentMinutes: 300,
+              targetCaps: 3,
+              memberSeats: 1,
+              deepAllowed: false,
+              selfServe: true,
+              availability: "available",
+            },
+          ],
+        }}
+        context={context}
+      />
+    )
+    expect((html.match(/<th[^>]*scope="col"/g) ?? []).length).toBe(4)
+    expect(html).toContain("Plan")
+    expect(html).toContain("Price")
+    expect(html).toContain("Minutes")
+    expect(html).toContain("Availability")
+  })
 })
 
 describe("ProposalActions", () => {

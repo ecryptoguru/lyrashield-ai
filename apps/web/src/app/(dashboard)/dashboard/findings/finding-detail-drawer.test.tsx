@@ -27,4 +27,10 @@ describe("finding detail drawer enum labels", () => {
     expect(source).toContain("getVerificationStatusLabel(receipt.status)")
     expect(source).toContain("humanizeToken(receipt.method)")
   })
+
+  it("lets long checksums and receipt ids wrap instead of overflowing", () => {
+    expect((source.match(/className="break-all font-mono"/g) ?? []).length).toBe(7)
+    // Only the short scanner-source label keeps plain mono styling.
+    expect((source.match(/className="font-mono"/g) ?? []).length).toBe(1)
+  })
 })
