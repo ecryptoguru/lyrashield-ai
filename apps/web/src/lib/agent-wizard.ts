@@ -10,7 +10,7 @@ import { getAgent, renderConfig } from "@lyrashield/agent-registry"
  * fallback for the guided-manual agents that have no config file.
  */
 
-export type WizardStepKind = "install" | "config" | "api-key" | "rules" | "hooks" | "verify"
+type WizardStepKind = "install" | "config" | "api-key" | "rules" | "hooks" | "verify"
 
 export interface WizardStep {
   id: string

@@ -1,6 +1,6 @@
 import type { FindingSeverity, FindingStatus, TargetEnvironment } from "@lyrashield/types"
 
-export type FindingPriorityBand = "urgent" | "high" | "normal" | "low"
+type FindingPriorityBand = "urgent" | "high" | "normal" | "low"
 
 export interface FindingPriorityResult {
   score: number

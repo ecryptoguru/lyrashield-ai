@@ -7,7 +7,7 @@ import {
 } from "@lyrashield/db"
 import { VIBE_SECURITY_CONTROLS } from "@lyrashield/security"
 
-export type PublicArtifactManifestItem = {
+type PublicArtifactManifestItem = {
   id: string
   filename: string
   mediaType: string
@@ -36,9 +36,7 @@ const CONTROL_TITLE_BY_ID: Record<string, string> = Object.fromEntries(
   VIBE_SECURITY_CONTROLS.map((control) => [`vibe-${control.rank}`, control.title])
 )
 
-export function toPublicArtifactManifestItem(
-  item: ArtifactManifestItem
-): PublicArtifactManifestItem {
+function toPublicArtifactManifestItem(item: ArtifactManifestItem): PublicArtifactManifestItem {
   return {
     id: item.id,
     filename: item.filename,

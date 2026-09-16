@@ -26,7 +26,7 @@ import {
   type CloudPlanId,
 } from "@lyrashield/billing"
 
-export interface ReplenishAllowanceResult {
+interface ReplenishAllowanceResult {
   /** Accounts evaluated. */
   evaluated: number
   /** New grants issued this run. */

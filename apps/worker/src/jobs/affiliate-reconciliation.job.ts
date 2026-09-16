@@ -1,13 +1,11 @@
 import { reconciliationJob, type ReconciliationResult } from "@lyrashield/affiliate"
 import { logger } from "@lyrashield/logger"
 
-export const AFFILIATE_RECONCILIATION_QUEUE = "affiliate-reconciliation"
-
-export interface AffiliateReconciliationJobData {
+interface AffiliateReconciliationJobData {
   scheduledAt: string
 }
 
-export interface AffiliateReconciliationJobResult {
+interface AffiliateReconciliationJobResult {
   conversionsChecked: number
   payoutsChecked: number
   driftCount: number

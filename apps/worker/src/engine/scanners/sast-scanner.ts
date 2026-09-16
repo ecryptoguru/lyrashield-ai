@@ -10,7 +10,7 @@ import {
   type ScannerDiscovery,
 } from "../scanner-coverage"
 
-export interface SastScanConfig {
+interface SastScanConfig {
   repoPath: string
   workspaceDir: string
   signal?: AbortSignal

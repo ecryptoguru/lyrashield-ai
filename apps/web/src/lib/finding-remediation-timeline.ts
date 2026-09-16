@@ -13,7 +13,7 @@
  * module never truncates them.
  */
 
-export type RemediationTimelineEventKind =
+type RemediationTimelineEventKind =
   | "PROPOSED"
   | "PR_OPENED"
   | "PR_MERGED"
@@ -30,30 +30,6 @@ export interface RemediationTimelineEvent {
   at: string
   detail?: string
   tone: "neutral" | "primary" | "success" | "warning" | "destructive"
-}
-
-export interface TimelineFixProposal {
-  id: string
-  status: string
-  summary: string
-  createdAt: string
-  pullRequests: {
-    id: string
-    status: string
-    prNumber: number | null
-    prUrl: string | null
-    createdAt: string
-    mergedAt: string | null
-    closedAt: string | null
-  }[]
-}
-
-export interface TimelineRetest {
-  id: string
-  status: string
-  resultAfter: string | null
-  scanId: string
-  createdAt: string
 }
 
 export interface TimelineFinding {
@@ -199,7 +175,7 @@ export interface TimelineFixProposalInput {
   pullRequests: TimelinePullRequestInput[]
 }
 
-export interface TimelinePullRequestInput {
+interface TimelinePullRequestInput {
   id: string
   status: string
   prNumber: number | null

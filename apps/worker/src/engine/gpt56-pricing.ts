@@ -8,7 +8,7 @@ export const GPT_56_PRICING_USD_PER_MILLION = {
   "gpt-5.6-luna": { input: 0.2, cachedInput: 0.02, cacheWriteInput: 0.25, output: 1.2 },
 } as const
 
-export type Gpt56UsageBuckets = {
+type Gpt56UsageBuckets = {
   standardInputTokens: number | null
   standardCachedInputTokens: number | null
   standardCacheWriteInputTokens: number | null

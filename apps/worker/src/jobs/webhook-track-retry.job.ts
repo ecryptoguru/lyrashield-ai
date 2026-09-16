@@ -21,9 +21,9 @@ import type { Job } from "bullmq"
 import { enqueueWebhookTrackRetry, type WebhookTrackRetryJobData } from "@lyrashield/integrations"
 
 /** Fixed delay before the next attempt; the DB row owns the attempt budget. */
-export const WEBHOOK_TRACK_RETRY_DELAY_MS = 60_000
+const WEBHOOK_TRACK_RETRY_DELAY_MS = 60_000
 
-export interface WebhookTrackRetryResult {
+interface WebhookTrackRetryResult {
   outcome: string
   reEnqueued: boolean
 }

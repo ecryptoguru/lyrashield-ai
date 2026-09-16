@@ -27,7 +27,7 @@ const IGNORED_DIRECTORIES = new Set([
 ])
 const IMMUTABLE_REVISION = /(?:revision|commit_hash)\s*=\s*["'][a-f0-9]{7,64}["']/i
 
-export interface MlSupplyChainScanConfig {
+interface MlSupplyChainScanConfig {
   repoPath: string
   coverageIssues?: ScannerCoverageIssue[]
   signal?: AbortSignal

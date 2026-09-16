@@ -15,13 +15,11 @@ import { getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { downgradeToFree } from "@lyrashield/billing"
 
-export const BILLING_DOWNGRADE_QUEUE = "billing-downgrade"
-
-export interface BillingDowngradeJobData {
+interface BillingDowngradeJobData {
   scheduledAt: string
 }
 
-export interface BillingDowngradeJobResult {
+interface BillingDowngradeJobResult {
   downgraded: number
   errors: number
 }

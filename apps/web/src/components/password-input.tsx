@@ -4,7 +4,7 @@ import { forwardRef, useId, useState } from "react"
 import { Eye, EyeOff } from "lucide-react"
 import { Input, cn } from "@lyrashield/ui"
 
-export type PasswordInputProps = React.InputHTMLAttributes<HTMLInputElement>
+type PasswordInputProps = React.InputHTMLAttributes<HTMLInputElement>
 
 export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
   ({ className, id: idProp, ...props }, ref) => {

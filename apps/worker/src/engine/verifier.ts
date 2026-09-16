@@ -1,14 +1,14 @@
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "./output-parser"
 
-export interface VerificationResult {
+interface VerificationResult {
   verified: boolean
   confidence: "high" | "medium" | "low"
   reason: string
   verificationMethod: string
 }
 
-export interface VerifiedVulnerability extends EngineVulnerability {
+interface VerifiedVulnerability extends EngineVulnerability {
   verification: VerificationResult
 }
 

@@ -14,14 +14,14 @@ import { evaluateBillingAdmission, resolveProviderId } from "@lyrashield/billing
 
 type EnvLike = Record<string, string | undefined>
 
-export interface ReadinessCheck {
+interface ReadinessCheck {
   name: string
   ok: boolean
   detail: string
   missing?: string[]
 }
 
-export interface ReadinessReport {
+interface ReadinessReport {
   ok: boolean
   checks: ReadinessCheck[]
   /** Non-fatal observations the founder should still read. */
@@ -179,7 +179,7 @@ export function checkCheckoutReadiness(env: EnvLike): ReadinessReport {
   return { ok: checks.every((c) => c.ok), checks, notes }
 }
 
-export function formatReadinessReport(report: ReadinessReport): string {
+function formatReadinessReport(report: ReadinessReport): string {
   const lines = ["Checkout readiness", "─".repeat(48)]
   for (const check of report.checks) {
     lines.push(`[${check.ok ? "OK" : "FAIL"}] ${check.name} — ${check.detail}`)

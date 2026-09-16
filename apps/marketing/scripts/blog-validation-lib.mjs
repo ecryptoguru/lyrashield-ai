@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { resolve, sep } from "node:path"
 
-export const STABLE_TAGS = new Set([
+const STABLE_TAGS = new Set([
   "vibe-coding-security",
   "access-control",
   "web-security",
@@ -44,7 +44,7 @@ const ALL_FREE_TOOL_ROUTES = Object.freeze([
 
 const FREE_CHECKLIST_ROUTE = Object.freeze(["/tools/ai-app-security-checklist"])
 
-export const CTA_LINK_REQUIREMENTS = Object.freeze({
+const CTA_LINK_REQUIREMENTS = Object.freeze({
   "Links to all clusters and tools": ALL_FREE_TOOL_ROUTES,
   "Pillar + RLS Checker": Object.freeze(["/tools/supabase-rls-checker"]),
   "Pillar + Launch Checklist": FREE_CHECKLIST_ROUTE,
@@ -454,7 +454,7 @@ export function validateProgramRoot(program) {
   return errors
 }
 
-export function isCompatibleRelatedEntry(programEntry, candidate) {
+function isCompatibleRelatedEntry(programEntry, candidate) {
   if (!programEntry || !candidate || !Number.isInteger(candidate.index) || candidate.index <= 1) {
     return false
   }
@@ -891,7 +891,7 @@ export function validateImageLibrary(catalog, manifests, root, options = {}) {
   return [...new Set(errors)]
 }
 
-export function redactUrl(rawUrl) {
+function redactUrl(rawUrl) {
   try {
     const url = new URL(rawUrl)
     url.search = ""

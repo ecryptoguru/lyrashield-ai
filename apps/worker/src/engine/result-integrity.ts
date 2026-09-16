@@ -932,12 +932,3 @@ export async function failTerminalRetestsForScan(scanId: string): Promise<void> 
     data: { status: "error", resultAfter: "The retest scan did not complete successfully." },
   })
 }
-
-export const resultIntegrity = {
-  buildCoverageReceipts,
-  persistResultManifest,
-  persistDetectionReceipt,
-  markRetestsRunning,
-  completeRetestsForScan,
-  failTerminalRetestsForScan,
-}

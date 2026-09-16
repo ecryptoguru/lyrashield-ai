@@ -23,7 +23,7 @@ const PROPOSAL_STATUS_BADGE: Record<string, BadgeVariant> = {
   rejected: "danger",
 }
 
-export interface FixProposalItem {
+interface FixProposalItem {
   id: string
   kind: string
   summary: string

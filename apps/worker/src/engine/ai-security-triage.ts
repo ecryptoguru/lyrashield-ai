@@ -3,7 +3,7 @@ import type { AISecuritySignal } from "@lyrashield/security/ai-security"
 const SHA256 = /^[a-f0-9]{64}$/i
 const GIT_SHA = /^[a-f0-9]{40}$/i
 
-export type EngineTriageInput = {
+type EngineTriageInput = {
   schemaVersion: "ai-security-triage-input/1.0"
   commitSha: string
   detectorVersion: string

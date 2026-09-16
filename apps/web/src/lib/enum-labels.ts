@@ -1,6 +1,6 @@
 import { MODE_LABELS, SEVERITY_LABELS } from "./labels"
 
-export const SCAN_GOAL_LABELS: Record<string, string> = {
+const SCAN_GOAL_LABELS: Record<string, string> = {
   CHECK_PR: "Check PR",
   TEST_APP: "Code review",
   LAUNCH_REVIEW: "Release check",
@@ -12,16 +12,16 @@ export const SCAN_GOAL_LABELS: Record<string, string> = {
   SECURITY_REVIEW: "Security review",
 }
 
-export const SCAN_MODE_LABELS: Readonly<Record<string, string>> = MODE_LABELS
+const SCAN_MODE_LABELS: Readonly<Record<string, string>> = MODE_LABELS
 
-export const SCAN_TRIGGER_LABELS: Record<string, string> = {
+const SCAN_TRIGGER_LABELS: Record<string, string> = {
   manual: "Manual",
   retest: "Retest",
   schedule: "Schedule",
   webhook: "Webhook",
 }
 
-export const FINDING_SEVERITY_LABELS: Readonly<Record<string, string>> = SEVERITY_LABELS
+const FINDING_SEVERITY_LABELS: Readonly<Record<string, string>> = SEVERITY_LABELS
 
 export const FINDING_STATUS_LABELS: Record<string, string> = {
   OPEN: "Open",
@@ -35,21 +35,21 @@ export const FINDING_STATUS_LABELS: Record<string, string> = {
   DUPLICATE: "Duplicate",
 }
 
-export const VERIFICATION_STATUS_LABELS: Record<string, string> = {
+const VERIFICATION_STATUS_LABELS: Record<string, string> = {
   DETECTED: "Detected",
   VALIDATED: "Validated",
   VERIFIED: "Independently verified",
   INCONCLUSIVE: "Inconclusive",
 }
 
-export const TARGET_TYPE_LABELS: Record<string, string> = {
+const TARGET_TYPE_LABELS: Record<string, string> = {
   REPO: "Repository",
   WEB_APP: "Web app",
   API: "API",
   IAC: "IaC",
 }
 
-export const SCAN_STATUS_LABELS: Record<string, string> = {
+const SCAN_STATUS_LABELS: Record<string, string> = {
   QUEUED: "Queued",
   PREFLIGHT: "Checking setup",
   RUNNING: "Scanning",
@@ -67,16 +67,16 @@ export const SCAN_STATUS_LABELS: Record<string, string> = {
 // PRODUCTION in the Prisma schema and @lyrashield/types). "EnvironmentKind"
 // and the TARGET_ENVIRONMENT_LABELS alias are kept so callers using either
 // name resolve.
-export const ENVIRONMENT_KIND_LABELS: Record<string, string> = {
+const ENVIRONMENT_KIND_LABELS: Record<string, string> = {
   LOCAL: "Local",
   PREVIEW: "Preview",
   STAGING: "Staging",
   PRODUCTION: "Production",
 }
 
-export const TARGET_ENVIRONMENT_LABELS: Record<string, string> = ENVIRONMENT_KIND_LABELS
+const TARGET_ENVIRONMENT_LABELS: Record<string, string> = ENVIRONMENT_KIND_LABELS
 
-export const WORKSPACE_PLAN_LABELS: Record<string, string> = {
+const WORKSPACE_PLAN_LABELS: Record<string, string> = {
   FREE: "Free",
   TRIAL: "Trial",
   STARTER: "Starter",

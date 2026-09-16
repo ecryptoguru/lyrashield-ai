@@ -9,7 +9,7 @@ import {
 } from "@lyrashield/security"
 import { logger } from "@lyrashield/logger"
 
-export type UrlBehaviorProbeResult = {
+type UrlBehaviorProbeResult = {
   signals: SurfaceSignal[]
   subjects: SurfaceSubject[]
   issues: SurfaceCollectionIssue[]

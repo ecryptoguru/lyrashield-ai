@@ -15,14 +15,14 @@ const ACTIVE_SCAN_STATUSES: ScanStatus[] = ["QUEUED", "PREFLIGHT", "RUNNING", "V
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const CUID_RUN_ID = /^c[a-z0-9]{24}$/
 
-export interface StaleContainer {
+interface StaleContainer {
   id: string
   scanId: string
   createdAt: number
   running: boolean
 }
 
-export interface StaleDirectory {
+interface StaleDirectory {
   path: string
   scanId: string
   modifiedAt: number
@@ -36,7 +36,7 @@ export interface StaleResourceReaperDependencies {
   removeDirectory: (path: string) => Promise<void>
 }
 
-export interface StaleResourceReaperResult {
+interface StaleResourceReaperResult {
   containersRemoved: number
   directoriesRemoved: number
   skippedActive: number

@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 /** Lenient date validator: accepts ISO 8601 or any string. */
-export const dateString = z.string().datetime().or(z.string())
+const dateString = z.string().datetime().or(z.string())
 
 /** Build a Zod schema for the standard paginated envelope. */
 export function paginatedResponseSchema<T>(itemSchema: z.ZodType<T>) {
@@ -31,7 +31,7 @@ export const onboardingDataSchema = z
   })
   .passthrough()
 
-export const githubRepoSchema = z
+const githubRepoSchema = z
   .object({
     id: z.number(),
     fullName: z.string(),
@@ -71,22 +71,3 @@ export const targetSchema = z
     createdAt: dateString,
   })
   .passthrough()
-
-export const createAiAssuranceEvidenceSchema = z.object({
-  workspaceId: z.string(),
-  targetId: z.string(),
-  controlId: z.string(),
-  attestation: z.string().min(1).max(5000),
-  expiresAt: z.string().datetime().nullable().default(null),
-})
-
-export const reviseAiAssuranceEvidenceSchema = z.object({
-  workspaceId: z.string(),
-  attestation: z.string().min(1).max(5000),
-  expiresAt: z.string().datetime().nullable().default(null),
-})
-
-export const reviewAiAssuranceEvidenceSchema = z.object({
-  workspaceId: z.string(),
-  status: z.enum(["ACCEPTED", "REJECTED"]),
-})

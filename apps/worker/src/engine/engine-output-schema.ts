@@ -155,18 +155,15 @@ export const engineRunRecordSchema = z
   })
   .strip()
 
-export type EngineVulnerabilitySchema = z.infer<typeof engineVulnerabilitySchema>
-export type EngineRunRecordSchema = z.infer<typeof engineRunRecordSchema>
-
 /**
  * The run.json major version this worker's schema is written against. The
  * engine emits RUN_RECORD_SCHEMA_VERSION (currently "1.0"); MAJOR bumps mean
  * the cross-repo contract moved (field removed/renamed/re-meaned), MINOR bumps
  * are additive.
  */
-export const EXPECTED_RUN_RECORD_SCHEMA_MAJOR = 1
+const EXPECTED_RUN_RECORD_SCHEMA_MAJOR = 1
 
-export interface RunRecordSchemaVersionCheck {
+interface RunRecordSchemaVersionCheck {
   level: "warn" | "error"
   message: string
 }

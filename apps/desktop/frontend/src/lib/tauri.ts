@@ -7,7 +7,6 @@ import type {
   Finding,
   LicenseStatus,
   RuntimeStatus,
-  ScanDetail,
   ScanEvent,
   ScanMode,
   ScanSummary,
@@ -22,9 +21,6 @@ import type {
 // License
 export async function activateLicense(licenseKey: string, apiUrl?: string): Promise<LicenseStatus> {
   return invoke("activate_license", { licenseKey, apiUrl: apiUrl ?? null })
-}
-export async function verifyStoredLicense(): Promise<LicenseStatus> {
-  return invoke("verify_stored_license")
 }
 export async function startupRevalidateLicense(): Promise<LicenseStatus> {
   return invoke("startup_revalidate_license")
@@ -51,9 +47,6 @@ export async function logoutChatGpt(): Promise<void> {
 export async function saveAzureConfig(apiKey: string, endpoint: string): Promise<void> {
   return invoke("save_azure_config", { apiKey, endpoint })
 }
-export async function clearAzureConfig(): Promise<void> {
-  return invoke("clear_azure_config")
-}
 export async function getByokMetadata(): Promise<AzureMetadata> {
   return invoke("get_byok_metadata")
 }
@@ -75,9 +68,6 @@ export async function cancelScan(scanId: string): Promise<void> {
 }
 export async function listScans(): Promise<ScanSummary[]> {
   return invoke("list_scans")
-}
-export async function getScanDetail(scanId: string): Promise<ScanDetail> {
-  return invoke("get_scan_detail", { scanId })
 }
 export async function getScanEvents(scanId: string, fromSeq?: number): Promise<SequencedEvent[]> {
   return invoke("get_scan_events", { scanId, fromSeq: fromSeq ?? 0 })
@@ -139,12 +129,6 @@ export async function syncFindings(
 }
 export async function getSyncState(): Promise<SyncConnection | null> {
   return invoke("get_sync_state")
-}
-export async function fetchSyncCursor(
-  apiUrl: string | undefined,
-  workspaceId: string
-): Promise<SyncConnection> {
-  return invoke("fetch_sync_cursor", { apiUrl: apiUrl ?? null, workspaceId })
 }
 export async function disconnectSync(): Promise<void> {
   return invoke("disconnect_sync")

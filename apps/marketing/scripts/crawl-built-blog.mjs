@@ -81,7 +81,7 @@ export function extractSitemapLocations(xml) {
     .filter(Boolean)
 }
 
-export function extractRssLinks(xml) {
+function extractRssLinks(xml) {
   return [
     ...xml.matchAll(/<item\b[^>]*>[\s\S]*?<link\b[^>]*>([\s\S]*?)<\/link\s*>[\s\S]*?<\/item\s*>/gi),
   ]

@@ -4,7 +4,7 @@ import { getScanQueue, isScanWorkerAvailable } from "@lyrashield/integrations"
 import { computePaidAccountMetrics } from "./growth-metrics"
 
 export type PlatformHealthStatus = "healthy" | "degraded" | "unknown"
-export const ACTIVATION_MINIMUM_SAMPLE = 20
+const ACTIVATION_MINIMUM_SAMPLE = 20
 
 type ActivationRow = {
   accountsCreated: bigint
@@ -345,5 +345,3 @@ export async function getPlatformAdminOverview() {
     generatedAt: new Date().toISOString(),
   }
 }
-
-export type PlatformAdminOverview = Awaited<ReturnType<typeof getPlatformAdminOverview>>

@@ -17,9 +17,7 @@ import { env } from "@lyrashield/config"
 
 const TTL_MS = 15 * 60 * 1000 // 15 minutes — one consent interaction
 
-export const OAUTH_CONNECTION_SCOPES = ["lyrashield.read", "lyrashield.write"] as const
-
-export interface OAuthConsentStatePayload {
+interface OAuthConsentStatePayload {
   clientId: string
   scopes: string[]
   userId: string
@@ -46,7 +44,7 @@ export function createOAuthConsentState(
   return `${encoded}.${sign(encoded)}`
 }
 
-export type OAuthConsentStateResult =
+type OAuthConsentStateResult =
   | { valid: true; payload: OAuthConsentStatePayload }
   | { valid: false; reason: "malformed" | "bad_signature" | "expired" }
 

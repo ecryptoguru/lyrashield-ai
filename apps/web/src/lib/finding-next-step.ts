@@ -1,4 +1,4 @@
-export type FindingNextStep = "REPORT" | "RETEST_IN_PROGRESS" | "FIX_PROPOSAL" | "RETEST"
+type FindingNextStep = "REPORT" | "RETEST_IN_PROGRESS" | "FIX_PROPOSAL" | "RETEST"
 
 export function getFindingNextStep({
   latestRetestStatus,
@@ -12,23 +12,6 @@ export function getFindingNextStep({
     return "RETEST_IN_PROGRESS"
   }
   return hasFixProposal ? "RETEST" : "FIX_PROPOSAL"
-}
-
-export interface FindingNextActionInput {
-  latestRetestStatus?: string | null
-  hasFixProposal: boolean
-  /** Canonical finding status (OPEN, FIX_READY, PR_OPENED, FIXED, dispositions...). */
-  status?: string | null
-  /** Whether the finding carries usable fix evidence (implicated files/patch). */
-  hasFixEvidence?: boolean
-  /** Whether a durable operation for this finding is already running. */
-  operationInFlight?: boolean
-}
-
-export interface FindingAction {
-  action: FindingNextStep | "INSPECT_EVIDENCE" | "OPEN_PR" | "NONE"
-  /** Why this action (or no action) is possible. Never a claim of exploitability. */
-  reason: string
 }
 
 /**

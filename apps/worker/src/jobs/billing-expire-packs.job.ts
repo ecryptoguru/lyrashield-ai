@@ -9,13 +9,11 @@
 import { logger } from "@lyrashield/logger"
 import { expirePacks, type ExpirePacksResult } from "@lyrashield/billing"
 
-export const BILLING_EXPIRE_PACKS_QUEUE = "billing-expire-packs"
-
-export interface BillingExpirePacksJobData {
+interface BillingExpirePacksJobData {
   scheduledAt: string
 }
 
-export interface BillingExpirePacksJobResult {
+interface BillingExpirePacksJobResult {
   expired: number
 }
 

@@ -5,14 +5,14 @@ import { logger } from "@lyrashield/logger"
 import { addScanEvent } from "@lyrashield/db"
 import { checkScanUrlSafe } from "@lyrashield/security"
 
-export interface PreflightResult {
+interface PreflightResult {
   passed: boolean
   checks: PreflightCheck[]
   errorCategory?: string
   errorMessage?: string
 }
 
-export interface PreflightCheck {
+interface PreflightCheck {
   name: string
   passed: boolean
   message: string

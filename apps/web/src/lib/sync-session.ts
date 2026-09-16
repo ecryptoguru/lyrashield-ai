@@ -44,7 +44,7 @@ export function createSyncSessionToken(
   return { token: `${encodedPayload}.${sign(encodedPayload)}`, expiresAt }
 }
 
-export type VerifySyncSessionResult =
+type VerifySyncSessionResult =
   | { valid: true; licenseId: string }
   | { valid: false; reason: "malformed" | "bad_signature" | "expired" | "identity_mismatch" }
 

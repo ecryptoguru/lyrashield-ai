@@ -39,7 +39,7 @@ const FIXTURE_WAIT_MS = QUEUE_ORPHAN_GRACE_MS + 5_000
 const STOP_RECEIPT_PATH = "/run/lyrashield/worker-stop-provenance.json"
 const STOP_RECEIPT_MAX_AGE_MS = 15 * 60_000
 
-export interface QueueOrphanFixtureOptions {
+interface QueueOrphanFixtureOptions {
   environment?: string
   confirmProduction?: string
   incidentCommander?: string
@@ -129,7 +129,7 @@ export interface QueueOrphanFixtureDeps {
   now(): Date
 }
 
-export interface QueueOrphanFixtureReceipt {
+interface QueueOrphanFixtureReceipt {
   overall: "passed"
   timestamp: string
   workspaceId: string

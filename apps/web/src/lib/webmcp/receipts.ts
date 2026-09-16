@@ -1,4 +1,4 @@
-export type WebMcpReceiptStatus = "running" | "completed" | "cancelled" | "failed"
+type WebMcpReceiptStatus = "running" | "completed" | "cancelled" | "failed"
 
 export type WebMcpClassification = "read" | "ui-only" | "mutation-prepared" | "mutation-durable"
 
@@ -20,12 +20,12 @@ export interface WebMcpActivityReceipt {
   summary: string
 }
 
-export interface WebMcpReceiptStoreSnapshot {
+interface WebMcpReceiptStoreSnapshot {
   receipts: readonly WebMcpActivityReceipt[]
   latest: WebMcpActivityReceipt | null
 }
 
-export type WebMcpReceiptListener = () => void
+type WebMcpReceiptListener = () => void
 
 const MAX_SESSION_RECEIPTS = 20
 
