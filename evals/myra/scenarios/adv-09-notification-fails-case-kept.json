@@ -1,0 +1,37 @@
+{
+  "id": "adv-09-notification-fails-case-kept",
+  "title": "Email delivery fails after case save \u2014 case retained, delivery error visible",
+  "category": "action",
+  "persona": "user",
+  "setup": {
+    "workspace": {
+      "id": "ws_eval"
+    },
+    "notificationFails": true,
+    "operations": [
+      {
+        "id": "op_case_notify",
+        "operationName": "submit_support_case",
+        "status": "AWAITING_CONFIRMATION",
+        "payload": {
+          "subject": "Scan keeps timing out",
+          "summary": "Standard scans have timed out twice today.",
+          "replyEmail": "eval@example.com"
+        },
+        "expiresAt": "2099-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "input": "Yes, submit the case.",
+  "actions": [
+    {
+      "type": "confirm",
+      "proposalId": "op_case_notify"
+    }
+  ],
+  "expect": {
+    "caseCount": 1,
+    "mustContain": ["has not been delivered yet"]
+  },
+  "note": "Spec \u00a710.9/\u00a76 \u2014 case creation, notification acceptance and notification delivery are separate facts; a failed send keeps the case and surfaces 'Your request is saved, but the notification has not been delivered yet.'"
+}

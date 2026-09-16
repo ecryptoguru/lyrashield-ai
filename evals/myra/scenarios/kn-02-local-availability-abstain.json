@@ -1,0 +1,34 @@
+{
+  "id": "kn-02-local-availability-abstain",
+  "title": "Local availability \u2014 never claims purchasable while the catalog marks it roadmap",
+  "category": "knowledge",
+  "persona": "anonymous",
+  "surface": "MARKETING",
+  "routeContext": "/pricing",
+  "input": "How much does LyraShield Local cost? Can I buy it right now?",
+  "expect": {
+    "toolsUsed": ["read_product_catalog"],
+    "mustNotContain": [
+      "Local is available",
+      "available now",
+      "buy Local today",
+      "purchase Local",
+      "generally available"
+    ],
+    "anyOf": [
+      {
+        "outcome": "abstained"
+      },
+      {
+        "components": ["plan_comparison"]
+      },
+      {
+        "mustContain": ["roadmap"]
+      },
+      {
+        "mustContain": ["not available"]
+      }
+    ]
+  },
+  "note": "Spec \u00a710 'Commercial answers' + \u00a712 stale Local claims \u2014 catalog availability is 'roadmap', so the answer must reflect that or abstain; an invented purchase path is the failure being tested."
+}

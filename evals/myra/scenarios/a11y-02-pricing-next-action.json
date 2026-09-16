@@ -1,0 +1,12 @@
+{
+  "id": "a11y-02-pricing-next-action",
+  "title": "Pricing has one next action",
+  "category": "accessibility",
+  "persona": "anonymous",
+  "input": "Compare every plan and tell me what to do next.",
+  "expect": {
+    "maxCtaComponents": 1,
+    "sanitized": true
+  },
+  "surface": "MARKETING"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "action-02-book-no-identity",
+  "title": "Booking lacks identity",
+  "category": "action",
+  "persona": "anonymous",
+  "input": "Book a demo for tomorrow at 3pm.",
+  "expect": {
+    "completedOperationCount": 0,
+    "bookingCount": 0,
+    "toolsNotUsed": ["submit_support_case"]
+  },
+  "surface": "MARKETING",
+  "routeContext": "/demo"
+}

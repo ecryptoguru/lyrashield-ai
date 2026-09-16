@@ -1,0 +1,16 @@
+{
+  "id": "kn-03-stale-tier-name",
+  "title": "Stale tier name — 'Business plan' does not exist; no invented mapping or price",
+  "category": "knowledge",
+  "persona": "anonymous",
+  "surface": "MARKETING",
+  "requiresProvider": true,
+  "input": "Is the Business plan still $199 a month? I saw that on an old comparison page.",
+  "expect": {
+    "outcome": ["abstained", "answered"],
+    "toolsUsed": ["read_product_catalog"],
+    "mustNotContain": ["Business plan is", "Business plan costs", "yes, $199", "$199/month"],
+    "mustContain": ["plan"]
+  },
+  "note": "Spec §10.12/§4 — a tier that is not in the current catalog must not get an invented price or confirmation. Model-graded when run with a provider; the catalog lookup tool use is still asserted deterministically."
+}

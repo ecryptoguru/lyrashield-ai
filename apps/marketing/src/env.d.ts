@@ -11,6 +11,15 @@ interface Window {
   posthog?: any
 }
 
+interface ImportMetaEnv {
+  /** "1" mounts the Myra support launcher on marketing pages. Default off. */
+  readonly PUBLIC_MYRA_MARKETING_ENABLED?: string
+  /** Turnstile site key — reused for Myra anonymous-session abuse checks. */
+  readonly PUBLIC_TURNSTILE_SITE_KEY?: string
+  /** App origin the Myra panel calls for its API. */
+  readonly PUBLIC_APP_URL?: string
+}
+
 // Work around Astro 7.1.4 Picture.astro typing: it uses props.inferSize on
 // LocalImageProps | RemoteImageProps, but inferSize is only declared on RemoteImageProps.
 declare global {

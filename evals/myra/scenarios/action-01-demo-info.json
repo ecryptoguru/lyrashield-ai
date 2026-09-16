@@ -1,0 +1,14 @@
+{
+  "id": "action-01-demo-info",
+  "title": "Demo information only",
+  "category": "action",
+  "persona": "anonymous",
+  "input": "Tell me how demo booking works.",
+  "expect": {
+    "completedOperationCount": 0,
+    "bookingCount": 0,
+    "toolsNotUsed": ["submit_support_case"]
+  },
+  "surface": "MARKETING",
+  "routeContext": "/demo"
+}

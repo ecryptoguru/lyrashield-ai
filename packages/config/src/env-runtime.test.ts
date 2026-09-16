@@ -25,6 +25,26 @@ describe("runtime environment validation", () => {
     await expect(import("./env")).resolves.toBeDefined()
   })
 
+  it("rejects Azure generation without positive cost rates", async () => {
+    vi.stubEnv("MYRA_GENERATION_ENABLED", "1")
+    vi.stubEnv("MYRA_PROVIDER", "azure")
+    vi.stubEnv("MYRA_AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com")
+    vi.stubEnv("MYRA_AZURE_OPENAI_API_KEY", "test-key")
+    vi.stubEnv("MYRA_MODEL_FAST", "fast")
+    vi.stubEnv("MYRA_MODEL_DEEP", "deep")
+    vi.stubEnv("MYRA_COST_PER_1K_INPUT_USD", "")
+    vi.stubEnv("MYRA_COST_PER_1K_OUTPUT_USD", "")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+  })
+
+  it("rejects Azure generation without provider credentials and deployments", async () => {
+    vi.stubEnv("MYRA_GENERATION_ENABLED", "1")
+    vi.stubEnv("MYRA_PROVIDER", "azure")
+    vi.stubEnv("MYRA_COST_PER_1K_INPUT_USD", "0.001")
+    vi.stubEnv("MYRA_COST_PER_1K_OUTPUT_USD", "0.002")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+  })
+
   it("rejects a missing or expanded production platform-admin allowlist", async () => {
     vi.stubEnv("PLATFORM_ADMIN_EMAILS", "")
     await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
@@ -71,6 +91,19 @@ describe("runtime environment validation", () => {
     vi.resetModules()
     vi.stubEnv("LYRASHIELD_TARGET_RELAY_URL", "http://127.0.0.1:8080")
     await expect(import("./env")).resolves.toBeDefined()
+
+    vi.resetModules()
+    vi.stubEnv("LYRASHIELD_TARGET_RELAY_URL", "http://[::1]:8080/")
+    await expect(import("./env")).resolves.toBeDefined()
+
+    // A loopback-looking authority that is actually a remote host must fail.
+    vi.resetModules()
+    vi.stubEnv("LYRASHIELD_TARGET_RELAY_URL", "http://127.0.0.1.evil.example")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+
+    vi.resetModules()
+    vi.stubEnv("LYRASHIELD_TARGET_RELAY_URL", "http://user@127.0.0.1:8080")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
   })
 
   // VULN-I-001: secureCookies derives the session Secure flag from the

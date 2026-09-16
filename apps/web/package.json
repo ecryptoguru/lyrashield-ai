@@ -23,6 +23,7 @@
     "@lyrashield/licenses": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/mcp": "workspace:*",
+    "@lyrashield/myra": "workspace:*",
     "@lyrashield/pricing": "workspace:*",
     "@lyrashield/score": "workspace:*",
     "@lyrashield/security": "workspace:*",
