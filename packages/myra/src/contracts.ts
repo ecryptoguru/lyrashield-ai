@@ -38,12 +38,7 @@ export type MyraFlowStatus = (typeof MYRA_FLOW_STATUSES)[number]
 export const SUPPORT_CASE_STATUSES = ["NEW", "OPEN", "PENDING_USER", "RESOLVED"] as const
 export type SupportCaseStatus = (typeof SUPPORT_CASE_STATUSES)[number]
 
-export const DEMO_BOOKING_STATUSES = [
-  "HELD",
-  "CONFIRMED",
-  "CANCELED",
-  "OUTCOME_UNKNOWN",
-] as const
+export const DEMO_BOOKING_STATUSES = ["HELD", "CONFIRMED", "CANCELED", "OUTCOME_UNKNOWN"] as const
 export type DemoBookingStatus = (typeof DEMO_BOOKING_STATUSES)[number]
 
 // ─── Error codes ───────────────────────────────────────────────────────────
@@ -148,10 +143,7 @@ export interface MyraPrincipalOperator {
   accountId: string
   sessionId: string
 }
-export type MyraPrincipal =
-  | MyraPrincipalAnonymous
-  | MyraPrincipalUser
-  | MyraPrincipalOperator
+export type MyraPrincipal = MyraPrincipalAnonymous | MyraPrincipalUser | MyraPrincipalOperator
 
 // ─── Renderable components (allowlist — deterministic rendering only) ──────
 
@@ -401,9 +393,7 @@ export const suggestRequestSchema = z
   })
   .strict()
 
-export const confirmProposalRequestSchema = z
-  .object({ proposalId: z.string().max(80) })
-  .strict()
+export const confirmProposalRequestSchema = z.object({ proposalId: z.string().max(80) }).strict()
 
 export const submitCasePayloadSchema = z
   .object({
@@ -428,9 +418,7 @@ export const bookDemoPayloadSchema = z
   .strict()
 export type BookDemoPayload = z.infer<typeof bookDemoPayloadSchema>
 
-export const caseReplyRequestSchema = z
-  .object({ body: z.string().min(1).max(4000) })
-  .strict()
+export const caseReplyRequestSchema = z.object({ body: z.string().min(1).max(4000) }).strict()
 
 export const identityRequestSchema = z
   .object({
@@ -473,10 +461,8 @@ export const MYRA_COPY = {
   talkToPerson: "Talk to a person",
   caseDraft: "Review what we'll send to support.",
   caseSaved: (ref: string) => `Your request is saved as ${ref}.`,
-  caseOffline:
-    "No one is available for live chat right now. Your request is in the support queue.",
-  caseDeliveryProblem:
-    "Your request is saved, but the notification has not been delivered yet.",
+  caseOffline: "No one is available for live chat right now. Your request is in the support queue.",
+  caseDeliveryProblem: "Your request is saved, but the notification has not been delivered yet.",
   contactFallback: "You can also contact support through our support page.",
   demoConfirmed: (when: string) => `Your demo is booked for ${when}.`,
   demoMeetPending: "Your booking is confirmed. We are still preparing the Meet link.",

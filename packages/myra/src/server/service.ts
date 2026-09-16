@@ -22,11 +22,7 @@ import type { MyraDb } from "./db"
 import type { ResolvedMyraRequest } from "./context"
 import { newTraceId, runTaskLoop } from "./loop"
 import { auditEvent } from "./audit"
-import {
-  cancel as cancelOperationProposal,
-  confirm,
-  invalidateForConversation,
-} from "./operations"
+import { cancel as cancelOperationProposal, confirm, invalidateForConversation } from "./operations"
 import type { OperationContext, OperationExecutor } from "./operations"
 import {
   computeDemoSlots,
@@ -62,8 +58,7 @@ function toolContext(
     principal: ctx.principal,
     // Anonymous principals are clamped to MARKETING — a claimed DASHBOARD
     // surface must never widen a public session into app-surface starters.
-    surface:
-      ctx.principal.kind === "user" ? (surface ?? "DASHBOARD") : "MARKETING",
+    surface: ctx.principal.kind === "user" ? (surface ?? "DASHBOARD") : "MARKETING",
     conversationId,
     workspaceId: ctx.workspaceId,
     role: ctx.role,
@@ -79,10 +74,7 @@ function disabled(): MyraStreamEvent | null {
 
 // ─── Conversations ────────────────────────────────────────────────────────
 
-async function loadOwnedConversation(
-  ctx: ResolvedMyraRequest,
-  conversationId: string
-) {
+async function loadOwnedConversation(ctx: ResolvedMyraRequest, conversationId: string) {
   const conversation = await withOwnerScope(ctx.principal, (tx) =>
     tx.myraConversation.findUnique({ where: { id: conversationId } })
   )
@@ -143,8 +135,7 @@ export async function* handleMessage(
 
   let conversation
   try {
-    const clampedSurface =
-      ctx.principal.kind === "user" ? input.surface : "MARKETING"
+    const clampedSurface = ctx.principal.kind === "user" ? input.surface : "MARKETING"
     conversation = input.conversationId
       ? await loadOwnedConversation(ctx, input.conversationId)
       : await createConversation(ctx, clampedSurface, input.routeContext)
@@ -166,18 +157,14 @@ export async function* handleMessage(
     })
   )
   if (redacted > 0) {
-    await auditEvent(
-      ctx.principal.kind === "user" ? "user" : "public_session",
-      {
-        accountId: ctx.principal.kind === "user" ? ctx.principal.accountId : null,
-        publicSessionId:
-          ctx.principal.kind === "anonymous" ? ctx.principal.publicSessionId : null,
-        action: "myra.secret_screened",
-        resourceType: "conversation",
-        resourceId: conversationId,
-        metadata: { redactedCount: redacted, traceId },
-      }
-    )
+    await auditEvent(ctx.principal.kind === "user" ? "user" : "public_session", {
+      accountId: ctx.principal.kind === "user" ? ctx.principal.accountId : null,
+      publicSessionId: ctx.principal.kind === "anonymous" ? ctx.principal.publicSessionId : null,
+      action: "myra.secret_screened",
+      resourceType: "conversation",
+      resourceId: conversationId,
+      metadata: { redactedCount: redacted, traceId },
+    })
   }
 
   // Reconcile any OUTCOME_UNKNOWN booking on this conversation before
@@ -256,10 +243,7 @@ export async function confirmProposal(
   privateResult?: Record<string, unknown>
   component: MyraComponent
 }> {
-  if (
-    process.env.MYRA_WRITES_DISABLED === "1" ||
-    process.env.MYRA_WRITES_DISABLED === "true"
-  ) {
+  if (process.env.MYRA_WRITES_DISABLED === "1" || process.env.MYRA_WRITES_DISABLED === "true") {
     throw err("WRITES_DISABLED", "Actions are temporarily disabled.")
   }
   const proposal = await withOwnerScope(ctx.principal, (tx) =>
@@ -293,21 +277,16 @@ export async function confirmProposal(
         : outcome.status === "OUTCOME_UNKNOWN"
           ? "You do not need to submit it again."
           : undefined,
-    reference:
-      typeof result.reference === "string" ? result.reference : undefined,
+    reference: typeof result.reference === "string" ? result.reference : undefined,
   }
-  await auditEvent(
-    ctx.principal.kind === "user" ? "user" : "public_session",
-    {
-      accountId: ctx.principal.kind === "user" ? ctx.principal.accountId : null,
-      publicSessionId:
-        ctx.principal.kind === "anonymous" ? ctx.principal.publicSessionId : null,
-      action: `myra.operation.${outcome.status.toLowerCase()}`,
-      resourceType: "myra_operation",
-      resourceId: proposalId,
-      metadata: { operationName: proposal.operationName },
-    }
-  )
+  await auditEvent(ctx.principal.kind === "user" ? "user" : "public_session", {
+    accountId: ctx.principal.kind === "user" ? ctx.principal.accountId : null,
+    publicSessionId: ctx.principal.kind === "anonymous" ? ctx.principal.publicSessionId : null,
+    action: `myra.operation.${outcome.status.toLowerCase()}`,
+    resourceType: "myra_operation",
+    resourceId: proposalId,
+    metadata: { operationName: proposal.operationName },
+  })
   return {
     status: outcome.status,
     result: outcome.result,
@@ -320,10 +299,7 @@ export async function cancelProposal(
   ctx: ResolvedMyraRequest,
   proposalId: string
 ): Promise<{ status: string }> {
-  return cancelOperationProposal(
-    { principal: ctx.principal },
-    proposalId
-  )
+  return cancelOperationProposal({ principal: ctx.principal }, proposalId)
 }
 
 /** Type-ahead suggestions — retrieval only, never a model call. */
@@ -337,8 +313,7 @@ export async function suggest(
   const result = await runTool("instant_suggest", toolCtx, { text })
   const card = result.components?.find((c) => c.type === "instant_suggestions")
   return {
-    suggestions:
-      card?.type === "instant_suggestions" ? card.suggestions : [],
+    suggestions: card?.type === "instant_suggestions" ? card.suggestions : [],
   }
 }
 
@@ -503,25 +478,17 @@ export async function getOwnCase(ctx: ResolvedMyraRequest, idOrRef: string) {
   return result.data
 }
 
-export async function replyToOwnCase(
-  ctx: ResolvedMyraRequest,
-  caseId: string,
-  body: string
-) {
+export async function replyToOwnCase(ctx: ResolvedMyraRequest, caseId: string, body: string) {
   const screened = screenSecrets(body)
   const toolCtx = toolContext(ctx, null)
   const result = await runSendCaseReply(toolCtx, { caseId, body: screened.text })
-  await auditEvent(
-    ctx.principal.kind === "user" ? "user" : "public_session",
-    {
-      accountId: ctx.principal.kind === "user" ? ctx.principal.accountId : null,
-      publicSessionId:
-        ctx.principal.kind === "anonymous" ? ctx.principal.publicSessionId : null,
-      action: "myra.case.user_reply",
-      resourceType: "support_case",
-      resourceId: caseId,
-    }
-  )
+  await auditEvent(ctx.principal.kind === "user" ? "user" : "public_session", {
+    accountId: ctx.principal.kind === "user" ? ctx.principal.accountId : null,
+    publicSessionId: ctx.principal.kind === "anonymous" ? ctx.principal.publicSessionId : null,
+    action: "myra.case.user_reply",
+    resourceType: "support_case",
+    resourceId: caseId,
+  })
   return result.data
 }
 
@@ -566,11 +533,7 @@ export async function listOperatorCases(
   return { cases, nextCursor }
 }
 
-export async function getOperatorCase(
-  operatorId: string,
-  caseId: string,
-  db: MyraDb = prisma
-) {
+export async function getOperatorCase(operatorId: string, caseId: string, db: MyraDb = prisma) {
   const supportCase = await db.supportCase.findUnique({ where: { id: caseId } })
   if (!supportCase) throw err("NOT_FOUND", "Case not found.")
   const replies = await db.supportCaseReply.findMany({
@@ -665,11 +628,7 @@ export async function operatorReply(
  * Takeover: pause Myra on the conversation and cancel its unexecuted
  * proposals. A late AI write cannot execute after this returns.
  */
-export async function operatorTakeover(
-  operatorId: string,
-  caseId: string,
-  db: MyraDb = prisma
-) {
+export async function operatorTakeover(operatorId: string, caseId: string, db: MyraDb = prisma) {
   const supportCase = await db.supportCase.findUnique({ where: { id: caseId } })
   if (!supportCase) throw err("NOT_FOUND", "Case not found.")
   const now = new Date()
@@ -701,11 +660,7 @@ export async function operatorTakeover(
 }
 
 /** Explicit operator control to hand the conversation back to Myra. */
-export async function operatorRelease(
-  operatorId: string,
-  caseId: string,
-  db: MyraDb = prisma
-) {
+export async function operatorRelease(operatorId: string, caseId: string, db: MyraDb = prisma) {
   const supportCase = await db.supportCase.findUnique({ where: { id: caseId } })
   if (!supportCase) throw err("NOT_FOUND", "Case not found.")
   if (supportCase.conversationId) {

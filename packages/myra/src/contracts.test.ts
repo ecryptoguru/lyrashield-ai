@@ -75,7 +75,9 @@ const validComponents: Record<string, unknown> = {
   slot_picker: {
     type: "slot_picker",
     displayTimezone: "Asia/Kolkata",
-    slots: [{ id: "slot_1", startsAt: "2026-09-16T15:00:00+05:30", endsAt: "2026-09-16T15:30:00+05:30" }],
+    slots: [
+      { id: "slot_1", startsAt: "2026-09-16T15:00:00+05:30", endsAt: "2026-09-16T15:30:00+05:30" },
+    ],
   },
   action_confirmation: {
     type: "action_confirmation",
@@ -142,9 +144,35 @@ describe("component schemas", () => {
       ["plan_comparison", { type: "plan_comparison", checkedAt: "t", plans: "none" }],
       ["diagnostic_status", { type: "diagnostic_status", title: 1, checkedAt: "t", checks: [] }],
       ["task_steps", { type: "task_steps", steps: [{ id: "s", title: "t", status: "maybe" }] }],
-      ["action_confirmation", { type: "action_confirmation", proposalId: 1, title: "t", description: "d", confirmLabel: "c", expiresAt: "e" }],
-      ["guided_flow", { type: "guided_flow", flowId: "f", flowTitle: "t", stepIndex: -1, status: "ACTIVE", steps: [] }],
-      ["instant_suggestions", { type: "instant_suggestions", suggestions: [{ entryId: "e", title: "t", snippet: "s", sourceUrl: 9 }] }],
+      [
+        "action_confirmation",
+        {
+          type: "action_confirmation",
+          proposalId: 1,
+          title: "t",
+          description: "d",
+          confirmLabel: "c",
+          expiresAt: "e",
+        },
+      ],
+      [
+        "guided_flow",
+        {
+          type: "guided_flow",
+          flowId: "f",
+          flowTitle: "t",
+          stepIndex: -1,
+          status: "ACTIVE",
+          steps: [],
+        },
+      ],
+      [
+        "instant_suggestions",
+        {
+          type: "instant_suggestions",
+          suggestions: [{ entryId: "e", title: "t", snippet: "s", sourceUrl: 9 }],
+        },
+      ],
       ["memory_card", { type: "memory_card", entries: [{ key: "k" }] }],
       ["capability_line", { type: "capability_line", canSee: "all", cannotSee: [] }],
     ]
@@ -296,9 +324,17 @@ describe("stream event schemas", () => {
 
 describe("taskRecordSchema", () => {
   it("accepts valid records and all outcome codes", () => {
-    for (const outcome of ["answered", "abstained", "escalated", "action_proposed", "action_done", "error"]) {
+    for (const outcome of [
+      "answered",
+      "abstained",
+      "escalated",
+      "action_proposed",
+      "action_done",
+      "error",
+    ]) {
       expect(
-        taskRecordSchema.safeParse({ intent: "x", toolsUsed: [], outcome, unresolved: false }).success,
+        taskRecordSchema.safeParse({ intent: "x", toolsUsed: [], outcome, unresolved: false })
+          .success,
         outcome
       ).toBe(true)
     }
@@ -346,9 +382,9 @@ describe("myraErrorSchema", () => {
 
 describe("request schemas", () => {
   it("postMessageRequestSchema accepts valid input and rejects extras", () => {
-    expect(
-      postMessageRequestSchema.safeParse({ text: "hi", surface: "MARKETING" }).success
-    ).toBe(true)
+    expect(postMessageRequestSchema.safeParse({ text: "hi", surface: "MARKETING" }).success).toBe(
+      true
+    )
     expect(
       postMessageRequestSchema.safeParse({
         text: "hi",
@@ -382,9 +418,9 @@ describe("request schemas", () => {
 
   it("confirmProposalRequestSchema takes only a proposalId", () => {
     expect(confirmProposalRequestSchema.safeParse({ proposalId: "p1" }).success).toBe(true)
-    expect(
-      confirmProposalRequestSchema.safeParse({ proposalId: "p1", payload: {} }).success
-    ).toBe(false)
+    expect(confirmProposalRequestSchema.safeParse({ proposalId: "p1", payload: {} }).success).toBe(
+      false
+    )
     expect(confirmProposalRequestSchema.safeParse({}).success).toBe(false)
   })
 
@@ -418,7 +454,13 @@ describe("request schemas", () => {
     for (const bad of [
       { slotStart: "tomorrow at 3", timezone: "x", name: "n", email: "a@b.com" },
       { slotStart: "2026-09-20T15:00:00+05:30", timezone: "x", name: "n", email: "bad" },
-      { slotStart: "2026-09-20T15:00:00+05:30", timezone: "x", name: "n", email: "a@b.com", force: true },
+      {
+        slotStart: "2026-09-20T15:00:00+05:30",
+        timezone: "x",
+        name: "n",
+        email: "a@b.com",
+        force: true,
+      },
     ]) {
       expect(bookDemoPayloadSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false)
     }
@@ -454,10 +496,7 @@ describe("request schemas", () => {
       true
     )
     for (const from of ["09/20/2026", "2026-9-2", "next week", "2026-09-20T00:00:00Z"]) {
-      expect(
-        demoSlotsRequestSchema.safeParse({ timezone: "UTC", from }).success,
-        from
-      ).toBe(false)
+      expect(demoSlotsRequestSchema.safeParse({ timezone: "UTC", from }).success, from).toBe(false)
     }
   })
 
@@ -475,9 +514,7 @@ describe("request schemas", () => {
     ).toBe(false)
     expect(caseReplyRequestSchema.safeParse({ body: "more info" }).success).toBe(true)
     expect(caseReplyRequestSchema.safeParse({ body: "" }).success).toBe(false)
-    expect(
-      caseReplyRequestSchema.safeParse({ body: "x", asOperator: true }).success
-    ).toBe(false)
+    expect(caseReplyRequestSchema.safeParse({ body: "x", asOperator: true }).success).toBe(false)
   })
 })
 
@@ -531,9 +568,7 @@ describe("MYRA_COPY pins the spec'd exact strings", () => {
     expect(MYRA_COPY.caseDeliveryProblem).toBe(
       "Your request is saved, but the notification has not been delivered yet."
     )
-    expect(MYRA_COPY.contactFallback).toBe(
-      "You can also contact support through our support page."
-    )
+    expect(MYRA_COPY.contactFallback).toBe("You can also contact support through our support page.")
     expect(MYRA_COPY.demoConfirmed("Mon 3pm")).toBe("Your demo is booked for Mon 3pm.")
     expect(MYRA_COPY.demoMeetPending).toBe(
       "Your booking is confirmed. We are still preparing the Meet link."

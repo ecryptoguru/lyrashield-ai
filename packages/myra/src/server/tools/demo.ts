@@ -200,10 +200,7 @@ async function verifyAttendee(
   return { verifiedAt: verified.consumedAt }
 }
 
-export async function runBookDemo(
-  ctx: MyraToolContext,
-  input: unknown
-): Promise<MyraToolResult> {
+export async function runBookDemo(ctx: MyraToolContext, input: unknown): Promise<MyraToolResult> {
   const payload = bookDemoInput.parse(input)
   // Fail fast at proposal time — the executor re-checks regardless.
   const start = new Date(payload.slotStart)
@@ -640,7 +637,10 @@ export async function executeManageDemo(
   // Reschedule: confirm the replacement before touching the original.
   const newStart = new Date(parsed.newSlotStart!)
   const newEnd = new Date(newStart.getTime() + D.durationMinutes * 60_000)
-  if (!isOnGrid(newStart, newEnd) || newStart.getTime() < Date.now() + D.minNoticeHours * 3_600_000) {
+  if (
+    !isOnGrid(newStart, newEnd) ||
+    newStart.getTime() < Date.now() + D.minNoticeHours * 3_600_000
+  ) {
     throw new MyraServiceError("SLOT_UNAVAILABLE", MYRA_COPY.demoConflict)
   }
   const holdStart = new Date(newStart.getTime() - D.bufferMinutes * 60_000)

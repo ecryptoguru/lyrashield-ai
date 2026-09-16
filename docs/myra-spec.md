@@ -40,16 +40,16 @@ A polished chat panel is insufficient. A release must demonstrate correct answer
 
 The dedicated Developer Agent inspected ecryptoguru/lyrashield-ai at main **010d7b3a** and compared current live pages during this thread's review. Recheck changed dependencies before implementation. Source inspection is not an end-to-end production acceptance test.
 
-| Verified item | Consequence for Myra |
-| --- | --- |
-| Trial is 7 days, 60 one-time agent-minutes and 3 targets | Earlier 100-minute extraction was stale cached content. No pricing PR was opened. |
-| Trial/billing are account-owned with workspace sponsorship | Resolve effective entitlements through existing services; workspace ownership alone is not billing authority. |
-| Current tiers include Starter, Pro, Agency and contact-led Enterprise | Read current display names from the catalog; do not hardcode the old Launch Assurance tier label. |
-| Local pricing section says Launching later | Explain Local as not yet available until verified release state changes. |
-| /support publishes <support@lyrashieldai.com> and <security@lyrashieldai.com> | Preserve these routes. Mailto presence does not prove staffing or email delivery. |
-| Contact Sales currently links to /support; no booking system was found | Add a dedicated sales booking route without replacing support. |
-| No support-case/conversation system or web support model-call path exists | New schema and provider configuration are genuine work, not a widget-only change. |
-| Existing Ticket model mirrors finding-linked external issues | Do not repurpose it as customer support. |
+| Verified item                                                                 | Consequence for Myra                                                                                          |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Trial is 7 days, 60 one-time agent-minutes and 3 targets                      | Earlier 100-minute extraction was stale cached content. No pricing PR was opened.                             |
+| Trial/billing are account-owned with workspace sponsorship                    | Resolve effective entitlements through existing services; workspace ownership alone is not billing authority. |
+| Current tiers include Starter, Pro, Agency and contact-led Enterprise         | Read current display names from the catalog; do not hardcode the old Launch Assurance tier label.             |
+| Local pricing section says Launching later                                    | Explain Local as not yet available until verified release state changes.                                      |
+| /support publishes <support@lyrashieldai.com> and <security@lyrashieldai.com> | Preserve these routes. Mailto presence does not prove staffing or email delivery.                             |
+| Contact Sales currently links to /support; no booking system was found        | Add a dedicated sales booking route without replacing support.                                                |
+| No support-case/conversation system or web support model-call path exists     | New schema and provider configuration are genuine work, not a widget-only change.                             |
+| Existing Ticket model mirrors finding-linked external issues                  | Do not repurpose it as customer support.                                                                      |
 
 Commercial snapshot for source reconciliation only: Starter $29/month with 210 minutes and 5 targets; Pro $99/month with 850 minutes and 15 targets; Agency $499/month with 4,500 minutes, 50 targets and 5 seats; Enterprise from $1,500/month contact-led. Current packs are $15/$35/$65. **Runtime answers must use structured current data, never this snapshot as a permanent prompt.**
 
@@ -67,14 +67,14 @@ A quiet Help launcher opens Myra. No automatic pop-open, countdown, fake online 
 
 Marketing starters: Compare plans, Try a free check, Book a demo. Dashboard starters: Help with this page, Check setup, Understand this result. Starters never limit free-form questions. Page context is an allowlisted route identifier, not scraped DOM text. Ask a focused clarifying question only when needed; do not make users repeat known permitted context.
 
-| Journey | Agent behavior | Useful completion |
-| --- | --- | --- |
-| Visitor asks which plan fits | Read current catalog, clarify one relevant requirement and show a comparison with limits and source | User selects a relevant next step without pressure |
-| Visitor wants a quick check | Explain bounded scope and link the matching free tool | Tool opens without Myra reading its inputs |
-| User cannot start a scan | Read permitted setup/entitlement status, report the actual blocker and give a valid deep link | User reaches the right control or submits a case; no scan is launched |
-| User asks about an inconclusive result | Explain the returned evidence state and its limits | User understands what is unproven; no false release approval |
-| User wants a human | Stop troubleshooting and offer the case composer immediately | A durable case ID or an honest existing-contact fallback |
-| Visitor wants a demo | Open the shared slot/confirmation flow | One confirmed booking, not an unverified promise |
+| Journey                                | Agent behavior                                                                                      | Useful completion                                                     |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Visitor asks which plan fits           | Read current catalog, clarify one relevant requirement and show a comparison with limits and source | User selects a relevant next step without pressure                    |
+| Visitor wants a quick check            | Explain bounded scope and link the matching free tool                                               | Tool opens without Myra reading its inputs                            |
+| User cannot start a scan               | Read permitted setup/entitlement status, report the actual blocker and give a valid deep link       | User reaches the right control or submits a case; no scan is launched |
+| User asks about an inconclusive result | Explain the returned evidence state and its limits                                                  | User understands what is unproven; no false release approval          |
+| User wants a human                     | Stop troubleshooting and offer the case composer immediately                                        | A durable case ID or an honest existing-contact fallback              |
+| Visitor wants a demo                   | Open the shared slot/confirmation flow                                                              | One confirmed booking, not an unverified promise                      |
 
 ### Rich UI with deterministic rendering
 
@@ -98,15 +98,15 @@ Voice is direct and technically accurate, with detail matched to the user. No Ox
 
 Create a reviewed source inventory for every LyraShield offering and workflow. This document is the contract for that corpus, not the corpus itself.
 
-| Knowledge area | Authoritative source strategy | Required question coverage |
-| --- | --- | --- |
-| Plans, trial, packs and usage | Structured catalog from canonical pricing/billing definitions | Eligibility, duration, currencies, caps, depth, overage and missing data |
-| Cloud/Local availability | Released status and approved public documentation | Available versus coming, entitlements, provider/privacy limits |
-| Setup and integrations | docs/user-guide.md and current released integration docs | Target setup, GitHub, CLI/MCP, connections and role restrictions |
-| Evidence and reports | Current public methodology plus permitted status tools | Detected versus verified, inconclusive, retest limits and sharing |
-| Free tools/WebMCP | Released tool pages and versioned control registry | Local versus server processing, input scope, exports and limitations |
-| Billing/support policy | Current approved policy and support pages | Refund policy, human exceptions, cancellation guidance and security reporting |
-| Troubleshooting | Reviewed sanitized runbooks with audience labels | Observed error codes, safe steps, escalation and unknown causes |
+| Knowledge area                | Authoritative source strategy                                 | Required question coverage                                                    |
+| ----------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Plans, trial, packs and usage | Structured catalog from canonical pricing/billing definitions | Eligibility, duration, currencies, caps, depth, overage and missing data      |
+| Cloud/Local availability      | Released status and approved public documentation             | Available versus coming, entitlements, provider/privacy limits                |
+| Setup and integrations        | docs/user-guide.md and current released integration docs      | Target setup, GitHub, CLI/MCP, connections and role restrictions              |
+| Evidence and reports          | Current public methodology plus permitted status tools        | Detected versus verified, inconclusive, retest limits and sharing             |
+| Free tools/WebMCP             | Released tool pages and versioned control registry            | Local versus server processing, input scope, exports and limitations          |
+| Billing/support policy        | Current approved policy and support pages                     | Refund policy, human exceptions, cancellation guidance and security reporting |
+| Troubleshooting               | Reviewed sanitized runbooks with audience labels              | Observed error codes, safe steps, escalation and unknown causes               |
 
 Minimum knowledge-entry contract: source ID, topic, public/restricted audience, allowed roles where relevant, source URL/path, source commit/release, effective date, last verification, owner, review/expiry rule and capability status. Internal repo paths map to approved public citations where needed; never expose private coordinates merely to supply a citation.
 
@@ -136,19 +136,19 @@ Use one small workflow service with typed tools. Deterministic workflows handle 
 
 These names are contracts to implement, not existing routes.
 
-| Tool | Public access | Dashboard access | Side-effect rule |
-| --- | --- | --- | --- |
-| search_public_help | Approved public sources | Same | Read only |
-| read_product_catalog | Current public commercial data | Same | Read only |
-| get_my_context | None | Authorized effective entitlement/setup summary | Read only |
-| get_scan_status | None | Authorized status and bounded sanitized codes | Read only; no raw findings |
-| get_connection_health | None | Authorized connection state | Read only; no credentials |
-| guide_workflow | Public route map | Role-valid route map | No navigation without user click |
-| propose_support_case | Session-owned draft | Actor/workspace-owned draft | No notification |
-| submit_support_case | Verified reply identity | Verified actor | Exact preview confirmation |
-| read_own_case / send_case_reply | Verified case ownership | Current case permission | Explicit Send for exact reply |
-| get_demo_slots | Bounded slots | Bounded slots | Read only |
-| book_demo / manage_own_demo | Verified attendee/booking ownership | Same ownership requirement | Exact action confirmation |
+| Tool                            | Public access                       | Dashboard access                               | Side-effect rule                 |
+| ------------------------------- | ----------------------------------- | ---------------------------------------------- | -------------------------------- |
+| search_public_help              | Approved public sources             | Same                                           | Read only                        |
+| read_product_catalog            | Current public commercial data      | Same                                           | Read only                        |
+| get_my_context                  | None                                | Authorized effective entitlement/setup summary | Read only                        |
+| get_scan_status                 | None                                | Authorized status and bounded sanitized codes  | Read only; no raw findings       |
+| get_connection_health           | None                                | Authorized connection state                    | Read only; no credentials        |
+| guide_workflow                  | Public route map                    | Role-valid route map                           | No navigation without user click |
+| propose_support_case            | Session-owned draft                 | Actor/workspace-owned draft                    | No notification                  |
+| submit_support_case             | Verified reply identity             | Verified actor                                 | Exact preview confirmation       |
+| read_own_case / send_case_reply | Verified case ownership             | Current case permission                        | Explicit Send for exact reply    |
+| get_demo_slots                  | Bounded slots                       | Bounded slots                                  | Read only                        |
+| book_demo / manage_own_demo     | Verified attendee/booking ownership | Same ownership requirement                     | Exact action confirmation        |
 
 Keep generic HTTP, SQL, shell, browser automation, unrestricted MCP access and product mutation tools absent. The model cannot extend the registry.
 
@@ -249,18 +249,18 @@ Only show Request a time when that fallback is actually configured. Do not silen
 
 ### Reuse versus new work
 
-| Area | Existing implementation evidence | Required adaptation |
-| --- | --- | --- |
-| Auth/RBAC | packages/auth/src/session.ts; requireWorkspaceAccess, requirePermission, assertBrowserSession | Browser-session-only private tools with current membership checks |
-| Workspace isolation | withWorkspaceRLS and scoped-model registry/schema-sync tests | Register new workspace-scoped models; enforce public-session ownership separately |
-| Confirmed operations | AgentOperation ledger in Prisma schema | Audited reusable pattern for support/booking; no unrestricted MCP bridge |
-| Tool validation | MCP validation, result caps and guard tests | Reuse helpers where appropriate, not remote mutation permissions |
-| Public API controls | public-cors.ts, Turnstile and distributed rate limits | Tight cross-host behavior plus independent authorization/abuse controls |
-| Notifications | Brevo channel and lease-based delivery orchestration | Explicit email channel selection, safe templates and tested production config |
-| Analytics/flags | PostHog allowlists, URL scrubbing and default-off env flags | Non-text support events and separate generation/read/write kill switches |
-| Model calls | No support model-call path in apps/web | New provider adapter, secret/egress setup, budgets and evaluation |
-| Calendar | Google sign-in exists; Calendar client does not | Separate consent, encrypted token storage and scheduling adapter |
-| Support data | Finding-linked Ticket only | New support/conversation/booking data; do not repurpose Ticket |
+| Area                 | Existing implementation evidence                                                              | Required adaptation                                                               |
+| -------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Auth/RBAC            | packages/auth/src/session.ts; requireWorkspaceAccess, requirePermission, assertBrowserSession | Browser-session-only private tools with current membership checks                 |
+| Workspace isolation  | withWorkspaceRLS and scoped-model registry/schema-sync tests                                  | Register new workspace-scoped models; enforce public-session ownership separately |
+| Confirmed operations | AgentOperation ledger in Prisma schema                                                        | Audited reusable pattern for support/booking; no unrestricted MCP bridge          |
+| Tool validation      | MCP validation, result caps and guard tests                                                   | Reuse helpers where appropriate, not remote mutation permissions                  |
+| Public API controls  | public-cors.ts, Turnstile and distributed rate limits                                         | Tight cross-host behavior plus independent authorization/abuse controls           |
+| Notifications        | Brevo channel and lease-based delivery orchestration                                          | Explicit email channel selection, safe templates and tested production config     |
+| Analytics/flags      | PostHog allowlists, URL scrubbing and default-off env flags                                   | Non-text support events and separate generation/read/write kill switches          |
+| Model calls          | No support model-call path in apps/web                                                        | New provider adapter, secret/egress setup, budgets and evaluation                 |
+| Calendar             | Google sign-in exists; Calendar client does not                                               | Separate consent, encrypted token storage and scheduling adapter                  |
+| Support data         | Finding-linked Ticket only                                                                    | New support/conversation/booking data; do not repurpose Ticket                    |
 
 ### Component boundaries
 
@@ -317,19 +317,19 @@ On suspected leakage or unauthorized action: disable affected tools, preserve mi
 
 Build at least 60 reviewed scenarios: 12 knowledge/commercial, 12 guided diagnostics, 12 permission/privacy, 12 action/recovery and 12 handoff/accessibility. Add explicit regression cases for every defect. Keep part of the corpus held out from prompt tuning. Run generative scenarios at least three times per release candidate to expose variation. Use deterministic service assertions for permissions and side effects; model grading alone is insufficient.
 
-| Gate | Required evidence before release |
-| --- | --- |
-| Authorization and writes | Every deterministic isolation, confirmation, replay, role-loss and ownership test passes; zero unauthorized executions in the test corpus |
-| Commercial answers | Every price, allowance and availability answer matches current catalog output or explicitly abstains |
-| Answer quality | At least 95% of in-scope answerable scenarios are both correct and supported; abstention on an answerable case does not count as success |
-| Citation quality | At least 95% correct source-to-claim support; no fabricated or unauthorized citation URLs |
-| Task utility | At least 90% of supported scripted tasks reach the intended verified UI/action outcome; appropriate escalations tracked separately |
-| Human handoff | Every explicit human-request scenario offers immediate handoff; confirmed submissions persist once and notification failures remain visible |
-| Action recovery | Duplicate, timeout, conflict, expiry and takeover tests pass without unintended duplicate effects |
-| Accessibility | WCAG 2.2 AA review, keyboard/screen-reader checks, 390px mobile and 200% zoom; no unresolved critical or serious automated accessibility findings |
-| Latency | Proposed p95 first useful answer under 3 seconds for cached help and under 8 seconds for diagnostic responses at an agreed representative load |
-| Page impact | No model call before interaction; measure widget bundle/network impact and agree a baseline-relative performance budget before shipping |
-| Spend | Enforced configured caps plus measured cost per task/resolution; no hidden use of scan credits |
+| Gate                     | Required evidence before release                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authorization and writes | Every deterministic isolation, confirmation, replay, role-loss and ownership test passes; zero unauthorized executions in the test corpus         |
+| Commercial answers       | Every price, allowance and availability answer matches current catalog output or explicitly abstains                                              |
+| Answer quality           | At least 95% of in-scope answerable scenarios are both correct and supported; abstention on an answerable case does not count as success          |
+| Citation quality         | At least 95% correct source-to-claim support; no fabricated or unauthorized citation URLs                                                         |
+| Task utility             | At least 90% of supported scripted tasks reach the intended verified UI/action outcome; appropriate escalations tracked separately                |
+| Human handoff            | Every explicit human-request scenario offers immediate handoff; confirmed submissions persist once and notification failures remain visible       |
+| Action recovery          | Duplicate, timeout, conflict, expiry and takeover tests pass without unintended duplicate effects                                                 |
+| Accessibility            | WCAG 2.2 AA review, keyboard/screen-reader checks, 390px mobile and 200% zoom; no unresolved critical or serious automated accessibility findings |
+| Latency                  | Proposed p95 first useful answer under 3 seconds for cached help and under 8 seconds for diagnostic responses at an agreed representative load    |
+| Page impact              | No model call before interaction; measure widget bundle/network impact and agree a baseline-relative performance budget before shipping           |
+| Spend                    | Enforced configured caps plus measured cost per task/resolution; no hidden use of scan credits                                                    |
 
 Latency includes the actual service path, not just a first empty streamed token. The test report must state sample size, load, environment, model/prompt/KB versions and failures. Performance budgets and production SLOs need approval after baseline measurement.
 
@@ -359,15 +359,15 @@ Track verified task completion, user-confirmed resolution, reopen rate, handoff 
 
 The dedicated LyraShield Developer Agent owns engineering. Marketing owns UX copy and source governance. Vision QA reviews rendered interfaces; content review is a separate track. Ankit owns policy and release approval. No invented staff or staffing coverage.
 
-| Work package | Deliverable | Exit condition |
-| --- | --- | --- |
-| WP0: contracts and threat model | Recheck current code, schema/migration proposal, permission map, provider/Calendar config design | Founder approves high-risk choices; no production mutations |
-| WP1: knowledge and evaluation | Source inventory, reviewed public corpus, catalog adapter, eval fixtures and rollback | Coverage matrix complete with answer/abstention tests |
-| WP2: both interfaces | Shared components, route-aware starters, accessible cards and mocked streaming | Marketing and dashboard rendered flows pass UX/vision review |
-| WP3: diagnostics | Browser-session tools using current RLS/effective entitlements | Permission, cache and stream isolation tests pass |
-| WP4: support | Durable cases, follow-ups, operator inbox, notifications and takeover | Ownership, delivery failure and takeover tests pass |
-| WP5: booking | Founder OAuth, availability, reservation, confirmation and management | Isolated calendar tests pass with bounded side effects |
-| WP6: release candidate | Integrated flows, eval report, observability, cost caps and runbook | CI, accessibility, scenario and founder release gates pass |
+| Work package                    | Deliverable                                                                                      | Exit condition                                               |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| WP0: contracts and threat model | Recheck current code, schema/migration proposal, permission map, provider/Calendar config design | Founder approves high-risk choices; no production mutations  |
+| WP1: knowledge and evaluation   | Source inventory, reviewed public corpus, catalog adapter, eval fixtures and rollback            | Coverage matrix complete with answer/abstention tests        |
+| WP2: both interfaces            | Shared components, route-aware starters, accessible cards and mocked streaming                   | Marketing and dashboard rendered flows pass UX/vision review |
+| WP3: diagnostics                | Browser-session tools using current RLS/effective entitlements                                   | Permission, cache and stream isolation tests pass            |
+| WP4: support                    | Durable cases, follow-ups, operator inbox, notifications and takeover                            | Ownership, delivery failure and takeover tests pass          |
+| WP5: booking                    | Founder OAuth, availability, reservation, confirmation and management                            | Isolated calendar tests pass with bounded side effects       |
+| WP6: release candidate          | Integrated flows, eval report, observability, cost caps and runbook                              | CI, accessibility, scenario and founder release gates pass   |
 
 Internal sequencing does not change the decision to release both surfaces together. Default-off flags allow development safely. Do not merge to main or deploy without the required approval. Use branch/PR review and record actually executed checks. If a check can run only in CI, label it accordingly.
 
@@ -375,23 +375,23 @@ Internal sequencing does not change the decision to release both surfaces togeth
 
 All gates below were answered by Ankit. Resolved values are implementation inputs; "before production" gates remain checkpoints, not blocks on mocked development.
 
-| Decision | Resolved value | Gate |
-| --- | --- | --- |
-| Build mode | Full WP0–WP6 behind default-off `MYRA_*` flags; mocked provider + mocked Calendar adapters; no production mutations | Now |
-| v1.1 scope | Approved — agent loop, guided flows, scoped memory, instant suggestions all in scope | Now |
-| Operation ledger | New additive `MyraOperation` table (AgentOperation keeps required workspaceId) | Now |
-| Operator access | Reuse `PLATFORM_OPERATOR` allowlist for the founder inbox; no new grant type | Now |
-| Provider/model routing | Platform-owned, two-tier: simple queries → `gpt-5-nano` class, complex → `gpt-5.6-luna` class. Model names are env-configurable (`MYRA_MODEL_FAST`/`MYRA_MODEL_DEEP`); exact provider IDs verified at production enablement. Standard API privacy terms accepted | Before production model calls |
-| Spend | $50/month server-enforced cap; ≤6 tool steps + ≤4k output tokens per turn | Before generation enabled |
-| Retention | Conversations/messages 30 days; support cases + replies 1 year; demo bookings 1 year; audit per existing policy; backups per existing policy | Before production data collection |
-| Privacy sign-off | Founder self-review of processor/disclosure wording | Before launch |
-| Booking schedule | 30-minute duration, 15-minute buffers, 24-hour notice, 14-day horizon; bookable IST (Asia/Kolkata) weekdays 15:00–20:00; conflicts = primary calendar only | Before offering live slots |
-| Google access | Founder-only Calendar OAuth for ankit@lyrashieldai.com, minimal scopes, encrypted token storage; Meet link on every booking (conferenceDataVersion=1) | Before connecting the live calendar |
-| Case notifications | support@lyrashieldai.com is real and monitored — notifications go there | Before claiming staffed handoff |
-| Response wording | Best-effort, no SLA (matches /support) | Now |
-| Panel audience | All workspace roles see the dashboard panel; tools stay permission-scoped | Now |
-| Anonymous cases | Yes — email-verified submission for public users | Now |
-| Infrastructure | Azure OpenAI/Foundry account (fast + deep chat deployments + one embedding deployment) is the only new Azure resource. Reuse: Key Vault (managed-identity auth, no API keys), Container Apps, Upstash Redis, Supabase Postgres with pgvector, Azure Monitor budget alert as backstop to the app-side cap. Explicitly no Azure AI Search, no second Postgres, no new queues | Before provisioning |
+| Decision               | Resolved value                                                                                                                                                                                                                                                                                                                                                             | Gate                                |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Build mode             | Full WP0–WP6 behind default-off `MYRA_*` flags; mocked provider + mocked Calendar adapters; no production mutations                                                                                                                                                                                                                                                        | Now                                 |
+| v1.1 scope             | Approved — agent loop, guided flows, scoped memory, instant suggestions all in scope                                                                                                                                                                                                                                                                                       | Now                                 |
+| Operation ledger       | New additive `MyraOperation` table (AgentOperation keeps required workspaceId)                                                                                                                                                                                                                                                                                             | Now                                 |
+| Operator access        | Reuse `PLATFORM_OPERATOR` allowlist for the founder inbox; no new grant type                                                                                                                                                                                                                                                                                               | Now                                 |
+| Provider/model routing | Platform-owned, two-tier: simple queries → `gpt-5-nano` class, complex → `gpt-5.6-luna` class. Model names are env-configurable (`MYRA_MODEL_FAST`/`MYRA_MODEL_DEEP`); exact provider IDs verified at production enablement. Standard API privacy terms accepted                                                                                                           | Before production model calls       |
+| Spend                  | $50/month server-enforced cap; ≤6 tool steps + ≤4k output tokens per turn                                                                                                                                                                                                                                                                                                  | Before generation enabled           |
+| Retention              | Conversations/messages 30 days; support cases + replies 1 year; demo bookings 1 year; audit per existing policy; backups per existing policy                                                                                                                                                                                                                               | Before production data collection   |
+| Privacy sign-off       | Founder self-review of processor/disclosure wording                                                                                                                                                                                                                                                                                                                        | Before launch                       |
+| Booking schedule       | 30-minute duration, 15-minute buffers, 24-hour notice, 14-day horizon; bookable IST (Asia/Kolkata) weekdays 15:00–20:00; conflicts = primary calendar only                                                                                                                                                                                                                 | Before offering live slots          |
+| Google access          | Founder-only Calendar OAuth for ankit@lyrashieldai.com, minimal scopes, encrypted token storage; Meet link on every booking (conferenceDataVersion=1)                                                                                                                                                                                                                      | Before connecting the live calendar |
+| Case notifications     | support@lyrashieldai.com is real and monitored — notifications go there                                                                                                                                                                                                                                                                                                    | Before claiming staffed handoff     |
+| Response wording       | Best-effort, no SLA (matches /support)                                                                                                                                                                                                                                                                                                                                     | Now                                 |
+| Panel audience         | All workspace roles see the dashboard panel; tools stay permission-scoped                                                                                                                                                                                                                                                                                                  | Now                                 |
+| Anonymous cases        | Yes — email-verified submission for public users                                                                                                                                                                                                                                                                                                                           | Now                                 |
+| Infrastructure         | Azure OpenAI/Foundry account (fast + deep chat deployments + one embedding deployment) is the only new Azure resource. Reuse: Key Vault (managed-identity auth, no API keys), Container Apps, Upstash Redis, Supabase Postgres with pgvector, Azure Monitor budget alert as backstop to the app-side cap. Explicitly no Azure AI Search, no second Postgres, no new queues | Before provisioning                 |
 
 Safe development may use synthetic data, mocked adapters and disabled integrations while these decisions are pending. Do not use real customer findings as test fixtures. Any live invitation/email test needs explicit approval of the recipient and action.
 
@@ -489,13 +489,13 @@ Components added to the allowlist: `GuidedFlow`, `InstantSuggestions`, `MemoryCa
 
 Tools added to the registry contract:
 
-| Tool | Public access | Dashboard access | Side-effect rule |
-| --- | --- | --- | --- |
-| instant_suggest | Approved public entries while typing | Same | Read only; no model call |
-| start_guided_flow / advance_guided_flow | Session-owned flow state | Actor/workspace-owned flow state | Step reads only; flow persists progress |
-| verify_resolution | Bounded re-check of public-safe state | Re-run failing check | Read only; feeds closed-loop confirmation |
-| read_memory / write_memory | Session memory | Per-account memory | Writes restricted to allowlisted preference keys; never authority-bearing |
-| attach_trace | Own conversation trace | Own conversation trace | Read only; binds trace ID to a case draft |
+| Tool                                    | Public access                         | Dashboard access                 | Side-effect rule                                                          |
+| --------------------------------------- | ------------------------------------- | -------------------------------- | ------------------------------------------------------------------------- |
+| instant_suggest                         | Approved public entries while typing  | Same                             | Read only; no model call                                                  |
+| start_guided_flow / advance_guided_flow | Session-owned flow state              | Actor/workspace-owned flow state | Step reads only; flow persists progress                                   |
+| verify_resolution                       | Bounded re-check of public-safe state | Re-run failing check             | Read only; feeds closed-loop confirmation                                 |
+| read_memory / write_memory              | Session memory                        | Per-account memory               | Writes restricted to allowlisted preference keys; never authority-bearing |
+| attach_trace                            | Own conversation trace                | Own conversation trace           | Read only; binds trace ID to a case draft                                 |
 
 All v1.0 registry rules still apply: no product mutations, the model cannot extend the registry, every write is confirmed, every execution rechecks authorization.
 

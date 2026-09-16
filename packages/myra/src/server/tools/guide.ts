@@ -20,10 +20,7 @@ export async function runGuideWorkflow(
   const { goal, routeContext } = guideWorkflowInput.parse(input)
   const route = routeContext ?? ctx.routeContext ?? null
   const surface = ctx.surface === "DASHBOARD" ? "app" : "marketing"
-  const allowedRoutes = routesForPrincipal(
-    { kind: ctx.principal.kind, role: ctx.role },
-    surface
-  )
+  const allowedRoutes = routesForPrincipal({ kind: ctx.principal.kind, role: ctx.role }, surface)
   const suggested = suggestFlows(route).filter((f) => f.surfaces.includes(surface))
 
   // Task steps: suggested flow steps first, then matching manifest routes.
@@ -42,8 +39,7 @@ export async function runGuideWorkflow(
         title: s.title,
         detail: s.instruction.slice(0, 400),
         status: i === 0 ? "active" : "pending",
-        ctaRoute:
-          s.ctaRoute && isManifestRoute(s.ctaRoute, surface) ? s.ctaRoute : undefined,
+        ctaRoute: s.ctaRoute && isManifestRoute(s.ctaRoute, surface) ? s.ctaRoute : undefined,
       })
     }
   }
@@ -56,7 +52,13 @@ export async function runGuideWorkflow(
         r.path.includes(goalLower))
   )
   for (const r of matching.slice(0, 4)) {
-    steps.push({ id: `route:${r.path}`, title: r.label, detail: r.description, status: "pending", ctaRoute: r.path })
+    steps.push({
+      id: `route:${r.path}`,
+      title: r.label,
+      detail: r.description,
+      status: "pending",
+      ctaRoute: r.path,
+    })
   }
 
   const components: MyraComponent[] =

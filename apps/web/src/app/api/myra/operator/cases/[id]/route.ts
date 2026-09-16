@@ -5,10 +5,7 @@
  * Mutations require the 30-minute TOTP elevation (requirePlatformAdmin) and
  * pass through withCookieMutation so the browser-session origin check applies.
  */
-import {
-  requirePlatformAdmin,
-  requirePlatformAdminIdentity,
-} from "@lyrashield/auth/server"
+import { requirePlatformAdmin, requirePlatformAdminIdentity } from "@lyrashield/auth/server"
 import {
   getOperatorCase,
   operatorRelease,
@@ -40,8 +37,7 @@ const patchSchema = z
 function operatorAuthFailure(error: unknown): Response {
   const authError = authErrorResponse(error)
   if (authError) {
-    for (const [name, value] of Object.entries(PRIVATE_HEADERS))
-      authError.headers.set(name, value)
+    for (const [name, value] of Object.entries(PRIVATE_HEADERS)) authError.headers.set(name, value)
     return authError
   }
   return apiError("FORBIDDEN", "Forbidden", 403, PRIVATE_HEADERS)
@@ -65,14 +61,12 @@ async function get(
   try {
     const result = await getOperatorCase(operator.userId, id)
     const response = apiSuccess(result)
-    for (const [name, value] of Object.entries(PRIVATE_HEADERS))
-      response.headers.set(name, value)
+    for (const [name, value] of Object.entries(PRIVATE_HEADERS)) response.headers.set(name, value)
     return response
   } catch (error) {
     const failure = myraServiceFailure(request, error)
     if (failure) {
-      for (const [name, value] of Object.entries(PRIVATE_HEADERS))
-        failure.headers.set(name, value)
+      for (const [name, value] of Object.entries(PRIVATE_HEADERS)) failure.headers.set(name, value)
       return failure
     }
     logger.error("Myra operator case read failed", {
@@ -145,14 +139,12 @@ async function patch(
       }
     }
     const response = apiSuccess(result)
-    for (const [name, value] of Object.entries(PRIVATE_HEADERS))
-      response.headers.set(name, value)
+    for (const [name, value] of Object.entries(PRIVATE_HEADERS)) response.headers.set(name, value)
     return response
   } catch (error) {
     const failure = myraServiceFailure(request, error)
     if (failure) {
-      for (const [name, value] of Object.entries(PRIVATE_HEADERS))
-        failure.headers.set(name, value)
+      for (const [name, value] of Object.entries(PRIVATE_HEADERS)) failure.headers.set(name, value)
       return failure
     }
     logger.error("Myra operator case mutation failed", {

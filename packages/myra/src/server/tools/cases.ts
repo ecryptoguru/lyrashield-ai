@@ -8,11 +8,7 @@ import { randomInt } from "node:crypto"
 import { z } from "zod"
 import { prisma } from "@lyrashield/db"
 import { sendNotification } from "@lyrashield/integrations"
-import {
-  MYRA_COPY,
-  submitCasePayloadSchema,
-  type SubmitCasePayload,
-} from "../../contracts"
+import { MYRA_COPY, submitCasePayloadSchema, type SubmitCasePayload } from "../../contracts"
 import { err } from "../errors"
 import { createProposal } from "../operations"
 import type { ExecutorOutcome, OperationContext } from "../operations"
@@ -49,7 +45,8 @@ async function resolveReplyDestination(
   payload: SubmitCasePayload
 ): Promise<{ replyEmail: string; verifiedAt: Date | null }> {
   if (ctx.principal.kind === "user") {
-    const email = payload.replyEmail ?? (await accountEmail(ctx.principal.accountId, ctx.db ?? prisma))
+    const email =
+      payload.replyEmail ?? (await accountEmail(ctx.principal.accountId, ctx.db ?? prisma))
     if (!email) throw err("VERIFICATION_REQUIRED", "Your account has no reply email.")
     return { replyEmail: email, verifiedAt: null }
   }
@@ -120,12 +117,10 @@ export async function runProposeSupportCase(
     storedPayload,
     { db: ctx.db }
   )
-  const summary = toProposalSummary(
-    proposal,
-    "Send support request",
-    MYRA_COPY.caseDraft,
-    { subject: payload.subject, includeDiagnostics: payload.includeDiagnostics }
-  )
+  const summary = toProposalSummary(proposal, "Send support request", MYRA_COPY.caseDraft, {
+    subject: payload.subject,
+    includeDiagnostics: payload.includeDiagnostics,
+  })
   return {
     data: { proposalId: proposal.id, expiresAt: summary.expiresAt },
     components: [casePreview(summary, payload, replyEmail)],
@@ -256,7 +251,10 @@ async function notifyCaseCreated(
 
 // ─── Owned-case reads and replies ─────────────────────────────────────────
 
-async function findOwnedCase(ctx: MyraToolContext, idOrRef: { caseId?: string; reference?: string }) {
+async function findOwnedCase(
+  ctx: MyraToolContext,
+  idOrRef: { caseId?: string; reference?: string }
+) {
   const where = {
     ...ownerWhere(ctx.principal),
     ...(idOrRef.caseId ? { id: idOrRef.caseId } : {}),

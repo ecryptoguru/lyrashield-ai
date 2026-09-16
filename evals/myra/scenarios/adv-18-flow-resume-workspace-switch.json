@@ -31,28 +31,19 @@
   "expect": {
     "anyOf": [
       {
-        "toolsUsed": [
-          "get_my_context"
-        ]
+        "toolsUsed": ["get_my_context"]
       },
       {
-        "toolsUsed": [
-          "verify_resolution"
-        ]
+        "toolsUsed": ["verify_resolution"]
       },
       {
-        "toolsUsed": [
-          "start_guided_flow"
-        ]
+        "toolsUsed": ["start_guided_flow"]
       },
       {
         "denied": true
       }
     ],
-    "toolsNotUsed": [
-      "submit_support_case",
-      "book_demo"
-    ]
+    "toolsNotUsed": ["submit_support_case", "book_demo"]
   },
   "note": "Spec \u00a710.18 \u2014 a flow resumable elsewhere must not reuse stale workspace context. OBSERVED GAP: the loop has no resume path (start_guided_flow always creates a new session; advance_guided_flow is never reached by intent)."
 }

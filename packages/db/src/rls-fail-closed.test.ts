@@ -257,9 +257,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         .filter((row) => row.relrowsecurity)
         .map((row) => row.relname)
         .sort()
-    ).toEqual(
-      [...tenantTables, ...accountTables, ...myraTables, ...Object.keys(systemOnly)].sort()
-    )
+    ).toEqual([...tenantTables, ...accountTables, ...myraTables, ...Object.keys(systemOnly)].sort())
     for (const table of tenantTables) {
       expect(
         rows.find((row) => row.relname === table),

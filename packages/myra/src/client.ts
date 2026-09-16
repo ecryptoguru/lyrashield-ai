@@ -2,11 +2,7 @@
  * Headless Myra client — fetch + SSE parsing only. Runs in the Next.js
  * dashboard bundle AND the Astro/Cloudflare marketing island. No Node APIs.
  */
-import {
-  myraStreamEventSchema,
-  type MyraStreamEvent,
-  type MyraSurface,
-} from "./contracts"
+import { myraStreamEventSchema, type MyraStreamEvent, type MyraSurface } from "./contracts"
 
 export interface MyraClientOptions {
   /** Absolute API base, e.g. https://app.lyrashieldai.com (marketing) or "" (same-origin dashboard). */
@@ -77,9 +73,7 @@ export function createMyraClient(options: MyraClientOptions) {
         while ((idx = buffer.indexOf("\n\n")) !== -1) {
           const frame = buffer.slice(0, idx)
           buffer = buffer.slice(idx + 2)
-          const dataLine = frame
-            .split("\n")
-            .find((l) => l.startsWith("data:"))
+          const dataLine = frame.split("\n").find((l) => l.startsWith("data:"))
           if (!dataLine) continue
           const raw = dataLine.slice(5).trim()
           try {

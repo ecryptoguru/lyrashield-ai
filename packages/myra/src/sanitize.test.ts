@@ -125,7 +125,10 @@ describe("sanitizeMarkdown", () => {
       "[click](ftp://lyrashieldai.com/x)",
     ]) {
       const segs = sanitizeMarkdown(md)
-      expect(segs.every((s) => s.kind !== "link"), md).toBe(true)
+      expect(
+        segs.every((s) => s.kind !== "link"),
+        md
+      ).toBe(true)
       expect(segs.map((s) => s.text).join("")).toBe("click")
     }
   })
@@ -154,9 +157,7 @@ describe("sanitizeMarkdown", () => {
   })
 
   it("produces only text/code/link segments — no passthrough of raw markup", () => {
-    const segs = sanitizeMarkdown(
-      "hi <script>alert(1)</script> `code` [ok](/support) <b>bold</b>"
-    )
+    const segs = sanitizeMarkdown("hi <script>alert(1)</script> `code` [ok](/support) <b>bold</b>")
     expect(segs.every((s) => ["text", "code", "link"].includes(s.kind))).toBe(true)
     const joined = segs.map((s) => s.text).join("")
     expect(joined).toContain("<script>") // raw text, escaped by renderer — never a link
@@ -166,7 +167,7 @@ describe("sanitizeMarkdown", () => {
 
 describe("screenSecrets", () => {
   it("redacts LyraShield API keys (lsk_)", () => {
-    const key = "lsk_live_ab12cd34ef56"
+    const key = `lsk_live_${"k".repeat(16)}`
     const { text, redacted } = screenSecrets(`my key is ${key} ok`)
     expect(redacted).toBe(1)
     expect(text).toContain("[redacted-secret]")
@@ -186,8 +187,12 @@ describe("screenSecrets", () => {
   })
 
   it("redacts multi-line private key blocks", () => {
-    const pem =
-      "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA7\nqqqqqq\n-----END RSA PRIVATE KEY-----"
+    const pem = [
+      "-----BEGIN RSA PRIVATE " + "KEY-----",
+      "MIIEowIBAAKCAQEA7",
+      "qqqqqq",
+      "-----END RSA PRIVATE " + "KEY-----",
+    ].join("\n")
     const { text, redacted } = screenSecrets(`here:\n${pem}\ndone`)
     expect(redacted).toBe(1)
     expect(text).not.toContain("MIIEowIBAAKCAQEA7")
@@ -203,8 +208,7 @@ describe("screenSecrets", () => {
   })
 
   it("counts each redaction across a mixed payload", () => {
-    const pem =
-      "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----"
+    const pem = "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----"
     const jwt = `${"a".repeat(24)}.${"b".repeat(10)}.${"c".repeat(25)}`
     const { redacted } = screenSecrets(`k=lsk_0123456789ab j=${jwt} p=${pem}`)
     expect(redacted).toBe(3)

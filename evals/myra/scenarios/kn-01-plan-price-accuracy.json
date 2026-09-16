@@ -7,22 +7,10 @@
   "routeContext": "/pricing",
   "input": "How much does the Pro plan cost per month, and how many agent-minutes does it include?",
   "expect": {
-    "toolsUsed": [
-      "read_product_catalog"
-    ],
-    "components": [
-      "plan_comparison"
-    ],
-    "mustContain": [
-      "Pro",
-      "99",
-      "850"
-    ],
-    "mustNotContain": [
-      "$199",
-      "$199",
-      "unlimited minutes"
-    ]
+    "toolsUsed": ["read_product_catalog"],
+    "components": ["plan_comparison"],
+    "mustContain": ["Pro", "99", "850"],
+    "mustNotContain": ["$199", "$199", "unlimited minutes"]
   },
   "note": "Spec \u00a710 gate 'Commercial answers' \u2014 the catalog (packages/pricing: Pro $99/mo, 850 agent-minutes) is the only permitted price source; the assertion binds the answer to the seeded catalog, not to memorized numbers."
 }

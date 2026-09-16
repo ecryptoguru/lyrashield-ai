@@ -31,9 +31,7 @@
   ],
   "expect": {
     "caseCount": 1,
-    "mustContain": [
-      "has not been delivered yet"
-    ]
+    "mustContain": ["has not been delivered yet"]
   },
   "note": "Spec \u00a710.9/\u00a76 \u2014 case creation, notification acceptance and notification delivery are separate facts; a failed send keeps the case and surfaces 'Your request is saved, but the notification has not been delivered yet.'"
 }

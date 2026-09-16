@@ -72,11 +72,7 @@ async function accessToken(env: GoogleEnv): Promise<string> {
   return body.access_token
 }
 
-async function api(
-  env: GoogleEnv,
-  path: string,
-  init: RequestInit = {}
-): Promise<Response> {
+async function api(env: GoogleEnv, path: string, init: RequestInit = {}): Promise<Response> {
   const token = await accessToken(env)
   const res = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(env.calendarId)}${path}`,

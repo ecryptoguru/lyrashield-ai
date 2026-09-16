@@ -6,11 +6,7 @@
  */
 import { randomBytes } from "node:crypto"
 import { MYRA_LIMITS } from "../contracts"
-import type {
-  MyraStreamEvent,
-  MyraToolName,
-  TaskRecord,
-} from "../contracts"
+import type { MyraStreamEvent, MyraToolName, TaskRecord } from "../contracts"
 import { checkBudget, recordCost } from "./budget"
 import { auditEvent } from "./audit"
 import { toMyraError } from "./errors"
@@ -70,7 +66,9 @@ export function classifyIntent(text: string, isUser: boolean): string {
   if (/\b(demo|book a (call|demo)|walkthrough|talk to sales|see it live)\b/.test(t)) {
     return "demo"
   }
-  if (/\b(continue|resume|pick up|carry on)\b.{0,40}\b(flow|left off|check)\b|\bguided flow\b/.test(t)) {
+  if (
+    /\b(continue|resume|pick up|carry on)\b.{0,40}\b(flow|left off|check)\b|\bguided flow\b/.test(t)
+  ) {
     return "flow_resume"
   }
   if (
@@ -83,7 +81,10 @@ export function classifyIntent(text: string, isUser: boolean): string {
   if (/\b(remember|forget that|my timezone|preferred (timezone|locale|depth))\b/.test(t)) {
     return "memory"
   }
-  if (isUser && /\b(won'?t start|can'?t start|not starting|stuck|scan fails|scan failed)\b/.test(t)) {
+  if (
+    isUser &&
+    /\b(won'?t start|can'?t start|not starting|stuck|scan fails|scan failed)\b/.test(t)
+  ) {
     return "flow_start"
   }
   if (
@@ -269,7 +270,12 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
           includeDiagnostics: false,
           includeTranscriptExcerpt: false,
         }).catch((e) => {
-          if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "VERIFICATION_REQUIRED") {
+          if (
+            e &&
+            typeof e === "object" &&
+            "code" in e &&
+            (e as { code: string }).code === "VERIFICATION_REQUIRED"
+          ) {
             step.toolOutputs.push({
               name: "propose_support_case",
               output: { verificationRequired: true },
@@ -320,9 +326,7 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
   // Prose answer — budget-gated. Deterministic intents keep working when
   // generation is off: a fixed explanation replaces the model call.
   let answerText: string
-  const verificationRequired = step.toolOutputs.some(
-    (t) => t.output.verificationRequired === true
-  )
+  const verificationRequired = step.toolOutputs.some((t) => t.output.verificationRequired === true)
   if (!budget.allowed && provider.name !== "mock") {
     yield {
       type: "error",
@@ -345,7 +349,9 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
     const generated = await provider.generate({
       system: systemPrompt(ctx),
       messages: [{ role: "user", content: text }],
-      tier: ["diagnostics", "flow_start", "flow_resume", "support_case", "evidence"].includes(intent)
+      tier: ["diagnostics", "flow_start", "flow_resume", "support_case", "evidence"].includes(
+        intent
+      )
         ? "deep"
         : "fast",
       context: { intent, toolOutputs: step.toolOutputs, routeContext: safeRouteContext },
@@ -382,8 +388,7 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
     isUser ? "user" : "public_session",
     {
       accountId: ctx.principal.kind === "user" ? ctx.principal.accountId : null,
-      publicSessionId:
-        ctx.principal.kind === "anonymous" ? ctx.principal.publicSessionId : null,
+      publicSessionId: ctx.principal.kind === "anonymous" ? ctx.principal.publicSessionId : null,
       workspaceId: ctx.workspaceId,
       action: "myra.turn",
       resourceType: "conversation",

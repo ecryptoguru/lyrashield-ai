@@ -71,12 +71,7 @@ async function post(request: Request): Promise<Response> {
 
   // Turnstile is required for anonymous issue (spec §5 abuse controls).
   if (!(await verifyTurnstile(parsed.data.turnstileToken))) {
-    return myraFail(
-      request,
-      "VERIFICATION_FAILED",
-      "Please retry the abuse check.",
-      403
-    )
+    return myraFail(request, "VERIFICATION_FAILED", "Please retry the abuse check.", 403)
   }
 
   try {

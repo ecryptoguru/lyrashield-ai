@@ -52,8 +52,7 @@ export async function verifyPublicToken(
   if (!row || row.expiresAt <= now) return null
   // Slide the expiry at most once an hour — the session stays valid either
   // way; per-request UPDATEs are pure churn on the verify hot path.
-  const stale =
-    !row.lastSeenAt || now.getTime() - row.lastSeenAt.getTime() > 60 * 60 * 1000
+  const stale = !row.lastSeenAt || now.getTime() - row.lastSeenAt.getTime() > 60 * 60 * 1000
   if (stale) {
     await db.myraPublicSession.update({
       where: { id: row.id },

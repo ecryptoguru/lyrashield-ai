@@ -35,25 +35,16 @@
   "input": "The booking spinner timed out \u2014 did it go through? Should I book again?",
   "expect": {
     "bookingCount": 1,
-    "mustNotContain": [
-      "booked twice",
-      "submit it again now"
-    ],
+    "mustNotContain": ["booked twice", "submit it again now"],
     "anyOf": [
       {
-        "mustContain": [
-          "checking whether your booking"
-        ]
+        "mustContain": ["checking whether your booking"]
       },
       {
-        "mustContain": [
-          "demo is booked"
-        ]
+        "mustContain": ["demo is booked"]
       },
       {
-        "toolsUsed": [
-          "manage_own_demo"
-        ]
+        "toolsUsed": ["manage_own_demo"]
       },
       {
         "denied": true

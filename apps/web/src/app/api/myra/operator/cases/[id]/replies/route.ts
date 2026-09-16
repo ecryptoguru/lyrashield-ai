@@ -55,14 +55,12 @@ async function post(
   try {
     const result = await operatorReply(operator.userId, id, parsed.data.body)
     const response = apiSuccess(result)
-    for (const [name, value] of Object.entries(PRIVATE_HEADERS))
-      response.headers.set(name, value)
+    for (const [name, value] of Object.entries(PRIVATE_HEADERS)) response.headers.set(name, value)
     return response
   } catch (error) {
     const failure = myraServiceFailure(request, error)
     if (failure) {
-      for (const [name, value] of Object.entries(PRIVATE_HEADERS))
-        failure.headers.set(name, value)
+      for (const [name, value] of Object.entries(PRIVATE_HEADERS)) failure.headers.set(name, value)
       return failure
     }
     logger.error("Myra operator reply failed", {

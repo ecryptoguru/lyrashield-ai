@@ -22,9 +22,7 @@ export async function resolveMyraRequest(
   request: Request,
   db?: MyraDb
 ): Promise<ResolvedMyraRequest | null> {
-  const session = await auth.api
-    .getSession({ headers: request.headers })
-    .catch(() => null)
+  const session = await auth.api.getSession({ headers: request.headers }).catch(() => null)
   if (session?.user?.id && session.session?.id) {
     const workspace = await resolveActiveWorkspace(request, session.user.id)
     return {

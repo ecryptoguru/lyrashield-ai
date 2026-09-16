@@ -173,10 +173,7 @@ export async function confirm(
             where: { id: proposalId, status: "AWAITING_CONFIRMATION" },
             data: { status: "CANCELED" },
           })
-          throw err(
-            "FORBIDDEN",
-            "Your workspace access changed. Ask Myra to prepare it again."
-          )
+          throw err("FORBIDDEN", "Your workspace access changed. Ask Myra to prepare it again.")
         }
       }
       if (proposal.conversationId) {

@@ -60,12 +60,7 @@ async function post(request: Request): Promise<Response> {
 
   const resolved = await resolveMyraRequest(request)
   if (!resolved) {
-    return myraFail(
-      request,
-      "UNAUTHORIZED",
-      "Start a Myra session before sending messages",
-      401
-    )
+    return myraFail(request, "UNAUTHORIZED", "Start a Myra session before sending messages", 401)
   }
 
   // Principal-level gates sit alongside the surface gate so a forged surface

@@ -35,10 +35,7 @@ const USER_EXTRA_TOOLS: readonly MyraToolName[] = [
 ]
 
 const ANONYMOUS_SET: ReadonlySet<MyraToolName> = new Set(ANONYMOUS_TOOLS)
-const USER_SET: ReadonlySet<MyraToolName> = new Set([
-  ...ANONYMOUS_TOOLS,
-  ...USER_EXTRA_TOOLS,
-])
+const USER_SET: ReadonlySet<MyraToolName> = new Set([...ANONYMOUS_TOOLS, ...USER_EXTRA_TOOLS])
 
 export function allowedToolsFor(principal: MyraPrincipal): ReadonlySet<MyraToolName> {
   if (principal.kind === "user") return USER_SET

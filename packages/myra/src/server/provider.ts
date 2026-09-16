@@ -97,7 +97,9 @@ function classify(text: string): string {
   if (/\b(price|pricing|plan|cost|how much|subscription|pack|overage)\b/.test(text)) {
     return "catalog"
   }
-  if (/\b(scan|finding|result|inconclusive|detected|verified|verdict|not start|fail)\b/.test(text)) {
+  if (
+    /\b(scan|finding|result|inconclusive|detected|verified|verdict|not start|fail)\b/.test(text)
+  ) {
     return "diagnostics"
   }
   return "help"
@@ -111,8 +113,10 @@ function composeAnswer(intent: string, text: string, outs: ToolCallOutput[]): st
         const names = (catalog.plans as { name: string; monthlyUsd: number }[])
           .map((p) => `${p.name} $${p.monthlyUsd}/mo`)
           .join(", ")
-        return `Current Cloud plans (checked just now): ${names}. ` +
+        return (
+          `Current Cloud plans (checked just now): ${names}. ` +
           `Prices exclude tax; Enterprise is custom. See the comparison above or /pricing for checkout.`
+        )
       }
       return "Here is the current plan comparison from the live catalog."
     }
@@ -120,9 +124,9 @@ function composeAnswer(intent: string, text: string, outs: ToolCallOutput[]): st
       return "Pick a slot below — weekday times are shown in your timezone. The booking is confirmed only after you review it."
     case "demo_status": {
       const info = toolData(outs, "manage_own_demo")
-      const bookings = (info?.bookings as
-        | { status: string; startsAt: string; conferenceState: string }[]
-        | undefined) ?? []
+      const bookings =
+        (info?.bookings as
+          { status: string; startsAt: string; conferenceState: string }[] | undefined) ?? []
       const latest = bookings[0]
       if (!latest) {
         return "I don't see a demo booking on this account yet. Want to pick a time?"
@@ -145,8 +149,10 @@ function composeAnswer(intent: string, text: string, outs: ToolCallOutput[]): st
     case "account": {
       const ctx = toolData(outs, "get_my_context")
       if (ctx) {
-        return `Your plan is ${ctx.planName} and you have ${ctx.minutesRemaining} agent-minutes remaining` +
+        return (
+          `Your plan is ${ctx.planName} and you have ${ctx.minutesRemaining} agent-minutes remaining` +
           (ctx.isTrial ? ` (${ctx.trialDaysLeft} trial days left).` : ".")
+        )
       }
       return "I could not read your account status. Try again or open /dashboard/billing."
     }

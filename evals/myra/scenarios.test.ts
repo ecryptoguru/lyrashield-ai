@@ -149,9 +149,10 @@ describe("myra scenario corpus", () => {
   it("routeContext values resolve in the manifest", () => {
     for (const [file, f] of fixtures) {
       if (f.routeContext) {
-        expect(isManifestRoute(f.routeContext), `${file}: dead routeContext ${f.routeContext}`).toBe(
-          true
-        )
+        expect(
+          isManifestRoute(f.routeContext),
+          `${file}: dead routeContext ${f.routeContext}`
+        ).toBe(true)
       }
     }
   })

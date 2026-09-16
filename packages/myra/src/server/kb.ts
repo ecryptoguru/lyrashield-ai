@@ -76,9 +76,7 @@ export async function searchKnowledge(
       // Corpus text is untrusted: degrade markup to plain text and drop
       // source URLs outside the product's own surface.
       const sourceUrl =
-        r.sourceUrl && isTrustedSourceUrl(r.sourceUrl)
-          ? sanitizeLinkHref(r.sourceUrl)
-          : null
+        r.sourceUrl && isTrustedSourceUrl(r.sourceUrl) ? sanitizeLinkHref(r.sourceUrl) : null
       const toText = (raw: string) =>
         stripDangerousText(
           sanitizeMarkdown(raw)

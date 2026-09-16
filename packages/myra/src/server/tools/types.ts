@@ -36,7 +36,4 @@ export interface MyraToolResult {
   proposals?: ProposalSummary[]
 }
 
-export type ToolRunner = (
-  ctx: MyraToolContext,
-  input: unknown
-) => Promise<MyraToolResult>
+export type ToolRunner = (ctx: MyraToolContext, input: unknown) => Promise<MyraToolResult>

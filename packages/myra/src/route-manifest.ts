@@ -17,23 +17,106 @@ export interface RouteEntry {
 export const ROUTE_MANIFEST: readonly RouteEntry[] = [
   // Marketing surface
   { path: "/", surface: "marketing", label: "Home", description: "LyraShield AI homepage" },
-  { path: "/pricing", surface: "marketing", label: "Pricing", description: "Cloud plans, minute packs, trial and Local availability" },
-  { path: "/scan", surface: "marketing", label: "Lite Check", description: "Free passive public-surface check" },
-  { path: "/tools", surface: "marketing", label: "Free tools", description: "Browser-local security tools" },
-  { path: "/docs/integrations", surface: "marketing", label: "Integration guides", description: "CLI, MCP, GitHub Action and agent client setup" },
-  { path: "/support", surface: "marketing", label: "Support", description: "Contact support and security reporting" },
-  { path: "/demo", surface: "marketing", label: "Book a demo", description: "Schedule a product walkthrough" },
-  { path: "/methodology", surface: "marketing", label: "Methodology", description: "How scans, evidence and retests work" },
-  { path: "/compare", surface: "marketing", label: "Comparisons", description: "LyraShield vs other tools" },
+  {
+    path: "/pricing",
+    surface: "marketing",
+    label: "Pricing",
+    description: "Cloud plans, minute packs, trial and Local availability",
+  },
+  {
+    path: "/scan",
+    surface: "marketing",
+    label: "Lite Check",
+    description: "Free passive public-surface check",
+  },
+  {
+    path: "/tools",
+    surface: "marketing",
+    label: "Free tools",
+    description: "Browser-local security tools",
+  },
+  {
+    path: "/docs/integrations",
+    surface: "marketing",
+    label: "Integration guides",
+    description: "CLI, MCP, GitHub Action and agent client setup",
+  },
+  {
+    path: "/support",
+    surface: "marketing",
+    label: "Support",
+    description: "Contact support and security reporting",
+  },
+  {
+    path: "/demo",
+    surface: "marketing",
+    label: "Book a demo",
+    description: "Schedule a product walkthrough",
+  },
+  {
+    path: "/methodology",
+    surface: "marketing",
+    label: "Methodology",
+    description: "How scans, evidence and retests work",
+  },
+  {
+    path: "/compare",
+    surface: "marketing",
+    label: "Comparisons",
+    description: "LyraShield vs other tools",
+  },
   // App surface
-  { path: "/dashboard", surface: "app", label: "Dashboard", description: "Posture, next action and activity" },
-  { path: "/dashboard/targets", surface: "app", label: "Targets", description: "Manage scan targets" },
-  { path: "/dashboard/scans", surface: "app", label: "Scans", description: "Scan history and status" },
-  { path: "/dashboard/findings", surface: "app", label: "Findings", description: "Detected issues and evidence state" },
-  { path: "/dashboard/schedules", surface: "app", label: "Schedules", description: "Recurring scan schedules", minRole: "MEMBER" },
-  { path: "/dashboard/settings", surface: "app", label: "Settings", description: "Workspace settings and connections" },
-  { path: "/dashboard/billing", surface: "app", label: "Billing", description: "Plan, minutes and packs", minRole: "BILLING_ADMIN" },
-  { path: "/dashboard/admin/support", surface: "app", label: "Support inbox", description: "Platform-operator support console", minRole: "OWNER" },
+  {
+    path: "/dashboard",
+    surface: "app",
+    label: "Dashboard",
+    description: "Posture, next action and activity",
+  },
+  {
+    path: "/dashboard/targets",
+    surface: "app",
+    label: "Targets",
+    description: "Manage scan targets",
+  },
+  {
+    path: "/dashboard/scans",
+    surface: "app",
+    label: "Scans",
+    description: "Scan history and status",
+  },
+  {
+    path: "/dashboard/findings",
+    surface: "app",
+    label: "Findings",
+    description: "Detected issues and evidence state",
+  },
+  {
+    path: "/dashboard/schedules",
+    surface: "app",
+    label: "Schedules",
+    description: "Recurring scan schedules",
+    minRole: "MEMBER",
+  },
+  {
+    path: "/dashboard/settings",
+    surface: "app",
+    label: "Settings",
+    description: "Workspace settings and connections",
+  },
+  {
+    path: "/dashboard/billing",
+    surface: "app",
+    label: "Billing",
+    description: "Plan, minutes and packs",
+    minRole: "BILLING_ADMIN",
+  },
+  {
+    path: "/dashboard/admin/support",
+    surface: "app",
+    label: "Support inbox",
+    description: "Platform-operator support console",
+    minRole: "OWNER",
+  },
 ]
 
 const ROLE_RANK: Record<string, number> = {
@@ -81,7 +164,5 @@ export function routeAllowedForPrincipal(
 
 /** Validate a route is present in the manifest (blocks model-invented links). */
 export function isManifestRoute(path: string, surface?: "marketing" | "app"): boolean {
-  return ROUTE_MANIFEST.some(
-    (r) => r.path === path && (!surface || r.surface === surface)
-  )
+  return ROUTE_MANIFEST.some((r) => r.path === path && (!surface || r.surface === surface))
 }

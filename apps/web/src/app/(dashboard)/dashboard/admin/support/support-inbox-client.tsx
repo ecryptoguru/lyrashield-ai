@@ -78,16 +78,18 @@ function statusVariant(status: CaseStatus) {
 }
 
 function authorVariant(author: CaseReply["authorType"]) {
-  return author === "OPERATOR" ? ("default" as const) : author === "MYRA" ? ("info" as const) : ("muted" as const)
+  return author === "OPERATOR"
+    ? ("default" as const)
+    : author === "MYRA"
+      ? ("info" as const)
+      : ("muted" as const)
 }
 
 function isUnread(row: CaseRow): boolean {
   if (row.status === "NEW") return true
   if (!row.lastUserReplyAt) return false
   // lastUserReplyAt ≈ updatedAt means the latest activity was a user reply.
-  return (
-    new Date(row.lastUserReplyAt).getTime() >= new Date(row.updatedAt).getTime() - 60_000
-  )
+  return new Date(row.lastUserReplyAt).getTime() >= new Date(row.updatedAt).getTime() - 60_000
 }
 
 function age(iso: string): string {
@@ -312,7 +314,8 @@ export function SupportInbox() {
           <Card className="border-l-2 border-l-amber-500 p-4 text-sm">{listError}</Card>
         ) : rows.length === 0 ? (
           <Card className="text-muted-foreground p-4 text-sm">
-            No cases{statusFilter ? ` with status ${statusFilter.toLowerCase().replace(/_/g, " ")}` : ""}.
+            No cases
+            {statusFilter ? ` with status ${statusFilter.toLowerCase().replace(/_/g, " ")}` : ""}.
           </Card>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -324,7 +327,9 @@ export function SupportInbox() {
                   aria-current={selectedId === row.id || undefined}
                   className={cn(
                     "focus-visible:ring-ring w-full rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none",
-                    selectedId === row.id ? "border-primary" : "border-border hover:border-primary/60"
+                    selectedId === row.id
+                      ? "border-primary"
+                      : "border-border hover:border-primary/60"
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -474,9 +479,7 @@ export function SupportInbox() {
                           {formatTime(reply.createdAt)}
                         </span>
                       </div>
-                      <p className="mt-1.5 text-sm break-words whitespace-pre-wrap">
-                        {reply.body}
-                      </p>
+                      <p className="mt-1.5 text-sm break-words whitespace-pre-wrap">{reply.body}</p>
                     </li>
                   ))}
                 </ul>

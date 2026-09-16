@@ -47,20 +47,11 @@ async function post(request: Request): Promise<Response> {
   }
 
   if (!(await verifyTurnstile(parsed.data.turnstileToken))) {
-    return myraFail(
-      request,
-      "VERIFICATION_FAILED",
-      "Please retry the abuse check.",
-      403
-    )
+    return myraFail(request, "VERIFICATION_FAILED", "Please retry the abuse check.", 403)
   }
 
   try {
-    await requestIdentityCode(
-      parsed.data.email,
-      parsed.data.purpose,
-      parsed.data.publicSessionId
-    )
+    await requestIdentityCode(parsed.data.email, parsed.data.purpose, parsed.data.publicSessionId)
   } catch (error) {
     // Never reveal existence or send failures through this surface — the
     // caller-visible contract is identical either way.

@@ -74,9 +74,6 @@ export async function runInstantSuggest(
   })
   return {
     data: { hitCount: suggestions.length, abstained: suggestions.length === 0 },
-    components:
-      suggestions.length > 0
-        ? [{ type: "instant_suggestions", suggestions }]
-        : [],
+    components: suggestions.length > 0 ? [{ type: "instant_suggestions", suggestions }] : [],
   }
 }

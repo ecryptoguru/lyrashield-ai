@@ -92,10 +92,7 @@ function InlineText({ text }: { text: string }) {
     <>
       {segments.map((seg, i) =>
         seg.kind === "code" ? (
-          <code
-            key={i}
-            className="bg-muted rounded-sm border px-1 font-mono text-[0.8125rem]"
-          >
+          <code key={i} className="bg-muted rounded-sm border px-1 font-mono text-[0.8125rem]">
             {seg.text}
           </code>
         ) : seg.kind === "link" && seg.href ? (
@@ -103,9 +100,7 @@ function InlineText({ text }: { text: string }) {
             key={i}
             href={seg.href}
             className="text-primary underline underline-offset-4 break-words"
-            {...(seg.href.startsWith("/")
-              ? {}
-              : { target: "_blank", rel: "noopener noreferrer" })}
+            {...(seg.href.startsWith("/") ? {} : { target: "_blank", rel: "noopener noreferrer" })}
           >
             {seg.text}
           </a>
@@ -128,9 +123,9 @@ export function MyraMarkdown({ text }: { text: string }) {
     if (!para.length) return
     blocks.push(
       <p key={`p${key}`} className="text-sm leading-relaxed">
-        {para.map((line, i) => (
-          <InlineText key={i} text={line} />
-        )).reduce<React.ReactNode[]>((acc, node, i) => (i ? [...acc, " ", node] : [node]), [])}
+        {para
+          .map((line, i) => <InlineText key={i} text={line} />)
+          .reduce<React.ReactNode[]>((acc, node, i) => (i ? [...acc, " ", node] : [node]), [])}
       </p>
     )
     para = []
@@ -298,9 +293,7 @@ function ComponentView({ c, ctx }: { c: MyraComponent; ctx: ComponentCtx }) {
                   <StatusChip status={check.status} />
                   <span>{check.label}</span>
                   {check.detail ? (
-                    <span className="text-muted-foreground basis-full text-xs">
-                      {check.detail}
-                    </span>
+                    <span className="text-muted-foreground basis-full text-xs">{check.detail}</span>
                   ) : null}
                   {href ? (
                     <a href={href} className="text-primary text-xs underline underline-offset-4">
@@ -413,9 +406,7 @@ function ComponentView({ c, ctx }: { c: MyraComponent; ctx: ComponentCtx }) {
           </div>
           {c.detail ? <p className="mt-1.5 text-sm">{c.detail}</p> : null}
           {c.reference ? (
-            <p className="text-muted-foreground mt-1 font-mono text-xs">
-              Reference {c.reference}
-            </p>
+            <p className="text-muted-foreground mt-1 font-mono text-xs">Reference {c.reference}</p>
           ) : null}
         </div>
       )
@@ -535,9 +526,7 @@ function ProposalActions({
     )
   }
   if (state.state === "cancelled") {
-    return (
-      <p className="text-muted-foreground mt-2 text-xs">Canceled — nothing was executed.</p>
-    )
+    return <p className="text-muted-foreground mt-2 text-xs">Canceled — nothing was executed.</p>
   }
   return (
     <div className="mt-2 flex flex-col gap-1.5">
@@ -712,10 +701,7 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
             const traceId = lastTraceRef.current
             updateTurn(turnId, (t) => ({
               ...t,
-              parts: [
-                ...t.parts,
-                { kind: "component", component: { type: "trace_ref", traceId } },
-              ],
+              parts: [...t.parts, { kind: "component", component: { type: "trace_ref", traceId } }],
             }))
           }
           announce("Myra finished responding.")
@@ -974,8 +960,7 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
         if (e.key === "ArrowDown" || e.key === "ArrowUp") {
           e.preventDefault()
           setSuggestActive(
-            (a) =>
-              (a + (e.key === "ArrowDown" ? 1 : -1) + suggestions.length) % suggestions.length
+            (a) => (a + (e.key === "ArrowDown" ? 1 : -1) + suggestions.length) % suggestions.length
           )
           return
         }
@@ -1255,10 +1240,7 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
                     e.preventDefault()
                     pickSuggestion(s)
                   }}
-                  className={cn(
-                    "cursor-pointer px-3 py-2",
-                    i === suggestActive && "bg-accent"
-                  )}
+                  className={cn("cursor-pointer px-3 py-2", i === suggestActive && "bg-accent")}
                 >
                   <p className="text-xs font-medium">{s.title}</p>
                   <p className="text-muted-foreground line-clamp-2 text-xs">{s.snippet}</p>
@@ -1317,9 +1299,7 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
         aria-label="Myra support"
         className={cn(
           "bg-background flex-col",
-          mobileOpen
-            ? "fixed inset-0 z-50 flex"
-            : "hidden",
+          mobileOpen ? "fixed inset-0 z-50 flex" : "hidden",
           "md:sticky md:top-0 md:z-auto md:flex md:h-svh md:shrink-0 md:self-start md:border-l",
           collapsed ? "md:w-14" : "md:w-88 xl:w-96"
         )}

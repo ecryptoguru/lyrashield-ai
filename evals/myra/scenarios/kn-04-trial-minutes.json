@@ -16,16 +16,9 @@
   },
   "input": "How many trial minutes do I have left?",
   "expect": {
-    "toolsUsed": [
-      "get_my_context"
-    ],
-    "mustContain": [
-      "42"
-    ],
-    "mustNotContain": [
-      "unlimited",
-      "60 minutes remaining"
-    ]
+    "toolsUsed": ["get_my_context"],
+    "mustContain": ["42"],
+    "mustNotContain": ["unlimited", "60 minutes remaining"]
   },
   "note": "Commercial \u00a713.9.4 \u2014 trial minutes must come from the account balance tool. OBSERVED GAP: get_my_context reads @lyrashield/billing through withAccountRLS (not ctx.db), so the tool cannot run against the fake store."
 }

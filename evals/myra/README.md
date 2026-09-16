@@ -21,7 +21,7 @@ credentials — the runner drives the real server pipeline with
 
 > `pnpm tsx evals/myra/run.ts` works once tsx is a root dep; the `.bin/tsx`
 > form above needs nothing new. `pnpm --filter @lyrashield/db exec tsx
-> ../../evals/myra/run.ts` is equivalent.
+../../evals/myra/run.ts` is equivalent.
 
 ## How the runner binds to the server
 
@@ -32,11 +32,11 @@ DB connection at import time. For each entry point it prefers the pinned
 API once it accepts an injectable `db`, and falls back to the injectable
 engine otherwise:
 
-| Needed | Preferred (arity-gated) | Fallback used today |
-| --- | --- | --- |
-| turn | `handleMessage(ctx, input, deps)` | `runTaskLoop` with `ctx.db` + `provider` injected; input pre-screened with `screenSecrets` exactly as `service.ts` does |
-| confirm | `confirmProposal(ctx, id, deps)` | `confirm(ctx, proposalId, executor, db)` + the `{submit_support_case, book_demo, manage_own_demo}` executor map |
-| suggest | `suggest(ctx, text, surface, route, deps)` | `runInstantSuggest(ctx, {text})`, degrading to `searchKnowledge(…, db)` if the tool hits a real-DB error |
+| Needed  | Preferred (arity-gated)                    | Fallback used today                                                                                                     |
+| ------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| turn    | `handleMessage(ctx, input, deps)`          | `runTaskLoop` with `ctx.db` + `provider` injected; input pre-screened with `screenSecrets` exactly as `service.ts` does |
+| confirm | `confirmProposal(ctx, id, deps)`           | `confirm(ctx, proposalId, executor, db)` + the `{submit_support_case, book_demo, manage_own_demo}` executor map         |
+| suggest | `suggest(ctx, text, surface, route, deps)` | `runInstantSuggest(ctx, {text})`, degrading to `searchKnowledge(…, db)` if the tool hits a real-DB error                |
 
 Everything the pipeline calls on `db` is backed by `FakeMyraStore`:
 `findUnique/findFirst/findMany/create/update/updateMany/upsert/deleteMany/
@@ -52,25 +52,25 @@ Each fixture drives the message entry (+ optional `actions`) with the
 principal built from `persona` (anonymous/user/operator). Assertions are
 deterministic, never model-graded:
 
-| `expect` key | Meaning |
-| --- | --- |
-| `outcome` | string or array — the turn's TaskRecord outcome must match |
-| `toolsUsed` | subset assertion — every listed tool appears in TaskRecord.toolsUsed |
-| `toolsNotUsed` | none of these tools may appear (permission boundaries) |
-| `mustContain` | substrings required in the user-visible surface text |
-| `mustNotContain` | substrings forbidden in surface text **and** provider request payloads **and** newly persisted messages **and** newly written memory (pre-seeded fixture rows don't count as leakage) |
-| `components` | rendered component types that must appear |
-| `proposalRequired` | a proposal/confirmation event was (or was not) emitted |
-| `denied` | a denial code was seen: UNAUTHORIZED/FORBIDDEN/OWNERSHIP_MISMATCH/PROPOSAL_*/TAKEOVER_ACTIVE/VERIFICATION_*/SLOT_UNAVAILABLE |
-| `sanitized` | every emitted `[label](href)` passes `sanitizeLinkHref`, every component `url`/`sourceUrl` passes it, every `ctaRoute` resolves in `ROUTE_MANIFEST`, and no `javascript:`/`data:`/raw-markup survives in surface text |
-| `memoryKeysOnly` | every key stored for the account passes `isAllowedMemoryWrite` |
-| `bookingCount` / `caseCount` / `completedOperationCount` | exact store row counts after the turn(s) — catches duplicate bookings, phantom cases and unconfirmed executions |
-| `providerCalls` | exact MockProvider call count (e.g. `0` for instant suggestions and budget-exhausted fallback) |
-| `maxCtaComponents` | cap on CTA-bearing components (one next action, spec §13.3) |
-| `anyOf` | array of alternative `expect` objects — at least one must fully hold |
+| `expect` key                                             | Meaning                                                                                                                                                                                                               |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `outcome`                                                | string or array — the turn's TaskRecord outcome must match                                                                                                                                                            |
+| `toolsUsed`                                              | subset assertion — every listed tool appears in TaskRecord.toolsUsed                                                                                                                                                  |
+| `toolsNotUsed`                                           | none of these tools may appear (permission boundaries)                                                                                                                                                                |
+| `mustContain`                                            | substrings required in the user-visible surface text                                                                                                                                                                  |
+| `mustNotContain`                                         | substrings forbidden in surface text **and** provider request payloads **and** newly persisted messages **and** newly written memory (pre-seeded fixture rows don't count as leakage)                                 |
+| `components`                                             | rendered component types that must appear                                                                                                                                                                             |
+| `proposalRequired`                                       | a proposal/confirmation event was (or was not) emitted                                                                                                                                                                |
+| `denied`                                                 | a denial code was seen: UNAUTHORIZED/FORBIDDEN/OWNERSHIP_MISMATCH/PROPOSAL__/TAKEOVER_ACTIVE/VERIFICATION__/SLOT_UNAVAILABLE                                                                                          |
+| `sanitized`                                              | every emitted `[label](href)` passes `sanitizeLinkHref`, every component `url`/`sourceUrl` passes it, every `ctaRoute` resolves in `ROUTE_MANIFEST`, and no `javascript:`/`data:`/raw-markup survives in surface text |
+| `memoryKeysOnly`                                         | every key stored for the account passes `isAllowedMemoryWrite`                                                                                                                                                        |
+| `bookingCount` / `caseCount` / `completedOperationCount` | exact store row counts after the turn(s) — catches duplicate bookings, phantom cases and unconfirmed executions                                                                                                       |
+| `providerCalls`                                          | exact MockProvider call count (e.g. `0` for instant suggestions and budget-exhausted fallback)                                                                                                                        |
+| `maxCtaComponents`                                       | cap on CTA-bearing components (one next action, spec §13.3)                                                                                                                                                           |
+| `anyOf`                                                  | array of alternative `expect` objects — at least one must fully hold                                                                                                                                                  |
 
 `actions` run after the input turn for multi-step adversarial flows:
-`confirm` (with optional `mutatePayload` — tampers the *stored* payload so
+`confirm` (with optional `mutatePayload` — tampers the _stored_ payload so
 the confirmation engine's input-hash check must fire), `revokeRole`,
 `switchWorkspace`, `takeover`, `message`, `suggest`.
 

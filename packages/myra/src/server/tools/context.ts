@@ -29,8 +29,7 @@ export async function runGetMyContext(
     resolveAccountBilling: ctx.deps?.resolveAccountBilling ?? resolveAccountBilling,
     getAccountTrialState: ctx.deps?.getAccountTrialState ?? getAccountTrialState,
     getUsageBalance: ctx.deps?.getUsageBalance ?? getUsageBalance,
-    evaluateScanEntitlement:
-      ctx.deps?.evaluateScanEntitlement ?? evaluateScanEntitlement,
+    evaluateScanEntitlement: ctx.deps?.evaluateScanEntitlement ?? evaluateScanEntitlement,
   }
 
   // An injected db (tests/evals) is already the scoped view — skip the RLS
@@ -71,9 +70,7 @@ export async function runGetMyContext(
   if (ctx.workspaceId) {
     const workspaceId = ctx.workspaceId
     targetCount = ctx.db
-      ? await ctx.db.target
-          .count({ where: { workspaceId, deletedAt: null } })
-          .catch(() => null)
+      ? await ctx.db.target.count({ where: { workspaceId, deletedAt: null } }).catch(() => null)
       : await withWorkspaceRLS(
           workspaceId,
           (tx) => tx.target.count({ where: { workspaceId, deletedAt: null } }),
@@ -101,9 +98,7 @@ export async function runGetMyContext(
       trialDaysLeft: summary.trial.daysLeft,
       minutesRemaining: summary.balance?.totalRemaining ?? summary.trial.minutesLeft,
       targetCount,
-      targetCap: summary.trial.isActive
-        ? summary.trial.targetCap
-        : (cloudPlan?.targetCaps ?? null),
+      targetCap: summary.trial.isActive ? summary.trial.targetCap : (cloudPlan?.targetCaps ?? null),
       canScan,
     },
   }

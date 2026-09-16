@@ -48,10 +48,7 @@ export async function pruneMyraRetention(db: MyraDb = prisma): Promise<Retention
       db.myraPublicSession.deleteMany({ where: { expiresAt: { lt: now } } }),
       db.myraIdentityVerification.deleteMany({
         where: {
-          OR: [
-            { consumedAt: { lt: dayAgo } },
-            { consumedAt: null, expiresAt: { lt: dayAgo } },
-          ],
+          OR: [{ consumedAt: { lt: dayAgo } }, { consumedAt: null, expiresAt: { lt: dayAgo } }],
         },
       }),
       db.supportCase.deleteMany({ where: { createdAt: { lt: caseCutoff } } }),

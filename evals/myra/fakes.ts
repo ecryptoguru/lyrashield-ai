@@ -24,17 +24,7 @@ import { MYRA_MEMORY_KEYS, isAllowedMemoryWrite } from "../../packages/myra/src/
 type Row = Record<string, unknown> & { id: string }
 type Where = Record<string, unknown>
 
-const OP_KEYS = new Set([
-  "in",
-  "notIn",
-  "not",
-  "lt",
-  "lte",
-  "gt",
-  "gte",
-  "contains",
-  "equals",
-])
+const OP_KEYS = new Set(["in", "notIn", "not", "lt", "lte", "gt", "gte", "contains", "equals"])
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !(v instanceof Date) && !Array.isArray(v)
@@ -210,7 +200,10 @@ export class FakeTable<T extends Row = Row> {
     return rows.map((r) => project(r, q.select))
   }
 
-  async create(q: { data: Record<string, unknown>; select?: Record<string, boolean> }): Promise<Row> {
+  async create(q: {
+    data: Record<string, unknown>
+    select?: Record<string, boolean>
+  }): Promise<Row> {
     const now = new Date()
     const row = {
       id: this.newId(),
@@ -242,7 +235,10 @@ export class FakeTable<T extends Row = Row> {
     return project(row as T, q.select)
   }
 
-  async updateMany(q: { where?: Where; data: Record<string, unknown> }): Promise<{ count: number }> {
+  async updateMany(q: {
+    where?: Where
+    data: Record<string, unknown>
+  }): Promise<{ count: number }> {
     let count = 0
     for (const row of this.rows.values()) {
       if (!rowMatches(row, q.where)) continue
@@ -316,7 +312,11 @@ export class FakeMyraStore {
   readonly connection = new FakeTable()
 
   /** Notification deliveries — separate fact from case persistence. */
-  notifications: { caseId: string; status: "queued" | "delivered" | "failed"; error: string | null }[] = []
+  notifications: {
+    caseId: string
+    status: "queued" | "delivered" | "failed"
+    error: string | null
+  }[] = []
 
   flags = {
     /** Not currently wired into the server (the notifier seam lives in
@@ -359,21 +359,24 @@ export class FakeMyraStore {
    * the SQL text (+ the role bind value), then scores by token overlap.
    * Anything unrecognized returns [] — fail-closed for a fake.
    */
-  async $queryRaw(query: { text?: string; strings?: string[]; values?: unknown[] } | string): Promise<Row[]> {
+  async $queryRaw(
+    query: { text?: string; strings?: string[]; values?: unknown[] } | string
+  ): Promise<Row[]> {
     const text =
-      typeof query === "string"
-        ? query
-        : (query.strings ?? []).join("?") + (query.text ?? "")
+      typeof query === "string" ? query : (query.strings ?? []).join("?") + (query.text ?? "")
     if (!text.includes("myra_knowledge_entries")) return []
     const values = typeof query === "object" ? (query.values ?? []) : []
     const roleParam = values.find((v) => typeof v === "string" && /^[A-Z_]+$/.test(v)) as
-      | string
-      | undefined
-    const queryText = values
-      .filter((v): v is string => typeof v === "string")
-      .sort((a, b) => b.length - a.length)[0] ?? ""
+      string | undefined
+    const queryText =
+      values
+        .filter((v): v is string => typeof v === "string")
+        .sort((a, b) => b.length - a.length)[0] ?? ""
     const allowRestricted = text.includes("'RESTRICTED'")
-    const tokens = queryText.toLowerCase().split(/[^a-z0-9_]+/).filter((t) => t.length > 2)
+    const tokens = queryText
+      .toLowerCase()
+      .split(/[^a-z0-9_]+/)
+      .filter((t) => t.length > 2)
     const out: Row[] = []
     for (const e of this.myraKnowledgeEntry.rows.values()) {
       if (e.status !== "ACTIVE") continue
@@ -509,7 +512,10 @@ export function hashPayload(payload: unknown): string {
 const FAR_FUTURE = new Date("2099-01-01T00:00:00Z")
 
 /** Seed a fresh FakeMyraStore from a scenario `setup` block. */
-export function seedStore(setup: ScenarioSetup | undefined, principal: MyraPrincipal): FakeMyraStore {
+export function seedStore(
+  setup: ScenarioSetup | undefined,
+  principal: MyraPrincipal
+): FakeMyraStore {
   const store = new FakeMyraStore()
   if (!setup) return store
 
@@ -604,8 +610,7 @@ export function seedStore(setup: ScenarioSetup | undefined, principal: MyraPrinc
       publicSessionId: op.publicSessionId !== undefined ? op.publicSessionId : publicSessionId,
       workspaceId: op.workspaceId !== undefined ? op.workspaceId : workspaceId,
       conversationId: op.conversationId !== undefined ? op.conversationId : "conv_eval",
-      inputHash:
-        op.hashMatchesPayload === false ? "mismatch" : hashPayload(op.payload),
+      inputHash: op.hashMatchesPayload === false ? "mismatch" : hashPayload(op.payload),
       payload: op.payload,
       idempotencyKey: op.idempotencyKey ?? `idem_${op.id}`,
       expiresAt: op.expiresAt ? new Date(op.expiresAt) : FAR_FUTURE,
@@ -731,8 +736,7 @@ export class MockProvider {
 }
 
 function composeFromToolOutputs(input: unknown): string {
-  const ctx = (input as { context?: { toolOutputs?: ToolOutputLike[]; intent?: string } })
-    ?.context
+  const ctx = (input as { context?: { toolOutputs?: ToolOutputLike[]; intent?: string } })?.context
   const outs = ctx?.toolOutputs ?? []
   const data = (name: string) => outs.find((t) => t.name === name)?.output
 
@@ -754,9 +758,9 @@ function composeFromToolOutputs(input: unknown): string {
   const flow = data("start_guided_flow")
   if (flow) return "I've started a guided check — follow the step shown and I'll re-verify it."
   const manage = data("manage_own_demo")
-  const bookings = (manage?.bookings as
-    | { status?: string; conferenceState?: string; startsAt?: string }[]
-    | undefined) ?? []
+  const bookings =
+    (manage?.bookings as
+      { status?: string; conferenceState?: string; startsAt?: string }[] | undefined) ?? []
   if (manage && bookings.length) {
     const latest = bookings[0]!
     if (latest.status === "OUTCOME_UNKNOWN") {

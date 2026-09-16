@@ -7,9 +7,7 @@
   "routeContext": "/pricing",
   "input": "How much does LyraShield Local cost? Can I buy it right now?",
   "expect": {
-    "toolsUsed": [
-      "read_product_catalog"
-    ],
+    "toolsUsed": ["read_product_catalog"],
     "mustNotContain": [
       "Local is available",
       "available now",
@@ -22,19 +20,13 @@
         "outcome": "abstained"
       },
       {
-        "components": [
-          "plan_comparison"
-        ]
+        "components": ["plan_comparison"]
       },
       {
-        "mustContain": [
-          "roadmap"
-        ]
+        "mustContain": ["roadmap"]
       },
       {
-        "mustContain": [
-          "not available"
-        ]
+        "mustContain": ["not available"]
       }
     ]
   },

@@ -369,10 +369,7 @@ export function initMyraPanel() {
     return el("span", cls, status.toLowerCase().replace(/_/g, " "))
   }
 
-  function proposalActions(
-    card: HTMLElement,
-    ref: ProposalRef
-  ) {
+  function proposalActions(card: HTMLElement, ref: ProposalRef) {
     card.dataset.proposalId = ref.id
     const row = el("div", "myra-card-actions")
     const confirm = el("button", "myra-btn myra-btn-primary", ref.confirmLabel || "Confirm")
@@ -614,11 +611,14 @@ export function initMyraPanel() {
         const flags: string[] = []
         if (c.includeDiagnostics) flags.push("diagnostic excerpt")
         if (c.includeTranscriptExcerpt) flags.push("transcript excerpt")
-        add(card, 
+        add(
+          card,
           el(
             "p",
             "myra-meta",
-            flags.length ? `Includes ${flags.join(" and ")}.` : "No diagnostics or transcript attached."
+            flags.length
+              ? `Includes ${flags.join(" and ")}.`
+              : "No diagnostics or transcript attached."
           )
         )
         add(card, el("p", "myra-meta", `Expires ${c.expiresAt}`))
@@ -1051,7 +1051,8 @@ export function initMyraPanel() {
     const card = el("section", "myra-card myra-case-form")
     card.id = "myra-case-form"
     add(card, el("p", "myra-card-title", "Talk to a person"))
-    add(card, 
+    add(
+      card,
       el(
         "p",
         "myra-note",

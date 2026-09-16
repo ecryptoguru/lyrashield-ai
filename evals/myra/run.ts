@@ -42,12 +42,7 @@ import {
 } from "../../packages/myra/src/contracts"
 import { isManifestRoute } from "../../packages/myra/src/route-manifest"
 import { sanitizeLinkHref, screenSecrets } from "../../packages/myra/src/sanitize"
-import {
-  MockProvider,
-  seedStore,
-  type FakeMyraStore,
-  type ScenarioSetup,
-} from "./fakes"
+import { MockProvider, seedStore, type FakeMyraStore, type ScenarioSetup } from "./fakes"
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SCENARIO_DIR = join(HERE, "scenarios")
@@ -55,9 +50,23 @@ const REPORT_PATH = join(HERE, "last-report.json")
 
 // ─── Scenario fixture shape ────────────────────────────────────────────────
 
-const CATEGORIES = ["knowledge", "diagnostic", "permission", "action", "handoff", "accessibility"] as const
+const CATEGORIES = [
+  "knowledge",
+  "diagnostic",
+  "permission",
+  "action",
+  "handoff",
+  "accessibility",
+] as const
 const PERSONAS = ["anonymous", "user", "operator"] as const
-const OUTCOMES = ["answered", "abstained", "escalated", "action_proposed", "action_done", "error"] as const
+const OUTCOMES = [
+  "answered",
+  "abstained",
+  "escalated",
+  "action_proposed",
+  "action_done",
+  "error",
+] as const
 
 interface ScenarioAction {
   type: "confirm" | "revokeRole" | "switchWorkspace" | "takeover" | "message" | "suggest"
@@ -291,8 +300,7 @@ async function loadPipeline(): Promise<PipelineStatus> {
           principal: args.principal,
           surface: args.surface,
           conversationId: args.input.conversationId ?? null,
-          workspaceId:
-            args.principal.kind === "user" ? (args.principal.workspaceId ?? null) : null,
+          workspaceId: args.principal.kind === "user" ? (args.principal.workspaceId ?? null) : null,
           role: args.principal.kind === "user" ? args.principal.role : null,
           routeContext: args.routeContext,
           db: args.db,
@@ -431,30 +439,34 @@ async function loadPipeline(): Promise<PipelineStatus> {
     bound.push("searchKnowledge")
     const fn = mod.searchKnowledge
     suggest = async (a) => ({
-      suggestions: ((await fn(
-        a.principal as never,
-        a.text as never,
-        {
-          limit: 3,
-          role:
-            (a.principal as MyraPrincipal).kind === "user"
-              ? (a.principal as { role?: string | null }).role
-              : null,
-        } as never,
-        a.db as never
-      )) as { entryId: string; title: string; snippet: string; sourceUrl: string | null }[]).map(
-        (h) => ({
-          entryId: h.entryId,
-          title: h.title,
-          snippet: h.snippet,
-          sourceUrl: h.sourceUrl ?? undefined,
-        })
-      ),
+      suggestions: (
+        (await fn(
+          a.principal as never,
+          a.text as never,
+          {
+            limit: 3,
+            role:
+              (a.principal as MyraPrincipal).kind === "user"
+                ? (a.principal as { role?: string | null }).role
+                : null,
+          } as never,
+          a.db as never
+        )) as { entryId: string; title: string; snippet: string; sourceUrl: string | null }[]
+      ).map((h) => ({
+        entryId: h.entryId,
+        title: h.title,
+        snippet: h.snippet,
+        sourceUrl: h.sourceUrl ?? undefined,
+      })),
     })
   }
 
-  if (missing.length) return { pipeline: null, missing, error: `bound: ${bound.join(", ") || "none"}` }
-  return { pipeline: { handleMessage: handleMessage!, confirmProposal: confirmProposal!, suggest, bound }, missing: [] }
+  if (missing.length)
+    return { pipeline: null, missing, error: `bound: ${bound.join(", ") || "none"}` }
+  return {
+    pipeline: { handleMessage: handleMessage!, confirmProposal: confirmProposal!, suggest, bound },
+    missing: [],
+  }
 }
 
 // ─── Turn collection ───────────────────────────────────────────────────────
@@ -538,8 +550,12 @@ function absorbEvent(turn: TurnResult, raw: unknown): void {
     case "proposal":
       turn.proposalCount += 1
       turn.surfaceText +=
-        event.proposal.title + "\n" + event.proposal.description + "\n" +
-        JSON.stringify(event.proposal.payloadPreview) + "\n"
+        event.proposal.title +
+        "\n" +
+        event.proposal.description +
+        "\n" +
+        JSON.stringify(event.proposal.payloadPreview) +
+        "\n"
       break
     case "operation":
       if (DENIAL_CODES.has(event.status)) turn.denials.push(event.status)
@@ -626,8 +642,7 @@ async function runAction(
           db: store,
           provider,
           conversationId: ctx.conversationId,
-          workspaceId:
-            principal.kind === "user" ? (principal.workspaceId ?? null) : null,
+          workspaceId: principal.kind === "user" ? (principal.workspaceId ?? null) : null,
           deps: ctx.deps,
           ...(action.mutatePayload ? { mutatePayload: action.mutatePayload } : {}),
         })) as Record<string, unknown> | undefined
@@ -651,9 +666,8 @@ async function runAction(
         if (DENIAL_CODES.has(code)) ctx.turn.denials.push(code)
         else {
           const msg = err instanceof Error ? err.message : String(err)
-          const prismaHit = /P\d{4}|PrismaClient|prisma\.|Can't reach database|authentication failed/i.test(
-            msg
-          )
+          const prismaHit =
+            /P\d{4}|PrismaClient|prisma\.|Can't reach database|authentication failed/i.test(msg)
           ctx.turn.actionErrors.push(
             prismaHit
               ? `confirm hit the real DB (path not db-injectable): ${code}`
@@ -783,9 +797,7 @@ function evaluateExpect(
     const newMessages = [...store.myraMessage.rows.values()]
       .filter((r) => !preRunRowIds.has(r.id))
       .map((r) => String(r.content ?? ""))
-    const newMemory = [...store.myraMemory.rows.values()].filter(
-      (r) => !preRunRowIds.has(r.id)
-    )
+    const newMemory = [...store.myraMemory.rows.values()].filter((r) => !preRunRowIds.has(r.id))
     const corpus = [
       turn.surfaceText,
       JSON.stringify(provider.calls.map((c) => c.input)),
@@ -830,7 +842,8 @@ function evaluateExpect(
         }
         check(c[key])
         for (const item of Object.values(c)) {
-          if (Array.isArray(item)) for (const it of item) check((it as Record<string, unknown>)?.[key])
+          if (Array.isArray(item))
+            for (const it of item) check((it as Record<string, unknown>)?.[key])
         }
       }
       for (const m of JSON.stringify(c).matchAll(/"ctaRoute":"([^"]+)"/g)) {
@@ -894,11 +907,31 @@ function evaluateExpect(
 // ─── Fixture loading + validation ──────────────────────────────────────────
 
 const EXPECT_KEYS = new Set([
-  "outcome", "toolsUsed", "toolsNotUsed", "mustContain", "mustNotContain", "components",
-  "proposalRequired", "denied", "sanitized", "memoryKeysOnly", "bookingCount", "caseCount",
-  "completedOperationCount", "providerCalls", "maxCtaComponents", "anyOf",
+  "outcome",
+  "toolsUsed",
+  "toolsNotUsed",
+  "mustContain",
+  "mustNotContain",
+  "components",
+  "proposalRequired",
+  "denied",
+  "sanitized",
+  "memoryKeysOnly",
+  "bookingCount",
+  "caseCount",
+  "completedOperationCount",
+  "providerCalls",
+  "maxCtaComponents",
+  "anyOf",
 ])
-const ACTION_TYPES = new Set(["confirm", "revokeRole", "switchWorkspace", "takeover", "message", "suggest"])
+const ACTION_TYPES = new Set([
+  "confirm",
+  "revokeRole",
+  "switchWorkspace",
+  "takeover",
+  "message",
+  "suggest",
+])
 
 function validateScenario(raw: unknown, file: string): { scenario?: Scenario; problems: string[] } {
   const problems: string[] = []
@@ -959,10 +992,15 @@ async function main(): Promise<number> {
   process.env.MYRA_PROVIDER ??= "mock"
   process.env.MYRA_CALENDAR_PROVIDER ??= "mock"
   const runs = Number(args.find((a) => a.startsWith("--runs="))?.slice(7) ?? "1") || 1
-  const only = args.find((a) => a.startsWith("--scenario="))?.slice(11)?.split(",")
+  const only = args
+    .find((a) => a.startsWith("--scenario="))
+    ?.slice(11)
+    ?.split(",")
   const allowBlocked = args.includes("--allow-blocked")
 
-  const files = readdirSync(SCENARIO_DIR).filter((f) => f.endsWith(".json")).sort()
+  const files = readdirSync(SCENARIO_DIR)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
   const scenarios: Scenario[] = []
   const results: ScenarioResult[] = []
   for (const file of files) {
@@ -973,7 +1011,10 @@ async function main(): Promise<number> {
       raw = JSON.parse(readFileSync(join(SCENARIO_DIR, file), "utf8"))
     } catch (err) {
       results.push({
-        id: file, title: file, category: "?", status: "invalid",
+        id: file,
+        title: file,
+        category: "?",
+        status: "invalid",
         reasons: [`invalid JSON: ${err instanceof Error ? err.message : String(err)}`],
         runCount: 0,
       })
@@ -981,7 +1022,14 @@ async function main(): Promise<number> {
     }
     const { scenario, problems } = validateScenario(raw, file)
     if (!scenario) {
-      results.push({ id: file, title: file, category: "?", status: "invalid", reasons: problems, runCount: 0 })
+      results.push({
+        id: file,
+        title: file,
+        category: "?",
+        status: "invalid",
+        reasons: problems,
+        runCount: 0,
+      })
       continue
     }
     if (only && !only.includes(scenario.id)) continue
@@ -990,22 +1038,29 @@ async function main(): Promise<number> {
 
   const pipeStatus = await loadPipeline()
   if (!pipeStatus.pipeline) {
-    const why = pipeStatus.error ?? `server pipeline incomplete — missing exports: ${pipeStatus.missing.join(", ")}`
+    const why =
+      pipeStatus.error ??
+      `server pipeline incomplete — missing exports: ${pipeStatus.missing.join(", ")}`
     console.error(`[myra-eval] pipeline unavailable: ${why}`)
   }
 
   for (const scenario of scenarios) {
     if (scenario.requiresProvider) {
       results.push({
-        id: scenario.id, title: scenario.title, category: scenario.category,
-        status: "skip", reasons: ["requiresProvider: needs a live model — skipped cleanly"],
+        id: scenario.id,
+        title: scenario.title,
+        category: scenario.category,
+        status: "skip",
+        reasons: ["requiresProvider: needs a live model — skipped cleanly"],
         runCount: 0,
       })
       continue
     }
     if (!pipeStatus.pipeline) {
       results.push({
-        id: scenario.id, title: scenario.title, category: scenario.category,
+        id: scenario.id,
+        title: scenario.title,
+        category: scenario.category,
         status: "blocked",
         reasons: [pipeStatus.error ?? `missing exports: ${pipeStatus.missing.join(", ")}`],
         runCount: 0,
@@ -1044,8 +1099,14 @@ async function main(): Promise<number> {
         const callsBeforeActions = provider.calls.length
         for (const action of scenario.actions ?? []) {
           await runAction(action, {
-            pipeline: pipeStatus.pipeline, principal, store, provider,
-            conversationId, surface, routeContext: scenario.routeContext ?? null, turn,
+            pipeline: pipeStatus.pipeline,
+            principal,
+            store,
+            provider,
+            conversationId,
+            surface,
+            routeContext: scenario.routeContext ?? null,
+            turn,
             deps,
           })
         }
@@ -1072,8 +1133,12 @@ async function main(): Promise<number> {
       }
     }
     results.push({
-      id: scenario.id, title: scenario.title, category: scenario.category,
-      status: allReasons.length ? "fail" : "pass", reasons: allReasons, runCount,
+      id: scenario.id,
+      title: scenario.title,
+      category: scenario.category,
+      status: allReasons.length ? "fail" : "pass",
+      reasons: allReasons,
+      runCount,
     })
   }
 
@@ -1104,8 +1169,12 @@ async function main(): Promise<number> {
     runs,
     totals,
     results: results.map((r) => ({
-      id: r.id, title: r.title, category: r.category, status: r.status,
-      reasons: r.reasons, runCount: r.runCount,
+      id: r.id,
+      title: r.title,
+      category: r.category,
+      status: r.status,
+      reasons: r.reasons,
+      runCount: r.runCount,
     })),
   }
   writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2) + "\n")

@@ -76,7 +76,13 @@ function flowComponent(
       id: s.id,
       title: s.title,
       status:
-        i < stepIndex ? "done" : i === stepIndex ? (s.id === blockedStepId ? "blocked" : "active") : "pending",
+        i < stepIndex
+          ? "done"
+          : i === stepIndex
+            ? s.id === blockedStepId
+              ? "blocked"
+              : "active"
+            : "pending",
     })),
   }
 }
@@ -94,7 +100,13 @@ function checkExpectation(expect: string, data: Record<string, unknown>): boolea
   const left = data[m[1]!]
   const rightRaw = m[3]!
   const right =
-    rightRaw === "true" ? true : rightRaw === "false" ? false : Number.isNaN(Number(rightRaw)) ? rightRaw : Number(rightRaw)
+    rightRaw === "true"
+      ? true
+      : rightRaw === "false"
+        ? false
+        : Number.isNaN(Number(rightRaw))
+          ? rightRaw
+          : Number(rightRaw)
   switch (m[2]) {
     case "==":
       return left === right
@@ -122,8 +134,7 @@ async function runCheckTool(
     if (step.check.tool === "get_my_context") return (await runGetMyContext(ctx, {})).data
     if (step.check.tool === "get_connection_health")
       return (await runGetConnectionHealth(ctx, {})).data
-    if (step.check.tool === "get_scan_status")
-      return (await runGetScanStatus(ctx, {})).data
+    if (step.check.tool === "get_scan_status") return (await runGetScanStatus(ctx, {})).data
     if (step.check.tool === "verify_resolution") return (await runVerifyResolution(ctx, {})).data
   } catch {
     return null

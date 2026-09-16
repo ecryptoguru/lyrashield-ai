@@ -63,8 +63,7 @@ async function get(request: Request): Promise<Response> {
       operator.userId
     )
     const response = apiSuccess(result)
-    for (const [name, value] of Object.entries(PRIVATE_HEADERS))
-      response.headers.set(name, value)
+    for (const [name, value] of Object.entries(PRIVATE_HEADERS)) response.headers.set(name, value)
     return response
   } catch (error) {
     logger.error("Myra operator case list failed", {

@@ -77,19 +77,13 @@ async function get(request: Request): Promise<Response> {
       items: items.slice(0, PAGE_SIZE),
       nextCursor,
     })
-    for (const [name, value] of Object.entries(PRIVATE_HEADERS))
-      response.headers.set(name, value)
+    for (const [name, value] of Object.entries(PRIVATE_HEADERS)) response.headers.set(name, value)
     return response
   } catch (error) {
     logger.error("Myra operator stuck-operations list failed", {
       error: error instanceof Error ? error.name : "unknown_error",
     })
-    return apiError(
-      "INTERNAL_ERROR",
-      "Could not load the operations list",
-      500,
-      PRIVATE_HEADERS
-    )
+    return apiError("INTERNAL_ERROR", "Could not load the operations list", 500, PRIVATE_HEADERS)
   }
 }
 

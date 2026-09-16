@@ -26,11 +26,7 @@
   "expect": {
     "providerCalls": 0,
     "sanitized": true,
-    "mustNotContain": [
-      "javascript:",
-      "onmouseover",
-      "steal()"
-    ]
+    "mustNotContain": ["javascript:", "onmouseover", "steal()"]
   },
   "note": "Spec \u00a713.8.19 \u2014 instant suggestions must be sanitized before render. OBSERVED FINDING: runInstantSuggest returns raw hit snippets/sourceUrls \u2014 a javascript: link reaches the suggestions payload."
 }

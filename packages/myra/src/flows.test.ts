@@ -50,10 +50,9 @@ describe("GUIDED_FLOWS structure", () => {
     for (const flow of GUIDED_FLOWS) {
       for (const step of flow.steps) {
         if (!step.check) continue
-        expect(
-          MYRA_TOOL_NAMES as readonly string[],
-          `${flow.id}.${step.id} check.tool`
-        ).toContain(step.check.tool)
+        expect(MYRA_TOOL_NAMES as readonly string[], `${flow.id}.${step.id} check.tool`).toContain(
+          step.check.tool
+        )
         expect(step.check.expect.length, `${flow.id}.${step.id}`).toBeGreaterThan(0)
       }
     }
@@ -99,15 +98,17 @@ describe("flow lookup helpers", () => {
   })
 
   it("suggestFlows matches the route context", () => {
-    expect(suggestFlows("/dashboard/scans").map((f) => f.id).sort()).toEqual([
-      "scan_wont_start",
-      "understand_result",
-    ])
+    expect(
+      suggestFlows("/dashboard/scans")
+        .map((f) => f.id)
+        .sort()
+    ).toEqual(["scan_wont_start", "understand_result"])
     expect(suggestFlows("/pricing").map((f) => f.id)).toEqual(["trial_help"])
-    expect(suggestFlows("/dashboard").map((f) => f.id).sort()).toEqual([
-      "scan_wont_start",
-      "trial_help",
-    ])
+    expect(
+      suggestFlows("/dashboard")
+        .map((f) => f.id)
+        .sort()
+    ).toEqual(["scan_wont_start", "trial_help"])
   })
 
   it("suggestFlows returns nothing for missing or unknown routes", () => {

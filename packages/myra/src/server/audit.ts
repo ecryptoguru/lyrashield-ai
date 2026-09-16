@@ -19,7 +19,8 @@ export interface AuditFields {
   metadata?: Record<string, unknown>
 }
 
-const SENSITIVE_KEY = /pass|secret|token|key|body|content|message|text|summary|subject|email|authorization|cookie|credential/i
+const SENSITIVE_KEY =
+  /pass|secret|token|key|body|content|message|text|summary|subject|email|authorization|cookie|credential/i
 const MAX_META_BYTES = 4000
 
 /** Drop sensitive keys, cap lengths, screen residual secrets — recursively. */
@@ -46,7 +47,9 @@ function sanitizeValue(key: string, value: unknown, depth: number): unknown {
   return undefined
 }
 
-function sanitizeMetadata(meta: Record<string, unknown> | undefined): Record<string, unknown> | null {
+function sanitizeMetadata(
+  meta: Record<string, unknown> | undefined
+): Record<string, unknown> | null {
   if (!meta) return null
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(meta)) {

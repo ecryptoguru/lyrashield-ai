@@ -13,9 +13,9 @@ const appPaths = (principal: Parameters<typeof routesForPrincipal>[0]) =>
 const GATED_APP_ROUTES = ROUTE_MANIFEST.filter((r) => r.surface === "app" && r.minRole).map(
   (r) => r.path
 )
-const UNGATED_APP_ROUTES = ROUTE_MANIFEST.filter(
-  (r) => r.surface === "app" && !r.minRole
-).map((r) => r.path)
+const UNGATED_APP_ROUTES = ROUTE_MANIFEST.filter((r) => r.surface === "app" && !r.minRole).map(
+  (r) => r.path
+)
 
 describe("ROUTE_MANIFEST entries", () => {
   it("every entry has the required fields", () => {

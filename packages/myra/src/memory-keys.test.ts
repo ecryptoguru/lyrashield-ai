@@ -36,10 +36,16 @@ describe("isAllowedMemoryWrite — allowlisted keys", () => {
     expect(isAllowedMemoryWrite("preferred_locale", "x".repeat(21))).toBe(false)
     expect(isAllowedMemoryWrite("dismissed_flows", ["x".repeat(61)])).toBe(false)
     expect(
-      isAllowedMemoryWrite("dismissed_flows", Array.from({ length: 51 }, (_, i) => `f${i}`))
+      isAllowedMemoryWrite(
+        "dismissed_flows",
+        Array.from({ length: 51 }, (_, i) => `f${i}`)
+      )
     ).toBe(false)
     expect(
-      isAllowedMemoryWrite("dismissed_flows", Array.from({ length: 50 }, (_, i) => `f${i}`))
+      isAllowedMemoryWrite(
+        "dismissed_flows",
+        Array.from({ length: 50 }, (_, i) => `f${i}`)
+      )
     ).toBe(true)
   })
 })

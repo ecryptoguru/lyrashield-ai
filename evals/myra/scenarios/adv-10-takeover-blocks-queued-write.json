@@ -20,10 +20,7 @@
     ]
   },
   "input": "Confirm the case submission.",
-  "actions": [
-    { "type": "takeover" },
-    { "type": "confirm", "proposalId": "op_case_race" }
-  ],
+  "actions": [{ "type": "takeover" }, { "type": "confirm", "proposalId": "op_case_race" }],
   "expect": {
     "denied": true,
     "completedOperationCount": 0,
