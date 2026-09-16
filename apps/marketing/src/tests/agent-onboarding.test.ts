@@ -44,6 +44,23 @@ describe("agent onboarding contract", () => {
     expect(body).not.toContain("${origin}")
   })
 
+  it("serves concrete agent setup URLs from the llms.txt endpoint", async () => {
+    // Direct handler invocation preserves runtime response coverage without
+    // Wrangler's extension-path redirect behavior.
+    const { GET } = await import("../pages/llms.txt")
+    const context = {
+      site: new URL("https://lyrashieldai.com"),
+    } as unknown as Parameters<typeof GET>[0]
+    const response = await GET(context)
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("Content-Type")).toContain("text/plain")
+    const body = await response.text()
+    expect(body).toContain("https://lyrashieldai.com/agents")
+    expect(body).toContain("https://lyrashieldai.com/agents.md")
+    expect(body).not.toContain("${origin}")
+  })
+
   it("keeps a human-first funnel while exposing agent setup", () => {
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const header = readFileSync(new URL("../components/Header.astro", import.meta.url), "utf8")

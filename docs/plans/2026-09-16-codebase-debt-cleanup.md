@@ -2,7 +2,7 @@
 
 Date: September 16, 2026
 
-Status: revised plan only. This document supersedes the pasted “codebase debt & bloat removal — megaplan.” Updating the plan does not execute cleanup, authorize payout activation, or approve merge or deployment.
+Status: implementation dispatched across PRs #686–#688. This document supersedes the pasted “codebase debt & bloat removal — megaplan.” It records completed branch work and remaining merge gates; it does not authorize payout activation, merge, or deployment.
 
 ## Objective
 
@@ -15,7 +15,7 @@ Remove confirmed unused code and dependency declarations while preserving produc
 - Checkout was clean before review. It contained 2,689 tracked files; the feature branch differed from main across 128 files. These are snapshot facts, not permanent baselines.
 - Review verified selected source consumers, package manifests, test configuration, and focused tests. It did not repeat the original Knip audit or validate every proposed export deletion. The original 204 exports plus 32 types are unverified candidates, not an approved removal list.
 - Verification completed: 70 tests across readiness, SARIF, and five affiliate job suites; seven newsletter endpoint tests; E2E typechecking; and `git diff --check`.
-- Marketing Playwright discovery found 16 desktop/mobile cases across two files. Discovery is not browser execution. No full build, full suite, production verification, or deletion validation was performed.
+- The initial review discovered 16 desktop/mobile marketing cases across two root files. PR #686 migrated those cases into the marketing-owned browser suite and CI executed them. Merge, deployment, and production verification remain separate gates.
 
 ## Constraints
 
@@ -55,16 +55,9 @@ The Myra eval entry is `evals/myra/run.ts`, with a documented command in `evals/
 
 ### Marketing browser tests
 
-Do not delete root `playwright.marketing.config.ts` yet. It discovers 16 cases in `e2e/marketing-agent-onboarding.spec.ts` and `e2e/marketing-ai-app-security-tool.spec.ts` across desktop and mobile projects.
+Implemented in PR #686. The two root marketing specifications moved into `apps/marketing/tests-browser`, and the redundant root `playwright.marketing.config.ts` was removed. The marketing Playwright configuration now runs the migrated cases on desktop and mobile viewports through the existing `test:browser` CI command.
 
-The main Playwright config excludes `marketing-*`. The marketing package's browser config targets `tests-browser`, a different suite. Vitest does not replace either browser suite.
-
-Choose the smaller reliable integration:
-
-1. Add an explicit command and invocation in existing marketing CI; or
-2. Migrate the tests into the existing marketing browser suite, preserving desktop/mobile coverage and the server/runtime behavior each test needs.
-
-Delete the old config only after equivalent test discovery and actual browser execution pass. Preserve the browser-only scanner's no-network assertion, onboarding/API checks, navigation, accessibility, and viewport coverage.
+The migrated suite retains the browser-only scanner no-network assertion, onboarding navigation, keyboard behavior, responsive layout, and viewport coverage. Extensioned `/agents.md` and `/llms.txt` responses are exercised through direct route-handler tests because Wrangler's local asset normalization redirects those paths before Astro handles them.
 
 ### Conditional integration tests
 

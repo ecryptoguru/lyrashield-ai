@@ -26,7 +26,7 @@ test("mobile navigation reaches agent onboarding", async ({ page }) => {
   ).toBeVisible()
 })
 
-// /agents.md and /llms.txt HTTP coverage lives in src/tests/agent-onboarding.test.ts
+// /agents.md and /llms.txt handler coverage lives in src/tests/agent-onboarding.test.ts.
 // (direct GET-handler invocation): extensioned SSR endpoints self-redirect under
 // `wrangler dev --local` — the assets layer normalizes `/agents.md` to
 // `/agents.md/` and Astro's trailingSlash:"never" then 301s it back, looping.
