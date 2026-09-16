@@ -27,6 +27,23 @@ describe("agent onboarding contract", () => {
     expect(markdownRoute).toContain("renderAgentOnboardingMarkdown(origin)")
   })
 
+  it("serves the Markdown onboarding contract from the agents.md endpoint", async () => {
+    // Direct handler invocation — the browser suite cannot cover this route
+    // because extensioned SSR paths self-redirect under `wrangler dev --local`
+    // (asset-layer slash normalization vs Astro trailingSlash:"never").
+    const { GET } = await import("../pages/agents.md")
+    const context = {
+      site: new URL("https://lyrashieldai.com"),
+    } as unknown as Parameters<typeof GET>[0]
+    const response = await GET(context)
+
+    expect(response.headers.get("Content-Type")).toContain("text/markdown")
+    const body = await response.text()
+    expect(body).toContain("# Release assurance for coding agents")
+    expect(body).toContain("https://lyrashieldai.com/docs/integrations/agent-plugins")
+    expect(body).not.toContain("${origin}")
+  })
+
   it("keeps a human-first funnel while exposing agent setup", () => {
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const header = readFileSync(new URL("../components/Header.astro", import.meta.url), "utf8")
