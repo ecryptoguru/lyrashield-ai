@@ -988,7 +988,24 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
     onPickSlot: (startsAt) => void send(`Book the demo slot that starts at ${startsAt}`),
     onConfirm: (proposalId) => void confirmProposalAction(proposalId),
     onCancel: (proposalId) => void cancelProposalAction(proposalId),
-    onForgetMemory: () => void send("Please forget what you have remembered about me."),
+    onForgetMemory: () => {
+      void fetch("/api/myra/memory", { method: "DELETE" })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Could not clear memory.")
+          setTurns((previous) =>
+            previous.map((turn) => ({
+              ...turn,
+              parts: turn.parts.map((part) =>
+                part.kind === "component" && part.component.type === "memory_card"
+                  ? { ...part, component: { ...part.component, entries: [] } }
+                  : part
+              ),
+            }))
+          )
+          announce("Myra's saved support preferences were cleared.")
+        })
+        .catch(() => announce("Myra could not clear saved preferences. Try again."))
+    },
     proposalStates,
   }
 

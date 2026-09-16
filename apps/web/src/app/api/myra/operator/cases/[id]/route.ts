@@ -8,6 +8,7 @@
 import { requirePlatformAdmin, requirePlatformAdminIdentity } from "@lyrashield/auth/server"
 import {
   getOperatorCase,
+  operatorAssign,
   operatorRelease,
   operatorSetStatus,
   operatorTakeover,
@@ -30,7 +31,7 @@ const patchSchema = z
   .object({
     action: z.enum(["takeover", "release", "resolve", "assign"]),
     status: z.enum(SUPPORT_CASE_STATUSES).optional(),
-    assigneeUserId: z.string().max(80).optional(),
+    handoffSummary: z.string().trim().min(10).max(4000).optional(),
   })
   .strict()
 
@@ -104,7 +105,7 @@ async function patch(
   }
 
   const { id } = await params
-  const { action, status, assigneeUserId } = parsed.data
+  const { action, status, handoffSummary } = parsed.data
   try {
     let result: unknown
     switch (action) {
@@ -114,28 +115,22 @@ async function patch(
         result = await operatorTakeover(operator.userId, id)
         break
       case "release":
-        result = await operatorRelease(operator.userId, id)
+        if (!handoffSummary) {
+          return apiError(
+            "VALIDATION_ERROR",
+            "A reviewed handoff summary is required",
+            400,
+            PRIVATE_HEADERS
+          )
+        }
+        result = await operatorRelease(operator.userId, id, handoffSummary)
         break
       case "resolve":
         result = await operatorSetStatus(operator.userId, id, status ?? "RESOLVED")
         break
       case "assign": {
-        if (!assigneeUserId) {
-          return apiError(
-            "VALIDATION_ERROR",
-            "assigneeUserId is required for assign",
-            400,
-            PRIVATE_HEADERS
-          )
-        }
-        // The declared service surface has no dedicated assign function —
-        // reject cleanly rather than silently issuing the wrong mutation.
-        return apiError(
-          "VALIDATION_ERROR",
-          "Assign is not supported by the service layer yet",
-          400,
-          PRIVATE_HEADERS
-        )
+        result = await operatorAssign(operator.userId, id)
+        break
       }
     }
     const response = apiSuccess(result)

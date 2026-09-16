@@ -3,9 +3,11 @@
  * `myra.generate` audit events with `metadata.costUsd`; the cap comes from
  * MYRA_LIMITS.monthlyBudgetUsd, overridable via MYRA_MONTHLY_BUDGET_USD.
  */
-import { prisma } from "@lyrashield/db"
+import { Prisma, prisma } from "@lyrashield/db"
 import { MYRA_LIMITS } from "../contracts"
 import { auditEvent } from "./audit"
+import { err } from "./errors"
+import { resolveCostRates } from "./provider"
 import type { MyraDb } from "./db"
 
 export interface BudgetState {
@@ -56,4 +58,60 @@ export async function recordCost(
     },
     db
   )
+}
+
+function currentMonthStart(): Date {
+  const value = new Date()
+  value.setUTCDate(1)
+  value.setUTCHours(0, 0, 0, 0)
+  return value
+}
+
+/** Conservative ceiling: bounded context/user/system input plus the 4k output cap. */
+export function maximumTurnCostUsd(tier: "fast" | "deep"): number {
+  const { inRate, outRate } = resolveCostRates(tier === "deep")
+  const cost = 30 * inRate + (MYRA_LIMITS.maxOutputTokensPerTurn / 1000) * outRate
+  return Math.ceil(cost * 10_000) / 10_000
+}
+
+export async function reserveGenerationBudget(traceId: string, reservedUsd: number): Promise<void> {
+  if (!Number.isFinite(reservedUsd) || reservedUsd <= 0) {
+    throw err("PROVIDER_ERROR", "Generation cost rates are not configured.")
+  }
+  const capUsd = monthlyBudgetCapUsd()
+  const monthStart = currentMonthStart()
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw(
+      Prisma.sql`SELECT pg_advisory_xact_lock(hashtext('myra_generation_budget'))`
+    )
+    const existing = await tx.myraGenerationReservation.findUnique({ where: { traceId } })
+    if (existing) {
+      throw err("PROVIDER_ERROR", "Generation request was already reserved.")
+    }
+    const totals = await tx.myraGenerationReservation.aggregate({
+      where: { monthStart },
+      _sum: { reservedUsd: true, actualUsd: true },
+    })
+    const settled = Number(totals._sum.actualUsd ?? 0)
+    const reserved = Number(totals._sum.reservedUsd ?? 0)
+    if (settled + reserved + reservedUsd > capUsd) {
+      throw err("BUDGET_EXHAUSTED", "Myra is at its usage limit for now.")
+    }
+    await tx.myraGenerationReservation.create({
+      data: { traceId, monthStart, reservedUsd: new Prisma.Decimal(reservedUsd) },
+    })
+  })
+}
+
+export async function settleGenerationBudget(traceId: string, actualUsd: number): Promise<void> {
+  const value = Number.isFinite(actualUsd) && actualUsd > 0 ? actualUsd : 0
+  await prisma.myraGenerationReservation.updateMany({
+    where: { traceId, status: "RESERVED" },
+    data: {
+      actualUsd: new Prisma.Decimal(value),
+      reservedUsd: new Prisma.Decimal(0),
+      status: value > 0 ? "SETTLED" : "RELEASED",
+      settledAt: new Date(),
+    },
+  })
 }

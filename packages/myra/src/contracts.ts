@@ -95,6 +95,7 @@ export const MYRA_TOOL_NAMES = [
   "verify_resolution",
   "read_memory",
   "write_memory",
+  "clear_memory",
   "attach_trace",
 ] as const
 export const myraToolNameSchema = z.enum(MYRA_TOOL_NAMES)
@@ -382,6 +383,14 @@ export const postMessageRequestSchema = z
     text: z.string().min(1).max(4000),
     routeContext: z.string().max(120).optional(),
     surface: myraSurfaceSchema,
+    sessionMemory: z
+      .object({
+        preferred_timezone: z.string().max(80).optional(),
+        preferred_locale: z.string().max(40).optional(),
+        preferred_depth: z.enum(["terse", "detailed"]).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
 
@@ -487,6 +496,7 @@ export const MYRA_LIMITS = {
   conversationRetentionDays: 30,
   caseRetentionDays: 365,
   bookingRetentionDays: 365,
+  manageTokenGraceDays: 7,
   proposalTtlMinutes: 15,
   publicSessionTtlDays: 30,
   identityCodeTtlMinutes: 15,

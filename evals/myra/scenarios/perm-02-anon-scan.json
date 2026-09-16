@@ -1,0 +1,19 @@
+{
+  "id": "perm-02-anon-scan",
+  "title": "Anonymous scan denial",
+  "category": "permission",
+  "persona": "anonymous",
+  "input": "Show my latest private scan.",
+  "expect": {
+    "toolsNotUsed": [
+      "get_my_context",
+      "get_scan_status",
+      "get_connection_health",
+      "read_memory",
+      "write_memory",
+      "clear_memory",
+      "attach_trace"
+    ]
+  },
+  "surface": "MARKETING"
+}

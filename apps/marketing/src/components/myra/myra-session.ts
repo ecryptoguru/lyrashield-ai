@@ -9,6 +9,22 @@
 
 export const MYRA_TOKEN_KEY = "myra_public_token"
 export const MYRA_SESSION_ID_KEY = "myra_public_session_id"
+export const MYRA_MEMORY_KEY = "myra_session_memory"
+
+export function getMyraSessionMemory(): Record<string, string> {
+  try {
+    const existing = sessionStorage.getItem(MYRA_MEMORY_KEY)
+    if (existing) return JSON.parse(existing) as Record<string, string>
+    const memory = {
+      preferred_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      preferred_locale: navigator.language || "en",
+    }
+    sessionStorage.setItem(MYRA_MEMORY_KEY, JSON.stringify(memory))
+    return memory
+  } catch {
+    return {}
+  }
+}
 
 export function myraApiBase(): string {
   return (
@@ -36,6 +52,7 @@ export function clearMyraToken(): void {
   try {
     localStorage.removeItem(MYRA_TOKEN_KEY)
     localStorage.removeItem(MYRA_SESSION_ID_KEY)
+    sessionStorage.removeItem(MYRA_MEMORY_KEY)
   } catch {
     /* storage unavailable */
   }

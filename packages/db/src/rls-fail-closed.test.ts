@@ -228,6 +228,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       "myra_audit_events",
       "myra_conversations",
       "myra_flow_sessions",
+      "myra_generation_reservations",
       "myra_identity_verifications",
       "myra_knowledge_entries",
       "myra_knowledge_releases",

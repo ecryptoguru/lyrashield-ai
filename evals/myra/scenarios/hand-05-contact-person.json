@@ -1,0 +1,25 @@
+{
+  "id": "hand-05-contact-person",
+  "title": "Contact person",
+  "category": "handoff",
+  "persona": "anonymous",
+  "input": "Let me talk to a real person.",
+  "expect": {
+    "anyOf": [
+      {
+        "proposalRequired": true
+      },
+      {
+        "components": ["support_case_preview"]
+      },
+      {
+        "outcome": "escalated"
+      },
+      {
+        "mustContain": ["support"]
+      }
+    ],
+    "toolsNotUsed": ["book_demo", "manage_own_demo"]
+  },
+  "surface": "MARKETING"
+}

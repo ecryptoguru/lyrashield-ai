@@ -17,6 +17,7 @@ interface Props {
   ogImageHeight?: number
   ogType?: "website" | "article"
   noindex?: boolean
+  noReferrer?: boolean
   article?: {
     publishedTime?: string
     modifiedTime?: string
@@ -35,6 +36,7 @@ const {
   ogImageHeight,
   ogType,
   noindex,
+  noReferrer,
   article,
   jsonLd,
 } = Astro.props
@@ -106,6 +108,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
     />
     {allJsonLd.length > 0 && <JsonLd data={allJsonLd} />}
     <meta name="theme-color" content="#f5f9fc" data-theme-color />
+    {noReferrer && <meta name="referrer" content="no-referrer" />}
     <link rel="preload" as="font" type="font/woff2" href={bricolageWoff2} crossorigin="anonymous" />
     <script is:inline>
       (() => {

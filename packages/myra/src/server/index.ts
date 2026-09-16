@@ -35,7 +35,15 @@ export {
   type IdentityPurpose,
 } from "./verify"
 export { auditEvent, type MyraActorType, type AuditFields } from "./audit"
-export { checkBudget, recordCost, monthlyBudgetCapUsd, type BudgetState } from "./budget"
+export {
+  checkBudget,
+  recordCost,
+  monthlyBudgetCapUsd,
+  maximumTurnCostUsd,
+  reserveGenerationBudget,
+  settleGenerationBudget,
+  type BudgetState,
+} from "./budget"
 export {
   getCalendarAdapter,
   zonedParts,
@@ -68,6 +76,7 @@ export {
   listOwnCases,
   getOwnCase,
   replyToOwnCase,
+  clearAccountMemory,
   getDemoSlots,
   manageBooking,
   listOperatorCases,
@@ -75,6 +84,7 @@ export {
   operatorReply,
   operatorTakeover,
   operatorRelease,
+  operatorAssign,
   operatorSetStatus,
   type HandleMessageInput,
 } from "./service"

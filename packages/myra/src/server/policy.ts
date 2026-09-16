@@ -31,6 +31,7 @@ const USER_EXTRA_TOOLS: readonly MyraToolName[] = [
   "verify_resolution",
   "read_memory",
   "write_memory",
+  "clear_memory",
   "attach_trace",
 ]
 

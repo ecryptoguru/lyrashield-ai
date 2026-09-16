@@ -2555,6 +2555,9 @@ model SupportCase {
   lastUserReplyAt     DateTime?
   lastOperatorReplyAt DateTime?
   resolvedAt          DateTime?
+  handoffSummary      String?           @db.Text
+  handoffReviewedAt   DateTime?
+  handoffReviewedBy   String?
   // Notification delivery is a separate fact from case persistence.
   notificationState   String            @default("pending") // pending|sent|failed|none
   createdAt           DateTime          @default(now())
@@ -2636,6 +2639,8 @@ model DemoBooking {
   meetLink           String?
   conferenceState    String            @default("none") // none|pending|ready|failed
   manageTokenHash    String?           @unique
+  manageTokenExpiresAt DateTime
+  manageTokenRevokedAt DateTime?
   idempotencyKey     String            @unique
   accountId          String?
   publicSessionId    String?
@@ -2648,6 +2653,7 @@ model DemoBooking {
   @@index([holdStartsAt, holdEndsAt])
   @@index([status])
   @@index([attendeeEmail])
+  @@index([manageTokenExpiresAt])
   @@map("demo_bookings")
 }
 
@@ -2751,4 +2757,18 @@ model MyraAuditEvent {
   @@index([operatorId, createdAt])
   @@index([createdAt])
   @@map("myra_audit_events")
+}
+
+model MyraGenerationReservation {
+  traceId     String   @id
+  monthStart  DateTime
+  reservedUsd Decimal  @db.Decimal(19, 4)
+  actualUsd   Decimal? @db.Decimal(19, 4)
+  status      String   @default("RESERVED") // RESERVED|SETTLED|RELEASED
+  createdAt   DateTime @default(now())
+  settledAt   DateTime?
+
+  @@index([monthStart, status])
+  @@index([status, createdAt])
+  @@map("myra_generation_reservations")
 }

@@ -3,7 +3,7 @@
  * messages + flow sessions), support cases 1y, demo bookings 1y; expired
  * public sessions and stale identity verifications are removed too.
  */
-import { prisma } from "@lyrashield/db"
+import { Prisma, prisma } from "@lyrashield/db"
 import { MYRA_LIMITS } from "../contracts"
 import type { MyraDb } from "./db"
 
@@ -14,6 +14,7 @@ export interface RetentionCounts {
   supportCases: number
   demoBookings: number
   operations: number
+  generationReservations: number
 }
 
 export async function pruneMyraRetention(db: MyraDb = prisma): Promise<RetentionCounts> {
@@ -41,6 +42,19 @@ export async function pruneMyraRetention(db: MyraDb = prisma): Promise<Retention
     where: { status: "HELD", createdAt: { lt: hourAgo } },
     data: { status: "OUTCOME_UNKNOWN" },
   })
+  // A crashed process may have reached the provider before settlement. Count
+  // stale reservations at their conservative ceiling instead of reopening
+  // budget that may already have been spent.
+  const generationReservationCount = await db.$executeRaw(
+    Prisma.sql`
+      UPDATE "myra_generation_reservations"
+      SET "status" = 'SETTLED',
+          "actualUsd" = "reservedUsd",
+          "reservedUsd" = 0,
+          "settledAt" = ${now}
+      WHERE "status" = 'RESERVED' AND "createdAt" < ${hourAgo}
+    `
+  )
 
   const [conversations, publicSessions, verifications, supportCases, demoBookings, operations] =
     await Promise.all([
@@ -67,5 +81,6 @@ export async function pruneMyraRetention(db: MyraDb = prisma): Promise<Retention
     supportCases: supportCases.count,
     demoBookings: demoBookings.count,
     operations: operations.count,
+    generationReservations: generationReservationCount,
   }
 }

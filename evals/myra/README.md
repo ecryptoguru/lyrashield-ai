@@ -114,14 +114,15 @@ assumptions; if a scenario genuinely needs generation judgment, set
 `requiresProvider: true`.
 
 Corpus status vs spec §10: all 20 adversarial scenarios (§10 list +
-§13.8 additions 16–20) are represented by `adv-01`…`adv-20`; knowledge,
-diagnostic, handoff and accessibility coverage is `kn-*`, `diag-*`,
-`hand-*`, `a11y-*`. WCAG 2.2 AA checks remain a browser-level gate — this
-runner covers only the deterministic slice.
+§13.8 additions 16–20) are represented by `adv-01`…`adv-20`. The corpus
+contains at least 12 scenarios in each required bucket: knowledge,
+diagnostic, permission, action, and combined handoff/accessibility. WCAG 2.2
+AA checks remain a browser-level gate — this runner covers only the
+deterministic slice.
 
 ## Corpus fixture tests
 
 `evals/myra/scenarios.test.ts` (Vitest, run from repo root:
 `pnpm vitest run evals/myra/scenarios.test.ts`) validates the corpus:
 shape, unique ids, expect-key allowlist, action schema, adversarial
-coverage ≥ 20 and ≥ 24 total.
+coverage ≥ 20, ≥ 60 total, and ≥ 12 in every required bucket.

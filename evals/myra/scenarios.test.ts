@@ -76,8 +76,15 @@ const fixtures: [string, Fixture][] = files.map((f) => [
 ])
 
 describe("myra scenario corpus", () => {
-  it("has at least 24 fixtures", () => {
-    expect(fixtures.length).toBeGreaterThanOrEqual(24)
+  it("has the reviewed 60-scenario minimum with balanced release categories", () => {
+    expect(fixtures.length).toBeGreaterThanOrEqual(60)
+    const count = (categories: string[]) =>
+      fixtures.filter(([, fixture]) => categories.includes(fixture.category)).length
+    expect(count(["knowledge"])).toBeGreaterThanOrEqual(12)
+    expect(count(["diagnostic"])).toBeGreaterThanOrEqual(12)
+    expect(count(["permission"])).toBeGreaterThanOrEqual(12)
+    expect(count(["action"])).toBeGreaterThanOrEqual(12)
+    expect(count(["handoff", "accessibility"])).toBeGreaterThanOrEqual(12)
   })
 
   it("has unique ids matching filenames", () => {

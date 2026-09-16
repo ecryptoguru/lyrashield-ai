@@ -29,6 +29,7 @@ import {
   executeBookDemo,
   executeManageDemo,
   hashManageToken,
+  isManageTokenActive,
   reconcileDemoBooking,
 } from "./tools/demo"
 import { executeSubmitSupportCase } from "./tools/cases"
@@ -41,6 +42,11 @@ export interface HandleMessageInput {
   text: string
   routeContext?: string
   surface: MyraSurface
+  sessionMemory?: {
+    preferred_timezone?: string
+    preferred_locale?: string
+    preferred_depth?: "terse" | "detailed"
+  }
 }
 
 const EXECUTORS: Record<string, OperationExecutor> = {
@@ -204,6 +210,7 @@ export async function* handleMessage(
       ctx: toolCtx,
       text: screened,
       routeContext: input.routeContext,
+      sessionMemory: ctx.principal.kind === "anonymous" ? input.sessionMemory : undefined,
       assistantMessageId,
       traceId,
     })) {
@@ -389,7 +396,9 @@ export async function manageBooking(
   const booking = await db.demoBooking
     .findUnique({ where: { manageTokenHash: tokenHash } })
     .catch(() => null)
-  if (!booking) throw err("FORBIDDEN", "Invalid booking management link.")
+  if (!booking || !isManageTokenActive(booking)) {
+    throw err("FORBIDDEN", "Invalid or expired booking management link.")
+  }
 
   if (action === "get") {
     if (booking.status === "OUTCOME_UNKNOWN") {
@@ -488,6 +497,19 @@ export async function replyToOwnCase(ctx: ResolvedMyraRequest, caseId: string, b
     action: "myra.case.user_reply",
     resourceType: "support_case",
     resourceId: caseId,
+  })
+  return result.data
+}
+
+export async function clearAccountMemory(ctx: ResolvedMyraRequest) {
+  if (ctx.principal.kind !== "user") {
+    throw err("UNAUTHORIZED", "Memory is available for signed-in accounts only.")
+  }
+  const result = await runTool("clear_memory", toolContext(ctx, null), {})
+  await auditEvent("user", {
+    accountId: ctx.principal.accountId,
+    action: "myra.memory.clear",
+    resourceType: "myra_memory",
   })
   return result.data
 }
@@ -660,9 +682,27 @@ export async function operatorTakeover(operatorId: string, caseId: string, db: M
 }
 
 /** Explicit operator control to hand the conversation back to Myra. */
-export async function operatorRelease(operatorId: string, caseId: string, db: MyraDb = prisma) {
+export async function operatorRelease(
+  operatorId: string,
+  caseId: string,
+  handoffSummary: string,
+  db: MyraDb = prisma
+) {
+  const screenedSummary = screenSecrets(handoffSummary.trim()).text
+  if (screenedSummary.length < 10 || screenedSummary.length > 4000) {
+    throw err("VALIDATION_ERROR", "A reviewed handoff summary is required.")
+  }
   const supportCase = await db.supportCase.findUnique({ where: { id: caseId } })
   if (!supportCase) throw err("NOT_FOUND", "Case not found.")
+  await db.supportCase.update({
+    where: { id: caseId },
+    data: {
+      takenOverAt: null,
+      handoffSummary: screenedSummary,
+      handoffReviewedAt: new Date(),
+      handoffReviewedBy: operatorId,
+    },
+  })
   if (supportCase.conversationId) {
     await db.myraConversation.update({
       where: { id: supportCase.conversationId },
@@ -681,6 +721,27 @@ export async function operatorRelease(operatorId: string, caseId: string, db: My
     db
   )
   return { released: true }
+}
+
+export async function operatorAssign(operatorId: string, caseId: string, db: MyraDb = prisma) {
+  const supportCase = await db.supportCase.findUnique({ where: { id: caseId } })
+  if (!supportCase) throw err("NOT_FOUND", "Case not found.")
+  await db.supportCase.update({
+    where: { id: caseId },
+    data: { assigneeUserId: operatorId },
+  })
+  await auditEvent(
+    "operator",
+    {
+      operatorId,
+      action: "myra.operator.assign",
+      resourceType: "support_case",
+      resourceId: caseId,
+      workspaceId: supportCase.workspaceId,
+    },
+    db
+  )
+  return { assigneeUserId: operatorId }
 }
 
 export async function operatorSetStatus(

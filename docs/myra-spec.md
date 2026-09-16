@@ -489,13 +489,13 @@ Components added to the allowlist: `GuidedFlow`, `InstantSuggestions`, `MemoryCa
 
 Tools added to the registry contract:
 
-| Tool                                    | Public access                         | Dashboard access                 | Side-effect rule                                                          |
-| --------------------------------------- | ------------------------------------- | -------------------------------- | ------------------------------------------------------------------------- |
-| instant_suggest                         | Approved public entries while typing  | Same                             | Read only; no model call                                                  |
-| start_guided_flow / advance_guided_flow | Session-owned flow state              | Actor/workspace-owned flow state | Step reads only; flow persists progress                                   |
-| verify_resolution                       | Bounded re-check of public-safe state | Re-run failing check             | Read only; feeds closed-loop confirmation                                 |
-| read_memory / write_memory              | Session memory                        | Per-account memory               | Writes restricted to allowlisted preference keys; never authority-bearing |
-| attach_trace                            | Own conversation trace                | Own conversation trace           | Read only; binds trace ID to a case draft                                 |
+| Tool                                      | Public access                         | Dashboard access                 | Side-effect rule                                                                         |
+| ----------------------------------------- | ------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------- |
+| instant_suggest                           | Approved public entries while typing  | Same                             | Read only; no model call                                                                 |
+| start_guided_flow / advance_guided_flow   | Session-owned flow state              | Actor/workspace-owned flow state | Step reads only; flow persists progress                                                  |
+| verify_resolution                         | Bounded re-check of public-safe state | Re-run failing check             | Read only; feeds closed-loop confirmation                                                |
+| read_memory / write_memory / clear_memory | Session memory                        | Per-account memory               | Writes restricted to allowlisted preference keys; users can delete all saved preferences |
+| attach_trace                              | Own conversation trace                | Own conversation trace           | Read only; binds trace ID to a case draft                                                |
 
 All v1.0 registry rules still apply: no product mutations, the model cannot extend the registry, every write is confirmed, every execution rechecks authorization.
 

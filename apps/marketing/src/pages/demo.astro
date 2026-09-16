@@ -8,7 +8,12 @@ const description =
   "Book a 30-minute walkthrough of LyraShield AI with the founder — how evidence, retests and release records fit your app."
 ---
 
-<Base title="Book a demo | LyraShield AI" description={description} canonical={canonical}>
+<Base
+  title="Book a demo | LyraShield AI"
+  description={description}
+  canonical={canonical}
+  noReferrer
+>
   <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
     <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">
       Talk to the founder
@@ -331,8 +336,12 @@ const description =
   const manageReslots = $("demo-manage-reslots")
   const manageSlotsEl = $("demo-manage-slots")
 
-  /** Manage link from the URL — the token IS the credential (?manage=…). */
-  const manageToken = new URLSearchParams(window.location.search).get("manage")?.trim() ?? ""
+  /** Fragment keeps the credential out of HTTP requests; query remains backward-compatible. */
+  const manageToken =
+    new URLSearchParams(window.location.hash.slice(1)).get("manage")?.trim() ??
+    new URLSearchParams(window.location.search).get("manage")?.trim() ??
+    ""
+  if (manageToken) history.replaceState(null, "", "/demo")
 
   interface Slot {
     id: string
@@ -658,7 +667,7 @@ const description =
       const token = (data as { privateResult?: { manageToken?: string } })?.privateResult
         ?.manageToken
       if (token && manageLink) {
-        manageLink.href = `/demo?manage=${encodeURIComponent(token)}`
+        manageLink.href = `/demo#manage=${encodeURIComponent(token)}`
         doneManage?.removeAttribute("hidden")
       }
     } else {
@@ -744,7 +753,7 @@ const description =
     // Reschedule rotates the credential — swap the URL without a reload.
     if (json.data?.manageToken) {
       newManageToken = json.data.manageToken
-      history.replaceState(null, "", `/demo?manage=${encodeURIComponent(newManageToken)}`)
+      history.replaceState(null, "", "/demo")
     }
     if (json.data?.result?.copy && manageStatus) manageStatus.textContent = json.data.result.copy
     manageReslots?.setAttribute("hidden", "")

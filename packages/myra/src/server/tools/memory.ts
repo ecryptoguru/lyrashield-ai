@@ -13,6 +13,7 @@ export const writeMemoryInput = z.object({
   key: z.string().max(60),
   value: z.unknown(),
 })
+export const clearMemoryInput = z.object({}).strict()
 
 const KEY_LABELS: Record<string, string> = {
   preferred_timezone: "Preferred timezone",
@@ -79,4 +80,17 @@ export async function runWriteMemory(
     ctx.db
   )
   return { data: { written: key, allowed: MYRA_MEMORY_KEYS } }
+}
+
+export async function runClearMemory(
+  ctx: MyraToolContext,
+  _input: unknown
+): Promise<MyraToolResult> {
+  const accountId = requireUser(ctx)
+  const result = await withOwnerScope(
+    ctx.principal,
+    (tx) => tx.myraMemory.deleteMany({ where: { accountId } }),
+    ctx.db
+  )
+  return { data: { cleared: result.count } }
 }

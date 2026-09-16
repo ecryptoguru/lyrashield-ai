@@ -626,6 +626,43 @@ const envSchema = z
           "required Cloudflare origin mTLS needs AOP and deployment probe SHA-256 fingerprints",
       })
     }
+    if (val.MYRA_GENERATION_ENABLED === "1" && val.MYRA_PROVIDER === "azure") {
+      const requiredProviderValues = [
+        ["MYRA_AZURE_OPENAI_ENDPOINT", val.MYRA_AZURE_OPENAI_ENDPOINT],
+        ["MYRA_AZURE_OPENAI_API_KEY", val.MYRA_AZURE_OPENAI_API_KEY],
+      ] as const
+      for (const [key, value] of requiredProviderValues) {
+        if (!value) {
+          ctx.addIssue({
+            code: "custom",
+            path: [key],
+            message: `${key} is required when Azure Myra generation is enabled`,
+          })
+        }
+      }
+      if (!val.MYRA_AZURE_OPENAI_DEPLOYMENT && (!val.MYRA_MODEL_FAST || !val.MYRA_MODEL_DEEP)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["MYRA_AZURE_OPENAI_DEPLOYMENT"],
+          message:
+            "Set MYRA_AZURE_OPENAI_DEPLOYMENT or both MYRA_MODEL_FAST and MYRA_MODEL_DEEP when Azure Myra generation is enabled",
+        })
+      }
+      const requiredRates = [
+        ["MYRA_COST_PER_1K_INPUT_USD", val.MYRA_COST_PER_1K_INPUT_USD],
+        ["MYRA_COST_PER_1K_OUTPUT_USD", val.MYRA_COST_PER_1K_OUTPUT_USD],
+      ] as const
+      for (const [key, raw] of requiredRates) {
+        const rate = Number(raw)
+        if (!Number.isFinite(rate) || rate <= 0) {
+          ctx.addIssue({
+            code: "custom",
+            path: [key],
+            message: `${key} must be a positive number when Azure Myra generation is enabled`,
+          })
+        }
+      }
+    }
   })
 
 export type Env = z.infer<typeof envSchema>

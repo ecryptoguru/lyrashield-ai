@@ -134,6 +134,9 @@ CREATE TABLE "support_cases" (
     "lastUserReplyAt" TIMESTAMP(3),
     "lastOperatorReplyAt" TIMESTAMP(3),
     "resolvedAt" TIMESTAMP(3),
+    "handoffSummary" TEXT,
+    "handoffReviewedAt" TIMESTAMP(3),
+    "handoffReviewedBy" TEXT,
     "notificationState" TEXT NOT NULL DEFAULT 'pending',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -193,6 +196,8 @@ CREATE TABLE "demo_bookings" (
     "meetLink" TEXT,
     "conferenceState" TEXT NOT NULL DEFAULT 'none',
     "manageTokenHash" TEXT,
+    "manageTokenExpiresAt" TIMESTAMP(3) NOT NULL,
+    "manageTokenRevokedAt" TIMESTAMP(3),
     "idempotencyKey" TEXT NOT NULL,
     "accountId" TEXT,
     "publicSessionId" TEXT,
@@ -284,6 +289,23 @@ CREATE TABLE "myra_audit_events" (
     CONSTRAINT "myra_audit_events_pkey" PRIMARY KEY ("id")
 );
 
+-- Atomic pre-call reservations enforce the model budget without holding a
+-- database transaction open across a provider request.
+CREATE TABLE "myra_generation_reservations" (
+    "traceId" TEXT NOT NULL,
+    "monthStart" TIMESTAMP(3) NOT NULL,
+    "reservedUsd" DECIMAL(19,4) NOT NULL,
+    "actualUsd" DECIMAL(19,4),
+    "status" TEXT NOT NULL DEFAULT 'RESERVED',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "settledAt" TIMESTAMP(3),
+
+    CONSTRAINT "myra_generation_reservations_pkey" PRIMARY KEY ("traceId"),
+    CONSTRAINT "myra_generation_reservations_status_check" CHECK ("status" IN ('RESERVED', 'SETTLED', 'RELEASED')),
+    CONSTRAINT "myra_generation_reservations_reserved_nonnegative" CHECK ("reservedUsd" >= 0),
+    CONSTRAINT "myra_generation_reservations_actual_nonnegative" CHECK ("actualUsd" IS NULL OR "actualUsd" >= 0)
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "myra_public_sessions_tokenHash_key" ON "myra_public_sessions"("tokenHash");
 CREATE INDEX "myra_public_sessions_expiresAt_idx" ON "myra_public_sessions"("expiresAt");
@@ -325,6 +347,7 @@ CREATE UNIQUE INDEX "demo_bookings_idempotencyKey_key" ON "demo_bookings"("idemp
 CREATE INDEX "demo_bookings_holdStartsAt_holdEndsAt_idx" ON "demo_bookings"("holdStartsAt", "holdEndsAt");
 CREATE INDEX "demo_bookings_status_idx" ON "demo_bookings"("status");
 CREATE INDEX "demo_bookings_attendeeEmail_idx" ON "demo_bookings"("attendeeEmail");
+CREATE INDEX "demo_bookings_manageTokenExpiresAt_idx" ON "demo_bookings"("manageTokenExpiresAt");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "myra_knowledge_releases_version_key" ON "myra_knowledge_releases"("version");
@@ -345,6 +368,8 @@ CREATE INDEX "myra_audit_events_action_createdAt_idx" ON "myra_audit_events"("ac
 CREATE INDEX "myra_audit_events_accountId_idx" ON "myra_audit_events"("accountId");
 CREATE INDEX "myra_audit_events_operatorId_createdAt_idx" ON "myra_audit_events"("operatorId", "createdAt");
 CREATE INDEX "myra_audit_events_createdAt_idx" ON "myra_audit_events"("createdAt");
+CREATE INDEX "myra_generation_reservations_monthStart_status_idx" ON "myra_generation_reservations"("monthStart", "status");
+CREATE INDEX "myra_generation_reservations_status_createdAt_idx" ON "myra_generation_reservations"("status", "createdAt");
 
 -- AddForeignKey
 ALTER TABLE "myra_messages" ADD CONSTRAINT "myra_messages_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "myra_conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -419,6 +444,8 @@ ALTER TABLE "myra_identity_verifications" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "myra_identity_verifications" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "myra_audit_events" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "myra_audit_events" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "myra_generation_reservations" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "myra_generation_reservations" FORCE ROW LEVEL SECURITY;
 
 -- Dual-owner tables: unbound trusted path OR account owner OR public owner.
 
@@ -606,3 +633,8 @@ CREATE POLICY myra_audit_events_insert ON "myra_audit_events"
   FOR INSERT WITH CHECK (true);
 CREATE POLICY myra_audit_events_unbound_read ON "myra_audit_events"
   FOR SELECT USING (app.current_account_id() IS NULL AND app.myra_public_session_id() IS NULL);
+
+-- Budget reservations are internal and must never be visible in an owner-bound request.
+CREATE POLICY myra_generation_reservations_unbound ON "myra_generation_reservations"
+  FOR ALL USING (app.current_account_id() IS NULL AND app.myra_public_session_id() IS NULL)
+  WITH CHECK (app.current_account_id() IS NULL AND app.myra_public_session_id() IS NULL);

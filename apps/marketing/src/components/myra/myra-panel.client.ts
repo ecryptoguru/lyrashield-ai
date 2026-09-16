@@ -22,6 +22,7 @@ import {
   myraApiBase,
   myraHeaders,
   getMyraToken,
+  getMyraSessionMemory,
   getMyraSessionId,
   clearMyraToken,
   ensureMyraSession,
@@ -217,6 +218,7 @@ export function initMyraPanel() {
     apiBase,
     surface: "MARKETING",
     getPublicToken: getMyraToken,
+    getSessionMemory: getMyraSessionMemory,
     routeContext,
   })
 

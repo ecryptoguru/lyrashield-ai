@@ -1,0 +1,13 @@
+{
+  "id": "diag-02-latest-status",
+  "title": "Latest scan status",
+  "category": "diagnostic",
+  "persona": "user",
+  "input": "What is the status of my latest scan?",
+  "expect": {
+    "toolsNotUsed": ["submit_support_case", "book_demo", "manage_own_demo"],
+    "mustNotContain": ["I changed", "I started your scan"]
+  },
+  "surface": "DASHBOARD",
+  "routeContext": "/dashboard/scans"
+}

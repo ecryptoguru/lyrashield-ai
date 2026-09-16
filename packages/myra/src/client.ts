@@ -12,6 +12,8 @@ export interface MyraClientOptions {
   getPublicToken?: () => string | null
   /** Route identifier for context-aware starters/answers (allowlisted). */
   routeContext?: string
+  /** Anonymous personalization only. Read from sessionStorage by the caller. */
+  getSessionMemory?: () => Record<string, string> | null
   fetchImpl?: typeof fetch
 }
 
@@ -92,6 +94,7 @@ export function createMyraClient(options: MyraClientOptions) {
   return {
     /** Send a message and stream validated events until `done`/`error`. */
     async *sendMessage(input: SendMessageInput): AsyncGenerator<MyraStreamEvent> {
+      const sessionMemory = options.getSessionMemory?.()
       const res = await fetchImpl(`${options.apiBase}/api/myra/message`, {
         method: "POST",
         credentials: "include",
@@ -102,6 +105,7 @@ export function createMyraClient(options: MyraClientOptions) {
           conversationId: input.conversationId,
           routeContext: options.routeContext,
           surface: options.surface,
+          ...(sessionMemory ? { sessionMemory } : {}),
         }),
       })
       if (!res.ok || !res.headers.get("content-type")?.includes("text/event-stream")) {

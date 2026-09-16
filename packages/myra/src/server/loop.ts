@@ -7,7 +7,13 @@
 import { randomBytes } from "node:crypto"
 import { MYRA_LIMITS } from "../contracts"
 import type { MyraStreamEvent, MyraToolName, TaskRecord } from "../contracts"
-import { checkBudget, recordCost } from "./budget"
+import {
+  checkBudget,
+  maximumTurnCostUsd,
+  recordCost,
+  reserveGenerationBudget,
+  settleGenerationBudget,
+} from "./budget"
 import { auditEvent } from "./audit"
 import { toMyraError } from "./errors"
 import { getProvider, sanitizeAnswerMarkdown } from "./provider"
@@ -18,6 +24,7 @@ import { withOwnerScope } from "./db"
 import { suggestFlows } from "../flows"
 import { routeAllowedForPrincipal } from "../route-manifest"
 import { readOwnBookings } from "./tools/demo"
+import { sanitizeInstructionInput } from "@lyrashield/security"
 
 export interface LoopArgs {
   ctx: MyraToolContext
@@ -27,6 +34,7 @@ export interface LoopArgs {
   assistantMessageId: string
   traceId: string
   provider?: ModelProvider
+  sessionMemory?: Record<string, string>
 }
 
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.]{2,}/
@@ -78,7 +86,11 @@ export function classifyIntent(text: string, isUser: boolean): string {
   ) {
     return "support_case"
   }
-  if (/\b(remember|forget that|my timezone|preferred (timezone|locale|depth))\b/.test(t)) {
+  if (
+    /\b(remember|forget (?:that|what|everything)|my timezone|preferred (timezone|locale|depth))\b/.test(
+      t
+    )
+  ) {
     return "memory"
   }
   if (
@@ -287,6 +299,10 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
         break
       }
       case "memory": {
+        if (/\bforget (?:that|what|everything)\b/i.test(text)) {
+          await run("clear_memory", {})
+          break
+        }
         const tz = /timezone[^\n]{0,40}?(?:to|is|:)\s*([A-Za-z_]+\/[A-Za-z_]+)/i.exec(text)?.[1]
         const depth = /\b(terse|detailed)\b/i.exec(text)?.[1]?.toLowerCase()
         if (/\bremember|set\b/i.test(text) && (tz || depth)) {
@@ -346,17 +362,29 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
       )
         ? ctx.routeContext
         : null
+    const tier = ["diagnostics", "flow_start", "flow_resume", "support_case", "evidence"].includes(
+      intent
+    )
+      ? "deep"
+      : "fast"
+    if (provider.name === "azure") {
+      await reserveGenerationBudget(traceId, maximumTurnCostUsd(tier))
+    }
     const generated = await provider.generate({
       system: systemPrompt(ctx),
-      messages: [{ role: "user", content: text }],
-      tier: ["diagnostics", "flow_start", "flow_resume", "support_case", "evidence"].includes(
-        intent
-      )
-        ? "deep"
-        : "fast",
-      context: { intent, toolOutputs: step.toolOutputs, routeContext: safeRouteContext },
+      messages: [{ role: "user", content: sanitizeInstructionInput(text) }],
+      tier,
+      context: {
+        intent,
+        toolOutputs: step.toolOutputs,
+        routeContext: safeRouteContext,
+        sessionMemory: args.sessionMemory,
+      },
     })
     answerText = sanitizeAnswerMarkdown(generated.text)
+    if (provider.name === "azure") {
+      await settleGenerationBudget(traceId, generated.usage.costUsd)
+    }
     if (generated.usage.costUsd > 0) {
       await recordCost(
         traceId,

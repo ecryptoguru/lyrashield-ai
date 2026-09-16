@@ -258,6 +258,17 @@ export function hashManageToken(token: string): string {
   return createHash("sha256").update(token).digest("hex")
 }
 
+export function manageTokenExpiresAt(bookingEndsAt: Date): Date {
+  return new Date(bookingEndsAt.getTime() + MYRA_LIMITS.manageTokenGraceDays * 24 * 60 * 60 * 1000)
+}
+
+export function isManageTokenActive(
+  booking: { manageTokenExpiresAt: Date; manageTokenRevokedAt: Date | null },
+  now = new Date()
+): boolean {
+  return booking.manageTokenRevokedAt === null && booking.manageTokenExpiresAt > now
+}
+
 export async function executeBookDemo(
   payload: Record<string, unknown>,
   ctx: OperationContext
@@ -310,6 +321,7 @@ export async function executeBookDemo(
           organizerEmail: D.organizerEmail,
           providerEventId,
           manageTokenHash: hashManageToken(manageToken),
+          manageTokenExpiresAt: manageTokenExpiresAt(end),
           idempotencyKey: `${ctx.conversationId ?? "anon"}:${providerEventId}`,
           ...(ctx.principal.kind === "user" ? { accountId: ctx.principal.accountId } : {}),
           ...(ctx.principal.kind === "anonymous"
@@ -365,7 +377,12 @@ export async function executeBookDemo(
     if (e instanceof CalendarConflictError) {
       await db.demoBooking.update({
         where: { id: bookingId },
-        data: { status: "CANCELED", canceledAt: new Date() },
+        data: {
+          status: "CANCELED",
+          canceledAt: new Date(),
+          manageTokenHash: null,
+          manageTokenRevokedAt: new Date(),
+        },
       })
       throw new MyraServiceError("SLOT_UNAVAILABLE", MYRA_COPY.demoConflict)
     }
@@ -544,7 +561,11 @@ export async function runManageOwnDemo(
     : await (ctx.db ?? prisma).demoBooking
         .findUnique({ where: { manageTokenHash: hashManageToken(manageToken) } })
         .catch(() => null)
-  if (!booking || !verifyManageToken(booking.manageTokenHash, manageToken)) {
+  if (
+    !booking ||
+    !isManageTokenActive(booking) ||
+    !verifyManageToken(booking.manageTokenHash, manageToken)
+  ) {
     throw err("FORBIDDEN", "Invalid booking management link.")
   }
   if (booking.status === "CANCELED") {
@@ -616,7 +637,11 @@ export async function executeManageDemo(
     : await db.demoBooking
         .findUnique({ where: { manageTokenHash: hashManageToken(parsed.manageToken) } })
         .catch(() => null)
-  if (!booking || !verifyManageToken(booking.manageTokenHash, parsed.manageToken)) {
+  if (
+    !booking ||
+    !isManageTokenActive(booking) ||
+    !verifyManageToken(booking.manageTokenHash, parsed.manageToken)
+  ) {
     throw err("FORBIDDEN", "Invalid booking management link.")
   }
   if (booking.status === "CANCELED") {
@@ -629,7 +654,12 @@ export async function executeManageDemo(
     }
     await db.demoBooking.update({
       where: { id: booking.id },
-      data: { status: "CANCELED", canceledAt: new Date() },
+      data: {
+        status: "CANCELED",
+        canceledAt: new Date(),
+        manageTokenHash: null,
+        manageTokenRevokedAt: new Date(),
+      },
     })
     return { result: { bookingId: booking.id, status: "CANCELED" } }
   }
@@ -668,6 +698,7 @@ export async function executeManageDemo(
       organizerEmail: booking.organizerEmail,
       providerEventId: newEventId,
       manageTokenHash: hashManageToken(newToken),
+      manageTokenExpiresAt: manageTokenExpiresAt(newEnd),
       idempotencyKey: `resched:${newEventId}`,
       accountId: booking.accountId,
       publicSessionId: booking.publicSessionId,
@@ -699,7 +730,15 @@ export async function executeManageDemo(
   } catch (e) {
     await db.demoBooking.update({
       where: { id: newBookingId },
-      data: { status: e instanceof CalendarConflictError ? "CANCELED" : "OUTCOME_UNKNOWN" },
+      data:
+        e instanceof CalendarConflictError
+          ? {
+              status: "CANCELED",
+              canceledAt: new Date(),
+              manageTokenHash: null,
+              manageTokenRevokedAt: new Date(),
+            }
+          : { status: "OUTCOME_UNKNOWN" },
     })
     if (e instanceof CalendarConflictError) {
       throw new MyraServiceError("SLOT_UNAVAILABLE", MYRA_COPY.demoConflict)
@@ -716,7 +755,12 @@ export async function executeManageDemo(
     }
     await db.demoBooking.update({
       where: { id: booking.id },
-      data: { status: "CANCELED", canceledAt: new Date() },
+      data: {
+        status: "CANCELED",
+        canceledAt: new Date(),
+        manageTokenHash: null,
+        manageTokenRevokedAt: new Date(),
+      },
     })
   } catch {
     /* best-effort release — the confirmed replacement stands */

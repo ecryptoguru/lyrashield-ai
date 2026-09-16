@@ -522,8 +522,8 @@ describe("request schemas", () => {
 
 describe("tool registry contract", () => {
   it("contains exactly the spec'd tools with unique names", () => {
-    expect(MYRA_TOOL_NAMES.length).toBe(20)
-    expect(new Set(MYRA_TOOL_NAMES).size).toBe(20)
+    expect(MYRA_TOOL_NAMES.length).toBe(21)
+    expect(new Set(MYRA_TOOL_NAMES).size).toBe(21)
     for (const v11 of [
       "instant_suggest",
       "start_guided_flow",
@@ -531,6 +531,7 @@ describe("tool registry contract", () => {
       "verify_resolution",
       "read_memory",
       "write_memory",
+      "clear_memory",
       "attach_trace",
     ]) {
       expect(MYRA_TOOL_NAMES).toContain(v11)

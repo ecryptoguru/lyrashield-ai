@@ -51,5 +51,5 @@
       }
     ]
   },
-  "note": "Spec \u00a710.7 \u2014 an accepted-but-timed-out booking must be reconciled, never duplicated. OBSERVED GAP: the deterministic loop has no chat path that reaches reconcileDemoBooking from a status question."
+  "note": "Spec \u00a710.7 \u2014 an accepted-but-timed-out booking must be reconciled, never duplicated."
 }

@@ -47,7 +47,14 @@ import {
   startGuidedFlowInput,
   verifyResolutionInput,
 } from "./flows-tools"
-import { readMemoryInput, runReadMemory, runWriteMemory, writeMemoryInput } from "./memory"
+import {
+  clearMemoryInput,
+  readMemoryInput,
+  runClearMemory,
+  runReadMemory,
+  runWriteMemory,
+  writeMemoryInput,
+} from "./memory"
 import { attachTraceInput, runAttachTrace } from "./trace"
 import type { MyraToolContext, MyraToolResult, ToolRunner } from "./types"
 
@@ -185,6 +192,13 @@ export const MYRA_TOOLS: Record<MyraToolName, MyraToolDefinition> = {
     description: "Write an allowlisted support preference. Never authority-bearing.",
     maxOutputBytes: 2048,
   },
+  clear_memory: {
+    name: "clear_memory",
+    audience: "authenticated",
+    effect: "draft",
+    description: "Clear all allowlisted support memory for the current account.",
+    maxOutputBytes: 1024,
+  },
   attach_trace: {
     name: "attach_trace",
     audience: "authenticated",
@@ -213,6 +227,7 @@ const INPUT_SCHEMAS: Partial<Record<MyraToolName, z.ZodType<unknown>>> = {
   verify_resolution: verifyResolutionInput,
   read_memory: readMemoryInput,
   write_memory: writeMemoryInput,
+  clear_memory: clearMemoryInput,
   attach_trace: attachTraceInput,
 }
 
@@ -236,6 +251,7 @@ const RUNNERS: Record<MyraToolName, ToolRunner> = {
   verify_resolution: runVerifyResolution,
   read_memory: runReadMemory,
   write_memory: runWriteMemory,
+  clear_memory: runClearMemory,
   attach_trace: runAttachTrace,
 }
 

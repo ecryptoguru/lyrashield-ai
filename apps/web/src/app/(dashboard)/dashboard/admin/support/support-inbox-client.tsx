@@ -60,6 +60,9 @@ interface CaseDetail {
   lastOperatorReplyAt: string | null
   resolvedAt: string | null
   notificationState: string
+  handoffSummary: string | null
+  handoffReviewedAt: string | null
+  handoffReviewedBy: string | null
   createdAt: string
   updatedAt: string
 }
@@ -134,6 +137,7 @@ export function SupportInbox() {
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [replyBody, setReplyBody] = useState("")
+  const [handoffSummary, setHandoffSummary] = useState("")
   const [announce, setAnnounce] = useState("")
 
   // setState only inside promise callbacks — an effect may call these, but
@@ -196,6 +200,7 @@ export function SupportInbox() {
   const selectCase = useCallback((id: string | null) => {
     setSelectedId(id)
     setReplyBody("")
+    setHandoffSummary("")
     setActionError(null)
     if (id) {
       setLoadingDetail(true)
@@ -220,7 +225,11 @@ export function SupportInbox() {
         const res = await fetch(`/api/myra/operator/cases/${selectedId}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action, ...(status ? { status } : {}) }),
+          body: JSON.stringify({
+            action,
+            ...(status ? { status } : {}),
+            ...(action === "release" ? { handoffSummary } : {}),
+          }),
         })
         if (!res.ok) await readError(res)
         await Promise.all([loadDetail(selectedId), loadList()])
@@ -229,7 +238,9 @@ export function SupportInbox() {
             ? "You are handling this case. Myra is paused on the conversation."
             : action === "release"
               ? "Released — Myra may respond again."
-              : `Case marked ${status?.toLowerCase().replace(/_/g, " ") ?? "resolved"}.`
+              : action === "assign"
+                ? "Case assigned to you."
+                : `Case marked ${status?.toLowerCase().replace(/_/g, " ") ?? "resolved"}.`
         )
       } catch (e) {
         setActionError(e instanceof Error ? e.message : "Could not update that case.")
@@ -237,7 +248,7 @@ export function SupportInbox() {
         setBusy(null)
       }
     },
-    [selectedId, loadDetail, loadList]
+    [selectedId, loadDetail, loadList, handoffSummary]
   )
 
   const sendReply = useCallback(async () => {
@@ -400,6 +411,36 @@ export function SupportInbox() {
                 <p className="mt-1.5 text-sm break-words whitespace-pre-wrap">{selected.summary}</p>
               </div>
 
+              {selected.handoffSummary ? (
+                <div className="mt-4 border-t pt-3">
+                  <h3 className="text-muted-foreground font-mono text-xs uppercase">
+                    Last handoff to Myra
+                  </h3>
+                  <p className="mt-1.5 text-sm break-words whitespace-pre-wrap">
+                    {selected.handoffSummary}
+                  </p>
+                </div>
+              ) : null}
+
+              {takenOver ? (
+                <div className="mt-4 border-t pt-3">
+                  <label htmlFor="myra-handoff-summary" className="text-sm font-medium">
+                    Reviewed handoff summary
+                  </label>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Tell Myra what was resolved and what the requester should do next.
+                  </p>
+                  <textarea
+                    id="myra-handoff-summary"
+                    value={handoffSummary}
+                    maxLength={4000}
+                    rows={4}
+                    onChange={(event) => setHandoffSummary(event.target.value)}
+                    className="border-input bg-background focus-visible:ring-ring mt-2 w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+                  />
+                </div>
+              ) : null}
+
               <div className="mt-4 flex flex-wrap gap-2 border-t pt-3" aria-label="Case controls">
                 {!takenOver ? (
                   <Button
@@ -414,12 +455,22 @@ export function SupportInbox() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    disabled={busy !== null}
+                    disabled={busy !== null || handoffSummary.trim().length < 10}
                     onClick={() => void patch("release")}
                   >
                     Release to Myra
                   </Button>
                 )}
+                {!selected.assigneeUserId ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy !== null}
+                    onClick={() => void patch("assign")}
+                  >
+                    Assign to me
+                  </Button>
+                ) : null}
                 {selected.status !== "RESOLVED" ? (
                   <>
                     <Button

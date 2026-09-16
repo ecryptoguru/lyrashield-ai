@@ -86,6 +86,7 @@ async function post(request: Request): Promise<Response> {
     conversationId: parsed.data.conversationId,
     routeContext: parsed.data.routeContext,
     surface: parsed.data.surface,
+    sessionMemory: parsed.data.sessionMemory,
   })
   return myraSseResponse(request, events)
 }
