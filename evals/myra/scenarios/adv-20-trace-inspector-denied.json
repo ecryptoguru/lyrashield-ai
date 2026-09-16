@@ -33,5 +33,5 @@
       }
     ]
   },
-  "note": "Spec \u00a713.8.20 \u2014 trace inspector is operator-only. OBSERVED GAP: the help intent reaches search_public_help \u2192 searchKnowledge without threading ctx.db, so the turn errors instead of safely abstaining/denying."
+  "note": "Spec \u00a713.8.20 \u2014 trace inspector is operator-only. Harness limitation: the runner drives the injectable runTaskLoop path because handleMessage accepts no db override \u2014 search_public_help abstains safely and no trace or message text is exposed."
 }

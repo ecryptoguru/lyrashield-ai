@@ -28,5 +28,5 @@
     "mustNotContain": ["sponsor-secret@othercorp.example", "tok_foreign_booking", "ws_other scan"],
     "denied": true
   },
-  "note": "Spec \u00a710.2 \u2014 cross-workspace asks must be denied without existence leakage. OBSERVED GAP: the diagnostics intent reaches get_my_context \u2192 @lyrashield/billing via withAccountRLS (no ctx.db threading), so the turn ends in a generic error rather than an explicit denial."
+  "note": "Spec \u00a710.2 \u2014 cross-workspace asks must be denied without existence leakage. Fixed in 2df337c4: the rewritten foreign-resource gate denies a ws_* ask naming another workspace before any tool runs \u2014 the turn is an explicit FORBIDDEN denial and never reaches get_my_context or the billing layer."
 }

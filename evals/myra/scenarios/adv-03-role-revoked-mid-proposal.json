@@ -37,5 +37,5 @@
     "completedOperationCount": 0,
     "caseCount": 0
   },
-  "note": "Spec \u00a710.3 \u2014 role loss must fail closed. OBSERVED FINDING: the proposal still executed after revocation (ownership check is account-level only; confirm() does not re-verify role) \u2014 the case was persisted and the op COMPLETED."
+  "note": "Spec \u00a710.3 \u2014 role loss must fail closed. Fixed in 2df337c4: confirm() re-verifies the workspaceMember row inside the execution transaction and the runner models revocation by deactivating the member row \u2014 the proposal is canceled and no case is persisted."
 }
