@@ -1,0 +1,62 @@
+[
+  {
+    "slug": "race-conditions-ai-built-apps",
+    "imageId": "agent-security-06",
+    "cluster": "agent-security",
+    "concept": "A private application workspace separated from an external assistant channel",
+    "prompt": "Text-free square cinematic technical artwork, a protected data chamber separated by a translucent privacy boundary from an external assistant path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "A protected data chamber separated from an external assistant path",
+    "sourceHash": "sha256:d4e070a2021276fc97fbf54b6befd9aa7caeff2491ec9c18f8abb04c52b39b92",
+    "cropNotes": "Keep the privacy boundary and both sides visible; avoid depicting real user data",
+    "usageCount": 3,
+    "approved": true
+  },
+  {
+    "slug": "what-data-shows-ai-generated-code-security-2026",
+    "imageId": "decision-operations-06",
+    "cluster": "decision-operations",
+    "concept": "A recovery proof path for small teams and internal systems",
+    "prompt": "Text-free square cinematic technical artwork, a compact system chamber connected to a backup artifact and a verified restore path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "A compact system connected to a backup artifact and verified restore path",
+    "sourceHash": "sha256:6fd8119b21a108ad8d615a825086c7455eb9a2d355b8bd74ce0a845c7fe5b3f0",
+    "cropNotes": "Keep the system, backup, and restore path visible in the central safe area",
+    "usageCount": 3,
+    "approved": true
+  },
+  {
+    "slug": "building-release-assurance-lessons-open-beta",
+    "imageId": "decision-operations-02",
+    "cluster": "decision-operations",
+    "concept": "Monitoring and recovery paths forming a continuous operating loop",
+    "prompt": "Text-free square cinematic technical artwork, a restrained monitoring path feeding a tested recovery loop around a production core, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "A monitoring path feeding a recovery loop around a production core",
+    "sourceHash": "sha256:8222cb1fcb4097fcf17ec9f8ff5076f87b188fb373d0aa874513b4f3dfabb729",
+    "cropNotes": "Keep the loop complete in landscape and portrait crops",
+    "usageCount": 3,
+    "approved": true
+  },
+  {
+    "slug": "scanner-findings-vs-verified-findings",
+    "imageId": "decision-operations-03",
+    "cluster": "decision-operations",
+    "concept": "An incident path moving from containment to verified recovery",
+    "prompt": "Text-free square cinematic technical artwork, an amber incident signal contained by a graphite boundary before entering a green retest path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "An incident signal contained before entering a retest path",
+    "sourceHash": "sha256:88fadac28eb1897950c4bc810a2360d340dfd49fb802612c0b17d620fc59a006",
+    "cropNotes": "Keep containment and retest stages separate and inside the protected center",
+    "usageCount": 3,
+    "approved": true
+  },
+  {
+    "slug": "insecure-file-upload-ai-built-apps",
+    "imageId": "web-execution-05",
+    "cluster": "web-execution",
+    "concept": "An untrusted file or diagnostic channel isolated from executable and public-response space",
+    "prompt": "Text-free square cinematic technical artwork, an untrusted file artifact or protected diagnostic stream passing through a controlled handling boundary into a sealed internal channel while executable space and the public-response plane remain isolated, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "An untrusted file or diagnostic channel isolated from executable and public-response space",
+    "sourceHash": "sha256:88d116c8658d46175ffcef46451b6c3370fd0c2ab9736d8be8bbeedb92c6b4ea",
+    "cropNotes": "Keep the untrusted input, controlled internal channel, executable boundary, and public-response plane visible in every crop",
+    "usageCount": 3,
+    "approved": true
+  }
+]
