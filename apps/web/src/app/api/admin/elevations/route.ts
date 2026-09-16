@@ -23,6 +23,11 @@ const ElevationSchema = z.object({
     "affiliate.reconcile-payout",
     "affiliate.verify-payout-profile",
     "affiliate.tier-override",
+    "myra.case.takeover",
+    "myra.case.release",
+    "myra.case.resolve",
+    "myra.case.assign",
+    "myra.case.reply",
   ]),
   code: z.string().regex(/^\d{6}$/),
 })

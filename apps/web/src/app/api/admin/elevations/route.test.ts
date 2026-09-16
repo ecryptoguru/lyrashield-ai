@@ -65,6 +65,23 @@ describe("POST /api/admin/elevations", () => {
     })
   })
 
+  it.each([
+    "myra.case.takeover",
+    "myra.case.release",
+    "myra.case.resolve",
+    "myra.case.assign",
+    "myra.case.reply",
+  ])("issues a nonce for registered operator action %s", async (action) => {
+    const response = await POST(request({ action, code: "123456" }))
+
+    expect(response.status).toBe(201)
+    expect(issuePlatformAdminElevation).toHaveBeenCalledWith({
+      userId: "admin-1",
+      sessionId: "session-1",
+      action,
+    })
+  })
+
   it("rejects arbitrary actions before TOTP verification", async () => {
     const response = await POST(request({ action: "deploy.run-command", code: "123456" }))
 
