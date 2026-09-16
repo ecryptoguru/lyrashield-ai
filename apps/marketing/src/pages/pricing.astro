@@ -4,6 +4,7 @@ import {
   CLOUD_PLANS,
   LOCAL_SKU_MAP,
   MINUTE_PACKS,
+  PACK_VALIDITY_DAYS,
   formatINR,
   formatUSD,
   getPlan,
@@ -29,7 +30,7 @@ const pricingFaqs = [
   },
   {
     q: "What happens if I run out of agent-minutes?",
-    a: "You can add a prepaid minute pack at any time. Packs are valid for 6 months and are consumed after your monthly pool. Overage billing at $0.15/min with a spend limit is available on Agency.",
+    a: `You can add a prepaid minute pack at any time. Packs are valid for ${PACK_VALIDITY_DAYS} days and are consumed after your monthly pool. Overage billing at $0.15/min with a spend limit is available on Agency.`,
   },
   {
     q: "Can I trial Agency?",
@@ -325,8 +326,8 @@ const appUrl =
       <div class="mt-16">
         <h2 class="text-2xl font-bold text-text">Minute Packs</h2>
         <p class="mt-2 text-sm text-text-muted">
-          Add prepaid agent-minutes to any plan. Packs are valid for 6 months and are consumed after
-          your monthly pool.
+          Add prepaid agent-minutes to any plan. Packs are valid for {PACK_VALIDITY_DAYS} days and
+          are consumed after your monthly pool.
         </p>
         <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {
@@ -337,7 +338,7 @@ const appUrl =
                   USD ${pack.priceUsd}
                 </p>
                 <p class="text-sm text-text-muted">{pack.minutes} agent-minutes</p>
-                <p class="mt-1 text-xs text-text-muted">Valid for 6 months</p>
+                <p class="mt-1 text-xs text-text-muted">Valid for {PACK_VALIDITY_DAYS} days</p>
               </div>
             ))
           }
@@ -443,8 +444,8 @@ const appUrl =
       </p>
       <p class="mt-3 text-sm text-text-muted">
         Overage (when all included minutes and packs are exhausted) is billed at $0.15/min for
-        Agency plans with a spend limit configured. Minute packs are valid for 6 months
-        from purchase.
+        Agency plans with a spend limit configured. Minute packs are valid for {PACK_VALIDITY_DAYS}
+        days from purchase.
       </p>
     </div>
 

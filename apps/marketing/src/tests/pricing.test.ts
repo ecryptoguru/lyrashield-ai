@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { CLOUD_PLAN_MAP } from "@lyrashield/pricing"
+import { CLOUD_PLAN_MAP, PACK_VALIDITY_DAYS } from "@lyrashield/pricing"
 
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const pricingPage = readFileSync(new URL("../pages/pricing.astro", import.meta.url), "utf8")
@@ -93,5 +93,12 @@ describe("pricing page", () => {
     )
     expect(pricingPage).toContain("require its check in your repository settings")
     expect(pricingPage).not.toContain("Launch Assurance tier's gate")
+  })
+
+  it("renders pack validity from the catalog constant, never a hardcoded month count", () => {
+    expect(PACK_VALIDITY_DAYS).toBe(180)
+    expect(`${PACK_VALIDITY_DAYS} days`).toBe("180 days")
+    expect(pricingPage).toContain("PACK_VALIDITY_DAYS")
+    expect(pricingPage).not.toContain("6 months")
   })
 })
