@@ -46,6 +46,12 @@ const workerPromoter = readFileSync(
 )
 // The path is anchored to this test module rather than derived from external input.
 // eslint-disable-next-line security/detect-non-literal-fs-filename
+const workerProvenanceValidator = readFileSync(
+  fileURLToPath(new URL("../../../.github/scripts/validate-worker-provenance.sh", import.meta.url)),
+  "utf8"
+)
+// The path is anchored to this test module rather than derived from external input.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
 const workerSecretRefresh = readFileSync(
   fileURLToPath(new URL("../../../ops/worker/refresh-secrets.sh", import.meta.url)),
   "utf8"
@@ -240,9 +246,14 @@ describe("worker Docker runtime", () => {
 
   it("promotes the exact worker digest with bounded rollback and verification", () => {
     expect(deployWorkflow).toContain("Validate worker provenance record")
-    expect(deployWorkflow).toContain("LYRASHIELD_PRODUCT_REVISION=${{ env.DEPLOY_SHA }}")
-    expect(deployWorkflow).toContain("LYRASHIELD_WORKER_IMAGE_DIGEST=$digest")
-    expect(deployWorkflow).toContain("LYRASHIELD_ENGINE_REVISION=${{ env.ENGINE_REVISION }}")
+    expect(deployWorkflow).toContain(".github/scripts/validate-worker-provenance.sh")
+    expect(deployWorkflow).toContain('"${{ steps.build-worker.outputs.digest }}"')
+    expect(deployWorkflow).toContain('"${{ env.DEPLOY_SHA }}"')
+    expect(deployWorkflow).toContain('"${{ env.ENGINE_REVISION }}"')
+    expect(workerProvenanceValidator).toContain("- LYRASHIELD_PRODUCT_REVISION=")
+    expect(workerProvenanceValidator).toContain("- LYRASHIELD_WORKER_IMAGE_DIGEST=${digest}")
+    expect(workerProvenanceValidator).toContain("- LYRASHIELD_ENGINE_REVISION=")
+    expect(workerProvenanceValidator).toContain('>>"$GITHUB_STEP_SUMMARY"')
     expect(deployWorkflow).toContain("Promote verified worker digest on VM")
     expect(deployWorkflow).toContain("AZURE_VM_RUN_COMMAND_TIMEOUT_SECONDS=1800")
     expect(deployWorkflow).toContain("needs: [build, deploy]")

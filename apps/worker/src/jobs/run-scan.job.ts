@@ -1,91 +1,33 @@
 import type { Job } from "bullmq"
-import { hasPermission, PERMISSIONS } from "@lyrashield/auth/permissions"
 import { boundedCleanup, finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
-import {
-  prisma,
-  runWithWorkspaceContext,
-  runWithAccountContext,
-  getSystemPrisma,
-  type ScopedTransaction,
-} from "@lyrashield/db"
+import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
-import {
-  authorizeDeterministicRetest,
-  checkoutDeterministicRetest,
-} from "../engine/deterministic-retest"
-import {
-  recordAgentMinutes,
-  evaluateScanEntitlement,
-  hasUnsettledScanIntent,
-  enterGrace,
-  debitOverage,
-  resolveAccountBilling,
-} from "@lyrashield/billing"
+import type { checkoutDeterministicRetest } from "../engine/deterministic-retest"
 
-import {
-  buildVibeSecurityInstruction,
-  buildUrlTargetInstruction,
-  normalizeDomainForProof,
-  summarizeVibeSecurityCoverage,
-  checkInstructionSafety,
-  containsPromptInjection,
-  applyEngineTriageArtifact,
-} from "@lyrashield/security"
-import {
-  fetchRelayAudit,
-  mintScanRelayGrant,
-  registerRelayGrant,
-  resolveRelayRuntimeConfig,
-  resolveSpecServerHosts,
-  revokeRelayGrant,
-} from "../engine/relay-client"
+import { summarizeVibeSecurityCoverage } from "@lyrashield/security"
+import { executeScanTarget, resolveEngineTerminalError } from "./run-scan/execution"
+import { createEngineMinuteMeter, type ScanTerminalError } from "./run-scan/settlement"
+import { finalizeScanLifecycle } from "./run-scan/finalization"
+import { runEngineTriageOverlay } from "./run-scan/triage"
 import {
   updateScanStatus,
   addScanEvent,
-  completeScanWithScore,
   createAiSecurityScoreSnapshot,
   qualifyReferralForWorkspace,
-  withScanFinalizationClaim,
-  evaluateGateForTarget,
   type ScanStatus,
 } from "@lyrashield/db"
+import { resolveScanProfile, type UrlScanProfile } from "@lyrashield/types"
+import { prepareScanExecution } from "./run-scan/preparation"
 import {
-  AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
-  AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
-  AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
-  resolveScanProfile,
-  resolveTargetScanMode,
-  type UrlScanProfile,
-} from "@lyrashield/types"
-import { runPreflight } from "./preflight.job"
-import {
-  runEngine,
   cleanupEngineWorkspace,
   interpretExitCode,
   resolveEngineProfile,
-  runEngineTriage,
-  type EngineProfile,
   type EngineRunResult,
 } from "../engine/runner"
 import { engineWorkspacePath } from "../engine/workspace-path"
-import { mergeLlmUsage, type EngineRunRecord } from "../engine/output-parser"
-import { buildEngineTriageInput, eligibleForEngineTriage } from "../engine/ai-security-triage"
-import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
-import {
-  calculateGpt56CostUsd,
-  calculateGpt56CostUsdFromBuckets,
-  calculateGpt56CostUsdFromModelBuckets,
-  GPT_56_PRICING_EFFECTIVE_DATE,
-  GPT_56_PRICING_SOURCE,
-  type Gpt56ModelUsageBuckets,
-} from "../engine/gpt56-pricing"
-import { persistFindings } from "../engine/finding-persister"
-import {
-  assertEvidenceStorageConfigured,
-  EvidenceStorageConfigurationError,
-} from "../engine/evidence-storage"
-import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
+import type { TargetType } from "../engine/command-builder"
+import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import {
   completeRetestsForScan,
@@ -94,647 +36,45 @@ import {
   persistResultManifest,
 } from "../engine/result-integrity"
 import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
-import { ScanJobDataSchema, type ScanJobData, type ScanJobResult } from "../types"
-import type { ScannerCoverageIssue } from "../engine/scanner-coverage"
+import { type ScanJobData, type ScanJobResult } from "../types"
+import { verifyScanJobAuthority } from "./run-scan/authority"
+import { verifyScanAdmission } from "./run-scan/admission"
+import { resumePendingScanFinalization } from "./run-scan/pending-finalization"
+import {
+  imageDigest,
+  isTimeoutError,
+  MAX_SCAN_RUNTIME_MS,
+  reportInterruptedSettlement,
+  resolveEngineRuntimeBudgetMs,
+  resolveScanRuntimeBudgetMs,
+  resolveScannerPhaseTimeoutMs,
+  timeoutErrorMessage,
+} from "./run-scan/lifecycle-utils"
+import {
+  engineRoutingCoverageIssue,
+  extractActualCostUsd,
+  extractUsageSummary,
+  persistEngineUsageCheckpoint,
+  shouldRecordAgentMinutes,
+} from "./run-scan/usage"
 
-async function reportInterruptedSettlement(workspaceId: string, scanId: string): Promise<void> {
-  let checkUnavailable = false
-  const pending = await hasUnsettledScanIntent(workspaceId, scanId).catch(() => {
-    checkUnavailable = true
-    return true
-  })
-  if (pending) {
-    logger.error("billing.scan_settlement_commit_uncertain", {
-      workspaceId,
-      scanId,
-      accountingReviewRequired: true,
-      automaticReplayAllowed: false,
-      checkUnavailable,
-    })
-  }
-}
-
-export function extractActualCostUsd(usage: Record<string, unknown> | undefined): number | null {
-  if (!usage) return null
-  for (const key of ["total_cost_usd", "cost_usd", "total_cost", "cost"]) {
-    const value = usage[key]
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1_000_000) {
-      return value
-    }
-  }
-  return null
-}
-
-export function engineRoutingCoverageIssue(
-  profile: EngineProfile,
-  runRecord: EngineRunRecord | null
-): ScannerCoverageIssue | null {
-  if (!runRecord) return null
-  const expectedPolicy =
-    profile.model && profile.delegateModel
-      ? `coordinator=${profile.model}@${profile.reasoningEffort};delegate=${profile.delegateModel}@${profile.delegateReasoningEffort};v=1`
-      : null
-  const mismatches = [
-    profile.model !== undefined && runRecord.model !== profile.model ? "model" : null,
-    runRecord.reasoning_effort !== profile.reasoningEffort ? "reasoning_effort" : null,
-    profile.delegateModel !== undefined && runRecord.delegate_model !== profile.delegateModel
-      ? "delegate_model"
-      : null,
-    runRecord.delegate_reasoning_effort !== profile.delegateReasoningEffort
-      ? "delegate_reasoning_effort"
-      : null,
-    expectedPolicy !== null && runRecord.model_routing_policy !== expectedPolicy
-      ? "model_routing_policy"
-      : null,
-  ].filter((field): field is string => field !== null)
-
-  return mismatches.length === 0
-    ? null
-    : {
-        scanner: "engine",
-        status: "partial",
-        subject: "routing-receipt",
-        reason: `Engine routing receipt did not match the worker profile: ${mismatches.join(", ")}`,
-      }
-}
-
-type StoredTerminalOutcome = {
-  status: "COMPLETED" | "PARTIAL" | "FAILED" | "STOPPED_BUDGET"
-  errorCategory: string | null
-  errorMessage: string | null
-}
-
-function storedTerminalOutcome(manifest: unknown): StoredTerminalOutcome | null {
-  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) return null
-  const outcome = (manifest as { terminalOutcome?: unknown }).terminalOutcome
-  if (!outcome || typeof outcome !== "object" || Array.isArray(outcome)) return null
-  const record = outcome as Record<string, unknown>
-  if (!["COMPLETED", "PARTIAL", "FAILED", "STOPPED_BUDGET"].includes(String(record.status))) {
-    return null
-  }
-  if (
-    record.errorCategory !== null &&
-    record.errorCategory !== undefined &&
-    typeof record.errorCategory !== "string"
-  ) {
-    return null
-  }
-  if (
-    record.errorMessage !== null &&
-    record.errorMessage !== undefined &&
-    typeof record.errorMessage !== "string"
-  ) {
-    return null
-  }
-  return {
-    status: record.status as StoredTerminalOutcome["status"],
-    errorCategory: typeof record.errorCategory === "string" ? record.errorCategory : null,
-    errorMessage: typeof record.errorMessage === "string" ? record.errorMessage : null,
-  }
-}
-
-type UsageSummary = {
-  requestCount: number | null
-  inputTokens: number | null
-  cachedInputTokens: number | null
-  cacheWriteInputTokens: number | null
-  outputTokens: number | null
-  pricingBuckets: {
-    standardInputTokens: number | null
-    standardCachedInputTokens: number | null
-    standardCacheWriteInputTokens: number | null
-    standardOutputTokens: number | null
-    longInputTokens: number | null
-    longCachedInputTokens: number | null
-    longCacheWriteInputTokens: number | null
-    longOutputTokens: number | null
-  } | null
-  modelPricingBuckets: Gpt56ModelUsageBuckets[] | null
-  singleModel: string | null
-  engineReportedCostUsd: number | null
-}
-
-function usageCount(usage: Record<string, unknown>, key: string): number | null {
-  const value = usage[key]
-  return typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value >= 0 &&
-    value <= 2_147_483_647
-    ? value
-    : null
-}
-
-function extractModelPricingBuckets(
-  usage: Record<string, unknown>
-): Gpt56ModelUsageBuckets[] | null {
-  const rawBuckets = usage.model_usage_buckets
-  if (!Array.isArray(rawBuckets) || rawBuckets.length === 0 || rawBuckets.length > 3) return null
-  const result: Gpt56ModelUsageBuckets[] = []
-  for (const rawBucket of rawBuckets) {
-    if (typeof rawBucket !== "object" || rawBucket === null || Array.isArray(rawBucket)) return null
-    const bucket = rawBucket as Record<string, unknown>
-    const model = typeof bucket.model === "string" ? bucket.model.trim() : ""
-    const values = {
-      standardInputTokens: usageCount(bucket, "standard_input_tokens"),
-      standardCachedInputTokens: usageCount(bucket, "standard_cached_input_tokens"),
-      standardCacheWriteInputTokens: usageCount(bucket, "standard_cache_write_input_tokens"),
-      standardOutputTokens: usageCount(bucket, "standard_output_tokens"),
-      longInputTokens: usageCount(bucket, "long_input_tokens"),
-      longCachedInputTokens: usageCount(bucket, "long_cached_input_tokens"),
-      longCacheWriteInputTokens: usageCount(bucket, "long_cache_write_input_tokens"),
-      longOutputTokens: usageCount(bucket, "long_output_tokens"),
-    }
-    if (!model || Object.values(values).some((value) => value === null)) return null
-    result.push({ model, ...(values as Omit<Gpt56ModelUsageBuckets, "model">) })
-  }
-  return result
-}
-
-export function extractUsageSummary(usage: Record<string, unknown>): UsageSummary {
-  const pricingBuckets = {
-    standardInputTokens: usageCount(usage, "standard_input_tokens"),
-    standardCachedInputTokens: usageCount(usage, "standard_cached_input_tokens"),
-    standardCacheWriteInputTokens: usageCount(usage, "standard_cache_write_input_tokens"),
-    standardOutputTokens: usageCount(usage, "standard_output_tokens"),
-    longInputTokens: usageCount(usage, "long_input_tokens"),
-    longCachedInputTokens: usageCount(usage, "long_cached_input_tokens"),
-    longCacheWriteInputTokens: usageCount(usage, "long_cache_write_input_tokens"),
-    longOutputTokens: usageCount(usage, "long_output_tokens"),
-  }
-  const modelPricingBuckets = extractModelPricingBuckets(usage)
-  const bucketModels = modelPricingBuckets
-    ? [...new Set(modelPricingBuckets.map((b) => b.model))]
-    : []
-  const rootModel = typeof usage["model"] === "string" ? (usage["model"] as string) : null
-  const singleModel = bucketModels.length === 1 ? bucketModels[0]! : rootModel
-
-  return {
-    requestCount: usageCount(usage, "request_count"),
-    inputTokens: usageCount(usage, "input_tokens"),
-    cachedInputTokens: usageCount(usage, "cached_input_tokens"),
-    cacheWriteInputTokens: usageCount(usage, "cache_write_input_tokens"),
-    outputTokens: usageCount(usage, "output_tokens"),
-    pricingBuckets: Object.values(pricingBuckets).every((value) => value !== null)
-      ? pricingBuckets
-      : null,
-    modelPricingBuckets,
-    singleModel,
-    engineReportedCostUsd: extractActualCostUsd(usage),
-  }
-}
-
-export function shouldRecordAgentMinutes(
-  scanId: string,
-  exitStatus: "COMPLETED" | "PARTIAL" | "FAILED",
-  runRecord: EngineRunRecord | null,
-  opts: { cancelled?: boolean } = {}
-): boolean {
-  if (!runRecord) return false
-  if (runRecord.run_id !== scanId || runRecord.run_name !== scanId) return false
-
-  // Founder-confirmed billing rules (2026-08-29):
-  // - A user-CANCELLED scan bills for the period actually used. It is billed
-  //   (elapsed time, no floor) whenever engine work was observed.
-  // - Any OTHER failed terminal state is NEVER billed, even if provider usage
-  //   was recorded before the failure (if the customer got nothing usable,
-  //   they pay nothing).
-  const validCompletedReceipt = exitStatus === "COMPLETED" && runRecord.status === "completed"
-  if (validCompletedReceipt) return true
-
-  if (exitStatus === "FAILED" && !opts.cancelled) return false
-
-  if (!runRecord.llm_usage) return false
-  const usage = extractUsageSummary(runRecord.llm_usage)
-  return [
-    usage.requestCount,
-    usage.inputTokens,
-    usage.cachedInputTokens,
-    usage.cacheWriteInputTokens,
-    usage.outputTokens,
-    usage.engineReportedCostUsd,
-    ...(usage.pricingBuckets ? Object.values(usage.pricingBuckets) : []),
-    ...(usage.modelPricingBuckets
-      ? usage.modelPricingBuckets.flatMap((bucket) => [
-          bucket.standardInputTokens,
-          bucket.standardCachedInputTokens,
-          bucket.standardCacheWriteInputTokens,
-          bucket.standardOutputTokens,
-          bucket.longInputTokens,
-          bucket.longCachedInputTokens,
-          bucket.longCacheWriteInputTokens,
-          bucket.longOutputTokens,
-        ])
-      : []),
-  ].some((value) => typeof value === "number" && value > 0)
-}
-
-const MAX_SCAN_RUNTIME_MS = 30 * 60 * 1000
-
-export function resolveScanRuntimeBudgetMs(
-  mode: ScanJobData["mode"],
-  maxDurationMinutes: number | null | undefined,
-  targetType = "REPO"
-): number {
-  let modeMaxMs = MAX_SCAN_RUNTIME_MS
-  try {
-    modeMaxMs = resolveScanProfile({ targetType, mode }).maxDurationMinutes * 60 * 1000
-  } catch {
-    // A historical invalid row must not turn a worker retry into an unbounded run.
-    modeMaxMs = MAX_SCAN_RUNTIME_MS
-  }
-  const configuredMaxMs =
-    typeof maxDurationMinutes === "number" &&
-    Number.isFinite(maxDurationMinutes) &&
-    maxDurationMinutes > 0
-      ? Math.floor(maxDurationMinutes * 60 * 1000)
-      : modeMaxMs
-
-  return Math.min(configuredMaxMs, modeMaxMs)
-}
-
-export function resolveScannerPhaseTimeoutMs(
-  globalScanBudgetMs: number,
-  elapsedMs: number
-): number {
-  // ponytail: spend only the wall-clock time the engine actually used.
-  return Math.max(0, Math.min(env.SCANNER_PHASE_TIMEOUT_MS, globalScanBudgetMs - elapsedMs))
-}
-
-export function resolveEngineRuntimeBudgetMs(
-  mode: ScanJobData["mode"],
-  targetType: TargetType,
-  scanRuntimeBudgetMs: number,
-  elapsedMs: number
-): number {
-  try {
-    const profile = resolveScanProfile({ targetType, mode })
-    // Deterministic-only profiles carry no engine budget — the caller never
-    // reaches here for them.
-    if (!profile.usesAi || profile.maxEngineMinutes <= 0) {
-      return Math.max(0, scanRuntimeBudgetMs - elapsedMs)
-    }
-    const engineCapMs = profile.maxEngineMinutes * 60 * 1000
-    const scannerReserveMs = profile.scannerReserveMinutes * 60 * 1000
-    return Math.max(0, Math.min(engineCapMs, scanRuntimeBudgetMs - elapsedMs - scannerReserveMs))
-  } catch {
-    return Math.max(0, scanRuntimeBudgetMs - elapsedMs)
-  }
-}
-
-function requireEngineModel(model: string | undefined): string {
-  if (!model) {
-    throw new Error("A GPT-5.6 Terra or Luna deployment must be configured for engine-backed scans")
-  }
-  return model
-}
-
-function timeoutErrorMessage(totalRuntimeMs: number): string {
-  const minutes = Math.max(1, Math.ceil(totalRuntimeMs / 60_000))
-  return `Scan exceeded the configured runtime limit of ${minutes} minute(s)`
-}
-
-function imageDigest(image: string | undefined): string | undefined {
-  return image?.match(/@?(sha256:[a-f0-9]{64})$/i)?.[1]?.toLowerCase()
-}
-
-/**
- * WP2 gate maintenance: re-evaluate the Launch Gate verdict for a target after
- * a scan reaches a terminal state. A completed scan adds evidence (verdict may
- * move toward READY); a failed/stopped scan changes the staleness picture. The
- * verdict is derived purely from stored evidence, so this is a best-effort
- * refresh — a gate failure must never fail or retry a scan that already
- * finalized. No-op for scans without a target.
- */
-async function refreshGateVerdictAfterTerminalScan(
-  workspaceId: string,
-  targetId: string | null | undefined,
-  scanId: string
-): Promise<void> {
-  if (!targetId) return
-  try {
-    await evaluateGateForTarget(workspaceId, targetId)
-  } catch (error) {
-    logger.warn("Post-scan gate evaluation failed (non-fatal)", {
-      scanId,
-      targetId,
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }
-}
-
-function isTimeoutError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-  if (error.name === "TimeoutError") return true
-
-  const message = error.message.toLowerCase()
-  return message.includes("timeout") || message.includes("timed out")
-}
-
-export async function persistEngineUsageCheckpoint(params: {
-  scanId: string
-  maxBudgetUsd: number
-  llmUsage?: Record<string, unknown>
-  webSearchCostUsd?: number
-  usageExpected: boolean
-}): Promise<{
-  budgetExceeded: boolean
-  billedCostUsd: number | null
-  costReconciled: boolean
-  reconciliationReason?: string
-}> {
-  const { scanId, maxBudgetUsd, llmUsage, webSearchCostUsd = 0, usageExpected } = params
-  if (!llmUsage) {
-    if (usageExpected) {
-      try {
-        await addScanEvent(
-          scanId,
-          "llm_usage_unavailable",
-          "warning",
-          "AI usage counters were unavailable; billing reconciliation requires provider records"
-        )
-      } catch (eventErr) {
-        logger.warn("Failed to persist llm_usage_unavailable event", {
-          scanId,
-          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-        })
-      }
-    }
-    return {
-      budgetExceeded: false,
-      billedCostUsd: null,
-      costReconciled: !usageExpected,
-      ...(usageExpected
-        ? { reconciliationReason: "Per-request GPT-5.6 usage was unavailable" }
-        : {}),
-    }
-  }
-
-  const usage = extractUsageSummary(llmUsage)
-  // Per-request buckets are the only way to price mixed-context scans
-  // accurately. When they are unavailable, fall back to aggregate counters
-  // only if the usage payload names a single model, so we do not misprice a
-  // Terra/Luna mix at the configured model rate.
-  const aggregateCostUsd =
-    usage.inputTokens !== null &&
-    usage.cachedInputTokens !== null &&
-    usage.outputTokens !== null &&
-    usage.singleModel
-      ? calculateGpt56CostUsd(usage.singleModel, {
-          inputTokens: usage.inputTokens,
-          cachedInputTokens: usage.cachedInputTokens,
-          cacheWriteInputTokens: usage.cacheWriteInputTokens,
-          outputTokens: usage.outputTokens,
-        })
-      : null
-
-  let pricingMethod: string
-  let modelMixUnpriceable = false
-  let rateCardCostUsd: number | null = null
-
-  if (usage.modelPricingBuckets) {
-    const tokenCostUsd = calculateGpt56CostUsdFromModelBuckets(usage.modelPricingBuckets)
-    rateCardCostUsd = tokenCostUsd === null ? null : tokenCostUsd + webSearchCostUsd
-    pricingMethod = "per_request_model_buckets"
-  } else if (usage.pricingBuckets) {
-    if (usage.singleModel) {
-      const tokenCostUsd = calculateGpt56CostUsdFromBuckets(usage.singleModel, usage.pricingBuckets)
-      rateCardCostUsd = tokenCostUsd === null ? null : tokenCostUsd + webSearchCostUsd
-      pricingMethod = "per_request_buckets"
-    } else {
-      modelMixUnpriceable = true
-      pricingMethod = "model_mix_unpriceable"
-    }
-  } else if (aggregateCostUsd !== null) {
-    rateCardCostUsd = aggregateCostUsd + webSearchCostUsd
-    pricingMethod = "aggregate_tokens"
-  } else {
-    pricingMethod = "unavailable"
-  }
-
-  const costsMatch =
-    llmUsage["accountingComplete"] !== false &&
-    rateCardCostUsd !== null &&
-    (usage.engineReportedCostUsd === null ||
-      Math.abs(rateCardCostUsd - usage.engineReportedCostUsd) < 0.000001)
-  // Do not attach a money value to a scan unless the recorded provider total
-  // agrees with the complete, per-request rate-card calculation. A completed
-  // scan remains useful when accounting needs later operator reconciliation;
-  // inventing a billable amount would not be.
-  const billableCostUsd = costsMatch ? rateCardCostUsd : null
-  const billedCostUsd = billableCostUsd === null ? null : Math.min(billableCostUsd, maxBudgetUsd)
-  const costSource =
-    rateCardCostUsd !== null && usage.engineReportedCostUsd !== null
-      ? "rate_card_and_engine_reported"
-      : rateCardCostUsd !== null
-        ? "azure_rate_card"
-        : usage.engineReportedCostUsd !== null
-          ? "engine_reported_unreconciled"
-          : "unavailable"
-  const reconciliationStatus =
-    llmUsage["accountingComplete"] === false
-      ? "incomplete_provider_receipts"
-      : modelMixUnpriceable
-        ? "model_mix_unpriceable"
-        : rateCardCostUsd === null
-          ? "unavailable"
-          : usage.engineReportedCostUsd === null
-            ? "rate_card_only"
-            : costsMatch
-              ? "matched"
-              : "mismatch"
-
-  try {
-    await addScanEvent(scanId, "llm_usage", "info", "AI usage counters recorded", {
-      ...usage,
-      calculatedCostUsd: rateCardCostUsd,
-      pricingMethod,
-      billedCostUsd,
-      costSource,
-      reconciliationStatus,
-      accountingComplete: llmUsage["accountingComplete"] !== false,
-      ...(rateCardCostUsd !== null
-        ? {
-            pricingEffectiveDate: GPT_56_PRICING_EFFECTIVE_DATE,
-            pricingSource: GPT_56_PRICING_SOURCE,
-          }
-        : {}),
-    })
-  } catch (eventErr) {
-    logger.warn("Failed to persist llm_usage event", {
-      scanId,
-      error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-    })
-  }
-
-  await prisma.scan.update({
-    where: { id: scanId },
-    data: {
-      providerCostUsd:
-        usage.engineReportedCostUsd === null ? null : usage.engineReportedCostUsd.toFixed(6),
-      billedCostUsd: billedCostUsd === null ? null : billedCostUsd.toFixed(6),
-      actualCostCents: billedCostUsd === null ? null : Math.round(billedCostUsd * 100),
-      llmRequestCount: usage.requestCount,
-      llmInputTokens: usage.inputTokens,
-      llmCachedInputTokens: usage.cachedInputTokens,
-      llmOutputTokens: usage.outputTokens,
-    },
-  })
-
-  const budgetExceeded = billableCostUsd !== null && billableCostUsd > maxBudgetUsd
-  if (budgetExceeded) {
-    logger.warn("Engine reported spend above worker budget cap", {
-      scanId,
-      billableCostUsd,
-      maxBudgetUsd,
-    })
-    try {
-      await addScanEvent(scanId, "budget_exceeded", "error", "Protected run limit reached", {
-        billableCostUsd,
-        billedCostUsd,
-        maxBudgetUsd,
-      })
-    } catch (eventErr) {
-      logger.warn("Failed to persist budget_exceeded event", {
-        scanId,
-        error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-      })
-    }
-    await prisma.scan.update({
-      where: { id: scanId },
-      data: {
-        errorCategory: "BUDGET_EXCEEDED",
-        errorMessage: "Protected run limit reached",
-        actualCostCents: Math.round(billedCostUsd! * 100),
-      },
-    })
-  }
-
-  return {
-    budgetExceeded,
-    billedCostUsd,
-    costReconciled: !usageExpected || costsMatch,
-    ...(!usageExpected || costsMatch
-      ? {}
-      : {
-          reconciliationReason:
-            llmUsage["accountingComplete"] === false
-              ? "Some started provider requests have no final usage receipt"
-              : rateCardCostUsd === null
-                ? "Complete per-request GPT-5.6 usage buckets were unavailable"
-                : "Engine-reported cost did not match the GPT-5.6 rate-card calculation",
-        }),
-  }
+export {
+  engineRoutingCoverageIssue,
+  extractActualCostUsd,
+  extractUsageSummary,
+  persistEngineUsageCheckpoint,
+  resolveEngineRuntimeBudgetMs,
+  resolveScanRuntimeBudgetMs,
+  resolveScannerPhaseTimeoutMs,
+  shouldRecordAgentMinutes,
 }
 
 export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Promise<ScanJobResult> {
   const log = logger
-
-  // Prompt-injection checks happen before any schema trust: an attacker could
-  // place arbitrary text in the queue payload and the goal field is later used
-  // to build the engine instruction.
-  if (typeof job.data?.goal === "string" && containsPromptInjection(job.data.goal)) {
-    log.warn("Scan job goal contains prompt-injection patterns", { jobId: job.id })
-    return {
-      status: "failed",
-      errorCategory: "PROMPT_INJECTION",
-      errorMessage: "Scan goal contains disallowed instruction patterns",
-    }
-  }
-
-  // Validate and coerce the untrusted BullMQ payload before trusting any field.
-  const parseResult = ScanJobDataSchema.safeParse(job.data)
-  if (!parseResult.success) {
-    log.warn("Scan job payload failed schema validation", {
-      jobId: job.id,
-      errors: parseResult.error.issues.map((i) => i.message),
-    })
-    return {
-      status: "failed",
-      errorCategory: "INVALID_JOB",
-      errorMessage: parseResult.error.message,
-    }
-  }
-
-  const {
-    scanId,
-    workspaceId: claimedWorkspaceId,
-    targetId,
-    goal,
-    mode,
-    policyId,
-  } = parseResult.data
-
-  // enqueueScan() uses scanId as the BullMQ job ID. Reject any alternate ID
-  // before loading or mutating the canonical scan so duplicate/forged jobs
-  // cannot execute provider work under another queue identity.
-  if (String(job.id) !== scanId) {
-    log.warn("Scan job ID does not match scan ID", { jobId: job.id, scanId })
-    return {
-      status: "failed",
-      errorCategory: "INVALID_JOB",
-      errorMessage: "Scan job ID does not match the scan ID",
-    }
-  }
-
-  log.info("Processing scan job", { scanId, targetId, mode, jobId: job.id })
-
-  // Do not trust the workspaceId from the queue payload. Load the scan record
-  // with a privileged client and verify the claimed tenant matches the stored
-  // tenant; otherwise a forged job could read or mutate another workspace.
-  let scanRecord
-  try {
-    scanRecord = await getSystemPrisma().scan.findUnique({
-      where: { id: scanId },
-      select: {
-        id: true,
-        workspaceId: true,
-        targetId: true,
-        goal: true,
-        mode: true,
-        policyId: true,
-        determinismMode: true,
-        startedAt: true,
-        createdById: true,
-        sponsorAccountId: true,
-        triggerType: true,
-      },
-    })
-  } catch (err) {
-    throw new Error("Failed to verify scan authority", { cause: err })
-  }
-  if (
-    !scanRecord ||
-    scanRecord.workspaceId !== claimedWorkspaceId ||
-    scanRecord.targetId !== targetId ||
-    scanRecord.goal !== goal ||
-    scanRecord.mode !== mode ||
-    scanRecord.policyId !== (policyId ?? null)
-  ) {
-    if (scanRecord) {
-      try {
-        await updateScanStatus(
-          scanId,
-          "FAILED" as ScanStatus,
-          {
-            errorCategory: "INVALID_JOB",
-            errorMessage: "Scan job does not match the stored scan record",
-          },
-          scanRecord.workspaceId
-        )
-      } catch (statusErr) {
-        log.warn("Failed to mark invalid scan job as failed", {
-          scanId,
-          errorType: statusErr instanceof Error ? statusErr.name : "UNKNOWN",
-        })
-      }
-    }
-    return {
-      status: "failed",
-      errorCategory: "INVALID_JOB",
-      errorMessage: "Scan job does not match the stored scan record",
-    }
-  }
-  const workspaceId = scanRecord.workspaceId
+  const authority = await verifyScanJobAuthority(job)
+  if (!authority.ok) return authority.result
+  const { data, scanRecord, workspaceId } = authority
+  const { scanId, targetId, goal, mode, policyId } = data
   const elapsedScanMs = scanElapsedClock(scanRecord.startedAt)
 
   // Wrap the entire job in workspace context so the Prisma client extension's
@@ -755,209 +95,17 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     let durableFinalizationResult: ScanJobResult | null = null
     let deterministicCheckout: Awaited<ReturnType<typeof checkoutDeterministicRetest>> | undefined
     try {
-      // A manifest is the immutable checkpoint after findings and retests have
-      // been persisted. If an infrastructure error interrupted only the final
-      // score transition, resume that transition without replaying a billable
-      // scan or comparing a fresh result against the original manifest.
-      const pendingFinalization = await prisma.scan.findUnique({
-        where: { id: scanId },
-        select: {
-          status: true,
-          summary: true,
-          errorCategory: true,
-          errorMessage: true,
-          actualCostCents: true,
-          resultManifest: { select: { id: true, manifest: true } },
-          events: {
-            where: { stage: "billable_boundary" },
-            select: { id: true },
-            take: 1,
-          },
-        },
+      const resumedFinalization = await resumePendingScanFinalization({
+        scanId,
+        workspaceId,
+        targetId,
       })
-      const terminalOutcome = storedTerminalOutcome(pendingFinalization?.resultManifest?.manifest)
-      if (pendingFinalization?.status === "FAILED") {
-        return {
-          status: "failed",
-          errorCategory: pendingFinalization.errorCategory ?? "INTERNAL_ERROR",
-          errorMessage:
-            pendingFinalization.errorMessage ?? "Scan failed; paid work was not replayed",
-        }
-      }
-      if (pendingFinalization?.status === "COMPLETED") {
-        await reportInterruptedSettlement(workspaceId, scanId)
-        return { status: "completed", summary: pendingFinalization.summary ?? "Scan completed" }
-      }
-      if (pendingFinalization?.status === "PARTIAL") {
-        await reportInterruptedSettlement(workspaceId, scanId)
-        return {
-          status: "failed",
-          errorCategory: pendingFinalization.errorCategory ?? "PARTIAL",
-          errorMessage: pendingFinalization.errorMessage ?? "Partial findings preserved",
-        }
-      }
-      if (
-        pendingFinalization?.resultManifest &&
-        ["RUNNING", "VERIFYING"].includes(pendingFinalization.status) &&
-        terminalOutcome &&
-        terminalOutcome.status !== "COMPLETED"
-      ) {
-        await completeRetestsForScan({ scanId, workspaceId })
-        await updateScanStatus(scanId, terminalOutcome.status as ScanStatus, {
-          ...(terminalOutcome.errorCategory
-            ? { errorCategory: terminalOutcome.errorCategory }
-            : {}),
-          ...(terminalOutcome.errorMessage ? { errorMessage: terminalOutcome.errorMessage } : {}),
-          ...(pendingFinalization.actualCostCents !== null
-            ? { actualCostCents: pendingFinalization.actualCostCents }
-            : {}),
-        })
-        return {
-          status: "failed",
-          errorCategory: terminalOutcome.errorCategory ?? terminalOutcome.status,
-          errorMessage: terminalOutcome.errorMessage ?? "Scan did not complete successfully",
-        }
-      }
-      if (pendingFinalization?.status === "VERIFYING" && pendingFinalization.resultManifest) {
-        if (pendingFinalization.errorCategory === "BUDGET_EXCEEDED") {
-          await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
-            errorCategory: "BUDGET_EXCEEDED",
-            errorMessage: pendingFinalization.errorMessage ?? "Protected run limit reached",
-            ...(pendingFinalization.actualCostCents !== null
-              ? { actualCostCents: pendingFinalization.actualCostCents }
-              : {}),
-          })
-          return {
-            status: "failed",
-            errorCategory: "BUDGET_EXCEEDED",
-            errorMessage: "Protected run limit reached",
-          }
-        }
-        // The manifest is persisted before retest finalization in the normal
-        // path, so a crash between the two must resume pending retests from the
-        // stored receipt evidence before scoring; otherwise retest validation
-        // would be skipped silently. Nothing here invokes the engine or reruns
-        // scanners, so billable work is never replayed.
-        await completeRetestsForScan({ scanId, workspaceId })
-        await completeScanWithScore(scanId, workspaceId, pendingFinalization.summary)
-        await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
-        try {
-          await qualifyReferralForWorkspace(workspaceId)
-        } catch (referralError) {
-          log.warn("Failed to qualify referral after resumed scan completion", {
-            scanId,
-            error: referralError instanceof Error ? referralError.message : String(referralError),
-          })
-        }
-        return { status: "completed", summary: pendingFinalization.summary ?? "Scan completed" }
-      }
-      if (
-        ["RUNNING", "VERIFYING"].includes(pendingFinalization?.status ?? "") &&
-        pendingFinalization?.events?.length
-      ) {
-        const interruptedMessage =
-          "Provider-billable analysis was interrupted and was not replayed automatically"
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory: "BILLABLE_PHASE_INTERRUPTED",
-          errorMessage: interruptedMessage,
-        })
-        return {
-          status: "failed",
-          errorCategory: "BILLABLE_PHASE_INTERRUPTED",
-          errorMessage: interruptedMessage,
-        }
-      }
+      if (resumedFinalization) return resumedFinalization
 
-      // 1. Preflight checks
-      await updateScanStatus(scanId, "PREFLIGHT" as ScanStatus)
-      const preflight = await runPreflight(scanId, targetId)
-
-      if (!preflight.passed) {
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory: preflight.errorCategory,
-          errorMessage: preflight.errorMessage,
-        })
-        return {
-          status: "failed",
-          errorCategory: preflight.errorCategory,
-          errorMessage: preflight.errorMessage,
-        }
-      }
-
-      // 2. Fetch target details for the engine
-      const target = await prisma.target.findFirst({
-        where: { id: targetId, deletedAt: null },
-        select: {
-          id: true,
-          type: true,
-          name: true,
-          url: true,
-          repoFullName: true,
-          branch: true,
-          apiSpecUrl: true,
-          environment: true,
-          installationId: true,
-          repoProvider: true,
-        },
-      })
-
-      if (!target) {
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory: "TARGET_NOT_FOUND",
-          errorMessage: "Target disappeared between preflight and execution",
-        })
-        return {
-          status: "failed",
-          errorCategory: "TARGET_NOT_FOUND",
-          errorMessage: "Target not found",
-        }
-      }
-
-      if (target.type === "WEB_APP" || target.type === "API") {
-        const resolved = resolveTargetScanMode({
-          targetType: target.type,
-          mode,
-          hasApiSpec: Boolean(target.apiSpecUrl),
-        })
-        if (!resolved.ok) {
-          await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-            errorCategory: resolved.code,
-            errorMessage: resolved.reason,
-          })
-          return {
-            status: "failed",
-            errorCategory: resolved.code,
-            errorMessage: resolved.reason,
-          }
-        }
-        urlProfile = resolved.profile ?? undefined
-      }
-
-      // Reject prompt-injection patterns in user-controlled fields before they
-      // reach the engine prompt. This is fail-fast, before any provider spend.
-      const goalSafety = checkInstructionSafety(goal)
-      const targetNameSafety = checkInstructionSafety(target.name ?? "")
-      if (!goalSafety.safe || !targetNameSafety.safe) {
-        const patterns = [
-          ...new Set([...goalSafety.detectedPatterns, ...targetNameSafety.detectedPatterns]),
-        ]
-        const reason = `Prompt injection risk detected in scan input: ${patterns.join(", ")}`
-        log.warn("Scan rejected due to prompt injection risk", {
-          scanId,
-          patterns,
-          goalSafe: goalSafety.safe,
-          targetNameSafe: targetNameSafety.safe,
-        })
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory: "PROMPT_INJECTION",
-          errorMessage: reason,
-        })
-        return { status: "failed", errorCategory: "PROMPT_INJECTION", errorMessage: reason }
-      }
-
-      // Evidence is part of the result contract. Refuse before provider work
-      // when it cannot be retained durably.
-      assertEvidenceStorageConfigured()
+      const preparation = await prepareScanExecution({ scanId, targetId, goal, mode })
+      if (!preparation.ok) return preparation.result
+      const { target } = preparation
+      urlProfile = preparation.urlProfile
 
       // 3. Run the scan engine
       await updateScanStatus(scanId, "RUNNING" as ScanStatus)
@@ -1053,345 +201,47 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
 
-      // All producers converge here, including schedules and retests. Recheck
-      // revocation and billing before provider work; never switch a queued
-      // scan to a different payer when workspace sponsorship changes.
-      const creator = await prisma.workspaceMember.findFirst({
-        where: { workspaceId, userId: scanRecord.createdById, status: "active" },
-        select: { role: true },
+      const admission = await verifyScanAdmission({
+        scanId,
+        workspaceId,
+        targetId,
+        mode,
+        engineBacked,
+        deterministicRetest,
+        scanRecord,
       })
-      const executionPermission =
-        scanRecord.triggerType === "schedule"
-          ? PERMISSIONS.schedule.create
-          : scanRecord.triggerType === "retest"
-            ? PERMISSIONS.retest.create
-            : PERMISSIONS.scan.create
-      let admissionError: { errorCategory: string; errorMessage: string } | null = null
-      if (!creator || !hasPermission(creator.role, executionPermission)) {
-        admissionError = {
-          errorCategory: "SCAN_AUTHORIZATION_REVOKED",
-          errorMessage: "The scan creator no longer has permission to run this review.",
-        }
-      } else if (engineBacked && !deterministicRetest) {
-        const entitlement = await runWithAccountContext(scanRecord.createdById, () =>
-          evaluateScanEntitlement({ workspaceId, mode, sponsorAccountId: scanRecord.createdById })
-        )
-        if (!entitlement.allowed) {
-          admissionError = {
-            errorCategory: entitlement.code ?? "SCAN_ENTITLEMENT_UNAVAILABLE",
-            errorMessage: entitlement.message ?? "The billing sponsor cannot run this review.",
-          }
-        } else if (
-          entitlement.accountId !== (scanRecord.sponsorAccountId ?? scanRecord.createdById)
-        ) {
-          admissionError = {
-            errorCategory: "SCAN_SPONSOR_CHANGED",
-            errorMessage:
-              "Workspace billing sponsorship changed. Start a new review with the current sponsor.",
-          }
-        }
-      }
-      if (admissionError) {
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, admissionError)
-        await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
-        return { status: "failed", ...admissionError }
-      }
+      if (!admission.ok) return admission.result
 
-      if (deterministicRetest) {
-        if (target.repoProvider !== "github") {
-          throw new Error("Deterministic repository retests require a GitHub source target")
-        }
-        await authorizeDeterministicRetest(scanId, workspaceId, targetId)
-        deterministicCheckout = await checkoutDeterministicRetest({
-          scanId,
-          repoFullName: target.repoFullName,
-          branch: target.branch,
-          installationId: target.installationId,
-          timeoutMs: Math.max(0, scanRuntimeBudgetMs - elapsedScanMs()),
-          isCancelled: isScanCancelled,
-        })
-        engineResult = {
-          exitCode: 0,
-          cancelled: false,
-          timedOut: false,
-          sourceCheckoutPath: deterministicCheckout.checkoutPath,
-          sourceRevision: deterministicCheckout.sourceRevision,
-          output: {
-            vulnerabilities: [],
-            runRecord: null,
-            findingCount: 0,
-            summary:
-              "Deterministic repository retest completed; model analysis was outside this retest scope.",
-            findingsComplete: true,
-          },
-        }
-        await addScanEvent(
-          scanId,
-          "engine_skipped",
-          "info",
-          "Deterministic repository retest uses an independent checkout and no model calls"
-        )
-      } else if (engineBacked) {
-        maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd, target.type)
-        if (maxBudgetUsd <= 0) {
-          const errorMessage = "Protected run limit is zero"
-          log.warn("Scan rejected: zero budget", { scanId, workspaceId, policyMaxBudgetUsd })
-          try {
-            await addScanEvent(scanId, "budget_exceeded", "error", errorMessage, {
-              maxBudgetUsd,
-              policyMaxBudgetUsd,
-            })
-          } catch (eventErr) {
-            log.warn("Failed to persist budget_exceeded event", {
-              scanId,
-              error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-            })
-          }
-          return {
-            status: "failed",
-            errorCategory: "BUDGET_EXCEEDED",
-            errorMessage,
-          }
-        }
-
-        engineProfile = resolveEngineProfile(mode)
-        engineModel = requireEngineModel(engineProfile.model)
-        const budgetSource =
-          typeof policyMaxBudgetUsd === "number" &&
-          Number.isFinite(policyMaxBudgetUsd) &&
-          policyMaxBudgetUsd > 0
-            ? "policy"
-            : "mode_default"
-
-        try {
-          await addScanEvent(scanId, "budget_cap", "info", "Protected run limit enabled", {
-            maxBudgetUsd,
-            source: budgetSource,
-          })
-        } catch (eventErr) {
-          log.warn("Failed to persist budget_cap event", {
-            scanId,
-            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-          })
-        }
-
-        if (await isScanCancelled(true)) {
-          return {
-            status: "failed",
-            errorCategory: "CANCELLED",
-            errorMessage: "Scan cancelled by user",
-          }
-        }
-
-        // Engine-backed URL/API targets reach their host only through the
-        // scan-scoped relay. Everything here fails closed: no verified domain,
-        // no relay config, or an empty scope means no engine run — the coverage
-        // receipt records the gap instead of pretending the phase ran.
-        let relayCtx: { url: string; grant: string } | null = null
-        let relayConfigForCleanup: ReturnType<typeof resolveRelayRuntimeConfig> = null
-        if (urlEngineBacked) {
-          const relayConfig = resolveRelayRuntimeConfig()
-          relayConfigForCleanup = relayConfig
-          const verifiedDomain = target.url ? normalizeDomainForProof(target.url) : null
-          const verification = verifiedDomain
-            ? await prisma.targetDomainVerification.findFirst({
-                where: {
-                  workspaceId,
-                  domain: verifiedDomain,
-                  status: "VERIFIED",
-                  expiresAt: { gt: new Date() },
-                },
-                select: { id: true },
-              })
-            : null
-          if (!relayConfig || !verification || !target.url || !verifiedDomain) {
-            await addScanEvent(
-              scanId,
-              "engine_skipped",
-              "error",
-              "Engine-backed URL scan requires a verified domain and configured relay",
-              {
-                targetType: target.type,
-                relayConfigured: Boolean(relayConfig),
-                domainVerified: Boolean(verification),
-              }
-            )
-            return {
-              status: "failed",
-              errorCategory: "RELAY_SCOPE_UNAVAILABLE",
-              errorMessage:
-                "This review depth requires a verified domain and the target relay. Verify the domain or run Surface Review.",
-            }
-          }
-
-          const engineTimeoutMsForGrant = resolveEngineRuntimeBudgetMs(
-            mode,
-            target.type,
-            scanRuntimeBudgetMs,
-            elapsedScanMs()
-          )
-          try {
-            const specServerHosts =
-              target.type === "API" && target.apiSpecUrl
-                ? await resolveSpecServerHosts(target.apiSpecUrl)
-                : []
-            const minted = mintScanRelayGrant(
-              {
-                scanId,
-                mode: scanProfile?.canonicalMode === "DEEP" ? "DEEP" : "STANDARD",
-                verifiedDomain,
-                targetUrl: target.url,
-                apiSpecUrl: target.apiSpecUrl,
-                specServerHosts,
-                engineBudgetMs: engineTimeoutMsForGrant,
-                destructiveTestsAllowed: policy?.destructiveTestsAllowed === true,
-                blockedPaths: policy?.blockedPaths ?? [],
-                allowedDomains: policy?.allowedDomains ?? [],
-              },
-              relayConfig
-            )
-            await registerRelayGrant(scanId, minted.grant, relayConfig)
-            relayCtx = { url: relayConfig.url, grant: minted.grant }
-            await addScanEvent(scanId, "relay_scope", "info", "Relay scope granted", {
-              hosts: minted.scope.hosts,
-              methods: minted.scope.methods,
-              maxRequests: minted.scope.maxRequests,
-            })
-          } catch (grantErr) {
-            await addScanEvent(
-              scanId,
-              "engine_skipped",
-              "error",
-              "Relay grant could not be minted",
-              {
-                targetType: target.type,
-                error: grantErr instanceof Error ? grantErr.message : String(grantErr),
-              }
-            )
-            return {
-              status: "failed",
-              errorCategory: "RELAY_SCOPE_UNAVAILABLE",
-              errorMessage: "Could not establish relay scope for this verified target.",
-            }
-          }
-        }
-
-        // Once the external engine begins, an automatic BullMQ replay could
-        // spend twice for the same scan. Preflight remains retryable; the
-        // billable phase is terminal and any rerun requires a fresh scan.
-        await addScanEvent(
-          scanId,
-          "billable_boundary",
-          "info",
-          "Automatic retries disabled before provider-billable analysis",
-          { retryPolicy: "fresh_scan_required" }
-        )
-        billablePhaseStarted = true
-
-        // Keep the profile's deterministic-scanner reserve available even when
-        // the model is healthy until its own wall-clock cap.
-        const engineTimeoutMs = resolveEngineRuntimeBudgetMs(
-          mode,
-          target.type,
-          scanRuntimeBudgetMs,
-          elapsedScanMs()
-        )
-        if (engineTimeoutMs <= 0) {
+      const execution = await executeScanTarget({
+        scanId,
+        workspaceId,
+        goal,
+        mode,
+        focus: job.data.focus,
+        target,
+        policy,
+        policyMaxBudgetUsd,
+        scanRuntimeBudgetMs,
+        elapsedScanMs,
+        isScanCancelled,
+        markGlobalScanTimeout: () => {
           globalScanTimeoutReached = true
-          throw new Error("Scan analysis deadline exhausted before engine execution")
-        }
-
-        engineStartedAtMs = Date.now()
-        try {
-          engineResult = await runEngine(
-            {
-              scanId,
-              goal,
-              mode,
-              target: {
-                id: target.id,
-                type: target.type as TargetType,
-                url: target.url,
-                repoFullName: target.repoFullName,
-                branch: target.branch,
-                name: target.name,
-              },
-              apiSpecUrl: target.type === "API" ? target.apiSpecUrl : null,
-              instruction:
-                target.type === "REPO"
-                  ? buildVibeSecurityInstruction(goal)
-                  : buildUrlTargetInstruction(goal, {
-                      host: target.url ? new URL(target.url).hostname : "",
-                      targetType: target.type as "WEB_APP" | "API",
-                      environment: target.environment,
-                      hasApiSpec: Boolean(target.apiSpecUrl),
-                      focus: job.data.focus,
-                    }),
-              maxBudgetUsd,
-              ...(relayCtx ? { relay: relayCtx } : {}),
-            },
-            scanId,
-            engineTimeoutMs,
-            isScanCancelled,
-            // Sprint 10: metering hook — called on each agent-loop tick with
-            // wall-clock elapsed ms. The hook is a no-op for now; the final
-            // metering is done after the engine completes. This signal can be
-            // used for real-time balance checks in a future iteration.
-            (_elapsedMs: number) => {
-              // Real-time metering hook — intentionally empty for now.
-              // The final wall-clock duration is recorded after the engine exits.
-            }
-          )
-        } finally {
-          // Relay hygiene runs on EVERY terminal path — success, failure,
-          // cancel, or throw. The grant's expiry is a backstop, not the
-          // mechanism; revocation is immediate.
-          if (relayConfigForCleanup) {
-            const entries = await fetchRelayAudit(scanId, relayConfigForCleanup)
-            if (entries.length > 0) {
-              try {
-                const uploaded = await uploadEncryptedArtifact({
-                  workspaceId,
-                  ownerId: scanId,
-                  type: "relay_audit",
-                  content: JSON.stringify(entries),
-                  contentType: "application/json",
-                })
-                await addScanEvent(scanId, "relay_audit", "info", "Relay audit trail captured", {
-                  entries: entries.length,
-                  storageUri: uploaded.storageUri,
-                })
-              } catch (auditErr) {
-                log.warn("Failed to persist relay audit", {
-                  scanId,
-                  error: auditErr instanceof Error ? auditErr.message : String(auditErr),
-                })
-              }
-            }
-            await revokeRelayGrant(scanId, relayConfigForCleanup)
-          }
-        }
-      } else if (isUrlTarget) {
-        engineResult = {
-          exitCode: 0,
-          cancelled: false,
-          timedOut: false,
-          sourceCheckoutPath: null,
-          output: {
-            vulnerabilities: [],
-            runRecord: null,
-            findingCount: 0,
-            summary: "Deterministic surface review completed; the engine is not part of this tier.",
-            findingsComplete: true,
-          },
-        }
-      } else {
-        return {
-          status: "failed",
-          errorCategory: "INVALID_TARGET",
-          errorMessage: `Unsupported target type for scanning: ${target.type}`,
-        }
-      }
+        },
+        markBillablePhaseStarted: () => {
+          billablePhaseStarted = true
+        },
+        deterministicRetest,
+        engineBacked,
+        urlEngineBacked,
+        scanProfile,
+      })
+      if (!execution.ok) return execution.result
+      engineResult = execution.engineResult
+      deterministicCheckout = execution.deterministicCheckout
+      engineProfile = execution.engineProfile
+      engineModel = execution.engineModel
+      maxBudgetUsd = execution.maxBudgetUsd
+      engineStartedAtMs = execution.engineStartedAtMs
 
       if (target.type !== "REPO" && globalScanTimeoutReached) {
         const timeoutMessage = timeoutErrorMessage(scanRuntimeBudgetMs)
@@ -1427,122 +277,20 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // billed; cancelled scans bill elapsed time only (no 1-minute floor).
       const engineWallClockMs =
         engineStartedAtMs === null ? 0 : Math.max(1, Date.now() - engineStartedAtMs)
-      let agentMinuteTerminalError: {
-        status: ScanStatus
-        errorCategory: string
-        errorMessage: string
-      } | null = null
-      const meterEngineRun = async (
-        billingOutcome: "completed" | "partial" | "failed" | "cancelled",
-        finishEvidence?: () => Promise<void>
-      ) => {
-        const billableWork =
-          engineBacked &&
-          shouldRecordAgentMinutes(
-            scanId,
-            billingOutcome === "partial" ? "PARTIAL" : exitInterpretation.status,
-            runRecord,
-            { cancelled: billingOutcome === "cancelled" }
-          )
-        if (billableWork && billingOutcome !== "failed") {
-          let finalizationAttempted = false
-          try {
-            // The persisted sponsor is bound when the scan is created; older
-            // scans retain their original creator-owned billing identity.
-            const sponsorAccountId = scanRecord.sponsorAccountId ?? scanRecord.createdById
-            const settleOverage = async (minutes: number, tx?: ScopedTransaction) => {
-              // Overage is available to Launch Assurance accounts with a
-              // limit — read inside the settlement tx when one is bound so
-              // the decision cannot act on a stale row.
-              const sponsorBilling = tx
-                ? await resolveAccountBilling(sponsorAccountId, tx)
-                : await runWithAccountContext(sponsorAccountId, () =>
-                    resolveAccountBilling(sponsorAccountId)
-                  )
-              const overageAvailable =
-                sponsorBilling?.effectivePlan === "LAUNCH_ASSURANCE" &&
-                (sponsorBilling.spendLimitCents ?? 0) > 0
-
-              if (overageAvailable) {
-                const overage = await debitOverage({
-                  accountId: sponsorAccountId,
-                  workspaceId,
-                  minutes,
-                  scanId,
-                  phase: "engine_overage",
-                  transaction: tx,
-                })
-                if (!overage.debited || overage.minutes !== minutes) {
-                  agentMinuteTerminalError = {
-                    status: "STOPPED_BUDGET" as ScanStatus,
-                    errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
-                    errorMessage: AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
-                  }
-                }
-              } else {
-                // Enter grace period (15min cap) — the account's grace budget.
-                const graceResult = await enterGrace(sponsorAccountId, engineWallClockMs, tx)
-                if (!graceResult.shouldContinue) {
-                  // Preserve provider usage, deterministic receipts, and findings before
-                  // sealing the terminal entitlement outcome below.
-                  agentMinuteTerminalError = {
-                    status: "STOPPED_BUDGET" as ScanStatus,
-                    errorCategory: AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
-                    errorMessage: AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
-                  }
-                }
-              }
-              if (tx && agentMinuteTerminalError)
-                throw new Error(agentMinuteTerminalError.errorCategory)
-            }
-            const metering = await recordAgentMinutes(workspaceId, scanId, engineWallClockMs, {
-              mode,
-              phase: "engine_run",
-              outcome: billingOutcome,
-              ...(finishEvidence
-                ? {
-                    beforeCommit: async () => {
-                      finalizationAttempted = true
-                      await finishEvidence()
-                    },
-                  }
-                : {}),
-              // Cancellation deliberately retains its existing settlement policy.
-              ...(billingOutcome !== "cancelled"
-                ? { settleOverage: (tx, minutes) => settleOverage(minutes, tx) }
-                : {}),
-            })
-            if (billingOutcome === "cancelled" && metering.overageMinutes > 0) {
-              await settleOverage(metering.overageMinutes)
-            }
-          } catch (meterError) {
-            // Finalization failures must not be swallowed or retried outside
-            // the transaction that just rolled back their provisional charges.
-            if (finalizationAttempted) throw meterError
-            // Billable success requires a durable settlement obligation. A
-            // preliminary account read or intent insert can fail before the
-            // finalizer starts; never silently complete through that window.
-            // Quota refusal and cancellation retain their existing paths.
-            if (billingOutcome !== "cancelled" && !agentMinuteTerminalError) throw meterError
-            if (agentMinuteTerminalError) {
-              await prisma.auditLog.create({
-                data: {
-                  workspaceId,
-                  action: "billing.scan_settlement_refused",
-                  resourceType: "scan",
-                  resourceId: scanId,
-                  metadata: { reason: agentMinuteTerminalError.errorCategory },
-                },
-              })
-            }
-            log.warn("Failed to record agent minutes", {
-              scanId,
-              error: meterError instanceof Error ? meterError.message : String(meterError),
-            })
-            // Cancellation remains best-effort; quota refusal is finalized below.
-          }
-        }
-      }
+      let agentMinuteTerminalError: ScanTerminalError | null = null
+      const meterEngineRun = createEngineMinuteMeter({
+        scanId,
+        workspaceId,
+        mode,
+        engineBacked,
+        engineWallClockMs,
+        sponsorAccountId: scanRecord.sponsorAccountId ?? scanRecord.createdById,
+        exitStatus: exitInterpretation.status,
+        runRecord,
+        onTerminalError: (error) => {
+          agentMinuteTerminalError = error
+        },
+      })
 
       // Persist usage before deterministic scanners or finding persistence can
       // fail, so provider spend is never lost behind a downstream error.
@@ -1724,94 +472,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // Deterministic scanners can still provide value from a partial engine run
       // (for example, when the engine cloned the repository but stopped for a
       // budget or model error). Usage is checkpointed above for reconciliation.
-      let engineTerminalError: {
-        status: ScanStatus
-        errorCategory: string
-        errorMessage: string
-      } | null = agentMinuteTerminalError
-
-      if (!engineTerminalError && engineBacked && exitInterpretation.status === "FAILED") {
-        const stoppedForBudget = exitInterpretation.category === "BUDGET_EXCEEDED"
-        engineTerminalError = {
-          status: (stoppedForBudget ? "STOPPED_BUDGET" : "FAILED") as ScanStatus,
-          errorCategory: exitInterpretation.category,
-          errorMessage: exitInterpretation.message,
-        }
-        try {
-          await addScanEvent(
-            scanId,
-            "engine_terminal",
-            stoppedForBudget ? "error" : "warning",
-            `Engine stopped (${exitInterpretation.category}); continuing with deterministic scanners`,
-            {
-              exitCode: engineResult.exitCode,
-              errorCategory: exitInterpretation.category,
-            }
-          )
-        } catch (eventErr) {
-          log.warn("Failed to persist engine_terminal event", {
-            scanId,
-            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-          })
-        }
-      } else if (
-        !engineTerminalError &&
-        !deterministicRetest &&
-        engineBacked &&
-        (!engineResult.output.findingsComplete ||
-          !runRecord ||
-          runRecord.run_id !== scanId ||
-          runRecord.run_name !== scanId ||
-          runRecord.status !== "completed")
-      ) {
-        const stoppedForBudget = runRecord?.terminal_reason === "budget_exceeded"
-        const stoppedForContentFilter = runRecord?.terminal_reason === "content_filter_stopped"
-        const stoppedForEngineError = runRecord?.terminal_reason === "engine_stopped"
-        const hasEngineFindings = (engineResult.output.vulnerabilities?.length ?? 0) > 0
-        const errorCategory = stoppedForBudget
-          ? "BUDGET_EXCEEDED"
-          : stoppedForContentFilter
-            ? "CONTENT_FILTER_STOPPED"
-            : stoppedForEngineError
-              ? "ENGINE_STOPPED"
-              : "ENGINE_INCOMPLETE"
-        const errorMessage = stoppedForBudget
-          ? "Protected run limit reached"
-          : stoppedForContentFilter
-            ? "Engine stopped after content filter blocked the model; partial findings preserved"
-            : stoppedForEngineError
-              ? "Engine stopped after a model error; partial findings preserved"
-              : "Engine did not produce a completed, valid result receipt"
-        // Content filter stops and engine errors with findings are PARTIAL:
-        // the engine produced results but did not complete its full scope.
-        // Reporting these as COMPLETED would promise "we looked, and this is
-        // what we found" when the run was actually truncated — false confidence
-        // in a security tool. Without findings, they fail.
-        const terminalStatus: ScanStatus = stoppedForBudget
-          ? "STOPPED_BUDGET"
-          : (stoppedForContentFilter || stoppedForEngineError) && hasEngineFindings
-            ? "PARTIAL"
-            : "FAILED"
-        engineTerminalError = {
-          status: terminalStatus,
-          errorCategory,
-          errorMessage,
-        }
-        try {
-          await addScanEvent(
-            scanId,
-            "engine_incomplete",
-            "warning",
-            `Engine result incomplete; continuing with deterministic scanners`,
-            { errorCategory }
-          )
-        } catch (eventErr) {
-          log.warn("Failed to persist engine_incomplete event", {
-            scanId,
-            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-          })
-        }
-      }
+      let engineTerminalError = await resolveEngineTerminalError({
+        scanId,
+        engineBacked,
+        deterministicRetest,
+        engineResult,
+        exitInterpretation,
+        priorError: agentMinuteTerminalError,
+      })
 
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
       await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
@@ -1841,163 +509,31 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         urlProfile,
       })
 
-      let aiSecuritySignals = orchestratorResult.aiAppSecuritySignals ?? []
-      let triageSnapshot:
-        | {
-            status: "COMPLETED" | "DISABLED" | "FAILED" | "BUDGET_STOPPED"
-            terminalReason: string | null
-            policyVersion: string
-            modelRoute: string
-            inputChecksum: string
-            redactionReceipt: string
-            resultCount: number
-          }
-        | undefined
-      const triageInput = buildEngineTriageInput(aiSecuritySignals, engineResult.sourceRevision)
-      const triageFeatureEnabled =
-        !deterministicRetest &&
-        !agentMinuteTerminalError &&
-        !hasGlobalScanTimeout() &&
-        env.LYRASHIELD_AI_TRIAGE_ENABLED === "1"
-      const workspacePlan =
-        triageFeatureEnabled && triageInput
-          ? await runWithAccountContext(scanRecord.sponsorAccountId ?? scanRecord.createdById, () =>
-              resolveAccountBilling(scanRecord.sponsorAccountId ?? scanRecord.createdById)
-            )
-              .then((b) => (b ? { plan: b.effectivePlan } : null))
-              .catch(() => null)
-          : null
-      const triageEligibility = eligibleForEngineTriage({
-        enabled: triageFeatureEnabled,
-        // Entitlement follows the sponsoring account, not the workspace row.
-        workspacePlan: workspacePlan?.plan ?? "FREE",
+      const triageOverlay = await runEngineTriageOverlay({
+        scanId,
+        sponsorAccountId: scanRecord.sponsorAccountId ?? scanRecord.createdById,
+        targetType: target.type,
         mode,
+        deterministicRetest,
+        agentMinuteTerminalError,
+        hasGlobalScanTimeout,
+        isScanCancelled,
+        engineResult,
+        aiSecuritySignals: orchestratorResult.aiAppSecuritySignals ?? [],
         billedCostUsd,
         costReconciled,
+        budgetExceeded,
+        reconciliationReason,
         maxBudgetUsd,
-        triageCapUsd: env.LYRASHIELD_AI_TRIAGE_MAX_BUDGET_USD,
+        scanRuntimeBudgetMs,
+        elapsedScanMs,
       })
-      let triageTerminalReason = triageEligibility.reason
-      if (
-        target.type === "REPO" &&
-        triageInput &&
-        triageEligibility.eligible &&
-        !hasGlobalScanTimeout()
-      ) {
-        try {
-          const triageResult = await runEngineTriage({
-            scanId,
-            profile: resolveEngineProfile("STANDARD"),
-            input: triageInput,
-            maxBudgetUsd: triageEligibility.maxBudgetUsd!,
-            timeoutMs: resolveScannerPhaseTimeoutMs(scanRuntimeBudgetMs, elapsedScanMs()),
-            shouldCancel: async () => hasGlobalScanTimeout() || (await isScanCancelled()),
-          })
-          const artifact = triageResult.artifact
-          if (triageResult.llmUsage) {
-            const mergedUsage = mergeLlmUsage(
-              engineResult.output.runRecord?.llm_usage,
-              triageResult.llmUsage
-            )
-            if (mergedUsage) {
-              if (triageResult.llmUsage["accountingComplete"] === false)
-                mergedUsage["accountingComplete"] = false
-              const updatedAccounting = await persistEngineUsageCheckpoint({
-                scanId,
-                maxBudgetUsd,
-                llmUsage: mergedUsage,
-                webSearchCostUsd: engineResult.output.runRecord?.webSearchCostUsd,
-                usageExpected: true,
-              })
-              budgetExceeded = updatedAccounting.budgetExceeded
-              billedCostUsd = updatedAccounting.billedCostUsd
-              costReconciled = updatedAccounting.costReconciled
-              reconciliationReason = updatedAccounting.reconciliationReason
-              if (artifact) {
-                aiSecuritySignals = applyEngineTriageArtifact(aiSecuritySignals, artifact)
-                triageSnapshot = {
-                  status: artifact.status,
-                  terminalReason: artifact.terminalReason,
-                  policyVersion: artifact.policyVersion,
-                  modelRoute: artifact.modelRoute,
-                  inputChecksum: artifact.inputChecksum,
-                  redactionReceipt: artifact.redactionReceipt.inputChecksum,
-                  resultCount: artifact.results.length,
-                }
-              }
-            } else {
-              if (!artifact) {
-                triageTerminalReason = "TRIAGE_ARTIFACT_UNAVAILABLE"
-              } else {
-                triageSnapshot = {
-                  status: "FAILED",
-                  terminalReason: "TRIAGE_ACCOUNTING_UNAVAILABLE",
-                  policyVersion: artifact.policyVersion,
-                  modelRoute: artifact.modelRoute,
-                  inputChecksum: artifact.inputChecksum,
-                  redactionReceipt: artifact.redactionReceipt.inputChecksum,
-                  resultCount: 0,
-                }
-              }
-            }
-          } else if (artifact) {
-            const updatedAccounting = await persistEngineUsageCheckpoint({
-              scanId,
-              maxBudgetUsd,
-              webSearchCostUsd: engineResult.output.runRecord?.webSearchCostUsd,
-              usageExpected: true,
-            })
-            budgetExceeded = updatedAccounting.budgetExceeded
-            billedCostUsd = updatedAccounting.billedCostUsd
-            costReconciled = updatedAccounting.costReconciled
-            reconciliationReason = updatedAccounting.reconciliationReason
-            triageSnapshot = {
-              status: artifact.status,
-              terminalReason: artifact.terminalReason,
-              policyVersion: artifact.policyVersion,
-              modelRoute: artifact.modelRoute,
-              inputChecksum: artifact.inputChecksum,
-              redactionReceipt: artifact.redactionReceipt.inputChecksum,
-              resultCount: 0,
-            }
-          } else {
-            const updatedAccounting = await persistEngineUsageCheckpoint({
-              scanId,
-              maxBudgetUsd,
-              webSearchCostUsd: engineResult.output.runRecord?.webSearchCostUsd,
-              usageExpected: true,
-            })
-            budgetExceeded = updatedAccounting.budgetExceeded
-            billedCostUsd = updatedAccounting.billedCostUsd
-            costReconciled = updatedAccounting.costReconciled
-            reconciliationReason = updatedAccounting.reconciliationReason
-          }
-          triageTerminalReason = triageSnapshot?.terminalReason ?? "TRIAGE_ARTIFACT_UNAVAILABLE"
-        } catch {
-          // An additive overlay can never fail the deterministic scan.
-          triageTerminalReason = "TRIAGE_COMMAND_FAILED"
-        }
-      }
-      if (target.type === "REPO" && triageFeatureEnabled && (triageSnapshot || triageInput)) {
-        await addScanEvent(
-          scanId,
-          "ai_security_triage",
-          triageSnapshot?.status === "FAILED" || triageSnapshot?.status === "BUDGET_STOPPED"
-            ? "warning"
-            : "info",
-          "AI-assisted triage overlay completed without changing deterministic findings",
-          {
-            status: triageSnapshot?.status ?? "DISABLED",
-            terminalReason: triageSnapshot?.terminalReason ?? triageTerminalReason,
-            resultCount: triageSnapshot?.resultCount ?? 0,
-          }
-        ).catch((eventErr) =>
-          log.warn("Failed to persist AI-assisted triage terminal state", {
-            scanId,
-            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-          })
-        )
-      }
+      const aiSecuritySignals = triageOverlay.aiSecuritySignals
+      const triageSnapshot = triageOverlay.triageSnapshot
+      budgetExceeded = triageOverlay.budgetExceeded
+      billedCostUsd = triageOverlay.billedCostUsd
+      costReconciled = triageOverlay.costReconciled
+      reconciliationReason = triageOverlay.reconciliationReason
 
       try {
         await addScanEvent(
@@ -2040,198 +576,30 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
 
       const grace = finalizationGrace()
-      const finalization = await withScanFinalizationClaim(scanId, workspaceId, async () => {
-        // 5. Persist normalized findings
-        const persistedFindings = await persistFindings({
-          scanId,
-          workspaceId,
-          targetId,
-          vulnerabilities: orchestratorResult.allFindings,
-          assertCanStart: grace.assertRemaining,
-          // Stamp the scanned revision on every finding so fix patches apply
-          // against exactly the commit that was analyzed.
-          ...(engineResult.sourceRevision ? { sourceRevision: engineResult.sourceRevision } : {}),
-        })
-
-        const newFindings = persistedFindings.filter((f) => f.isNew).length
-        grace.assertRemaining()
-        const dupFindings = persistedFindings.length - newFindings
-
-        // engineResult.output.summary describes only the agentic engine's own
-        // vulnerabilities.json artifact (see parseEngineOutput). It never sees the
-        // SCA, secrets, agent-config, or URL scanner findings that the
-        // orchestrator merges in, nor the false-positive filtering and dedup that
-        // happen afterward — so on a run where the engine layer alone found
-        // nothing, it reads "0 finding(s) reported" next to a persisted finding
-        // count that can be dozens. That text becomes scan.summary, which the
-        // dashboard, the private assurance report, and completion notifications
-        // all display verbatim, so the mismatch is user-facing, not just internal.
-        // Leave the engine's own text untouched when it already matches what was
-        // persisted; only correct it when the two disagree, so this stays a
-        // targeted fix rather than a rewrite of copy that was already accurate.
-        const scanSummary =
-          persistedFindings.length !== engineResult.output.findingCount
-            ? `${engineResult.output.summary} ${persistedFindings.length} finding(s) retained after all scanner layers and deduplication.`
-            : engineResult.output.summary
-
-        try {
-          await addScanEvent(
-            scanId,
-            "findings_persisted",
-            "info",
-            `Persisted ${persistedFindings.length} finding(s): ${newFindings} new, ${dupFindings} duplicate`,
-            {
-              total: persistedFindings.length,
-              new: newFindings,
-              duplicate: dupFindings,
-            }
-          )
-        } catch (eventErr) {
-          log.warn("Failed to persist findings_persisted event", {
-            scanId,
-            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-          })
-        }
-
-        // Persist the result manifest for every outcome, including a failed or
-        // incomplete engine, so coverage receipts are always available. The
-        // manifest must exist BEFORE retest finalization: completeRetestsForScan
-        // binds its verdict to the stored baseline/retest checksums, so a crash
-        // between manifest and retests resumes finalization from the receipt
-        // evidence instead of skipping it.
-        await prisma.scan.update({
-          where: { id: scanId },
-          data: { summary: scanSummary },
-        })
-        const finishEvidence = async () => {
-          // Once sealing starts, await the whole evidence/retest/settlement
-          // sequence. Interrupting between its writes could promote an
-          // incomplete retest or abandon an unsettled billing transaction.
-          grace.assertRemaining()
-          await persistResultManifest({
-            scanId,
-            target: {
-              id: target.id,
-              type: target.type,
-              repoFullName: target.repoFullName,
-              branch: target.branch,
-              url: target.url,
-            },
-            engineBacked,
-            sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
-            engineFindingCount: orchestratorResult.engineFindings.length,
-            coverageIssues: [
-              ...orchestratorResult.coverageIssues,
-              ...(routingCoverageIssue ? [routingCoverageIssue] : []),
-            ],
-            aiAppSecurityDiscovery: orchestratorResult.aiAppSecurityDiscovery,
-            webMcpCoverage: orchestratorResult.webMcpCoverage,
-            scannerDiscovery: orchestratorResult.scannerDiscovery,
-            matchedControlRanks: coverage.matchedControlRanks,
-            urlExecution: orchestratorResult.urlExecution,
-            engineExecution,
-            ...(deterministicCheckout
-              ? {
-                  sourceExecution: {
-                    kind: "deterministic_retest" as const,
-                    sourceRevision: deterministicCheckout.sourceRevision,
-                  },
-                }
-              : {}),
-            accounting: {
-              maxBudgetUsd,
-              billedCostUsd,
-              reconciled: costReconciled,
-              ...(reconciliationReason ? { reconciliationReason } : {}),
-            },
-            workerExecution,
-            terminalOutcome: engineTerminalError
-              ? {
-                  status: engineTerminalError.status as "PARTIAL" | "FAILED" | "STOPPED_BUDGET",
-                  errorCategory: engineTerminalError.errorCategory,
-                  errorMessage: engineTerminalError.errorMessage,
-                }
-              : budgetExceeded
-                ? {
-                    status: "STOPPED_BUDGET",
-                    errorCategory: "BUDGET_EXCEEDED",
-                    errorMessage: "Protected run limit reached",
-                  }
-                : { status: "COMPLETED", errorCategory: null, errorMessage: null },
-          })
-
-          await completeRetestsForScan({ scanId, workspaceId })
-
-          if (engineTerminalError) {
-            await updateScanStatus(scanId, engineTerminalError.status, {
-              errorCategory: engineTerminalError.errorCategory,
-              errorMessage: engineTerminalError.errorMessage,
-              ...(billedCostUsd !== null
-                ? { actualCostCents: Math.round(billedCostUsd * 100) }
-                : {}),
-            })
-            // A PARTIAL/FAILED/STOPPED terminal state still changed stored
-            // evidence (findings, receipts) — refresh the gate verdict so it
-            // never presents a stale pre-scan picture as current.
-            await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
-            return {
-              persistedFindings,
-              newFindings,
-              scanSummary,
-              terminalResult: {
-                status: "failed" as const,
-                errorCategory: engineTerminalError.errorCategory,
-                errorMessage: engineTerminalError.errorMessage,
-              },
-            }
-          }
-
-          if (budgetExceeded) {
-            await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
-              errorCategory: "BUDGET_EXCEEDED",
-              errorMessage: "Protected run limit reached",
-              actualCostCents: Math.round(billedCostUsd! * 100),
-            })
-            await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
-            return {
-              persistedFindings,
-              newFindings,
-              scanSummary,
-              terminalResult: {
-                status: "failed" as const,
-                errorCategory: "BUDGET_EXCEEDED",
-                errorMessage: "Protected run limit reached",
-              },
-            }
-          }
-          // Retests may validate a pending fix and change the target's scoreable
-          // state. Freeze the score only after those outcomes are persisted.
-          await completeScanWithScore(scanId, workspaceId, scanSummary)
-          // Refresh the gate verdict now that this scan's evidence is stored.
-          await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
-          return { persistedFindings, newFindings, scanSummary, terminalResult: null }
-        }
-        let finished: Awaited<ReturnType<typeof finishEvidence>> | undefined
-        // Quota refusal happens before any terminal evidence is sealed. For
-        // billable results, DB-only finalization must finish before money commits.
-        await meterEngineRun(
-          budgetExceeded || engineTerminalError?.status === "STOPPED_BUDGET"
-            ? "failed"
-            : engineTerminalError?.status === "PARTIAL"
-              ? "partial"
-              : engineTerminalError
-                ? "failed"
-                : "completed",
-          async () => {
-            finished = await finishEvidence()
-            durableFinalizationResult = finished.terminalResult ?? {
-              status: "completed",
-              summary: finished.scanSummary,
-            }
-          }
-        )
-        if (agentMinuteTerminalError) engineTerminalError = agentMinuteTerminalError
-        return finished ?? (await finishEvidence())
+      const finalization = await finalizeScanLifecycle({
+        scanId,
+        workspaceId,
+        targetId,
+        target,
+        grace,
+        engineResult,
+        orchestratorResult,
+        coverageMatchedControlRanks: coverage.matchedControlRanks,
+        routingCoverageIssue,
+        deterministicCheckout,
+        engineBacked,
+        budgetExceeded,
+        billedCostUsd,
+        costReconciled,
+        reconciliationReason,
+        maxBudgetUsd,
+        workerExecution,
+        engineExecution,
+        terminalErrorAfterMeter: () => agentMinuteTerminalError ?? engineTerminalError,
+        meterEngineRun,
+        onDurableResult: (result) => {
+          durableFinalizationResult = result
+        },
       })
 
       if (finalization.status === "cancelled") {

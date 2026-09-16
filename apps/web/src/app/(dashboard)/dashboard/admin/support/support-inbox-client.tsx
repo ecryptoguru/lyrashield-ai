@@ -7,10 +7,15 @@
  * window, mutations need the 30-minute TOTP elevation. This client only
  * renders what GET /api/myra/operator/cases returns — it never infers access.
  */
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Badge, Button, Card, Spinner, cn } from "@lyrashield/ui"
-
-type CaseStatus = "NEW" | "OPEN" | "PENDING_USER" | "RESOLVED"
+import {
+  SupportCaseDetail,
+  supportCaseStatusVariant,
+  type CaseDetail,
+  type CaseReply,
+  type CaseStatus,
+} from "./support-case-detail"
 
 const STATUSES: { value: CaseStatus | ""; label: string }[] = [
   { value: "", label: "All" },
@@ -33,61 +38,6 @@ interface CaseRow {
   notificationState: string
 }
 
-interface CaseReply {
-  id: string
-  caseId: string
-  authorType: "USER" | "OPERATOR" | "MYRA"
-  authorUserId: string | null
-  body: string
-  createdAt: string
-}
-
-interface CaseDetail {
-  id: string
-  reference: string
-  status: CaseStatus
-  subject: string
-  summary: string
-  accountId: string | null
-  publicSessionId: string | null
-  workspaceId: string | null
-  replyEmail: string | null
-  emailVerifiedAt: string | null
-  conversationId: string | null
-  assigneeUserId: string | null
-  takenOverAt: string | null
-  lastUserReplyAt: string | null
-  lastOperatorReplyAt: string | null
-  resolvedAt: string | null
-  notificationState: string
-  handoffSummary: string | null
-  handoffReviewedAt: string | null
-  handoffReviewedBy: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-function statusVariant(status: CaseStatus) {
-  switch (status) {
-    case "NEW":
-      return "info" as const
-    case "OPEN":
-      return "warning" as const
-    case "PENDING_USER":
-      return "muted" as const
-    case "RESOLVED":
-      return "success" as const
-  }
-}
-
-function authorVariant(author: CaseReply["authorType"]) {
-  return author === "OPERATOR"
-    ? ("default" as const)
-    : author === "MYRA"
-      ? ("info" as const)
-      : ("muted" as const)
-}
-
 function isUnread(row: CaseRow): boolean {
   if (row.status === "NEW") return true
   if (!row.lastUserReplyAt) return false
@@ -101,12 +51,6 @@ function age(iso: string): string {
   if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m`
   if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h`
   return `${Math.floor(ms / 86_400_000)}d`
-}
-
-function formatTime(iso: string | null | undefined): string {
-  if (!iso) return "—"
-  const d = new Date(iso)
-  return Number.isNaN(d.valueOf()) ? "—" : d.toLocaleString()
 }
 
 async function readError(res: Response): Promise<never> {
@@ -272,28 +216,6 @@ export function SupportInbox() {
     }
   }, [selectedId, replyBody, loadDetail, loadList])
 
-  const selected = detail?.case ?? null
-  const takenOver = !!selected?.takenOverAt
-
-  const detailMeta = useMemo(() => {
-    if (!selected) return []
-    const requester = selected.replyEmail
-      ? `${selected.replyEmail}${selected.emailVerifiedAt ? " (verified)" : " (unverified)"}`
-      : selected.accountId
-        ? "Signed-in account"
-        : "Anonymous session"
-    return [
-      ["Reference", selected.reference],
-      ["Status", selected.status.toLowerCase().replace(/_/g, " ")],
-      ["Requester", requester],
-      ["Created", formatTime(selected.createdAt)],
-      ["Notify state", selected.notificationState],
-      ["Workspace", selected.workspaceId ?? "—"],
-      ["Conversation", selected.conversationId ? "linked" : "—"],
-      ["Taken over", selected.takenOverAt ? formatTime(selected.takenOverAt) : "—"],
-    ] as [string, string][]
-  }, [selected])
-
   return (
     <div className="grid gap-5 lg:grid-cols-[22rem_1fr]">
       <section aria-label="Case list" className="flex flex-col gap-3">
@@ -344,7 +266,7 @@ export function SupportInbox() {
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <Badge variant={statusVariant(row.status)}>
+                    <Badge variant={supportCaseStatusVariant(row.status)}>
                       {row.status.toLowerCase().replace(/_/g, " ")}
                     </Badge>
                     {isUnread(row) ? <Badge variant="info">unread</Badge> : null}
@@ -379,190 +301,20 @@ export function SupportInbox() {
         ) : null}
       </section>
 
-      <section aria-label="Case detail" aria-live="off">
-        {!selectedId ? (
-          <Card className="text-muted-foreground p-6 text-sm">Select a case to review it.</Card>
-        ) : loadingDetail ? (
-          <div className="flex items-center gap-2 p-4">
-            <Spinner />
-            <span className="text-muted-foreground text-sm">Loading case…</span>
-          </div>
-        ) : detailError ? (
-          <Card className="border-l-2 border-l-amber-500 p-4 text-sm">{detailError}</Card>
-        ) : selected ? (
-          <div className="flex flex-col gap-4">
-            <Card className="p-5">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={statusVariant(selected.status)}>
-                  {selected.status.toLowerCase().replace(/_/g, " ")}
-                </Badge>
-                <h2 className="text-base font-semibold">{selected.subject}</h2>
-              </div>
-              <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
-                {detailMeta.map(([k, v]) => (
-                  <div key={k}>
-                    <dt className="text-muted-foreground font-mono uppercase">{k}</dt>
-                    <dd className="mt-0.5 break-words">{v}</dd>
-                  </div>
-                ))}
-              </dl>
-              <div className="mt-4 border-t pt-3">
-                <h3 className="text-muted-foreground font-mono text-xs uppercase">Summary</h3>
-                <p className="mt-1.5 text-sm break-words whitespace-pre-wrap">{selected.summary}</p>
-              </div>
-
-              {selected.handoffSummary ? (
-                <div className="mt-4 border-t pt-3">
-                  <h3 className="text-muted-foreground font-mono text-xs uppercase">
-                    Last handoff to Myra
-                  </h3>
-                  <p className="mt-1.5 text-sm break-words whitespace-pre-wrap">
-                    {selected.handoffSummary}
-                  </p>
-                </div>
-              ) : null}
-
-              {takenOver ? (
-                <div className="mt-4 border-t pt-3">
-                  <label htmlFor="myra-handoff-summary" className="text-sm font-medium">
-                    Reviewed handoff summary
-                  </label>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    Tell Myra what was resolved and what the requester should do next.
-                  </p>
-                  <textarea
-                    id="myra-handoff-summary"
-                    value={handoffSummary}
-                    maxLength={4000}
-                    rows={4}
-                    onChange={(event) => setHandoffSummary(event.target.value)}
-                    className="border-input bg-background focus-visible:ring-ring mt-2 w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
-                  />
-                </div>
-              ) : null}
-
-              <div className="mt-4 flex flex-wrap gap-2 border-t pt-3" aria-label="Case controls">
-                {!takenOver ? (
-                  <Button
-                    size="sm"
-                    disabled={busy !== null}
-                    onClick={() => void patch("takeover")}
-                    title="Assigns you and pauses Myra on the linked conversation"
-                  >
-                    Take over
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={busy !== null || handoffSummary.trim().length < 10}
-                    onClick={() => void patch("release")}
-                  >
-                    Release to Myra
-                  </Button>
-                )}
-                {!selected.assigneeUserId ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={busy !== null}
-                    onClick={() => void patch("assign")}
-                  >
-                    Assign to me
-                  </Button>
-                ) : null}
-                {selected.status !== "RESOLVED" ? (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={busy !== null}
-                      onClick={() => void patch("resolve", "RESOLVED")}
-                    >
-                      Resolve
-                    </Button>
-                    {selected.status !== "PENDING_USER" ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy !== null}
-                        onClick={() => void patch("resolve", "PENDING_USER")}
-                      >
-                        Mark pending user
-                      </Button>
-                    ) : null}
-                  </>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={busy !== null}
-                    onClick={() => void patch("resolve", "OPEN")}
-                  >
-                    Reopen
-                  </Button>
-                )}
-              </div>
-              {actionError ? (
-                <p className="text-destructive mt-2 text-sm" role="alert">
-                  {actionError}
-                </p>
-              ) : null}
-            </Card>
-
-            <Card className="p-5">
-              <h3 className="font-semibold">Replies</h3>
-              {detail && detail.replies.length === 0 ? (
-                <p className="text-muted-foreground mt-2 text-sm">No replies yet.</p>
-              ) : (
-                <ul className="mt-3 space-y-3">
-                  {detail?.replies.map((reply) => (
-                    <li key={reply.id} className="rounded-lg border p-3">
-                      <div className="flex items-center gap-2">
-                        <Badge variant={authorVariant(reply.authorType)}>
-                          {reply.authorType === "MYRA"
-                            ? "Myra"
-                            : reply.authorType === "OPERATOR"
-                              ? "Operator"
-                              : "User"}
-                        </Badge>
-                        <span className="text-muted-foreground font-mono text-xs">
-                          {formatTime(reply.createdAt)}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-sm break-words whitespace-pre-wrap">{reply.body}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <div className="mt-4 border-t pt-3">
-                <label htmlFor="support-reply" className="text-sm font-medium">
-                  Reply to requester
-                </label>
-                <textarea
-                  id="support-reply"
-                  value={replyBody}
-                  onChange={(e) => setReplyBody(e.target.value)}
-                  rows={4}
-                  maxLength={4000}
-                  className="border-input bg-background focus-visible:ring-ring mt-2 w-full resize-none rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
-                  placeholder="Reply as the operator. The requester sees this verbatim."
-                />
-                <div className="mt-2">
-                  <Button
-                    size="sm"
-                    disabled={busy !== null || !replyBody.trim()}
-                    onClick={() => void sendReply()}
-                  >
-                    {busy === "reply" ? "Sending…" : "Send reply"}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          </div>
-        ) : null}
-      </section>
+      <SupportCaseDetail
+        selectedId={selectedId}
+        detail={detail}
+        loading={loadingDetail}
+        error={detailError}
+        busy={busy}
+        actionError={actionError}
+        replyBody={replyBody}
+        handoffSummary={handoffSummary}
+        onReplyBodyChange={setReplyBody}
+        onHandoffSummaryChange={setHandoffSummary}
+        onPatch={(action, status) => void patch(action, status)}
+        onSendReply={() => void sendReply()}
+      />
       <p role="status" aria-live="polite" className="sr-only">
         {announce}
       </p>
