@@ -2,57 +2,23 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import Link from "next/link"
-import { Plus, Crosshair, Bug, Globe, GitBranch, ArrowLeft, Info, Trash2 } from "lucide-react"
-import {
-  Button,
-  Badge,
-  EmptyState,
-  FormField,
-  Input,
-  Spinner,
-  LoadMore,
-  Select,
-} from "@lyrashield/ui"
-import { githubReposSchema, paginatedResponseSchema, targetSchema } from "@/lib/api-schemas"
+import { Plus, ArrowLeft } from "lucide-react"
+import { Button, Spinner, LoadMore } from "@lyrashield/ui"
+import { githubReposSchema } from "@/lib/api-schemas"
 import { apiGet, apiGetPaginated, apiPost, apiDelete } from "@/lib/api-client"
-import { InlineConfirm } from "@/components/ui/inline-confirm"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { TARGET_PLURAL, TARGET_SINGULAR, RUN_PLURAL, ISSUE_PLURAL } from "@/lib/terminology"
-import { getTargetTypeLabel } from "@/lib/enum-labels"
-import { humanizeToken } from "@/lib/labels"
+import { TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
-
-interface Target {
-  id: string
-  name: string
-  type: string
-  url: string | null
-  apiSpecUrl: string | null
-  repoFullName: string | null
-  branch: string | null
-  environment: string
-  status: string
-  lastScanAt: string | null
-  project: { id: string; name: string } | null
-  scanCount: number
-  findingCount: number
-  createdAt: string
-  domainVerificationStatus?: string
-}
-
-interface GithubRepo {
-  id: number
-  fullName: string
-  name: string
-  owner: string
-  defaultBranch: string
-  private: boolean
-  htmlUrl: string
-  installationId: string
-}
-
-const targetsPaginatedSchema = paginatedResponseSchema(targetSchema)
+import {
+  EMPTY_REPO_FORM,
+  EMPTY_URL_FORM,
+  targetsPaginatedSchema,
+  type GithubRepo,
+  type RepoFormState,
+  type Target,
+  type UrlFormState,
+} from "./targets-model"
+import { RepoTargetForm, TargetCreatePanel, UrlTargetForm } from "./targets-form"
+import { TargetsEmptyState, TargetsTable } from "./targets-table"
 
 export function TargetsClient({
   workspaceId,
@@ -83,20 +49,8 @@ export function TargetsClient({
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [filterProjectId, setFilterProjectId] = useState<string | null>(initialProjectId ?? null)
 
-  const [repoForm, setRepoForm] = useState({
-    name: "",
-    repoOwner: "",
-    repoName: "",
-    branch: "",
-    installationId: "",
-  })
-  const [urlForm, setUrlForm] = useState({
-    name: "",
-    url: "",
-    apiSpecUrl: "",
-    urlType: "WEB_APP" as "WEB_APP" | "API",
-    ownershipAttested: false,
-  })
+  const [repoForm, setRepoForm] = useState<RepoFormState>(EMPTY_REPO_FORM)
+  const [urlForm, setUrlForm] = useState<UrlFormState>(EMPTY_URL_FORM)
 
   const [githubRepos, setGithubRepos] = useState<GithubRepo[]>([])
   const [reposLoading, setReposLoading] = useState(false)
@@ -199,8 +153,7 @@ export function TargetsClient({
     }
   }
 
-  async function handleCreateRepo(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleCreateRepo() {
     setCreating(true)
     setError(null)
     try {
@@ -214,13 +167,7 @@ export function TargetsClient({
         ...(repoForm.branch.trim() ? { branch: repoForm.branch.trim() } : {}),
       })
       setShowForm(false)
-      setRepoForm({
-        name: "",
-        repoOwner: "",
-        repoName: "",
-        branch: "",
-        installationId: "",
-      })
+      setRepoForm(EMPTY_REPO_FORM)
       await fetchTargets()
       router.refresh()
     } catch (e) {
@@ -230,8 +177,7 @@ export function TargetsClient({
     }
   }
 
-  async function handleCreateUrl(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleCreateUrl() {
     setCreating(true)
     setError(null)
     try {
@@ -244,13 +190,7 @@ export function TargetsClient({
         ownershipAttested: urlForm.ownershipAttested,
       })
       setShowForm(false)
-      setUrlForm({
-        name: "",
-        url: "",
-        apiSpecUrl: "",
-        urlType: "WEB_APP",
-        ownershipAttested: false,
-      })
+      setUrlForm(EMPTY_URL_FORM)
       await fetchTargets()
       router.refresh()
     } catch (e) {
@@ -319,416 +259,47 @@ export function TargetsClient({
       </div>
 
       {showForm && (
-        <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
-          <div className="mb-4 flex flex-wrap gap-2">
-            <Button
-              variant={formType === "REPO" ? "default" : "secondary"}
-              onClick={() => setFormType("REPO")}
-              size="sm"
-            >
-              <GitBranch className="h-4 w-4" aria-hidden="true" />
-              Repository
-            </Button>
-            <Button
-              variant={formType === "URL" ? "default" : "secondary"}
-              onClick={() => setFormType("URL")}
-              size="sm"
-            >
-              <Globe className="h-4 w-4" aria-hidden="true" />
-              URL
-            </Button>
-          </div>
-
-          {error && (
-            <div
-              className="bg-destructive/10 text-destructive mb-4 rounded-md p-3 text-sm"
-              role="alert"
-            >
-              {error}
-            </div>
-          )}
-
+        <TargetCreatePanel formType={formType} onFormTypeChange={setFormType} error={error}>
           {formType === "REPO" ? (
-            <form onSubmit={handleCreateRepo} className="space-y-4">
-              {githubConnected && repoMode === "picker" && (
-                <>
-                  <FormField label="Select repository" htmlFor="repo-select">
-                    {reposLoading ? (
-                      <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                        <Spinner className="h-4 w-4" />
-                        Loading repositories...
-                      </div>
-                    ) : githubRepos.length === 0 ? (
-                      <p className="text-muted-foreground text-sm">
-                        No repositories found.{" "}
-                        <button
-                          type="button"
-                          onClick={() => setRepoMode("manual")}
-                          className="text-primary hover:underline"
-                        >
-                          Enter manually
-                        </button>
-                      </p>
-                    ) : (
-                      <Select
-                        id="repo-select"
-                        value={selectedRepoId}
-                        onChange={(e) => handleSelectRepo(e.target.value)}
-                      >
-                        <option value="">Choose a repository...</option>
-                        {githubRepos.map((repo) => (
-                          <option key={repo.id} value={String(repo.id)}>
-                            {repo.fullName}
-                            {repo.private ? " (private)" : ""}
-                          </option>
-                        ))}
-                      </Select>
-                    )}
-                  </FormField>
-                  <button
-                    type="button"
-                    onClick={() => setRepoMode("manual")}
-                    className="text-muted-foreground hover:text-foreground text-xs underline"
-                  >
-                    Enter repository manually
-                  </button>
-                </>
-              )}
-              {(!githubConnected || repoMode === "manual") && (
-                <>
-                  <FormField label={`${TARGET_SINGULAR} name`} htmlFor="repo-name-input">
-                    <Input
-                      id="repo-name-input"
-                      type="text"
-                      value={repoForm.name}
-                      onChange={(e) => setRepoForm({ ...repoForm, name: e.target.value })}
-                      required
-                      maxLength={100}
-                      autoFocus
-                      placeholder="My App Backend"
-                    />
-                  </FormField>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField label="Repo Owner" htmlFor="repo-owner">
-                      <Input
-                        id="repo-owner"
-                        type="text"
-                        value={repoForm.repoOwner}
-                        onChange={(e) => setRepoForm({ ...repoForm, repoOwner: e.target.value })}
-                        required
-                        placeholder={githubAccountLogin ?? "lyrashield"}
-                      />
-                    </FormField>
-                    <FormField label="Repo Name" htmlFor="repo-name-field">
-                      <Input
-                        id="repo-name-field"
-                        type="text"
-                        value={repoForm.repoName}
-                        onChange={(e) => setRepoForm({ ...repoForm, repoName: e.target.value })}
-                        required
-                        placeholder="lyrashield"
-                      />
-                    </FormField>
-                  </div>
-                  <FormField label="Branch or tag (optional)" htmlFor="repo-ref">
-                    <p id="repo-ref-help" className="text-muted-foreground mb-1 text-xs">
-                      Leave blank to use the default branch, or enter an exact branch or release tag
-                      such as v0.1.17.
-                    </p>
-                    <Input
-                      id="repo-ref"
-                      type="text"
-                      value={repoForm.branch}
-                      onChange={(e) => setRepoForm({ ...repoForm, branch: e.target.value })}
-                      maxLength={255}
-                      aria-describedby="repo-ref-help"
-                      autoComplete="off"
-                      spellCheck={false}
-                      placeholder="main or v0.1.17"
-                    />
-                  </FormField>
-                  {githubConnected && repoMode === "manual" && (
-                    <button
-                      type="button"
-                      onClick={() => setRepoMode("picker")}
-                      className="text-muted-foreground hover:text-foreground text-xs underline"
-                    >
-                      Use repository picker
-                    </button>
-                  )}
-                </>
-              )}
-              <div className="flex gap-2">
-                <Button
-                  type="submit"
-                  disabled={
-                    creating ||
-                    (!repoForm.name && !selectedRepoId) ||
-                    (!githubConnected || repoMode === "manual"
-                      ? !repoForm.repoOwner || !repoForm.repoName
-                      : false)
-                  }
-                >
-                  {creating ? "Creating..." : `Create ${TARGET_SINGULAR}`}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    setShowForm(false)
-                    setError(null)
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
+            <RepoTargetForm
+              picker={{
+                connected: githubConnected,
+                accountLogin: githubAccountLogin,
+                repos: githubRepos,
+                loading: reposLoading,
+                mode: repoMode,
+                onModeChange: setRepoMode,
+                selectedRepoId,
+                onSelectRepo: handleSelectRepo,
+              }}
+              repoForm={repoForm}
+              onRepoFormChange={(patch) => setRepoForm({ ...repoForm, ...patch })}
+              creating={creating}
+              onSubmit={handleCreateRepo}
+              onCancel={() => {
+                setShowForm(false)
+                setError(null)
+              }}
+            />
           ) : (
-            <form onSubmit={handleCreateUrl} className="space-y-4">
-              <FormField label="Type" htmlFor="url-type">
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant={urlForm.urlType === "WEB_APP" ? "default" : "secondary"}
-                    size="sm"
-                    onClick={() => setUrlForm({ ...urlForm, urlType: "WEB_APP" })}
-                  >
-                    <Globe className="h-4 w-4" aria-hidden="true" />
-                    Web App
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={urlForm.urlType === "API" ? "default" : "secondary"}
-                    size="sm"
-                    onClick={() => setUrlForm({ ...urlForm, urlType: "API" })}
-                  >
-                    API
-                  </Button>
-                </div>
-              </FormField>
-              <FormField label={`${TARGET_SINGULAR} name`} htmlFor="url-name">
-                <Input
-                  id="url-name"
-                  type="text"
-                  value={urlForm.name}
-                  onChange={(e) => setUrlForm({ ...urlForm, name: e.target.value })}
-                  required
-                  maxLength={100}
-                  autoFocus
-                  placeholder={urlForm.urlType === "API" ? "Production API" : "Staging Site"}
-                />
-              </FormField>
-              <FormField label="URL" htmlFor="url-input">
-                <Input
-                  id="url-input"
-                  type="url"
-                  value={urlForm.url}
-                  onChange={(e) => setUrlForm({ ...urlForm, url: e.target.value })}
-                  required
-                  placeholder={
-                    urlForm.urlType === "API"
-                      ? "https://api.example.com"
-                      : "https://staging.example.com"
-                  }
-                />
-              </FormField>
-              {urlForm.urlType === "API" && (
-                <FormField label="OpenAPI / Swagger URL" htmlFor="api-spec-url">
-                  <p className="text-muted-foreground mb-1 text-xs">
-                    Required for Contract and Contract Behavior reviews. Public HTTPS URL with no
-                    query, fragment, or credentials.
-                  </p>
-                  <Input
-                    id="api-spec-url"
-                    type="url"
-                    value={urlForm.apiSpecUrl}
-                    onChange={(e) => setUrlForm({ ...urlForm, apiSpecUrl: e.target.value })}
-                    placeholder="https://api.example.com/openapi.yaml"
-                  />
-                </FormField>
-              )}
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={urlForm.ownershipAttested}
-                  onChange={(e) => setUrlForm({ ...urlForm, ownershipAttested: e.target.checked })}
-                  className="mt-0.5"
-                  required
-                />
-                <span className="text-muted-foreground">
-                  I own or am authorized to scan this {TARGET_SINGULAR.toLowerCase()}.
-                </span>
-                <Tooltip>
-                  <TooltipTrigger aria-label="Why ownership attestation is required">
-                    <Info
-                      className="text-muted-foreground hover:text-foreground size-4"
-                      aria-hidden="true"
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-xs">
-                    LyraShield can only review targets you own or have permission to test. This
-                    attestation is recorded for your security audit log.
-                  </TooltipContent>
-                </Tooltip>
-              </label>
-              <div className="flex gap-2">
-                <Button type="submit" disabled={creating || !urlForm.ownershipAttested}>
-                  {creating ? "Creating..." : `Create ${TARGET_SINGULAR}`}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    setShowForm(false)
-                    setError(null)
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
+            <UrlTargetForm
+              urlForm={urlForm}
+              onUrlFormChange={(patch) => setUrlForm({ ...urlForm, ...patch })}
+              creating={creating}
+              onSubmit={handleCreateUrl}
+              onCancel={() => {
+                setShowForm(false)
+                setError(null)
+              }}
+            />
           )}
-        </div>
+        </TargetCreatePanel>
       )}
 
       {targets.length === 0 ? (
-        <EmptyState
-          icon={Crosshair}
-          title={`No ${TARGET_PLURAL.toLowerCase()} yet`}
-          description="Add a repository or URL target to start scanning."
-          action={
-            <Button onClick={() => setShowForm(true)}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add {TARGET_SINGULAR.toLowerCase()}
-            </Button>
-          }
-        />
+        <TargetsEmptyState onAdd={() => setShowForm(true)} />
       ) : (
-        <div
-          className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border shadow-sm [contain:paint]"
-          tabIndex={0}
-          aria-label="Targets list"
-        >
-          <table className="w-full min-w-[40rem] text-sm">
-            <thead className="bg-muted/30 border-b">
-              <tr>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">
-                  Name
-                </th>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">
-                  Type
-                </th>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">
-                  Domain verification
-                </th>
-                <th scope="col" className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
-                  {RUN_PLURAL}
-                </th>
-                <th scope="col" className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
-                  {ISSUE_PLURAL}
-                </th>
-                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
-                  Status
-                </th>
-                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
-                  <span className="sr-only">View</span>
-                </th>
-                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
-                  <span className="sr-only">Delete</span>
-                </th>
-                <th scope="col" className="sr-only">
-                  <span className="sr-only">
-                    {RUN_PLURAL} and {ISSUE_PLURAL} summary
-                  </span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {targets.map((t) => (
-                <tr key={t.id} className="hover:bg-muted/30 border-b last:border-0">
-                  <td className="overflow-hidden px-4 py-3">
-                    <Link
-                      href={`/dashboard/targets/${t.id}`}
-                      className="block truncate font-medium hover:underline"
-                      aria-label={`View ${TARGET_SINGULAR.toLowerCase()} ${t.name}`}
-                    >
-                      {t.name}
-                    </Link>
-                    {t.repoFullName && (
-                      <div className="text-muted-foreground truncate text-xs">{t.repoFullName}</div>
-                    )}
-                    {t.url && <div className="text-muted-foreground truncate text-xs">{t.url}</div>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge>
-                      {t.type === "REPO" ? (
-                        <GitBranch className="h-3 w-3" aria-hidden="true" />
-                      ) : (
-                        <Globe className="h-3 w-3" aria-hidden="true" />
-                      )}
-                      {getTargetTypeLabel(t.type)}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge
-                      variant={
-                        t.domainVerificationStatus?.startsWith("Verified until")
-                          ? "success"
-                          : "muted"
-                      }
-                    >
-                      {t.domainVerificationStatus ??
-                        (t.type === "WEB_APP" || t.type === "API"
-                          ? "Not verified"
-                          : "Not applicable")}
-                    </Badge>
-                  </td>
-                  <td className="hidden px-4 py-3 lg:table-cell">{t.scanCount}</td>
-                  <td className="hidden px-4 py-3 lg:table-cell">
-                    {t.findingCount > 0 ? (
-                      <span className="text-destructive flex items-center gap-1">
-                        <Bug className="h-3 w-3" aria-hidden="true" />
-                        {t.findingCount}
-                      </span>
-                    ) : (
-                      "0"
-                    )}
-                  </td>
-                  <td className="hidden px-4 py-3 sm:table-cell">
-                    <Badge variant={t.status === "active" ? "success" : "muted"}>
-                      {humanizeToken(t.status)}
-                    </Badge>
-                  </td>
-                  <td className="hidden px-4 py-3 sm:table-cell">
-                    <Link
-                      href={`/dashboard/targets/${t.id}`}
-                      className="text-primary text-xs font-medium hover:underline"
-                      aria-label={`View ${TARGET_SINGULAR.toLowerCase()} ${t.name}`}
-                    >
-                      View
-                    </Link>
-                  </td>
-                  <td className="hidden px-4 py-3 sm:table-cell">
-                    <InlineConfirm
-                      triggerIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
-                      aria-label={`Delete ${TARGET_SINGULAR.toLowerCase()} ${t.name}`}
-                      message={`Delete ${t.name}? Scans, findings, verdicts and reports stay in the workspace.`}
-                      confirmLabel="Delete"
-                      onConfirm={() => handleDeleteTarget(t)}
-                    />
-                  </td>
-                  {/* Mobile/AT fallback: Runs and Issues columns are hidden
-                      below lg, so the primary row data is otherwise
-                      unreachable on small screens. Announce counts + status
-                      without affecting the visual layout. */}
-                  <td className="sr-only">
-                    <span className="sr-only">{`${humanizeToken(t.status)}, ${t.scanCount} ${RUN_PLURAL.toLowerCase()}, ${t.findingCount} ${ISSUE_PLURAL.toLowerCase()}`}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TargetsTable targets={targets} onDelete={(t) => void handleDeleteTarget(t)} />
       )}
 
       <LoadMore
