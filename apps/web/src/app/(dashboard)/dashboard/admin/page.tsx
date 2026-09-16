@@ -151,8 +151,8 @@ export default async function PlatformAdminPage() {
             </h2>
             <p className="text-muted-foreground text-sm">
               Derived from provider-backed billing rows (Polar/Razorpay, status active, paid plan).
-              Trial markers, complimentary rows, platform-admin accounts, and refunded or lapsed
-              rows never count.
+              Trial markers, complimentary rows, platform-admin accounts and refunded or lapsed rows
+              never count.
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

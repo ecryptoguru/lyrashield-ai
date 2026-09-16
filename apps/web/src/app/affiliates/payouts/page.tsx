@@ -83,7 +83,7 @@ export default async function AffiliatePayoutsPage() {
     <div className="mx-auto max-w-4xl px-4 py-8">
       <PageHeader
         title="Payouts"
-        description="Manage your payout method, view balances, and request payouts."
+        description="Manage your payout method, view balances and request payouts."
       />
 
       <div className="mt-6 grid gap-4 sm:grid-cols-4">
