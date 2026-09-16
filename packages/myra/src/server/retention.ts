@@ -2,10 +2,12 @@
  * Retention sweep — founder-resolved periods: conversations 30d (cascade
  * messages + flow sessions), support cases 1y, demo bookings 1y, audit
  * events 90d; expired public sessions and stale identity verifications are
- * removed too.
+ * removed too. The sweep also reconciles bookings superseded by a confirmed
+ * reschedule — their provider events would otherwise stay live forever.
  */
 import { Prisma, prisma, withMyraOperatorRLS } from "@lyrashield/db"
 import { MYRA_LIMITS } from "../contracts"
+import { getCalendarAdapter, type CalendarAdapter } from "./calendar/adapter"
 import { MYRA_TRUSTED_RETENTION, type MyraDb } from "./db"
 
 export interface RetentionCounts {
@@ -17,15 +19,66 @@ export interface RetentionCounts {
   operations: number
   auditEvents: number
   generationReservations: number
+  rescheduledOriginals: number
 }
 
-export async function pruneMyraRetention(db: MyraDb = prisma): Promise<RetentionCounts> {
+/**
+ * Cancel the provider event and revoke the manage token of every CONFIRMED
+ * or HELD booking already superseded by a CONFIRMED replacement. The
+ * reschedule executor releases the original best-effort; a crash between
+ * confirming the replacement and that release leaves the original live —
+ * this is the retry path its comment references. Provider failures stay
+ * non-fatal: the row is still marked CANCELED so the slot unblocks and the
+ * token dies.
+ */
+async function reconcileRescheduledOriginals(
+  db: MyraDb,
+  adapter: CalendarAdapter
+): Promise<number> {
+  const replacements = await db.demoBooking.findMany({
+    where: { status: "CONFIRMED", rescheduledFromId: { not: null } },
+    select: { rescheduledFromId: true },
+  })
+  const originalIds = [
+    ...new Set(
+      replacements
+        .map((r) => r.rescheduledFromId)
+        .filter((id): id is string => typeof id === "string")
+    ),
+  ]
+  if (originalIds.length === 0) return 0
+  const stale = await db.demoBooking.findMany({
+    where: { id: { in: originalIds }, status: { in: ["CONFIRMED", "HELD"] } },
+    select: { id: true, providerEventId: true },
+  })
+  const now = new Date()
+  for (const original of stale) {
+    if (original.providerEventId) {
+      await adapter.cancelEvent(original.providerEventId).catch(() => {})
+    }
+    await db.demoBooking.update({
+      where: { id: original.id },
+      data: {
+        status: "CANCELED",
+        canceledAt: now,
+        manageTokenHash: null,
+        manageTokenRevokedAt: now,
+      },
+    })
+  }
+  return stale.length
+}
+
+export async function pruneMyraRetention(
+  db: MyraDb = prisma,
+  adapter: CalendarAdapter = getCalendarAdapter()
+): Promise<RetentionCounts> {
   // The sweep is trusted-path work: it touches every owner's rows. The
   // dual-owner RESTRICTIVE boundary (v18 1.3) denies context-free statements,
   // so an ambient `db` runs through the retention sentinel — the scheduler
   // caller is the authorization, the binding declares the path.
   if (db === prisma) {
-    return withMyraOperatorRLS(MYRA_TRUSTED_RETENTION, (tx) => pruneMyraRetention(tx))
+    return withMyraOperatorRLS(MYRA_TRUSTED_RETENTION, (tx) => pruneMyraRetention(tx, adapter))
   }
   const now = new Date()
   const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
@@ -66,6 +119,8 @@ export async function pruneMyraRetention(db: MyraDb = prisma): Promise<Retention
     `
   )
 
+  const rescheduledOriginals = await reconcileRescheduledOriginals(db, adapter)
+
   const [
     conversations,
     publicSessions,
@@ -101,5 +156,6 @@ export async function pruneMyraRetention(db: MyraDb = prisma): Promise<Retention
     operations: operations.count,
     auditEvents: auditEvents.count,
     generationReservations: generationReservationCount,
+    rescheduledOriginals,
   }
 }

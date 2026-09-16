@@ -825,8 +825,8 @@ export async function executeManageDemo(
   }
 
   // Replacement confirmed — now release the original. A failure here must
-  // not fail the operation: the new booking is already valid; the stale
-  // original is retried by the retention/reconcile path.
+  // not fail the operation: the new booking is already valid and the
+  // retention sweep reconciles any stale original left behind.
   try {
     if (booking.providerEventId) {
       await adapter.cancelEvent(booking.providerEventId).catch(() => {})
