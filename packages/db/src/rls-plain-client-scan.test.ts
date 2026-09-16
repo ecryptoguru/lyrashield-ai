@@ -122,6 +122,17 @@ const ALLOWLIST: Record<string, string> = {
     "retest/findingCandidate/scanResultManifest/scanCoverageReceipt reads with explicit workspaceId args (extension-wrapped)",
   "apps/worker/src/jobs/preflight.job.ts":
     "target/scan reads with explicit workspaceId or bare-id lookups inside the scan pipeline (extension-wrapped)",
+  // run-scan.job.ts was decomposed into apps/worker/src/jobs/run-scan/*
+  // phase modules; the reads below are the same extension-wrapped calls moved
+  // verbatim (the coordinator's getSystemPrisma marker moved to authority.ts).
+  "apps/worker/src/jobs/run-scan.job.ts":
+    "policy read carries explicit workspaceId; scan cancellation check is a bare-id lookup inside the scan pipeline (extension-wrapped)",
+  "apps/worker/src/jobs/run-scan/execution.ts":
+    "targetDomainVerification read carries explicit workspaceId (extension-wrapped)",
+  "apps/worker/src/jobs/run-scan/pending-finalization.ts":
+    "scan recovery read is a bare-id lookup inside the scan pipeline (extension-wrapped)",
+  "apps/worker/src/jobs/run-scan/preparation.ts":
+    "target read is a bare-id lookup inside the scan pipeline (extension-wrapped)",
   "apps/worker/src/schedules.ts":
     "scan counts and schedule updates with explicit workspaceId args (extension-wrapped; the P1-8 guard count passes workspaceId explicitly — regression-tested in worker-rls-regressions.runtime.test.ts)",
   "packages/billing/src/entitlements.ts":

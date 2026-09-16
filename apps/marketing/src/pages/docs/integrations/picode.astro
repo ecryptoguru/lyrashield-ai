@@ -1,22 +1,19 @@
 ---
 import DocsLayout from "@layouts/DocsLayout.astro"
+import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const canonical = new URL("/docs/integrations/picode", origin).toString()
 const title = "LyraShield for Pi — Standalone CLI Guide"
 const description = "Use LyraShield alongside Pi through the standalone CLI and CI. Pi core does not document native MCP client support."
 const updatedDate = "2026-09-08"
-const jsonLd = [{
-  "@context": "https://schema.org",
-  "@type": "TechArticle",
-  headline: title,
+const { canonical, techArticle } = buildDocsJsonLd({
+  origin,
+  path: "/docs/integrations/picode",
+  title,
   description,
-  url: canonical,
-  dateModified: updatedDate,
-  author: { "@id": `${origin}/#organization` },
-  publisher: { "@id": `${origin}/#organization` },
-  inLanguage: "en-US",
-}]
+  updatedDate,
+})
+const jsonLd = [techArticle]
 ---
 
 <DocsLayout title={`${title} | LyraShield AI`} description={description} canonical={canonical} jsonLd={jsonLd} updatedDate={updatedDate} currentPath="/docs/integrations/picode">

@@ -1,41 +1,23 @@
 ---
 import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
+import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const canonical = new URL("/docs/integrations/opencode", origin).toString()
 const title = "LyraShield MCP for OpenCode — Setup Guide"
 const description =
   'Connect LyraShield to OpenCode with native remote OAuth or local stdio MCP under the top-level "mcp" key.'
 const updatedDate = "2026-09-09"
 
-const jsonLd: unknown[] = [
-  {
-    "@context": "https://schema.org",
-    "@type": "TechArticle",
-    headline: title,
-    description,
-    url: canonical,
-    dateModified: updatedDate,
-    author: { "@id": `${origin}/#organization` },
-    publisher: { "@id": `${origin}/#organization` },
-    inLanguage: "en-US",
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: "Integrations",
-        item: `${origin}/docs/integrations`,
-      },
-      { "@type": "ListItem", position: 3, name: "OpenCode", item: canonical },
-    ],
-  },
-]
+const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
+  origin,
+  path: "/docs/integrations/opencode",
+  title,
+  description,
+  updatedDate,
+  breadcrumbLabel: "OpenCode",
+})
+const jsonLd: unknown[] = [techArticle, breadcrumbList]
 ---
 
 <DocsLayout

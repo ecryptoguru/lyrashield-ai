@@ -5,7 +5,7 @@ import { registerWebMcpTool, type WebMcpInputSchema } from "@/lib/webmcp/registe
 import { useWebMcpReceiptStore } from "@/components/webmcp/webmcp-receipt-provider"
 import { getManualScanOptions } from "@/lib/scan-presets"
 
-import type { TargetItem } from "./scans-client"
+import type { TargetItem } from "./scan-types"
 
 const prepareScanInputSchema: WebMcpInputSchema = {
   required: ["targetName"],
