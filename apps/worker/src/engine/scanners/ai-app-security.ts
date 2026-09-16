@@ -186,9 +186,7 @@ const LOW_PRIORITY_SEGMENTS = new Set([
   "tests",
 ])
 
-function resolveAiAppSecurityDiscoveryMode(
-  mode?: string
-): AiAppSecurityDiscoveryReceipt["mode"] {
+function resolveAiAppSecurityDiscoveryMode(mode?: string): AiAppSecurityDiscoveryReceipt["mode"] {
   switch (mode?.trim().toUpperCase()) {
     case "STANDARD":
       return "STANDARD"

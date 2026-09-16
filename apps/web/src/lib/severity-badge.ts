@@ -1,4 +1,3 @@
-
 type SeverityBadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
 
 export const SEVERITY_BADGE: Record<string, SeverityBadgeVariant> = {

@@ -75,7 +75,6 @@ const categoriesById = new Map<string, BlogCategory>(
   BLOG_CATEGORIES.map((category) => [category.id, category])
 )
 
-
 /** Human label for a tag slug, falling back to the raw slug. */
 export function getCategoryLabel(slug: string): string {
   return categoriesById.get(slug)?.label ?? slug
@@ -91,7 +90,6 @@ async function getPublishedPosts(): Promise<BlogEntry[]> {
   const posts = await getCollection("blog", (entry) => !entry.data.draft)
   return posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
 }
-
 
 interface BlogCategoryWithCount extends BlogCategory {
   count: number

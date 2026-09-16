@@ -116,7 +116,6 @@ const BLOCKING_STATUSES = new Set<string>([
   "FIXED_PENDING_RETEST",
 ])
 
-
 export function generateLaunchReadinessReport(
   findings: FindingForReadiness[],
   hasCompletedScan: boolean,
