@@ -1095,6 +1095,7 @@ async function main(): Promise<number> {
       const principal = principalFor(scenario)
       const store = seedStore(scenario.setup, principal)
       const provider = new MockProvider()
+      provider.budgetExhausted = store.flags.budgetExhausted
       const preRunRowIds = new Set([
         ...store.myraMessage.rows.keys(),
         ...store.myraMemory.rows.keys(),

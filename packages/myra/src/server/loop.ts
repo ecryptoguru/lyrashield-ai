@@ -8,15 +8,14 @@ import { randomBytes } from "node:crypto"
 import { MYRA_LIMITS } from "../contracts"
 import type { BookingRequest, MyraStreamEvent, MyraToolName, TaskRecord } from "../contracts"
 import {
-  checkBudget,
   maximumTurnCostUsd,
-  recordCost,
+  releaseGenerationBudget,
   reserveGenerationBudget,
   settleGenerationBudget,
 } from "./budget"
 import { auditEvent } from "./audit"
 import { toMyraError } from "./errors"
-import { getProvider, sanitizeAnswerMarkdown } from "./provider"
+import { getProvider, ProviderDefiniteFailure, sanitizeAnswerMarkdown } from "./provider"
 import type { ModelProvider, ToolCallOutput } from "./provider"
 import { runTool } from "./tools/registry"
 import type { MyraToolContext, MyraToolResult, ProposalSummary } from "./tools/types"
@@ -319,7 +318,6 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
   // book_demo.
   const intent = args.bookingRequest ? "demo" : classifyIntent(text, isUser)
   const step: StepOutcome = { toolOutputs: [], components: [], proposals: [], toolsUsed: [] }
-  const budget = await checkBudget(db)
 
   const activity = ACTIVITY[intent]
   if (activity) yield { type: "activity", label: activity }
@@ -400,17 +398,13 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
     }
   }
 
-  // Prose answer — budget-gated. Deterministic intents keep working when
-  // generation is off: a fixed explanation replaces the model call.
+  // Prose answer — the reservation ledger is the budget gate, so it works
+  // under any bound context. Deterministic intents keep working when
+  // generation is off: the mock provider never reserves.
   let answerText: string
   const verification = step.toolOutputs.find((t) => t.output.verificationRequired === true)
-  if (!budget.allowed && provider.name !== "mock") {
-    yield {
-      type: "error",
-      error: { code: "BUDGET_EXHAUSTED", message: "Myra is at its usage limit for now." },
-    }
-    return
-  }
+  const reserves = provider.name === "azure"
+  let releaseReservation = false
   try {
     // The provider only receives a route context the caller's role may
     // actually see — a VIEWER on /dashboard/billing leaks nothing upstream.
@@ -428,7 +422,7 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
     )
       ? "deep"
       : "fast"
-    if (provider.name === "azure") {
+    if (reserves) {
       await reserveGenerationBudget(traceId, maximumTurnCostUsd(tier))
     }
     const generated = await provider.generate({
@@ -443,24 +437,21 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
       },
     })
     answerText = sanitizeAnswerMarkdown(generated.text)
-    if (provider.name === "azure") {
+    if (reserves) {
       await settleGenerationBudget(traceId, generated.usage.costUsd)
     }
-    if (generated.usage.costUsd > 0) {
-      await recordCost(
-        traceId,
-        generated.usage.costUsd,
-        {
-          accountId: ctx.principal.kind === "user" ? ctx.principal.accountId : null,
-          publicSessionId:
-            ctx.principal.kind === "anonymous" ? ctx.principal.publicSessionId : null,
-        },
-        db
-      )
-    }
   } catch (e) {
+    // A definite failure means no generation could have happened — the hold
+    // goes back in the finally below. A timeout may still have reached the
+    // provider, so the row stays RESERVED and the retention sweep settles it
+    // at the ceiling rather than reopening budget that may have been spent.
+    releaseReservation = reserves && e instanceof ProviderDefiniteFailure
     yield { type: "error", error: toMyraError(e) }
     return
+  } finally {
+    if (releaseReservation) {
+      await releaseGenerationBudget(traceId).catch(() => {})
+    }
   }
   if (verification) {
     answerText +=

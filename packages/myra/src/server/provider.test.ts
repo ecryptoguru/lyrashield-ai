@@ -1,7 +1,7 @@
 import "./test-env"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { env } from "@lyrashield/config"
-import { AzureProvider } from "./provider"
+import { AzureProvider, ProviderDefiniteFailure, ProviderTimeout } from "./provider"
 
 // The provider reads the validated `env` snapshot, not process.env — tests
 // mutate the snapshot fields directly and restore them afterwards.
@@ -89,5 +89,29 @@ describe("AzureProvider", () => {
       })
     ).rejects.toMatchObject({ code: "PROVIDER_ERROR" })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("throws ProviderDefiniteFailure on a non-2xx response so the hold releases", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("upstream", { status: 500 }))
+
+    await expect(
+      new AzureProvider().generate({
+        system: "system",
+        messages: [{ role: "user", content: "hello" }],
+      })
+    ).rejects.toBeInstanceOf(ProviderDefiniteFailure)
+  })
+
+  it("throws ProviderTimeout on AbortSignal.timeout so the hold stays reserved", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new DOMException("The operation timed out.", "TimeoutError")
+    )
+
+    await expect(
+      new AzureProvider().generate({
+        system: "system",
+        messages: [{ role: "user", content: "hello" }],
+      })
+    ).rejects.toBeInstanceOf(ProviderTimeout)
   })
 })

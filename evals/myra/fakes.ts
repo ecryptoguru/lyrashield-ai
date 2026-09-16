@@ -18,6 +18,7 @@
 import { createHash } from "node:crypto"
 import type { MyraPrincipal } from "../../packages/myra/src/contracts"
 import { MYRA_MEMORY_KEYS, isAllowedMemoryWrite } from "../../packages/myra/src/memory-keys"
+import { MyraServiceError } from "../../packages/myra/src/server/errors"
 
 // ─── Generic Prisma-ish table ──────────────────────────────────────────────
 
@@ -323,6 +324,9 @@ export class FakeMyraStore {
      *  @lyrashield/integrations); kept for when it becomes injectable. */
     notificationFails: false,
     calendarConfigured: true,
+    /** The reservation ledger lives in Postgres — the offline harness
+     *  emulates the denied generation at the provider seam instead. */
+    budgetExhausted: false,
   }
 
   reset(): void {
@@ -350,7 +354,11 @@ export class FakeMyraStore {
       t.rows.clear()
     }
     this.notifications = []
-    this.flags = { notificationFails: false, calendarConfigured: true }
+    this.flags = {
+      notificationFails: false,
+      calendarConfigured: true,
+      budgetExhausted: false,
+    }
   }
 
   /**
@@ -499,7 +507,8 @@ export interface ScenarioSetup {
     notificationState?: string
   }[]
   memory?: Record<string, unknown>
-  /** Seed monthly spend at the cap so checkBudget() denies generation. */
+  /** Emulate the reservation ledger denying the turn (the real gate is
+   *  Postgres-side — the offline harness cannot reach it). */
   budgetExhausted?: boolean
   notificationFails?: boolean
 }
@@ -681,16 +690,11 @@ export function seedStore(
   }
 
   if (setup.budgetExhausted) {
-    // checkBudget() sums metadata.costUsd on myra.generate events this month.
-    store.myraAuditEvent.rows.set("audit_budget_cap", {
-      id: "audit_budget_cap",
-      actorType: "system",
-      action: "myra.generate",
-      resourceType: "trace",
-      resourceId: "eval",
-      metadata: { costUsd: 999 },
-      createdAt: new Date(),
-    })
+    // The reservation ledger is the budget gate now. With no database the
+    // harness cannot seed a reservation row, so the MockProvider emulates
+    // the denied generation — the same BUDGET_EXHAUSTED the loop surfaces
+    // when reserveGenerationBudget rejects.
+    store.flags.budgetExhausted = true
   }
 
   return store
@@ -714,8 +718,10 @@ interface ToolOutputLike {
 
 /**
  * Deterministic ModelProvider for the harness. `name` is deliberately not
- * "mock" — loop.ts exempts the literal name "mock" from the budget gate, and
- * the budget-exhausted scenario must see the gate actually engage.
+ * "mock" — loop.ts only exempts the literal name "mock" from the
+ * reservation-ledger gate and the budget-exhausted scenario must see the
+ * gate actually engage (emulated via `budgetExhausted`, since the ledger is
+ * a Postgres table the offline harness cannot reach).
  *
  * `generate` composes a short answer from the deterministic tool outputs the
  * loop hands it — the same contract the server's own MockProvider uses —
@@ -725,10 +731,17 @@ interface ToolOutputLike {
  */
 export class MockProvider {
   readonly name = "eval-mock"
+  /** Emulates the reservation ledger denying the turn before any paid call. */
+  budgetExhausted = false
   calls: EvalProviderCall[] = []
   script: ((input: unknown) => string) | null = null
 
   async generate(input: unknown): Promise<EvalProviderResult> {
+    if (this.budgetExhausted) {
+      // The turn is denied upstream of the model — no call is recorded, so
+      // providerCalls stays at 0 exactly like a rejected reservation.
+      throw new MyraServiceError("BUDGET_EXHAUSTED", "Myra is at its usage limit for now.")
+    }
     this.calls.push({ input })
     const text = this.script ? this.script(input) : composeFromToolOutputs(input)
     return { text, usage: { inTokens: 0, outTokens: 0, costUsd: 0 } }

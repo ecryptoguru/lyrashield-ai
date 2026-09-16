@@ -49,13 +49,12 @@ export {
 } from "./verify"
 export { auditEvent, type MyraActorType, type AuditFields } from "./audit"
 export {
-  checkBudget,
-  recordCost,
   monthlyBudgetCapUsd,
+  monthlyGenerationSpendUsd,
   maximumTurnCostUsd,
   reserveGenerationBudget,
   settleGenerationBudget,
-  type BudgetState,
+  releaseGenerationBudget,
 } from "./budget"
 export {
   getCalendarAdapter,
@@ -74,6 +73,8 @@ export {
   getProvider,
   MockProvider,
   AzureProvider,
+  ProviderDefiniteFailure,
+  ProviderTimeout,
   sanitizeAnswerMarkdown,
   type ModelProvider,
   type ModelGenerateInput,
