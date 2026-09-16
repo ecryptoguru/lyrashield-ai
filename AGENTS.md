@@ -78,6 +78,8 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Public paid-launch timing and publishable pricing.
 - Confirm intended current public Cloud-admission posture and authorize each live checkout/refund proof; Local admissions remain off.
 - Provider/model and target for first Deep/Terra acceptance.
+- Decide whether repository-level MCP/WebMCP scanner findings should remain visible on Trial and Starter. Current behavior keeps them available on every plan; a Pro+ entitlement would remove existing visibility.
+- Approve the disclosure and endpoint contract before any public release-identity confirmation work. Current public report verification does not disclose or confirm a stored commit or artifact identity.
 
 ## Non-negotiable implementation rules
 
