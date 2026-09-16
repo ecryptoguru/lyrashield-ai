@@ -139,6 +139,101 @@ interface StepOutcome {
   aborted?: MyraStreamEvent // terminal event to yield instead of continuing
 }
 
+type RunStep = (name: MyraToolName, input: unknown) => Promise<MyraToolResult | null>
+
+async function runDemoIntent(text: string, run: RunStep): Promise<void> {
+  const timezone = "UTC"
+  await run("get_demo_slots", {
+    timezone,
+    from: new Date().toISOString().slice(0, 10),
+  })
+  // Only draft a booking proposal when the message already carries an
+  // explicit slot instant plus attendee identity — never invent a slot.
+  const email = EMAIL_RE.exec(text)?.[0]
+  const name = NAME_RE.exec(text)?.[1]?.trim()
+  const iso = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.exec(text)?.[0]
+  if (email && name && iso) {
+    await run("book_demo", {
+      slotStart: new Date(iso).toISOString(),
+      timezone,
+      name,
+      email,
+    }).catch(() => null)
+  }
+}
+
+async function runDemoStatusIntent(ctx: MyraToolContext, step: StepOutcome): Promise<void> {
+  // Own-booking read + outcome-unknown reconcile, then the provider
+  // explains the state. Never a second insert, never a duplicate.
+  const bookings = await readOwnBookings(ctx)
+  step.toolOutputs.push({
+    name: "manage_own_demo",
+    output: { bookings },
+  })
+}
+
+async function runFlowResumeIntent(
+  ctx: MyraToolContext,
+  db: MyraToolContext["db"],
+  run: RunStep
+): Promise<void> {
+  const active = ctx.conversationId
+    ? await withOwnerScope(
+        ctx.principal,
+        (tx) =>
+          tx.myraFlowSession.findFirst({
+            where: { conversationId: ctx.conversationId!, status: "ACTIVE" },
+            orderBy: { createdAt: "desc" },
+          }),
+        db
+      ).catch(() => null)
+    : null
+  if (active) {
+    // start_guided_flow resumes the session and re-validates workspace.
+    await run("start_guided_flow", { flowId: active.flowId })
+  } else {
+    await run("verify_resolution", {})
+  }
+}
+
+async function runSupportCaseIntent(text: string, step: StepOutcome, run: RunStep): Promise<void> {
+  const subject = text.split(/\n/)[0]!.slice(0, 120) || "Support request"
+  await run("propose_support_case", {
+    subject,
+    summary: text.slice(0, 4000),
+    includeDiagnostics: false,
+    includeTranscriptExcerpt: false,
+  }).catch((e) => {
+    if (
+      e &&
+      typeof e === "object" &&
+      "code" in e &&
+      (e as { code: string }).code === "VERIFICATION_REQUIRED"
+    ) {
+      step.toolOutputs.push({
+        name: "propose_support_case",
+        output: { verificationRequired: true },
+      })
+      return null
+    }
+    throw e
+  })
+}
+
+async function runMemoryIntent(text: string, run: RunStep): Promise<void> {
+  if (/\bforget (?:that|what|everything)\b/i.test(text)) {
+    await run("clear_memory", {})
+    return
+  }
+  const tz = /timezone[^\n]{0,40}?(?:to|is|:)\s*([A-Za-z_]+\/[A-Za-z_]+)/i.exec(text)?.[1]
+  const depth = /\b(terse|detailed)\b/i.exec(text)?.[1]?.toLowerCase()
+  if (/\bremember|set\b/i.test(text) && (tz || depth)) {
+    if (tz) await run("write_memory", { key: "preferred_timezone", value: tz })
+    if (depth) await run("write_memory", { key: "preferred_depth", value: depth })
+  }
+  await run("read_memory", {})
+}
+
 export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEvent> {
   const { ctx, text, assistantMessageId, traceId } = args
   const provider = args.provider ?? getProvider()
@@ -223,95 +318,21 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
         }
         break
       }
-      case "demo": {
-        const timezone = "UTC"
-        await run("get_demo_slots", {
-          timezone,
-          from: new Date().toISOString().slice(0, 10),
-        })
-        // Only draft a booking proposal when the message already carries an
-        // explicit slot instant plus attendee identity — never invent a slot.
-        const email = EMAIL_RE.exec(text)?.[0]
-        const name = NAME_RE.exec(text)?.[1]?.trim()
-        const iso = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.exec(text)?.[0]
-        if (email && name && iso) {
-          await run("book_demo", {
-            slotStart: new Date(iso).toISOString(),
-            timezone,
-            name,
-            email,
-          }).catch(() => null)
-        }
+      case "demo":
+        await runDemoIntent(text, run)
         break
-      }
-      case "demo_status": {
-        // Own-booking read + outcome-unknown reconcile, then the provider
-        // explains the state. Never a second insert, never a duplicate.
-        const bookings = await readOwnBookings(ctx)
-        step.toolOutputs.push({
-          name: "manage_own_demo",
-          output: { bookings },
-        })
+      case "demo_status":
+        await runDemoStatusIntent(ctx, step)
         break
-      }
-      case "flow_resume": {
-        const active = ctx.conversationId
-          ? await withOwnerScope(
-              ctx.principal,
-              (tx) =>
-                tx.myraFlowSession.findFirst({
-                  where: { conversationId: ctx.conversationId!, status: "ACTIVE" },
-                  orderBy: { createdAt: "desc" },
-                }),
-              db
-            ).catch(() => null)
-          : null
-        if (active) {
-          // start_guided_flow resumes the session and re-validates workspace.
-          await run("start_guided_flow", { flowId: active.flowId })
-        } else {
-          await run("verify_resolution", {})
-        }
+      case "flow_resume":
+        await runFlowResumeIntent(ctx, db, run)
         break
-      }
-      case "support_case": {
-        const subject = text.split(/\n/)[0]!.slice(0, 120) || "Support request"
-        await run("propose_support_case", {
-          subject,
-          summary: text.slice(0, 4000),
-          includeDiagnostics: false,
-          includeTranscriptExcerpt: false,
-        }).catch((e) => {
-          if (
-            e &&
-            typeof e === "object" &&
-            "code" in e &&
-            (e as { code: string }).code === "VERIFICATION_REQUIRED"
-          ) {
-            step.toolOutputs.push({
-              name: "propose_support_case",
-              output: { verificationRequired: true },
-            })
-            return null
-          }
-          throw e
-        })
+      case "support_case":
+        await runSupportCaseIntent(text, step, run)
         break
-      }
-      case "memory": {
-        if (/\bforget (?:that|what|everything)\b/i.test(text)) {
-          await run("clear_memory", {})
-          break
-        }
-        const tz = /timezone[^\n]{0,40}?(?:to|is|:)\s*([A-Za-z_]+\/[A-Za-z_]+)/i.exec(text)?.[1]
-        const depth = /\b(terse|detailed)\b/i.exec(text)?.[1]?.toLowerCase()
-        if (/\bremember|set\b/i.test(text) && (tz || depth)) {
-          if (tz) await run("write_memory", { key: "preferred_timezone", value: tz })
-          if (depth) await run("write_memory", { key: "preferred_depth", value: depth })
-        }
-        await run("read_memory", {})
+      case "memory":
+        await runMemoryIntent(text, run)
         break
-      }
       case "help":
       case "evidence":
       default:

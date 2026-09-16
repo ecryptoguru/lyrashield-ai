@@ -269,6 +269,19 @@ export function isManageTokenActive(
   return booking.manageTokenRevokedAt === null && booking.manageTokenExpiresAt > now
 }
 
+async function cancelBookingAndRevokeManageToken(db: MyraDb, bookingId: string): Promise<void> {
+  const now = new Date()
+  await db.demoBooking.update({
+    where: { id: bookingId },
+    data: {
+      status: "CANCELED",
+      canceledAt: now,
+      manageTokenHash: null,
+      manageTokenRevokedAt: now,
+    },
+  })
+}
+
 export async function executeBookDemo(
   payload: Record<string, unknown>,
   ctx: OperationContext
@@ -375,15 +388,7 @@ export async function executeBookDemo(
     }
   } catch (e) {
     if (e instanceof CalendarConflictError) {
-      await db.demoBooking.update({
-        where: { id: bookingId },
-        data: {
-          status: "CANCELED",
-          canceledAt: new Date(),
-          manageTokenHash: null,
-          manageTokenRevokedAt: new Date(),
-        },
-      })
+      await cancelBookingAndRevokeManageToken(db, bookingId)
       throw new MyraServiceError("SLOT_UNAVAILABLE", MYRA_COPY.demoConflict)
     }
     // Timeout after provider submission: the event may exist. Mark the
@@ -652,15 +657,7 @@ export async function executeManageDemo(
     if (booking.providerEventId) {
       await adapter.cancelEvent(booking.providerEventId)
     }
-    await db.demoBooking.update({
-      where: { id: booking.id },
-      data: {
-        status: "CANCELED",
-        canceledAt: new Date(),
-        manageTokenHash: null,
-        manageTokenRevokedAt: new Date(),
-      },
-    })
+    await cancelBookingAndRevokeManageToken(db, booking.id)
     return { result: { bookingId: booking.id, status: "CANCELED" } }
   }
 
@@ -728,21 +725,14 @@ export async function executeManageDemo(
       },
     })
   } catch (e) {
-    await db.demoBooking.update({
-      where: { id: newBookingId },
-      data:
-        e instanceof CalendarConflictError
-          ? {
-              status: "CANCELED",
-              canceledAt: new Date(),
-              manageTokenHash: null,
-              manageTokenRevokedAt: new Date(),
-            }
-          : { status: "OUTCOME_UNKNOWN" },
-    })
     if (e instanceof CalendarConflictError) {
+      await cancelBookingAndRevokeManageToken(db, newBookingId)
       throw new MyraServiceError("SLOT_UNAVAILABLE", MYRA_COPY.demoConflict)
     }
+    await db.demoBooking.update({
+      where: { id: newBookingId },
+      data: { status: "OUTCOME_UNKNOWN" },
+    })
     throw new OutcomeUnknownError(MYRA_COPY.demoUnknown)
   }
 
@@ -753,15 +743,7 @@ export async function executeManageDemo(
     if (booking.providerEventId) {
       await adapter.cancelEvent(booking.providerEventId).catch(() => {})
     }
-    await db.demoBooking.update({
-      where: { id: booking.id },
-      data: {
-        status: "CANCELED",
-        canceledAt: new Date(),
-        manageTokenHash: null,
-        manageTokenRevokedAt: new Date(),
-      },
-    })
+    await cancelBookingAndRevokeManageToken(db, booking.id)
   } catch {
     /* best-effort release — the confirmed replacement stands */
   }
