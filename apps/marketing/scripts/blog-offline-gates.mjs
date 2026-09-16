@@ -67,6 +67,8 @@ export const DEAD_URLS = Object.freeze({
     "https://owasp.org/www-community/pages/vulnerabilities/race_conditions",
   "https://github.blog/open-source/closing-down-the-attack-surface-how-github-mitigates-secret-sprawl/":
     "https://github.blog/security/application-security/how-github-used-secret-scanning-to-reach-inbox-zero/",
+  "https://owasp.org/www-project-top-10-for-large-language-model-applications/2_0_vulns/LLM05_ImproperOutputHandling":
+    "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
 })
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
