@@ -494,34 +494,35 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 
 ## 12. Key files
 
-| File                                                    | Purpose                                                      |
-| ------------------------------------------------------- | ------------------------------------------------------------ |
-| `apps/web/src/proxy.ts`                                 | CSP, rate limit, trusted client IP                           |
-| `apps/web/src/lib/api-client.ts`                        | Typed client requests                                        |
-| `apps/web/src/lib/api-response.ts`                      | Typed server responses                                       |
-| `apps/web/src/app/api/scans/route.ts`                   | Scan admission and creation                                  |
-| `apps/web/src/app/billing/webhook/route.ts`             | Polar/Razorpay idempotent webhook boundary                   |
-| `apps/web/src/lib/licenses/license-service.ts`          | Production signing boundary                                  |
-| `apps/worker/src/jobs/run-scan.job.ts`                  | End-to-end scan orchestration                                |
-| `apps/worker/src/engine/runner.ts`                      | Bounded/cancellable engine subprocess                        |
-| `apps/worker/src/engine/command-builder.ts`             | Engine arguments and budget policy                           |
-| `apps/worker/src/engine/gpt56-pricing.ts`               | Versioned GPT-5.6 rate card                                  |
-| `apps/worker/src/engine/scanner-orchestrator.ts`        | Deterministic and engine result merge                        |
-| `apps/worker/src/engine/result-integrity.ts`            | Manifest/candidate/receipt boundary                          |
-| `apps/worker/src/operations/verify-launch-assurance.ts` | Host-side dry-run-first launch-assurance orchestrator        |
-| `ops/monitoring/provision-alerts.sh`                    | Actionable Azure alert provisioning with readback            |
-| `ops/worker/run-worker.sh`                              | Worker VM launcher with provenance derivation                |
-| `packages/integrations/src/queue.ts`                    | Shared queue authority                                       |
-| `packages/db/prisma/schema.prisma`                      | Executable data model                                        |
-| `packages/db/src/scoping.ts`                            | AsyncLocalStorage and scope policy                           |
-| `packages/db/src/rls.ts`                                | Transaction-local RLS context                                |
-| `packages/db/src/scan-transitions.ts`                   | Lifecycle guards                                             |
-| `packages/db/src/score-service.ts`                      | Score persistence/public payload boundary                    |
-| `packages/security/src/safe-fetch.ts`                   | Redirect-safe pinned fetch                                   |
-| `packages/mcp/src/prompt-injection-guard.ts`            | Model-input guard                                            |
-| `ops/worker/*`                                          | Worker VM services, secrets, egress, promotion, verification |
-| `.github/workflows/ci.yml`                              | Main release gate                                            |
-| `.github/workflows/deploy-azure.yml`                    | Migration-first Azure deployment                             |
+| File                                                    | Purpose                                                                             |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `apps/web/src/proxy.ts`                                 | CSP, rate limit, trusted client IP                                                  |
+| `apps/web/src/lib/api-client.ts`                        | Typed client requests                                                               |
+| `apps/web/src/lib/api-response.ts`                      | Typed server responses                                                              |
+| `apps/web/src/app/api/scans/route.ts`                   | Scan admission and creation                                                         |
+| `apps/web/src/app/billing/webhook/route.ts`             | Polar/Razorpay idempotent webhook boundary                                          |
+| `apps/web/src/lib/licenses/license-service.ts`          | Production signing boundary                                                         |
+| `apps/worker/src/jobs/run-scan.job.ts`                  | Scan orchestration entry; delegates to `run-scan/` phases                           |
+| `apps/worker/src/jobs/run-scan/`                        | Scan lifecycle phases (authority, preparation, execution, settlement, finalization) |
+| `apps/worker/src/engine/runner.ts`                      | Bounded/cancellable engine subprocess                                               |
+| `apps/worker/src/engine/command-builder.ts`             | Engine arguments and budget policy                                                  |
+| `apps/worker/src/engine/gpt56-pricing.ts`               | Versioned GPT-5.6 rate card                                                         |
+| `apps/worker/src/engine/scanner-orchestrator.ts`        | Deterministic and engine result merge                                               |
+| `apps/worker/src/engine/result-integrity.ts`            | Manifest/candidate/receipt boundary                                                 |
+| `apps/worker/src/operations/verify-launch-assurance.ts` | Host-side dry-run-first launch-assurance orchestrator                               |
+| `ops/monitoring/provision-alerts.sh`                    | Actionable Azure alert provisioning with readback                                   |
+| `ops/worker/run-worker.sh`                              | Worker VM launcher with provenance derivation                                       |
+| `packages/integrations/src/queue.ts`                    | Shared queue authority                                                              |
+| `packages/db/prisma/schema.prisma`                      | Executable data model                                                               |
+| `packages/db/src/scoping.ts`                            | AsyncLocalStorage and scope policy                                                  |
+| `packages/db/src/rls.ts`                                | Transaction-local RLS context                                                       |
+| `packages/db/src/scan-transitions.ts`                   | Lifecycle guards                                                                    |
+| `packages/db/src/score-service.ts`                      | Score persistence/public payload boundary                                           |
+| `packages/security/src/safe-fetch.ts`                   | Redirect-safe pinned fetch                                                          |
+| `packages/mcp/src/prompt-injection-guard.ts`            | Model-input guard                                                                   |
+| `ops/worker/*`                                          | Worker VM services, secrets, egress, promotion, verification                        |
+| `.github/workflows/ci.yml`                              | Main release gate                                                                   |
+| `.github/workflows/deploy-azure.yml`                    | Migration-first Azure deployment                                                    |
 
 ## 13. Landmines
 
