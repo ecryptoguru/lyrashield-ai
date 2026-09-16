@@ -9,7 +9,20 @@ import { validateImageLibrary } from "./blog-validation-lib.mjs"
 const marketingRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const repositoryRoot = resolve(marketingRoot, "../..")
 const manifestRoot = join(repositoryRoot, "docs/editorial/blog-image-manifests")
-const releases = ["authority", "batch-1", "batch-2", "batch-3", "batch-4", "batch-5", "batch-6", "batch-7", "batch-8", "batch-9", "batch-10"]
+const releases = [
+  "authority",
+  "batch-1",
+  "batch-2",
+  "batch-3",
+  "batch-4",
+  "batch-5",
+  "batch-6",
+  "batch-7",
+  "batch-8",
+  "batch-9",
+  "batch-10",
+  "batch-11",
+]
 
 function releaseOption(arguments_) {
   const index = arguments_.indexOf("--release")

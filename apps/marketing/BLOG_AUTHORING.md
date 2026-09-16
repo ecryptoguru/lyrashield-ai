@@ -20,7 +20,7 @@ The editorial policy is a permanent public resource, not one of the mapped artic
 - `src/content/blog/*.mdx` owns the article body and validated frontmatter.
 - `src/pages/editorial-policy.astro` owns the public correction, sourcing, and authorship policy.
 
-Do not publish an ad hoc article outside the manifest. The eleven defined releases are `authority` followed by `batch-1` through `batch-10`; use the `--release` selector on `blog:validate` and `blog:validate:images` when validating one (`blog:validate:mdx`, `blog:validate:offline`, and `compare:validate` always run against the whole repository — they take no `--release` flag).
+Do not publish an ad hoc article outside the manifest. The twelve defined releases are `authority` followed by `batch-1` through `batch-11`; use the `--release` selector on `blog:validate` and `blog:validate:images` when validating one (`blog:validate:mdx`, `blog:validate:offline`, and `compare:validate` always run against the whole repository — they take no `--release` flag).
 
 ## Non-negotiable claim rules
 
@@ -181,3 +181,4 @@ Publication requires explicit founder approval for each article or clearly named
 - [ ] FAQ content is visible, non-duplicative, and consistent with JSON-LD.
 - [ ] Draft remains true unless explicit approval is recorded.
 - [ ] Selected release checks, build, Worker crawler, browser QA, and release gates pass.
+      s.

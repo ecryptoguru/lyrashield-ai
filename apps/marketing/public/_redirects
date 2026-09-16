@@ -55,6 +55,7 @@
 /blog/base44-app-security-checklist/ /blog/base44-app-security-checklist 301
 /blog/bolt-app-security-checklist/ /blog/bolt-app-security-checklist 301
 /blog/brute-force-account-enumeration/ /blog/brute-force-account-enumeration 301
+/blog/building-release-assurance-lessons-open-beta/ /blog/building-release-assurance-lessons-open-beta 301
 /blog/cicd-agent-confused-deputy/ /blog/cicd-agent-confused-deputy 301
 /blog/claude-code-mcp-agent-rules-security/ /blog/claude-code-mcp-agent-rules-security 301
 /blog/claude-code-security-workflow/ /blog/claude-code-security-workflow 301
@@ -101,6 +102,7 @@
 /blog/idor-ai-built-apps/ /blog/idor-ai-built-apps 301
 /blog/indirect-prompt-injection-coding-agents/ /blog/indirect-prompt-injection-coding-agents 301
 /blog/input-validation-ai-generated-api/ /blog/input-validation-ai-generated-api 301
+/blog/insecure-file-upload-ai-built-apps/ /blog/insecure-file-upload-ai-built-apps 301
 /blog/install-script-supply-chain-security/ /blog/install-script-supply-chain-security 301
 /blog/jetbrains-ai-app-security-checklist/ /blog/jetbrains-ai-app-security-checklist 301
 /blog/jetbrains-mcp-security-workflow/ /blog/jetbrains-mcp-security-workflow 301
@@ -139,6 +141,7 @@
 /blog/prioritize-security-findings/ /blog/prioritize-security-findings 301
 /blog/prototype-to-production-security/ /blog/prototype-to-production-security 301
 /blog/public-by-default-ai-apps/ /blog/public-by-default-ai-apps 301
+/blog/race-conditions-ai-built-apps/ /blog/race-conditions-ai-built-apps 301
 /blog/rate-limiting-ai-apps/ /blog/rate-limiting-ai-apps 301
 /blog/react-frontend-security-ai-code/ /blog/react-frontend-security-ai-code 301
 /blog/replit-app-security-checklist/ /blog/replit-app-security-checklist 301
@@ -148,6 +151,7 @@
 /blog/runsybil-vs-lyrashield/ /blog/runsybil-vs-lyrashield 301
 /blog/sarif-ai-coding-workflow/ /blog/sarif-ai-coding-workflow 301
 /blog/sast-dast-sca-ai-apps/ /blog/sast-dast-sca-ai-apps 301
+/blog/scanner-findings-vs-verified-findings/ /blog/scanner-findings-vs-verified-findings 301
 /blog/secret-scanning-before-commit/ /blog/secret-scanning-before-commit 301
 /blog/secrets-ai-coding-prompts/ /blog/secrets-ai-coding-prompts 301
 /blog/secure-admin-routes/ /blog/secure-admin-routes 301
@@ -192,6 +196,7 @@
 /blog/vscode-ai-app-security-checklist/ /blog/vscode-ai-app-security-checklist 301
 /blog/vscode-mcp-security-copilot/ /blog/vscode-mcp-security-copilot 301
 /blog/weekly-security-scan-workflow/ /blog/weekly-security-scan-workflow 301
+/blog/what-data-shows-ai-generated-code-security-2026/ /blog/what-data-shows-ai-generated-code-security-2026 301
 /blog/windsurf-mcp-security-workflow/ /blog/windsurf-mcp-security-workflow 301
 /blog/windsurf-security-workflow/ /blog/windsurf-security-workflow 301
 /blog/xbow-vs-lyrashield/ /blog/xbow-vs-lyrashield 301
