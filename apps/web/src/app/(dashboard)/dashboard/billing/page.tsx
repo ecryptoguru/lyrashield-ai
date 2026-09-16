@@ -23,6 +23,7 @@ import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
 import { headers, cookies } from "next/headers"
 import { parsePlanIntent, PLAN_INTENT_COOKIE } from "@/lib/plan-intent"
+import { getWorkspacePlanLabel } from "@/lib/enum-labels"
 import { getRequestBillingAdmission, resolveRequestBillingProvider } from "@/lib/billing-admission"
 import { BillingReturnNotice } from "./billing-return-notice"
 
@@ -141,7 +142,9 @@ export default async function BillingPage({
           <CardContent className="space-y-4">
             <div className="space-y-4">
               <div>
-                <p className="text-2xl font-bold">{cloudPlan?.name ?? plan}</p>
+                <p className="text-2xl font-bold">
+                  {cloudPlan?.name ?? getWorkspacePlanLabel(plan)}
+                </p>
                 {billingAccount?.interval && (
                   <p className="text-sm text-muted-foreground">
                     {billingAccount.interval === "annual" ? "Annual billing" : "Monthly billing"}
