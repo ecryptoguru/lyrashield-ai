@@ -2,16 +2,16 @@
 import { clearAccountMemory, resolveMyraRequest } from "@lyrashield/myra/server"
 import { logger } from "@lyrashield/logger"
 import { withCookieMutation } from "@/lib/api-auth"
-import { myraDashboardEnabled, myraFail, myraNotFound, myraOk, myraServiceFailure } from "../_lib"
+import { myraFail, myraNotFound, myraOk, myraPrincipalEnabled, myraServiceFailure } from "../_lib"
 
 export const dynamic = "force-dynamic"
 
 async function remove(request: Request): Promise<Response> {
-  if (!myraDashboardEnabled()) return myraNotFound(request)
   const resolved = await resolveMyraRequest(request)
   if (!resolved || resolved.principal.kind !== "user") {
     return myraFail(request, "UNAUTHORIZED", "Authentication required", 401)
   }
+  if (!myraPrincipalEnabled(resolved.principal)) return myraNotFound(request)
   try {
     return myraOk(request, await clearAccountMemory(resolved))
   } catch (error) {

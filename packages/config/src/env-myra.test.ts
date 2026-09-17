@@ -27,6 +27,7 @@ const requiredProductionEnv = {
 const myraBaseEnv = {
   MYRA_PUBLIC_ENABLED: "0",
   MYRA_DASHBOARD_ENABLED: "0",
+  MYRA_ALLOWED_EMAILS: "",
   MYRA_GENERATION_ENABLED: "0",
   MYRA_WRITES_ENABLED: "0",
   MYRA_OPERATOR_ENABLED: "0",
@@ -56,6 +57,7 @@ const myraBaseEnv = {
 
 const googleWriteEnv = {
   MYRA_WRITES_ENABLED: "1",
+  MYRA_ALLOWED_EMAILS: "ankit@lyrashieldai.com",
   MYRA_CALENDAR_PROVIDER: "google",
   MYRA_GOOGLE_CLIENT_ID: "client-id.apps.googleusercontent.com",
   MYRA_GOOGLE_CLIENT_SECRET: "secret",

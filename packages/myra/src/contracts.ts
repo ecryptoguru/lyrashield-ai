@@ -136,6 +136,8 @@ export interface MyraPrincipalUser {
   kind: "user"
   accountId: string
   sessionId: string
+  email: string
+  emailVerified: boolean
   workspaceId: string | null
   role: string | null
 }

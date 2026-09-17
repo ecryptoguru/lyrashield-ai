@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { APPROVED_PLATFORM_ADMIN_EMAILS, normalizePlatformAdminEmails } from "./platform-admin"
+import { normalizeMyraAllowedEmails } from "./myra-access"
 
 /**
  * Literal-loopback http check for bearer-grant URLs: the host must be exactly
@@ -389,6 +390,23 @@ const envSchema = z
     MYRA_PUBLIC_ENABLED: z.enum(["0", "1"]).optional().default("0"),
     // Dashboard surface + authenticated-user principals.
     MYRA_DASHBOARD_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Exact signed-in accounts admitted while the dashboard surface is in a
+    // controlled rollout. Empty denies all dashboard users.
+    MYRA_ALLOWED_EMAILS: z
+      .string()
+      .optional()
+      .default("")
+      .transform((value, context) => {
+        try {
+          return normalizeMyraAllowedEmails(value)
+        } catch (error) {
+          context.addIssue({
+            code: "custom",
+            message: error instanceof Error ? error.message : "Invalid Myra allowlist",
+          })
+          return z.NEVER
+        }
+      }),
     // Model generation inside the support workflow. Retrieval, suggestions and
     // human handoff stay available while this is off.
     MYRA_GENERATION_ENABLED: z.enum(["0", "1"]).optional().default("0"),
@@ -671,6 +689,13 @@ const envSchema = z
   // build that carries these values is a genuine misconfiguration.
   .superRefine((val, ctx) => {
     if (val.NODE_ENV !== "production") return
+    if (val.MYRA_DASHBOARD_ENABLED === "1" && !val.MYRA_ALLOWED_EMAILS) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["MYRA_ALLOWED_EMAILS"],
+        message: "MYRA_ALLOWED_EMAILS is required when the production dashboard is enabled",
+      })
+    }
     const mockFaultSwitches = [
       ["MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT", val.MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT],
       ["MYRA_MOCK_CALENDAR_PENDING_CONFERENCE", val.MYRA_MOCK_CALENDAR_PENDING_CONFERENCE],
@@ -686,6 +711,13 @@ const envSchema = z
       }
     }
     if (val.MYRA_WRITES_ENABLED !== "1") return
+    if (!val.MYRA_ALLOWED_EMAILS) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["MYRA_ALLOWED_EMAILS"],
+        message: "MYRA_ALLOWED_EMAILS is required when production writes are enabled",
+      })
+    }
     if (val.MYRA_CALENDAR_PROVIDER !== "google") {
       ctx.addIssue({
         code: "custom",

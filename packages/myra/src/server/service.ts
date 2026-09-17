@@ -5,7 +5,7 @@
  * (route handlers) apply requirePlatformAdmin first.
  */
 import { randomUUID } from "node:crypto"
-import { env } from "@lyrashield/config"
+import { env, isMyraAllowedEmail } from "@lyrashield/config"
 import { prisma } from "@lyrashield/db"
 import { sendNotification } from "@lyrashield/integrations"
 import { MYRA_LIMITS } from "../contracts"
@@ -57,6 +57,19 @@ const EXECUTORS: Record<string, OperationExecutor> = {
   submit_support_case: executeSubmitSupportCase,
   book_demo: executeBookDemo,
   manage_own_demo: executeManageDemo,
+}
+
+function assertWritesAllowed(ctx: ResolvedMyraRequest): void {
+  const principal = ctx.principal
+  if (
+    env.MYRA_WRITES_ENABLED !== "1" ||
+    (env.MYRA_ALLOWED_EMAILS &&
+      (principal.kind !== "user" ||
+        !principal.emailVerified ||
+        !isMyraAllowedEmail(principal.email, env.MYRA_ALLOWED_EMAILS)))
+  ) {
+    throw err("WRITES_DISABLED", "Actions are temporarily disabled.")
+  }
 }
 
 function toolContext(
@@ -248,9 +261,7 @@ export async function confirmProposal(
 }> {
   // Fail closed on the validated write gate — the unvalidated
   // MYRA_WRITES_DISABLED process.env switch was removed (Deep Review v18).
-  if (env.MYRA_WRITES_ENABLED !== "1") {
-    throw err("WRITES_DISABLED", "Actions are temporarily disabled.")
-  }
+  assertWritesAllowed(ctx)
   const proposal = await withOwnerScope(ctx.principal, (tx) =>
     tx.myraOperation.findUnique({ where: { id: proposalId } })
   )
@@ -498,6 +509,7 @@ export async function getOwnCase(ctx: ResolvedMyraRequest, idOrRef: string) {
 }
 
 export async function replyToOwnCase(ctx: ResolvedMyraRequest, caseId: string, body: string) {
+  assertWritesAllowed(ctx)
   const screened = screenSecrets(body)
   const toolCtx = toolContext(ctx, null)
   const result = await runSendCaseReply(toolCtx, { caseId, body: screened.text })

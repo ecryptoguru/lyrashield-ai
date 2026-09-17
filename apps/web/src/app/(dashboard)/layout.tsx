@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
-import { env } from "@lyrashield/config"
+import { env, isMyraAllowedEmail } from "@lyrashield/config"
 import { MyraPanel } from "@/components/myra/myra-panel"
 import { V2Sidebar } from "@/components/v2-sidebar"
 import { BottomNav } from "@/components/bottom-nav"
@@ -85,7 +85,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Myra is default-off. API-key/OAuth-delegated sessions never mount it —
   // the chat surface is for the interactive browser session only.
   const myraDashboardEnabled =
-    env.MYRA_DASHBOARD_ENABLED === "1" && !session.apiKey && !session.oauth
+    env.MYRA_DASHBOARD_ENABLED === "1" &&
+    isMyraAllowedEmail(session.userEmail, env.MYRA_ALLOWED_EMAILS) &&
+    !session.apiKey &&
+    !session.oauth
 
   return (
     <div className="bg-background flex min-h-screen flex-col md:flex-row">
