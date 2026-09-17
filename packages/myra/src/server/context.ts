@@ -6,7 +6,6 @@
  * public token → null. API keys and OAuth bearers are deliberately not
  * accepted: they are narrower delegated credentials, not chat identities.
  */
-import { auth, getWorkspaceMembership } from "@lyrashield/auth/server"
 import type { MyraPrincipal } from "../contracts"
 import { readPublicToken, verifyPublicToken } from "./session"
 import type { MyraDb } from "./db"
@@ -22,6 +21,9 @@ export async function resolveMyraRequest(
   request: Request,
   db?: MyraDb
 ): Promise<ResolvedMyraRequest | null> {
+  // The worker imports the Myra server barrel for maintenance. Keep the
+  // Next-only auth session module behind this request-only boundary.
+  const { auth } = await import("@lyrashield/auth/server")
   const session = await auth.api.getSession({ headers: request.headers }).catch(() => null)
   if (session?.user?.id && session.session?.id) {
     const workspace = await resolveActiveWorkspace(request, session.user.id)
@@ -61,6 +63,7 @@ async function resolveActiveWorkspace(
   request: Request,
   userId: string
 ): Promise<{ workspaceId: string; role: string } | null> {
+  const { getWorkspaceMembership } = await import("@lyrashield/auth/server")
   const cookieHeader = request.headers.get("cookie") ?? ""
   const requested = /(?:^|;\s*)activeWorkspaceId=([^;]+)/.exec(cookieHeader)?.[1]
   if (!requested) return null
