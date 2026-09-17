@@ -128,6 +128,7 @@ export {
   withAccountRLS,
   withMyraPublicRLS,
   withMyraOperatorRLS,
+  bindMyraOperatorRLSContext,
   withoutWorkspaceRLS,
   bindAccountRLSContext,
   bindMyraPublicRLSContext,

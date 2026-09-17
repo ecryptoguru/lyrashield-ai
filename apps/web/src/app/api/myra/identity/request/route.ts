@@ -57,9 +57,16 @@ async function post(request: Request): Promise<Response> {
 
   try {
     const resolved = await resolveMyraRequest(request)
-    const publicSessionId =
-      resolved?.principal.kind === "anonymous" ? resolved.principal.publicSessionId : undefined
-    await requestIdentityCode(parsed.data.email, parsed.data.purpose, publicSessionId)
+    const principal = resolved?.principal
+    if (!principal || principal.kind === "operator")
+      throw new Error("MYRA_IDENTITY_CONTEXT_REQUIRED")
+    await requestIdentityCode(
+      parsed.data.email,
+      parsed.data.purpose,
+      principal.kind === "user"
+        ? { accountId: principal.accountId }
+        : { publicSessionId: principal.publicSessionId }
+    )
   } catch (error) {
     // Never reveal existence or send failures through this surface — the
     // caller-visible contract is identical either way.

@@ -57,16 +57,20 @@ describe("POST /api/myra/identity/request", () => {
     )
 
     expect(response.status).toBe(200)
-    expect(requestIdentityCode).toHaveBeenCalledWith("a@b.com", "support_case", "ps_resolved")
-    expect(requestIdentityCode).not.toHaveBeenCalledWith("a@b.com", "support_case", "ps_forged")
+    expect(requestIdentityCode).toHaveBeenCalledWith("a@b.com", "support_case", {
+      publicSessionId: "ps_resolved",
+    })
+    expect(requestIdentityCode).not.toHaveBeenCalledWith("a@b.com", "support_case", {
+      publicSessionId: "ps_forged",
+    })
   })
 
-  it("leaves the code unbound when no principal resolves", async () => {
+  it("does not issue a reusable code when no principal resolves", async () => {
     resolveMyraRequest.mockResolvedValue(null)
     const response = await POST(request({ email: "a@b.com", purpose: "demo_booking" }) as never)
 
     expect(response.status).toBe(200)
-    expect(requestIdentityCode).toHaveBeenCalledWith("a@b.com", "demo_booking", undefined)
+    expect(requestIdentityCode).not.toHaveBeenCalled()
   })
 
   it("does not bind a session for a signed-in user principal", async () => {
@@ -84,6 +88,8 @@ describe("POST /api/myra/identity/request", () => {
     const response = await POST(request({ email: "a@b.com", purpose: "support_case" }) as never)
 
     expect(response.status).toBe(200)
-    expect(requestIdentityCode).toHaveBeenCalledWith("a@b.com", "support_case", undefined)
+    expect(requestIdentityCode).toHaveBeenCalledWith("a@b.com", "support_case", {
+      accountId: "acct-1",
+    })
   })
 })

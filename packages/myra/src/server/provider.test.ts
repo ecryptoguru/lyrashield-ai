@@ -92,7 +92,9 @@ describe("AzureProvider", () => {
   })
 
   it("throws ProviderDefiniteFailure on a non-2xx response so the hold releases", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("upstream", { status: 500 }))
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("upstream", { status: 500 }))
+      .mockResolvedValueOnce(new Response("upstream", { status: 500 }))
 
     await expect(
       new AzureProvider().generate({
@@ -113,5 +115,19 @@ describe("AzureProvider", () => {
         messages: [{ role: "user", content: "hello" }],
       })
     ).rejects.toBeInstanceOf(ProviderTimeout)
+  })
+
+  it("keeps the hold reserved when transport fails after a request may have been sent", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("socket reset"))
+
+    await expect(
+      new AzureProvider().generate({
+        system: "system",
+        messages: [{ role: "user", content: "hello" }],
+      })
+    ).rejects.toBeInstanceOf(ProviderTimeout)
+
+    // Retrying an ambiguous request could bill two generations.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

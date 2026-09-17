@@ -28,6 +28,7 @@ const zeroCounts = {
   operations: 0,
   generationReservations: 0,
   rescheduledOriginals: 0,
+  pendingProviderCancellations: 0,
 }
 
 describe("Myra maintenance runners", () => {
@@ -93,6 +94,7 @@ describe("Myra maintenance runners", () => {
       operations: 1,
       generationReservations: 1,
       rescheduledOriginals: 2,
+      pendingProviderCancellations: 1,
     })
     await runMyraMaintenance()
     expect(logger.info).toHaveBeenCalledWith("Myra maintenance sweep completed", {
@@ -104,6 +106,7 @@ describe("Myra maintenance runners", () => {
       operations: 1,
       generationReservations: 1,
       rescheduledOriginals: 2,
+      pendingProviderCancellations: 1,
     })
   })
 

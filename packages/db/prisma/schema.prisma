@@ -2729,6 +2729,7 @@ model MyraIdentityVerification {
   email           String
   purpose         String // support_case | demo_booking
   codeHash        String
+  accountId       String?
   publicSessionId String?
   attempts        Int       @default(0)
   expiresAt       DateTime
@@ -2736,6 +2737,7 @@ model MyraIdentityVerification {
   createdAt       DateTime  @default(now())
 
   @@index([email, purpose, expiresAt])
+  @@index([accountId, email, purpose, expiresAt])
   @@index([expiresAt])
   @@map("myra_identity_verifications")
 }

@@ -65,6 +65,7 @@ admission_stop_value=
 config_changed=0
 host_assets_changed=0
 promotion_complete=0
+promotion_step=initializing
 asset_container=
 asset_stage=
 host_backup=
@@ -147,7 +148,7 @@ rollback() {
       resume_admission || true
     fi
     restore_timer || true
-    echo "Worker promotion failed; prior digest restored" >&2
+    echo "Worker promotion failed during: ${promotion_step} (exit ${status}); prior digest restored" >&2
   fi
   cleanup_host_assets
   exit "$status"
@@ -156,6 +157,7 @@ trap rollback EXIT HUP INT TERM
 
 # Keep DNS refresh from racing the bounded replacement window. The timer is
 # restored after success or rollback.
+promotion_step=quiescing-egress-refresh
 systemctl stop "$timer"
 for _ in $(seq 1 60); do
   systemctl is-active --quiet lyrashield-worker-egress-refresh.service || break
@@ -165,10 +167,12 @@ systemctl is-active --quiet lyrashield-worker-egress-refresh.service && {
   echo "Egress refresh did not quiesce" >&2
   exit 1
 }
+promotion_step=checking-current-worker
 wait_healthy
 
 # JavaScript template literal is passed verbatim to the container.
 # shellcheck disable=SC2016
+promotion_step=claiming-admission-stop
 admission_stop_claim=$(redis_eval 'const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:null}); const key="lyrashield:scan-admission:stopped"; const value=JSON.stringify({operator:"github-actions",reason:"worker-promotion",at:new Date().toISOString()}); const claimed=await redis.eval(`if redis.call("EXISTS", KEYS[1]) == 1 then return 0 end redis.call("SET", KEYS[1], ARGV[1]) return 1`,1,key,value); console.log(claimed); if (claimed === 1) console.log(value); await redis.quit();')
 admission_stop_owned=$(printf '%s\n' "$admission_stop_claim" | sed -n '1p')
 admission_stop_value=$(printf '%s\n' "$admission_stop_claim" | sed -n '2p')
@@ -178,10 +182,12 @@ case "$admission_stop_owned" in
   *) echo "Worker promotion could not establish scan admission ownership" >&2; exit 1 ;;
 esac
 
+promotion_step=checking-queues
 assert_empty_queues
 
 # Keep the running worker image for rollback while reclaiming superseded release
 # images before Docker needs space for both compressed and extracted target layers.
+promotion_step=cleaning-images
 docker_root=$(docker info --format '{{.DockerRootDir}}')
 current_image_id=$(docker inspect "$container" --format '{{.Image}}')
 current_image_size=$(docker image inspect "$current_image_id" --format '{{.Size}}')
@@ -196,12 +202,14 @@ echo "Worker image cleanup reclaimed ${reclaimed} bytes; ${free_after} bytes ava
   exit 1
 }
 
+promotion_step=pulling-worker-image
 ghcr_username=$(sed -n 's/^GHCR_USERNAME=//p' "$config" | head -n 1)
 ghcr_token=$(sed -n 's/^GHCR_TOKEN=//p' "$environment_file" | head -n 1)
 [ -n "$ghcr_username" ]
 [ -n "$ghcr_token" ]
 printf '%s\n' "$ghcr_token" | docker login ghcr.io -u "$ghcr_username" --password-stdin >/dev/null 2>&1
 docker pull "$target" >/dev/null
+promotion_step=checking-image-provenance
 app_label=$(docker image inspect "$target" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
 engine_label=$(docker image inspect "$target" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')
 [ "$app_label" = "$expected_app" ]
@@ -210,6 +218,7 @@ engine_label=$(docker image inspect "$target" --format '{{index .Config.Labels "
 # Host scripts and units are release assets bound to the same reviewed image
 # digest as the worker. Installing them here prevents VM bootstrap drift from
 # silently omitting new fail-closed configuration before the service restart.
+promotion_step=installing-host-assets
 asset_stage=$(mktemp -d "$promotion_state_dir/worker-host-assets.XXXXXX")
 asset_container=$(docker create "$target")
 docker cp "$asset_container:/opt/lyrashield-worker-host/." "$asset_stage"
@@ -262,15 +271,19 @@ chown root:root "$temporary"
 mv "$temporary" "$config"
 config_changed=1
 
+promotion_step=restarting-worker
 systemctl reset-failed "$service" || true
 systemctl restart "$service"
+promotion_step=checking-restarted-worker
 wait_healthy
 [ "$(docker inspect "$container" --format '{{.Config.Image}}')" = "$target" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$expected_app" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$expected_engine" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
+promotion_step=checking-scan-readiness
 curl --fail --silent --show-error --max-time 10 https://app.lyrashieldai.com/api/ready/scans >/dev/null
 
+promotion_step=restoring-worker-units
 restore_timer
 # Promotion owns these systemd units. Repair disabled or previously inactive
 # units before reopening scan admission so the next rollout needs no VM step.
@@ -282,6 +295,7 @@ systemctl is-active --quiet "$timer"
 systemctl is-enabled --quiet "$timer"
 echo "Worker service state: active enabled"
 echo "Worker egress refresh timer state: active enabled"
+promotion_step=resuming-admission
 if [ "$admission_stop_owned" -eq 1 ]; then
   resume_admission
 fi

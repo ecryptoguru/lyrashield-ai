@@ -10,7 +10,7 @@ import { requirePlatformAdmin } from "@lyrashield/auth/server"
 
 import { operatorReply } from "@lyrashield/myra/server"
 import { caseReplyRequestSchema } from "@lyrashield/myra"
-import { executePlatformAdminMutation, withMyraOperatorRLS } from "@lyrashield/db"
+import { bindMyraOperatorRLSContext, executePlatformAdminMutation } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse, withCookieMutation } from "@/lib/api-auth"
 import { apiError, apiSuccess } from "@/lib/api-response"
@@ -78,13 +78,10 @@ async function post(
         ipAddress: ipAddress === "unknown" ? undefined : ipAddress,
         userAgent: request.headers.get("user-agent")?.slice(0, 512),
       },
-      () =>
-        // The service runs on its own operator-bound transaction — the
-        // dual-owner RESTRICTIVE boundary only reads the tx-local settings
-        // this binding sets (v18 1.3).
-        withMyraOperatorRLS(operator.userId, (tx) =>
-          operatorReply(operator.userId, id, parsed.data.body, tx)
-        )
+      async (tx) => {
+        await bindMyraOperatorRLSContext(tx, operator.userId)
+        return operatorReply(operator.userId, id, parsed.data.body, tx)
+      }
     )
     return myraOperatorPrivate(apiSuccess(reply))
   } catch (error) {

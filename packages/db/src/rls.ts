@@ -116,10 +116,7 @@ export async function withMyraOperatorRLS<T>(
   fn: (tx: ScopedTransaction) => Promise<T>
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT set_config('app.current_workspace_id', '', true)`
-    await tx.$executeRaw`SELECT set_config('app.current_account_id', '', true)`
-    await tx.$executeRaw`SELECT set_config('app.myra_public_session_id', '', true)`
-    await tx.$executeRaw`SELECT set_config('app.myra_operator_id', ${operatorId}, true)`
+    await bindMyraOperatorRLSContext(tx, operatorId)
     return runWithDatabaseRLSContext(null, () => fn(tx), null)
   })
 }
@@ -155,6 +152,18 @@ export async function bindMyraPublicRLSContext(
   publicSessionId: string
 ): Promise<void> {
   await tx.$executeRaw`SELECT set_config('app.myra_public_session_id', ${publicSessionId}, true)`
+}
+
+/**
+ * Bind the Myra trusted/operator setting inside an already-open transaction.
+ * Critical platform-admin mutations use this with the transaction that also
+ * consumes their elevation nonce and appends the mandatory audit record.
+ */
+export async function bindMyraOperatorRLSContext(tx: BoundTx, operatorId: string): Promise<void> {
+  await tx.$executeRaw`SELECT set_config('app.current_workspace_id', '', true)`
+  await tx.$executeRaw`SELECT set_config('app.current_account_id', '', true)`
+  await tx.$executeRaw`SELECT set_config('app.myra_public_session_id', '', true)`
+  await tx.$executeRaw`SELECT set_config('app.myra_operator_id', ${operatorId}, true)`
 }
 
 /**

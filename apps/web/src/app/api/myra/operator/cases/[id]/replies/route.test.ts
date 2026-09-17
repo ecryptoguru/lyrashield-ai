@@ -7,8 +7,10 @@ const env = vi.hoisted(() => ({
 const requirePlatformAdmin = vi.fn()
 const operatorReply = vi.fn()
 const executePlatformAdminMutation = vi.fn()
+const bindMyraOperatorRLSContext = vi.fn()
 const platformAdminAuditCreate = vi.fn()
 const liveNonces = new Set<string>()
+const mutationTx = { transaction: "nonce-and-audit" }
 
 vi.mock("@lyrashield/config", () => ({ env }))
 vi.mock("@lyrashield/auth/server", () => ({
@@ -18,9 +20,7 @@ vi.mock("@lyrashield/auth/server", () => ({
 vi.mock("@lyrashield/myra/server", () => ({ operatorReply }))
 vi.mock("@lyrashield/db", () => ({
   executePlatformAdminMutation: (...args: unknown[]) => executePlatformAdminMutation(...args),
-  // The route composes the nonce primitive with the operator-bound RLS
-  // transaction — the service fns are mocked so a passthrough tx suffices.
-  withMyraOperatorRLS: (_operatorId: string, fn: (tx: unknown) => unknown) => fn({}),
+  bindMyraOperatorRLSContext: (...args: unknown[]) => bindMyraOperatorRLSContext(...args),
 }))
 vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
@@ -77,7 +77,7 @@ describe("POST /api/myra/operator/cases/[id]/replies elevation nonce", () => {
       ) => {
         if (!liveNonces.has(input.nonce)) throw new Error("ADMIN_ELEVATION_INVALID")
         liveNonces.delete(input.nonce)
-        const result = await mutate({})
+        const result = await mutate(mutationTx)
         platformAdminAuditCreate({
           actorUserId: input.userId,
           sessionId: input.sessionId,
@@ -134,6 +134,8 @@ describe("POST /api/myra/operator/cases/[id]/replies elevation nonce", () => {
       expect.any(Function)
     )
     expect(operatorReply).toHaveBeenCalledOnce()
+    expect(bindMyraOperatorRLSContext).toHaveBeenCalledWith(mutationTx, "operator-1")
+    expect(operatorReply).toHaveBeenCalledWith("operator-1", "case-1", "Hello", mutationTx)
     expect(platformAdminAuditCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         actorUserId: "operator-1",

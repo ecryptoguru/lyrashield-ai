@@ -5,7 +5,7 @@
  * code is wrong, or attempts ran out (no existence leak either way). Attempt
  * counting/expiry is enforced by the service.
  */
-import { confirmIdentityCode } from "@lyrashield/myra/server"
+import { confirmIdentityCode, resolveMyraRequest } from "@lyrashield/myra/server"
 import { identityConfirmSchema } from "@lyrashield/myra"
 import { logger } from "@lyrashield/logger"
 import { checkMyraRateLimit, clientIpFromRequest } from "@/lib/rate-limit"
@@ -45,10 +45,16 @@ async function post(request: Request): Promise<Response> {
   }
 
   try {
+    const resolved = await resolveMyraRequest(request)
+    const principal = resolved?.principal
+    if (!principal || principal.kind === "operator") return myraOk(request, { verified: false })
     const verified = await confirmIdentityCode(
       parsed.data.email,
       parsed.data.purpose,
-      parsed.data.code
+      parsed.data.code,
+      principal.kind === "user"
+        ? { accountId: principal.accountId }
+        : { publicSessionId: principal.publicSessionId }
     )
     return myraOk(request, { verified })
   } catch (error) {

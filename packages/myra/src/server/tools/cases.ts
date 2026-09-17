@@ -47,19 +47,20 @@ async function accountEmail(accountId: string, db: MyraDb): Promise<string | nul
  * is never trusted on its own.
  */
 async function resolveUserReplyEmail(
-  account: string | null,
+  accountId: string,
+  accountEmail: string | null,
   requestedRaw: string | undefined,
   db: MyraDb
 ): Promise<{ replyEmail: string; verifiedAt: Date | null }> {
   const requested = requestedRaw?.trim().toLowerCase()
-  if (requested && requested !== account?.trim().toLowerCase()) {
-    const verified = await findVerifiedEmail(requested, "support_case", null, db)
+  if (requested && requested !== accountEmail?.trim().toLowerCase()) {
+    const verified = await findVerifiedEmail(requested, "support_case", { accountId }, db)
     if (!verified) {
       throw err("VERIFICATION_REQUIRED", "Verify your reply email to send a case.")
     }
     return { replyEmail: requested, verifiedAt: verified.consumedAt }
   }
-  const replyEmail = requested ?? account
+  const replyEmail = requested ?? accountEmail
   if (!replyEmail) throw err("VERIFICATION_REQUIRED", "Your account has no reply email.")
   return { replyEmail, verifiedAt: null }
 }
@@ -71,6 +72,7 @@ async function resolveReplyDestination(
   if (ctx.principal.kind === "user") {
     const db = ctx.db ?? prisma
     return resolveUserReplyEmail(
+      ctx.principal.accountId,
       await accountEmail(ctx.principal.accountId, db),
       payload.replyEmail,
       db
@@ -86,7 +88,7 @@ async function resolveReplyDestination(
   const verified = await findVerifiedEmail(
     email,
     "support_case",
-    ctx.principal.publicSessionId,
+    { publicSessionId: ctx.principal.publicSessionId },
     ctx.db ?? prisma
   )
   if (!verified) {
@@ -183,6 +185,7 @@ export async function executeSubmitSupportCase(
   if (ctx.principal.kind === "user") {
     const db = ctx.db ?? prisma
     const resolved = await resolveUserReplyEmail(
+      ctx.principal.accountId,
       await accountEmail(ctx.principal.accountId, db),
       parsed.replyEmail,
       db
@@ -195,7 +198,7 @@ export async function executeSubmitSupportCase(
     const verified = await findVerifiedEmail(
       email,
       "support_case",
-      ctx.principal.publicSessionId,
+      { publicSessionId: ctx.principal.publicSessionId },
       ctx.db ?? prisma
     )
     if (!verified) throw err("VERIFICATION_REQUIRED", "Verify your reply email first.")

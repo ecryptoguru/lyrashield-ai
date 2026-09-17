@@ -887,6 +887,7 @@ describe("account deletion", () => {
         summary: "Please help me with setup",
         accountId: myraUserId,
         replyEmail: `${myraUserId}@example.com`,
+        handoffSummary: "Customer supplied private details",
       },
     })
     await withAccountRLS(myraUserId, (tx) =>
@@ -964,7 +965,9 @@ describe("account deletion", () => {
       replyEmail: null,
       subject: "Deleted account",
       summary: "",
+      handoffSummary: null,
     })
+    expect(await system.supportCaseReply.count({ where: { caseId: supportCase.id } })).toBe(0)
     const scrubbedBooking = await system.demoBooking.findUnique({ where: { id: booking.id } })
     expect(scrubbedBooking).toMatchObject({
       accountId: null,
@@ -975,6 +978,7 @@ describe("account deletion", () => {
     })
     expect(scrubbedBooking?.attendeeEmail).toBe(`deleted-user:${booking.id}`)
     expect(scrubbedBooking?.manageTokenRevokedAt).not.toBeNull()
+    expect(scrubbedBooking?.providerEventId).toBeNull()
     const scrubbedAudit = await system.myraAuditEvent.findUnique({ where: { id: audit.id } })
     expect(scrubbedAudit?.metadata).toEqual({ retained: "yes" })
     expect(cancelCalendarEvent).toHaveBeenCalledWith(`myra-demo-${suffix}`)

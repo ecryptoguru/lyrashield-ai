@@ -210,7 +210,9 @@ async function verifyAttendee(
   const verified = await findVerifiedEmail(
     normalized,
     "demo_booking",
-    ctx.principal.kind === "anonymous" ? ctx.principal.publicSessionId : null,
+    ctx.principal.kind === "anonymous"
+      ? { publicSessionId: ctx.principal.publicSessionId }
+      : { accountId: ctx.principal.accountId },
     ctx.db ?? prisma
   )
   if (!verified) {

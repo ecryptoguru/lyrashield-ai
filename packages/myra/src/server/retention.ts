@@ -20,6 +20,7 @@ export interface RetentionCounts {
   auditEvents: number
   generationReservations: number
   rescheduledOriginals: number
+  pendingProviderCancellations: number
 }
 
 export interface RecoveryCounts {
@@ -63,8 +64,8 @@ export async function recoverMyraState(db: MyraDb = prisma): Promise<RecoveryCou
  * reschedule executor releases the original best-effort; a crash between
  * confirming the replacement and that release leaves the original live —
  * this is the retry path its comment references. Provider failures stay
- * non-fatal: the row is still marked CANCELED so the slot unblocks and the
- * token dies.
+ * non-fatal: the row is marked CANCELED so the slot unblocks and the token
+ * dies, while providerEventId remains a durable cleanup obligation.
  */
 async function reconcileRescheduledOriginals(
   db: MyraDb,
@@ -88,20 +89,58 @@ async function reconcileRescheduledOriginals(
   })
   const now = new Date()
   for (const original of stale) {
-    if (original.providerEventId) {
-      await adapter.cancelEvent(original.providerEventId).catch(() => {})
+    try {
+      if (original.providerEventId) await adapter.cancelEvent(original.providerEventId)
+      await db.demoBooking.update({
+        where: { id: original.id },
+        data: {
+          status: "CANCELED",
+          canceledAt: now,
+          manageTokenHash: null,
+          manageTokenRevokedAt: now,
+          providerEventId: null,
+        },
+      })
+    } catch {
+      await db.demoBooking.update({
+        where: { id: original.id },
+        data: {
+          status: "CANCELED",
+          canceledAt: now,
+          manageTokenHash: null,
+          manageTokenRevokedAt: now,
+          providerEventId: original.providerEventId,
+        },
+      })
     }
-    await db.demoBooking.update({
-      where: { id: original.id },
-      data: {
-        status: "CANCELED",
-        canceledAt: now,
-        manageTokenHash: null,
-        manageTokenRevokedAt: now,
-      },
-    })
   }
   return stale.length
+}
+
+/** Retry calendar cleanup retained after cancellation or account erasure. */
+async function reconcilePendingProviderCancellations(
+  db: MyraDb,
+  adapter: CalendarAdapter,
+  now: Date
+): Promise<number> {
+  const pending = await db.demoBooking.findMany({
+    where: {
+      status: "CANCELED",
+      providerEventId: { not: null },
+      canceledAt: { lt: new Date(now.getTime() - 60_000) },
+    },
+    select: { id: true, providerEventId: true },
+    take: 100,
+  })
+  for (const booking of pending) {
+    try {
+      await adapter.cancelEvent(booking.providerEventId!)
+      await db.demoBooking.update({ where: { id: booking.id }, data: { providerEventId: null } })
+    } catch {
+      // Keep providerEventId so the next bounded pass retries it.
+    }
+  }
+  return pending.length
 }
 
 export async function pruneMyraRetention(
@@ -144,6 +183,7 @@ export async function pruneMyraRetention(
   )
 
   const rescheduledOriginals = await reconcileRescheduledOriginals(db, adapter)
+  const pendingProviderCancellations = await reconcilePendingProviderCancellations(db, adapter, now)
 
   const [
     conversations,
@@ -181,5 +221,6 @@ export async function pruneMyraRetention(
     auditEvents: auditEvents.count,
     generationReservations: generationReservationCount,
     rescheduledOriginals,
+    pendingProviderCancellations,
   }
 }

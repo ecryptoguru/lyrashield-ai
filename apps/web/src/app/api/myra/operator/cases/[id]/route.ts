@@ -18,7 +18,11 @@ import {
   operatorTakeover,
 } from "@lyrashield/myra/server"
 import { SUPPORT_CASE_STATUSES } from "@lyrashield/myra"
-import { executePlatformAdminMutation, withMyraOperatorRLS } from "@lyrashield/db"
+import {
+  bindMyraOperatorRLSContext,
+  executePlatformAdminMutation,
+  withMyraOperatorRLS,
+} from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
 import { authErrorResponse, withApiRequest, withCookieMutation } from "@/lib/api-auth"
@@ -134,26 +138,23 @@ async function patch(
         userAgent: request.headers.get("user-agent")?.slice(0, 512),
         metadata: status ? { status } : undefined,
       },
-      () =>
-        // Operator-bound trusted path: requirePlatformAdmin above is the
-        // authorization, the binding declares it to the dual-owner tables'
-        // RESTRICTIVE boundary (v18 1.3). The service runs on its own bound
-        // transaction because the boundary only reads the tx-local settings
-        // this binding sets.
-        withMyraOperatorRLS(operator.userId, async (tx) => {
-          switch (action) {
-            case "takeover":
-              // Takeover pauses Myra replies and invalidates unexecuted
-              // proposals for that conversation (service-side, spec §6).
-              return operatorTakeover(operator.userId, id, tx)
-            case "release":
-              return operatorRelease(operator.userId, id, handoffSummary!, tx)
-            case "resolve":
-              return operatorSetStatus(operator.userId, id, status ?? "RESOLVED", tx)
-            case "assign":
-              return operatorAssign(operator.userId, id, tx)
-          }
-        })
+      async (tx) => {
+        // Keep the Myra mutation on the nonce/audit transaction. The binding
+        // declares the trusted RLS path; requirePlatformAdmin is the gate.
+        await bindMyraOperatorRLSContext(tx, operator.userId)
+        switch (action) {
+          case "takeover":
+            // Takeover pauses Myra replies and invalidates unexecuted
+            // proposals for that conversation (service-side, spec §6).
+            return operatorTakeover(operator.userId, id, tx)
+          case "release":
+            return operatorRelease(operator.userId, id, handoffSummary!, tx)
+          case "resolve":
+            return operatorSetStatus(operator.userId, id, status ?? "RESOLVED", tx)
+          case "assign":
+            return operatorAssign(operator.userId, id, tx)
+        }
+      }
     )
     return myraOperatorPrivate(apiSuccess(result))
   } catch (error) {

@@ -172,6 +172,27 @@ describe("executeScanTarget relay lifecycle", () => {
     expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig)
   })
 
+  it("cleans a deterministic checkout when event persistence fails before handoff", async () => {
+    const cleanup = vi.fn().mockResolvedValue(undefined)
+    mocks.checkoutDeterministicRetest.mockResolvedValue({
+      checkoutPath: "/tmp/retest",
+      sourceRevision: "abc123",
+      cleanup,
+    })
+    mocks.addScanEvent.mockRejectedValue(new Error("event storage unavailable"))
+
+    await expect(
+      executeScanTarget(
+        params({
+          deterministicRetest: true,
+          target: { ...target, repoProvider: "github", repoFullName: "owner/repo" } as never,
+        })
+      )
+    ).rejects.toThrow("event storage unavailable")
+
+    expect(cleanup).toHaveBeenCalledOnce()
+  })
+
   it("denies the engine run without a verified domain and never mints a grant", async () => {
     mocks.prisma.targetDomainVerification.findFirst.mockResolvedValue(null)
 

@@ -16,6 +16,7 @@ function fakeAdapter(): CalendarAdapter & { cancelEvent: ReturnType<typeof vi.fn
 function fakeDb(opts: {
   replacements?: { rescheduledFromId: string | null }[]
   staleOriginals?: { id: string; providerEventId: string | null }[]
+  pendingCancellations?: { id: string; providerEventId: string }[]
 }) {
   return {
     myraOperation: {
@@ -26,10 +27,11 @@ function fakeDb(opts: {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       update: vi.fn().mockResolvedValue({}),
-      findMany: vi
-        .fn()
-        .mockResolvedValueOnce(opts.replacements ?? [])
-        .mockResolvedValue(opts.staleOriginals ?? []),
+      findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+        if ("rescheduledFromId" in where) return opts.replacements ?? []
+        if ("id" in where) return opts.staleOriginals ?? []
+        return opts.pendingCancellations ?? []
+      }),
     },
     myraConversation: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
     myraPublicSession: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
@@ -74,7 +76,7 @@ describe("pruneMyraRetention rescheduled-original reconcile", () => {
     expect(counts.rescheduledOriginals).toBe(0)
   })
 
-  it("still marks the original canceled when the provider cancel fails", async () => {
+  it("retains a failed provider cancellation for the next maintenance pass", async () => {
     const adapter = fakeAdapter()
     adapter.cancelEvent.mockRejectedValue(new Error("provider down"))
     const db = fakeDb({
@@ -87,8 +89,22 @@ describe("pruneMyraRetention rescheduled-original reconcile", () => {
     expect(adapter.cancelEvent).toHaveBeenCalledWith("evt-1")
     expect(db.demoBooking.update).toHaveBeenCalledWith({
       where: { id: "orig-1" },
-      data: expect.objectContaining({ status: "CANCELED" }),
+      data: expect.objectContaining({ status: "CANCELED", providerEventId: "evt-1" }),
     })
     expect(counts.rescheduledOriginals).toBe(1)
+  })
+
+  it("retries a canceled booking until its provider event is confirmed absent", async () => {
+    const adapter = fakeAdapter()
+    const db = fakeDb({ pendingCancellations: [{ id: "booking-1", providerEventId: "evt-1" }] })
+
+    const counts = await pruneMyraRetention(db as never, adapter)
+
+    expect(adapter.cancelEvent).toHaveBeenCalledWith("evt-1")
+    expect(db.demoBooking.update).toHaveBeenCalledWith({
+      where: { id: "booking-1" },
+      data: { providerEventId: null },
+    })
+    expect(counts.pendingProviderCancellations).toBe(1)
   })
 })

@@ -295,7 +295,7 @@ export async function deleteUserAccount(
     (id) => !plan.deletable.some((workspace) => workspace.id === id)
   )
 
-  const artifactDeletionTaskIds = await prisma.$transaction(
+  const deletionResult = await prisma.$transaction(
     async (tx) => {
       // The preview is advisory. Lock every affected workspace in a stable order,
       // then reclassify ownership before any deletion or attribution mutation.
@@ -650,19 +650,21 @@ export async function deleteUserAccount(
         WHERE "accountId" = ${userId}
           AND "providerEventId" IS NOT NULL
           AND "status" IN ('HELD'::"DemoBookingStatus", 'CONFIRMED'::"DemoBookingStatus", 'OUTCOME_UNKNOWN'::"DemoBookingStatus")`
-      for (const booking of myraBookingsToCancel) {
-        // Best-effort provider cancellation — the row scrub below is the
-        // durable erasure and an unreachable calendar must not roll it back.
-        await cancelCalendarEvent?.(booking.providerEventId).catch(() => {})
-      }
       await tx.$executeRaw`DELETE FROM "myra_conversations" WHERE "accountId" = ${userId}`
       await tx.$executeRaw`DELETE FROM "myra_operations" WHERE "accountId" = ${userId}`
-      // Cases stay for operator history: the account link and the submitter
-      // identity fields go and the scrubbed shell keeps its reference.
+      // Cases stay as an operational shell only. Replies and handoff notes
+      // can contain customer-supplied text, so purge them before retaining
+      // the non-identifying reference.
+      await tx.$executeRaw`
+        DELETE FROM "support_case_replies"
+        WHERE "caseId" IN (SELECT id FROM "support_cases" WHERE "accountId" = ${userId})`
       await tx.$executeRaw`
         UPDATE "support_cases"
         SET "accountId" = NULL, "replyEmail" = NULL,
-            "subject" = 'Deleted account', "summary" = ''
+            "subject" = 'Deleted account', "summary" = '',
+            "handoffSummary" = NULL, "handoffReviewedAt" = NULL,
+            "handoffReviewedBy" = NULL,
+            "assigneeUserId" = CASE WHEN "assigneeUserId" = ${userId} THEN NULL ELSE "assigneeUserId" END
         WHERE "accountId" = ${userId}`
       await tx.$executeRaw`
         UPDATE "demo_bookings"
@@ -692,10 +694,31 @@ export async function deleteUserAccount(
 
       await tx.user.delete({ where: { id: userId } })
 
-      return taskIds
+      return {
+        taskIds,
+        calendarEventIds: myraBookingsToCancel.map((booking) => booking.providerEventId),
+      }
     },
     { maxWait: 15_000, timeout: 120_000 }
   )
 
-  return { workspaceIds: retainedWorkspaceIds, artifactDeletionTaskIds }
+  // External calendar cancellation happens after the irreversible database
+  // erasure commits. A failure leaves providerEventId on the canceled booking
+  // for the bounded Myra maintenance retry, rather than holding this long
+  // transaction open or claiming the event was removed.
+  for (const providerEventId of deletionResult.calendarEventIds) {
+    try {
+      await cancelCalendarEvent?.(providerEventId)
+      if (cancelCalendarEvent) {
+        await getSystemPrisma().demoBooking.updateMany({
+          where: { providerEventId, status: "CANCELED" },
+          data: { providerEventId: null },
+        })
+      }
+    } catch {
+      // Retention retries the remaining providerEventId without user data.
+    }
+  }
+
+  return { workspaceIds: retainedWorkspaceIds, artifactDeletionTaskIds: deletionResult.taskIds }
 }

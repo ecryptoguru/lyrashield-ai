@@ -231,7 +231,8 @@ export function createMyraConversation(options: {
     setStreaming(true)
     setActivity("Working on it…")
     announce("Message sent.")
-    streamAbort = new AbortController()
+    const abort = new AbortController()
+    streamAbort = abort
 
     let attemptedReauth = false
     let received = false
@@ -241,7 +242,7 @@ export function createMyraConversation(options: {
         for await (const ev of client.sendMessage({
           text: trimmed,
           conversationId,
-          signal: streamAbort.signal,
+          signal: abort.signal,
           bookingRequest,
         })) {
           received = true
@@ -249,7 +250,7 @@ export function createMyraConversation(options: {
         }
         break
       } catch (err) {
-        if (streamAbort.signal.aborted || (err as Error).name === "AbortError") break
+        if (abort.signal.aborted || (err as Error).name === "AbortError") break
         const code = (err as MyraClientError).code
         if (code === "UNAUTHORIZED" && !attemptedReauth) {
           attemptedReauth = true
@@ -265,7 +266,7 @@ export function createMyraConversation(options: {
       }
     }
 
-    streamAbort = null
+    if (streamAbort === abort) streamAbort = null
     setStreaming(false)
     setActivity(null)
     if (turn.stopped) markStopped(turn)

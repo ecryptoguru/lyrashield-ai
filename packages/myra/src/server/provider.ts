@@ -232,7 +232,6 @@ export class AzureProvider implements ModelProvider {
     // transient 429/5xx keeps a blip from failing the whole support turn.
     const url = `${endpoint.replace(/\/$/, "")}/openai/v1/chat/completions`
     let res: Response | null = null
-    let failure: ProviderDefiniteFailure | ProviderTimeout | null = null
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         res = await fetch(url, {
@@ -258,19 +257,19 @@ export class AzureProvider implements ModelProvider {
             max_completion_tokens: 4000,
           }),
         })
-        failure = null
       } catch (e) {
-        // A timeout may still have produced a generation upstream; any other
-        // transport failure means the request never completed — release it.
-        res = null
-        failure = isTimeoutError(e)
-          ? new ProviderTimeout("Generation provider request timed out.")
-          : new ProviderDefiniteFailure("Generation provider request failed.")
+        // Once fetch has started, a transport failure cannot prove the
+        // provider did not generate. Do not retry an ambiguous request: that
+        // could bill two turns while the ledger releases only one hold.
+        throw new ProviderTimeout(
+          isTimeoutError(e)
+            ? "Generation provider request timed out."
+            : "Generation provider request outcome is unknown."
+        )
       }
       if (res && (res.ok || (res.status !== 429 && res.status < 500))) break
       if (attempt === 0) await new Promise((r) => setTimeout(r, 1_000))
     }
-    if (failure) throw failure
     if (!res?.ok) {
       throw new ProviderDefiniteFailure("Generation provider request failed.")
     }
