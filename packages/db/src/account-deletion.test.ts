@@ -141,6 +141,9 @@ async function cleanup() {
   await prisma.$executeRaw`DELETE FROM "myra_audit_events" WHERE "accountId" = ${myraUserId} OR "resourceId" = ${`myra-${suffix}`}`.catch(
     () => {}
   )
+  await prisma.$executeRaw`DELETE FROM "myra_identity_verifications" WHERE "accountId" = ${myraUserId}`.catch(
+    () => {}
+  )
 }
 
 describe("account deletion", () => {
@@ -946,6 +949,15 @@ describe("account deletion", () => {
         metadata: { email: `${myraUserId}@example.com`, retained: "yes" },
       },
     })
+    await getSystemPrisma().myraIdentityVerification.create({
+      data: {
+        email: `${myraUserId}@example.com`,
+        purpose: "support_case",
+        codeHash: `verification-${suffix}`,
+        accountId: myraUserId,
+        expiresAt,
+      },
+    })
     const cancelCalendarEvent = vi.fn(async () => {})
 
     await deleteUserAccount(myraUserId, "DELETE", { cancelCalendarEvent })
@@ -958,6 +970,9 @@ describe("account deletion", () => {
     )
     expect(await system.myraOperation.count({ where: { accountId: myraUserId } })).toBe(0)
     expect(await system.myraMemory.count({ where: { accountId: myraUserId } })).toBe(0)
+    expect(await system.myraIdentityVerification.count({ where: { accountId: myraUserId } })).toBe(
+      0
+    )
     expect(await system.myraAuditEvent.count({ where: { accountId: myraUserId } })).toBe(0)
     const scrubbedCase = await system.supportCase.findUnique({ where: { id: supportCase.id } })
     expect(scrubbedCase).toMatchObject({

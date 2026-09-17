@@ -691,6 +691,7 @@ export async function deleteUserAccount(
         WHERE "accountId" = ${userId}`
       await tx.$executeRaw`SELECT set_config('app.current_account_id', ${userId}, true)`
       await tx.$executeRaw`DELETE FROM "myra_memories" WHERE "accountId" = ${userId}`
+      await tx.$executeRaw`DELETE FROM "myra_identity_verifications" WHERE "accountId" = ${userId}`
 
       await tx.user.delete({ where: { id: userId } })
 

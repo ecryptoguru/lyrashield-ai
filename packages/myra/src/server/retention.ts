@@ -67,10 +67,14 @@ export async function recoverMyraState(db: MyraDb = prisma): Promise<RecoveryCou
  * non-fatal: the row is marked CANCELED so the slot unblocks and the token
  * dies, while providerEventId remains a durable cleanup obligation.
  */
+interface ProviderCancellation {
+  id: string
+  providerEventId: string
+}
+
 async function reconcileRescheduledOriginals(
-  db: MyraDb,
-  adapter: CalendarAdapter
-): Promise<number> {
+  db: MyraDb
+): Promise<{ count: number; cancellations: ProviderCancellation[] }> {
   const replacements = await db.demoBooking.findMany({
     where: { status: "CONFIRMED", rescheduledFromId: { not: null } },
     select: { rescheduledFromId: true },
@@ -82,78 +86,58 @@ async function reconcileRescheduledOriginals(
         .filter((id): id is string => typeof id === "string")
     ),
   ]
-  if (originalIds.length === 0) return 0
+  if (originalIds.length === 0) return { count: 0, cancellations: [] }
   const stale = await db.demoBooking.findMany({
     where: { id: { in: originalIds }, status: { in: ["CONFIRMED", "HELD"] } },
     select: { id: true, providerEventId: true },
   })
   const now = new Date()
   for (const original of stale) {
-    try {
-      if (original.providerEventId) await adapter.cancelEvent(original.providerEventId)
-      await db.demoBooking.update({
-        where: { id: original.id },
-        data: {
-          status: "CANCELED",
-          canceledAt: now,
-          manageTokenHash: null,
-          manageTokenRevokedAt: now,
-          providerEventId: null,
-        },
-      })
-    } catch {
-      await db.demoBooking.update({
-        where: { id: original.id },
-        data: {
-          status: "CANCELED",
-          canceledAt: now,
-          manageTokenHash: null,
-          manageTokenRevokedAt: now,
-          providerEventId: original.providerEventId,
-        },
-      })
-    }
+    await db.demoBooking.update({
+      where: { id: original.id },
+      data: {
+        status: "CANCELED",
+        canceledAt: now,
+        manageTokenHash: null,
+        manageTokenRevokedAt: now,
+        providerEventId: original.providerEventId,
+      },
+    })
   }
-  return stale.length
+  return {
+    count: stale.length,
+    cancellations: stale.flatMap(({ id, providerEventId }) =>
+      providerEventId ? [{ id, providerEventId }] : []
+    ),
+  }
 }
 
-/** Retry calendar cleanup retained after cancellation or account erasure. */
-async function reconcilePendingProviderCancellations(
+/** Find calendar cleanup retained after cancellation or account erasure. */
+async function findPendingProviderCancellations(
   db: MyraDb,
-  adapter: CalendarAdapter,
   now: Date
-): Promise<number> {
-  const pending = await db.demoBooking.findMany({
-    where: {
-      status: "CANCELED",
-      providerEventId: { not: null },
-      canceledAt: { lt: new Date(now.getTime() - 60_000) },
-    },
-    select: { id: true, providerEventId: true },
-    take: 100,
-  })
-  for (const booking of pending) {
-    try {
-      await adapter.cancelEvent(booking.providerEventId!)
-      await db.demoBooking.update({ where: { id: booking.id }, data: { providerEventId: null } })
-    } catch {
-      // Keep providerEventId so the next bounded pass retries it.
-    }
-  }
-  return pending.length
+): Promise<ProviderCancellation[]> {
+  return db.demoBooking
+    .findMany({
+      where: {
+        status: "CANCELED",
+        providerEventId: { not: null },
+        canceledAt: { lt: new Date(now.getTime() - 60_000) },
+      },
+      select: { id: true, providerEventId: true },
+      take: 100,
+    })
+    .then((bookings) =>
+      bookings.flatMap(({ id, providerEventId }) =>
+        providerEventId ? [{ id, providerEventId }] : []
+      )
+    )
 }
 
-export async function pruneMyraRetention(
-  db: MyraDb = prisma,
-  adapter: CalendarAdapter = getCalendarAdapter()
-): Promise<RetentionCounts> {
-  // The sweep is trusted-path work: it touches every owner's rows. The
-  // dual-owner RESTRICTIVE boundary (v18 1.3) denies context-free statements,
-  // so an ambient `db` runs through the retention sentinel — the scheduler
-  // caller is the authorization, the binding declares the path.
-  if (db === prisma) {
-    return withMyraOperatorRLS(MYRA_TRUSTED_RETENTION, (tx) => pruneMyraRetention(tx, adapter))
-  }
+async function pruneRetentionRows(db: MyraDb): Promise<{
+  counts: RetentionCounts
+  cancellations: ProviderCancellation[]
+}> {
   const now = new Date()
   const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const caseCutoff = new Date(now.getTime() - MYRA_LIMITS.caseRetentionDays * 86_400_000)
@@ -182,8 +166,8 @@ export async function pruneMyraRetention(
     `
   )
 
-  const rescheduledOriginals = await reconcileRescheduledOriginals(db, adapter)
-  const pendingProviderCancellations = await reconcilePendingProviderCancellations(db, adapter, now)
+  const rescheduled = await reconcileRescheduledOriginals(db)
+  const pending = await findPendingProviderCancellations(db, now)
 
   const [
     conversations,
@@ -202,7 +186,12 @@ export async function pruneMyraRetention(
       },
     }),
     db.supportCase.deleteMany({ where: { createdAt: { lt: caseCutoff } } }),
-    db.demoBooking.deleteMany({ where: { createdAt: { lt: bookingCutoff } } }),
+    db.demoBooking.deleteMany({
+      where: {
+        createdAt: { lt: bookingCutoff },
+        OR: [{ status: { not: "CANCELED" } }, { providerEventId: null }],
+      },
+    }),
     db.myraOperation.deleteMany({
       where: {
         status: { in: ["EXPIRED", "CANCELED", "FAILED"] },
@@ -212,15 +201,54 @@ export async function pruneMyraRetention(
     db.myraAuditEvent.deleteMany({ where: { createdAt: { lt: auditCutoff } } }),
   ])
   return {
-    conversations: conversations.count,
-    publicSessions: publicSessions.count,
-    verifications: verifications.count,
-    supportCases: supportCases.count,
-    demoBookings: demoBookings.count,
-    operations: operations.count,
-    auditEvents: auditEvents.count,
-    generationReservations: generationReservationCount,
-    rescheduledOriginals,
-    pendingProviderCancellations,
+    counts: {
+      conversations: conversations.count,
+      publicSessions: publicSessions.count,
+      verifications: verifications.count,
+      supportCases: supportCases.count,
+      demoBookings: demoBookings.count,
+      operations: operations.count,
+      auditEvents: auditEvents.count,
+      generationReservations: generationReservationCount,
+      rescheduledOriginals: rescheduled.count,
+      pendingProviderCancellations: pending.length,
+    },
+    cancellations: [...rescheduled.cancellations, ...pending],
   }
+}
+
+export async function pruneMyraRetention(
+  db: MyraDb = prisma,
+  adapter: CalendarAdapter = getCalendarAdapter()
+): Promise<RetentionCounts> {
+  // Commit cross-owner retention before making bounded provider calls. Each
+  // successful provider cancellation is then acknowledged in a short write.
+  const result =
+    db === prisma
+      ? await withMyraOperatorRLS(MYRA_TRUSTED_RETENTION, (tx) => pruneRetentionRows(tx))
+      : await pruneRetentionRows(db)
+
+  for (const cancellation of result.cancellations) {
+    try {
+      await adapter.cancelEvent(cancellation.providerEventId)
+      const acknowledge = (scopedDb: MyraDb) =>
+        scopedDb.demoBooking.updateMany({
+          where: {
+            id: cancellation.id,
+            status: "CANCELED",
+            providerEventId: cancellation.providerEventId,
+          },
+          data: { providerEventId: null },
+        })
+      if (db === prisma) {
+        await withMyraOperatorRLS(MYRA_TRUSTED_RETENTION, acknowledge)
+      } else {
+        await acknowledge(db)
+      }
+    } catch {
+      // Keep providerEventId so the next bounded pass retries it.
+    }
+  }
+
+  return result.counts
 }
