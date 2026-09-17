@@ -713,29 +713,57 @@ jobs:
           echo "::error::Live homepage did not serve revision '${GITHUB_SHA}' with all expected markers after 8 attempts."
           exit 1
 
+      - name: Submit the live sitemap to IndexNow
+        continue-on-error: true
+        shell: bash
+        run: |
+          # Bing's index backs Microsoft Copilot answers, so this is the one
+          # discovery signal that is fully in-repo. The script never exits
+          # non-zero on a network or provider failure; continue-on-error keeps
+          # a discovery hint from ever failing a release.
+          node apps/marketing/scripts/indexnow.mjs --origin https://lyrashieldai.com
+
       - name: Lighthouse production measurement
         continue-on-error: true
         shell: bash
         run: |
           # Exact CLI version keeps the live gate reproducible without adding a
-          # runtime dependency to the product workspace.
-          npx --yes lighthouse@13.0.1 https://lyrashieldai.com \
-            --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
-            --only-categories=performance,accessibility,seo \
-            --output=json \
-            --output-path=/tmp/lyrashield-lighthouse.json \
-            --quiet
+          # runtime dependency to the product workspace. The homepage alone
+          # missed regressions on the money pages, so the landing surfaces that
+          # carry acquisition traffic are measured too.
+          for path in "/" "/pricing" "/agents" "/scan" "/webmcp"; do
+            name="$(printf '%s' "$path" | tr '/' '_')"
+            npx --yes lighthouse@13.0.1 "https://lyrashieldai.com${path}" \
+              --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
+              --only-categories=performance,accessibility,seo \
+              --output=json \
+              --output-path="/tmp/lyrashield-lighthouse${name}.json" \
+              --quiet
+          done
           # shellcheck disable=SC2016
           node -e '
-            const report = require("/tmp/lyrashield-lighthouse.json");
-            const minimum = { performance: 0.8, accessibility: 0.95, seo: 0.95 };
-            for (const [category, threshold] of Object.entries(minimum)) {
-              const score = report.categories?.[category]?.score;
-              if (typeof score !== "number" || score < threshold) {
-                throw new Error(`${category} score ${score ?? "missing"} is below ${threshold}`);
+            const fs = require("node:fs")
+            const minimum = { performance: 0.8, accessibility: 0.95, seo: 0.95 }
+            const files = fs
+              .readdirSync("/tmp")
+              .filter((name) => name.startsWith("lyrashield-lighthouse") && name.endsWith(".json"))
+            if (files.length === 0) throw new Error("no Lighthouse reports were produced")
+            let failed = false
+            for (const file of files.sort()) {
+              const report = JSON.parse(fs.readFileSync(`/tmp/${file}`, "utf8"))
+              const url = report.finalDisplayedUrl || report.finalUrl || file
+              for (const [category, threshold] of Object.entries(minimum)) {
+                const score = report.categories?.[category]?.score
+                const line = `${url} ${category}: ${score ?? "missing"} (min ${threshold})`
+                if (typeof score !== "number" || score < threshold) {
+                  console.error(`FAIL ${line}`)
+                  failed = true
+                } else {
+                  console.log(`ok   ${line}`)
+                }
               }
-              console.log(`${category}: ${score}`);
             }
+            if (failed) process.exit(1)
           '
 
   desktop-rust:

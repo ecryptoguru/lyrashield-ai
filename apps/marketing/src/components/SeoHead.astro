@@ -43,6 +43,10 @@ const pageUrl = canonical ?? new URL(Astro.url.pathname, siteOrigin).toString()
 const imageUrl = ogImage.startsWith("http") ? ogImage : new URL(ogImage, siteOrigin).toString()
 const imageAlt = ogImageAlt ?? (title.includes("LyraShield AI") ? title : `${title} — LyraShield AI`)
 const indexable = __MARKETING_INDEXABLE__
+// Search Console / Bing Webmaster verification. Rendered only when the code is
+// configured, so the tag never ships as an empty placeholder.
+const googleVerification = import.meta.env.PUBLIC_GOOGLE_SITE_VERIFICATION
+const bingVerification = import.meta.env.PUBLIC_BING_SITE_VERIFICATION
 ---
 
 <meta charset="utf-8" />
@@ -61,6 +65,8 @@ const indexable = __MARKETING_INDEXABLE__
 ) : (
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 )}
+{googleVerification && <meta name="google-site-verification" content={googleVerification} />}
+{bingVerification && <meta name="msvalidate.01" content={bingVerification} />}
 
 <meta property="og:type" content={ogType} />
 <meta property="og:title" content={title} />

@@ -154,7 +154,18 @@ export function inspectHtml(html, pageUrl) {
     }
   }
 
+  const metaByProperty = (property) =>
+    metaTags
+      .map(attributes)
+      .find((attrs) => attrs.get("property")?.toLowerCase() === property)
+      ?.get("content")
+      ?.trim()
+  const ogImage = metaByProperty("og:image") ?? ""
+  const ogImageWidth = metaByProperty("og:image:width") ?? ""
+  const ogImageHeight = metaByProperty("og:image:height") ?? ""
+
   const jsonLdErrors = []
+  const jsonLdTypes = []
   let jsonLdCount = 0
   const scriptPattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi
   for (const match of html.matchAll(scriptPattern)) {
@@ -162,7 +173,12 @@ export function inspectHtml(html, pageUrl) {
     if (attrs.get("type")?.toLowerCase() !== "application/ld+json") continue
     jsonLdCount += 1
     try {
-      JSON.parse(match[2]?.trim() ?? "")
+      const parsed = JSON.parse(match[2]?.trim() ?? "")
+      for (const node of Array.isArray(parsed) ? parsed : [parsed]) {
+        const type = node?.["@type"]
+        if (typeof type === "string") jsonLdTypes.push(type)
+        else if (Array.isArray(type)) jsonLdTypes.push(...type.filter((t) => typeof t === "string"))
+      }
     } catch {
       jsonLdErrors.push("invalid JSON-LD")
     }
@@ -199,7 +215,11 @@ export function inspectHtml(html, pageUrl) {
     anchorTargets,
     anchorErrors: unique(anchorErrors),
     imageUrls: unique(imageUrls),
+    ogImage,
+    ogImageWidth,
+    ogImageHeight,
     jsonLdCount,
+    jsonLdTypes: unique(jsonLdTypes),
     jsonLdErrors,
     hasDraftMarker,
   }

@@ -1,0 +1,726 @@
+{
+  "generatedAt": "2026-09-17",
+  "notes": {},
+  "entries": [
+    {
+      "rule": "description-too-long",
+      "path": "/blog/tags/access-control"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/blog/tags/agent-security"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/blog/tags/supply-chain"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/blog/tags/verification"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/blog/tags/vibe-coding-security"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/blog/tags/web-security"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/approvals"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/agent-rules"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/amp"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/claude-code"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/cline"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/copilot-cli"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/devin-cli"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/gemini-cli"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/github-action"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/goose"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/jetbrains"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/mimo-code"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/oh-my-pi"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/openai-codex"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/openclaw"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/remote-mcp"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/rest-api"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/troubleshooting"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/docs/integrations/vscode"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/pricing"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/research"
+    },
+    {
+      "rule": "description-too-long",
+      "path": "/vibe-security-50"
+    },
+    {
+      "rule": "jsonld-page-entity-missing",
+      "path": "/demo"
+    },
+    {
+      "rule": "jsonld-page-entity-missing",
+      "path": "/security-reporting"
+    },
+    {
+      "rule": "jsonld-page-entity-missing",
+      "path": "/support"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/about"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/agents"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/ai-safety"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/blog"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/blog/editorial-policy"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/blog/tags/access-control"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/blog/tags/agent-security"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/blog/tags/supply-chain"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/blog/tags/verification"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/blog/tags/vibe-coding-security"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/blog/tags/web-security"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/aikido"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/corgea"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/github-advanced-security"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/horizon3"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/mobb"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/pentera"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/pixee"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/runsybil"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/semgrep"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/snyk"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/sonarqube"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/xbow"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/compare/zeropath"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/demo"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/api"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/approvals"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/agent-plugins"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/agent-rules"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/aider"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/amp"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/antigravity"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/claude-code"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/cline"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/codebuff"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/copilot-cli"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/cursor"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/devin"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/devin-cli"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/gemini-cli"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/github-action"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/github-copilot"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/goose"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/hermes"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/jetbrains"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/kilo-code"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/kiro"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/mimo-code"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/oh-my-pi"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/openai-codex"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/openclaw"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/opencode"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/picode"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/remote-mcp"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/rest-api"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/roo-code"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/troubleshooting"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/vscode"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/docs/integrations/zed"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/evidence-vault"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/methodology"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/pricing"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/privacy"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/research"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/scan"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/security-reporting"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/support"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/tools"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/tools/ai-app-security-checklist"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/tools/ai-app-security-scanner"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/tools/jwt-session-inspector"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/tools/secret-exposure-scanner"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/tools/security-headers-checker"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/tools/supabase-rls-checker"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/tools/webmcp-security-checker"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/vibe-security-50"
+    },
+    {
+      "rule": "og-image-default",
+      "path": "/webmcp"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/agency-client-app-security-review"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/agent-rules-file-security"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/ai-dependency-vulnerability-audit"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/ai-generated-tests-security"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/ai-security-review-prompt"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/aider-app-security-checklist"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/aider-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/aikido-vs-lyrashield"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/amp-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/antigravity-app-security-checklist"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/app-security-score-explained"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/backup-restore-agentic-apps"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/cicd-agent-confused-deputy"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/claude-code-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/client-security-report-handoff"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/cline-app-security-checklist"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/cline-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/codex-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/codex-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/copilot-cli-app-security-checklist"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/copilot-cli-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/cursor-app-security-checklist"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/cursor-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/exposed-api-key-incident-response"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/firebase-security-guide"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/gemini-cli-app-security-checklist"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/github-copilot-app-security-checklist"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/github-copilot-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/hermes-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/horizon3-vs-lyrashield"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/human-review-threat-model-vibe-coding"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/install-script-supply-chain-security"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/jetbrains-ai-app-security-checklist"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/kilo-code-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/kiro-app-security-checklist"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/kiro-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/multi-agent-prompt-injection"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/openclaw-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/opencode-app-security-checklist"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/opencode-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/path-traversal-generated-code"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/pentera-vs-lyrashield"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/pi-coding-agent-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/prototype-to-production-security"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/react-frontend-security-ai-code"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/runsybil-vs-lyrashield"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/secure-ai-built-internal-tools"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/security-scanner-false-positives"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/server-side-authorization-ai-apis"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/share-security-report-safely"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/source-map-build-artifact-security"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/supabase-security-guide"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/tags/vibe-coding-security"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/vercel-deployment-security"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/vscode-ai-app-security-checklist"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/windsurf-mcp-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/windsurf-security-workflow"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/blog/xss-ai-app-markdown-output"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/docs/integrations"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/docs/integrations/agent-rules"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/docs/integrations/amp"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/docs/integrations/copilot-cli"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/docs/integrations/github-action"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/docs/integrations/github-copilot"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/docs/integrations/hermes"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/docs/integrations/jetbrains"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/docs/integrations/openai-codex"
+    },
+    {
+      "rule": "title-too-long",
+      "path": "/docs/integrations/remote-mcp"
+    }
+  ]
+}

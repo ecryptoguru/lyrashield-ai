@@ -1,0 +1,456 @@
+#!/usr/bin/env node
+
+/**
+ * Site-wide built-HTML SEO/AEO gate.
+ *
+ * `crawl-built-blog.mjs` validates the /blog surface only, and it is a manual
+ * pre-release crawl. This script covers every URL in the built sitemap —
+ * metadata limits, canonical agreement, structured-data presence, social-card
+ * coverage, internal links, and the machine-readable surfaces (robots.txt,
+ * llms.txt, rss.xml, security.txt) — and runs in CI through
+ * `tests-browser/seo.e2e.ts`, which reuses the Playwright webServer that
+ * already boots `pnpm preview`.
+ *
+ * Known violations are pinned in `seo-baseline.json` so the gate can land
+ * before the fixes that drain it: the gate fails on anything NOT baselined,
+ * reports baselined items separately, and warns about stale entries so the
+ * baseline cannot rot silently.
+ *
+ * Usage:
+ *   node scripts/crawl-built-site.mjs --origin http://localhost:8787
+ *   node scripts/crawl-built-site.mjs --origin http://localhost:8787 --write-baseline
+ */
+
+import { readFile, writeFile } from "node:fs/promises"
+import { pathToFileURL } from "node:url"
+import { extractSitemapLocations, inspectHtml } from "./crawl-built-blog.mjs"
+
+const SITEMAP_PATH = "/sitemap-index.xml"
+const DEFAULT_BASELINE_PATH = new URL("./seo-baseline.json", import.meta.url)
+const FETCH_CONCURRENCY = 8
+
+/** Rendered-title budget. Blog posts carry a longer brand suffix than static pages. */
+export const TITLE_LIMIT_DEFAULT = 60
+export const TITLE_LIMIT_BLOG_POST = 65
+export const DESCRIPTION_LIMIT = 160
+
+/**
+ * Retrieval and search agents that must be named explicitly. Relying on the
+ * permissive wildcard means a future tightening of `*` silently revokes the
+ * citation access this list exists to protect.
+ */
+export const REQUIRED_ROBOTS_AGENTS = [
+  "GPTBot",
+  "OAI-SearchBot",
+  "ChatGPT-User",
+  "ClaudeBot",
+  "Claude-User",
+  "Claude-SearchBot",
+  "PerplexityBot",
+  "Perplexity-User",
+  "Google-Extended",
+  "GoogleOther",
+  "Applebot",
+  "Applebot-Extended",
+  "DuckAssistBot",
+  "meta-externalagent",
+  "Amazonbot",
+  "YouBot",
+  "cohere-ai",
+  "MistralAI-User",
+  "AI2Bot",
+  "Diffbot",
+  "Timpibot",
+  "Bytespider",
+  "CCBot",
+]
+
+/**
+ * Sitemap URLs that deliberately stay out of llms.txt: scanner-gated, legal
+ * noindex, and the 404 route. Everything else in the sitemap must be listed.
+ */
+export const LLMS_EXCLUDED_PATHS = new Set(["/scan", "/terms", "/terms-of-sale"])
+
+const SITE_GRAPH_TYPES = new Set(["Organization", "WebSite"])
+
+const BLOG_POST_PATH = /^\/blog\/[^/]+$/
+const BLOG_PAGINATION_PATH = /^\/blog\/[1-9]\d*$/
+
+export function isBlogPostPath(path) {
+  return (
+    BLOG_POST_PATH.test(path) &&
+    path !== "/blog/editorial-policy" &&
+    !BLOG_PAGINATION_PATH.test(path)
+  )
+}
+
+export function titleLimitFor(path) {
+  return isBlogPostPath(path) ? TITLE_LIMIT_BLOG_POST : TITLE_LIMIT_DEFAULT
+}
+
+/** Canonical form of a sitemap path: slash-less everywhere except the homepage. */
+export function expectedCanonical(origin, path) {
+  return path === "/" ? `${origin}/` : `${origin}${path}`
+}
+
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length)
+  let cursor = 0
+  async function run() {
+    while (cursor < items.length) {
+      const index = cursor
+      cursor += 1
+      results[index] = await worker(items[index], index)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run))
+  return results
+}
+
+async function fetchText(fetchImpl, url, { follow = false } = {}) {
+  try {
+    const response = await fetchImpl(url, { redirect: follow ? "follow" : "manual" })
+    if (response.status !== 200) return { status: response.status, text: null }
+    return { status: response.status, text: await response.text() }
+  } catch {
+    return { status: 0, text: null }
+  }
+}
+
+/**
+ * The canonical site origin comes from the sitemap, not from the origin the
+ * gate fetches: a local `pnpm preview` serves the same build whose canonicals,
+ * llms.txt links and sitemap `<loc>`s all carry the configured
+ * `PUBLIC_SITE_URL` (production), so comparing them against the fetch origin
+ * would flag every page.
+ */
+async function sitemapPaths(origin, fetchImpl) {
+  const pending = [new URL(SITEMAP_PATH, origin).href]
+  const visited = new Set()
+  const paths = new Set()
+  let siteOrigin = null
+
+  while (pending.length > 0) {
+    const requestUrl = pending.shift()
+    if (!requestUrl || visited.has(requestUrl)) continue
+    visited.add(requestUrl)
+    const { text } = await fetchText(fetchImpl, requestUrl)
+    if (text === null) continue
+    const locations = extractSitemapLocations(text)
+    for (const location of locations) {
+      const parsed = new URL(location, origin)
+      if (siteOrigin === null) siteOrigin = parsed.origin
+      if (/<sitemapindex\b/i.test(text)) {
+        pending.push(new URL(parsed.pathname, origin).href)
+      } else {
+        paths.add(parsed.pathname)
+      }
+    }
+  }
+
+  return { paths, siteOrigin: siteOrigin ?? new URL(origin).origin }
+}
+
+/** Page-level violations for one already-fetched document. */
+export function pageViolations({ path, facts, origin }) {
+  const violations = []
+  const add = (rule, detail) => violations.push({ rule, path, detail })
+
+  if (!facts.title) add("title-missing", "")
+  else if (facts.title.length > titleLimitFor(path)) {
+    add("title-too-long", `${facts.title.length} > ${titleLimitFor(path)}: ${facts.title}`)
+  }
+
+  if (!facts.description) add("description-missing", "")
+  else if (facts.description.length > DESCRIPTION_LIMIT) {
+    add("description-too-long", `${facts.description.length} > ${DESCRIPTION_LIMIT}`)
+  }
+
+  if (facts.h1Count !== 1) add("h1-count", String(facts.h1Count))
+  if (facts.mainCount !== 1) add("main-count", String(facts.mainCount))
+
+  const expected = expectedCanonical(origin, path)
+  if (facts.canonicalCount !== 1) add("canonical-count", String(facts.canonicalCount))
+  else if (facts.canonical !== expected) {
+    add("canonical-mismatch", `${facts.canonical} != ${expected}`)
+  }
+
+  if (facts.noindex) add("noindex-in-sitemap", "")
+
+  if (facts.jsonLdCount === 0) add("jsonld-missing", "")
+  for (const error of facts.jsonLdErrors) add("jsonld-invalid", error)
+  if (!facts.jsonLdTypes.some((type) => !SITE_GRAPH_TYPES.has(type))) {
+    add("jsonld-page-entity-missing", facts.jsonLdTypes.join(", "))
+  }
+
+  if (!facts.ogImage) add("og-image-missing", "")
+  else {
+    if (!facts.ogImage.startsWith("http")) add("og-image-relative", facts.ogImage)
+    if (!facts.ogImageWidth || !facts.ogImageHeight) {
+      add("og-image-dimensions-missing", `${facts.ogImageWidth}x${facts.ogImageHeight}`)
+    }
+    if (facts.ogImage.endsWith("/og/og-default.png") && !isBlogPostPath(path)) {
+      add("og-image-default", facts.ogImage)
+    }
+  }
+
+  for (const error of facts.anchorErrors) add("anchor-missing", error)
+
+  return violations
+}
+
+/** Site-level violations: uniqueness, internal links, machine-readable surfaces. */
+export function siteViolations({ pageFacts, origin, robots, llms, rss, securityTxt }) {
+  const violations = []
+  const add = (rule, path, detail) => violations.push({ rule, path, detail })
+
+  const seen = { title: new Map(), description: new Map(), canonical: new Map() }
+  for (const [path, facts] of pageFacts) {
+    for (const [key, value] of [
+      ["title", facts.title],
+      ["description", facts.description],
+      ["canonical", facts.canonical],
+    ]) {
+      if (!value) continue
+      const previous = seen[key].get(value)
+      if (previous) add(`duplicate-${key}`, path, `also on ${previous}`)
+      else seen[key].set(value, path)
+    }
+  }
+
+  const sitemapPaths = new Set(pageFacts.keys())
+  const externalPaths = new Set()
+  for (const [path, facts] of pageFacts) {
+    for (const href of facts.localHrefs) {
+      const target = href.length > 1 ? href.replace(/\/+$/, "") : href
+      if (target !== path && !sitemapPaths.has(target)) externalPaths.add(target)
+    }
+  }
+
+  for (const agent of REQUIRED_ROBOTS_AGENTS) {
+    if (robots === null) break
+    if (!new RegExp(`^User-agent:\\s*${agent}\\s*$`, "im").test(robots)) {
+      add("robots-agent-missing", "/robots.txt", agent)
+    }
+  }
+
+  if (llms === null) {
+    add("llms-missing", "/llms.txt", "llms.txt did not return 200")
+  } else {
+    for (const path of [...sitemapPaths].sort()) {
+      if (LLMS_EXCLUDED_PATHS.has(path)) continue
+      const url = expectedCanonical(origin, path)
+      if (!llms.includes(url)) add("llms-url-missing", "/llms.txt", path)
+    }
+  }
+
+  if (rss === null) {
+    add("rss-missing", "/rss.xml", "rss.xml did not return 200")
+  } else {
+    const itemLinks = [...rss.matchAll(/<item\b[^>]*>[\s\S]*?<link\b[^>]*>([\s\S]*?)<\/link\s*>/gi)]
+      .map((match) => match[1]?.trim() ?? "")
+      .filter(Boolean)
+    for (const link of itemLinks) {
+      if (link.endsWith("/")) add("rss-trailing-slash", "/rss.xml", link)
+    }
+  }
+
+  if (securityTxt === null) {
+    add("security-txt-missing", "/.well-known/security.txt", "did not return 200")
+  }
+
+  return { violations, externalPaths: [...externalPaths].sort() }
+}
+
+export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
+  if (typeof fetchImpl !== "function") throw new TypeError("fetch implementation is required")
+  const localOrigin = new URL(origin).origin
+  const violations = []
+
+  const { paths: discovered, siteOrigin } = await sitemapPaths(localOrigin, fetchImpl)
+  const paths = [...discovered].sort()
+  const pages = await mapWithConcurrency(paths, FETCH_CONCURRENCY, async (path) => {
+    const url = new URL(path, localOrigin).href
+    const { status, text } = await fetchText(fetchImpl, url)
+    if (text === null) {
+      violations.push({ rule: "page-status", path, detail: `returned ${status}` })
+      return [path, null]
+    }
+    return [path, inspectHtml(text, url)]
+  })
+
+  const pageFacts = new Map(pages.filter(([, facts]) => facts !== null))
+  for (const [path, facts] of pageFacts) {
+    violations.push(...pageViolations({ path, facts, origin: siteOrigin }))
+  }
+
+  const [robots, llms, rss, securityTxt] = await Promise.all(
+    ["/robots.txt", "/llms.txt", "/rss.xml", "/.well-known/security.txt"].map(async (path) => {
+      const { text } = await fetchText(fetchImpl, new URL(path, localOrigin).href)
+      return text
+    })
+  )
+
+  const site = siteViolations({
+    pageFacts,
+    origin: siteOrigin,
+    robots,
+    llms,
+    rss,
+    securityTxt,
+  })
+  violations.push(...site.violations)
+
+  const linkResults = await mapWithConcurrency(
+    site.externalPaths,
+    FETCH_CONCURRENCY,
+    async (path) => {
+      // A followed redirect to a 200 is fine: /docs/integrations/windsurf and
+      // /rss.xml are intentional 301s, not broken links.
+      const { status } = await fetchText(fetchImpl, new URL(path, localOrigin).href, {
+        follow: true,
+      })
+      return status === 200 ? null : { rule: "internal-link-broken", path, detail: String(status) }
+    }
+  )
+  violations.push(...linkResults.filter(Boolean))
+
+  return {
+    siteOrigin,
+    pageCount: pageFacts.size,
+    checkedLinkCount: site.externalPaths.length,
+    violations: dedupeViolations(violations),
+  }
+}
+
+export function dedupeViolations(violations) {
+  const seen = new Set()
+  const unique = []
+  for (const violation of violations) {
+    const key = `${violation.rule}\u0000${violation.path}\u0000${violation.detail}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(violation)
+  }
+  return unique.sort((a, b) =>
+    a.rule === b.rule ? a.path.localeCompare(b.path) : a.rule.localeCompare(b.rule)
+  )
+}
+
+export function applyBaseline(violations, baseline) {
+  const entries = new Set(
+    (baseline?.entries ?? []).map((entry) => `${entry.rule}\u0000${entry.path}`)
+  )
+  const fresh = []
+  const baselined = []
+  for (const violation of violations) {
+    const key = `${violation.rule}\u0000${violation.path}`
+    if (entries.has(key)) {
+      baselined.push(violation)
+      entries.delete(key)
+    } else {
+      fresh.push(violation)
+    }
+  }
+  return { fresh, baselined, stale: [...entries].map((key) => key.split("\u0000")) }
+}
+
+export function buildBaseline(violations, { date, notes = {} }) {
+  const entries = [...new Set(violations.map((v) => `${v.rule}\u0000${v.path}`))]
+    .map((key) => {
+      const [rule, path] = key.split("\u0000")
+      return { rule, path }
+    })
+    .sort((a, b) => (a.rule === b.rule ? a.path.localeCompare(b.path) : a.rule.localeCompare(b.rule)))
+  return { generatedAt: date, notes, entries }
+}
+
+/**
+ * Why each baselined rule is tolerated and which wave removes it. Keeping this
+ * next to the entries makes the allowlist reviewable instead of a list of
+ * paths a reader has to reverse-engineer.
+ */
+export const BASELINE_NOTES = {
+  "title-too-long": {
+    reason:
+      "Rendered titles above the budget: 57 blog posts carry the ' | LyraShield AI Blog' suffix and 10 docs guides append ' | LyraShield AI'.",
+    wave: 3,
+  },
+  "description-too-long": {
+    reason: "Meta descriptions above 160 characters on docs guides, tag hubs and three landing pages.",
+    wave: 3,
+  },
+  "og-image-default": {
+    reason: "Non-blog pages still share /og/og-default.png; blog posts already carry unique cards.",
+    wave: 3,
+  },
+  "jsonld-page-entity-missing": {
+    reason: "Pages that emit only the site graph (Organization + WebSite) and no page-level entity.",
+    wave: 2,
+  },
+}
+
+async function readBaseline(path) {
+  try {
+    return JSON.parse(await readFile(path, "utf8"))
+  } catch {
+    return { entries: [] }
+  }
+}
+
+function argumentValue(args, name) {
+  const index = args.indexOf(name)
+  return index === -1 ? undefined : args[index + 1]
+}
+
+export async function runSiteGate({ origin, fetchImpl = globalThis.fetch, baseline }) {
+  const result = await crawlBuiltSite({ origin, fetchImpl })
+  return { ...result, ...applyBaseline(result.violations, baseline) }
+}
+
+async function main() {
+  const args = process.argv.slice(2)
+  const origin = argumentValue(args, "--origin")
+  if (!origin) {
+    console.error("Usage: node scripts/crawl-built-site.mjs --origin http://localhost:8787")
+    process.exitCode = 1
+    return
+  }
+
+  const baselinePath = argumentValue(args, "--baseline") ?? DEFAULT_BASELINE_PATH
+  const result = await crawlBuiltSite({ origin })
+
+  if (args.includes("--write-baseline")) {
+    const baseline = buildBaseline(result.violations, {
+      date: new Date().toISOString().slice(0, 10),
+      notes: BASELINE_NOTES,
+    })
+    await writeFile(baselinePath, `${JSON.stringify(baseline, null, 2)}\n`, "utf8")
+    console.log(`Wrote ${baseline.entries.length} baseline entr(ies) to seo-baseline.json.`)
+    return
+  }
+
+  const baseline = await readBaseline(baselinePath)
+  const { fresh, baselined, stale } = applyBaseline(result.violations, baseline)
+
+  for (const violation of fresh) {
+    console.error(
+      `${violation.rule}: ${violation.path}${violation.detail ? ` — ${violation.detail}` : ""}`
+    )
+  }
+  for (const [rule, path] of stale) {
+    console.warn(`stale baseline entry (no longer violated): ${rule}: ${path}`)
+  }
+
+  console.log(
+    `Site SEO gate: ${result.pageCount} pages on ${result.siteOrigin}, ` +
+      `${result.checkedLinkCount} internal links checked, ${baselined.length} baselined, ` +
+      `${stale.length} stale, ${fresh.length} new violation(s).`
+  )
+  if (fresh.length > 0) process.exitCode = 1
+}
+
+const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : ""
+if (import.meta.url === invokedPath) {
+  await main()
+}

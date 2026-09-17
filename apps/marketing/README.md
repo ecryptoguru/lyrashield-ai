@@ -140,8 +140,48 @@ mass-rewriting established search copy. Offer schema remains deferred until live
 paid admission and publishable pricing are founder-approved.
 
 The post-deploy CI gate runs the exact `lighthouse@13.0.1` CLI against the live
-homepage and requires performance 0.80, accessibility 0.95, and SEO 0.95. The
-CLI stays deployment tooling rather than a product runtime dependency.
+homepage, `/pricing`, `/agents`, `/scan` and `/webmcp`, and requires performance
+0.80, accessibility 0.95, and SEO 0.95 on each. The CLI stays deployment tooling
+rather than a product runtime dependency. The same job submits the live sitemap
+to IndexNow (`scripts/indexnow.mjs`) with `continue-on-error`, so a provider or
+network failure can never fail a release.
+
+## Site-wide SEO / AEO gate
+
+`scripts/crawl-built-site.mjs` crawls every URL in the built sitemap and asserts
+the invariants that used to be checked by hand — one `h1` and one `main` per
+page, canonical agreement, unique titles/descriptions, rendered title and
+description budgets, a page-level JSON-LD entity, an absolute OG image with
+declared dimensions, resolvable internal links, and the machine-readable
+surfaces (`robots.txt` names every required retrieval agent, `llms.txt` lists
+every sitemap URL it is meant to, RSS links stay slash-less,
+`/.well-known/security.txt` exists).
+
+`scripts/crawl-built-blog.mjs` remains the deeper `/blog`-only crawl (images,
+tag archives, RSS membership) and stays a manual pre-release step.
+
+```bash
+pnpm --filter @lyrashield/marketing preview   # terminal 1
+pnpm --filter @lyrashield/marketing seo:crawl # terminal 2
+```
+
+Known violations are pinned in `scripts/seo-baseline.json`, so the gate can land
+before the fixes that drain it: it fails on anything **not** baselined and warns
+about stale entries so the allowlist cannot rot. Regenerate it after draining a
+wave:
+
+```bash
+pnpm --filter @lyrashield/marketing seo:baseline
+```
+
+The same gate runs in CI as `tests-browser/seo.e2e.ts`, reusing the Playwright
+`webServer` so it asserts against the exact built Worker. It is the reason
+`pnpm preview` sets `LYRASHIELD_LOCAL_PREVIEW=1` before `astro build`: without
+that flag the middleware's http→https upgrade fires on the local preview (where
+`wrangler dev` rewrites the request host to the custom domain) and 301s every
+SSR route — `llms.txt`, `rss.xml`, `agents.md`, `/api/*` — to a port with no TLS.
+Never set the flag in a deploy build; the worker-entry scheme guard still 301s
+plaintext in production regardless.
 
 ## Automatic production deploy (GitHub Actions)
 
