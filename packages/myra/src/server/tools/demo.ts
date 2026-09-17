@@ -613,24 +613,21 @@ export async function runManageOwnDemo(
   input: unknown
 ): Promise<MyraToolResult> {
   const { bookingId, manageToken, action, newSlotStart } = manageOwnDemoInput.parse(input)
-  // The manage token is the credential — the hash lookup happens before any
-  // owner context exists, so it declares the manage-token trusted path.
-  const booking = bookingId
-    ? await withTrustedScope(
-        MYRA_TRUSTED_MANAGE_TOKEN,
-        (tx) => tx.demoBooking.findUnique({ where: { id: bookingId } }),
-        ctx.db
-      )
-    : await withTrustedScope(
-        MYRA_TRUSTED_MANAGE_TOKEN,
-        (tx) =>
-          tx.demoBooking
-            .findUnique({ where: { manageTokenHash: hashManageToken(manageToken) } })
-            .catch(() => null),
-        ctx.db
-      )
+  // Resolve by token hash only — the manage token IS the credential. A
+  // supplied bookingId is a consistency check, never a lookup key. The hash
+  // lookup precedes any owner context, so it declares the manage-token
+  // trusted path.
+  const booking = await withTrustedScope(
+    MYRA_TRUSTED_MANAGE_TOKEN,
+    (tx) =>
+      tx.demoBooking
+        .findUnique({ where: { manageTokenHash: hashManageToken(manageToken) } })
+        .catch(() => null),
+    ctx.db
+  )
   if (
     !booking ||
+    (bookingId !== undefined && booking.id !== bookingId) ||
     !isManageTokenActive(booking) ||
     !verifyManageToken(booking.manageTokenHash, manageToken)
   ) {
@@ -698,25 +695,21 @@ export async function executeManageDemo(
   const parsed = manageOwnDemoInput.parse(payload)
   const db = ctx.db ?? prisma
   const adapter = getCalendarAdapter()
-  // Resolve by id or by token hash — the manage token IS the credential, and
-  // a foreign token must deny, never throw uncoded. The lookup precedes any
+  // Resolve by token hash only — the manage token IS the credential and a
+  // foreign token must deny, never throw uncoded. A supplied bookingId is a
+  // consistency check, never a lookup key. The hash lookup precedes any
   // owner context, so it declares the manage-token trusted path.
-  const booking = parsed.bookingId
-    ? await withTrustedScope(
-        MYRA_TRUSTED_MANAGE_TOKEN,
-        (tx) => tx.demoBooking.findUnique({ where: { id: parsed.bookingId } }),
-        db
-      )
-    : await withTrustedScope(
-        MYRA_TRUSTED_MANAGE_TOKEN,
-        (tx) =>
-          tx.demoBooking
-            .findUnique({ where: { manageTokenHash: hashManageToken(parsed.manageToken) } })
-            .catch(() => null),
-        db
-      )
+  const booking = await withTrustedScope(
+    MYRA_TRUSTED_MANAGE_TOKEN,
+    (tx) =>
+      tx.demoBooking
+        .findUnique({ where: { manageTokenHash: hashManageToken(parsed.manageToken) } })
+        .catch(() => null),
+    db
+  )
   if (
     !booking ||
+    (parsed.bookingId !== undefined && booking.id !== parsed.bookingId) ||
     !isManageTokenActive(booking) ||
     !verifyManageToken(booking.manageTokenHash, parsed.manageToken)
   ) {
