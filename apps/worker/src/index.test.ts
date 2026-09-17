@@ -1,7 +1,10 @@
 import { describe, it, expect, afterEach, vi } from "vitest"
 import { readFile, stat } from "node:fs/promises"
+import { SCAN_WORKER_HEARTBEAT_MS } from "@lyrashield/integrations"
 import {
+  MANAGED_REDIS_BULLMQ_WORKER_COUNT,
   MANAGED_REDIS_DRAIN_DELAY_SECONDS,
+  MANAGED_REDIS_MONTHLY_COMMAND_BUDGET,
   MANAGED_REDIS_STALLED_INTERVAL_MS,
   RECONCILIATION_INTERVAL_MS,
   advanceReconciliationTimestamp,
@@ -78,11 +81,18 @@ describe("worker readiness lifecycle", () => {
     const baselineIdleCommandsPerWorker =
       thirtyDaysMs / (MANAGED_REDIS_DRAIN_DELAY_SECONDS * 1_000) +
       thirtyDaysMs / MANAGED_REDIS_STALLED_INTERVAL_MS
-    const idleReconciliationsPerWorker = thirtyDaysMs / RECONCILIATION_IDLE_BACKSTOP_MS
+    const baselineBullMqCommands = baselineIdleCommandsPerWorker * MANAGED_REDIS_BULLMQ_WORKER_COUNT
+    const heartbeatCommands = thirtyDaysMs / SCAN_WORKER_HEARTBEAT_MS
+    const fixedIdleCommands = baselineBullMqCommands + heartbeatCommands
+    const idleReconciliations = thirtyDaysMs / RECONCILIATION_IDLE_BACKSTOP_MS
 
-    expect(baselineIdleCommandsPerWorker).toBe(47_520)
-    expect(baselineIdleCommandsPerWorker * 2).toBeLessThan(100_000)
-    expect(idleReconciliationsPerWorker).toBe(720)
+    expect(MANAGED_REDIS_BULLMQ_WORKER_COUNT).toBe(3)
+    expect(baselineIdleCommandsPerWorker).toBe(25_920)
+    expect(baselineBullMqCommands).toBe(77_760)
+    expect(heartbeatCommands).toBe(21_600)
+    expect(fixedIdleCommands).toBe(99_360)
+    expect(fixedIdleCommands).toBeLessThan(MANAGED_REDIS_MONTHLY_COMMAND_BUDGET / 4)
+    expect(idleReconciliations).toBe(720)
   })
 
   it("keeps the reconciliation timestamp monotonic when ticks finish out of order", () => {

@@ -63,7 +63,9 @@ const readinessPath = "/tmp/lyrashield-worker-ready"
 const activeJobPath = "/tmp/lyrashield-worker-active"
 export const RECONCILIATION_INTERVAL_MS = 300_000
 export const MANAGED_REDIS_DRAIN_DELAY_SECONDS = 600
-export const MANAGED_REDIS_STALLED_INTERVAL_MS = 60_000
+export const MANAGED_REDIS_STALLED_INTERVAL_MS = 120_000
+export const MANAGED_REDIS_BULLMQ_WORKER_COUNT = 3
+export const MANAGED_REDIS_MONTHLY_COMMAND_BUDGET = 500_000
 
 export function advanceReconciliationTimestamp(currentMs: number, completedTickMs: number): number {
   return Math.max(currentMs, completedTickMs)
@@ -377,7 +379,7 @@ async function main(): Promise<void> {
       autorun: false,
       // BRPOP blocks for up to 10 min per call — but returns instantly when a
       // job is pushed to the queue. This gives instant scan pickup with only
-      // ~4.3K re-issue commands/month at idle. Stalled checks run every minute
+      // ~4.3K re-issue commands/month at idle. Stalled checks run every two minutes
       // so jobs that are genuinely stuck are retried; reconcileScanQueue() is the
       // fail-closed backstop that runs both on startup and periodically. The
       // consumer-liveness guard (below) covers the remaining failure mode: the
