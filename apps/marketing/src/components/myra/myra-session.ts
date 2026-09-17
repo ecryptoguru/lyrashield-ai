@@ -58,14 +58,15 @@ export function clearMyraToken(): void {
   }
 }
 
-// ─── Turnstile (lazy, invisible) ─────────────────────────────────────────────
+// ─── Turnstile (lazy, invisible until interaction is required) ───────────────
 
 interface TurnstileGlobal {
   render: (
     container: HTMLElement,
     options: {
       sitekey: string
-      size?: "normal" | "compact" | "flexible" | "invisible"
+      size?: "normal" | "compact" | "flexible"
+      appearance?: "always" | "execute" | "interaction-only"
       callback?: (token: string) => void
       "error-callback"?: () => void
       "expired-callback"?: () => void
@@ -74,6 +75,14 @@ interface TurnstileGlobal {
   execute: (widgetId: string) => void
   reset: (widgetId: string) => void
 }
+
+/**
+ * Host element for the challenge widget. When one is present and visible the
+ * widget renders inside it, so an interaction challenge can actually be
+ * completed; otherwise it renders into a hidden holder — managed challenges
+ * still pass without user interaction, which is the common case.
+ */
+export const MYRA_TURNSTILE_SELECTOR = "[data-myra-turnstile]"
 
 /** DOM append via Node.appendChild — workerd's Element.append shadows the
  *  variadic ParentNode signature in this project's type environment. */
@@ -116,16 +125,21 @@ export async function getTurnstileToken(): Promise<string | undefined> {
   if (!turnstile) return undefined
   try {
     if (turnstileWidgetId === undefined) {
-      const holder = document.createElement("div")
-      holder.setAttribute("aria-hidden", "true")
-      holder.style.position = "absolute"
-      holder.style.width = "0"
-      holder.style.height = "0"
-      holder.style.overflow = "hidden"
-      add(document.body, holder)
+      const host = document.querySelector<HTMLElement>(MYRA_TURNSTILE_SELECTOR)
+      const visibleHost = host && host.offsetParent !== null ? host : null
+      const holder = visibleHost ?? document.createElement("div")
+      if (!visibleHost) {
+        holder.setAttribute("aria-hidden", "true")
+        holder.style.position = "absolute"
+        holder.style.width = "0"
+        holder.style.height = "0"
+        holder.style.overflow = "hidden"
+        add(document.body, holder)
+      }
       turnstileWidgetId = turnstile.render(holder, {
         sitekey,
-        size: "invisible",
+        size: "flexible",
+        appearance: "interaction-only",
         callback: (token) => {
           turnstileResolve?.(token)
           turnstileResolve = null

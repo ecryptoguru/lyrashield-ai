@@ -3,6 +3,7 @@
 
 declare const __MARKETING_INDEXABLE__: boolean
 declare const __MARKETING_X_URL__: string
+declare const __MARKETING_MYRA_ENABLED__: boolean
 declare const __MARKETING_BUILD_REVISION__: string
 declare const __MARKETING_SOURCE_DATES__: Readonly<Record<string, string>>
 

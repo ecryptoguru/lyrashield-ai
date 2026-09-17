@@ -45,7 +45,7 @@ const siteUrl = Astro.site?.toString() || "http://localhost:4321"
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const xUrl = __MARKETING_X_URL__
 // Default-off flag: the support panel only mounts when explicitly enabled.
-const myraEnabled = import.meta.env.PUBLIC_MYRA_MARKETING_ENABLED === "1"
+const myraEnabled = __MARKETING_MYRA_ENABLED__
 const siteDescription =
   "LyraShield AI records what was tested, separates detected risks from retest-confirmed fixes, and creates an assurance report for AI-built apps."
 

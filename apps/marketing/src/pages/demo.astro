@@ -53,6 +53,30 @@ const description =
         <p id="demo-slots-status" role="status" aria-live="polite" class="mt-3 text-sm text-text-muted">
           Loading times…
         </p>
+        <div data-myra-turnstile class="mt-3 empty:hidden"></div>
+        <div id="demo-slots-error" hidden class="mt-4 rounded-lg border border-danger/40 bg-danger/5 p-4">
+          <p id="demo-slots-error-title" class="text-sm font-semibold text-danger">
+            Booking times couldn't load.
+          </p>
+          <p class="mt-1 text-sm leading-6 text-text-muted">
+            This is a problem on our side, not your connection. Try again, or request a time and we'll
+            follow up by email.
+          </p>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              id="demo-slots-retry"
+              class="inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
+            >
+              Try again
+            </button>
+            <a
+              href="/support"
+              class="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >Request a time instead</a
+            >
+          </div>
+        </div>
         <div id="demo-no-slots" hidden class="mt-4 flex flex-wrap items-center gap-3">
           <p class="text-sm text-text">{MYRA_COPY.demoNoSlots}</p>
           <a
@@ -303,6 +327,9 @@ const description =
   const tzSelect = $<HTMLSelectElement>("demo-tz")
   const slotsEl = $("demo-slots")
   const slotsStatus = $("demo-slots-status")
+  const slotsErrorEl = $("demo-slots-error")
+  const slotsErrorTitle = $("demo-slots-error-title")
+  const slotsRetry = $<HTMLButtonElement>("demo-slots-retry")
   const noSlotsEl = $("demo-no-slots")
   const laterBtn = $<HTMLButtonElement>("demo-later")
   const stepSlot = $("demo-step-slot")
@@ -424,6 +451,7 @@ const description =
     slotsEl.textContent = ""
     slotsStatus.textContent = "Loading times…"
     noSlotsEl?.setAttribute("hidden", "")
+    slotsErrorEl?.setAttribute("hidden", "")
     laterBtn?.setAttribute("hidden", "")
     try {
       await ensureMyraSession(apiBase).catch(() => {})
@@ -476,8 +504,18 @@ const description =
       }
       const daysIn = Math.round((windowFrom.valueOf() - Date.now()) / 86_400_000)
       if (laterBtn && daysIn + 7 < horizonDays) laterBtn.removeAttribute("hidden")
-    } catch {
-      slotsStatus.textContent = "Times could not be loaded. Check your connection and try again."
+    } catch (err) {
+      // Honest failure surface: say it is ours, offer a retry, and keep a
+      // human path open. Never blame the visitor's connection for our outage.
+      const code = (err as Error & { code?: string }).code
+      slotsStatus.textContent = ""
+      if (slotsErrorTitle) {
+        slotsErrorTitle.textContent =
+          code === "NOT_FOUND"
+            ? "Demo booking is temporarily unavailable."
+            : "Booking times couldn't load."
+      }
+      slotsErrorEl?.removeAttribute("hidden")
     }
   }
 
@@ -807,7 +845,7 @@ const description =
         add(manageSlotsEl, btn)
       }
     } catch {
-      manageSlotsEl.textContent = "Times could not be loaded. Check your connection."
+      setError(manageError, "Times could not be loaded. Try again in a moment.")
     }
   }
 
@@ -846,6 +884,10 @@ const description =
 
   laterBtn?.addEventListener("click", () => {
     windowFrom = new Date(windowFrom.valueOf() + 7 * 86_400_000)
+    void fetchSlots()
+  })
+
+  slotsRetry?.addEventListener("click", () => {
     void fetchSlots()
   })
 

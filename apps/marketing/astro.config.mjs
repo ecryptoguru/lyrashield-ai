@@ -258,6 +258,13 @@ const configuredScannerUrl = process.env.PUBLIC_SCANNER_URL || wranglerVar("PUBL
 const turnstileSiteKey =
   process.env.PUBLIC_TURNSTILE_SITE_KEY || wranglerVar("PUBLIC_TURNSTILE_SITE_KEY") || ""
 const abuseEmail = process.env.PUBLIC_ABUSE_EMAIL || wranglerVar("PUBLIC_ABUSE_EMAIL") || ""
+// Marketing Myra launcher. Resolved here (not only from the build environment)
+// so the wrangler var is authoritative in every build pipeline — the same
+// pattern as PUBLIC_INDEXABLE and PUBLIC_X_URL.
+const myraMarketingEnabled =
+  (process.env.PUBLIC_MYRA_MARKETING_ENABLED ||
+    wranglerVar("PUBLIC_MYRA_MARKETING_ENABLED") ||
+    "0") === "1"
 
 if (indexable) {
   try {
@@ -401,6 +408,7 @@ export default defineConfig({
     define: {
       __MARKETING_INDEXABLE__: JSON.stringify(indexable),
       __MARKETING_X_URL__: JSON.stringify(xUrl),
+      __MARKETING_MYRA_ENABLED__: JSON.stringify(myraMarketingEnabled),
       __MARKETING_BUILD_REVISION__: JSON.stringify(buildRevision),
       __MARKETING_SOURCE_DATES__: JSON.stringify(SOURCE_DATES),
     },
