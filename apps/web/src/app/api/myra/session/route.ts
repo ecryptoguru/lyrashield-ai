@@ -15,11 +15,11 @@ import { verifyTurnstile } from "@/lib/turnstile"
 import { checkMyraRateLimit, clientIpFromRequest } from "@/lib/rate-limit"
 import { withApiRequest } from "@/lib/api-auth"
 import {
-  myraDashboardEnabled,
   myraFail,
   myraNotFound,
   myraOk,
   myraPreflight,
+  myraPrincipalEnabled,
   myraPublicEnabled,
   myraRateLimited,
 } from "../_lib"
@@ -42,7 +42,7 @@ async function post(request: Request): Promise<Response> {
 
   // Existing browser session — the cookie is the credential.
   if (resolved?.principal.kind === "user") {
-    if (!myraDashboardEnabled()) return myraNotFound(request)
+    if (!myraPrincipalEnabled(resolved.principal)) return myraNotFound(request)
     return myraOk(request, { principal: "user" })
   }
 

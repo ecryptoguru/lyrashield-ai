@@ -30,7 +30,12 @@ export function OPTIONS(request: Request): Response {
 }
 
 async function post(request: Request): Promise<Response> {
-  if (!myraWritesEnabled()) return myraNotFound(request)
+  const resolved = await resolveMyraRequest(request)
+  if (!resolved) {
+    return myraFail(request, "UNAUTHORIZED", "Authentication required", 401)
+  }
+  if (!myraWritesEnabled(resolved.principal)) return myraNotFound(request)
+  if (!myraPrincipalEnabled(resolved.principal)) return myraNotFound(request)
 
   let body: unknown
   try {
@@ -42,12 +47,6 @@ async function post(request: Request): Promise<Response> {
   if (!parsed.success) {
     return myraFail(request, "VALIDATION_ERROR", "Invalid request", 400)
   }
-
-  const resolved = await resolveMyraRequest(request)
-  if (!resolved) {
-    return myraFail(request, "UNAUTHORIZED", "Authentication required", 401)
-  }
-  if (!myraPrincipalEnabled(resolved.principal)) return myraNotFound(request)
 
   const limit = await checkMyraRateLimit("message", myraRateLimitKey(resolved.principal))
   if (limit.limited) return myraRateLimited(request, limit.retryAfter)

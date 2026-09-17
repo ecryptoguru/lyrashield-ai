@@ -16,10 +16,10 @@ import { postMessageRequestSchema } from "@lyrashield/myra"
 import { assertSameOriginMutation, withApiRequest } from "@/lib/api-auth"
 import { checkMyraRateLimit } from "@/lib/rate-limit"
 import {
-  myraDashboardEnabled,
   myraFail,
   myraNotFound,
   myraPreflight,
+  myraPrincipalEnabled,
   myraPublicEnabled,
   myraRateLimitKey,
   myraRateLimited,
@@ -68,9 +68,8 @@ async function post(request: Request): Promise<Response> {
   if (resolved.principal.kind === "anonymous" && !myraPublicEnabled()) {
     return myraNotFound(request)
   }
-  if (resolved.principal.kind === "user" && !myraDashboardEnabled()) {
+  if (resolved.principal.kind === "user" && !myraPrincipalEnabled(resolved.principal))
     return myraNotFound(request)
-  }
   if (resolved.principal.kind === "operator") {
     return myraFail(request, "FORBIDDEN", "Forbidden", 403)
   }

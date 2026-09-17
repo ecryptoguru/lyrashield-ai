@@ -12,7 +12,7 @@
  * convention used across apps/web; error codes come from MYRA_ERROR_CODES so
  * the shared client can key on them.
  */
-import { env } from "@lyrashield/config"
+import { env, isMyraAllowedEmail } from "@lyrashield/config"
 import {
   MYRA_ERROR_CODES,
   type MyraError,
@@ -36,8 +36,14 @@ export function myraDashboardEnabled(): boolean {
   return env.MYRA_DASHBOARD_ENABLED === "1"
 }
 
-export function myraWritesEnabled(): boolean {
-  return env.MYRA_WRITES_ENABLED === "1"
+export function myraWritesEnabled(principal?: MyraPrincipal): boolean {
+  if (env.MYRA_WRITES_ENABLED !== "1") return false
+  if (!env.MYRA_ALLOWED_EMAILS) return true
+  return (
+    principal?.kind === "user" &&
+    principal.emailVerified &&
+    isMyraAllowedEmail(principal.email, env.MYRA_ALLOWED_EMAILS)
+  )
 }
 
 export function myraOperatorEnabled(): boolean {
@@ -51,7 +57,13 @@ export function myraSurfaceEnabled(surface: MyraSurface): boolean {
 
 /** Principal-level gate for routes without an explicit surface in the body. */
 export function myraPrincipalEnabled(principal: MyraPrincipal): boolean {
-  if (principal.kind === "user") return myraDashboardEnabled()
+  if (principal.kind === "user") {
+    return (
+      myraDashboardEnabled() &&
+      principal.emailVerified &&
+      isMyraAllowedEmail(principal.email, env.MYRA_ALLOWED_EMAILS)
+    )
+  }
   if (principal.kind === "anonymous") return myraPublicEnabled()
   return myraOperatorEnabled()
 }

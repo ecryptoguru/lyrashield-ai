@@ -32,6 +32,8 @@ export async function resolveMyraRequest(
         kind: "user",
         accountId: session.user.id,
         sessionId: session.session.id,
+        email: session.user.email,
+        emailVerified: session.user.emailVerified,
         // Per contract: resolved lazily by tools that need them.
         workspaceId: null,
         role: null,

@@ -7,6 +7,8 @@ const script = ".github/scripts/verify-myra-deployment-config.mjs"
 const baseEnv = {
   ...process.env,
   MYRA_WRITES_ENABLED: "0",
+  MYRA_DASHBOARD_ENABLED: "0",
+  MYRA_ALLOWED_EMAILS: "",
   MYRA_CALENDAR_PROVIDER: "mock",
   MYRA_GOOGLE_CLIENT_ID: "",
   MYRA_GOOGLE_CLIENT_SECRET: "",
@@ -36,6 +38,7 @@ const fails = (env, message) => {
 
 const googleEnv = {
   MYRA_WRITES_ENABLED: "1",
+  MYRA_ALLOWED_EMAILS: "ankit@lyrashieldai.com",
   MYRA_CALENDAR_PROVIDER: "google",
   MYRA_GOOGLE_CLIENT_ID: "client-id",
   MYRA_GOOGLE_CLIENT_SECRET: "secret",
@@ -48,6 +51,12 @@ test("accepts the google provider with complete credentials when writes are enab
 
 test("accepts the mock provider when writes are disabled", () => {
   assert.match(run(), /Myra deployment configuration is valid/)
+})
+
+test("requires an account allowlist when the dashboard or writes are enabled", () => {
+  fails({ MYRA_DASHBOARD_ENABLED: "1" }, "MYRA_ALLOWED_EMAILS")
+  fails({ ...googleEnv, MYRA_ALLOWED_EMAILS: "" }, "MYRA_ALLOWED_EMAILS")
+  fails({ MYRA_ALLOWED_EMAILS: "not-an-email" }, "unique, valid")
 })
 
 test("rejects writes enabled against the mock calendar provider", () => {
