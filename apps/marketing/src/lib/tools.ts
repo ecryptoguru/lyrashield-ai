@@ -23,7 +23,7 @@ export const tools = [
     references: [
       {
         label: "OWASP Application Security Verification Standard",
-        url: "https://owasp.org/www-project-application-security-verification-standard/",
+        url: "https://owasp.org/asvs",
       },
     ],
   },
