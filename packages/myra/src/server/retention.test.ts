@@ -101,10 +101,34 @@ describe("pruneMyraRetention rescheduled-original reconcile", () => {
     const counts = await pruneMyraRetention(db as never, adapter)
 
     expect(adapter.cancelEvent).toHaveBeenCalledWith("evt-1")
-    expect(db.demoBooking.update).toHaveBeenCalledWith({
-      where: { id: "booking-1" },
+    expect(db.demoBooking.updateMany).toHaveBeenCalledWith({
+      where: { id: "booking-1", status: "CANCELED", providerEventId: "evt-1" },
       data: { providerEventId: null },
     })
     expect(counts.pendingProviderCancellations).toBe(1)
+  })
+
+  it("commits retention before provider cleanup and preserves pending cancellation rows", async () => {
+    let finishCancellation!: () => void
+    const adapter = fakeAdapter()
+    adapter.cancelEvent.mockImplementation(
+      () => new Promise<void>((resolve) => (finishCancellation = resolve))
+    )
+    const db = fakeDb({ pendingCancellations: [{ id: "booking-1", providerEventId: "evt-1" }] })
+
+    const sweep = pruneMyraRetention(db as never, adapter)
+    await vi.waitFor(() => expect(adapter.cancelEvent).toHaveBeenCalledWith("evt-1"))
+
+    try {
+      expect(db.demoBooking.deleteMany).toHaveBeenCalledWith({
+        where: {
+          createdAt: { lt: expect.any(Date) },
+          OR: [{ status: { not: "CANCELED" } }, { providerEventId: null }],
+        },
+      })
+    } finally {
+      finishCancellation()
+      await sweep
+    }
   })
 })
