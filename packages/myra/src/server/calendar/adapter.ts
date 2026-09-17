@@ -3,6 +3,7 @@
  * interface; provider transport is replaceable without touching the
  * permission layer. Provider tokens never leave this module.
  */
+import { env } from "@lyrashield/config"
 import { MyraServiceError } from "../errors"
 import { GoogleCalendarAdapter } from "./google"
 import { MockCalendarAdapter } from "./mock"
@@ -116,7 +117,9 @@ export function zonedWallToUtc(date: string, minutes: number, tz: string): Date 
 }
 
 export function getCalendarAdapter(): CalendarAdapter {
-  const provider = (process.env.MYRA_CALENDAR_PROVIDER ?? "mock").toLowerCase()
-  if (provider === "google") return new GoogleCalendarAdapter()
+  // The schema fails closed in production: when writes are enabled it refuses
+  // the mock provider outright, so this branch can never silently book
+  // against the in-process fake.
+  if (env.MYRA_CALENDAR_PROVIDER === "google") return new GoogleCalendarAdapter()
   return new MockCalendarAdapter()
 }

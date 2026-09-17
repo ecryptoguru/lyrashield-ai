@@ -1651,6 +1651,7 @@ model BillingAccount {
   @@index([workspaceId])
   @@index([accountId])
   @@index([status, currentPeriodEnd])
+  @@index([provider, status, deletedAt])
 }
 
 model Invitation {
@@ -2566,6 +2567,7 @@ model SupportCase {
   replies SupportCaseReply[]
 
   @@index([status, createdAt])
+  @@index([createdAt])
   @@index([accountId])
   @@index([publicSessionId])
   @@index([workspaceId])
@@ -2614,6 +2616,7 @@ model MyraOperation {
   @@index([accountId])
   @@index([publicSessionId])
   @@index([status, expiresAt])
+  @@index([status, updatedAt])
   @@map("myra_operations")
 }
 
@@ -2654,6 +2657,7 @@ model DemoBooking {
   @@index([status])
   @@index([attendeeEmail])
   @@index([manageTokenExpiresAt])
+  @@index([createdAt])
   @@map("demo_bookings")
 }
 
@@ -2725,6 +2729,7 @@ model MyraIdentityVerification {
   email           String
   purpose         String // support_case | demo_booking
   codeHash        String
+  accountId       String?
   publicSessionId String?
   attempts        Int       @default(0)
   expiresAt       DateTime
@@ -2732,6 +2737,7 @@ model MyraIdentityVerification {
   createdAt       DateTime  @default(now())
 
   @@index([email, purpose, expiresAt])
+  @@index([accountId, email, purpose, expiresAt])
   @@index([expiresAt])
   @@map("myra_identity_verifications")
 }

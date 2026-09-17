@@ -1,5 +1,5 @@
 import type React from "react"
-import { Badge, Button, Card, Spinner } from "@lyrashield/ui"
+import { Badge, Button, Card, Input, Spinner } from "@lyrashield/ui"
 
 export type CaseStatus = "NEW" | "OPEN" | "PENDING_USER" | "RESOLVED"
 
@@ -73,8 +73,10 @@ export function SupportCaseDetail(props: {
   actionError: string | null
   replyBody: string
   handoffSummary: string
+  elevationCode: string
   onReplyBodyChange: (value: string) => void
   onHandoffSummaryChange: (value: string) => void
+  onElevationCodeChange: (value: string) => void
   onPatch: (action: "takeover" | "release" | "resolve" | "assign", status?: CaseStatus) => void
   onSendReply: () => void
 }): React.ReactNode {
@@ -87,8 +89,10 @@ export function SupportCaseDetail(props: {
     actionError,
     replyBody,
     handoffSummary,
+    elevationCode,
     onReplyBodyChange,
     onHandoffSummaryChange,
+    onElevationCodeChange,
     onPatch,
     onSendReply,
   } = props
@@ -177,6 +181,28 @@ export function SupportCaseDetail(props: {
                 />
               </div>
             ) : null}
+
+            <div className="mt-4 border-t pt-3">
+              <label htmlFor="operator-elevation-code" className="text-sm font-medium">
+                Authenticator code
+              </label>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Every case action consumes a fresh one-time elevation — enter the current 6-digit
+                code from your authenticator app before clicking an action or sending a reply.
+              </p>
+              <Input
+                id="operator-elevation-code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                placeholder="123456"
+                value={elevationCode}
+                onChange={(event) =>
+                  onElevationCodeChange(event.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+                className="mt-2 max-w-40 text-center font-mono tracking-[0.3em]"
+              />
+            </div>
 
             <div className="mt-4 flex flex-wrap gap-2 border-t pt-3" aria-label="Case controls">
               {!takenOver ? (

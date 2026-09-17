@@ -12,7 +12,7 @@ const description = "Run a free, passive URL security check for AI-built apps. R
 const faqs = [
   { question: "What does the LyraShield free security check look for?", answer: "It reads the public page, response headers, and up to six same-origin JavaScript or CSS assets linked by that page. It checks for high-confidence secret patterns, baseline security headers, data-layer signals, HTTPS consistency, and supported framework fingerprints." },
   { question: "Is the LyraShield Lite Check safe?", answer: "It is passive and read-only. It does not log in, send attack payloads, query databases, enumerate private paths, exploit a finding, or actively test row-level security. Scan only apps you own or have permission to test." },
-  { question: "Do you store my app data or exposed secrets?", answer: "The scanner does not persist page bodies, matched secret values, or findings. Analytics receives only a one-way hash of the target hostname plus coarse funnel data. A public scorecard contains aggregate counters only and never the target URL or finding detail." },
+  { question: "Do you store my app data or exposed secrets?", answer: "The scanner does not persist page bodies, matched secret values, or findings. Analytics receives only coarse funnel counters — never the target URL, the hostname or finding detail. A public scorecard contains aggregate counters only." },
   { question: "Does a clean Lite Check mean my app is secure?", answer: "No. A clean result means no surface issues were found in this limited, outside-only check. Business-logic flaws, authenticated access issues, server-side code, and exploit validation require a deeper authorized assessment." },
 ]
 const jsonLd = [
@@ -268,6 +268,7 @@ const jsonLd = [
   {turnstileSiteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer is:inline></script>}
   <script>
     import { normalizePublicHttpUrl } from "../lib/public-url"
+    import { sanitizeMarketingProperties, type MarketingEventName } from "../lib/posthog-privacy"
 
     type LiteCheck = { category: string; severity: "needs_attention" | "worth_reviewing" | "ok"; title: string; whatItIs: string; whyItMatters: string; learnMoreUrl: string }
     type LiteResult = { target: string; scannedAt: string; checks: LiteCheck[]; liteResultSummary: { needsAttention: number; worthReviewing: number; looksOk: number; findingCount: number }; disclaimers: string[] }
@@ -291,7 +292,15 @@ const jsonLd = [
     let currentResult: LiteResult | null = null
     let lastAction = "waitlist"
 
-    const capture = (event: string, props: Record<string, unknown> = {}) => window.posthog?.capture(event, { product: "LyraShield", ...props })
+    // Analytics boundary: Lite Check events carry coarse funnel counters only.
+    // No target-derived property ever leaves this page — no domain hash
+    // no target URL, no finding category or severity. The allowlist in
+    // posthog-privacy.ts strips anything it does not name.
+    const capture = (event: MarketingEventName, props: Record<string, unknown> = {}) =>
+      window.posthog?.capture(
+        event,
+        sanitizeMarketingProperties(event, { product: "LyraShield", ...props }) ?? {}
+      )
     const query = new URL(location.href).searchParams
     let pendingHomepageScan = false
     if (query.get("start") === "1") {
@@ -307,12 +316,6 @@ const jsonLd = [
     }
     const attribution = { utm_source: query.get("utm_source") || undefined, utm_medium: query.get("utm_medium") || undefined, utm_campaign: query.get("utm_campaign") || undefined, referrer: document.referrer || undefined }
     const referralCode = query.get("ref")?.toUpperCase().match(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/)?.[0]
-
-    async function hashDomain(url: string): Promise<string> {
-      const host = new URL(url).hostname.toLowerCase()
-      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(host))
-      return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("")
-    }
 
     function animateSteps() {
       const steps = [...document.querySelectorAll<HTMLElement>("#scan-steps li")]
@@ -423,27 +426,15 @@ const jsonLd = [
         body.appendChild(wrap)
         details.appendChild(summaryEl)
         details.appendChild(body)
-        details.addEventListener("toggle", () => { if (details.open) capture("finding_expanded", { category: check.category, severity: check.severity }) })
+        details.addEventListener("toggle", () => { if (details.open) capture("finding_expanded") })
         findings.appendChild(details)
       })
-      results?.classList.remove("hidden"); results?.focus(); capture("scan_completed", { duration_ms: durationMs, finding_count: summary.findingCount, categories_flagged: [...new Set(result.checks.filter((check) => check.severity !== "ok").map((check) => check.category))], had_findings: summary.findingCount > 0 }); capture("upsell_viewed")
+      results?.classList.remove("hidden"); results?.focus(); capture("scan_completed", { duration_ms: durationMs, finding_count: summary.findingCount, had_findings: summary.findingCount > 0 }); capture("upsell_viewed")
     }
 
-    async function hashDomainOrReportError(url: string): Promise<string | null> {
-      try {
-        return await hashDomain(url)
-      } catch {
-        if (errorBox) {
-          errorBox.textContent = "Enter a valid public URL."
-          errorBox.classList.remove("hidden")
-        }
-        return null
-      }
-    }
-
-    function captureScanStarted(domainHash: string) {
+    function captureScanStarted() {
       const device = matchMedia("(max-width: 767px)").matches ? "mobile" : "desktop"
-      capture("scan_started", { target_domain_hash: domainHash, device, ...attribution })
+      capture("scan_started", { device, ...attribution })
     }
 
     function showScanningUi() {
@@ -501,14 +492,13 @@ const jsonLd = [
       return { result: body.result, durationMs: body.durationMs ?? 0 }
     }
 
-    function handleScanError(error: Error & { reason?: string }, domainHash: string) {
+    function handleScanError(error: Error & { reason?: string }) {
       if (errorBox) {
         errorBox.textContent = error.message
         errorBox.classList.remove("hidden")
       }
       capture(error.reason === "ssrf_blocked" ? "scan_blocked" : "scan_error", {
         reason: error.reason || "unreachable",
-        target_domain_hash: domainHash,
       })
       ;(window as TurnstileWindow).turnstile?.reset(turnstileWidget)
     }
@@ -532,17 +522,14 @@ const jsonLd = [
         return
       }
 
-      const domainHash = await hashDomainOrReportError(url)
-      if (!domainHash) return
-
-      captureScanStarted(domainHash)
+      captureScanStarted()
       const progress = showScanningUi()
       try {
         const { result, durationMs } = await runLiteScan(url, turnstileToken)
         await progress.finished
         renderResult(result, durationMs)
       } catch (cause) {
-        handleScanError(cause as Error & { reason?: string }, domainHash)
+        handleScanError(cause as Error & { reason?: string })
       } finally {
         hideScanningUi(progress)
       }

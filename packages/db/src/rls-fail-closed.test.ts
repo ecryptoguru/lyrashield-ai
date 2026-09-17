@@ -1284,4 +1284,77 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       }
     })
   })
+
+  describe("Myra operator-bound trusted path (v18 1.3 hardening)", () => {
+    const seedCase = () =>
+      prisma.supportCase.create({
+        data: {
+          reference: `LS-FC-${suffix.slice(0, 4).toUpperCase()}`,
+          subject: "Operator boundary fixture",
+          summary: "Fail-closed probe",
+          accountId: `rls-fc-owner-${suffix}`,
+        },
+      })
+
+    it("fails closed on a dual-owner table when no principal context is bound", async () => {
+      // The historical bug shape: the unbound trusted path silently saw every
+      // row. With the RESTRICTIVE boundary the same read must return zero —
+      // no account, no public session and no operator context means denied.
+      const supportCase = await seedCase()
+      try {
+        const unbound = await asWorkspace(null, async (tx) => {
+          const rows = await tx.$queryRaw<Array<{ count: bigint }>>`
+            SELECT count(*)::bigint AS count FROM "support_cases" WHERE id = ${supportCase.id}`
+          return Number(rows[0]?.count ?? 0)
+        })
+        expect(unbound).toBe(0)
+
+        // Binding ONLY the operator context is what admits the trusted path —
+        // an operator reads any owner's case.
+        const bound = await restricted.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT set_config('app.current_workspace_id', '', true)`
+          await tx.$executeRaw`SELECT set_config('app.current_account_id', '', true)`
+          await tx.$executeRaw`SELECT set_config('app.myra_public_session_id', '', true)`
+          await tx.$executeRaw`SELECT set_config('app.myra_operator_id', ${`rls-fc-op-${suffix}`}, true)`
+          const rows = await tx.$queryRaw<Array<{ count: bigint }>>`
+            SELECT count(*)::bigint AS count FROM "support_cases" WHERE id = ${supportCase.id}`
+          return Number(rows[0]?.count ?? 0)
+        })
+        expect(bound).toBe(1)
+      } finally {
+        await prisma.supportCase.delete({ where: { id: supportCase.id } })
+      }
+    })
+
+    it("reads a dual-owner row through withMyraOperatorRLS while the ambient client stays closed", async () => {
+      const { withMyraOperatorRLS } = await import("./rls")
+      const supportCase = await seedCase()
+      try {
+        const viaHelper = await withMyraOperatorRLS(`rls-fc-op-${suffix}`, (tx) =>
+          tx.supportCase.findUnique({ where: { id: supportCase.id } })
+        )
+        expect(viaHelper?.id).toBe(supportCase.id)
+
+        // Same read on the ambient restricted client (extension applies no
+        // scoping to a bare-id lookup): still zero.
+        await expect(
+          applicationPrisma.supportCase.findUnique({ where: { id: supportCase.id } })
+        ).resolves.toBeNull()
+
+        // And an owner-bound context for a different account stays closed.
+        const foreignAccount = await restricted.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT set_config('app.current_workspace_id', '', true)`
+          await tx.$executeRaw`SELECT set_config('app.current_account_id', ${`rls-fc-other-${suffix}`}, true)`
+          await tx.$executeRaw`SELECT set_config('app.myra_public_session_id', '', true)`
+          await tx.$executeRaw`SELECT set_config('app.myra_operator_id', '', true)`
+          const rows = await tx.$queryRaw<Array<{ count: bigint }>>`
+            SELECT count(*)::bigint AS count FROM "support_cases" WHERE id = ${supportCase.id}`
+          return Number(rows[0]?.count ?? 0)
+        })
+        expect(foreignAccount).toBe(0)
+      } finally {
+        await prisma.supportCase.delete({ where: { id: supportCase.id } })
+      }
+    })
+  })
 })

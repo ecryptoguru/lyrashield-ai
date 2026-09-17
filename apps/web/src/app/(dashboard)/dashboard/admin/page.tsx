@@ -13,6 +13,8 @@ import { Badge, Card, buttonVariants } from "@lyrashield/ui"
 import { requirePlatformAdminIdentity } from "@lyrashield/auth/server"
 import { notFound } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
+import { LocalTime } from "@/components/local-time"
+import { getWorkspacePlanLabel } from "@/lib/enum-labels"
 import { getPlatformAdminOverview, type PlatformHealthStatus } from "@/lib/platform-admin-overview"
 
 export const dynamic = "force-dynamic"
@@ -23,8 +25,10 @@ function statusVariant(status: PlatformHealthStatus) {
   return "muted" as const
 }
 
+const NUMBER_FORMAT = new Intl.NumberFormat("en-US")
+
 function count(value: number | null): string {
-  return value === null ? "Unknown" : value.toLocaleString()
+  return value === null ? "Unknown" : NUMBER_FORMAT.format(value)
 }
 
 function AdminCard({
@@ -95,7 +99,7 @@ export default async function PlatformAdminPage() {
           elevation and atomic platform audit controls are connected.
         </p>
         <p className="text-muted-foreground text-xs">
-          Refreshed {new Date(overview.generatedAt).toLocaleString()}
+          Refreshed <LocalTime value={overview.generatedAt} withTime />
         </p>
       </div>
 
@@ -147,8 +151,8 @@ export default async function PlatformAdminPage() {
             </h2>
             <p className="text-muted-foreground text-sm">
               Derived from provider-backed billing rows (Polar/Razorpay, status active, paid plan).
-              Trial markers, complimentary rows, platform-admin accounts, and refunded or lapsed
-              rows never count.
+              Trial markers, complimentary rows, platform-admin accounts and refunded or lapsed rows
+              never count.
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -158,18 +162,18 @@ export default async function PlatformAdminPage() {
                 <h3 className="font-semibold">Active paid accounts</h3>
               </div>
               <p className="mt-2 text-xl font-semibold tabular-nums">
-                {overview.growth.activePaidAccounts.toLocaleString()}
+                {NUMBER_FORMAT.format(overview.growth.activePaidAccounts)}
               </p>
               <p className="text-muted-foreground mt-2 text-xs">
-                {overview.growth.paidAccountsInTerm.toLocaleString()} still paying through current
-                term (includes past-due and canceled-but-in-term).
+                {NUMBER_FORMAT.format(overview.growth.paidAccountsInTerm)} still paying through
+                current term (includes past-due and canceled-but-in-term).
               </p>
             </Card>
             <Card className="p-5">
               <h3 className="font-semibold">New / canceled (30d)</h3>
               <p className="mt-2 text-xl font-semibold tabular-nums">
-                +{overview.growth.newPaidAccounts30d.toLocaleString()} / −
-                {overview.growth.canceled30d.toLocaleString()}
+                +{NUMBER_FORMAT.format(overview.growth.newPaidAccounts30d)} / −
+                {NUMBER_FORMAT.format(overview.growth.canceled30d)}
               </p>
               <p className="text-muted-foreground mt-2 text-xs">
                 New counts still-active paid accounts created in the window; canceled counts
@@ -179,17 +183,17 @@ export default async function PlatformAdminPage() {
             <Card className="p-5">
               <h3 className="font-semibold">MRR (catalog USD)</h3>
               <p className="mt-2 text-xl font-semibold tabular-nums">
-                ${Math.round(overview.growth.mrrUsd).toLocaleString()}
+                ${NUMBER_FORMAT.format(Math.round(overview.growth.mrrUsd))}
                 <span className="text-muted-foreground text-sm font-normal">
                   {" "}
-                  · ARR ${Math.round(overview.growth.arrUsd).toLocaleString()}
+                  · ARR ${NUMBER_FORMAT.format(Math.round(overview.growth.arrUsd))}
                 </span>
               </p>
               <p className="text-muted-foreground mt-2 text-xs">
                 Monthly-equivalent at published USD prices (annual/12). INR purchases count at USD
                 catalog price — reporting convention, not settlement. Plan mix:{" "}
                 {Object.entries(overview.growth.planMix)
-                  .map(([plan, n]) => `${plan} ${n}`)
+                  .map(([plan, n]) => `${getWorkspacePlanLabel(plan)} ${NUMBER_FORMAT.format(n)}`)
                   .join(" · ") || "none"}
               </p>
             </Card>

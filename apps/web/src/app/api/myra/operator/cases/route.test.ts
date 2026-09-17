@@ -5,6 +5,11 @@ const requirePlatformAdminIdentity = vi.fn()
 const listOperatorCases = vi.fn()
 
 vi.mock("@lyrashield/config", () => ({ env }))
+vi.mock("@lyrashield/db", () => ({
+  // The operator routes run reads and writes on the bound RLS transaction
+  // (v18 1.3) — the service fns are mocked so a passthrough tx suffices.
+  withMyraOperatorRLS: (_operatorId: string, fn: (tx: unknown) => unknown) => fn({}),
+}))
 vi.mock("@lyrashield/auth/server", () => ({
   requirePlatformAdminIdentity,
   getSession: vi.fn(),
@@ -42,7 +47,8 @@ describe("GET /api/myra/operator/cases private headers", () => {
     expectPrivateHeaders(response)
     expect(listOperatorCases).toHaveBeenCalledWith(
       { status: undefined, cursor: undefined },
-      "operator-1"
+      "operator-1",
+      expect.anything()
     )
   })
 

@@ -12,6 +12,8 @@ import { err } from "./errors"
 import type { MyraDb } from "./db"
 
 export type IdentityPurpose = "support_case" | "demo_booking"
+export type IdentityBinding =
+  { accountId: string; publicSessionId?: never } | { publicSessionId: string; accountId?: never }
 
 const MAX_SENDS_PER_HOUR = 3
 
@@ -22,7 +24,7 @@ function hashCode(code: string): string {
 export async function requestIdentityCode(
   email: string,
   purpose: IdentityPurpose,
-  publicSessionId?: string,
+  binding: IdentityBinding,
   db: MyraDb = prisma
 ): Promise<{ sent: boolean; expiresAt: Date }> {
   const normalized = email.trim().toLowerCase()
@@ -39,14 +41,21 @@ export async function requestIdentityCode(
 
   // One active code per (email, purpose): supersede prior unconsumed codes.
   await db.myraIdentityVerification.deleteMany({
-    where: { email: normalized, purpose, consumedAt: null },
+    where: {
+      email: normalized,
+      purpose,
+      consumedAt: null,
+      accountId: binding.accountId ?? null,
+      publicSessionId: binding.publicSessionId ?? null,
+    },
   })
   await db.myraIdentityVerification.create({
     data: {
       email: normalized,
       purpose,
       codeHash: hashCode(code),
-      publicSessionId: publicSessionId ?? null,
+      accountId: binding.accountId ?? null,
+      publicSessionId: binding.publicSessionId ?? null,
       expiresAt,
     },
   })
@@ -72,11 +81,18 @@ export async function confirmIdentityCode(
   email: string,
   purpose: IdentityPurpose,
   code: string,
+  binding: IdentityBinding,
   db: MyraDb = prisma
 ): Promise<boolean> {
   const normalized = email.trim().toLowerCase()
   const row = await db.myraIdentityVerification.findFirst({
-    where: { email: normalized, purpose, consumedAt: null },
+    where: {
+      email: normalized,
+      purpose,
+      consumedAt: null,
+      accountId: binding.accountId ?? null,
+      publicSessionId: binding.publicSessionId ?? null,
+    },
     orderBy: { createdAt: "desc" },
   })
   if (!row) return false
@@ -101,36 +117,37 @@ export async function confirmIdentityCode(
 }
 
 /**
- * The latest consumed verification for (email, purpose), or null. When
- * `publicSessionId` is given, a session-bound code must match that session;
- * unbound consumed codes are accepted as already-verified.
+ * The latest consumed verification for this principal, email and purpose, or
+ * null. A consumed code counts only for four code lifetimes (one hour).
  */
 export async function findVerifiedEmail(
   email: string,
   purpose: IdentityPurpose,
-  publicSessionId?: string | null,
+  binding: IdentityBinding,
   db: MyraDb = prisma
 ): Promise<{ consumedAt: Date | null } | null> {
   const normalized = email.trim().toLowerCase()
+  const verifiedSince = new Date(Date.now() - MYRA_LIMITS.identityCodeTtlMinutes * 4 * 60 * 1000)
   const row = await db.myraIdentityVerification.findFirst({
-    where: { email: normalized, purpose, consumedAt: { not: null } },
+    where: {
+      email: normalized,
+      purpose,
+      accountId: binding.accountId ?? null,
+      publicSessionId: binding.publicSessionId ?? null,
+      consumedAt: { not: null, gte: verifiedSince },
+    },
     orderBy: { consumedAt: "desc" },
-    select: { publicSessionId: true, consumedAt: true },
+    select: { consumedAt: true },
   })
   if (!row) return null
-  // A session-bound code only verifies for that session. An unbound code is
-  // accepted for any caller — the email owner proved control of the inbox.
-  if (row.publicSessionId && row.publicSessionId !== (publicSessionId ?? null)) {
-    return null
-  }
   return { consumedAt: row.consumedAt }
 }
 
 export async function hasVerifiedEmail(
   email: string,
   purpose: IdentityPurpose,
-  publicSessionId?: string | null,
+  binding: IdentityBinding,
   db: MyraDb = prisma
 ): Promise<boolean> {
-  return (await findVerifiedEmail(email, purpose, publicSessionId, db)) !== null
+  return (await findVerifiedEmail(email, purpose, binding, db)) !== null
 }

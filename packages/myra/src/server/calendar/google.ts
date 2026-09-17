@@ -3,6 +3,7 @@
  * Throws CALENDAR_NOT_CONFIGURED unless MYRA_GOOGLE_CLIENT_* envs exist.
  * Tokens stay server-side; nothing here is reachable from the client bundle.
  */
+import { env } from "@lyrashield/config"
 import { MyraServiceError } from "../errors"
 import {
   CalendarTimeoutError,
@@ -20,13 +21,13 @@ interface GoogleEnv {
 }
 
 function googleEnv(): GoogleEnv | null {
-  const clientId = process.env.MYRA_GOOGLE_CLIENT_ID
-  const clientSecret = process.env.MYRA_GOOGLE_CLIENT_SECRET
+  const clientId = env.MYRA_GOOGLE_CLIENT_ID
+  const clientSecret = env.MYRA_GOOGLE_CLIENT_SECRET
   // Dev convenience: a full OAuth token blob can stand in for the refresh env.
-  let refreshToken = process.env.MYRA_GOOGLE_REFRESH_TOKEN
-  if (!refreshToken && process.env.MYRA_GOOGLE_TOKEN_JSON) {
+  let refreshToken = env.MYRA_GOOGLE_REFRESH_TOKEN
+  if (!refreshToken && env.MYRA_GOOGLE_TOKEN_JSON) {
     try {
-      const blob = JSON.parse(process.env.MYRA_GOOGLE_TOKEN_JSON) as {
+      const blob = JSON.parse(env.MYRA_GOOGLE_TOKEN_JSON) as {
         refresh_token?: string
       }
       refreshToken = blob.refresh_token
@@ -39,7 +40,7 @@ function googleEnv(): GoogleEnv | null {
     clientId,
     clientSecret,
     refreshToken,
-    calendarId: process.env.MYRA_GOOGLE_CALENDAR_ID ?? "primary",
+    calendarId: env.MYRA_GOOGLE_CALENDAR_ID || "primary",
   }
 }
 

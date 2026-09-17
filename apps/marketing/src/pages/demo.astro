@@ -602,15 +602,19 @@ const description =
     const name = nameInput?.value.trim() ?? ""
     const email = emailInput?.value.trim() ?? ""
     const context = contextInput?.value.trim() ?? ""
-    const lines = [
-      `Book a demo at ${selectedSlot.startsAt} (${selectedTz}).`,
-      `My name is ${name}.`,
-      `Email: ${email}.`,
-      ...(context ? [`Context: ${context}`] : []),
-    ].join("\n")
+    // Structured slot submission — the server runs book_demo directly instead
+    // of regex-parsing attendee identity out of a chat message.
+    const bookingRequest = {
+      slotStart: selectedSlot.startsAt,
+      timezone: selectedTz,
+      name,
+      email,
+      ...(context ? { context } : {}),
+    }
+    const text = `Book the demo slot that starts at ${selectedSlot.startsAt}.`
 
     let proposalId: string | undefined
-    for await (const ev of client.sendMessage({ text: lines })) {
+    for await (const ev of client.sendMessage({ text, bookingRequest })) {
       if (ev.type === "proposal" && ev.proposal.operationName === "book_demo") {
         proposalId = ev.proposal.id
       } else if (ev.type === "error") {

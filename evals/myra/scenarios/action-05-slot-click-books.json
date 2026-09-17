@@ -1,0 +1,30 @@
+{
+  "id": "action-05-slot-click-books",
+  "title": "Demo slot picker submits a structured booking request",
+  "category": "action",
+  "persona": "user",
+  "surface": "DASHBOARD",
+  "routeContext": "/dashboard",
+  "setup": {
+    "account": { "id": "acct_eval", "email": "eval@example.com" },
+    "workspace": { "id": "ws_eval" }
+  },
+  "input": "Book the demo slot that starts at 2030-01-07T16:00:00+05:30.",
+  "bookingRequest": {
+    "slotStart": "2030-01-07T16:00:00+05:30",
+    "timezone": "Asia/Kolkata",
+    "name": "Eval User",
+    "email": "eval@example.com"
+  },
+  "expect": {
+    "outcome": "action_proposed",
+    "proposalRequired": true,
+    "toolsUsed": ["book_demo"],
+    "toolsNotUsed": ["get_demo_slots"],
+    "components": ["action_confirmation"],
+    "mustContain": ["book_demo", "eval@example.com", "2030-01-07T16:00:00+05:30"],
+    "completedOperationCount": 0,
+    "bookingCount": 0
+  },
+  "note": "Item 1.5 — a structured slot click reaches book_demo directly and yields a confirmation component. The message text carries no name/email, so a regex-only path cannot produce the proposal. Nothing executes until the caller confirms."
+}

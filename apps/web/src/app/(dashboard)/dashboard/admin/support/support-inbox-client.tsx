@@ -4,8 +4,10 @@
  * Founder support inbox for Myra cases (spec §6).
  *
  * Server routes enforce the boundary: reads need the 12h operator identity
- * window, mutations need the 30-minute TOTP elevation. This client only
- * renders what GET /api/myra/operator/cases returns — it never infers access.
+ * window, mutations need the 30-minute TOTP elevation plus a single-use
+ * elevation nonce minted per action through /api/admin/elevations. This
+ * client only renders what GET /api/myra/operator/cases returns — it never
+ * infers access.
  */
 import { useCallback, useEffect, useState } from "react"
 import { Badge, Button, Card, Spinner, cn } from "@lyrashield/ui"
@@ -67,6 +69,24 @@ async function readError(res: Response): Promise<never> {
   throw new Error(message)
 }
 
+/**
+ * Mint an action-bound single-use elevation nonce. The elevations endpoint
+ * verifies the authenticator code and binds the nonce to the operator's
+ * session — the mutation route then consumes it exactly once.
+ */
+async function requestElevationNonce(action: string, code: string): Promise<string> {
+  const res = await fetch("/api/admin/elevations", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action, code }),
+  })
+  if (!res.ok) await readError(res)
+  const body = (await res.json()) as { data?: { nonce?: string } }
+  const nonce = typeof body.data?.nonce === "string" ? body.data.nonce : null
+  if (!nonce) throw new Error("Administrator elevation was not issued.")
+  return nonce
+}
+
 export function SupportInbox() {
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "">("")
   const [rows, setRows] = useState<CaseRow[]>([])
@@ -82,6 +102,7 @@ export function SupportInbox() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [replyBody, setReplyBody] = useState("")
   const [handoffSummary, setHandoffSummary] = useState("")
+  const [elevationCode, setElevationCode] = useState("")
   const [announce, setAnnounce] = useState("")
 
   // setState only inside promise callbacks — an effect may call these, but
@@ -145,6 +166,7 @@ export function SupportInbox() {
     setSelectedId(id)
     setReplyBody("")
     setHandoffSummary("")
+    setElevationCode("")
     setActionError(null)
     if (id) {
       setLoadingDetail(true)
@@ -166,9 +188,18 @@ export function SupportInbox() {
       setBusy(action)
       setActionError(null)
       try {
+        if (elevationCode.length !== 6) {
+          throw new Error("Enter the 6-digit authenticator code for this elevation.")
+        }
+        // Every case mutation consumes a fresh single-use elevation nonce —
+        // mint it for the specific action before sending the request.
+        const nonce = await requestElevationNonce(`myra.case.${action}`, elevationCode)
         const res = await fetch(`/api/myra/operator/cases/${selectedId}`, {
           method: "PATCH",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            "x-lyrashield-admin-elevation": nonce,
+          },
           body: JSON.stringify({
             action,
             ...(status ? { status } : {}),
@@ -176,6 +207,7 @@ export function SupportInbox() {
           }),
         })
         if (!res.ok) await readError(res)
+        setElevationCode("")
         await Promise.all([loadDetail(selectedId), loadList()])
         setAnnounce(
           action === "takeover"
@@ -192,7 +224,7 @@ export function SupportInbox() {
         setBusy(null)
       }
     },
-    [selectedId, loadDetail, loadList, handoffSummary]
+    [selectedId, loadDetail, loadList, handoffSummary, elevationCode]
   )
 
   const sendReply = useCallback(async () => {
@@ -200,13 +232,21 @@ export function SupportInbox() {
     setBusy("reply")
     setActionError(null)
     try {
+      if (elevationCode.length !== 6) {
+        throw new Error("Enter the 6-digit authenticator code for this elevation.")
+      }
+      const nonce = await requestElevationNonce("myra.case.reply", elevationCode)
       const res = await fetch(`/api/myra/operator/cases/${selectedId}/replies`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-lyrashield-admin-elevation": nonce,
+        },
         body: JSON.stringify({ body: replyBody.trim() }),
       })
       if (!res.ok) await readError(res)
       setReplyBody("")
+      setElevationCode("")
       await Promise.all([loadDetail(selectedId), loadList()])
       setAnnounce("Reply sent.")
     } catch (e) {
@@ -214,7 +254,7 @@ export function SupportInbox() {
     } finally {
       setBusy(null)
     }
-  }, [selectedId, replyBody, loadDetail, loadList])
+  }, [selectedId, replyBody, elevationCode, loadDetail, loadList])
 
   return (
     <div className="grid gap-5 lg:grid-cols-[22rem_1fr]">
@@ -310,8 +350,10 @@ export function SupportInbox() {
         actionError={actionError}
         replyBody={replyBody}
         handoffSummary={handoffSummary}
+        elevationCode={elevationCode}
         onReplyBodyChange={setReplyBody}
         onHandoffSummaryChange={setHandoffSummary}
+        onElevationCodeChange={setElevationCode}
         onPatch={(action, status) => void patch(action, status)}
         onSendReply={() => void sendReply()}
       />

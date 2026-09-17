@@ -1,7 +1,7 @@
-import { getSystemPrisma } from "@lyrashield/db"
+import { getSystemPrisma, Prisma } from "@lyrashield/db"
 import { env } from "@lyrashield/config"
 import { getScanQueue, isScanWorkerAvailable } from "@lyrashield/integrations"
-import { computePaidAccountMetrics } from "./growth-metrics"
+import { paidAccountMetricsFromAggregate, THIRTY_DAYS_MS } from "./growth-metrics"
 
 export type PlatformHealthStatus = "healthy" | "degraded" | "unknown"
 const ACTIVATION_MINIMUM_SAMPLE = 20
@@ -175,6 +175,98 @@ function countStatus(
   return groups.find((group) => group.status === status)?._count._all ?? 0
 }
 
+type PaidAccountAggregateRow = {
+  activePaidAccounts: bigint
+  paidAccountsInTerm: bigint
+  newPaidAccounts30d: bigint
+  canceled30d: bigint
+}
+
+type PaidPlanIntervalRow = {
+  currentPlan: string
+  interval: string | null
+  accounts: bigint
+}
+
+/**
+ * Paid-account metrics aggregated in SQL — the same rows count as in
+ * computePaidAccountMetrics: provider-backed (polar/razorpay), not
+ * soft-deleted, bound to an account, admin accounts excluded. The newest
+ * non-FREE row per account drives active/in-term/new-30d; any provider row
+ * canceled inside the 30-day window counts toward canceled30d. MRR and the
+ * plan mix are folded from the (plan, interval) tallies so catalog prices
+ * stay in packages/pricing.
+ */
+export async function getPaidAccountMetrics(
+  prisma: ReturnType<typeof getSystemPrisma>,
+  { excludedAccountIds, now = new Date() }: { excludedAccountIds: Set<string>; now?: Date }
+) {
+  const thirtyDaysAgo = new Date(now.getTime() - THIRTY_DAYS_MS)
+  const excluded = [...excludedAccountIds]
+  const adminFilter = excluded.length
+    ? Prisma.sql`AND "accountId" NOT IN (${Prisma.join(excluded)})`
+    : Prisma.empty
+  const providerRows = Prisma.sql`
+    WITH provider_rows AS (
+      SELECT
+        "id", "accountId", status, "currentPlan"::text AS "currentPlan",
+        interval, "currentPeriodEnd", "canceledAt", "createdAt"
+      FROM "BillingAccount"
+      WHERE "deletedAt" IS NULL
+        AND provider IN ('polar', 'razorpay')
+        AND "accountId" IS NOT NULL
+        ${adminFilter}
+    ),
+    paid_rows AS (SELECT * FROM provider_rows WHERE "currentPlan" <> 'FREE'),
+    newest_paid AS (
+      SELECT DISTINCT ON ("accountId") *
+      FROM paid_rows
+      ORDER BY "accountId", "createdAt" DESC, "id" DESC
+    )`
+  const [totalsRows, planRows] = await Promise.all([
+    prisma.$queryRaw<PaidAccountAggregateRow[]>`
+      ${providerRows}
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'active')::bigint AS "activePaidAccounts",
+        COUNT(*) FILTER (
+          WHERE status IN ('active', 'past_due')
+            OR (status = 'canceled' AND "currentPeriodEnd" > ${now})
+        )::bigint AS "paidAccountsInTerm",
+        COUNT(*) FILTER (
+          WHERE status = 'active' AND "createdAt" >= ${thirtyDaysAgo}
+        )::bigint AS "newPaidAccounts30d",
+        (
+          SELECT COUNT(DISTINCT "accountId")
+          FROM provider_rows
+          WHERE "canceledAt" IS NOT NULL AND "canceledAt" >= ${thirtyDaysAgo}
+        )::bigint AS "canceled30d"
+      FROM newest_paid
+    `,
+    prisma.$queryRaw<PaidPlanIntervalRow[]>`
+      ${providerRows}
+      SELECT "currentPlan", interval, COUNT(*)::bigint AS accounts
+      FROM newest_paid
+      WHERE status = 'active'
+      GROUP BY "currentPlan", interval
+    `,
+  ])
+  const totals = totalsRows[0]
+  if (!totals) throw new Error("Paid-account aggregate returned no row")
+  return paidAccountMetricsFromAggregate(
+    {
+      activePaidAccounts: Number(totals.activePaidAccounts),
+      paidAccountsInTerm: Number(totals.paidAccountsInTerm),
+      newPaidAccounts30d: Number(totals.newPaidAccounts30d),
+      canceled30d: Number(totals.canceled30d),
+    },
+    planRows.map((row) => ({
+      currentPlan: row.currentPlan,
+      interval: row.interval,
+      accounts: Number(row.accounts),
+    }))
+  )
+}
+
 export async function getPlatformAdminOverview() {
   const prisma = getSystemPrisma()
   const databasePromise = Promise.all([
@@ -200,32 +292,17 @@ export async function getPlatformAdminOverview() {
     prisma.payout.count({ where: { status: { in: ["PENDING", "PROCESSING"] } } }),
   ])
   const growthPromise = (async () => {
-    const [billingRows, admins] = await Promise.all([
-      prisma.billingAccount.findMany({
-        where: { deletedAt: null, provider: { in: ["polar", "razorpay"] } },
-        select: {
-          accountId: true,
-          provider: true,
-          status: true,
-          currentPlan: true,
-          interval: true,
-          currentPeriodEnd: true,
-          canceledAt: true,
-          createdAt: true,
+    const admins = await prisma.user.findMany({
+      where: {
+        email: {
+          in: env.PLATFORM_ADMIN_EMAILS.split(",")
+            .map((email) => email.trim().toLowerCase())
+            .filter(Boolean),
         },
-      }),
-      prisma.user.findMany({
-        where: {
-          email: {
-            in: env.PLATFORM_ADMIN_EMAILS.split(",")
-              .map((email) => email.trim().toLowerCase())
-              .filter(Boolean),
-          },
-        },
-        select: { id: true },
-      }),
-    ])
-    return computePaidAccountMetrics(billingRows, {
+      },
+      select: { id: true },
+    })
+    return getPaidAccountMetrics(prisma, {
       excludedAccountIds: new Set(admins.map((admin) => admin.id)),
     })
   })()

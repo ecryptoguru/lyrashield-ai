@@ -215,6 +215,7 @@ run_case() {
     grep -Fq "Worker promotion passed for ${digest}" <<< "$output"
   else
     [ "$status" -ne 0 ]
+    grep -Fq 'Worker promotion failed during:' <<< "$output"
     if grep -Fq 'Worker promotion passed' <<< "$output"; then
       echo "failed promotion emitted a success marker" >&2
       exit 1

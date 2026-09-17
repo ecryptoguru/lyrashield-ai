@@ -4,6 +4,7 @@ import {
   sanitizeLinkHref,
   sanitizeMarkdown,
   MYRA_COPY,
+  type BookingRequest,
   type MyraClient,
   type MyraClientError,
   type MyraComponent,
@@ -14,7 +15,8 @@ export interface MyraDomRendererContext {
   client: MyraClient
   apiBase: string
   announce: (text: string) => void
-  send: (text: string) => void
+  /** Chat turn; `bookingRequest` carries a structured slot-picker submission. */
+  send: (text: string, bookingRequest?: BookingRequest) => void
   markActionCompleted: () => void
   setLastTraceId: (traceId: string) => void
 }
@@ -285,6 +287,74 @@ function renderVerifyStep(
   add(card, row)
 }
 
+/**
+ * Inline attendee step after a marketing slot pick. Anonymous attendees type
+ * their own name/email; the server-side verifyAttendee gate then routes them
+ * through the existing demo_booking email verification when needed.
+ */
+function renderSlotAttendeeStep(
+  card: HTMLElement,
+  grid: HTMLElement,
+  slot: { id: string; startsAt: string; endsAt: string },
+  displayTimezone: string,
+  context: MyraDomRendererContext
+): void {
+  grid.hidden = true
+  const form = el("div", "myra-attendee")
+  const start = new Date(slot.startsAt)
+  const label = Number.isNaN(start.valueOf())
+    ? slot.startsAt
+    : new Intl.DateTimeFormat(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: displayTimezone,
+      }).format(start)
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+  add(form, el("p", "myra-card-title", "Your details"))
+  add(form, el("p", "myra-meta", `${label} · we'll send the invite in your timezone (${timezone})`))
+  const nameInput = el("input", "myra-input") as HTMLInputElement
+  nameInput.type = "text"
+  nameInput.setAttribute("aria-label", "Your name")
+  nameInput.setAttribute("autocomplete", "name")
+  nameInput.setAttribute("placeholder", "Your name")
+  const emailInput = el("input", "myra-input") as HTMLInputElement
+  emailInput.type = "email"
+  emailInput.setAttribute("aria-label", "Your email")
+  emailInput.setAttribute("autocomplete", "email")
+  emailInput.setAttribute("placeholder", "Your email")
+  const error = el("p", "myra-note myra-attendee-error")
+  const actions = el("div", "myra-attendee-actions")
+  const continueBtn = el("button", "myra-btn myra-btn-primary", "Continue")
+  continueBtn.type = "button"
+  continueBtn.addEventListener("click", () => {
+    const name = nameInput.value.trim()
+    const email = emailInput.value.trim()
+    if (!name || !email) {
+      error.textContent = "Add your name and email to continue."
+      return
+    }
+    context.send(`Book the demo slot that starts at ${slot.startsAt}`, {
+      slotStart: slot.startsAt,
+      timezone,
+      name,
+      email,
+    })
+  })
+  const backBtn = el("button", "myra-btn myra-btn-ghost", "Back")
+  backBtn.type = "button"
+  backBtn.addEventListener("click", () => {
+    form.remove()
+    grid.hidden = false
+  })
+  add(form, nameInput, emailInput, error, actions)
+  add(actions, continueBtn, backBtn)
+  add(card, form)
+  nameInput.focus()
+}
+
 export function renderMyraComponent(
   component: MyraComponent,
   host: HTMLElement,
@@ -431,8 +501,11 @@ export function renderMyraComponent(
             }).format(start)
         const btn = el("button", "myra-btn", label)
         btn.type = "button"
+        // The pick alone never sends a chat turn — the attendee step below
+        // collects name/email and submits a structured bookingRequest so the
+        // server drives book_demo without parsing free text (item 1.5).
         btn.addEventListener("click", () => {
-          context.send(`Book the demo slot that starts at ${slot.startsAt}`)
+          renderSlotAttendeeStep(card, grid, slot, component.displayTimezone, context)
         })
         add(grid, btn)
       }

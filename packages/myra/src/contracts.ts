@@ -377,12 +377,30 @@ export type TaskRecord = z.infer<typeof taskRecordSchema>
 
 // ─── API request/response payloads ─────────────────────────────────────────
 
+/**
+ * Structured demo-slot submission (item 1.5): the slot picker's attendee step
+ * sends this so the server can drive book_demo directly — no name/email
+ * parsing from free text. `context` is optional attendee notes carried into
+ * the booking record.
+ */
+export const bookingRequestSchema = z
+  .object({
+    slotStart: z.string().datetime({ offset: true }),
+    timezone: z.string().min(2).max(60),
+    name: z.string().min(1).max(120).optional(),
+    email: z.email().max(320).optional(),
+    context: z.string().max(2000).optional(),
+  })
+  .strict()
+export type BookingRequest = z.infer<typeof bookingRequestSchema>
+
 export const postMessageRequestSchema = z
   .object({
     conversationId: z.string().max(80).optional(),
     text: z.string().min(1).max(4000),
     routeContext: z.string().max(120).optional(),
     surface: myraSurfaceSchema,
+    bookingRequest: bookingRequestSchema.optional(),
     sessionMemory: z
       .object({
         preferred_timezone: z.string().max(80).optional(),
@@ -429,11 +447,13 @@ export type BookDemoPayload = z.infer<typeof bookDemoPayloadSchema>
 
 export const caseReplyRequestSchema = z.object({ body: z.string().min(1).max(4000) }).strict()
 
+// No publicSessionId field: the session binds through the verified
+// `x-myra-session` token in the route, never through a client-asserted body
+// value.
 export const identityRequestSchema = z
   .object({
     email: z.email().max(320),
     purpose: z.enum(["support_case", "demo_booking"]),
-    publicSessionId: z.string().max(80).optional(),
     turnstileToken: z.string().max(4096).optional(),
   })
   .strict()
@@ -496,6 +516,7 @@ export const MYRA_LIMITS = {
   conversationRetentionDays: 30,
   caseRetentionDays: 365,
   bookingRetentionDays: 365,
+  auditRetentionDays: 90,
   manageTokenGraceDays: 7,
   proposalTtlMinutes: 15,
   publicSessionTtlDays: 30,

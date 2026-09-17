@@ -47,6 +47,9 @@ export async function searchKnowledge(
       ? Prisma.sql`(cardinality("allowedRoles") = 0 OR ${opts.role} = ANY("allowedRoles"))`
       : Prisma.sql`cardinality("allowedRoles") = 0`
 
+  // The generated searchVector column (title + topic + content) is
+  // maintained by Postgres and GIN-indexed — never recompute the vector
+  // per query or the topic terms and the index are both lost.
   const rows = await db.$queryRaw<
     {
       id: string
@@ -59,14 +62,12 @@ export async function searchKnowledge(
   >(Prisma.sql`
     SELECT id, title, "sourceUrl", topic,
            left(content, 400) AS snippet,
-           ts_rank(to_tsvector('english', title || ' ' || content),
-                   websearch_to_tsquery('english', ${trimmed})) AS rank
+           ts_rank("searchVector", websearch_to_tsquery('english', ${trimmed})) AS rank
     FROM myra_knowledge_entries
     WHERE status = 'ACTIVE'
       AND ${audienceFilter}
       AND ${roleFilter}
-      AND to_tsvector('english', title || ' ' || content)
-          @@ websearch_to_tsquery('english', ${trimmed})
+      AND "searchVector" @@ websearch_to_tsquery('english', ${trimmed})
     ORDER BY rank DESC
     LIMIT ${limit}
   `)

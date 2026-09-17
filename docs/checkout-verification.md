@@ -25,7 +25,7 @@
 pnpm --filter @lyrashield/worker verify:checkout-readiness
 ```
 
-Validates admission posture, provider credentials, and catalog completeness
+Validates admission posture, provider credentials and catalog completeness
 (plan × interval + pack + local keys). Exits non-zero on gaps. This is a
 config check, not a payment test.
 
@@ -37,9 +37,9 @@ config check, not a payment test.
    Polar and Razorpay Cloud flags together. Record both resulting values; do
    not assume this workflow can change one provider alone.
 2. Redeploy web through the protected release path and read back the revision,
-   traffic, flags, and allowlist before purchase.
+   traffic, flags and allowlist before purchase.
 3. With an authenticated billing manager session and valid Origin header,
-   send `POST /billing/checkout` with JSON `workspaceId`, `plan`, and
+   send `POST /billing/checkout` with JSON `workspaceId`, `plan` and
    `interval`. An excluded workspace must receive external HTTP 503
    `PAYMENTS_UNAVAILABLE`; the internal decision reason is `not_canary`.
    Check the founder workspace can proceed without completing payment.
@@ -53,9 +53,9 @@ Use the founder canary account. Purchase the **cheapest self-serve paid plan**
 Evidence to retain per purchase:
 
 - Provider dashboard receipt (hosted checkout session id).
-- `WebhookEvent` row: provider, event type, external id, `processed`, and
+- `WebhookEvent` row: provider, event type, external id, `processed` and
   `processedAt`; inspect related `WebhookEventTrack` rows for billing status,
-  attempts, and completion. Retain provider signature-verification evidence
+  attempts and completion. Retain provider signature-verification evidence
   from the webhook handling path. Do not copy the stored raw payload.
 - `BillingAccount` row: `status=active`, `currentPlan`, `currentPeriodEnd`,
   `externalId` — confirms entitlement landed via webhook, not the return URL.
@@ -65,7 +65,7 @@ Evidence to retain per purchase:
 - Screenshot of `/dashboard/billing` post-webhook (success notice + plan).
 
 Use privileged, read-only, account-bound queries when collecting application
-receipts; parameterize the exact provider event and founder account IDs, and
+receipts; parameterize the exact provider event and founder account IDs and
 do not select `WebhookEvent.payload` or payment credentials:
 
 ```sql
@@ -88,7 +88,7 @@ Then immediately test cancellation from the customer portal and retain the
 
 ## Step 3 — Razorpay rail
 
-Repeat with `RAZORPAY_BILLING_ADMISSION=canary`, an INR method, and the INR
+Repeat with `RAZORPAY_BILLING_ADMISSION=canary`, an INR method and the INR
 plan catalog. Note: hosted-checkout methods above INR 15,000 are unproven —
 test the highest INR tier deliberately, not incidentally. Razorpay packs price
 dynamically via `BILLING_USD_INR_RATE` — verify the paise amount on the
@@ -111,7 +111,7 @@ subscriptions are unaffected — admission gates _new_ purchases only. Failed
 tracks below the retry cap can reconcile; `dead_letter` tracks are terminal and
 are **not** automatically re-enqueued. Check `admin → Billing`, retain event
 and track IDs, diagnose provider delivery and processing without exposing raw
-payloads, and use a separately authorized bounded recovery operation. Do not
+payloads and use a separately authorized bounded recovery operation. Do not
 mark a rail ready with unresolved dead letters.
 
 ## What this runbook does not cover

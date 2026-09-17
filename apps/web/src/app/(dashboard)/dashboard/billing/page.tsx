@@ -23,6 +23,7 @@ import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
 import { headers, cookies } from "next/headers"
 import { parsePlanIntent, PLAN_INTENT_COOKIE } from "@/lib/plan-intent"
+import { getWorkspacePlanLabel } from "@/lib/enum-labels"
 import { getRequestBillingAdmission, resolveRequestBillingProvider } from "@/lib/billing-admission"
 import { BillingReturnNotice } from "./billing-return-notice"
 
@@ -42,7 +43,7 @@ export default async function BillingPage({
   if (!workspaceId) {
     return (
       <div>
-        <PageHeader title="Billing" description="Manage your plan, usage, and minute packs." />
+        <PageHeader title="Billing" description="Manage your plan, usage and minute packs." />
         <NoWorkspaceState
           icon={CreditCard}
           description="Create a workspace during onboarding to manage billing."
@@ -99,7 +100,7 @@ export default async function BillingPage({
     <div>
       <PageHeader
         title="Billing"
-        description="Manage your plan, usage, and minute packs."
+        description="Manage your plan, usage and minute packs."
         icon={CreditCard}
       />
 
@@ -141,7 +142,9 @@ export default async function BillingPage({
           <CardContent className="space-y-4">
             <div className="space-y-4">
               <div>
-                <p className="text-2xl font-bold">{cloudPlan?.name ?? plan}</p>
+                <p className="text-2xl font-bold">
+                  {cloudPlan?.name ?? getWorkspacePlanLabel(plan)}
+                </p>
                 {billingAccount?.interval && (
                   <p className="text-sm text-muted-foreground">
                     {billingAccount.interval === "annual" ? "Annual billing" : "Monthly billing"}
@@ -265,7 +268,7 @@ export default async function BillingPage({
                 Agent-minutes are measured as wall-clock time. Deep/Custom scans consume 3× minutes.
               </p>
               <p className="text-xs text-muted-foreground">
-                You are only billed for usable scans: a failed scan bills nothing, and a cancelled
+                You are only billed for usable scans: a failed scan bills nothing and a cancelled
                 scan bills only the time it actually ran.
               </p>
               <p className="text-xs text-muted-foreground">
@@ -350,7 +353,7 @@ export default async function BillingPage({
         )}
 
         {/* Portal Link — rendered for ANY provider: the portal route decides
-            the destination (Polar portal, or the Razorpay billing-support
+            the destination (Polar portal or the Razorpay billing-support
             path). Gating the card on provider === "polar" left Razorpay
             subscribers with no manage path at all. */}
         {canManageBilling && plan !== "FREE" && billingAccount && !isComplimentary && (

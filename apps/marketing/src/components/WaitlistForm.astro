@@ -100,6 +100,8 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
 </form>
 
 <script>
+  import { sanitizeMarketingProperties } from "../lib/posthog-privacy"
+
   (function () {
     const form = document.getElementById("waitlist-form") as HTMLFormElement | null
     if (!form) return
@@ -158,7 +160,10 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
           window.open(destinations[channel as keyof typeof destinations], "_blank", "noopener,noreferrer")
         }
         if (window.posthog?.__loaded) {
-          window.posthog.capture("waitlist_referral_share", { channel })
+          window.posthog.capture(
+            "waitlist_referral_share",
+            sanitizeMarketingProperties("waitlist_referral_share", { channel }) ?? {}
+          )
         }
       })
     })
@@ -167,7 +172,10 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
       if (!formStarted) {
         formStarted = true
         if (window.posthog?.__loaded) {
-          window.posthog.capture("waitlist_form_start")
+          window.posthog.capture(
+            "waitlist_form_start",
+            sanitizeMarketingProperties("waitlist_form_start") ?? {}
+          )
         }
       }
     })
@@ -200,7 +208,11 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
           errorEl.classList.remove("hidden")
         }
         if (window.posthog?.__loaded) {
-          window.posthog.capture("waitlist_submit_error", { error_type: "invalid_email" })
+          window.posthog.capture(
+            "waitlist_submit_error",
+            sanitizeMarketingProperties("waitlist_submit_error", { error_type: "invalid_email" }) ??
+              {}
+          )
         }
         return
       }
@@ -224,7 +236,11 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
             errorEl.classList.remove("hidden")
           }
           if (window.posthog?.__loaded) {
-            window.posthog.capture("waitlist_submit_error", { error_type: "rate_limited" })
+            window.posthog.capture(
+              "waitlist_submit_error",
+              sanitizeMarketingProperties("waitlist_submit_error", { error_type: "rate_limited" }) ??
+                {}
+            )
           }
           return
         }
@@ -250,7 +266,10 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
         }
 
         if (window.posthog?.__loaded) {
-          window.posthog.capture("waitlist_submit_success", { role: body.role || null })
+          window.posthog.capture(
+            "waitlist_submit_success",
+            sanitizeMarketingProperties("waitlist_submit_success", { role: body.role || null }) ?? {}
+          )
         }
       } catch (error) {
         if (errorEl) {
@@ -258,7 +277,10 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
           errorEl.classList.remove("hidden")
         }
         if (window.posthog?.__loaded) {
-          window.posthog.capture("waitlist_submit_error", { error_type: "server" })
+          window.posthog.capture(
+            "waitlist_submit_error",
+            sanitizeMarketingProperties("waitlist_submit_error", { error_type: "server" }) ?? {}
+          )
         }
       } finally {
         if (submitButton) {

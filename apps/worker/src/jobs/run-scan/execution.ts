@@ -124,12 +124,24 @@ export async function executeScanTarget(params: {
         findingsComplete: true,
       },
     }
-    await addScanEvent(
-      scanId,
-      "engine_skipped",
-      "info",
-      "Deterministic repository retest uses an independent checkout and no model calls"
-    )
+    try {
+      await addScanEvent(
+        scanId,
+        "engine_skipped",
+        "info",
+        "Deterministic repository retest uses an independent checkout and no model calls"
+      )
+    } catch (error) {
+      // Ownership has not reached the job finalizer yet. Clean locally so an
+      // event-write failure cannot strand the independent retest checkout.
+      await deterministicCheckout.cleanup().catch((cleanupError) => {
+        logger.error("Failed to clean deterministic retest checkout after event failure", {
+          scanId,
+          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        })
+      })
+      throw error
+    }
   } else if (engineBacked) {
     maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd, target.type)
     if (maxBudgetUsd <= 0) {

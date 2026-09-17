@@ -36,7 +36,16 @@ function routeContextFor(pathname: string, surface: "marketing" | "app"): string
 
 // ─── Panel ──────────────────────────────────────────────────────────────────
 
-export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
+export function MyraPanel({
+  enabled = true,
+  accountEmail,
+  accountName,
+}: {
+  enabled?: boolean
+  /** Signed-in account identity — prefills the demo-booking attendee step. */
+  accountEmail?: string | null
+  accountName?: string | null
+}) {
   const pathname = usePathname()
   const routeContext = routeContextFor(pathname ?? "/", "app")
 
@@ -62,7 +71,7 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
     pickSuggestion,
     submitCaseForm,
     componentContext,
-  } = useMyraPanel(routeContext)
+  } = useMyraPanel(routeContext, { email: accountEmail, name: accountName })
 
   const starters = [
     { label: "Help with this page", send: "Help with this page" },
@@ -326,7 +335,11 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
           ) : null}
         </div>
         <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-muted-foreground text-xs">Enter to send · Shift+Enter for a line</p>
+          {streaming ? (
+            <p className="text-muted-foreground text-xs">Myra is answering…</p>
+          ) : (
+            <p className="text-muted-foreground text-xs">Enter to send · Shift+Enter for a line</p>
+          )}
           <div className="flex gap-2">
             {streaming ? (
               <Button size="sm" variant="secondary" onClick={stopStream}>
@@ -334,7 +347,11 @@ export function MyraPanel({ enabled = true }: { enabled?: boolean }) {
                 Stop
               </Button>
             ) : null}
-            <Button size="sm" onClick={() => void send(input)} disabled={!input.trim()}>
+            <Button
+              size="sm"
+              onClick={() => void send(input)}
+              disabled={!input.trim() || streaming}
+            >
               <Send className="mr-1 size-3.5" aria-hidden="true" />
               Send
             </Button>

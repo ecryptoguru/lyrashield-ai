@@ -60,7 +60,7 @@ an allowed ownership, membership, or sharing relationship for that project.
 
 Turn the invariant into positive and negative cases with two synthetic users and two projects. Test owner access, cross-user denial, missing membership, revoked membership, malformed identifiers, and any deliberate share path. Exercise the real query layer in a disposable database rather than mocking the authorization predicate away.
 
-Use [OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/) or another reviewed requirement set to derive invariants outside the generated patch. Select requirements that match the application architecture. ASVS is a verification framework, not proof that every listed control applies or passes.
+Use [OWASP ASVS](https://owasp.org/projects/asvs) or another reviewed requirement set to derive invariants outside the generated patch. Select requirements that match the application architecture. ASVS is a verification framework, not proof that every listed control applies or passes.
 
 ## Make a safe mutation and expect failure
 
@@ -126,5 +126,5 @@ The browser-local [AI app security checklist](/tools/ai-app-security-checklist) 
 
 - [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final)
 - [OWASP Secure Coding with AI Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_with_AI_Cheat_Sheet.html)
-- [OWASP Application Security Verification Standard](https://owasp.org/www-project-application-security-verification-standard/)
+- [OWASP Application Security Verification Standard](https://owasp.org/projects/asvs)
 - [The Illusion of Safety: Multi-Tier Verification of AI vs. Human C++ Code](https://arxiv.org/abs/2607.00107)

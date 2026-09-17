@@ -127,6 +127,8 @@ export {
   withWorkspaceRLS,
   withAccountRLS,
   withMyraPublicRLS,
+  withMyraOperatorRLS,
+  bindMyraOperatorRLSContext,
   withoutWorkspaceRLS,
   bindAccountRLSContext,
   bindMyraPublicRLSContext,
@@ -143,11 +145,13 @@ export {
 export {
   deleteUserAccount,
   getAccountDeletionPlan,
+  registerAccountDeletionHooks,
   AccountDeletionBlockedError,
   AccountDeletionConfirmationRequiredError,
   AccountDeletionActiveScanError,
   AccountDeletionUnsupportedArtifactError,
   AccountDeletionAffiliateError,
+  type AccountDeletionHooks,
   type AccountDeletionPlan,
 } from "./account-deletion"
 export {

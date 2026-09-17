@@ -67,13 +67,13 @@ components:
 
 LyraShield is an evidence-backed release-assurance product for AI-built software.
 The visual language is **terminal-precise and evidence-first**: dark surfaces,
-a single cyan accent, mono-font labels for machine-readable states, and honest
+a single cyan accent, mono-font labels for machine-readable states and honest
 empty/negative states rendered as plainly as passes. Nothing glows that isn't
 true. Both dark and light themes are first-class; every surface must resolve
 tokens under both `:root` and `:root[data-theme="light"]`.
 
 Audience: builders who already distrust scanners. The design earns trust by
-showing scope, evidence state, and limits — never by decoration.
+showing scope, evidence state and limits — never by decoration.
 
 ## Colors
 
@@ -134,6 +134,6 @@ Squared-terminal aesthetic on the hero (radius `sm` 0.25rem); standard
 - Do label all synthetic/demo output "Example"; don't present mock data as
   verified or independently reviewed.
 - Do honor `prefers-reduced-motion` and DNT/GPC; don't animate critical CTAs.
-- Don't introduce purple/violet, glassmorphism-heavy layers, or emoji in UI.
+- Don't introduce purple/violet, glassmorphism-heavy layers or emoji in UI.
 - Don't change public copy claims (certification, guarantee, universal
   coverage) — see `docs/claims-policy.md`.

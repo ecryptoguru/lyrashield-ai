@@ -2,6 +2,19 @@
  * @lyrashield/myra/server — server-only Myra surface. Never imported by the
  * client bundles or the marketing Worker.
  */
+import { registerAccountDeletionHooks } from "@lyrashield/db"
+import { getCalendarAdapter } from "./calendar/adapter"
+
+// Arm account deletion with provider-side demo cancellation. The db package
+// owns the erasure transaction but cannot import this adapter (dependency
+// direction), so the server bundle registers the cancel on import — any
+// environment that serves Myra cancels orphaned calendar events when an
+// account is deleted. Best-effort inside the transaction; the row scrub is
+// the durable erasure.
+registerAccountDeletionHooks({
+  cancelCalendarEvent: (providerEventId) => getCalendarAdapter().cancelEvent(providerEventId),
+})
+
 export { MyraServiceError, err, toMyraError } from "./errors"
 export { allowedToolsFor, isToolAllowed } from "./policy"
 export {
@@ -36,13 +49,12 @@ export {
 } from "./verify"
 export { auditEvent, type MyraActorType, type AuditFields } from "./audit"
 export {
-  checkBudget,
-  recordCost,
   monthlyBudgetCapUsd,
+  monthlyGenerationSpendUsd,
   maximumTurnCostUsd,
   reserveGenerationBudget,
   settleGenerationBudget,
-  type BudgetState,
+  releaseGenerationBudget,
 } from "./budget"
 export {
   getCalendarAdapter,
@@ -61,13 +73,20 @@ export {
   getProvider,
   MockProvider,
   AzureProvider,
+  ProviderDefiniteFailure,
+  ProviderTimeout,
   sanitizeAnswerMarkdown,
   type ModelProvider,
   type ModelGenerateInput,
   type ModelGenerateOutput,
 } from "./provider"
 export { runTaskLoop, newTraceId, classifyIntent, type LoopArgs } from "./loop"
-export { pruneMyraRetention, type RetentionCounts } from "./retention"
+export {
+  pruneMyraRetention,
+  recoverMyraState,
+  type RetentionCounts,
+  type RecoveryCounts,
+} from "./retention"
 export {
   handleMessage,
   suggest,

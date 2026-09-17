@@ -43,7 +43,7 @@ export default async function ConnectionsPage() {
       <div>
         <PageHeader
           title="Connections"
-          description="Connect coding agents, source control, and other services to your workspace."
+          description="Connect coding agents, source control and other services to your workspace."
         />
         <NoWorkspaceState
           icon={Bot}
@@ -59,7 +59,7 @@ export default async function ConnectionsPage() {
     <div>
       <PageHeader
         title="Connections"
-        description="Connected clients first, then the install catalog for coding agents, source control, and other services."
+        description="Connected clients first, then the install catalog for coding agents, source control and other services."
       />
 
       <section className="space-y-3" aria-labelledby="connected-heading">
@@ -69,7 +69,7 @@ export default async function ConnectionsPage() {
         {connections.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="text-muted-foreground p-6 text-sm">
-              No coding-agent connections yet. Install LyraShield in your agent below, or connect
+              No coding-agent connections yet. Install LyraShield in your agent below or connect
               through an OAuth consent from your client.
             </CardContent>
           </Card>
@@ -155,7 +155,7 @@ export default async function ConnectionsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground text-sm">Connect GitHub, MCP, and the CLI.</p>
+              <p className="text-muted-foreground text-sm">Connect GitHub, MCP and the CLI.</p>
               <Link
                 href="/dashboard/integrations"
                 className={buttonVariants({ variant: "secondary", size: "sm", className: "mt-3" })}

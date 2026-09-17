@@ -47,8 +47,10 @@ const baseProps = {
   actionError: null,
   replyBody: "Operator reply",
   handoffSummary: "short",
+  elevationCode: "",
   onReplyBodyChange: () => {},
   onHandoffSummaryChange: () => {},
+  onElevationCodeChange: () => {},
   onPatch: () => {},
   onSendReply: () => {},
 }
@@ -81,6 +83,7 @@ describe("SupportCaseDetail", () => {
     expect(html).toContain("The requester sees a blocked scan.")
     expect(html).toContain("Myra previously asked for scan details.")
     expect(html).toContain('id="myra-handoff-summary"')
+    expect(html).toContain('id="operator-elevation-code"')
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Release to Myra<\/button>/)
     expect(html).toContain("Assign to me")
     expect(html).toContain("Resolve")

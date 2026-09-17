@@ -16,6 +16,7 @@
   "dependencies": {
     "@lyrashield/auth": "workspace:*",
     "@lyrashield/billing": "workspace:*",
+    "@lyrashield/config": "workspace:*",
     "@lyrashield/db": "workspace:*",
     "@lyrashield/integrations": "workspace:*",
     "@lyrashield/pricing": "workspace:*",
@@ -25,6 +26,6 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^6.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.11"
   }
 }

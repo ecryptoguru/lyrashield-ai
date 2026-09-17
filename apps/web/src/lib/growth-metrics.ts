@@ -43,8 +43,23 @@ interface PaidAccountMetrics {
   planMix: Record<string, number>
 }
 
+/** Counts produced by the SQL aggregate in platform-admin-overview. */
+interface PaidAccountAggregateTotals {
+  activePaidAccounts: number
+  paidAccountsInTerm: number
+  newPaidAccounts30d: number
+  canceled30d: number
+}
+
+/** (plan, interval) tally over the deduped active paid rows. */
+interface PaidPlanIntervalCount {
+  currentPlan: string
+  interval: string | null
+  accounts: number
+}
+
 const PAID_PROVIDERS = new Set(["polar", "razorpay"])
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+export const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 
 function monthlyEquivalentUsd(plan: string, interval: string | null): number {
   const catalog = CLOUD_PLAN_MAP[plan as keyof typeof CLOUD_PLAN_MAP]
@@ -105,6 +120,32 @@ export function computePaidAccountMetrics(
       (row) => now.getTime() - row.createdAt.getTime() <= THIRTY_DAYS_MS
     ).length,
     canceled30d: recentlyCanceled.size,
+    mrrUsd,
+    arrUsd: mrrUsd * 12,
+    planMix,
+  }
+}
+
+/**
+ * Fold SQL-side aggregates into the same shape computePaidAccountMetrics
+ * returns. The database counts rows; only the catalog-priced MRR and the
+ * plan mix are derived here from the (plan, interval) tallies.
+ */
+export function paidAccountMetricsFromAggregate(
+  totals: PaidAccountAggregateTotals,
+  planIntervalCounts: PaidPlanIntervalCount[]
+): PaidAccountMetrics {
+  const planMix: Record<string, number> = {}
+  let mrrUsd = 0
+  for (const { currentPlan, interval, accounts } of planIntervalCounts) {
+    planMix[currentPlan] = (planMix[currentPlan] ?? 0) + accounts
+    mrrUsd += accounts * monthlyEquivalentUsd(currentPlan, interval)
+  }
+  return {
+    activePaidAccounts: totals.activePaidAccounts,
+    paidAccountsInTerm: totals.paidAccountsInTerm,
+    newPaidAccounts30d: totals.newPaidAccounts30d,
+    canceled30d: totals.canceled30d,
     mrrUsd,
     arrUsd: mrrUsd * 12,
     planMix,

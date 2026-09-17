@@ -52,7 +52,7 @@ describe("Lite Check marketing surface", () => {
   it("documents passive limits and privacy-safe sharing", () => {
     expect(page).toContain("no active RLS test")
     expect(page).toContain("It never queries a table or collection")
-    expect(page).toContain("target_domain_hash")
+    expect(page).not.toContain("target_domain_hash")
     expect(page).toContain("needsAttention: s.needsAttention")
     expect(page).not.toContain("secretValue")
   })

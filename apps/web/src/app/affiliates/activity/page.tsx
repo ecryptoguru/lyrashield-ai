@@ -126,7 +126,7 @@ export default async function AffiliateActivityPage({
     <div className="mx-auto max-w-6xl px-4 py-8">
       <PageHeader
         title="Activity"
-        description="Clicks, signups, and conversions attributed to your referrals."
+        description="Clicks, signups and conversions attributed to your referrals."
       />
 
       <ActivityTabs currentTab={tab} />

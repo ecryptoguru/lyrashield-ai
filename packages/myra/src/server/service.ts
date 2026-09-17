@@ -5,10 +5,12 @@
  * (route handlers) apply requirePlatformAdmin first.
  */
 import { randomUUID } from "node:crypto"
+import { env } from "@lyrashield/config"
 import { prisma } from "@lyrashield/db"
 import { sendNotification } from "@lyrashield/integrations"
 import { MYRA_LIMITS } from "../contracts"
 import type {
+  BookingRequest,
   MyraComponent,
   MyraStreamEvent,
   MyraSurface,
@@ -17,7 +19,7 @@ import type {
 } from "../contracts"
 import { screenSecrets } from "../sanitize"
 import { err, toMyraError } from "./errors"
-import { withOwnerScope, ownerWhere } from "./db"
+import { withOwnerScope, ownerWhere, withTrustedScope, MYRA_TRUSTED_MANAGE_TOKEN } from "./db"
 import type { MyraDb } from "./db"
 import type { ResolvedMyraRequest } from "./context"
 import { newTraceId, runTaskLoop } from "./loop"
@@ -42,6 +44,8 @@ export interface HandleMessageInput {
   text: string
   routeContext?: string
   surface: MyraSurface
+  /** Structured slot-picker submission — drives book_demo without text parsing. */
+  bookingRequest?: BookingRequest
   sessionMemory?: {
     preferred_timezone?: string
     preferred_locale?: string
@@ -69,13 +73,6 @@ function toolContext(
     workspaceId: ctx.workspaceId,
     role: ctx.role,
   }
-}
-
-function disabled(): MyraStreamEvent | null {
-  if (process.env.MYRA_DISABLED === "1" || process.env.MYRA_DISABLED === "true") {
-    return { type: "error", error: { code: "MYRA_DISABLED", message: "Myra is unavailable." } }
-  }
-  return null
 }
 
 // ─── Conversations ────────────────────────────────────────────────────────
@@ -122,11 +119,9 @@ export async function* handleMessage(
   ctx: ResolvedMyraRequest,
   input: HandleMessageInput
 ): AsyncGenerator<MyraStreamEvent> {
-  const off = disabled()
-  if (off) {
-    yield off
-    return
-  }
+  // The surface gates (MYRA_PUBLIC_ENABLED / MYRA_DASHBOARD_ENABLED) are
+  // enforced upstream on the route; there is no separate env kill switch —
+  // the unvalidated MYRA_DISABLED process.env read was removed (v18).
   if (!input.text || input.text.length > MYRA_LIMITS.messageMaxChars) {
     yield {
       type: "error",
@@ -210,6 +205,7 @@ export async function* handleMessage(
       ctx: toolCtx,
       text: screened,
       routeContext: input.routeContext,
+      bookingRequest: input.bookingRequest,
       sessionMemory: ctx.principal.kind === "anonymous" ? input.sessionMemory : undefined,
       assistantMessageId,
       traceId,
@@ -250,7 +246,9 @@ export async function confirmProposal(
   privateResult?: Record<string, unknown>
   component: MyraComponent
 }> {
-  if (process.env.MYRA_WRITES_DISABLED === "1" || process.env.MYRA_WRITES_DISABLED === "true") {
+  // Fail closed on the validated write gate — the unvalidated
+  // MYRA_WRITES_DISABLED process.env switch was removed (Deep Review v18).
+  if (env.MYRA_WRITES_ENABLED !== "1") {
     throw err("WRITES_DISABLED", "Actions are temporarily disabled.")
   }
   const proposal = await withOwnerScope(ctx.principal, (tx) =>
@@ -393,9 +391,13 @@ export async function manageBooking(
   db: MyraDb = prisma
 ) {
   const tokenHash = hashManageToken(manageToken)
-  const booking = await db.demoBooking
-    .findUnique({ where: { manageTokenHash: tokenHash } })
-    .catch(() => null)
+  // The manage token IS the credential — the hash lookup precedes any owner
+  // context, so it declares the manage-token trusted path (v18 1.3).
+  const booking = await withTrustedScope(
+    MYRA_TRUSTED_MANAGE_TOKEN,
+    (tx) => tx.demoBooking.findUnique({ where: { manageTokenHash: tokenHash } }).catch(() => null),
+    db
+  )
   if (!booking || !isManageTokenActive(booking)) {
     throw err("FORBIDDEN", "Invalid or expired booking management link.")
   }
@@ -404,7 +406,11 @@ export async function manageBooking(
     if (booking.status === "OUTCOME_UNKNOWN") {
       const res = await reconcileDemoBooking(booking.id, db).catch(() => null)
       if (res?.status === "CONFIRMED") {
-        const fresh = await db.demoBooking.findUnique({ where: { id: booking.id } })
+        const fresh = await withTrustedScope(
+          MYRA_TRUSTED_MANAGE_TOKEN,
+          (tx) => tx.demoBooking.findUnique({ where: { id: booking.id } }),
+          db
+        )
         return { booking: toBookingView(fresh ?? booking), copy: res.copy }
       }
       return { booking: toBookingView(booking), copy: res?.copy }
@@ -447,7 +453,11 @@ export async function manageBooking(
     typeof result.bookingId === "string" && result.status !== "CANCELED"
       ? result.bookingId
       : booking.id
-  const fresh = await db.demoBooking.findUnique({ where: { id: freshId } })
+  const fresh = await withTrustedScope(
+    MYRA_TRUSTED_MANAGE_TOKEN,
+    (tx) => tx.demoBooking.findUnique({ where: { id: freshId } }),
+    db
+  )
   return {
     booking: toBookingView(fresh ?? booking),
     result: outcome.result,

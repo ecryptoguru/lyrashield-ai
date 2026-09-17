@@ -6,6 +6,7 @@
  */
 import { randomInt } from "node:crypto"
 import { z } from "zod"
+import { env } from "@lyrashield/config"
 import { prisma } from "@lyrashield/db"
 import { sendNotification } from "@lyrashield/integrations"
 import { MYRA_COPY, submitCasePayloadSchema, type SubmitCasePayload } from "../../contracts"
@@ -13,7 +14,7 @@ import { err } from "../errors"
 import { createProposal } from "../operations"
 import type { ExecutorOutcome, OperationContext } from "../operations"
 import { findVerifiedEmail } from "../verify"
-import { ownerWhere, withOwnerScope } from "../db"
+import { ownerWhere, withOwnerScope, withTrustedScope, MYRA_TRUSTED_INTERNAL } from "../db"
 import type { MyraDb } from "../db"
 import type { MyraToolContext, MyraToolResult, ProposalSummary } from "./types"
 
@@ -40,15 +41,42 @@ async function accountEmail(accountId: string, db: MyraDb): Promise<string | nul
   return user?.email ?? null
 }
 
+/**
+ * Signed-in users may redirect replies only to their account email or to an
+ * address verified within the window — a client-asserted foreign replyEmail
+ * is never trusted on its own.
+ */
+async function resolveUserReplyEmail(
+  accountId: string,
+  accountEmail: string | null,
+  requestedRaw: string | undefined,
+  db: MyraDb
+): Promise<{ replyEmail: string; verifiedAt: Date | null }> {
+  const requested = requestedRaw?.trim().toLowerCase()
+  if (requested && requested !== accountEmail?.trim().toLowerCase()) {
+    const verified = await findVerifiedEmail(requested, "support_case", { accountId }, db)
+    if (!verified) {
+      throw err("VERIFICATION_REQUIRED", "Verify your reply email to send a case.")
+    }
+    return { replyEmail: requested, verifiedAt: verified.consumedAt }
+  }
+  const replyEmail = requested ?? accountEmail
+  if (!replyEmail) throw err("VERIFICATION_REQUIRED", "Your account has no reply email.")
+  return { replyEmail, verifiedAt: null }
+}
+
 async function resolveReplyDestination(
   ctx: MyraToolContext,
   payload: SubmitCasePayload
 ): Promise<{ replyEmail: string; verifiedAt: Date | null }> {
   if (ctx.principal.kind === "user") {
-    const email =
-      payload.replyEmail ?? (await accountEmail(ctx.principal.accountId, ctx.db ?? prisma))
-    if (!email) throw err("VERIFICATION_REQUIRED", "Your account has no reply email.")
-    return { replyEmail: email, verifiedAt: null }
+    const db = ctx.db ?? prisma
+    return resolveUserReplyEmail(
+      ctx.principal.accountId,
+      await accountEmail(ctx.principal.accountId, db),
+      payload.replyEmail,
+      db
+    )
   }
   // Anonymous: a verified reply destination is mandatory before any case
   // preview. Never reveals whether the address already has cases.
@@ -60,7 +88,7 @@ async function resolveReplyDestination(
   const verified = await findVerifiedEmail(
     email,
     "support_case",
-    ctx.principal.publicSessionId,
+    { publicSessionId: ctx.principal.publicSessionId },
     ctx.db ?? prisma
   )
   if (!verified) {
@@ -155,16 +183,22 @@ export async function executeSubmitSupportCase(
   let replyEmail: string | null = null
   let emailVerifiedAt: Date | null = null
   if (ctx.principal.kind === "user") {
-    replyEmail =
-      parsed.replyEmail ?? (await accountEmail(ctx.principal.accountId, ctx.db ?? prisma))
-    if (!replyEmail) throw err("VERIFICATION_REQUIRED", "Your account has no reply email.")
+    const db = ctx.db ?? prisma
+    const resolved = await resolveUserReplyEmail(
+      ctx.principal.accountId,
+      await accountEmail(ctx.principal.accountId, db),
+      parsed.replyEmail,
+      db
+    )
+    replyEmail = resolved.replyEmail
+    emailVerifiedAt = resolved.verifiedAt
   } else if (ctx.principal.kind === "anonymous") {
     const email = parsed.replyEmail?.trim().toLowerCase()
     if (!email) throw err("VERIFICATION_REQUIRED", "Verify your reply email first.")
     const verified = await findVerifiedEmail(
       email,
       "support_case",
-      ctx.principal.publicSessionId,
+      { publicSessionId: ctx.principal.publicSessionId },
       ctx.db ?? prisma
     )
     if (!verified) throw err("VERIFICATION_REQUIRED", "Verify your reply email first.")
@@ -240,12 +274,17 @@ async function notifyCaseCreated(
       body: "A new support case was submitted through Myra. Open the support inbox to review.",
       metadata: { caseId },
     },
-    [process.env.MYRA_SUPPORT_NOTIFY_EMAIL || SUPPORT_INBOX]
+    [env.MYRA_SUPPORT_NOTIFY_EMAIL || SUPPORT_INBOX]
   ).catch(() => false)
   const state = sent ? "sent" : "failed"
-  await db.supportCase
-    .update({ where: { id: caseId }, data: { notificationState: state } })
-    .catch(() => {})
+  // Marks the case notified after the email attempt — an ambient caller
+  // reaches this with no owner context bound, so the write declares itself
+  // through the internal trusted path (v18 1.3).
+  await withTrustedScope(
+    MYRA_TRUSTED_INTERNAL,
+    (tx) => tx.supportCase.update({ where: { id: caseId }, data: { notificationState: state } }),
+    db
+  ).catch(() => {})
   return state
 }
 

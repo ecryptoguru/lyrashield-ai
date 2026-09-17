@@ -2,10 +2,14 @@
  * GET   /api/myra/operator/cases/[id] — operator case detail (12h TOTP read).
  * PATCH /api/myra/operator/cases/[id] — takeover / release / status change.
  *
- * Mutations require the 30-minute TOTP elevation (requirePlatformAdmin) and
- * pass through withCookieMutation so the browser-session origin check applies.
+ * Mutations require the 30-minute TOTP elevation (requirePlatformAdmin) plus
+ * an action-specific single-use elevation nonce that executePlatformAdminMutation
+ * consumes atomically with the platform audit row — the same boundary the
+ * affiliate admin actions use. Requests pass through withCookieMutation so the
+ * browser-session origin check applies.
  */
 import { requirePlatformAdmin, requirePlatformAdminIdentity } from "@lyrashield/auth/server"
+
 import {
   getOperatorCase,
   operatorAssign,
@@ -14,10 +18,17 @@ import {
   operatorTakeover,
 } from "@lyrashield/myra/server"
 import { SUPPORT_CASE_STATUSES } from "@lyrashield/myra"
+import {
+  bindMyraOperatorRLSContext,
+  executePlatformAdminMutation,
+  withMyraOperatorRLS,
+} from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
 import { authErrorResponse, withApiRequest, withCookieMutation } from "@/lib/api-auth"
 import { apiError, apiSuccess } from "@/lib/api-response"
+import { validatePlatformAdminActionRequest } from "@/lib/platform-admin-request"
+import { clientIpFromRequest } from "@/lib/rate-limit"
 import { myraOperatorEnabled, myraOperatorPrivate, myraServiceFailure } from "../../../_lib"
 
 export const dynamic = "force-dynamic"
@@ -52,7 +63,9 @@ async function get(
 
   const { id } = await params
   try {
-    const result = await getOperatorCase(operator.userId, id)
+    const result = await withMyraOperatorRLS(operator.userId, (tx) =>
+      getOperatorCase(operator.userId, id, tx)
+    )
     return myraOperatorPrivate(apiSuccess(result))
   } catch (error) {
     const failure = myraServiceFailure(request, error)
@@ -70,6 +83,19 @@ async function patch(
 ): Promise<Response> {
   if (!myraOperatorEnabled()) {
     return myraOperatorPrivate(apiError("NOT_FOUND", "Not found", 404))
+  }
+
+  // Same request boundary as the other platform-admin mutations: same-origin
+  // JSON carrying a well-formed action-specific elevation nonce.
+  const boundary = validatePlatformAdminActionRequest(request, { requireElevationNonce: true })
+  if (!boundary.ok) {
+    return myraOperatorPrivate(apiError(boundary.code, boundary.message, 403))
+  }
+  const elevationNonce = boundary.elevationNonce
+  if (!elevationNonce) {
+    return myraOperatorPrivate(
+      apiError("ADMIN_ELEVATION_REQUIRED", "A valid administrator elevation is required", 403)
+    )
   }
 
   let operator
@@ -93,32 +119,57 @@ async function patch(
 
   const { id } = await params
   const { action, status, handoffSummary } = parsed.data
+  if (action === "release" && !handoffSummary) {
+    return myraOperatorPrivate(
+      apiError("VALIDATION_ERROR", "A reviewed handoff summary is required", 400)
+    )
+  }
+  const ipAddress = clientIpFromRequest(request)
   try {
-    let result: unknown
-    switch (action) {
-      case "takeover":
-        // Takeover pauses Myra replies and invalidates unexecuted proposals
-        // for that conversation (service-side, spec §6).
-        result = await operatorTakeover(operator.userId, id)
-        break
-      case "release":
-        if (!handoffSummary) {
-          return myraOperatorPrivate(
-            apiError("VALIDATION_ERROR", "A reviewed handoff summary is required", 400)
-          )
+    const result = await executePlatformAdminMutation(
+      {
+        userId: operator.userId,
+        sessionId: operator.sessionId,
+        action: `myra.case.${action}`,
+        nonce: elevationNonce,
+        resourceType: "SupportCase",
+        resourceId: id,
+        ipAddress: ipAddress === "unknown" ? undefined : ipAddress,
+        userAgent: request.headers.get("user-agent")?.slice(0, 512),
+        metadata: status ? { status } : undefined,
+      },
+      async (tx) => {
+        // Keep the Myra mutation on the nonce/audit transaction. The binding
+        // declares the trusted RLS path; requirePlatformAdmin is the gate.
+        await bindMyraOperatorRLSContext(tx, operator.userId)
+        switch (action) {
+          case "takeover":
+            // Takeover pauses Myra replies and invalidates unexecuted
+            // proposals for that conversation (service-side, spec §6).
+            return operatorTakeover(operator.userId, id, tx)
+          case "release":
+            return operatorRelease(operator.userId, id, handoffSummary!, tx)
+          case "resolve":
+            return operatorSetStatus(operator.userId, id, status ?? "RESOLVED", tx)
+          case "assign":
+            return operatorAssign(operator.userId, id, tx)
         }
-        result = await operatorRelease(operator.userId, id, handoffSummary)
-        break
-      case "resolve":
-        result = await operatorSetStatus(operator.userId, id, status ?? "RESOLVED")
-        break
-      case "assign": {
-        result = await operatorAssign(operator.userId, id)
-        break
       }
-    }
+    )
     return myraOperatorPrivate(apiSuccess(result))
   } catch (error) {
+    if (error instanceof Error && error.message === "ADMIN_ELEVATION_INVALID") {
+      return myraOperatorPrivate(
+        apiError(
+          "ADMIN_ELEVATION_INVALID",
+          "That elevation expired or was already used — authorize the action again",
+          409
+        )
+      )
+    }
+    if (error instanceof Error && error.message === "ADMIN_AUTHORITY_REVOKED") {
+      return myraOperatorPrivate(apiError("FORBIDDEN", "Forbidden", 403))
+    }
     const failure = myraServiceFailure(request, error)
     if (failure) return myraOperatorPrivate(failure)
     logger.error("Myra operator case mutation failed", {

@@ -171,10 +171,10 @@ export function ReportCreateForm({
             </TabsTrigger>
           </TabsList>
           <TabsContent value="executive" className="text-muted-foreground text-xs">
-            Decision-first posture, score trajectory, release conditions, and priority actions.
+            Decision-first posture, score trajectory, release conditions and priority actions.
           </TabsContent>
           <TabsContent value="developer" className="text-muted-foreground text-xs">
-            Technical findings, remediation state, retest outcomes, and fix guidance.
+            Technical findings, remediation state, retest outcomes and fix guidance.
           </TabsContent>
           <TabsContent value="compliance" className="text-muted-foreground text-xs">
             Evidence-oriented summary and methodology for lightweight assurance reviews.

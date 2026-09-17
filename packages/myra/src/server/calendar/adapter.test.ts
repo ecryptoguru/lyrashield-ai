@@ -1,3 +1,4 @@
+import "../test-env"
 import { describe, expect, it } from "vitest"
 import { zonedParts, zonedWallToUtc } from "./adapter"
 

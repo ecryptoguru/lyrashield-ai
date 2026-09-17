@@ -41,10 +41,10 @@ import { presentOperationFailure } from "@/lib/operation-failure"
 
 export const metadata: Metadata = {
   title: "Dashboard",
-  description: "Workspace overview, recent scans, findings, and launch readiness.",
+  description: "Workspace overview, recent scans, findings and launch readiness.",
   openGraph: {
     title: "Dashboard | LyraShield AI",
-    description: "Workspace overview, recent scans, findings, and launch readiness.",
+    description: "Workspace overview, recent scans, findings and launch readiness.",
     type: "website",
     siteName: "LyraShield AI",
   },
@@ -107,7 +107,7 @@ export default async function DashboardPage() {
   )
 
   // W1-02/W1-03: one canonical decision drives BOTH the header CTA and the
-  // next-action panel, consumes the uncached gate result, and leads with an
+  // next-action panel, consumes the uncached gate result and leads with an
   // active scan's progress instead of recommending a duplicate.
   const decision = deriveHomeDecision({
     targets,
@@ -245,7 +245,7 @@ export default async function DashboardPage() {
       {latestRunAlert && <LatestRunAlert run={latestRunAlert} />}
 
       {/* 4 — three compact metrics: blockers, freshness/coverage, activity (W1-05).
-          Score, severity mix, verification counts, and trends remain reachable in
+          Score, severity mix, verification counts and trends remain reachable in
           the secondary analytics sections below. */}
       <section className="grid gap-4 sm:grid-cols-3" aria-label="Workspace metrics">
         <MetricCard
@@ -495,7 +495,7 @@ function LatestRunAlert({
 }) {
   const active = isActiveScan(run.status)
   const presentation = getScanPresentation(run.status, {})
-  // W1-07: failures present cause, effect, and recovery from structured codes.
+  // W1-07: failures present cause, effect and recovery from structured codes.
   const failure =
     !active && (run.userSafeFailure || run.coverageState === "NONE")
       ? presentOperationFailure(

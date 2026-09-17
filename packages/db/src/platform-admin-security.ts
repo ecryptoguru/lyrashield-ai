@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
 import { Prisma } from "./generated/prisma"
+import type { ScopedTransaction } from "./rls"
 import { getSystemPrisma } from "./system-client"
 import { APPROVED_PLATFORM_ADMIN_EMAILS } from "@lyrashield/config"
 
@@ -144,7 +145,7 @@ export async function issuePlatformAdminElevation(
  */
 export async function executePlatformAdminMutation<T>(
   input: PlatformAdminMutationInput,
-  mutate: (tx: Prisma.TransactionClient) => Promise<T>
+  mutate: (tx: ScopedTransaction) => Promise<T>
 ): Promise<T> {
   assertIdentifier(input.userId, "admin_user_id")
   assertIdentifier(input.sessionId, "admin_session_id")
@@ -200,7 +201,7 @@ export async function executePlatformAdminMutation<T>(
     })
     if (consumed.count !== 1) throw new Error("ADMIN_ELEVATION_INVALID")
 
-    const result = await mutate(tx as unknown as Prisma.TransactionClient)
+    const result = await mutate(tx as unknown as ScopedTransaction)
     await tx.platformAdminAudit.create({
       data: {
         actorUserId: input.userId,

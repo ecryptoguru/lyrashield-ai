@@ -1,11 +1,13 @@
 "use client"
 
+import { useState } from "react"
 import {
   isManifestRoute,
   parseMyraMarkdownBlocks,
   sanitizeLinkHref,
   sanitizeMarkdown,
   MYRA_COPY,
+  type BookingRequest,
   type MyraComponent,
 } from "@lyrashield/myra"
 import { Badge, Button } from "@lyrashield/ui"
@@ -14,7 +16,10 @@ import { Badge, Button } from "@lyrashield/ui"
 export type ProposalState = "pending" | "working" | "done" | "cancelled"
 
 export interface MyraComponentContext {
-  onPickSlot: (startsAt: string) => void
+  /** Attendee-step submit: sends the structured bookingRequest to Myra. */
+  onBookSlot: (request: BookingRequest) => void
+  /** Signed-in account prefill — email is locked, name is editable. */
+  attendee?: { email?: string; name?: string }
   onConfirm: (proposalId: string) => void
   onCancel: (proposalId: string) => void
   onForgetMemory: () => void
@@ -142,10 +147,18 @@ export function MyraComponentView({
             <table className="w-full text-left text-xs">
               <thead className="text-muted-foreground">
                 <tr className="border-b">
-                  <th className="py-1 pr-3 font-medium">Plan</th>
-                  <th className="py-1 pr-3 font-medium">Price</th>
-                  <th className="py-1 pr-3 font-medium">Minutes</th>
-                  <th className="py-1 font-medium">Availability</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">
+                    Plan
+                  </th>
+                  <th scope="col" className="py-1 pr-3 font-medium">
+                    Price
+                  </th>
+                  <th scope="col" className="py-1 pr-3 font-medium">
+                    Minutes
+                  </th>
+                  <th scope="col" className="py-1 font-medium">
+                    Availability
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -266,40 +279,7 @@ export function MyraComponentView({
         </div>
       )
     case "slot_picker":
-      return (
-        <div className="rounded-lg border p-3">
-          <p className="text-sm font-medium">Pick a time</p>
-          <p className="text-muted-foreground mt-0.5 font-mono text-xs">
-            Times shown in {component.displayTimezone}
-          </p>
-          <div className="mt-2 grid grid-cols-2 gap-1.5">
-            {component.slots.map((slot) => {
-              const start = new Date(slot.startsAt)
-              const label = Number.isNaN(start.valueOf())
-                ? slot.startsAt
-                : new Intl.DateTimeFormat(undefined, {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    timeZone: component.displayTimezone,
-                  }).format(start)
-              return (
-                <Button
-                  key={slot.id}
-                  size="sm"
-                  variant="secondary"
-                  className="justify-start"
-                  onClick={() => context.onPickSlot(slot.startsAt)}
-                >
-                  {label}
-                </Button>
-              )
-            })}
-          </div>
-        </div>
-      )
+      return <SlotPickerView component={component} context={context} />
     case "action_confirmation":
       return (
         <div className="border-primary/40 rounded-lg border p-3">
@@ -428,6 +408,147 @@ export function MyraComponentView({
     default:
       return null
   }
+}
+
+type SlotPickerComponent = Extract<MyraComponent, { type: "slot_picker" }>
+
+function formatSlot(startsAt: string, timezone: string): string {
+  const start = new Date(startsAt)
+  return Number.isNaN(start.valueOf())
+    ? startsAt
+    : new Intl.DateTimeFormat(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: timezone,
+      }).format(start)
+}
+
+/**
+ * Slot grid → inline attendee step. A pick never sends a message by itself;
+ * the attendee step submits the structured bookingRequest so the server can
+ * drive book_demo without parsing free text (item 1.5).
+ */
+export function SlotPickerView({
+  component,
+  context,
+}: {
+  component: SlotPickerComponent
+  context: MyraComponentContext
+}) {
+  const [picked, setPicked] = useState<string | null>(null)
+  const slot = component.slots.find((s) => s.startsAt === picked)
+  if (slot) {
+    return (
+      <SlotAttendeeStep
+        slot={slot}
+        displayTimezone={component.displayTimezone}
+        context={context}
+        onBack={() => setPicked(null)}
+      />
+    )
+  }
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="text-sm font-medium">Pick a time</p>
+      <p className="text-muted-foreground mt-0.5 font-mono text-xs">
+        Times shown in {component.displayTimezone}
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-1.5">
+        {component.slots.map((s) => (
+          <Button
+            key={s.id}
+            size="sm"
+            variant="secondary"
+            className="justify-start"
+            onClick={() => setPicked(s.startsAt)}
+          >
+            {formatSlot(s.startsAt, component.displayTimezone)}
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Attendee details collected after a slot pick. The signed-in account email
+ * is prefilled and locked (the server still re-verifies it against the
+ * account); anonymous attendees type their own and pass through the existing
+ * email-verification flow on the server.
+ */
+export function SlotAttendeeStep({
+  slot,
+  displayTimezone,
+  context,
+  onBack,
+}: {
+  slot: SlotPickerComponent["slots"][number]
+  displayTimezone: string
+  context: MyraComponentContext
+  onBack: () => void
+}) {
+  const [name, setName] = useState(context.attendee?.name ?? "")
+  const [email, setEmail] = useState(context.attendee?.email ?? "")
+  const emailLocked = Boolean(context.attendee?.email)
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+  const ready = name.trim().length > 0 && email.trim().length > 0
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="text-sm font-medium">Your details</p>
+      <p className="text-muted-foreground mt-0.5 font-mono text-xs">
+        {formatSlot(slot.startsAt, displayTimezone)} · invite sent in your timezone ({timezone})
+      </p>
+      <div className="mt-2 space-y-2">
+        <input
+          type="text"
+          aria-label="Your name"
+          placeholder="Your name"
+          autoComplete="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:outline-none"
+        />
+        <input
+          type="email"
+          aria-label="Your email"
+          placeholder="Your email"
+          autoComplete="email"
+          value={email}
+          readOnly={emailLocked}
+          aria-readonly={emailLocked}
+          onChange={(e) => setEmail(e.target.value)}
+          className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-2.5 py-1.5 text-sm read-only:opacity-70 focus-visible:ring-2 focus-visible:outline-none"
+        />
+        {emailLocked ? (
+          <p className="text-muted-foreground text-xs">
+            Signed in — the invite uses your account email.
+          </p>
+        ) : null}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          disabled={!ready}
+          onClick={() =>
+            context.onBookSlot({
+              slotStart: slot.startsAt,
+              timezone,
+              name: name.trim(),
+              email: email.trim(),
+            })
+          }
+        >
+          Continue
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onBack}>
+          Back
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 export function ProposalActions({

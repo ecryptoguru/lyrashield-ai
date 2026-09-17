@@ -3,13 +3,15 @@
  * busy windows and keeps inserted events in a module map so timeout
  * reconciliation (`getEvent` by deterministic event id) is testable.
  *
- * Failure-injection knobs (env, read per call so tests can toggle):
+ * Failure-injection knobs (validated env snapshot — enabled switches are
+ * rejected outright in production by the config refinement):
  * - MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT=1 — store the event, then throw
  *   CalendarTimeoutError (models "accepted but response lost").
  * - MYRA_MOCK_CALENDAR_PENDING_CONFERENCE=1 — conferenceState stays "pending".
  * - MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT=1 — insertEvent throws
  *   CalendarConflictError (an external writer took the slot).
  */
+import { env } from "@lyrashield/config"
 import { MYRA_LIMITS } from "../../contracts"
 import {
   CalendarConflictError,
@@ -27,11 +29,6 @@ interface StoredEvent extends CalendarEventResult {
 }
 
 const events = new Map<string, StoredEvent>()
-
-function envOn(name: string): boolean {
-  const v = process.env[name]
-  return v === "1" || v === "true"
-}
 
 export class MockCalendarAdapter implements CalendarAdapter {
   name = "mock"
@@ -58,10 +55,10 @@ export class MockCalendarAdapter implements CalendarAdapter {
   }
 
   async insertEvent(spec: CalendarEventSpec): Promise<CalendarEventResult> {
-    if (envOn("MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT")) {
+    if (env.MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT === "1") {
       throw new CalendarConflictError()
     }
-    const pending = envOn("MYRA_MOCK_CALENDAR_PENDING_CONFERENCE")
+    const pending = env.MYRA_MOCK_CALENDAR_PENDING_CONFERENCE === "1"
     const result: StoredEvent = {
       eventId: spec.eventId,
       meetLink:
@@ -73,7 +70,7 @@ export class MockCalendarAdapter implements CalendarAdapter {
       canceled: false,
     }
     events.set(spec.eventId, result)
-    if (envOn("MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT")) {
+    if (env.MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT === "1") {
       throw new CalendarTimeoutError()
     }
     return result

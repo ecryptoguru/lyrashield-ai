@@ -6,6 +6,7 @@
  * credentials and workspace roles never grant this boundary.
  */
 import { requirePlatformAdminIdentity } from "@lyrashield/auth/server"
+import { withMyraOperatorRLS } from "@lyrashield/db"
 import { listOperatorCases } from "@lyrashield/myra/server"
 import { SUPPORT_CASE_STATUSES } from "@lyrashield/myra"
 import { logger } from "@lyrashield/logger"
@@ -46,12 +47,18 @@ async function get(request: Request): Promise<Response> {
   }
 
   try {
-    const result = await listOperatorCases(
-      {
-        status: parsed.data.status,
-        cursor: parsed.data.cursor,
-      },
-      operator.userId
+    // Operator-bound trusted path: the platform-admin check above is the
+    // authorization, the binding declares it to the dual-owner tables'
+    // RESTRICTIVE boundary (v18 1.3).
+    const result = await withMyraOperatorRLS(operator.userId, (tx) =>
+      listOperatorCases(
+        {
+          status: parsed.data.status,
+          cursor: parsed.data.cursor,
+        },
+        operator.userId,
+        tx
+      )
     )
     return myraOperatorPrivate(apiSuccess(result))
   } catch (error) {

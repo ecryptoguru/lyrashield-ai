@@ -25,7 +25,7 @@ import { startScheduleRunner } from "./schedules"
 import { startBillingJobsScheduler } from "./billing-jobs-scheduler"
 import { startApprovalExpiryRunner } from "./approval-expiry"
 import { startLoopClosureSweepRunner } from "./loop-closure-sweep-scheduler"
-import { startMyraMaintenanceRunner } from "./myra-maintenance"
+import { startMyraMaintenanceRunner, startMyraRecoveryRunner } from "./myra-maintenance"
 import { checkScanConsumerLiveness, markScanJobClaimed } from "./consumer-liveness"
 import {
   assertRepositoryScanRuntimeConfigured,
@@ -56,6 +56,7 @@ let billingJobsTimers: NodeJS.Timeout[] | null = null
 let approvalExpiryTimer: NodeJS.Timeout | null = null
 let loopClosureSweepTimer: NodeJS.Timeout | null = null
 let myraMaintenanceTimer: NodeJS.Timeout | null = null
+let myraRecoveryTimer: NodeJS.Timeout | null = null
 let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
@@ -240,6 +241,11 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     clearInterval(myraMaintenanceTimer)
     myraMaintenanceTimer = null
     logger.info("Myra maintenance runner stopped")
+  }
+  if (myraRecoveryTimer) {
+    clearInterval(myraRecoveryTimer)
+    myraRecoveryTimer = null
+    logger.info("Myra recovery runner stopped")
   }
   if (scheduleRunner) {
     clearInterval(scheduleRunner)
@@ -632,6 +638,7 @@ async function main(): Promise<void> {
   approvalExpiryTimer = startApprovalExpiryRunner()
 
   loopClosureSweepTimer = startLoopClosureSweepRunner()
+  myraRecoveryTimer = startMyraRecoveryRunner()
   myraMaintenanceTimer = startMyraMaintenanceRunner()
 }
 

@@ -664,6 +664,58 @@ const envSchema = z
       }
     }
   })
+  // Production Myra writes must fail closed on the real calendar: the mock
+  // adapter cannot take bookings and the MYRA_MOCK_CALENDAR_* switches exist
+  // only to inject failures in tests. This is runtime-only — like the egress
+  // proxy rule it needs no NEXT_PHASE build carve-out because a production
+  // build that carries these values is a genuine misconfiguration.
+  .superRefine((val, ctx) => {
+    if (val.NODE_ENV !== "production") return
+    const mockFaultSwitches = [
+      ["MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT", val.MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT],
+      ["MYRA_MOCK_CALENDAR_PENDING_CONFERENCE", val.MYRA_MOCK_CALENDAR_PENDING_CONFERENCE],
+      ["MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT", val.MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT],
+    ] as const
+    for (const [key, value] of mockFaultSwitches) {
+      if (value === "1") {
+        ctx.addIssue({
+          code: "custom",
+          path: [key],
+          message: `${key} is a test-only fault switch and must not be enabled in production`,
+        })
+      }
+    }
+    if (val.MYRA_WRITES_ENABLED !== "1") return
+    if (val.MYRA_CALENDAR_PROVIDER !== "google") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["MYRA_CALENDAR_PROVIDER"],
+        message:
+          'MYRA_CALENDAR_PROVIDER must be "google" in production when MYRA_WRITES_ENABLED=1 — the mock calendar cannot take real bookings',
+      })
+    }
+    const requiredGoogleValues = [
+      ["MYRA_GOOGLE_CLIENT_ID", val.MYRA_GOOGLE_CLIENT_ID],
+      ["MYRA_GOOGLE_CLIENT_SECRET", val.MYRA_GOOGLE_CLIENT_SECRET],
+    ] as const
+    for (const [key, value] of requiredGoogleValues) {
+      if (!value) {
+        ctx.addIssue({
+          code: "custom",
+          path: [key],
+          message: `${key} is required in production when MYRA_WRITES_ENABLED=1`,
+        })
+      }
+    }
+    if (!val.MYRA_GOOGLE_REFRESH_TOKEN && !val.MYRA_GOOGLE_TOKEN_JSON) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["MYRA_GOOGLE_REFRESH_TOKEN"],
+        message:
+          "MYRA_GOOGLE_REFRESH_TOKEN or MYRA_GOOGLE_TOKEN_JSON is required in production when MYRA_WRITES_ENABLED=1",
+      })
+    }
+  })
 
 export type Env = z.infer<typeof envSchema>
 

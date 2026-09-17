@@ -175,7 +175,10 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
       }
     </script>
     <script>
-      import { privacyBoundedMarketingEvent } from "../lib/posthog-privacy"
+      import {
+        privacyBoundedMarketingEvent,
+        sanitizeMarketingProperties,
+      } from "../lib/posthog-privacy"
 
       const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY
       const posthogHost = import.meta.env.PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com"
@@ -212,9 +215,9 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
 
             const pageUrl = new URL(location.href)
             const privacyBoundedPageUrl = `${pageUrl.origin}${pageUrl.pathname}`
-            posthog.capture("$pageview", {
+            posthog.capture("$pageview", sanitizeMarketingProperties("$pageview", {
               $current_url: privacyBoundedPageUrl,
-            })
+            }) ?? {})
             const props = {
               utm_source: pageUrl.searchParams.get("utm_source") || undefined,
               utm_medium: pageUrl.searchParams.get("utm_medium") || undefined,
@@ -223,14 +226,18 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
             }
 
             if (location.pathname === "/") {
-              posthog.capture("landing_view", props)
+              posthog.capture("landing_view", sanitizeMarketingProperties("landing_view", props) ?? {})
             }
 
             document.querySelectorAll("[data-cta-id]").forEach((el) => {
               el.addEventListener("click", () => {
                 const ctaId = el.getAttribute("data-cta-id")
                 if (ctaId)
-                  posthog.capture("cta_click", { cta_id: ctaId }, { send_instantly: true, transport: "sendBeacon" })
+                  posthog.capture(
+                    "cta_click",
+                    sanitizeMarketingProperties("cta_click", { cta_id: ctaId }) ?? {},
+                    { send_instantly: true, transport: "sendBeacon" }
+                  )
               })
             })
 
@@ -238,7 +245,10 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
               el.addEventListener("toggle", () => {
                 const questionId = el.getAttribute("data-question-id")
                 if (questionId && (el as HTMLDetailsElement).open) {
-                  posthog.capture("faq_open", { question_id: questionId })
+                  posthog.capture(
+                    "faq_open",
+                    sanitizeMarketingProperties("faq_open", { question_id: questionId }) ?? {}
+                  )
                 }
               })
             })
