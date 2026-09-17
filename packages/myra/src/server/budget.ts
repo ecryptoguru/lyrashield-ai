@@ -11,7 +11,7 @@
  * reservations RLS policy is unbound-only, so a bound owner context must
  * never carry these calls (it would see zero rows and wave spend through).
  */
-import { Prisma, prisma } from "@lyrashield/db"
+import { Prisma, getSystemPrisma } from "@lyrashield/db"
 import { env } from "@lyrashield/config"
 import { MYRA_LIMITS } from "../contracts"
 import { err } from "./errors"
@@ -31,7 +31,7 @@ function currentMonthStart(): Date {
 
 /** Operator-facing month-to-date generation spend — settled ledger rows only. */
 export async function monthlyGenerationSpendUsd(): Promise<number> {
-  const totals = await prisma.myraGenerationReservation.aggregate({
+  const totals = await getSystemPrisma().myraGenerationReservation.aggregate({
     where: { monthStart: currentMonthStart() },
     _sum: { actualUsd: true },
   })
@@ -51,7 +51,7 @@ export async function reserveGenerationBudget(traceId: string, reservedUsd: numb
   }
   const capUsd = monthlyBudgetCapUsd()
   const monthStart = currentMonthStart()
-  await prisma.$transaction(async (tx) => {
+  await getSystemPrisma().$transaction(async (tx) => {
     await tx.$executeRaw(
       Prisma.sql`SELECT pg_advisory_xact_lock(hashtext('myra_generation_budget'))`
     )
@@ -76,7 +76,7 @@ export async function reserveGenerationBudget(traceId: string, reservedUsd: numb
 
 export async function settleGenerationBudget(traceId: string, actualUsd: number): Promise<void> {
   const value = Number.isFinite(actualUsd) && actualUsd > 0 ? actualUsd : 0
-  await prisma.myraGenerationReservation.updateMany({
+  await getSystemPrisma().myraGenerationReservation.updateMany({
     where: { traceId, status: "RESERVED" },
     data: {
       actualUsd: new Prisma.Decimal(value),
@@ -94,7 +94,7 @@ export async function settleGenerationBudget(traceId: string, actualUsd: number)
  * upstream — so callers leave those rows RESERVED for the retention sweep.
  */
 export async function releaseGenerationBudget(traceId: string): Promise<void> {
-  await prisma.myraGenerationReservation.updateMany({
+  await getSystemPrisma().myraGenerationReservation.updateMany({
     where: { traceId, status: "RESERVED" },
     data: {
       reservedUsd: new Prisma.Decimal(0),
