@@ -182,6 +182,11 @@ export function pageViolations({ path, facts, origin }) {
   if (!facts.jsonLdTypes.some((type) => !SITE_GRAPH_TYPES.has(type))) {
     add("jsonld-page-entity-missing", facts.jsonLdTypes.join(", "))
   }
+  // Every page except the root sits somewhere in a hierarchy, so the trail is
+  // part of the page contract rather than an optional extra.
+  if (path !== "/" && !facts.jsonLdTypes.includes("BreadcrumbList")) {
+    add("jsonld-breadcrumb-missing", facts.jsonLdTypes.join(", "))
+  }
 
   if (!facts.ogImage) add("og-image-missing", "")
   else {

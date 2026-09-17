@@ -49,6 +49,16 @@ const myraEnabled = import.meta.env.PUBLIC_MYRA_MARKETING_ENABLED === "1"
 const siteDescription =
   "LyraShield AI records what was tested, separates detected risks from retest-confirmed fixes, and creates an assurance report for AI-built apps."
 
+// Google's logo guidance requires a raster image, and the SVG that renders in
+// the UI is not one. /logo.png is 1024x1024 and already served; declare the
+// dimensions so the consumer does not have to fetch it to find out.
+const organizationLogo = {
+  "@type": "ImageObject",
+  url: new URL("/logo.png", siteOrigin).toString(),
+  width: 1024,
+  height: 1024,
+}
+
 const siteGraph: unknown[] = [
   {
     "@context": "https://schema.org",
@@ -56,7 +66,7 @@ const siteGraph: unknown[] = [
     "@id": `${siteOrigin}/#organization`,
     name: "LyraShield AI",
     url: siteUrl,
-    logo: new URL("/logo.svg", siteOrigin).toString(),
+    logo: organizationLogo,
     description: siteDescription,
     knowsAbout: [
       "AI application security",
@@ -65,6 +75,28 @@ const siteGraph: unknown[] = [
       "independent finding verification",
       "security retesting",
     ],
+    // Both mailboxes are already published on /support, /privacy and
+    // /security-reporting; the structured data states the same destinations
+    // rather than inventing a new channel.
+    contactPoint: [
+      {
+        "@type": "ContactPoint",
+        contactType: "customer support",
+        email: "support@lyrashieldai.com",
+        url: new URL("/support", siteOrigin).toString(),
+        availableLanguage: ["en"],
+      },
+      {
+        "@type": "ContactPoint",
+        contactType: "security",
+        email: "security@lyrashieldai.com",
+        url: new URL("/security-reporting", siteOrigin).toString(),
+        availableLanguage: ["en"],
+      },
+    ],
+    // Only profiles that genuinely exist belong here. PUBLIC_X_URL is the one
+    // configured product handle; add GitHub/LinkedIn only once a real
+    // organization profile exists (see the megaplan's founder decisions).
     ...(xUrl ? { sameAs: [xUrl] } : {}),
     founder: {
       "@type": "Person",

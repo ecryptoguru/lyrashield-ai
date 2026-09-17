@@ -1,6 +1,23 @@
 {
   "generatedAt": "2026-09-17",
-  "notes": {},
+  "notes": {
+    "title-too-long": {
+      "reason": "Rendered titles above the budget: 57 blog posts carry the ' | LyraShield AI Blog' suffix and 10 docs guides append ' | LyraShield AI'.",
+      "wave": 3
+    },
+    "description-too-long": {
+      "reason": "Meta descriptions above 160 characters on docs guides, tag hubs and three landing pages.",
+      "wave": 3
+    },
+    "og-image-default": {
+      "reason": "Non-blog pages still share /og/og-default.png; blog posts already carry unique cards.",
+      "wave": 3
+    },
+    "jsonld-page-entity-missing": {
+      "reason": "Pages that emit only the site graph (Organization + WebSite) and no page-level entity.",
+      "wave": 2
+    }
+  },
   "entries": [
     {
       "rule": "description-too-long",
@@ -117,18 +134,6 @@
     {
       "rule": "description-too-long",
       "path": "/vibe-security-50"
-    },
-    {
-      "rule": "jsonld-page-entity-missing",
-      "path": "/demo"
-    },
-    {
-      "rule": "jsonld-page-entity-missing",
-      "path": "/security-reporting"
-    },
-    {
-      "rule": "jsonld-page-entity-missing",
-      "path": "/support"
     },
     {
       "rule": "og-image-default",

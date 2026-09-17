@@ -10,8 +10,27 @@ const description = "Get help with LyraShield AI: OAuth and MCP setup for coding
 const appUrl =
   (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
   "https://app.lyrashieldai.com"
+const title = "Support | LyraShield AI"
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: title,
+    description,
+    url: canonical,
+    isPartOf: { "@id": `${origin}/#website` },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Support", item: canonical },
+    ],
+  },
+]
 ---
-<Base title="Support | LyraShield AI" description={description} canonical={canonical}>
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
   <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
     <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Support</p>
     <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Connect with confidence.</h1>

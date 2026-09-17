@@ -4,8 +4,27 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/security-reporting", origin).toString()
 const securityEmail = (import.meta.env.PUBLIC_SECURITY_EMAIL as string | undefined) || "security@lyrashieldai.com"
 const description = "How to report a suspected LyraShield AI security vulnerability: what to include, testing boundaries to respect, and what response to expect."
+const title = "Security reporting | LyraShield AI"
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: title,
+    description,
+    url: canonical,
+    isPartOf: { "@id": `${origin}/#website` },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Security reporting", item: canonical },
+    ],
+  },
+]
 ---
-<Base title="Security reporting | LyraShield AI" description={description} canonical={canonical}>
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
   <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
     <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Security reporting</p>
     <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Report a suspected vulnerability.</h1>
