@@ -36,7 +36,7 @@ Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
 
 The CSP permits scripts and other resources from broad locations and retains two high-risk script exceptions. The HSTS policy commits the domain and every subdomain for a long period without showing that all of them support HTTPS. Both header names exist, but neither configuration is justified.
 
-The [OWASP Secure Headers Project](https://owasp.org/www-project-secure-headers/index.html) documents headers and deprecated patterns. Use it as a policy reference, then adapt each value to the application's behavior.
+The [OWASP Secure Headers Project](https://owasp.github.io/www-project-secure-headers/) documents headers and deprecated patterns. Use it as a policy reference, then adapt each value to the application's behavior.
 
 ## Why copied policies fail
 
@@ -113,6 +113,6 @@ Neither result proves every route returns the same policy or every allowed origi
 
 ## Sources
 
-- [OWASP Secure Headers Project](https://owasp.org/www-project-secure-headers/index.html)
+- [OWASP Secure Headers Project](https://owasp.github.io/www-project-secure-headers/)
 - [W3C Content Security Policy Level 3 Working Draft](https://www.w3.org/TR/CSP/)
 - [IETF RFC 6797: HTTP Strict Transport Security](https://www.rfc-editor.org/rfc/rfc6797.html)
