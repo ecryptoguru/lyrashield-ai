@@ -56,7 +56,10 @@ queue_count='const {getSystemPrisma}=await import("@lyrashield/db"); const {getS
 queue_expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
 
 assert_empty_queues() {
-  preflight=$(docker exec -w /app/apps/worker "$container" node --import tsx --input-type=module -e "$queue_count")
+  if ! preflight=$(worker_oneshot "$queue_count"); then
+    echo "Worker promotion requires empty scan and webhook queues" >&2
+    exit 1
+  fi
   [ "$preflight" = "$queue_expected" ] || {
     echo "Worker promotion requires empty scan and webhook queues" >&2
     exit 1
@@ -165,10 +168,11 @@ asset_container=
 asset_stage=
 host_backup=
 
+# Redis evals run in a one-shot container built from the refreshed environment
+# file, so the admission stop and the queue counts are evaluated against the
+# rotated endpoint rather than the stale environment inside the live worker.
 redis_eval() {
-  code=$1
-  shift
-  docker exec -w /app/apps/worker "$container" node --input-type=module -e "$code" "$@"
+  worker_oneshot "$@"
 }
 
 resume_admission() {
@@ -273,11 +277,13 @@ systemctl is-active --quiet lyrashield-worker-egress-refresh.service && {
 promotion_step=checking-current-worker
 wait_healthy
 
-# The isolated preflight already proved the refreshed Key Vault environment can
-# read the database and queues. Reload the active worker before it claims the
-# admission stop, so every following Redis operation uses that same endpoint.
-systemctl restart "$service"
-wait_healthy
+# Refresh the Key Vault environment file before the admission claim and the
+# queue check so both evaluate the rotated endpoints. The live worker is not
+# restarted here: it keeps draining its old environment while the admission
+# stop and the empty-queue proof run against the new endpoint through
+# one-shot containers. The single restart later in this script is what cuts
+# the worker over.
+systemctl restart lyrashield-worker-secrets.service
 
 # JavaScript template literal is passed verbatim to the container.
 # shellcheck disable=SC2016

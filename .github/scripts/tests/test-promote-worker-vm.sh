@@ -51,6 +51,7 @@ write_mocks() {
 #!/bin/sh
 set -eu
 printf '%s\n' "$*" >> "$MOCK_SYSTEMCTL_LOG"
+printf 'systemctl %s\n' "$*" >> "$MOCK_ORDER_LOG"
 command=$1
 shift
 [ "${1:-}" != "--quiet" ] || shift
@@ -83,6 +84,7 @@ case "$command:$unit" in
     if [ -n "${MOCK_REPLACEMENT_STOP:-}" ] && [ -s "$MOCK_ADMISSION_STOP" ]; then
       printf '%s' "$MOCK_REPLACEMENT_STOP" > "$MOCK_ADMISSION_STOP"
     fi ;;
+  restart:lyrashield-worker-secrets.service) : ;;
   reset-failed:lyrashield-worker.service) ;;
   daemon-reload:) ;;
   *) echo "unexpected systemctl call: $command $unit" >&2; exit 1 ;;
@@ -93,6 +95,7 @@ MOCK
 #!/bin/sh
 set -eu
 printf '%s\n' "$*" >> "$MOCK_DOCKER_LOG"
+printf 'docker %s\n' "$*" >> "$MOCK_ORDER_LOG"
 case "$1:$2" in
   inspect:lyrashield-worker)
     case "$*" in
@@ -106,7 +109,7 @@ case "$1:$2" in
         fi ;;
       *) exit 1 ;;
     esac ;;
-  exec:-w)
+  run:*)
     case "$*" in
       *'redis.call("GET"'*)
         for argument in "$@"; do expected_stop=$argument; done
@@ -127,6 +130,9 @@ case "$1:$2" in
       *getSystemPrisma*) printf '%s\n' '{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}' ;;
       *) : ;;
     esac ;;
+  exec:-w)
+    echo "promotion must not evaluate inside the live worker: $*" >&2
+    exit 1 ;;
   exec:lyrashield-worker)
     case "$*" in
       *LYRASHIELD_PRODUCT_REVISION*) printf '%s\n' "$MOCK_APP_REVISION" ;;
@@ -182,7 +188,8 @@ run_case() {
   printf '%s' "$existing_stop" > "$case_dir/admission-stop"
   : > "$case_dir/docker.log"
   : > "$case_dir/systemctl.log"
-  printf 'LYRASHIELD_WORKER_IMAGE=%s\nGHCR_USERNAME=test-user\n' "$target" > "$case_dir/runtime.conf"
+  : > "$case_dir/order.log"
+  printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$target" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
   printf 'GHCR_TOKEN=test-token\n' > "$case_dir/worker.env"
 
   set +e
@@ -198,6 +205,7 @@ run_case() {
       MOCK_ADMISSION_STOP="$case_dir/admission-stop" \
       MOCK_DOCKER_LOG="$case_dir/docker.log" \
       MOCK_SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+      MOCK_ORDER_LOG="$case_dir/order.log" \
       MOCK_IMAGE_ASSETS="$case_dir/image-assets" \
       MOCK_FREE_BYTES="$free_bytes" \
       MOCK_FAIL_IMAGE_CHECK="$fail_image_check" \
@@ -232,7 +240,15 @@ run_case() {
   fi
   grep -Fq 'image prune --all --force' "$case_dir/docker.log"
   if [ "$expected" = success ]; then
-    [ "$(grep -Fxc 'restart lyrashield-worker.service' "$case_dir/systemctl.log")" -eq 2 ]
+    # Exactly one restart and it happens after the admission-stop claim and
+    # the empty-queue check: a scan admitted before promotion finishes against
+    # the old worker before the container is replaced.
+    [ "$(grep -Fxc 'restart lyrashield-worker.service' "$case_dir/systemctl.log")" -eq 1 ]
+    restart_line=$(grep -Fn 'systemctl restart lyrashield-worker.service' "$case_dir/order.log" | cut -d: -f1)
+    claim_line=$(grep -Fn 'redis.call("EXISTS"' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
+    queue_line=$(grep -Fn 'getSystemPrisma' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
+    [ -n "$restart_line" ] && [ -n "$claim_line" ] && [ -n "$queue_line" ]
+    [ "$restart_line" -gt "$claim_line" ] && [ "$restart_line" -gt "$queue_line" ]
     [ -f "$case_dir/host/assets/worker-env.sh" ]
   fi
   if [ -n "$replacement_stop" ]; then
