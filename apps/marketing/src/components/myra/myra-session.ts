@@ -114,7 +114,10 @@ function loadTurnstile(): Promise<TurnstileGlobal | undefined> {
     const script = document.createElement("script")
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
     script.async = true
-    const timer = setTimeout(() => (w.turnstile ? resolve(w.turnstile) : fail()), TURNSTILE_SCRIPT_TIMEOUT_MS)
+    const timer = setTimeout(
+      () => (w.turnstile ? resolve(w.turnstile) : fail()),
+      TURNSTILE_SCRIPT_TIMEOUT_MS
+    )
     script.onload = () => {
       clearTimeout(timer)
       resolve(w.turnstile)

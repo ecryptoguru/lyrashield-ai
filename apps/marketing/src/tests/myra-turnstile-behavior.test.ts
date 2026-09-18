@@ -127,8 +127,7 @@ function fakeDocument(): FakeDocument {
     body: fakeEl("body"),
     hosts: [],
     createElement: (tag) => fakeEl(tag),
-    querySelectorAll: (selector) =>
-      selector === "[data-myra-turnstile]" ? [...doc.hosts] : [],
+    querySelectorAll: (selector) => (selector === "[data-myra-turnstile]" ? [...doc.hosts] : []),
   }
   return doc
 }
