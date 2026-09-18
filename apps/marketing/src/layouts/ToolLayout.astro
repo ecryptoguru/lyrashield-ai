@@ -44,11 +44,15 @@ const jsonLd = [
       <a href={`${appUrl}/sign-up?source=tool&cta=create_account`} data-cta-id="tool-page-create-account" class="lift mt-5 inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create a free account — no card needed</a>
     </section>
     <section class="mt-12 grid gap-8 border-t border-border pt-10 md:grid-cols-2" data-reveal-group>
-      <div data-reveal="left">
+      {/* Plain `data-reveal` (vertical) rather than left/right: the horizontal
+          ±2rem pre-reveal shift is wider than this section's gutter at ~768px,
+          so the un-revealed columns measured past the viewport (UF-13). Same
+          fix HomeLiteScan uses — no page-level CSS override needed. */}
+      <div data-reveal>
         <h2 class="text-xl font-semibold text-text">What this checks</h2>
         <ul class="mt-4 space-y-3 text-sm leading-6 text-text-muted">{tool.checks.map((item) => <li class="flex gap-3"><span class="mt-2 size-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true"></span><span>{item}</span></li>)}</ul>
       </div>
-      <div data-reveal="right">
+      <div data-reveal>
         <h2 class="text-xl font-semibold text-text">What this cannot prove</h2>
         <ul class="mt-4 space-y-3 text-sm leading-6 text-text-muted">{tool.limitations.map((item) => <li class="flex gap-3"><span class="mt-2 size-1.5 shrink-0 rounded-full bg-text-muted" aria-hidden="true"></span><span>{item}</span></li>)}</ul>
       </div>
