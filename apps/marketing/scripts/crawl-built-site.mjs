@@ -30,6 +30,10 @@ const SITEMAP_PATH = "/sitemap-index.xml"
 const DEFAULT_BASELINE_PATH = new URL("./seo-baseline.json", import.meta.url)
 const FETCH_CONCURRENCY = 8
 const FETCH_TIMEOUT_MS = 15_000
+// These SSR endpoints load the full content collections inside workerd. Keep
+// their timeout bounded, but allow a cold low-CPU CI worker more than a normal
+// page fetch to finish the same deterministic response.
+const MACHINE_FETCH_TIMEOUT_MS = 30_000
 
 /** Rendered-title budget. Blog posts carry a longer brand suffix than static pages. */
 export const TITLE_LIMIT_DEFAULT = 60
@@ -121,11 +125,11 @@ async function mapWithConcurrency(items, limit, worker) {
   return results
 }
 
-async function fetchText(fetchImpl, url, { follow = false } = {}) {
+async function fetchText(fetchImpl, url, { follow = false, timeoutMs = FETCH_TIMEOUT_MS } = {}) {
   try {
     const response = await fetchImpl(url, {
       redirect: follow ? "follow" : "manual",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     })
     if (response.status !== 200) return { status: response.status, text: null }
     return { status: response.status, text: await response.text() }
@@ -455,6 +459,20 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
       violations.push({ rule: "sitemap-lastmod-missing", path: entry.path, detail: "" })
     }
   }
+
+  // Probe machine-readable surfaces before crawling every page. llms.txt and
+  // rss.xml load Astro content collections in the Worker; keeping them on the
+  // cold path avoids a late request timing out after the page crawl has already
+  // consumed the local preview's budget.
+  const machineTexts = []
+  for (const path of ["/robots.txt", "/llms.txt", "/rss.xml", "/.well-known/security.txt"]) {
+    const { text } = await fetchText(fetchImpl, new URL(path, localOrigin).href, {
+      timeoutMs: MACHINE_FETCH_TIMEOUT_MS,
+    })
+    machineTexts.push(text)
+  }
+  const [robots, llms, rss, securityTxt] = machineTexts
+
   const pages = await mapWithConcurrency(paths, FETCH_CONCURRENCY, async (path) => {
     const url = new URL(path, localOrigin).href
     const { status, text } = await fetchText(fetchImpl, url)
@@ -469,13 +487,6 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
   for (const [path, facts] of pageFacts) {
     violations.push(...pageViolations({ path, facts, origin: siteOrigin }))
   }
-
-  const [robots, llms, rss, securityTxt] = await Promise.all(
-    ["/robots.txt", "/llms.txt", "/rss.xml", "/.well-known/security.txt"].map(async (path) => {
-      const { text } = await fetchText(fetchImpl, new URL(path, localOrigin).href)
-      return text
-    })
-  )
 
   const site = siteViolations({
     pageFacts,
@@ -504,8 +515,9 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
     }
   }
 
+  const machinePaths = new Set(["/robots.txt", "/llms.txt", "/rss.xml", "/.well-known/security.txt"])
   const linkResults = await mapWithConcurrency(
-    site.externalPaths,
+    site.externalPaths.filter((path) => !machinePaths.has(path)),
     FETCH_CONCURRENCY,
     async (path) => {
       // A followed redirect to a 200 is fine: /docs/integrations/windsurf and

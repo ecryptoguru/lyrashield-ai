@@ -20,7 +20,9 @@ import { categoryHref, getCategoriesWithCounts } from "../lib/blog-categories"
 // no package.json entry.
 import { VIBE_SECURITY_CONTROLS } from "../../../../packages/security/src/vibe-security-controls"
 
-export const prerender = false
+// This is build-derived content. Prerender it so the Worker does not rebuild
+// every content collection on each crawler request.
+export const prerender = true
 
 // Same registry vibe-security-50.astro builds its own counts from — hardcoding
 // "43"/"7" here as separate prose would let this file silently disagree with

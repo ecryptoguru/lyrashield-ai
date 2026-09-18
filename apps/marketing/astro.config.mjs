@@ -10,6 +10,18 @@ import tailwindcss from "@tailwindcss/vite"
 import { parseJsonc } from "./src/lib/jsonc"
 import { tools } from "./src/lib/tools"
 
+// Code-block palette. Astro's markdown pipeline (@astrojs/markdown-satteri →
+// shiki) defaults to the bundled `github-dark` theme, whose comment token
+// (#6a737d) reaches only 3.05:1 against that theme's own #24292e surface —
+// below the 4.5:1 AA threshold for body-size text, in BOTH themes, because the
+// code surface stays dark either way. src/lib/code-theme.json is that theme
+// copied verbatim except for the comment token, which now uses the design
+// system's muted #91a7b8 (5.88:1 on #24292e), so the palette lives in this repo
+// rather than depending on a patched node_modules theme.
+const codeTheme = JSON.parse(
+  readFileSync(new URL("./src/lib/code-theme.json", import.meta.url), "utf8")
+)
+
 // Astro resolves `site` and prerendered metadata during the build, before the
 // Cloudflare Worker receives runtime vars. Keep those values in this one build
 // configuration so sitemaps, canonical URLs, and indexing directives agree.
@@ -371,6 +383,11 @@ export default defineConfig({
 
   build: {
     inlineStylesheets: "auto",
+  },
+  markdown: {
+    shikiConfig: {
+      theme: codeTheme,
+    },
   },
   adapter: cloudflare({
     imageService: "passthrough",
