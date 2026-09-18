@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react"
 import { buttonVariants } from "@lyrashield/ui"
+import { formatUSD, getPlan } from "@lyrashield/pricing"
 import { useRouter } from "next/navigation"
 import { openRazorpaySubscriptionCheckout } from "@/lib/razorpay-checkout"
 import { apiPost, ApiError } from "@/lib/api-client"
@@ -129,30 +130,55 @@ export function BillingActions({
       )}
       {canStartSubscription && (
         <div className="grid gap-3 sm:grid-cols-3" aria-label="Choose a plan">
-          {PLANS.map(([targetPlan, label]) => (
-            <section key={targetPlan} className="min-w-0 rounded-lg border p-3 space-y-2">
-              <h3 className="font-medium">{label}</h3>
-              {(["monthly", "annual"] as const).map((interval) => {
-                const action = `checkout-${targetPlan}-${interval}`
-                return (
-                  <button
-                    key={interval}
-                    type="button"
-                    onClick={() => handleCheckout(targetPlan, interval)}
-                    disabled={loading !== null}
-                    aria-label={`Choose ${label}, ${interval} billing`}
-                    className={`${buttonVariants({ variant: "outline", size: "sm" })} w-full`}
-                  >
-                    {loading === action
-                      ? "Starting checkout…"
-                      : interval === "annual"
-                        ? "Annual billing"
-                        : "Monthly billing"}
-                  </button>
-                )
-              })}
-            </section>
-          ))}
+          {PLANS.map(([targetPlan, label]) => {
+            const definition = getPlan(targetPlan)
+            const usd = definition?.price.usd
+            const targets =
+              definition && definition.targetCaps > 0
+                ? `up to ${definition.targetCaps} targets`
+                : "custom target limits"
+            return (
+              <section key={targetPlan} className="min-w-0 space-y-2 rounded-lg border p-3">
+                <div className="space-y-1">
+                  <h3 className="font-medium">{label}</h3>
+                  {definition && (
+                    <p className="text-xs text-muted-foreground">
+                      {definition.agentMinutes} agent-minutes / month · {targets}
+                    </p>
+                  )}
+                </div>
+                {(["monthly", "annual"] as const).map((interval) => {
+                  const action = `checkout-${targetPlan}-${interval}`
+                  const price = usd ? (interval === "annual" ? usd.annual : usd.monthly) : undefined
+                  const amount =
+                    price === undefined ? null : `${formatUSD(price)}/${interval === "annual" ? "yr" : "mo"}`
+                  return (
+                    <button
+                      key={interval}
+                      type="button"
+                      onClick={() => handleCheckout(targetPlan, interval)}
+                      disabled={loading !== null}
+                      aria-label={`Choose ${label}, ${interval} billing${
+                        amount ? `, ${amount}` : ""
+                      }`}
+                      className={`${buttonVariants({ variant: "outline", size: "sm" })} w-full`}
+                    >
+                      {loading === action
+                        ? "Starting checkout…"
+                        : amount
+                          ? `${interval === "annual" ? "Annual" : "Monthly"} · ${amount}`
+                          : interval === "annual"
+                            ? "Annual billing"
+                            : "Monthly billing"}
+                    </button>
+                  )
+                })}
+              </section>
+            )
+          })}
+          <p className="text-xs text-muted-foreground sm:col-span-3">
+            Prices in USD. Checkout bills in your local currency where the provider offers it.
+          </p>
         </div>
       )}
       {plan !== "FREE" && !isComplimentary && (
