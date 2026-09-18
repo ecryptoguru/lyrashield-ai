@@ -49,7 +49,7 @@ export default async function AffiliateLandingPage() {
   const tierPct = (terms.tierRateBps / 100).toFixed(0)
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-16">
+    <main id="main-content" className="mx-auto max-w-4xl px-4 py-16">
       <header className="mb-12 text-center">
         <h1 className="text-4xl font-bold tracking-tight">LyraShield AI Affiliate Program</h1>
         <p className="mt-4 text-lg text-muted-foreground">
@@ -180,6 +180,6 @@ export default async function AffiliateLandingPage() {
           Apply Now
         </Link>
       </div>
-    </div>
+    </main>
   )
 }

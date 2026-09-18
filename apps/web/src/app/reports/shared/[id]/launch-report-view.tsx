@@ -38,7 +38,7 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
   const dispositionCounts = payload.dispositionCounts ?? { acceptedRisk: 0, falsePositive: 0 }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12">
+    <main id="main-content" className="mx-auto max-w-3xl px-6 py-12">
       {/* Header */}
       <div className="mb-8 flex items-start justify-between">
         <div>
@@ -184,6 +184,6 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
         A launch-readiness verdict reflects the named standard and the evidence examined — it is not
         a guarantee that an application is free of vulnerabilities.
       </p>
-    </div>
+    </main>
   )
 }

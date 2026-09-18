@@ -64,9 +64,14 @@ describe("dashboard route metadata", () => {
   })
 
   it("declares a title on every rendering route", () => {
+    // `generateMetadata` counts too: a route whose title depends on whether the
+    // record exists (e.g. a dead /dashboard/scans/<id> link) cannot use the
+    // static export, and both forms satisfy "declares its own title".
     const missing = pages
       .filter(({ source }) => !isRedirectOnly(source))
-      .filter(({ source }) => !/export const metadata/.test(source))
+      .filter(
+        ({ source }) => !/export (const metadata|async function generateMetadata)/.test(source)
+      )
       .map(({ file }) => file)
     expect(missing).toEqual([])
   })
