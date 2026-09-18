@@ -73,7 +73,7 @@ export function WebMcpActivityDrawer() {
   const StatusIcon = status.icon
 
   return (
-    <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 md:bottom-6 sm:right-6">
+    <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 lg:bottom-6 sm:right-6">
       {/* Live region for running work; completed history is not re-announced. */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {latestRunning
@@ -113,7 +113,7 @@ export function WebMcpActivityDrawer() {
           id="webmcp-activity-panel"
           className={cn(
             "shadow-card-hover w-[calc(100vw-2rem)] max-w-sm overflow-hidden border",
-            "fixed bottom-32 right-4 md:bottom-[4.5rem] sm:right-6"
+            "fixed bottom-32 right-4 lg:bottom-[4.5rem] sm:right-6"
           )}
           role="dialog"
           aria-label="Agent activity history"
