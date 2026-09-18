@@ -142,7 +142,14 @@ const jsonLd = [
         <a href={controlsUrl} class="text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Machine-readable registry</a>
       </div>
       <p class="leading-7 text-text-muted">Each control has a stable ID, severity, and evidence state. A result is a signal for review, not a claim that the condition is exploitable. The registry is versioned as {WEBMCP_DETECTOR_VERSION}.</p>
-      <div class="mt-6 overflow-x-auto rounded-xl border border-border bg-bg-raised">
+      <!-- Scrollable at narrow widths, so the region must be keyboard reachable
+           (axe `scrollable-region-focusable`). Same pattern as the dashboard tables. -->
+      <div
+        class="mt-6 overflow-x-auto rounded-xl border border-border bg-bg-raised focus-visible:ring-2 focus-visible:ring-accent"
+        tabindex="0"
+        role="region"
+        aria-label="WebMCP controls"
+      >
         <table class="w-full text-left text-sm">
           <thead>
             <tr class="border-b border-border">

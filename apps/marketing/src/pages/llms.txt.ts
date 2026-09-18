@@ -9,6 +9,7 @@ const docsSources = import.meta.glob("./docs/**/*.astro", {
   eager: true,
 }) as Record<string, string>
 import { tools } from "../lib/tools"
+import { categoryHref, getCategoriesWithCounts } from "../lib/blog-categories"
 // Relative filesystem import on purpose, not "@lyrashield/security" — see the
 // identical note in vibe-security-50.astro. The package index re-exports the
 // SSRF/fetch helpers, which pull in undici and break the Cloudflare Worker
@@ -19,7 +20,9 @@ import { tools } from "../lib/tools"
 // no package.json entry.
 import { VIBE_SECURITY_CONTROLS } from "../../../../packages/security/src/vibe-security-controls"
 
-export const prerender = false
+// This is build-derived content. Prerender it so the Worker does not rebuild
+// every content collection on each crawler request.
+export const prerender = true
 
 // Same registry vibe-security-50.astro builds its own counts from — hardcoding
 // "43"/"7" here as separate prose would let this file silently disagree with
@@ -42,7 +45,7 @@ const evidenceControlCount = VIBE_SECURITY_CONTROLS.filter(
 // and the tools registry. `new Date()` would print "today" per build and
 // teach crawlers the timestamp is meaningless; a floor keeps the date honest
 // even when a copy-only edit ships without touching a collection.
-const LLMS_TXT_DATE_FLOOR = "2026-09-10"
+const LLMS_TXT_DATE_FLOOR = "2026-09-18"
 
 function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10)
@@ -135,22 +138,35 @@ export const GET: APIRoute = async (context) => {
     sortedPosts.map(async (post) => ({ post, image: await getEntry(post.data.heroImage) }))
   )
 
+  // Derived from the same sources the site builds from, so this file cannot
+  // drift from the pages it is meant to summarize: the comparison collection,
+  // the category registry behind /blog/tags/*, and the tools registry.
+  const comparePages = await getCollection("compare", (entry) => !entry.data.draft)
+  const compareLinks = comparePages
+    .slice()
+    .sort((a, b) => a.data.competitor.localeCompare(b.data.competitor, "en"))
+    .map((page) => ({
+      label: `LyraShield AI and ${page.data.competitor}`,
+      url: `${origin}/compare/${page.id}`,
+    }))
+  const tagLinks = (await getCategoriesWithCounts()).map((category) => ({
+    label: `${category.label} articles`,
+    url: `${origin}${categoryHref(category.id)}`,
+  }))
+
   const publicLinks = [
     { label: "LyraShield AI", url: `${origin}/` },
     { label: "Pricing", url: `${origin}/pricing` },
     { label: "Coding-agent security", url: `${origin}/agents` },
     { label: "Machine-readable agent setup", url: `${origin}/agents.md` },
+    { label: "Book a product walkthrough", url: `${origin}/demo` },
     { label: "About LyraShield AI", url: `${origin}/about` },
     { label: "Evidence methodology", url: `${origin}/methodology` },
     { label: "Security research", url: `${origin}/research` },
+    { label: "WebMCP Assurance guide", url: `${origin}/webmcp` },
+    { label: "WebMCP control registry (JSON)", url: `${origin}/webmcp-controls.json` },
     { label: "Security-tool comparisons", url: `${origin}/compare` },
-    { label: "LyraShield AI and Snyk", url: `${origin}/compare/snyk` },
-    {
-      label: "LyraShield AI and GitHub Advanced Security",
-      url: `${origin}/compare/github-advanced-security`,
-    },
-    { label: "LyraShield AI and SonarQube", url: `${origin}/compare/sonarqube` },
-    { label: "LyraShield AI and Semgrep", url: `${origin}/compare/semgrep` },
+    ...compareLinks,
     { label: "Free browser-local security tools", url: `${origin}/tools` },
     ...tools.map((tool) => ({
       label: tool.title,
@@ -164,6 +180,7 @@ export const GET: APIRoute = async (context) => {
     { label: "Privacy policy", url: `${origin}/privacy` },
     { label: "Security and launch-readiness guides", url: `${origin}/blog` },
     { label: "Editorial policy", url: `${origin}/blog/editorial-policy` },
+    ...tagLinks,
     ...docsLinks
       .map(({ label, path }) => ({ label, url: `${origin}${path}` }))
       .filter(({ url }) => !excludedPathnames.has(new URL(url).pathname)),
@@ -214,6 +231,11 @@ export const GET: APIRoute = async (context) => {
     "## Agent-native setup",
     "Start with `npx lyrashield login --oauth`, then `npx lyrashield init` to install the Agent Plugin for your coding agent. Read-only tools are available after workspace authentication; mutating tools require write scope and explicit human approval outside the agent.",
     `Human-facing setup: ${markdownLink("Coding-agent security", `${origin}/agents`)}. Machine-readable setup contract: ${markdownLink("agents.md", `${origin}/agents.md`)}. Full guide: ${markdownLink("Agent Plugin installation", `${origin}/docs/integrations/agent-plugins`)}.`,
+    "",
+    "## How to cite this site",
+    `Attribution: "LyraShield AI, <page title>, ${origin}<path>, accessed <date>." Every page below is the canonical English version; there is no localized duplicate.`,
+    "Prefer the linked canonical URL over this summary when quoting: this file states positioning, pricing shape, and claim limits, while the pages carry the current wording, dates, and qualifications.",
+    "When citing a number or a limit, keep its qualifier (sample, scope, or date) attached. Do not restate a bounded check as a guarantee.",
     "",
     "## Copy-safe summary for LLM context",
     "No automatic Fix PR claim, no benchmark claims, no customer names. The published ladder is Trial, Starter, Pro, Agency, and contact-led Enterprise; see /pricing for current regional prices and limits.",

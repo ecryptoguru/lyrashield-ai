@@ -10,6 +10,18 @@ import tailwindcss from "@tailwindcss/vite"
 import { parseJsonc } from "./src/lib/jsonc"
 import { tools } from "./src/lib/tools"
 
+// Code-block palette. Astro's markdown pipeline (@astrojs/markdown-satteri →
+// shiki) defaults to the bundled `github-dark` theme, whose comment token
+// (#6a737d) reaches only 3.05:1 against that theme's own #24292e surface —
+// below the 4.5:1 AA threshold for body-size text, in BOTH themes, because the
+// code surface stays dark either way. src/lib/code-theme.json is that theme
+// copied verbatim except for the comment token, which now uses the design
+// system's muted #91a7b8 (5.88:1 on #24292e), so the palette lives in this repo
+// rather than depending on a patched node_modules theme.
+const codeTheme = JSON.parse(
+  readFileSync(new URL("./src/lib/code-theme.json", import.meta.url), "utf8")
+)
+
 // Astro resolves `site` and prerendered metadata during the build, before the
 // Cloudflare Worker receives runtime vars. Keep those values in this one build
 // configuration so sitemaps, canonical URLs, and indexing directives agree.
@@ -139,11 +151,14 @@ function contentLastmod() {
     if (date) map.set(pathname, date)
   }
 
-  // Static top-level pages: one .astro source each.
+  // Static top-level pages: one .astro source each. Every indexable top-level
+  // route must appear here or its sitemap entry loses lastmod — /demo was
+  // missing until the site gate learned to require one.
   for (const page of [
     "about",
     "agents",
     "ai-safety",
+    "demo",
     "evidence-vault",
     "methodology",
     "pricing",
@@ -201,6 +216,49 @@ function contentLastmod() {
 const LASTMOD = contentLastmod()
 
 /**
+ * Blog hero images for the sitemap's image extension.
+ *
+ * Each post already references its 1600x900 hero in the page and in JSON-LD, so
+ * this is about image discovery rather than correctness: the entry binds the
+ * post URL to the image the article actually renders, using the catalogue's alt
+ * text as the caption. Posts whose hero is missing from the catalogue are
+ * skipped rather than guessed at.
+ */
+function blogSitemapImages() {
+  const map = new Map()
+  const blogDir = new URL("./src/content/blog/", import.meta.url)
+  let catalog = {}
+  let files = []
+  try {
+    files = readdirSync(blogDir)
+    catalog = JSON.parse(
+      readFileSync(new URL("./src/content/blog-images/images.json", import.meta.url), "utf8")
+    )
+  } catch {
+    return map
+  }
+  for (const file of files) {
+    if (!/\.(md|mdx)$/.test(file)) continue
+    let frontmatter = ""
+    try {
+      frontmatter = readFileSync(new URL(file, blogDir), "utf8").split(/^---\s*$/m)[1] || ""
+    } catch {
+      continue
+    }
+    const hero = frontmatter
+      .match(/^heroImage:\s*(.+)$/m)?.[1]
+      ?.trim()
+      .replace(/^["']|["']$/g, "")
+    const image = hero ? catalog[hero] : undefined
+    if (!image?.jpeg) continue
+    map.set(`/blog/${file.replace(/\.(md|mdx)$/, "")}`, image)
+  }
+  return map
+}
+
+const SITEMAP_IMAGES = blogSitemapImages()
+
+/**
  * Git-derived "last commit that touched these source files" dates for pages
  * that render dateModified from their own source history. Computed HERE, in
  * plain Node during config load, because the @astrojs/cloudflare adapter
@@ -249,8 +307,15 @@ const SOURCE_DATES = sourceDates()
 
 const configuredSiteUrl = process.env.PUBLIC_SITE_URL || wranglerVar("PUBLIC_SITE_URL")
 const siteUrl = configuredSiteUrl || "http://localhost:4321"
+const sitemapOrigin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
 const indexable =
   (process.env.PUBLIC_INDEXABLE || wranglerVar("PUBLIC_INDEXABLE") || "false") === "true"
+// `pnpm preview` builds the production artifact but serves it over plain http on
+// loopback, where wrangler dev rewrites the request host to the custom domain.
+// The middleware's http→https upgrade cannot tell that apart from a plaintext
+// production request, so the preview script marks the build here and the
+// middleware stands down its redundant layer. Never set this in a deploy build.
+const localPreview = process.env.LYRASHIELD_LOCAL_PREVIEW === "1"
 const xUrl = process.env.PUBLIC_X_URL || wranglerVar("PUBLIC_X_URL") || ""
 const buildRevision = process.env.LYRASHIELD_MARKETING_REVISION || process.env.GITHUB_SHA || "local"
 const configuredAppUrl = process.env.PUBLIC_APP_URL || wranglerVar("PUBLIC_APP_URL")
@@ -258,6 +323,22 @@ const configuredScannerUrl = process.env.PUBLIC_SCANNER_URL || wranglerVar("PUBL
 const turnstileSiteKey =
   process.env.PUBLIC_TURNSTILE_SITE_KEY || wranglerVar("PUBLIC_TURNSTILE_SITE_KEY") || ""
 const abuseEmail = process.env.PUBLIC_ABUSE_EMAIL || wranglerVar("PUBLIC_ABUSE_EMAIL") || ""
+// Marketing Myra launcher. Resolved here (not only from the build environment)
+// so the wrangler var is authoritative in every build pipeline — the same
+// pattern as PUBLIC_INDEXABLE and PUBLIC_X_URL.
+const myraMarketingEnabled =
+  (process.env.PUBLIC_MYRA_MARKETING_ENABLED ||
+    wranglerVar("PUBLIC_MYRA_MARKETING_ENABLED") ||
+    "0") === "1"
+// Webmaster verification is a build-time emission like the site URL: the tags
+// only exist in prerendered HTML, so they resolve through wranglerVar, never
+// Worker runtime vars. Empty is a valid state — the tags are skipped.
+const googleVerification =
+  process.env.PUBLIC_GOOGLE_SITE_VERIFICATION ||
+  wranglerVar("PUBLIC_GOOGLE_SITE_VERIFICATION") ||
+  ""
+const bingVerification =
+  process.env.PUBLIC_BING_SITE_VERIFICATION || wranglerVar("PUBLIC_BING_SITE_VERIFICATION") || ""
 
 if (indexable) {
   try {
@@ -303,6 +384,11 @@ export default defineConfig({
   build: {
     inlineStylesheets: "auto",
   },
+  markdown: {
+    shikiConfig: {
+      theme: codeTheme,
+    },
+  },
   adapter: cloudflare({
     imageService: "passthrough",
   }),
@@ -324,10 +410,27 @@ export default defineConfig({
         // "/" is the one URL whose pathname is empty after trailing-slash
         // normalization; map it back to "/" or the LASTMOD lookup misses and
         // the homepage sitemap entry loses its lastmod.
+        //
+        // The homepage <loc> keeps its slash-less form. @astrojs/sitemap
+        // rewrites `<loc>${host}/</loc>` to `<loc>${host}</loc>` whenever
+        // trailingSlash is "never" (dist/write-sitemap.js), so a serialize
+        // override is discarded — and the two forms are the same URL to a
+        // crawler anyway. SeoHead's canonical stays the trailing-slash form.
         const rawPathname = new URL(item.url).pathname.replace(/\/$/, "")
         const pathname = rawPathname === "" ? "/" : rawPathname
         const lastmod = LASTMOD.get(pathname)
-        return lastmod ? { ...item, lastmod: lastmod.toISOString().slice(0, 10) } : item
+        const image = SITEMAP_IMAGES.get(pathname)
+        const serialized = { ...item }
+        if (lastmod) serialized.lastmod = lastmod.toISOString().slice(0, 10)
+        if (image) {
+          serialized.img = [
+            {
+              url: new URL(image.jpeg, sitemapOrigin).toString(),
+              caption: image.alt,
+            },
+          ]
+        }
+        return serialized
       },
     }),
   ],
@@ -384,6 +487,16 @@ export default defineConfig({
         access: "public",
         optional: true,
       }),
+      PUBLIC_GOOGLE_SITE_VERIFICATION: envField.string({
+        context: "client",
+        access: "public",
+        optional: true,
+      }),
+      PUBLIC_BING_SITE_VERIFICATION: envField.string({
+        context: "client",
+        access: "public",
+        optional: true,
+      }),
       PUBLIC_ABUSE_EMAIL: envField.string({
         context: "client",
         access: "public",
@@ -400,9 +513,13 @@ export default defineConfig({
     plugins: [tailwindcss()],
     define: {
       __MARKETING_INDEXABLE__: JSON.stringify(indexable),
+      __MARKETING_LOCAL_PREVIEW__: JSON.stringify(localPreview),
       __MARKETING_X_URL__: JSON.stringify(xUrl),
+      __MARKETING_MYRA_ENABLED__: JSON.stringify(myraMarketingEnabled),
       __MARKETING_BUILD_REVISION__: JSON.stringify(buildRevision),
       __MARKETING_SOURCE_DATES__: JSON.stringify(SOURCE_DATES),
+      __MARKETING_GOOGLE_VERIFICATION__: JSON.stringify(googleVerification),
+      __MARKETING_BING_VERIFICATION__: JSON.stringify(bingVerification),
     },
   },
 })

@@ -6,14 +6,15 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield for Aider — Standalone CLI Guide"
 const description = "Use LyraShield alongside Aider through the standalone CLI and CI. Aider does not currently document native MCP client support."
 const updatedDate = "2026-09-08"
-const { canonical, techArticle } = buildDocsJsonLd({
+const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
   path: "/docs/integrations/aider",
   title,
   description,
   updatedDate,
+  breadcrumbLabel: "Aider",
 })
-const jsonLd = [techArticle]
+const jsonLd = [techArticle, breadcrumbList]
 ---
 
 <DocsLayout title={`${title} | LyraShield AI`} description={description} canonical={canonical} jsonLd={jsonLd} updatedDate={updatedDate} currentPath="/docs/integrations/aider">

@@ -4,9 +4,9 @@ import DocsLayout from "@layouts/DocsLayout.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const title = "LyraShield MCP for OpenAI Codex — Setup Guide"
+const title = "LyraShield MCP for OpenAI Codex"
 const description =
-  "Connect LyraShield to OpenAI Codex CLI. Install the Agent Plugin for one-step setup, or add the MCP server entry to ~/.codex/config.toml using the [mcp_servers.lyrashield] TOML table."
+  "Connect LyraShield to OpenAI Codex CLI. Install the Agent Plugin for one-step setup, or add the [mcp_servers.lyrashield] table to ~/.codex/config.toml."
 const updatedDate = "2026-08-12"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({

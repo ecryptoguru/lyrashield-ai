@@ -4,6 +4,12 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource-variable/bricolage-grotesque";
 
+/* The code-block palette in src/lib/code-theme.json is data, not markup, but
+   Tailwind's source scanner reads every file in the project and would emit
+   utilities for lookalike strings inside it (its `"fontStyle": "italic"` token
+   settings are enough to generate a stray `.italic` rule). */
+@source not "../lib/code-theme.json";
+
 @theme {
   --color-bg: var(--bg);
   --color-bg-raised: var(--bg-raised);
@@ -297,6 +303,20 @@ summary::-webkit-details-marker {
 
 .callout--warn strong {
   color: var(--danger);
+}
+
+/* Light theme only: `--danger` (#e5534b) is a fill/border colour. As text on
+   the warn callout's own 5% tint it reaches only 3.47:1, under the 4.5:1 AA
+   threshold for this 14.4px bold heading. #c2251c is the same danger red
+   darkened (hue and saturation untouched) and reaches 5.52:1; dark theme keeps
+   `--danger`, which already passes at 6.18:1.
+   DocsLayout ships its own scoped copy of the callout rules
+   (`.docs-main[data-astro-cid] .callout--warn strong`), which outranks a bare
+   class selector, so the override is repeated for that context — the two
+   copies are documented as intentionally identical. */
+:root[data-theme="light"] .callout--warn strong,
+:root[data-theme="light"] .docs-main .callout--warn strong {
+  color: #c2251c;
 }
 
 /* Rendered-markdown comparison tables.
