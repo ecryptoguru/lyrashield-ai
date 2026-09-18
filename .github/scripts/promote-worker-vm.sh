@@ -185,13 +185,13 @@ systemctl is-active --quiet lyrashield-worker-egress-refresh.service && {
   echo "Egress refresh did not quiesce" >&2
   exit 1
 }
-promotion_step=checking-current-worker
-wait_healthy
-
 # The isolated preflight already proved the refreshed Key Vault environment can
 # read the database and queues. Reload the active worker before it claims the
-# admission stop, so every following Redis operation uses that same endpoint.
+# admission stop or checks health, so every following Redis operation uses that
+# same endpoint.
+promotion_step=restarting-current-worker
 systemctl restart "$service"
+promotion_step=checking-current-worker
 wait_healthy
 
 # JavaScript template literal is passed verbatim to the container.
