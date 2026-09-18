@@ -13,6 +13,15 @@ import {
 
 const marketingRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const releases = ["authority", "batch-1", "batch-2", "batch-3", "batch-4", "batch-5", "batch-6"]
+// Page-level citations live outside the blog program, so they are checked on
+// every run rather than per release.
+const pageCitations = ["src/pages/methodology.astro", "src/pages/ai-safety.astro"]
+
+function extractPageExternalLinks(source) {
+  const urls = []
+  for (const match of source.matchAll(/href="(https:\/\/[^"]+)"/g)) urls.push(match[1])
+  return urls
+}
 
 function releaseArgument() {
   const index = process.argv.indexOf("--release")
@@ -75,6 +84,18 @@ async function main() {
     } catch (error) {
       errors.push(`${entry.slug}: ${error.message}`)
     }
+  }
+
+  for (const page of pageCitations) {
+    const path = join(marketingRoot, page)
+    if (!existsSync(path)) {
+      errors.push(`${page}: page is missing`)
+      continue
+    }
+    articles.push({
+      slug: page,
+      urls: extractPageExternalLinks(readFileSync(path, "utf8")),
+    })
   }
 
   errors.push(...(await checkExternalLinks(articles)))
