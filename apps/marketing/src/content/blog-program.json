@@ -1608,5 +1608,55 @@
     "targetWords": 1400,
     "batch": "batch-10",
     "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 162,
+    "title": "Race Conditions in AI-Built Apps and Fixes",
+    "slug": "race-conditions-ai-built-apps",
+    "query": "race condition ai generated code - fix",
+    "cluster": "Data",
+    "targetWords": 1400,
+    "batch": "batch-11",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 163,
+    "title": "What Data Shows on AI-Generated Code Security",
+    "slug": "what-data-shows-ai-generated-code-security-2026",
+    "query": "ai generated code security statistics - research",
+    "cluster": "Decision",
+    "targetWords": 1400,
+    "batch": "batch-11",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 164,
+    "title": "What Building Release Assurance Taught Me",
+    "slug": "building-release-assurance-lessons-open-beta",
+    "query": "release assurance vibe coded apps - lessons",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-11",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 165,
+    "title": "Why Scanner Findings Are Not Proof",
+    "slug": "scanner-findings-vs-verified-findings",
+    "query": "scanner findings vs verified findings - difference",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-11",
+    "cta": "Pillar + verified findings"
+  },
+  {
+    "index": 166,
+    "title": "Insecure File Upload in AI-Built Apps",
+    "slug": "insecure-file-upload-ai-built-apps",
+    "query": "insecure file upload ai app - fix",
+    "cluster": "Input",
+    "targetWords": 1400,
+    "batch": "batch-11",
+    "cta": "Pillar + Launch Checklist"
   }
 ]

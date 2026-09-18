@@ -1,0 +1,141 @@
+---
+title: Race Conditions in AI-Built Apps and Fixes
+description: Learn how AI generated handlers create race conditions, why check then act fails and how to fix with atomic updates and constraints.
+pubDate: 2026-09-21
+author: lyrashield-team
+tags: [vibe-coding-security, web-security, verification]
+draft: false
+heroImage: agent-security-06
+faq:
+  - q: What is a race condition in an AI built app
+    a: Two requests operate on shared state at the same time without proper locking. Both read the same value, both think an action is allowed and the second write overwrites the first, causing lost updates or duplicate actions.
+  - q: Why do AI code generators create race windows
+    a: Generators optimize for single user happy path correctness. They rarely emit database transactions with atomic checks, row level locks or idempotency keys unless prompted, so check then act code passes serial tests but fails under concurrency.
+  - q: How can I test for race conditions before release
+    a: Add concurrent integration tests that fire duplicate requests in parallel, use database constraints as safety nets and review handlers that read then write without a transaction or atomic update. Tools that replay traffic can surface the window.
+  - q: What is the safest quick fix for check then act bugs
+    a: Move the check into the write using an atomic database operation, add a unique constraint or idempotency key and use transactions with select for update or comparable locking. That makes the second request fail safely instead of overwriting.
+---
+
+A race condition in AI built apps happens when two requests read shared state at the same time, both pass a check, then both write and the second overwrites the first. It creates double spend, double booking or lost updates that unit tests miss. Fix it with atomic database operations, unique constraints and parallel request tests. Our [vibe coding security guide](/blog/vibe-coding-security-guide) frames these as logic flaws that only concurrent testing catches.
+
+## Why AI generators create race windows
+
+AI coding assistants are tuned to make one request succeed end to end. Prompt for a credits system or one time coupon and the model writes code that reads balance, checks sufficiency, subtracts, saves. That flow is correct for one user at one moment. It breaks when two requests arrive within milliseconds and interleave at the database.
+
+Many AI stacks use an ORM that hides transactions. A typical handler does find, if check, then update with no explicit transaction and no row level lock. The same appears in serverless handlers scaffolded without for update locking. The code reads clearly and passes serial tests, so it looks safe in review.
+
+Vibe coded apps ship fast, so prompts rarely mention concurrency. A founder building a booking app prompts prevent double booking. The AI adds a check for existing bookings, returns early if found, otherwise inserts. Under load, two requests both find no booking and both insert. You have double booking with no error. The bug is silent and corrupting.
+
+Security impact goes beyond correctness. OWASP classifies race conditions as a concurrency flaw that can bypass business rules, see [OWASP Race Condition](https://owasp.org/www-community/pages/vulnerabilities/race_conditions). MITRE defines the root as concurrent execution using shared resource with improper synchronization, see [CWE 362 Concurrent Execution using Shared Resource with Improper Synchronization](https://cwe.mitre.org/data/definitions/362.html). The classic check then use variant is [CWE 367 Time of Check Time of Use](https://cwe.mitre.org/data/definitions/367.html). For client primitives that do not fix server races, see [MDN Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API).
+
+IDOR gets more attention, but race windows are equally common in AI built CRUD. Both need enforcement at the write point. For context see [IDOR in AI built apps](/blog/idor-ai-built-apps).
+
+## The two patterns that fail most
+
+Pattern one is check then act. Handler queries database, decides, then acts. Between check and act, another request changes state. Example is inventory check before checkout. Request A reads inventory one and passes. Request B reads same and passes. Both decrement. Inventory goes negative.
+
+Generators emit this because it matches prompt structure. The code is readable and matches step by step logic. The model has no signal that two requests can interleave unless prompt mentions transactions or atomic operations.
+
+Pattern two is read modify write without atomics. Handler reads balance, adds ten, writes back. If two deposits happen together, one addition is lost. In JavaScript this happens even with await because awaits yield to event loop and let other requests interleave in Node or edge runtimes. In Postgres two transactions both read balance 100, both add 10, both write 110. One credit disappears.
+
+A typical vulnerable snippet:
+
+```ts
+// vulnerable: read then write without atomic guarantee
+const user = await db.user.findUnique({ where: { id } })
+if (user.credits < cost) throw new Error("insufficient")
+await db.user.update({
+  where: { id },
+  data: { credits: user.credits - cost },
+})
+```
+
+This passes serial tests. Under concurrent load two requests read credits 10, cost 10, both pass, both write 0, both grant paid feature twice. You deliver feature twice for one payment.
+
+One time invites, single use coupons or seat counts show same flaw. AI writes if not used then mark used. Without database guarantee double redemption happens. For webhook idempotency compare [Stripe webhook signature guide](/blog/stripe-webhook-signature-security). For integration hardening see [docs integrations hub](/docs/integrations).
+
+## How to spot race windows before release
+
+Start with structural review. Look for handler that does read query, then if, then write to same table where write value derives from earlier read. Those are hot spots. Flag any write that uses credits minus cost or count plus one computed from previous read.
+
+Run mental test per endpoint: if I sent same request twice at exact same time would both succeed when only one should. Apply to credits, inventory, bookings, seat counts, coupon claims, invites, any only once action. If yes or maybe, you need database level fix.
+
+Add concurrent integration test before release. Fire ten parallel requests that try to claim same resource. Assert exactly one succeeds and rest fail safely. This catches most check then act bugs.
+
+```ts
+// concurrent test that surfaces double success
+const results = await Promise.allSettled(
+  Array.from({ length: 10 }, () =>
+    fetch("/api/claim", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: "ONE-TIME-10" }),
+    })
+  )
+)
+const ok = results.filter((r) => r.status === "fulfilled").length
+// expect exactly 1
+```
+
+Second, use database constraints as backstop. Add unique constraints for one per user resources, partial unique indexes for active bookings where status equals active, check constraints for non negative balances. Constraints make race fail loudly with violation instead of silent corruption. AI migrations often omit these unless asked.
+
+Third, review transaction boundaries. In Postgres wrap read and write in transaction with SELECT FOR UPDATE or use atomic update with where clause that includes check. In Prisma that is updateMany with condition and affected count check. In Supabase use RPC functions that perform checks inside Postgres rather than edge function. Client Web Locks do not replace server locking, as noted in [MDN Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API).
+
+Finally scan for idempotency gaps. If endpoint can be retried by client, queue or payment provider it needs idempotency key stored with unique constraint. Without it retries become races.
+
+## Fixes that hold under concurrency
+
+Safest fix moves check into write. Instead of reading then writing do one atomic operation that only succeeds if condition still holds at write time. Database serializes access and second request fails safely.
+
+Replace read then update with guarded update:
+
+```ts
+// safer: check inside write, no separate read
+const updated = await db.user.updateMany({
+  where: { id, credits: { gte: cost } },
+  data: { credits: { decrement: cost } },
+})
+if (updated.count === 0) throw new Error("insufficient or already claimed")
+```
+
+If concurrent requests race only one update matches where clause. Other affects zero rows and returns error. No lost update, no silent overwrite.
+
+When you need to read for business logic use transaction with explicit row locking in raw Postgres:
+
+```sql
+BEGIN;
+SELECT credits FROM users WHERE id = $1 FOR UPDATE;
+-- application checks here
+UPDATE users SET credits = credits - $2 WHERE id = $1;
+COMMIT;
+```
+
+FOR UPDATE locks row until commit so second transaction waits rather than reading stale data. Keep transactions short to avoid contention.
+
+For one time actions like coupon claims add unique constraint on claim table and attempt insert directly without prior existence check. Handle unique violation as already claimed. This is more reliable than check then insert.
+
+For high scale counters use database native atomic increments or queue that serializes claims. Avoid in memory counters in serverless functions since each instance has isolated memory.
+
+Use decision table to pick fix:
+
+| Vulnerable pattern                       | What fails under concurrency    | Safe replacement                                   | When to use it            |
+| ---------------------------------------- | ------------------------------- | -------------------------------------------------- | ------------------------- |
+| Check balance then deduct in two queries | Double spend both pass if       | Atomic updateMany with gte guard and count check   | Credits wallets inventory |
+| Read booking then insert if none         | Double booking duplicate rows   | Partial unique index plus insert conflict handling | Bookings seats holds      |
+| Read and update counter from read value  | Lost update one increment lost  | Atomic increment or transaction with FOR UPDATE    | Likes usage meters        |
+| One time code if not used then mark used | Double redemption coupon reused | Unique constraint plus direct insert               | Coupons invites tokens    |
+
+These fixes are database centric. Application locks in Node do not span multiple instances and vanish on restart. Browser locks do not help across users. Database is only shared truth that can enforce correctness when requests overlap. Prompt explicitly for these patterns like use atomic update with where clause that includes balance check and assert affected count equals one. Without that detail generators default to readable but unsafe read then write.
+
+## Why pair race handling with release assurance
+
+Race conditions are logic security not just performance. They can be exploited to bypass entitlements, reuse single use tokens, oversell limited inventory. They rarely show in dependency scans or secret scans because code looks correct and contains no known vulnerable library. You need behavioral review and concurrent tests that replay race.
+
+LyraShield AI is release assurance for AI built apps designed to separate detection from proof and keep evidence you can replay. As of August 2026 LyraShield AI is live with open registration in open beta at https://lyrashieldai.com The broader vision including deeper scan engine, immutable assurance reports and approval gated fix proposals requiring review are on the near term roadmap and not yet fully live. Any fixes we surface are proposals requiring review never unattended rewrites that change your app without human approval.
+
+That matters for concurrency bugs. A scanner that only flags possible race without replayable proof creates noise. A release assurance loop pairs detection with concurrent test that demonstrates double success, stores evidence, tracks fix through retest. Until that loop is fully available use manual steps: add parallel request test, add constraints that fail loudly, switch check then act to atomic writes.
+
+For launch checklist run focused pass with [AI app security checklist](/tools/ai-app-security-checklist). Look at every endpoint that modifies shared state especially credits bookings coupons invites and only once actions. Add parallel test to CI for those endpoints. It takes less than an hour for most solo stacks and catches class of bug AI generators miss most often.
+
+If you want to see how this fits with other patterns in vibe coded apps start with our [vibe coding security guide](/blog/vibe-coding-security-guide) and then branch into [Supabase RLS mistakes](/blog/supabase-rls-vibe-coded-apps) and [IDOR in AI built apps](/blog/idor-ai-built-apps). For official background read [OWASP Race Condition](https://owasp.org/www-community/pages/vulnerabilities/race_conditions), [CWE 362](https://cwe.mitre.org/data/definitions/362.html), [CWE 367](https://cwe.mitre.org/data/definitions/367.html) and [MDN Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API).
