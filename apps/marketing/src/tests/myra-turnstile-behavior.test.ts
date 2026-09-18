@@ -177,6 +177,7 @@ async function loadSession() {
 describe("Turnstile challenge lifecycle", () => {
   it("renders an interaction-only widget driven by explicit execute()", async () => {
     const { getTurnstileToken } = await loadSession()
+    doc.hosts.push(turnstileHost())
     const p = getTurnstileToken()
     await tick()
     const call = turnstile.renders[0]
@@ -242,28 +243,30 @@ describe("Turnstile challenge lifecycle", () => {
     await expect(p2).resolves.toBe("t2")
   })
 
-  it("falls back to a hidden holder only when no host is visible, then removes it", async () => {
+  it("does not start an interaction challenge when no host is visible", async () => {
     const { getTurnstileToken } = await loadSession()
     const hidden = turnstileHost()
     hidden.visible = false
     doc.hosts.push(hidden)
 
-    const p = getTurnstileToken()
+    await expect(getTurnstileToken()).resolves.toBeUndefined()
+    expect(turnstile.renders).toHaveLength(0)
+
+    // The failed attempt does not poison the queue. Once a host is visible,
+    // the next caller receives a fresh challenge.
+    hidden.visible = true
+    const retry = getTurnstileToken()
     await tick()
     expect(turnstile.renders).toHaveLength(1)
-    const holder = turnstile.renders[0]?.host
-    expect(holder).not.toBe(hidden)
-    expect(holder?.attrs["aria-hidden"]).toBe("true")
-    expect(doc.body.children).toContain(holder)
-
-    turnstile.renders[0]?.options.callback?.("t")
-    await expect(p).resolves.toBe("t")
-    expect(doc.body.children).not.toContain(holder)
+    expect(turnstile.renders[0]?.host).toBe(hidden)
+    turnstile.renders[0]?.options.callback?.("fresh")
+    await expect(retry).resolves.toBe("fresh")
   })
 
   it("a timed-out attempt cannot settle a later request", async () => {
     vi.useFakeTimers()
     const { getTurnstileToken } = await loadSession()
+    doc.hosts.push(turnstileHost())
 
     const p1 = getTurnstileToken()
     await tick()
@@ -288,6 +291,7 @@ describe("Turnstile challenge lifecycle", () => {
 
   it("a failed challenge resolves undefined and does not poison the queue", async () => {
     const { getTurnstileToken } = await loadSession()
+    doc.hosts.push(turnstileHost())
     const p1 = getTurnstileToken()
     await tick()
     turnstile.renders[0]?.options["error-callback"]?.()
@@ -302,6 +306,7 @@ describe("Turnstile challenge lifecycle", () => {
 
   it("an expired token fails the attempt closed", async () => {
     const { getTurnstileToken } = await loadSession()
+    doc.hosts.push(turnstileHost())
     const p = getTurnstileToken()
     await tick()
     turnstile.renders[0]?.options["expired-callback"]?.()
@@ -311,6 +316,7 @@ describe("Turnstile challenge lifecycle", () => {
   it("a blocked script fails closed and a later request retries the load", async () => {
     w.turnstile = undefined
     const { getTurnstileToken } = await loadSession()
+    doc.hosts.push(turnstileHost())
 
     const p1 = getTurnstileToken()
     await tick()
@@ -345,6 +351,7 @@ describe("session bootstrap deduplication", () => {
       }
     })
     const { ensureMyraSession } = await loadSession()
+    doc.hosts.push(turnstileHost())
 
     const a = ensureMyraSession("https://api.test")
     const b = ensureMyraSession("https://api.test")

@@ -58,15 +58,20 @@ describe("Myra Turnstile configuration", () => {
 
 describe("Myra panel + demo challenge hosts", () => {
   it("exposes a challenge host in the panel markup", () => {
-    expect(read("../components/myra/MyraPanel.astro")).toContain("data-myra-turnstile")
+    const panel = read("../components/myra/MyraPanel.astro")
+    const hostIndex = panel.indexOf("data-myra-turnstile")
+    const panelIndex = panel.indexOf('id="myra-panel"')
+    expect(hostIndex).toBeGreaterThan(-1)
+    expect(hostIndex).toBeLessThan(panelIndex)
   })
 
   it("exposes a challenge host and an honest, retryable failure surface on /demo", () => {
     const demo = read("../pages/demo.astro")
     expect(demo).toContain("data-myra-turnstile")
     expect(demo).toContain("demo-slots-retry")
-    // The old copy blamed the visitor's connection for a server-side outage.
+    // The failure can be a server or browser/network error.
     expect(demo).not.toContain("Check your connection")
+    expect(demo).not.toContain("not your connection")
   })
 
   it("keeps the /demo host outside the mutually-exclusive booking steps", () => {

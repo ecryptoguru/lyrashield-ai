@@ -173,22 +173,11 @@ async function requestTurnstileToken(): Promise<string | undefined> {
     // host used for a previous token may since have been hidden — the demo
     // page swaps booking steps, the panel opens and closes — and a challenge
     // rendered where the visitor cannot see it can never be completed. Only
-    // when no host is visible anywhere do we fall back to a hidden holder;
-    // managed challenges still pass there.
-    const pageHost = pickTurnstileHost()
-    let holder: HTMLElement | null = null
-    const host =
-      pageHost ??
-      (holder = (() => {
-        const el = document.createElement("div")
-        el.setAttribute("aria-hidden", "true")
-        el.style.position = "absolute"
-        el.style.width = "0"
-        el.style.height = "0"
-        el.style.overflow = "hidden"
-        add(document.body, el)
-        return el
-      })())
+    // when no host is visible, fail this attempt without starting a challenge.
+    // An interaction-only widget inside a hidden holder can require input the
+    // visitor has no way to provide. Both Myra surfaces keep a host visible.
+    const host = pickTurnstileHost()
+    if (!host) return undefined
 
     let widgetId: string | undefined
     const cleanup = () => {
@@ -200,8 +189,6 @@ async function requestTurnstileToken(): Promise<string | undefined> {
         }
         widgetId = undefined
       }
-      holder?.remove()
-      holder = null
     }
 
     try {
