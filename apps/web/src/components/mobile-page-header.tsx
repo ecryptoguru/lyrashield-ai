@@ -5,29 +5,28 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Bell, ChevronLeft } from "lucide-react"
 import { buttonVariants } from "@lyrashield/ui"
-import { NAV_TITLE_ITEMS } from "@/lib/nav-items"
+import { resolvePageTitle } from "@/lib/nav-items"
 import { ThemeToggle } from "./theme-toggle"
 
 /**
- * Resolves the current destination's label from the shared nav definition, preferring the
- * longest matching href so "/dashboard/targets" wins over "/dashboard".
+ * Resolves the current destination's label from the shared nav definition. An
+ * explicit `title` prop wins; otherwise the route is matched on segment
+ * boundaries (see `resolvePageTitle`), so an unlisted `/dashboard/*` route falls
+ * back to the neutral product name instead of the Home label (UF-25).
  */
 function usePageTitle(explicit?: string): string {
   const pathname = usePathname()
   if (explicit) return explicit
-  const exact = NAV_TITLE_ITEMS.find((item) => pathname === item.href)
-  if (exact) return exact.label
-  const match = NAV_TITLE_ITEMS.filter(
-    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
-  ).sort((a, b) => b.href.length - a.href.length)[0]
-  return match?.label ?? "LyraShield AI"
+  return resolvePageTitle(pathname)
 }
 
 export function MobilePageHeader({ title, backHref }: { title?: string; backHref?: string }) {
   const pageTitle = usePageTitle(title)
 
   return (
-    <header className="bg-background fixed top-0 z-30 flex h-[calc(4rem+env(safe-area-inset-top))] w-full items-center justify-between border-b px-4 pt-[env(safe-area-inset-top)] md:hidden">
+    // UF-27: the fixed header belongs to the same sub-`lg` shell as the bottom
+    // bar, so it must survive the tablet width where the sidebar is now hidden.
+    <header className="bg-background fixed top-0 z-30 flex h-[calc(4rem+env(safe-area-inset-top))] w-full items-center justify-between border-b px-4 pt-[env(safe-area-inset-top)] lg:hidden">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {backHref ? (
           <Link

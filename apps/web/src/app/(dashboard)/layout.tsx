@@ -91,7 +91,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     !session.oauth
 
   return (
-    <div className="bg-background flex min-h-screen flex-col md:flex-row">
+    // UF-27: the sidebar is revealed at `lg`, so the row layout and the mobile
+    // chrome's top/bottom padding also switch at `lg`. Between 768px and 1023px
+    // the tablet gets the mobile shell and full-width content.
+    <div className="bg-background flex min-h-screen flex-col lg:flex-row">
       <V2Sidebar
         userName={session.userName}
         userEmail={session.userEmail}
@@ -109,14 +112,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <nav aria-label="Skip navigation">
         <a
           href="#main-content"
-          className="bg-primary text-primary-foreground fixed top-2 left-2 z-50 -translate-y-16 rounded-lg px-3 py-2 text-sm font-medium transition-transform focus:translate-y-0"
+          // UF-30: the skip link is the first tab stop in the shell, so it must
+          // draw the shared token ring rather than the user-agent outline.
+          className="bg-primary text-primary-foreground focus-visible:ring-ring fixed top-2 left-2 z-50 -translate-y-16 rounded-lg px-3 py-2 text-sm font-medium transition-transform focus:translate-y-0 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
           Skip to content
         </a>
       </nav>
       <main
         id="main-content"
-        className="min-w-0 flex-1 overflow-x-clip pt-[calc(4rem+env(safe-area-inset-top))] pb-[calc(4rem+env(safe-area-inset-bottom))] md:pt-0 md:pb-0"
+        className="min-w-0 flex-1 overflow-x-clip pt-[calc(4rem+env(safe-area-inset-top))] pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pt-0 lg:pb-0"
         tabIndex={-1}
       >
         <div className="mx-auto w-full min-w-0 max-w-368 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">

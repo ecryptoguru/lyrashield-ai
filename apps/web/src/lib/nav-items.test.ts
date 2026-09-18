@@ -6,8 +6,11 @@ import {
   MORE_NAV_ITEMS,
   PRIMARY_NAV_ITEMS,
   SECONDARY_NAV_ITEMS,
+  PAGE_TITLE_FALLBACK,
   resolveNav,
+  resolvePageTitle,
 } from "./nav-items"
+import { HOME_LABEL, TARGET_PLURAL } from "./terminology"
 
 /**
  * Regression guard for a shipped defect: the bottom bar rendered
@@ -185,5 +188,37 @@ describe("nav-items title lookup", () => {
   it("has no duplicate hrefs in the title lookup list", () => {
     const hrefs = NAV_TITLE_ITEMS.map((i) => i.href)
     expect(new Set(hrefs).size).toBe(hrefs.length)
+  })
+
+  it("names the nav-less routes the audit found titling themselves Home (UF-25)", () => {
+    expect(resolvePageTitle("/dashboard/agents")).toBe("Coding Agents")
+    expect(resolvePageTitle("/dashboard/integrations")).toBe("Integrations")
+    expect(resolvePageTitle("/dashboard/projects")).toBe("Projects")
+  })
+
+  it("never resolves a non-root route to the Home label", () => {
+    for (const item of NAV_TITLE_ITEMS) {
+      if (item.href === "/dashboard") continue
+      expect(resolvePageTitle(item.href)).not.toBe(HOME_LABEL)
+    }
+    expect(resolvePageTitle("/dashboard/settings/workspace")).not.toBe(HOME_LABEL)
+    expect(resolvePageTitle("/dashboard/scans/scan_123")).not.toBe(HOME_LABEL)
+  })
+
+  it("falls back to the product name for an unlisted sub-route", () => {
+    expect(resolvePageTitle("/dashboard/not-a-real-route")).toBe(PAGE_TITLE_FALLBACK)
+    expect(resolvePageTitle("/dashboard/not-a-real-route/deeper")).toBe(PAGE_TITLE_FALLBACK)
+  })
+
+  it("matches the dashboard root on segment boundaries only", () => {
+    expect(resolvePageTitle("/dashboard")).toBe(HOME_LABEL)
+    expect(resolvePageTitle("/dashboard/")).toBe(HOME_LABEL)
+    // A prefix match must not let "/dashboard" claim a child route.
+    expect(resolvePageTitle("/dashboardish")).toBe(PAGE_TITLE_FALLBACK)
+  })
+
+  it("prefers the longest matching entry for nested routes", () => {
+    expect(resolvePageTitle("/dashboard/targets/tgt_1")).toBe(TARGET_PLURAL)
+    expect(resolvePageTitle("/dashboard/targets/tgt_1/edit")).toBe(TARGET_PLURAL)
   })
 })

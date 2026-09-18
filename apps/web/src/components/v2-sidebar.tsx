@@ -33,6 +33,10 @@ function SidebarLink({ item, pathname }: { item: NavItem; pathname: string }) {
       aria-current={isActive ? "page" : undefined}
       className={cn(
         "group flex min-h-11 items-center gap-3 border-l-2 px-3 text-sm font-medium transition-[background-color,border-color,color] duration-(--duration-fast) ease-out",
+        // UF-30: these rows previously had no ring class, so keyboard focus fell
+        // back to the user-agent outline while every other shell control drew the
+        // shared token ring. Inset matches the full-bleed brand link above.
+        "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset",
         isActive
           ? "border-primary bg-primary/8 text-primary"
           : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border-transparent"
@@ -140,7 +144,10 @@ export function V2Sidebar({
   }
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r md:block">
+    // UF-27: the expanded 288px sidebar is a desktop affordance. Below `lg`
+    // (1024px) the shell uses the mobile chrome — bottom bar + Workspace sheet —
+    // so a 768px tablet gets full-width content instead of 480px of `<main>`.
+    <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r lg:block">
       <div className="bg-sidebar flex h-full min-h-0 flex-col">
         <a
           href="https://lyrashieldai.com"
