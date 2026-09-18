@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-09-18",
+  "notes": {
+    "title-too-long": {
+      "reason": "Rendered title above the budget: 60 characters for static pages, 65 for blog posts (they carry a longer brand suffix).",
+      "wave": null
+    },
+    "description-too-long": {
+      "reason": "Meta description above 160 characters.",
+      "wave": null
+    },
+    "og-image-default": {
+      "reason": "A sitemap page fell back to /og/og-default.png instead of a section card from src/lib/og-images.ts.",
+      "wave": null
+    },
+    "jsonld-page-entity-missing": {
+      "reason": "Page emitted only the site graph (Organization + WebSite) and no page-level entity.",
+      "wave": null
+    },
+    "jsonld-breadcrumb-missing": {
+      "reason": "A non-root page emitted no BreadcrumbList.",
+      "wave": null
+    }
+  },
+  "entries": []
+}

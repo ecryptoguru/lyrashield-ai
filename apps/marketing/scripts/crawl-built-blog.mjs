@@ -89,13 +89,16 @@ function extractRssLinks(xml) {
     .filter(Boolean)
 }
 
-export function inspectHtml(html, pageUrl) {
+export function inspectHtml(html, pageUrl, { siteOrigin = new URL(pageUrl).origin } = {}) {
   const title = stripTags(pairedTagContents(html, "title")[0] ?? "")
   const metaTags = openingTags(html, "meta")
-  const noindex = metaTags.map(attributes).some((attrs) =>
-    ["robots", "googlebot"].includes(attrs.get("name")?.toLowerCase()) &&
-    /(?:^|[\s,])(noindex|none)(?:$|[\s,])/i.test(attrs.get("content") ?? "")
-  )
+  const noindex = metaTags
+    .map(attributes)
+    .some(
+      (attrs) =>
+        ["robots", "googlebot"].includes(attrs.get("name")?.toLowerCase()) &&
+        /(?:^|[\s,])(noindex|none)(?:$|[\s,])/i.test(attrs.get("content") ?? "")
+    )
   const description = metaTags
     .map(attributes)
     .find((attrs) => attrs.get("name")?.toLowerCase() === "description")
@@ -120,27 +123,36 @@ export function inspectHtml(html, pageUrl) {
   }
 
   const hrefs = []
+  const mailtoLinks = []
   const anchorTargets = []
   const anchorErrors = []
   for (const tag of openingTags(html, "a")) {
     const href = attributes(tag).get("href")
     if (!href) continue
+    if (/^mailto:/i.test(href)) mailtoLinks.push(decodeURIComponent(href.slice(7)).toLowerCase())
     const resolved = resolveHttpUrl(href, pageUrl)
     if (resolved) hrefs.push(resolved.href)
     if (!resolved || !resolved.hash) continue
 
     const fragment = decodeURIComponent(resolved.hash.slice(1))
     const current = new URL(pageUrl)
-    if (resolved.origin === current.origin && resolved.pathname === current.pathname) {
+    // A link is site-internal when it resolves to the page's own origin
+    // (relative links against a preview fetch) or to the canonical site
+    // origin (production-absolute links inside the same built site).
+    const sameSite = resolved.origin === current.origin || resolved.origin === siteOrigin
+    if (sameSite && resolved.pathname === current.pathname) {
       if (fragment && !ids.has(fragment)) anchorErrors.push(`missing anchor #${fragment}`)
-    } else if (resolved.origin === current.origin) {
+    } else if (sameSite) {
       anchorTargets.push({ url: `${resolved.origin}${resolved.pathname}`, fragment })
     }
   }
 
   const imageUrls = []
+  let imagesMissingAlt = 0
   for (const tag of openingTags(html, "img")) {
-    const src = attributes(tag).get("src")
+    const attrs = attributes(tag)
+    if (!attrs.has("alt")) imagesMissingAlt += 1
+    const src = attrs.get("src")
     const resolved = resolveHttpUrl(src, pageUrl)
     if (resolved) imageUrls.push(resolved.href)
   }
@@ -154,7 +166,18 @@ export function inspectHtml(html, pageUrl) {
     }
   }
 
+  const metaByProperty = (property) =>
+    metaTags
+      .map(attributes)
+      .find((attrs) => attrs.get("property")?.toLowerCase() === property)
+      ?.get("content")
+      ?.trim()
+  const ogImage = metaByProperty("og:image") ?? ""
+  const ogImageWidth = metaByProperty("og:image:width") ?? ""
+  const ogImageHeight = metaByProperty("og:image:height") ?? ""
+
   const jsonLdErrors = []
+  const jsonLdTypes = []
   let jsonLdCount = 0
   const scriptPattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi
   for (const match of html.matchAll(scriptPattern)) {
@@ -162,16 +185,25 @@ export function inspectHtml(html, pageUrl) {
     if (attrs.get("type")?.toLowerCase() !== "application/ld+json") continue
     jsonLdCount += 1
     try {
-      JSON.parse(match[2]?.trim() ?? "")
+      const parsed = JSON.parse(match[2]?.trim() ?? "")
+      for (const node of Array.isArray(parsed) ? parsed : [parsed]) {
+        const type = node?.["@type"]
+        if (typeof type === "string") jsonLdTypes.push(type)
+        else if (Array.isArray(type)) jsonLdTypes.push(...type.filter((t) => typeof t === "string"))
+      }
     } catch {
       jsonLdErrors.push("invalid JSON-LD")
     }
   }
 
   const page = new URL(pageUrl)
+  const htmlLang = attributes(openingTags(html, "html")[0] ?? "").get("lang") ?? ""
   const localHrefs = unique(
     hrefs
-      .filter((href) => new URL(href).origin === page.origin)
+      .filter((href) => {
+        const origin = new URL(href).origin
+        return origin === page.origin || origin === siteOrigin
+      })
       .map((href) => new URL(href).pathname)
   )
   const tagUrls = unique(
@@ -195,11 +227,18 @@ export function inspectHtml(html, pageUrl) {
     ids,
     hrefs: unique(hrefs),
     localHrefs,
+    mailtoLinks: unique(mailtoLinks),
     tagUrls,
     anchorTargets,
     anchorErrors: unique(anchorErrors),
     imageUrls: unique(imageUrls),
+    imagesMissingAlt,
+    htmlLang,
+    ogImage,
+    ogImageWidth,
+    ogImageHeight,
     jsonLdCount,
+    jsonLdTypes: unique(jsonLdTypes),
     jsonLdErrors,
     hasDraftMarker,
   }
@@ -377,9 +416,7 @@ export async function crawlBuiltBlog({
   const rssUrl = new URL(RSS_PATH, localOrigin).href
   const rss = await fetchText(fetchImpl, rssUrl, "RSS", errors)
   const rssLinks = rss === null ? [] : extractRssLinks(rss)
-  const rssPaths = new Set(
-    rssLinks.map((url) => normalizePath(new URL(url, localOrigin).pathname))
-  )
+  const rssPaths = new Set(rssLinks.map((url) => normalizePath(new URL(url, localOrigin).pathname)))
   const expectedRssItemCount = Math.min(expectedPaths.size, 20)
   if (rssLinks.length !== expectedRssItemCount || rssPaths.size !== expectedRssItemCount) {
     errors.push(`${rssUrl}: expected ${expectedRssItemCount} unique recent article items`)

@@ -14,9 +14,12 @@ export default getViteConfig(
     vite: {
       define: {
         __MARKETING_INDEXABLE__: "true",
+        __MARKETING_LOCAL_PREVIEW__: "false",
         __MARKETING_X_URL__: '""',
         __MARKETING_MYRA_ENABLED__: "false",
         __MARKETING_BUILD_REVISION__: '"0123456789abcdef0123456789abcdef01234567"',
+        __MARKETING_GOOGLE_VERIFICATION__: '""',
+        __MARKETING_BING_VERIFICATION__: '""',
       },
     },
   }

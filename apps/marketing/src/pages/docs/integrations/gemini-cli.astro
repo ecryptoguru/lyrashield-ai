@@ -6,7 +6,7 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for Gemini CLI — Setup Guide"
 const description =
-  "Connect LyraShield to Gemini CLI. Declare LYRASHIELD_API_KEY in the env block because Gemini filters sensitive inherited names, and avoid underscores in the server name."
+  "Connect LyraShield to Gemini CLI. Declare LYRASHIELD_API_KEY in the env block (Gemini filters sensitive inherited names) and avoid underscores in the name."
 const updatedDate = "2026-08-07"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({

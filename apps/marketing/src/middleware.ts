@@ -22,6 +22,10 @@ const PERMANENT_REDIRECTS: Record<string, string> = {
   "/how-it-works": "/#how-it-works",
   "/docs/integrations/windsurf": "/docs/integrations/devin",
   "/sitemap.xml": "/sitemap-index.xml",
+  // /blog/1 is not a generated route (page 1 IS /blog). The asset-layer
+  // rules canonicalise /blog/1/ to /blog/1, which used to 404; send both to
+  // the real hub instead of leaving a dead end for a URL people type.
+  "/blog/1": "/blog",
 }
 
 // NOTE: trailing-slash and /index.html canonicalisation for prerendered
@@ -35,9 +39,22 @@ export const onRequest = defineMiddleware(async ({ url }, next) => {
   // VULN-P-001: SSR/API routes must also refuse plaintext — the static-page
   // path is covered by the worker-entry guard applied in postbuild
   // (scripts/apply-worker-scheme-guard.mjs); middleware never runs for it.
-  // Scoped to the public hostnames so local `wrangler dev`/`astro dev` on
-  // http://localhost keeps working.
-  if (url.protocol === "http:" && url.hostname.endsWith("lyrashieldai.com")) {
+  //
+  // `wrangler dev` serves the production build over plain http on loopback but
+  // rewrites the request host to the custom domain, so a local request is
+  // indistinguishable from a plaintext production one by URL alone. The
+  // `pnpm preview` build therefore sets __MARKETING_LOCAL_PREVIEW__ (see
+  // astro.config.mjs); without this exemption every SSR route (llms.txt,
+  // rss.xml, agents.md, /api/*) answered 301 to https://127.0.0.1:8787, where
+  // nothing listens, which also made the built-HTML SEO gate unable to read
+  // the machine-readable surfaces. Production never sets the flag, and the
+  // worker-entry guard still 301s plaintext there, so this only stands down
+  // the redundant second layer.
+  if (
+    !__MARKETING_LOCAL_PREVIEW__ &&
+    url.protocol === "http:" &&
+    url.hostname.endsWith("lyrashieldai.com")
+  ) {
     const https = new URL(url)
     https.protocol = "https:"
     return new Response(null, {
