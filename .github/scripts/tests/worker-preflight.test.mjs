@@ -27,6 +27,13 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
   assert.match(scannerDeploy, /REDIS_URL=secretref:bullmq-redis-url/)
   assert.match(scannerDeploy, /UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token/)
 
+  const workerRedisSync = workflow
+    .split("      - name: Sync BullMQ Redis secret to worker Key Vault\n")[1]
+    ?.split("\n      - name:")[0]
+  assert.ok(workerRedisSync)
+  assert.match(workerRedisSync, /--name worker-redis-url/)
+  assert.match(workerRedisSync, /BULLMQ_REDIS_URL/)
+
   const githubSync = workflow
     .split("      - name: Sync GitHub App secrets to app Container App\n")[1]
     ?.split("\n      - name:")[0]

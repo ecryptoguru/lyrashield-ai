@@ -520,7 +520,6 @@ jobs:
           echo "Shared rate-limiting credentials present."
 
       - name: Verify BullMQ Redis credential
-        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
           BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
         run: |
@@ -538,6 +537,24 @@ jobs:
             exit 1
           }
           echo "BullMQ TLS Redis credential present."
+
+      # The Container Apps and worker VM consume the same BullMQ endpoint from
+      # different secret stores. Keep the VM's Key Vault copy in lockstep so a
+      # Redis rotation cannot leave the production worker on an exhausted plan.
+      - name: Sync BullMQ Redis secret to worker Key Vault
+        env:
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: |
+          if ! timeout --foreground 180s az keyvault secret set \
+            --vault-name "$AZURE_KEY_VAULT_NAME" \
+            --name worker-redis-url \
+            --value "$BULLMQ_REDIS_URL" \
+            --output none; then
+            echo "::error::Failed to sync BullMQ Redis secret to worker Key Vault."
+            exit 1
+          fi
+          echo "BullMQ Redis secret synced to worker Key Vault."
 
       - name: Verify evidence envelope key
         id: verify-evidence-kek
