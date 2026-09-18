@@ -67,13 +67,14 @@ interface TurnstileGlobal {
       sitekey: string
       size?: "normal" | "compact" | "flexible"
       appearance?: "always" | "execute" | "interaction-only"
+      execution?: "auto" | "execute"
       callback?: (token: string) => void
       "error-callback"?: () => void
       "expired-callback"?: () => void
     }
   ) => string
   execute: (widgetId: string) => void
-  reset: (widgetId: string) => void
+  remove: (widgetId: string) => void
 }
 
 /**
@@ -91,99 +92,138 @@ function add(parent: Node, kid: Node): void {
 }
 
 let turnstileScript: Promise<TurnstileGlobal | undefined> | null = null
-let turnstileWidgetId: string | undefined
-let turnstileResolve: ((token: string | undefined) => void) | null = null
-let turnstileInFlight: Promise<string | undefined> | null = null
+let turnstileQueue: Promise<void> = Promise.resolve()
+
+/** Interactive challenges need human time; managed ones settle in ~1s or fail fast. */
+const TURNSTILE_TIMEOUT_MS = 60_000
+const TURNSTILE_SCRIPT_TIMEOUT_MS = 15_000
 
 function loadTurnstile(): Promise<TurnstileGlobal | undefined> {
-  if (turnstileScript) return turnstileScript
-  turnstileScript = new Promise((resolve) => {
+  turnstileScript ??= new Promise((resolve) => {
     const w = window as Window & { turnstile?: TurnstileGlobal }
-    const done = () => resolve(w.turnstile)
     if (w.turnstile) {
-      done()
+      resolve(w.turnstile)
       return
+    }
+    // A failed or stalled load must not be cached forever — clear the cached
+    // promise so a later request retries the script load.
+    const fail = () => {
+      turnstileScript = null
+      resolve(undefined)
     }
     const script = document.createElement("script")
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
     script.async = true
-    script.onload = done
-    script.onerror = () => resolve(undefined)
+    const timer = setTimeout(() => (w.turnstile ? resolve(w.turnstile) : fail()), TURNSTILE_SCRIPT_TIMEOUT_MS)
+    script.onload = () => {
+      clearTimeout(timer)
+      resolve(w.turnstile)
+    }
+    script.onerror = () => {
+      clearTimeout(timer)
+      fail()
+    }
     add(document.head, script)
-    setTimeout(() => resolve(w.turnstile), 15_000)
   })
   return turnstileScript
+}
+
+/** First currently-visible challenge host, or null. getClientRects() is the
+ *  visibility test that survives a fixed-position ancestor (offsetParent is
+ *  always null inside position: fixed, which is exactly how the Myra panel is
+ *  positioned). */
+function pickTurnstileHost(): HTMLElement | null {
+  for (const host of document.querySelectorAll<HTMLElement>(MYRA_TURNSTILE_SELECTOR)) {
+    if (host.getClientRects().length > 0) return host
+  }
+  return null
 }
 
 /**
  * Fresh Turnstile token, or undefined when no site key is configured / the
  * challenge can't run. Single-use — call once per credential-issuing request.
  *
- * Single-flight: concurrent callers share one in-flight challenge. The demo
- * page bootstraps its session twice on load (once for the panel wiring, once
- * inside fetchSlots); without this guard the second call reset()s and
- * execute()s a widget that is already executing, the token callback fires for
- * only one of them, and the loser times out and mints an unauthenticated
- * session.
+ * Serialized, not shared: Turnstile tokens are single-use, so independent
+ * credential-issuing callers queue and each receives its own fresh challenge.
+ * Sharing one in-flight attempt would hand the same single-use credential to
+ * every concurrent caller and only the first server verification could pass.
+ * The deduplication that IS correct — concurrent session bootstraps sharing
+ * one mint — lives in ensureMyraSession.
  */
 export function getTurnstileToken(): Promise<string | undefined> {
-  turnstileInFlight ??= requestTurnstileToken().finally(() => {
-    turnstileInFlight = null
-  })
-  return turnstileInFlight
+  const attempt = turnstileQueue.then(requestTurnstileToken)
+  turnstileQueue = attempt.then(
+    () => undefined,
+    () => undefined
+  )
+  return attempt
 }
 
 async function requestTurnstileToken(): Promise<string | undefined> {
-  const sitekey = (import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string | undefined) || ""
-  if (!sitekey || typeof window === "undefined") return undefined
-  const turnstile = await loadTurnstile()
-  if (!turnstile) return undefined
   try {
-    if (turnstileWidgetId === undefined) {
-      const host = document.querySelector<HTMLElement>(MYRA_TURNSTILE_SELECTOR)
-      // getClientRects() is the visibility test that survives a fixed-position
-      // ancestor (offsetParent is always null inside position: fixed, which is
-      // exactly how the Myra panel is positioned).
-      const visibleHost = host && host.getClientRects().length > 0 ? host : null
-      const holder = visibleHost ?? document.createElement("div")
-      if (!visibleHost) {
-        holder.setAttribute("aria-hidden", "true")
-        holder.style.position = "absolute"
-        holder.style.width = "0"
-        holder.style.height = "0"
-        holder.style.overflow = "hidden"
-        add(document.body, holder)
-      }
-      turnstileWidgetId = turnstile.render(holder, {
-        sitekey,
-        size: "flexible",
-        appearance: "interaction-only",
-        callback: (token) => {
-          turnstileResolve?.(token)
-          turnstileResolve = null
-        },
-        "error-callback": () => {
-          turnstileResolve?.(undefined)
-          turnstileResolve = null
-        },
-      })
-    }
-    const widgetId = turnstileWidgetId
-    return await new Promise<string | undefined>((resolve) => {
-      const timer = setTimeout(() => {
-        if (turnstileResolve === settle) {
-          turnstileResolve = null
-          resolve(undefined)
+    const sitekey = (import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string | undefined) || ""
+    if (!sitekey || typeof window === "undefined") return undefined
+    const turnstile = await loadTurnstile()
+    if (!turnstile) return undefined
+
+    // A fresh widget per request, in the host that is visible right now. The
+    // host used for a previous token may since have been hidden — the demo
+    // page swaps booking steps, the panel opens and closes — and a challenge
+    // rendered where the visitor cannot see it can never be completed. Only
+    // when no host is visible anywhere do we fall back to a hidden holder;
+    // managed challenges still pass there.
+    const pageHost = pickTurnstileHost()
+    let holder: HTMLElement | null = null
+    const host =
+      pageHost ??
+      (holder = (() => {
+        const el = document.createElement("div")
+        el.setAttribute("aria-hidden", "true")
+        el.style.position = "absolute"
+        el.style.width = "0"
+        el.style.height = "0"
+        el.style.overflow = "hidden"
+        add(document.body, el)
+        return el
+      })())
+
+    let widgetId: string | undefined
+    const cleanup = () => {
+      if (widgetId !== undefined) {
+        try {
+          turnstile.remove(widgetId)
+        } catch {
+          /* widget already gone */
         }
-      }, 15_000)
-      const settle = (token: string | undefined) => {
-        clearTimeout(timer)
-        resolve(token)
+        widgetId = undefined
       }
-      turnstileResolve = settle
-      turnstile.reset(widgetId)
-      turnstile.execute(widgetId)
-    })
+      holder?.remove()
+      holder = null
+    }
+
+    try {
+      return await new Promise<string | undefined>((resolve) => {
+        const settle = (token: string | undefined) => {
+          clearTimeout(timer)
+          cleanup()
+          resolve(token)
+        }
+        const timer = setTimeout(() => settle(undefined), TURNSTILE_TIMEOUT_MS)
+        widgetId = turnstile.render(host, {
+          sitekey,
+          size: "flexible",
+          appearance: "interaction-only",
+          execution: "execute",
+          callback: settle,
+          "error-callback": () => settle(undefined),
+          "expired-callback": () => settle(undefined),
+        })
+        turnstile.execute(widgetId)
+      })
+    } catch {
+      cleanup()
+      return undefined
+    }
   } catch {
     return undefined
   }

@@ -36,6 +36,16 @@ describe("Myra Turnstile configuration", () => {
     expect(session).toContain('appearance: "interaction-only"')
   })
 
+  it("uses explicit execute() execution to match the execute call", () => {
+    expect(session).toContain('execution: "execute"')
+  })
+
+  it("re-selects a visible host per request instead of pinning one widget", () => {
+    expect(session).toContain("querySelectorAll")
+    expect(session).not.toContain("turnstileWidgetId")
+    expect(session).not.toContain("turnstileInFlight")
+  })
+
   it("does not declare the rejected size value in its Turnstile typings", () => {
     expect(session).not.toMatch(/size\?:[^\n]*invisible/)
   })
@@ -57,6 +67,19 @@ describe("Myra panel + demo challenge hosts", () => {
     expect(demo).toContain("demo-slots-retry")
     // The old copy blamed the visitor's connection for a server-side outage.
     expect(demo).not.toContain("Check your connection")
+  })
+
+  it("keeps the /demo host outside the mutually-exclusive booking steps", () => {
+    const demo = read("../pages/demo.astro")
+    // The host must follow the last step section so it stays visible no
+    // matter which step is showing — a challenge inside #demo-step-slot is
+    // hidden the moment a time is chosen.
+    const hostIndex = demo.indexOf("data-myra-turnstile")
+    const lastStepIndex = demo.indexOf('id="demo-step-manage"')
+    const noscriptIndex = demo.indexOf("<noscript>")
+    expect(hostIndex).toBeGreaterThan(lastStepIndex)
+    expect(hostIndex).toBeGreaterThan(-1)
+    expect(hostIndex).toBeLessThan(noscriptIndex)
   })
 })
 
