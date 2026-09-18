@@ -67,11 +67,11 @@ const preflightDockerStub = [
   "      *) exit 1 ;;",
   "    esac ;;",
   "  run:*)",
-  '    printf \'%s\\n\' "$QUEUE_STATE" ;;',
+  "    printf '%s\\n' \"$QUEUE_STATE\" ;;",
   "  exec:lyrashield-worker)",
   '    case "$*" in',
-  '      *printenv\\ REDIS_URL*) printf \'%s\\n\' "$MOCK_LIVE_REDIS_URL" ;;',
-  '      *printenv\\ DATABASE_URL*) printf \'%s\\n\' "$MOCK_LIVE_DATABASE_URL" ;;',
+  "      *printenv\\ REDIS_URL*) printf '%s\\n' \"$MOCK_LIVE_REDIS_URL\" ;;",
+  "      *printenv\\ DATABASE_URL*) printf '%s\\n' \"$MOCK_LIVE_DATABASE_URL\" ;;",
   "      *) exit 1 ;;",
   "    esac ;;",
   "  *) exit 1 ;;",
@@ -124,9 +124,13 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     const runtimeConfig = path.join(directory, "worker-runtime.conf")
     const envFile = path.join(directory, "worker.env")
     writeFileSync(path.join(directory, "docker"), preflightDockerStub, { mode: 0o700 })
-    writeFileSync(path.join(directory, "systemctl"), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n', {
-      mode: 0o700,
-    })
+    writeFileSync(
+      path.join(directory, "systemctl"),
+      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n',
+      {
+        mode: 0o700,
+      }
+    )
     writeFileSync(
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
@@ -155,7 +159,10 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
         stdio: ["ignore", "pipe", "pipe"],
       })
     assert.match(run(JSON.stringify(empty)), /Worker empty-queue preflight passed/)
-    assert.match(readFileSync(systemctlLog, "utf8"), /^restart lyrashield-worker-secrets\.service$/m)
+    assert.match(
+      readFileSync(systemctlLog, "utf8"),
+      /^restart lyrashield-worker-secrets\.service$/m
+    )
     const { tokens } = preflightRunEnvironment(dockerLog)
     const passedNames = new Set()
     for (let i = 0; i < tokens.length; i++) {
@@ -195,9 +202,13 @@ test("worker preflight names a stale worker environment and never prints endpoin
     const runtimeConfig = path.join(directory, "worker-runtime.conf")
     const envFile = path.join(directory, "worker.env")
     writeFileSync(path.join(directory, "docker"), preflightDockerStub, { mode: 0o700 })
-    writeFileSync(path.join(directory, "systemctl"), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n', {
-      mode: 0o700,
-    })
+    writeFileSync(
+      path.join(directory, "systemctl"),
+      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n',
+      {
+        mode: 0o700,
+      }
+    )
     writeFileSync(
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
@@ -228,17 +239,30 @@ test("worker preflight names a stale worker environment and never prints endpoin
 
     // Same host[:port] on both sides passes.
     assert.match(
-      run("rediss://default:rotated@redis.internal:6379", "postgres://worker:rotated@postgres.internal:5432/lyrashield"),
+      run(
+        "rediss://default:rotated@redis.internal:6379",
+        "postgres://worker:rotated@postgres.internal:5432/lyrashield"
+      ),
       /Worker empty-queue preflight passed/
     )
 
     // A rotated Redis or Postgres endpoint in the refreshed file names the
     // stale worker environment.
-    const staleMessage = /Worker environment is stale: restart lyrashield-worker\.service before promotion/
+    const staleMessage =
+      /Worker environment is stale: restart lyrashield-worker\.service before promotion/
     for (const [liveRedis, liveDatabase] of [
-      ["rediss://default:old@exhausted.upstash.io:6379", "postgres://worker:rotated@postgres.internal:5432/lyrashield"],
-      ["rediss://default:rotated@redis.internal:6379", "postgres://worker:old@retired.postgres.internal:5432/lyrashield"],
-      ["rediss://default:old@redis.internal:6380", "postgres://worker:rotated@postgres.internal:5432/lyrashield"],
+      [
+        "rediss://default:old@exhausted.upstash.io:6379",
+        "postgres://worker:rotated@postgres.internal:5432/lyrashield",
+      ],
+      [
+        "rediss://default:rotated@redis.internal:6379",
+        "postgres://worker:old@retired.postgres.internal:5432/lyrashield",
+      ],
+      [
+        "rediss://default:old@redis.internal:6380",
+        "postgres://worker:rotated@postgres.internal:5432/lyrashield",
+      ],
     ]) {
       let stderr = null
       try {
@@ -248,7 +272,10 @@ test("worker preflight names a stale worker environment and never prints endpoin
       }
       assert.notEqual(stderr, null, "preflight accepted a stale worker environment")
       assert.match(stderr, staleMessage)
-      assert.doesNotMatch(stderr, /exhausted\.upstash\.io|retired\.postgres\.internal|redis\.internal:6380/)
+      assert.doesNotMatch(
+        stderr,
+        /exhausted\.upstash\.io|retired\.postgres\.internal|redis\.internal:6380/
+      )
     }
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -263,9 +290,13 @@ test("preflight environment loads @lyrashield/config in production and matches t
     const runtimeConfig = path.join(directory, "worker-runtime.conf")
     const envFile = path.join(directory, "worker.env")
     writeFileSync(path.join(directory, "docker"), preflightDockerStub, { mode: 0o700 })
-    writeFileSync(path.join(directory, "systemctl"), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n', {
-      mode: 0o700,
-    })
+    writeFileSync(
+      path.join(directory, "systemctl"),
+      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n',
+      {
+        mode: 0o700,
+      }
+    )
     writeFileSync(
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
