@@ -357,7 +357,7 @@ export function ReportsEmptyState() {
       description="Generate a security report from a completed scan to share with stakeholders."
       action={
         <Link href="/dashboard/scans" className={buttonVariants()}>
-          Start a review
+          Start a scan
         </Link>
       }
     />

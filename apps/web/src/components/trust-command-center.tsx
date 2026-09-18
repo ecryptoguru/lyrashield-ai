@@ -72,7 +72,7 @@ function postureVerdict(
       : {
           variant: "muted",
           text: "Not scored",
-          scope: "Run a review to capture your first evidence.",
+          scope: "Run a scan to capture your first evidence.",
         }
   }
   switch (gate.state) {

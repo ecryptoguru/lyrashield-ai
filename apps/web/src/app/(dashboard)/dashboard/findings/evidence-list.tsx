@@ -41,10 +41,10 @@ export async function EvidenceList({ workspaceId }: { workspaceId: string }) {
       <EmptyState
         icon={ShieldAlert}
         title="No verified evidence yet"
-        description="Run a review and verify findings to collect evidence records."
+        description="Run a scan and verify findings to collect evidence records."
         action={
           <Link href="/dashboard/scans" className={buttonVariants()}>
-            Start a review
+            Start a scan
           </Link>
         }
       />

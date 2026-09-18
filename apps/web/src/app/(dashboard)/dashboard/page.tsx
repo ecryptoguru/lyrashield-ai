@@ -333,8 +333,8 @@ export default async function DashboardPage() {
               title="No scan activity yet"
               description={
                 targetCount === 0
-                  ? "Add a target to begin your first review."
-                  : "Run your first review to see activity here."
+                  ? "Add a target to begin your first scan."
+                  : "Run your first scan to see activity here."
               }
               action={
                 <Link
