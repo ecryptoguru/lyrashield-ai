@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Plus, FolderKanban, Bug, Crosshair, Radar } from "lucide-react"
@@ -56,6 +56,7 @@ export function ProjectsClient({
   initialNextCursor?: string | null
 }) {
   const router = useRouter()
+  const formTriggerRef = useRef<HTMLButtonElement>(null)
   const [projects, setProjects] = useState<Project[]>(initialData ?? [])
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor ?? null)
   const [loading, setLoading] = useState(!initialData)
@@ -141,10 +142,15 @@ export function ProjectsClient({
         title="Projects"
         description="Organize your scan targets and findings"
         action={
-          <Button onClick={() => setShowForm(!showForm)}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            New Project
-          </Button>
+          // On an empty surface the empty state owns the single primary action
+          // (DESIGN.md: one primary action per surface); two identical filled
+          // buttons for the same action read as competing CTAs.
+          projects.length === 0 ? undefined : (
+            <Button ref={formTriggerRef} onClick={() => setShowForm(!showForm)}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              New Project
+            </Button>
+          )
         }
       />
 
@@ -198,6 +204,10 @@ export function ProjectsClient({
               onClick={() => {
                 setShowForm(false)
                 setError(null)
+                // The form unmounts, so focus must be returned to the control
+                // that opened it — otherwise the next Tab restarts at the top
+                // of the document.
+                formTriggerRef.current?.focus()
               }}
             >
               Cancel
@@ -212,9 +222,9 @@ export function ProjectsClient({
           title="No projects yet"
           description="Create your first project to organize targets and scans."
           action={
-            <Button onClick={() => setShowForm(true)}>
+            <Button ref={formTriggerRef} onClick={() => setShowForm(true)}>
               <Plus className="h-4 w-4" aria-hidden="true" />
-              Create project
+              New Project
             </Button>
           }
         />

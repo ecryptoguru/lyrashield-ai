@@ -50,7 +50,10 @@ export function SharedReportView({ report }: { report: ShareableReport }) {
     : []
 
   return (
-    <main className="gradient-hero bg-background min-h-screen px-4 py-5 sm:px-6 sm:py-8 lg:py-12">
+    <main
+      id="main-content"
+      className="gradient-hero bg-background min-h-screen px-4 py-5 sm:px-6 sm:py-8 lg:py-12"
+    >
       <div className="mx-auto flex max-w-6xl flex-col gap-5 sm:gap-6">
         <header className="flex min-h-12 items-center justify-between gap-4">
           <div className="flex items-center gap-3">

@@ -202,7 +202,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   await expect(contractTargetResponse).toBeOK()
 
   await page.goto("/dashboard")
-  await expect(page.getByRole("heading", { name: "Run your first review" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Run your first scan" })).toBeVisible()
   // W2-07: the scan recommendation preselects the recommended target in the
   // composer href.
   await expect(page.getByRole("link", { name: "Start a scan" }).first()).toHaveAttribute(
@@ -504,7 +504,9 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
       ).toBe(403)
     }
     await otherPage.goto(`/dashboard/targets/${targetId}`)
-    await expect(otherPage.getByRole("heading", { name: /404|Not in evidence/i })).toBeVisible()
+    // UF-48: the dashboard not-found card is status-neutral ("…in evidence"),
+    // not the root "404" heading — the streamed shell can't promise a 404.
+    await expect(otherPage.getByRole("heading", { name: /404|in evidence/i })).toBeVisible()
     await otherPage.goto(`/dashboard/scans/${fixture.scan.id}`)
     await expect(otherPage.getByRole("heading", { name: "No workspace yet" })).toBeVisible()
   } finally {

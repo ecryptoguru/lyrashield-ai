@@ -482,7 +482,9 @@ export function projectGateReadinessReport(
       score: null,
       triageScore: triage.score,
       blockingFindings,
-      summary: `${insufficient.length} of ${targets.length} target(s) have no completed assessment yet.`,
+      summary: `${insufficient.length} of ${targets.length} ${
+        targets.length === 1 ? "target has" : "targets have"
+      } no completed assessment yet.`,
       conditions:
         conditions.length > 0
           ? conditions

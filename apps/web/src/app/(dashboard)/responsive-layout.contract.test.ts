@@ -11,7 +11,10 @@ const scorecardPage = readFileSync(
 
 describe("narrow viewport layout", () => {
   it("keeps dashboard content above the fixed mobile navigation", () => {
-    expect(dashboardLayout).toContain("pb-[calc(4rem+env(safe-area-inset-bottom))] md:pt-0 md:pb-0")
+    // UF-27: the fixed mobile chrome (bottom bar + page header) is the shell
+    // below `lg`, because the sidebar no longer appears at tablet widths.
+    expect(dashboardLayout).toContain("pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pt-0 lg:pb-0")
+    expect(dashboardLayout).toContain("flex-col lg:flex-row")
   })
 
   it("allows public scorecard status panels to shrink before the small breakpoint", () => {

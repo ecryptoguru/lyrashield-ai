@@ -8,7 +8,7 @@
  * requests use the cookie session (apiBase ""); anonymous/public tokens never
  * apply on this surface.
  */
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { usePathname } from "next/navigation"
 import {
   MessageCircleQuestion,
@@ -36,6 +36,16 @@ function routeContextFor(pathname: string, surface: "marketing" | "app"): string
 
 // ─── Panel ──────────────────────────────────────────────────────────────────
 
+const LG_MEDIA_QUERY = "(min-width: 1024px)"
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function subscribeLgViewport(callback: () => void) {
+  const media = window.matchMedia(LG_MEDIA_QUERY)
+  media.addEventListener("change", callback)
+  return () => media.removeEventListener("change", callback)
+}
+
 export function MyraPanel({
   enabled = true,
   accountEmail,
@@ -52,6 +62,17 @@ export function MyraPanel({
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const mobileLauncherRef = useRef<HTMLButtonElement | null>(null)
+  const panelRef = useRef<HTMLElement | null>(null)
+  const mobileCloseRef = useRef<HTMLButtonElement | null>(null)
+  // The sheet is modal only while it actually IS the full-screen overlay:
+  // below lg. Opening it and then widening past lg leaves the docked panel
+  // visible — a trapped/aria-modal state there would lie about the layout.
+  const isLgViewport = useSyncExternalStore(
+    subscribeLgViewport,
+    () => window.matchMedia(LG_MEDIA_QUERY).matches,
+    () => true
+  )
+  const isModal = mobileOpen && !isLgViewport
   const {
     turns,
     input,
@@ -86,9 +107,34 @@ export function MyraPanel({
   }, [])
 
   useEffect(() => {
-    if (!mobileOpen) return
+    if (!isModal) return
+    const panel = panelRef.current
+    // Focus enters the sheet when it opens. The close button is the entry
+    // point rather than the composer — focusing the textarea would pop the
+    // virtual keyboard over half the sheet on touch devices.
+    mobileCloseRef.current?.focus()
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeMobile()
+      if (e.key === "Escape") {
+        closeMobile()
+        return
+      }
+      if (e.key !== "Tab" || !panel) return
+      const focusables = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
+        (el) => el.offsetParent !== null || el === document.activeElement
+      )
+      if (focusables.length === 0) return
+      const first = focusables[0]!
+      const last = focusables[focusables.length - 1]!
+      const active = document.activeElement
+      const inside = active instanceof HTMLElement && panel.contains(active)
+      if (e.shiftKey && (!inside || active === first)) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (!inside || active === last)) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener("keydown", onKey)
     const prevOverflow = document.body.style.overflow
@@ -97,7 +143,7 @@ export function MyraPanel({
       document.removeEventListener("keydown", onKey)
       document.body.style.overflow = prevOverflow
     }
-  }, [mobileOpen, closeMobile])
+  }, [isModal, closeMobile])
 
   if (!enabled) return null
 
@@ -126,7 +172,7 @@ export function MyraPanel({
           <Button
             size="icon"
             variant="ghost"
-            className="hidden size-9 md:inline-flex"
+            className="hidden size-9 lg:inline-flex"
             aria-label={collapsed ? "Expand Myra panel" : "Collapse Myra panel"}
             onClick={() => setCollapsed((c) => !c)}
           >
@@ -137,9 +183,10 @@ export function MyraPanel({
             )}
           </Button>
           <Button
+            ref={mobileCloseRef}
             size="icon"
             variant="ghost"
-            className="size-9 md:hidden"
+            className="size-9 lg:hidden"
             aria-label="Close Myra"
             onClick={closeMobile}
           >
@@ -375,7 +422,7 @@ export function MyraPanel({
         aria-expanded={mobileOpen}
         aria-controls="myra-dash-panel"
         onClick={() => setMobileOpen(true)}
-        className="fixed right-4 bottom-20 z-40 gap-1.5 shadow-md md:hidden"
+        className="fixed right-4 bottom-20 z-40 gap-1.5 shadow-md sm:right-6 lg:hidden"
         style={{ marginBottom: "env(safe-area-inset-bottom)" }}
       >
         <MessageCircleQuestion className="size-4" aria-hidden="true" />
@@ -384,17 +431,20 @@ export function MyraPanel({
 
       {/*
         One DOM tree, two presentations:
-          <md  → hidden until the launcher opens it as a full-height fixed sheet
-          md+  → docked beside content; collapses to a slim rail, never a bubble
+          <lg  → hidden until the launcher opens it as a full-height fixed sheet
+          lg+  → docked beside content; collapses to a slim rail, never a bubble
       */}
       <aside
+        ref={panelRef}
         id="myra-dash-panel"
         aria-label="Myra support"
+        role={isModal ? "dialog" : "complementary"}
+        aria-modal={isModal || undefined}
         className={cn(
           "bg-background flex-col",
           mobileOpen ? "fixed inset-0 z-50 flex" : "hidden",
-          "md:sticky md:top-0 md:z-auto md:flex md:h-svh md:shrink-0 md:self-start md:border-l",
-          collapsed ? "md:w-14" : "md:w-88 xl:w-96"
+          "lg:sticky lg:top-0 lg:z-auto lg:flex lg:h-svh lg:shrink-0 lg:self-start lg:border-l",
+          collapsed ? "lg:w-14" : "lg:w-88 xl:w-96"
         )}
       >
         {collapsed && !mobileOpen ? (

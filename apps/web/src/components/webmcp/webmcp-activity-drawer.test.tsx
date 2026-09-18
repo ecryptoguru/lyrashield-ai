@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it, vi, afterAll } from "vitest"
 import { renderToString } from "react-dom/server"
 import { WebMcpReceiptProvider, useWebMcpReceiptStore } from "./webmcp-receipt-provider"
@@ -39,5 +40,26 @@ describe("WebMcpActivityDrawer", () => {
     expect(html).toContain("Agent activity")
     expect(html).toContain("test_tool")
     expect(html).toContain("Done")
+  })
+
+  it("stacks above the Myra Help launcher instead of sharing its band", () => {
+    // F5 regression: below lg the chip and Help both sat at bottom-20, and the
+    // chip's higher z-index made Help unclickable at ~768px. The chip now
+    // occupies bottom-32 (above Help) and only drops to bottom-6 at lg where
+    // Help is hidden — bottom-20 must not appear anywhere in this stack.
+    const html = renderToString(
+      <WebMcpReceiptProvider>
+        <Consumer />
+      </WebMcpReceiptProvider>
+    )
+    expect(html).toContain("bottom-32")
+    expect(html).toContain("lg:bottom-6")
+    expect(html).not.toContain("bottom-20")
+
+    // The expanded panel only mounts on interaction, so its class lives in
+    // source: it must clear the raised chip (bottom-32 + chip height + gap).
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const src = readFileSync(new URL("./webmcp-activity-drawer.tsx", import.meta.url), "utf8")
+    expect(src).toContain("bottom-44")
   })
 })

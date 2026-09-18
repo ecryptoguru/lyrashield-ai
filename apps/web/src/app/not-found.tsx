@@ -2,7 +2,22 @@ import Image from "next/image"
 import Link from "next/link"
 import { buttonVariants, cn } from "@lyrashield/ui"
 
-export default function NotFound() {
+/**
+ * Body of the not-found surface, shared by the root boundary and the dashboard
+ * boundary.
+ *
+ * It deliberately renders no landmark of its own: the root boundary owns
+ * `<main id="main-content">`, while dashboard routes already inherit a `<main>`
+ * from `(dashboard)/layout.tsx`. A second main in the same document is itself a
+ * landmark violation (axe `landmark-one-main`).
+ */
+export function NotFoundCard({
+  eyebrow = "404 · Not in evidence",
+  title = "404 — This page isn't in evidence",
+}: {
+  eyebrow?: string
+  title?: string
+}) {
   return (
     <div className="bg-background relative flex min-h-screen flex-col items-center justify-center px-4 py-16">
       {/* Subtle evidence console grid — low opacity so it reads as texture, not content. */}
@@ -25,25 +40,19 @@ export default function NotFound() {
               />
             </div>
             <p className="text-muted-foreground mt-5 text-[11px] font-semibold tracking-[0.16em] uppercase">
-              404 · Not in evidence
+              {eyebrow}
             </p>
-            <h1 className="mt-3 text-2xl font-bold tracking-tight text-balance">
-              404 — This page isn&apos;t in evidence
-            </h1>
+            <h1 className="mt-3 text-2xl font-bold tracking-tight text-balance">{title}</h1>
             <p className="text-muted-foreground mt-3 max-w-[32ch] text-sm text-pretty">
               The path doesn&apos;t exist or isn&apos;t available in this workspace. Check the URL
               or return to the console.
             </p>
+            {/* One primary action per surface (DESIGN.md). "Go home" is gone: for a
+                signed-in user it ejected them from the console into the marketing site. */}
             <div className="mt-8 flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
-              <Link href="/" className={cn(buttonVariants({ size: "md" }), "w-full sm:w-auto")}>
-                Go home
-              </Link>
               <Link
                 href="/dashboard"
-                className={cn(
-                  buttonVariants({ variant: "secondary", size: "md" }),
-                  "w-full sm:w-auto"
-                )}
+                className={cn(buttonVariants({ size: "md" }), "w-full sm:w-auto")}
               >
                 Go to dashboard
               </Link>
@@ -55,5 +64,13 @@ export default function NotFound() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function NotFound() {
+  return (
+    <main id="main-content">
+      <NotFoundCard />
+    </main>
   )
 }
