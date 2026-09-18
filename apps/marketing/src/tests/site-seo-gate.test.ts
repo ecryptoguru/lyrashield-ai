@@ -509,7 +509,10 @@ describe("site gate transport/origin probes", () => {
 
   it("leaves off-origin og:image URLs to their metadata checks", async () => {
     const pageOverrides = new Map([
-      ["/pricing", healthyPage("/pricing").replace(`${SITE}/og/page.png`, "https://cdn.example.com/x.png")],
+      [
+        "/pricing",
+        healthyPage("/pricing").replace(`${SITE}/og/page.png`, "https://cdn.example.com/x.png"),
+      ],
     ])
     const { fetchImpl, requests } = buildFakeSite({ pageOverrides })
     const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
