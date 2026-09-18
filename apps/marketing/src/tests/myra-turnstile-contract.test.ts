@@ -40,7 +40,7 @@ describe("Myra Turnstile configuration", () => {
 
   it("prefers a visible challenge host so a required interaction can be completed", () => {
     expect(session).toContain("MYRA_TURNSTILE_SELECTOR")
-    expect(session).toContain("offsetParent")
+    expect(session).toContain("getClientRects")
   })
 })
 

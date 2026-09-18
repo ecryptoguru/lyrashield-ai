@@ -141,7 +141,10 @@ async function requestTurnstileToken(): Promise<string | undefined> {
   try {
     if (turnstileWidgetId === undefined) {
       const host = document.querySelector<HTMLElement>(MYRA_TURNSTILE_SELECTOR)
-      const visibleHost = host && host.offsetParent !== null ? host : null
+      // getClientRects() is the visibility test that survives a fixed-position
+      // ancestor (offsetParent is always null inside position: fixed, which is
+      // exactly how the Myra panel is positioned).
+      const visibleHost = host && host.getClientRects().length > 0 ? host : null
       const holder = visibleHost ?? document.createElement("div")
       if (!visibleHost) {
         holder.setAttribute("aria-hidden", "true")
