@@ -28,3 +28,10 @@ e02853f094dd61f5732b539b81143e6cc49f647d:codebase.md:generic-api-key:290
 # original commit's snapshot inside the PR range.
 3b911644a7439f77fe9e4661438b2a3b2c9716e0:packages/myra/src/sanitize.test.ts:generic-api-key:169
 3b911644a7439f77fe9e4661438b2a3b2c9716e0:packages/myra/src/sanitize.test.ts:private-key:190
+
+# IndexNow verification key in apps/marketing/scripts/indexnow.mjs — public by
+# design, not a credential: the protocol works by fetching it from
+# https://<host>/<key>.txt, which is why the file is committed at all. The
+# source literal was replaced by a runtime read of that file; this fingerprint
+# covers the original commit's snapshot inside the PR range.
+983c146f36ee197dafadd2660179d9f700d1a6bf:apps/marketing/scripts/indexnow.mjs:generic-api-key:25
