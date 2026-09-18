@@ -32,6 +32,10 @@ overrides:
   # GHSA-3f6p-5ww8-9rcr: mysql2 <3.22.0 can downgrade auth to plaintext.
   # Optional through Prisma and Better Auth; force the compatible fixed release.
   mysql2: "3.23.1"
+  # GHSA-7w5x-hrqm-74c2: smol-toml <=1.7.0 DoS via malformed TOML.
+  # Transitive via markdownlint-cli2; force the patched line (already used
+  # by @astrojs/internal-helpers).
+  smol-toml: ">=1.7.1"
 
 peerDependencyRules:
   allowedVersions:
