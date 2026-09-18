@@ -30,9 +30,13 @@ if (allowedEmails) {
   }
 }
 
-if (provider !== "mock" && provider !== "google") {
+// An unset provider is valid while writes are off: no booking can execute, so
+// nothing needs a calendar adapter. Writes-on still requires "google" below.
+if (!provider && !writesEnabled) {
+  console.log("calendar provider unset; writes are off")
+} else if (provider && provider !== "mock" && provider !== "google") {
   fail(
-    `MYRA_CALENDAR_PROVIDER must be "mock" or "google" — got "${provider || "(empty)"}". ` +
+    `MYRA_CALENDAR_PROVIDER must be "mock" or "google" — got "${provider}". ` +
       "The deploy no longer defaults it; set the repository variable explicitly."
   )
 }
