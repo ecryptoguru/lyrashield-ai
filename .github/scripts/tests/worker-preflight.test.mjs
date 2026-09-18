@@ -163,7 +163,10 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
       readFileSync(systemctlLog, "utf8"),
       /^restart lyrashield-worker-secrets\.service$/m
     )
-    const { tokens } = preflightRunEnvironment(dockerLog)
+    const { env, tokens } = preflightRunEnvironment(dockerLog)
+    assert.equal(env.TMPDIR, "/tmp")
+    assert.ok(tokens.includes("/tmp:rw,nosuid,nodev,noexec,size=64m"))
+    assert.ok(!tokens.includes("--mount"))
     const passedNames = new Set()
     for (let i = 0; i < tokens.length; i++) {
       if (tokens[i] === "--env") passedNames.add(tokens[i + 1].split("=")[0])
