@@ -43,8 +43,14 @@
   --color-destructive-solid: oklch(0.55 0.24 25);
   --color-border: oklch(0.91 0.005 270);
   --color-input: oklch(0.91 0.005 270);
-  /* DESIGN.md: "Focus ring: amber #f5b84b, offset 4px". */
-  --color-ring: #f5b84b;
+  /*
+   * DESIGN.md: "Focus ring: amber #f5b84b, offset 4px". That amber is the dark
+   * theme's ring (11.5:1 against --background). On the light background it is
+   * only 1.7:1 — below the 3:1 guidance for focus indicators — so the light
+   * theme uses the same amber hue one step deeper (#b45309, 4.6:1). Both values
+   * are recorded in DESIGN.md.
+   */
+  --color-ring: #b45309;
   --color-success: oklch(0.55 0.14 164);
   --color-warning: oklch(0.65 0.15 72);
   --color-critical: oklch(0.55 0.21 25);
