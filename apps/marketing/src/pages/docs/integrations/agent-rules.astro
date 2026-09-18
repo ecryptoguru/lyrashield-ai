@@ -5,9 +5,9 @@ import type { RuleFormat } from "@lyrashield/agent-rules"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const title = "LyraShield Agent Rules — Generated Rule Files per Agent"
+const title = "LyraShield Agent Rules — Generated Rules"
 const description =
-  "Generated agent rules, skill files, and plugin snippets for Claude Code, Cursor, Windsurf, VS Code Copilot, Cline, OpenClaw, and AGENTS.md agents. Each file is managed by the lyrashield rules command with checksumed blocks."
+  "Generated agent rules, skill files and plugin snippets for Claude Code, Cursor, Copilot, Cline and AGENTS.md agents, managed by the lyrashield rules command."
 const updatedDate = "2026-07-31"
 
 const agentIds: Record<RuleFormat, string> = {

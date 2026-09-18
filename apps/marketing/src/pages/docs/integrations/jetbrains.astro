@@ -4,9 +4,9 @@ import DocsLayout from "@layouts/DocsLayout.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const title = "LyraShield MCP for JetBrains AI & Junie — Setup Guide"
+const title = "LyraShield MCP for JetBrains AI & Junie"
 const description =
-  "Add the LyraShield MCP server to JetBrains AI Assistant and Junie. Configure via Settings → Tools → AI Assistant → MCP Servers, and add AGENTS.md agent rules to your project."
+  "Add the LyraShield MCP server to JetBrains AI Assistant and Junie via Settings → Tools → AI Assistant → MCP Servers, plus AGENTS.md rules."
 const updatedDate = "2026-07-31"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({

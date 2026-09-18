@@ -42,8 +42,10 @@
     "PUBLIC_INDEXABLE": "true",
     "PUBLIC_POSTHOG_HOST": "https://us.i.posthog.com",
     "PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAAD2y2YIoipDqDHsM",
-    "PUBLIC_ABUSE_EMAIL": "abuse@lyrashieldai.com",
+    "PUBLIC_ABUSE_EMAIL": "admin@lyrashieldai.com",
     "PUBLIC_MYRA_MARKETING_ENABLED": "0",
+    "PUBLIC_GOOGLE_SITE_VERIFICATION": "",
+    "PUBLIC_BING_SITE_VERIFICATION": "",
   },
   "d1_databases": [
     {

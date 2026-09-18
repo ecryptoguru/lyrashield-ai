@@ -32,8 +32,8 @@ const otherCategories = (await getCategoriesWithCounts()).filter(
   (entry) => entry.id !== category.id
 )
 
-const title = `${category.label} — AI App Security Resources | LyraShield AI`
-const description = `${category.description} Practical guidance from LyraShield AI, with verified evidence and honest limitations.`
+const title = `${category.label} — AI App Security | LyraShield AI`
+const description = `${category.description} Practical guidance with honest limitations.`
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL(Astro.url.pathname, origin).toString()
 const jsonLd = [

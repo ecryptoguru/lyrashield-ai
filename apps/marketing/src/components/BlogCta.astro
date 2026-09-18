@@ -1,5 +1,24 @@
 ---
 import WaitlistForm from "@components/WaitlistForm.astro"
+
+// Product paths out of the 161-post library. Before this block, no post linked
+// to /pricing or /agents at all, so the largest content asset on the site sent
+// no reader and no equity to the pages that convert. Labels are the ones the
+// header and footer already use; nothing here makes a new claim.
+const productLinks = [
+  { label: "Pricing", href: "/pricing", description: "Cloud plans, minute packs and the free trial." },
+  {
+    label: "For coding agents",
+    href: "/agents",
+    description: "Run LyraShield from Claude Code, Cursor, Codex and 23 more clients.",
+  },
+  {
+    label: "Methodology",
+    href: "/methodology",
+    description: "What an evidence state means, and what a result does not prove.",
+  },
+  { label: "Free Lite Check", href: "/scan", description: "A passive URL check with no signup." },
+]
 ---
 
 <section aria-labelledby="blog-cta-heading" class="mt-16 border-t border-border pt-12">
@@ -11,4 +30,24 @@ import WaitlistForm from "@components/WaitlistForm.astro"
   <div class="mt-8">
     <WaitlistForm />
   </div>
+  <nav aria-labelledby="blog-next-steps-heading" class="mt-12 border-t border-border pt-8">
+    <h2 id="blog-next-steps-heading" class="font-mono text-xs font-semibold tracking-[.18em] text-accent uppercase">
+      Next steps
+    </h2>
+    <ul class="mt-5 grid gap-4 sm:grid-cols-2">
+      {
+        productLinks.map((link) => (
+          <li>
+            <a
+              href={link.href}
+              class="flex min-h-11 flex-col justify-center rounded-lg border border-border bg-bg-raised px-4 py-3 no-underline hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <span class="font-semibold text-text">{link.label}</span>
+              <span class="mt-1 text-sm text-text-muted">{link.description}</span>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </nav>
 </section>

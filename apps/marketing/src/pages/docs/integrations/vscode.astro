@@ -5,7 +5,7 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for VS Code — Setup Guide"
 const description =
-  'Add the LyraShield MCP server to VS Code with GitHub Copilot agent mode. The critical difference: VS Code uses the root key "servers" — not "mcpServers" — in .vscode/mcp.json.'
+  'Add the LyraShield MCP server to VS Code with GitHub Copilot agent mode. VS Code uses the root key "servers", not "mcpServers", in .vscode/mcp.json.'
 const updatedDate = "2026-08-26"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
