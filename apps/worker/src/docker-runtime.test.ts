@@ -377,8 +377,8 @@ describe("worker Docker runtime", () => {
     )
     expect(workerRunner).toContain("worker_shared_root=/var/lib/lyrashield/worker")
     expect(workerRunner).toContain('"$worker_shared_root"')
-    expect(workerEnv).toContain('--env LYRASHIELD_ENGINE_WORK_ROOT=$lwe_shared_root')
-    expect(workerEnv).toContain('--env TMPDIR=$lwe_shared_root/tmp')
+    expect(workerEnv).toContain("--env LYRASHIELD_ENGINE_WORK_ROOT=$lwe_shared_root")
+    expect(workerEnv).toContain("--env TMPDIR=$lwe_shared_root/tmp")
     expect(
       workerRunner.match(/type=bind,src="\$worker_shared_root",dst="\$worker_shared_root"/g) ?? []
     ).toHaveLength(2)
