@@ -93,6 +93,7 @@ function add(parent: Node, kid: Node): void {
 let turnstileScript: Promise<TurnstileGlobal | undefined> | null = null
 let turnstileWidgetId: string | undefined
 let turnstileResolve: ((token: string | undefined) => void) | null = null
+let turnstileInFlight: Promise<string | undefined> | null = null
 
 function loadTurnstile(): Promise<TurnstileGlobal | undefined> {
   if (turnstileScript) return turnstileScript
@@ -117,8 +118,22 @@ function loadTurnstile(): Promise<TurnstileGlobal | undefined> {
 /**
  * Fresh Turnstile token, or undefined when no site key is configured / the
  * challenge can't run. Single-use — call once per credential-issuing request.
+ *
+ * Single-flight: concurrent callers share one in-flight challenge. The demo
+ * page bootstraps its session twice on load (once for the panel wiring, once
+ * inside fetchSlots); without this guard the second call reset()s and
+ * execute()s a widget that is already executing, the token callback fires for
+ * only one of them, and the loser times out and mints an unauthenticated
+ * session.
  */
-export async function getTurnstileToken(): Promise<string | undefined> {
+export function getTurnstileToken(): Promise<string | undefined> {
+  turnstileInFlight ??= requestTurnstileToken().finally(() => {
+    turnstileInFlight = null
+  })
+  return turnstileInFlight
+}
+
+async function requestTurnstileToken(): Promise<string | undefined> {
   const sitekey = (import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string | undefined) || ""
   if (!sitekey || typeof window === "undefined") return undefined
   const turnstile = await loadTurnstile()
@@ -177,12 +192,27 @@ export async function getTurnstileToken(): Promise<string | undefined> {
  * POST /api/myra/session — resolves the cookie session or mints an anonymous
  * public session. Response envelope is { success, data: { principal,
  * publicToken? } }; the token is stored under `myra_public_token`.
+ *
+ * Single-flight: callers that race on page load share one mint instead of
+ * issuing two credential-minting requests (and two Turnstile challenges).
  */
-export async function ensureMyraSession(
+export function ensureMyraSession(
   apiBase = myraApiBase(),
   surface: "MARKETING" | "DASHBOARD" = "MARKETING"
 ): Promise<void> {
-  if (getMyraToken()) return
+  if (getMyraToken()) return Promise.resolve()
+  sessionBootstrap ??= mintMyraSession(apiBase, surface).finally(() => {
+    sessionBootstrap = null
+  })
+  return sessionBootstrap
+}
+
+let sessionBootstrap: Promise<void> | null = null
+
+async function mintMyraSession(
+  apiBase: string,
+  surface: "MARKETING" | "DASHBOARD"
+): Promise<void> {
   const turnstileToken = await getTurnstileToken()
   const res = await fetch(`${apiBase}/api/myra/session`, {
     method: "POST",
