@@ -57,8 +57,11 @@ test("mobile workspace sheet switches data, reaches Billing and signs out", asyn
   await page.goto("/dashboard/targets")
   await expect(page.getByText("Mobile Alpha target", { exact: true })).toBeVisible()
   const targetList = page.getByLabel("Targets list")
+  // UF-28: at 390px the responsive table fits — its `sm:min-w-[40rem]` floor is
+  // off, the name column truncates, and the extra columns collapse — so the
+  // list itself must NOT overflow, and neither may the page.
   expect(await targetList.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
-    true
+    false
   )
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
   const owner = await prisma.user.findUniqueOrThrow({ where: { email } })
