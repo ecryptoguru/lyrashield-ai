@@ -141,7 +141,9 @@ export function BottomNav({
   return (
     <nav
       aria-label="Main navigation"
-      className="bg-background fixed right-0 bottom-0 left-0 z-40 flex h-[calc(4rem+env(safe-area-inset-bottom))] items-center border-t pb-[env(safe-area-inset-bottom)] md:hidden"
+      // UF-27: the bottom bar is the primary navigation for every width that
+      // lacks the expanded sidebar, so it hides at `lg` — not `md`.
+      className="bg-background fixed right-0 bottom-0 left-0 z-40 flex h-[calc(4rem+env(safe-area-inset-bottom))] items-center border-t pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
       <div className="grid h-16 w-full grid-cols-5 items-center">
         {mobilePrimary.map((item) => (
