@@ -63,6 +63,15 @@ const organizationLogo = {
   height: 1024,
 }
 
+// Both mailboxes are already published on /support, /privacy and
+// /security-reporting; the structured data states the same destinations
+// rather than inventing a new channel. Read through the same env overrides
+// those pages honour, or the JSON-LD would advertise a stale address.
+const supportEmail =
+  (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
+const securityEmail =
+  (import.meta.env.PUBLIC_SECURITY_EMAIL as string | undefined) || "support@lyrashieldai.com"
+
 const siteGraph: unknown[] = [
   {
     "@context": "https://schema.org",
@@ -86,14 +95,14 @@ const siteGraph: unknown[] = [
       {
         "@type": "ContactPoint",
         contactType: "customer support",
-        email: "support@lyrashieldai.com",
+        email: supportEmail,
         url: new URL("/support", siteOrigin).toString(),
         availableLanguage: ["en"],
       },
       {
         "@type": "ContactPoint",
         contactType: "security",
-        email: "security@lyrashieldai.com",
+        email: securityEmail,
         url: new URL("/security-reporting", siteOrigin).toString(),
         availableLanguage: ["en"],
       },

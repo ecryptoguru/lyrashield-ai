@@ -140,11 +140,14 @@ mass-rewriting established search copy. Offer schema remains deferred until live
 paid admission and publishable pricing are founder-approved.
 
 The post-deploy CI gate runs the exact `lighthouse@13.0.1` CLI against the live
-homepage, `/pricing`, `/agents`, `/scan` and `/webmcp`, and requires performance
-0.80, accessibility 0.95, and SEO 0.95 on each. The CLI stays deployment tooling
-rather than a product runtime dependency. The same job submits the live sitemap
-to IndexNow (`scripts/indexnow.mjs`) with `continue-on-error`, so a provider or
-network failure can never fail a release.
+homepage, `/pricing`, `/agents`, `/scan` and `/webmcp`, and **reports** any
+performance score below 0.80, accessibility below 0.95, or SEO below 0.95. The
+step is `continue-on-error: true` and runs after the deploy, so a below-threshold
+score is advisory evidence in the run log rather than a deployment failure —
+read it as a signal to act on, not as a gate that blocked the release. The CLI
+stays deployment tooling rather than a product runtime dependency. The same job
+submits the live sitemap to IndexNow (`scripts/indexnow.mjs`) with
+`continue-on-error`, so a provider or network failure can never fail a release.
 
 ## Site-wide SEO / AEO gate
 

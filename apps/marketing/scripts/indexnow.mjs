@@ -125,11 +125,23 @@ async function main() {
 
   try {
     const result = await submitToIndexNow({ origin, dryRun: args.includes("--dry-run") })
-    console.log(
-      args.includes("--dry-run")
-        ? `IndexNow dry run: ${result.submitted} URL(s) on ${result.host} would be submitted.`
-        : `IndexNow accepted ${result.submitted} URL(s) for ${result.host} (HTTP ${result.status}).`
-    )
+    if (args.includes("--dry-run")) {
+      console.log(
+        `IndexNow dry run: ${result.submitted} URL(s) on ${result.host} would be submitted.`
+      )
+    } else if (result.status === 200 || result.status === 202) {
+      // 200 = accepted; 202 = accepted, key validation pending.
+      console.log(
+        `IndexNow accepted ${result.submitted} URL(s) for ${result.host} (HTTP ${result.status}).`
+      )
+    } else {
+      // 400 bad request, 403 key not valid, 422 URLs outside the host, 429
+      // throttled. Still non-fatal, but never reported as accepted.
+      console.warn(
+        `IndexNow rejected the submission for ${result.host}: HTTP ${result.status} ` +
+          `(${result.submitted} URL(s) were not queued).`
+      )
+    }
   } catch (error) {
     // Never fail the release: IndexNow is a discovery hint, not a gate.
     console.warn(`IndexNow submission skipped: ${error instanceof Error ? error.message : error}`)

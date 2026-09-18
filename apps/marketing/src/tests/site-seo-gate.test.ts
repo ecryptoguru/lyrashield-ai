@@ -8,6 +8,7 @@ import {
   expectedCanonical,
   isBlogPostPath,
   pageViolations,
+  siteViolations,
   sitemapEntries,
   titleLimitFor,
 } from "../../scripts/crawl-built-site.mjs"
@@ -178,6 +179,28 @@ describe("machine-readable surface contracts", () => {
       { path: "/pricing", lastmod: "2026-09-18" },
       { path: "/demo", lastmod: "" },
     ])
+  })
+
+  it("reads no page entries out of a sitemap index", () => {
+    // The index carries <sitemap> blocks, not <url> blocks. A rule fed the
+    // index sees nothing and silently never fires, which is exactly how the
+    // lastmod rule shipped dead once.
+    const index = `<?xml version="1.0"?><sitemapindex>
+      <sitemap><loc>https://lyrashieldai.com/sitemap-0.xml</loc></sitemap>
+    </sitemapindex>`
+    expect(sitemapEntries(index)).toEqual([])
+  })
+
+  it("reports an unreachable robots.txt instead of skipping the agent check", () => {
+    const violations = siteViolations({
+      pageFacts: new Map(),
+      origin: ORIGIN,
+      robots: null,
+      llms: "https://lyrashieldai.com/",
+      rss: "<rss></rss>",
+      securityTxt: "Contact: mailto:x@example.com",
+    })
+    expect(violations.violations.map((v) => v.rule)).toContain("robots-missing")
   })
 
   it("names every required retrieval agent in robots.txt", () => {

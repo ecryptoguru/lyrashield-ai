@@ -123,11 +123,16 @@ async function fetchText(fetchImpl, url, { follow = false } = {}) {
  * llms.txt links and sitemap `<loc>`s all carry the configured
  * `PUBLIC_SITE_URL` (production), so comparing them against the fetch origin
  * would flag every page.
+ *
+ * `entries` carries `{ path, lastmod }` from each child sitemap — the index
+ * itself contains `<sitemap>` blocks, not `<url>` blocks, so a parser pointed at
+ * the index finds nothing and any rule built on it silently never fires.
  */
 async function sitemapPaths(origin, fetchImpl) {
   const pending = [new URL(SITEMAP_PATH, origin).href]
   const visited = new Set()
   const paths = new Set()
+  const entries = []
   let siteOrigin = null
 
   while (pending.length > 0) {
@@ -146,9 +151,10 @@ async function sitemapPaths(origin, fetchImpl) {
         paths.add(parsed.pathname)
       }
     }
+    if (!/<sitemapindex\b/i.test(text)) entries.push(...sitemapEntries(text))
   }
 
-  return { paths, siteOrigin: siteOrigin ?? new URL(origin).origin }
+  return { paths, entries, siteOrigin: siteOrigin ?? new URL(origin).origin }
 }
 
 /**
@@ -255,10 +261,15 @@ export function siteViolations({ pageFacts, origin, robots, llms, rss, securityT
     }
   }
 
-  for (const agent of REQUIRED_ROBOTS_AGENTS) {
-    if (robots === null) break
-    if (!new RegExp(`^User-agent:\\s*${agent}\\s*$`, "im").test(robots)) {
-      add("robots-agent-missing", "/robots.txt", agent)
+  if (robots === null) {
+    // Without this, an unreachable robots.txt silently skips the whole agent
+    // check below — the gate would pass on a site crawlers cannot read.
+    add("robots-missing", "/robots.txt", "did not return 200")
+  } else {
+    for (const agent of REQUIRED_ROBOTS_AGENTS) {
+      if (!new RegExp(`^User-agent:\\s*${agent}\\s*$`, "im").test(robots)) {
+        add("robots-agent-missing", "/robots.txt", agent)
+      }
     }
   }
 
@@ -295,18 +306,19 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
   const localOrigin = new URL(origin).origin
   const violations = []
 
-  const { paths: discovered, siteOrigin } = await sitemapPaths(localOrigin, fetchImpl)
+  const { paths: discovered, entries, siteOrigin } = await sitemapPaths(localOrigin, fetchImpl)
   const paths = [...discovered].sort()
 
   // lastmod is the only freshness signal a crawler gets from the sitemap, and
   // it is derived per-route from git — so a page added without registering its
-  // source loses it silently. /demo was the one route in that state.
-  const sitemapXml = await fetchText(fetchImpl, new URL(SITEMAP_PATH, localOrigin).href)
-  if (sitemapXml.text !== null) {
-    for (const entry of sitemapEntries(sitemapXml.text)) {
-      if (!entry.lastmod) {
-        violations.push({ rule: "sitemap-lastmod-missing", path: entry.path, detail: "" })
-      }
+  // source loses it silently. /demo was the one route in that state. The
+  // entries come from the child sitemap(s), not the index.
+  if (entries.length === 0) {
+    violations.push({ rule: "sitemap-entries-missing", path: SITEMAP_PATH, detail: "" })
+  }
+  for (const entry of entries) {
+    if (!entry.lastmod) {
+      violations.push({ rule: "sitemap-lastmod-missing", path: entry.path, detail: "" })
     }
   }
   const pages = await mapWithConcurrency(paths, FETCH_CONCURRENCY, async (path) => {
@@ -447,6 +459,16 @@ export const BASELINE_NOTES = {
   "sitemap-lastmod-missing": {
     reason:
       "A sitemap URL carries no lastmod. Every indexable route must map to a source file in astro.config.mjs's contentLastmod() so its real git date can be emitted.",
+    wave: null,
+  },
+  "sitemap-entries-missing": {
+    reason:
+      "No <url> entries were found in any child sitemap, so the lastmod rule had nothing to check.",
+    wave: null,
+  },
+  "robots-missing": {
+    reason:
+      "robots.txt did not return 200. The agent-coverage check cannot run without it, and a missing robots.txt is itself a crawl-access problem.",
     wave: null,
   },
 }

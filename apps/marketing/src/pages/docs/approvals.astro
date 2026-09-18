@@ -5,7 +5,7 @@ import { buildDocsJsonLd } from "../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "Agent Authorization"
 const description =
-  "How mutating agent actions are authorized in LyraShield: a connected OAuth client is the grant. Other credentials get one connect_required response."
+  "How mutating agent actions are authorized in LyraShield: a connected OAuth client is the grant. API keys and legacy bearers get one connect_required response."
 const updatedDate = "2026-09-13"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
