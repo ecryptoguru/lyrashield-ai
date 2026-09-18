@@ -505,8 +505,12 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     color: #40596c;
   }
 
+  /* Light theme: the documented light accent (#087f78) only reaches 4.44:1
+     against the hero's #eef6fa surface — just under the 4.5:1 AA threshold for
+     this 13.6px normal-weight link. #076c66 is the same teal darkened (hue and
+     saturation untouched) and reaches 5.74:1. Dark theme keeps #54d6df. */
   :global(:root[data-theme="light"]) .premium-hero__agent-link {
-    color: #087f78;
+    color: #076c66;
   }
 
   :global(:root[data-theme="light"]) .premium-hero__agent-link:hover,
