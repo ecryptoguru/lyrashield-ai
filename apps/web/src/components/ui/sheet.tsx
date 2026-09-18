@@ -65,8 +65,15 @@ function SheetContent({
       >
         {children}
         {showCloseButton && (
-          <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-md opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
-            <XIcon className="size-4" />
+          /*
+           * The glyph is 16px, but the button must be a 44px target (WCAG 2.2 SC 2.5.8
+           * minimum is 24px; every row in this sheet is 44px). The box is inset by 2px so
+           * the 44px hit area stays centred on the old glyph position — the control looks
+           * identical, it is just possible to hit. The accessible name comes from the
+           * `sr-only` label below.
+           */
+          <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-0.5 right-0.5 inline-flex size-11 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-4 focus:outline-hidden disabled:pointer-events-none">
+            <XIcon className="size-4" aria-hidden="true" />
             <span className="sr-only">Close</span>
           </SheetPrimitive.Close>
         )}
