@@ -176,3 +176,24 @@ pass → 0.
     `pnpm --filter @lyrashield/db exec prisma generate`, `pnpm --filter @lyrashield/sdk build` and
     `pnpm --filter @lyrashield/mcp build` before the core suite is meaningful. Without them the suite
     reports 100+ phantom failures.
+
+- 2026-09-18 (session 7) — PR #702 opened and CI brought to green.
+  - **The secret scan failed, twice, for a real reason.** gitleaks reported
+    `generic-api-key` on `export const INDEXNOW_KEY = "..."` in
+    `scripts/indexnow.mjs`. The key is public by design (IndexNow fetches it from
+    `https://<host>/<key>.txt`), but a 32-hex literal is indistinguishable from a leaked credential to
+    a scanner.
+  - **First fix — remove the literal, not the control.** `indexnow.mjs` now resolves the key from the
+    single file the protocol serves (exactly one `public/<32 hex>.txt` whose content is its own
+    filename stem, or it fails loudly). One source of truth, no secret-shaped literal in source, and
+    the unit test asserts the literal is gone. Re-running the scan still failed, because gitleaks
+    walks the PR's whole commit range and the original commit is inside it.
+  - **Second fix — escalated, then applied on approval.** The remaining finding needed either a
+    `.gitleaksignore` fingerprint or a history rewrite plus force-push. Both touch something the
+    instructions say to escalate rather than decide unilaterally, so the choice was put to the user;
+    they chose the fingerprint. The entry is scoped to one
+    `commit:file:rule:line` with a comment explaining why, matching the repo's existing reviewed
+    entries for the Myra sanitizer fixtures. No rule, path or regex allowlist was widened.
+  - **Final CI on `34ea350d`: all green.** Lint/Typecheck/Test & Build 4m14s (this job runs
+    `test:browser`, so the new SEO gate now executes on every marketing change), both secret-scan
+    jobs, worker contract, changed-path detection and the LyraShield GitHub Action.
