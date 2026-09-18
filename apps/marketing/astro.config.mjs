@@ -311,6 +311,15 @@ const configuredScannerUrl = process.env.PUBLIC_SCANNER_URL || wranglerVar("PUBL
 const turnstileSiteKey =
   process.env.PUBLIC_TURNSTILE_SITE_KEY || wranglerVar("PUBLIC_TURNSTILE_SITE_KEY") || ""
 const abuseEmail = process.env.PUBLIC_ABUSE_EMAIL || wranglerVar("PUBLIC_ABUSE_EMAIL") || ""
+// Webmaster verification is a build-time emission like the site URL: the tags
+// only exist in prerendered HTML, so they resolve through wranglerVar, never
+// Worker runtime vars. Empty is a valid state — the tags are skipped.
+const googleVerification =
+  process.env.PUBLIC_GOOGLE_SITE_VERIFICATION ||
+  wranglerVar("PUBLIC_GOOGLE_SITE_VERIFICATION") ||
+  ""
+const bingVerification =
+  process.env.PUBLIC_BING_SITE_VERIFICATION || wranglerVar("PUBLIC_BING_SITE_VERIFICATION") || ""
 
 if (indexable) {
   try {
@@ -484,6 +493,8 @@ export default defineConfig({
       __MARKETING_X_URL__: JSON.stringify(xUrl),
       __MARKETING_BUILD_REVISION__: JSON.stringify(buildRevision),
       __MARKETING_SOURCE_DATES__: JSON.stringify(SOURCE_DATES),
+      __MARKETING_GOOGLE_VERIFICATION__: JSON.stringify(googleVerification),
+      __MARKETING_BING_VERIFICATION__: JSON.stringify(bingVerification),
     },
   },
 })

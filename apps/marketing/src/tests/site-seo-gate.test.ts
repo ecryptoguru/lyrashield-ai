@@ -2,9 +2,12 @@ import { existsSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { allRoutes } from "../../scripts/redirects-lib.mjs"
 import {
+  LLMS_EXCLUDED_PATHS,
   REQUIRED_ROBOTS_AGENTS,
+  SITEMAP_FILTER_EXCLUSIONS,
   applyBaseline,
   buildBaseline,
+  crawlBuiltSite,
   expectedCanonical,
   isBlogPostPath,
   pageViolations,
@@ -265,5 +268,252 @@ describe("machine-readable surface contracts", () => {
 
   it("redirects /blog/1 to the blog hub instead of serving a 404", () => {
     expect(source("../middleware.ts")).toContain('"/blog/1": "/blog"')
+  })
+})
+
+/**
+ * End-to-end gate probes over a synthetic built site (review findings F3/F4).
+ *
+ * The fake serves the whole route inventory through a local origin while the
+ * sitemap advertises production locs — exactly what `pnpm preview` looks like
+ * in CI. That is what exposed both defects: links were classified against the
+ * fetch origin, so production-absolute internal links were never checked, and
+ * a failed child sitemap could pass unnoticed behind a healthy sibling.
+ */
+describe("site gate transport/origin probes", () => {
+  const LOCAL = "http://localhost:8787"
+  const SITE = ORIGIN
+
+  function healthyPage(path: string, extra = ""): string {
+    return `<html lang="en"><head>
+      <title>Page ${path}</title>
+      <meta name="description" content="Description for ${path}">
+      <link rel="canonical" href="${SITE}${path}">
+      <meta property="og:image" content="${SITE}/og/page.png">
+      <meta property="og:image:width" content="1200">
+      <meta property="og:image:height" content="630">
+      <script type="application/ld+json">{"@type":"WebPage"}</script>
+      <script type="application/ld+json">{"@type":"BreadcrumbList"}</script>
+    </head><body><main><h1>Heading ${path}</h1>${extra}</main></body></html>`
+  }
+
+  const sitemapRoutes = () =>
+    allRoutes().filter(
+      (route) => !SITEMAP_FILTER_EXCLUSIONS.has(route) && !/^\/blog\/[1-9]\d*$/.test(route)
+    )
+
+  interface FakeSite {
+    store: Map<string, { status: number; body: string }>
+    requests: string[]
+    fetchImpl: typeof fetch
+  }
+
+  /** A fake site that satisfies every gate rule; tests then break one thing. */
+  function buildFakeSite({
+    extraRoutes = [] as string[],
+    pageOverrides = new Map<string, string>(),
+    omitRoutes = new Set<string>(),
+  } = {}): FakeSite {
+    const routes = ["/", ...sitemapRoutes(), ...extraRoutes].filter((r) => !omitRoutes.has(r))
+    const store = new Map<string, { status: number; body: string }>()
+    store.set("/sitemap-index.xml", {
+      status: 200,
+      body: `<sitemapindex><sitemap><loc>${SITE}/sitemap-0.xml</loc></sitemap></sitemapindex>`,
+    })
+    store.set("/sitemap-0.xml", {
+      status: 200,
+      body: `<urlset>${routes
+        .map((r) => `<url><loc>${SITE}${r}</loc><lastmod>2026-09-18</lastmod></url>`)
+        .join("")}</urlset>`,
+    })
+    for (const route of routes) {
+      store.set(route, { status: 200, body: pageOverrides.get(route) ?? healthyPage(route) })
+    }
+    store.set("/robots.txt", {
+      status: 200,
+      body: REQUIRED_ROBOTS_AGENTS.map((a) => `User-agent: ${a}\nAllow: /`).join("\n"),
+    })
+    store.set("/llms.txt", {
+      status: 200,
+      body: routes
+        .filter((r) => !LLMS_EXCLUDED_PATHS.has(r))
+        .map((r) => `${SITE}${r}`)
+        .join("\n"),
+    })
+    store.set("/rss.xml", { status: 200, body: "<rss></rss>" })
+    store.set("/.well-known/security.txt", { status: 200, body: "Expires: 2030-01-01" })
+    store.set("/og/page.png", { status: 200, body: "png-bytes" })
+
+    const requests: string[] = []
+    const fetchImpl = (async (input: unknown) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url
+      requests.push(url)
+      const record = store.get(new URL(url).pathname)
+      return new Response(record?.body ?? "not found", { status: record?.status ?? 404 })
+    }) as typeof fetch
+    return { store, requests, fetchImpl }
+  }
+
+  const rules = (result: Awaited<ReturnType<typeof crawlBuiltSite>>) =>
+    result.violations.map((v) => v.rule)
+
+  it("passes a fully healthy fake site", async () => {
+    const { fetchImpl } = buildFakeSite()
+    const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+    expect(result.violations).toEqual([])
+    expect(result.siteOrigin).toBe(SITE)
+    expect(result.pageCount).toBeGreaterThan(200)
+  })
+
+  it("checks a broken production-absolute internal link instead of skipping it", async () => {
+    const pageOverrides = new Map([
+      ["/pricing", healthyPage("/pricing", `<a href="${SITE}/broken">x</a>`)],
+    ])
+    const { fetchImpl, requests } = buildFakeSite({ pageOverrides })
+    const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+    expect(result.violations).toContainEqual({
+      rule: "internal-link-broken",
+      path: "/broken",
+      detail: "404",
+    })
+    // The same-site request is mapped back to the preview — production is
+    // never contacted, and genuinely external URLs stay outside the gate.
+    expect(requests).toContain(`${LOCAL}/broken`)
+    expect(requests.every((url) => url.startsWith(LOCAL))).toBe(true)
+  })
+
+  it("fails a cross-page fragment that resolves to a missing id", async () => {
+    const pageOverrides = new Map([
+      ["/p0", healthyPage("/p0", `<a href="${SITE}/p1#absent">x</a>`)],
+    ])
+    const { fetchImpl } = buildFakeSite({ extraRoutes: ["/p0", "/p1"], pageOverrides })
+    const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+    expect(result.violations).toContainEqual({
+      rule: "anchor-missing",
+      path: "/p0",
+      detail: "#absent on /p1",
+    })
+  })
+
+  it("accepts valid cross-page and encoded fragments", async () => {
+    const pageOverrides = new Map([
+      ["/p0", healthyPage("/p0", `<a href="${SITE}/p1#caf%C3%A9">x</a>`)],
+      ["/p1", healthyPage("/p1", `<h2 id="café">café</h2>`)],
+    ])
+    const { fetchImpl } = buildFakeSite({ extraRoutes: ["/p0", "/p1"], pageOverrides })
+    const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+    expect(result.violations).toEqual([])
+  })
+
+  it("leaves genuinely external links outside the internal-link gate", async () => {
+    const pageOverrides = new Map([
+      ["/pricing", healthyPage("/pricing", `<a href="https://example.com/gone">x</a>`)],
+    ])
+    const { fetchImpl, requests } = buildFakeSite({ pageOverrides })
+    const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+    expect(rules(result)).not.toContain("internal-link-broken")
+    expect(requests.every((url) => url.startsWith(LOCAL))).toBe(true)
+  })
+
+  it("fails when an advertised child sitemap cannot be fetched", async () => {
+    const { store, fetchImpl } = buildFakeSite()
+    store.set("/sitemap-index.xml", {
+      status: 200,
+      body: `<sitemapindex><sitemap><loc>${SITE}/sitemap-0.xml</loc></sitemap><sitemap><loc>${SITE}/sitemap-1.xml</loc></sitemap></sitemapindex>`,
+    })
+    store.set("/sitemap-1.xml", { status: 503, body: "" })
+    const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+    expect(result.violations).toContainEqual({
+      rule: "sitemap-fetch",
+      path: "/sitemap-1.xml",
+      detail: "503",
+    })
+    // The healthy child still covered everything — the failure is reported on
+    // its own, not hidden inside page counts.
+    expect(result.pageCount).toBeGreaterThan(200)
+  })
+
+  it("fails an advertised child sitemap that is empty or malformed", async () => {
+    for (const body of ["<urlset></urlset>", "this is not xml at all"]) {
+      const { store, fetchImpl } = buildFakeSite()
+      store.set("/sitemap-index.xml", {
+        status: 200,
+        body: `<sitemapindex><sitemap><loc>${SITE}/sitemap-0.xml</loc></sitemap><sitemap><loc>${SITE}/sitemap-1.xml</loc></sitemap></sitemapindex>`,
+      })
+      store.set("/sitemap-1.xml", { status: 200, body })
+      const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+      expect(rules(result), `body: ${body}`).toContain("sitemap-no-locations")
+    }
+  })
+
+  it("fails a real route that never reaches the sitemap", async () => {
+    const { fetchImpl } = buildFakeSite({ omitRoutes: new Set(["/pricing"]) })
+    const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+    expect(result.violations).toContainEqual({
+      rule: "route-not-in-sitemap",
+      path: "/pricing",
+      detail: "",
+    })
+  })
+
+  it("fails a named robots agent whose group disallows everything", async () => {
+    const { store, fetchImpl } = buildFakeSite()
+    store.set("/robots.txt", {
+      status: 200,
+      body: `${REQUIRED_ROBOTS_AGENTS.map((a) => `User-agent: ${a}\nAllow: /`).join("\n\n")}\n\nUser-agent: GPTBot\nDisallow: /\n`,
+    })
+    const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+    expect(result.violations).toContainEqual({
+      rule: "robots-agent-disallowed",
+      path: "/robots.txt",
+      detail: "GPTBot",
+    })
+  })
+
+  it("accepts a named robots agent with a scoped disallow", async () => {
+    const { store, fetchImpl } = buildFakeSite()
+    store.set("/robots.txt", {
+      status: 200,
+      body: `${REQUIRED_ROBOTS_AGENTS.map((a) => `User-agent: ${a}\nAllow: /`).join("\n\n")}\n\nUser-agent: GPTBot\nDisallow: /internal\n`,
+    })
+    const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+    expect(rules(result)).not.toContain("robots-agent-disallowed")
+  })
+
+  it("fails security.txt without a valid future Expires field", async () => {
+    for (const body of [
+      "Contact: mailto:x@example.com",
+      "Expires: 2001-01-01T00:00:00.000Z",
+      "Expires: eventually",
+    ]) {
+      const { store, fetchImpl } = buildFakeSite()
+      store.set("/.well-known/security.txt", { status: 200, body })
+      const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+      expect(rules(result), `body: ${body}`).toContain("security-txt-expires")
+    }
+  })
+
+  it("fetches each advertised same-origin og:image once and fails the unreachable", async () => {
+    const { store, fetchImpl, requests } = buildFakeSite()
+    store.delete("/og/page.png")
+    const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+    expect(rules(result)).toContain("og-image-unreachable")
+    // ~260 pages share one card — the dedupe keeps it to a single fetch.
+    expect(requests.filter((url) => url === `${LOCAL}/og/page.png`)).toHaveLength(1)
+  })
+
+  it("leaves off-origin og:image URLs to their metadata checks", async () => {
+    const pageOverrides = new Map([
+      ["/pricing", healthyPage("/pricing").replace(`${SITE}/og/page.png`, "https://cdn.example.com/x.png")],
+    ])
+    const { fetchImpl, requests } = buildFakeSite({ pageOverrides })
+    const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+    expect(rules(result)).not.toContain("og-image-unreachable")
+    expect(requests.every((url) => url.startsWith(LOCAL))).toBe(true)
   })
 })

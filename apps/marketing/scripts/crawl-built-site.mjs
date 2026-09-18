@@ -24,10 +24,12 @@
 import { readFile, writeFile } from "node:fs/promises"
 import { pathToFileURL } from "node:url"
 import { extractSitemapLocations, inspectHtml } from "./crawl-built-blog.mjs"
+import { allRoutes } from "./redirects-lib.mjs"
 
 const SITEMAP_PATH = "/sitemap-index.xml"
 const DEFAULT_BASELINE_PATH = new URL("./seo-baseline.json", import.meta.url)
 const FETCH_CONCURRENCY = 8
+const FETCH_TIMEOUT_MS = 15_000
 
 /** Rendered-title budget. Blog posts carry a longer brand suffix than static pages. */
 export const TITLE_LIMIT_DEFAULT = 60
@@ -76,6 +78,16 @@ const SITE_GRAPH_TYPES = new Set(["Organization", "WebSite"])
 const BLOG_POST_PATH = /^\/blog\/[^/]+$/
 const BLOG_PAGINATION_PATH = /^\/blog\/[1-9]\d*$/
 
+/**
+ * Routes the astro.config.mjs sitemap filter deliberately excludes (noindex
+ * or canonicalized elsewhere). Mirrored here so the route-inventory check
+ * below only demands routes the sitemap is supposed to carry; adding an
+ * exclusion there without updating this set fails the gate loudly.
+ * `/scan` is filtered conditionally upstream, so it stays out of the
+ * required set either way.
+ */
+export const SITEMAP_FILTER_EXCLUSIONS = new Set(["/terms", "/terms-of-sale", "/docs", "/scan"])
+
 export function isBlogPostPath(path) {
   return (
     BLOG_POST_PATH.test(path) &&
@@ -109,7 +121,10 @@ async function mapWithConcurrency(items, limit, worker) {
 
 async function fetchText(fetchImpl, url, { follow = false } = {}) {
   try {
-    const response = await fetchImpl(url, { redirect: follow ? "follow" : "manual" })
+    const response = await fetchImpl(url, {
+      redirect: follow ? "follow" : "manual",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
     if (response.status !== 200) return { status: response.status, text: null }
     return { status: response.status, text: await response.text() }
   } catch {
@@ -133,17 +148,36 @@ async function sitemapPaths(origin, fetchImpl) {
   const visited = new Set()
   const paths = new Set()
   const entries = []
+  const failures = []
   let siteOrigin = null
 
   while (pending.length > 0) {
     const requestUrl = pending.shift()
     if (!requestUrl || visited.has(requestUrl)) continue
     visited.add(requestUrl)
-    const { text } = await fetchText(fetchImpl, requestUrl)
-    if (text === null) continue
+    const { status, text } = await fetchText(fetchImpl, requestUrl)
+    if (text === null) {
+      // A child sitemap that cannot be fetched silently shrinks the crawl —
+      // as long as another child covers enough pages the gate would pass on
+      // partial discovery. Every advertised sitemap must account for itself.
+      failures.push({ rule: "sitemap-fetch", url: requestUrl, status })
+      continue
+    }
     const locations = extractSitemapLocations(text)
+    if (locations.length === 0) {
+      // A reachable-but-empty or malformed sitemap contributes no discovery
+      // at all while still looking healthy to a page-count check.
+      failures.push({ rule: "sitemap-no-locations", url: requestUrl, status })
+      continue
+    }
     for (const location of locations) {
-      const parsed = new URL(location, origin)
+      let parsed
+      try {
+        parsed = new URL(location, origin)
+      } catch {
+        failures.push({ rule: "sitemap-bad-location", url: requestUrl, status: location })
+        continue
+      }
       if (siteOrigin === null) siteOrigin = parsed.origin
       if (/<sitemapindex\b/i.test(text)) {
         pending.push(new URL(parsed.pathname, origin).href)
@@ -154,7 +188,7 @@ async function sitemapPaths(origin, fetchImpl) {
     if (!/<sitemapindex\b/i.test(text)) entries.push(...sitemapEntries(text))
   }
 
-  return { paths, entries, siteOrigin: siteOrigin ?? new URL(origin).origin }
+  return { paths, entries, failures, siteOrigin: siteOrigin ?? new URL(origin).origin }
 }
 
 /**
@@ -234,7 +268,15 @@ export function pageViolations({ path, facts, origin }) {
 }
 
 /** Site-level violations: uniqueness, internal links, machine-readable surfaces. */
-export function siteViolations({ pageFacts, origin, robots, llms, rss, securityTxt }) {
+export function siteViolations({
+  pageFacts,
+  origin,
+  robots,
+  llms,
+  rss,
+  securityTxt,
+  now = Date.now(),
+}) {
   const violations = []
   const add = (rule, path, detail) => violations.push({ rule, path, detail })
 
@@ -252,12 +294,26 @@ export function siteViolations({ pageFacts, origin, robots, llms, rss, securityT
     }
   }
 
-  const sitemapPaths = new Set(pageFacts.keys())
+  const sitemapPagePaths = new Set(pageFacts.keys())
   const externalPaths = new Set()
   for (const [path, facts] of pageFacts) {
     for (const href of facts.localHrefs) {
       const target = href.length > 1 ? href.replace(/\/+$/, "") : href
-      if (target !== path && !sitemapPaths.has(target)) externalPaths.add(target)
+      if (target !== path && !sitemapPagePaths.has(target)) externalPaths.add(target)
+    }
+  }
+
+  // Cross-page fragments: a same-site link into another page's #id fails only
+  // when the target was fetched and the id is absent. Targets outside the
+  // sitemap still get their link-status check below.
+  for (const [path, facts] of pageFacts) {
+    for (const target of facts.anchorTargets ?? []) {
+      const targetPath = new URL(target.url).pathname
+      const normalized = targetPath.length > 1 ? targetPath.replace(/\/+$/, "") : targetPath
+      const targetFacts = pageFacts.get(normalized)
+      if (target.fragment && targetFacts && !targetFacts.ids.has(target.fragment)) {
+        add("anchor-missing", path, `#${target.fragment} on ${normalized}`)
+      }
     }
   }
 
@@ -271,12 +327,24 @@ export function siteViolations({ pageFacts, origin, robots, llms, rss, securityT
         add("robots-agent-missing", "/robots.txt", agent)
       }
     }
+    // Naming the agent is necessary but not sufficient: a group that names a
+    // required agent and then disallows everything still passes the name
+    // check while revoking the access the list exists to protect.
+    for (const group of robots.split(/\n[ \t]*\n/)) {
+      if (!/^Disallow:\s*\/+(?:\s*#.*)?$/im.test(group)) continue
+      for (const match of group.matchAll(/^User-agent:\s*(.+?)\s*$/gim)) {
+        const agent = match[1] ?? ""
+        if (REQUIRED_ROBOTS_AGENTS.includes(agent)) {
+          add("robots-agent-disallowed", "/robots.txt", agent)
+        }
+      }
+    }
   }
 
   if (llms === null) {
     add("llms-missing", "/llms.txt", "llms.txt did not return 200")
   } else {
-    for (const path of [...sitemapPaths].sort()) {
+    for (const path of [...sitemapPagePaths].sort()) {
       if (LLMS_EXCLUDED_PATHS.has(path)) continue
       const url = expectedCanonical(origin, path)
       if (!llms.includes(url)) add("llms-url-missing", "/llms.txt", path)
@@ -296,6 +364,20 @@ export function siteViolations({ pageFacts, origin, robots, llms, rss, securityT
 
   if (securityTxt === null) {
     add("security-txt-missing", "/.well-known/security.txt", "did not return 200")
+  } else {
+    // RFC 9116 requires Expires — without the check an expired file still
+    // passes the existence test while telling reporters the policy is stale.
+    const expires = securityTxt.match(/^Expires:\s*(\S+)\s*$/im)?.[1]
+    if (!expires) {
+      add("security-txt-expires", "/.well-known/security.txt", "missing Expires field")
+    } else {
+      const parsed = Date.parse(expires)
+      if (Number.isNaN(parsed)) {
+        add("security-txt-expires", "/.well-known/security.txt", `unparseable Expires: ${expires}`)
+      } else if (parsed <= now) {
+        add("security-txt-expires", "/.well-known/security.txt", `expired ${expires}`)
+      }
+    }
   }
 
   return { violations, externalPaths: [...externalPaths].sort() }
@@ -306,8 +388,35 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
   const localOrigin = new URL(origin).origin
   const violations = []
 
-  const { paths: discovered, entries, siteOrigin } = await sitemapPaths(localOrigin, fetchImpl)
+  const {
+    paths: discovered,
+    entries,
+    failures: sitemapFailures,
+    siteOrigin,
+  } = await sitemapPaths(localOrigin, fetchImpl)
   const paths = [...discovered].sort()
+
+  // Discovery failures are reported separately from page violations: a
+  // sitemap that never answered means the page set itself is incomplete, no
+  // matter how clean the fetched pages are.
+  for (const failure of sitemapFailures) {
+    violations.push({
+      rule: failure.rule,
+      path: new URL(failure.url).pathname,
+      detail: String(failure.status),
+    })
+  }
+
+  // The route inventory is the same filesystem walk the trailing-slash rules
+  // use, so a page that exists but never reaches the sitemap is caught here
+  // instead of relying on a page-count threshold.
+  for (const route of allRoutes()) {
+    if (SITEMAP_FILTER_EXCLUSIONS.has(route) || BLOG_PAGINATION_PATH.test(route)) continue
+    if (!discovered.has(route)) {
+      violations.push({ rule: "route-not-in-sitemap", path: route, detail: "" })
+    }
+  }
+  if (!discovered.has("/")) violations.push({ rule: "route-not-in-sitemap", path: "/", detail: "" })
 
   // lastmod is the only freshness signal a crawler gets from the sitemap, and
   // it is derived per-route from git — so a page added without registering its
@@ -328,7 +437,7 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
       violations.push({ rule: "page-status", path, detail: `returned ${status}` })
       return [path, null]
     }
-    return [path, inspectHtml(text, url)]
+    return [path, inspectHtml(text, url, { siteOrigin })]
   })
 
   const pageFacts = new Map(pages.filter(([, facts]) => facts !== null))
@@ -383,6 +492,44 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
     }
   )
   violations.push(...linkResults.filter(Boolean))
+
+  // og:image metadata claims a card exists; same-origin cards get one
+  // deduplicated fetch to prove the file is actually retrievable — hundreds
+  // of pages sharing a handful of cards cost a handful of requests.
+  // Off-origin cards stay metadata-only: they are outside this gate's reach.
+  const ogReferrers = new Map()
+  for (const [path, facts] of pageFacts) {
+    if (!facts.ogImage.startsWith("http")) continue
+    let imageUrl
+    try {
+      imageUrl = new URL(facts.ogImage)
+    } catch {
+      continue
+    }
+    if (imageUrl.origin !== siteOrigin) continue
+    const refs = ogReferrers.get(imageUrl.href) ?? []
+    refs.push(path)
+    ogReferrers.set(imageUrl.href, refs)
+  }
+  const ogResults = await mapWithConcurrency(
+    [...ogReferrers],
+    FETCH_CONCURRENCY,
+    async ([href, refs]) => {
+      const { status } = await fetchText(
+        fetchImpl,
+        new URL(new URL(href).pathname, localOrigin).href,
+        { follow: true }
+      )
+      return status === 200
+        ? null
+        : {
+            rule: "og-image-unreachable",
+            path: refs[0],
+            detail: `${new URL(href).pathname} returned ${status} (referenced by ${refs.length} page(s))`,
+          }
+    }
+  )
+  violations.push(...ogResults.filter(Boolean))
 
   return {
     siteOrigin,
@@ -483,9 +630,48 @@ export const BASELINE_NOTES = {
       "No <url> entries were found in any child sitemap, so the lastmod rule had nothing to check.",
     wave: null,
   },
+  "sitemap-fetch": {
+    reason:
+      "A sitemap advertised by the index could not be fetched, so discovery from it is missing — the page set this run covers is incomplete no matter how clean the fetched pages are.",
+    wave: null,
+  },
+  "sitemap-no-locations": {
+    reason:
+      "A fetched sitemap contained no <loc> entries — empty or malformed, so it silently contributed nothing to discovery.",
+    wave: null,
+  },
+  "sitemap-bad-location": {
+    reason: "A sitemap <loc> could not be parsed as a URL.",
+    wave: null,
+  },
+  "route-not-in-sitemap": {
+    reason:
+      "A route from the filesystem inventory (redirects-lib.mjs allRoutes) is missing from the sitemap. Intended exclusions live in SITEMAP_FILTER_EXCLUSIONS, mirroring the astro.config.mjs sitemap filter.",
+    wave: null,
+  },
+  "anchor-missing": {
+    reason:
+      "A same-page or cross-page fragment points at an id that does not exist on the target page.",
+    wave: null,
+  },
   "robots-missing": {
     reason:
       "robots.txt did not return 200. The agent-coverage check cannot run without it, and a missing robots.txt is itself a crawl-access problem.",
+    wave: null,
+  },
+  "robots-agent-disallowed": {
+    reason:
+      "A required retrieval/search agent is named in robots.txt but its group disallows every path — named presence without actual access.",
+    wave: null,
+  },
+  "security-txt-expires": {
+    reason:
+      "/.well-known/security.txt has no parseable future Expires field. RFC 9116 requires one; an expired file claims a stale disclosure policy.",
+    wave: null,
+  },
+  "og-image-unreachable": {
+    reason:
+      "A page advertises a same-origin og:image whose file does not return 200 — the card metadata is not proof the image exists.",
     wave: null,
   },
   "security-txt-contact-mismatch": {

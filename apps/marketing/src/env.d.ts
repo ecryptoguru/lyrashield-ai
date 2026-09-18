@@ -6,6 +6,8 @@ declare const __MARKETING_LOCAL_PREVIEW__: boolean
 declare const __MARKETING_X_URL__: string
 declare const __MARKETING_BUILD_REVISION__: string
 declare const __MARKETING_SOURCE_DATES__: Readonly<Record<string, string>>
+declare const __MARKETING_GOOGLE_VERIFICATION__: string
+declare const __MARKETING_BING_VERIFICATION__: string
 
 interface Window {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

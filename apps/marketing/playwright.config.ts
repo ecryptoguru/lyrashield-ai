@@ -29,6 +29,8 @@ export default defineConfig({
     },
   ],
   webServer: {
+    // `pnpm preview` reuses the flagged artifact CI already built (see
+    // scripts/preview-build.mjs) and builds it locally from a clean tree.
     command: "pnpm preview",
     url: "http://127.0.0.1:8787/",
     reuseExistingServer: !process.env.CI,

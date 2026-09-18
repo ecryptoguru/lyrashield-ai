@@ -44,9 +44,12 @@ const imageUrl = ogImage.startsWith("http") ? ogImage : new URL(ogImage, siteOri
 const imageAlt = ogImageAlt ?? (title.includes("LyraShield AI") ? title : `${title} — LyraShield AI`)
 const indexable = __MARKETING_INDEXABLE__
 // Search Console / Bing Webmaster verification. Rendered only when the code is
-// configured, so the tag never ships as an empty placeholder.
-const googleVerification = import.meta.env.PUBLIC_GOOGLE_SITE_VERIFICATION
-const bingVerification = import.meta.env.PUBLIC_BING_SITE_VERIFICATION
+// configured, so the tag never ships as an empty placeholder. Resolved through
+// the build config (wrangler vars / build env) — import.meta.env never sees
+// wrangler.jsonc vars during `astro build`, so it would emit nothing even with
+// the documented var set.
+const googleVerification = __MARKETING_GOOGLE_VERIFICATION__
+const bingVerification = __MARKETING_BING_VERIFICATION__
 ---
 
 <meta charset="utf-8" />

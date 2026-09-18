@@ -89,7 +89,7 @@ function extractRssLinks(xml) {
     .filter(Boolean)
 }
 
-export function inspectHtml(html, pageUrl) {
+export function inspectHtml(html, pageUrl, { siteOrigin = new URL(pageUrl).origin } = {}) {
   const title = stripTags(pairedTagContents(html, "title")[0] ?? "")
   const metaTags = openingTags(html, "meta")
   const noindex = metaTags
@@ -136,9 +136,13 @@ export function inspectHtml(html, pageUrl) {
 
     const fragment = decodeURIComponent(resolved.hash.slice(1))
     const current = new URL(pageUrl)
-    if (resolved.origin === current.origin && resolved.pathname === current.pathname) {
+    // A link is site-internal when it resolves to the page's own origin
+    // (relative links against a preview fetch) or to the canonical site
+    // origin (production-absolute links inside the same built site).
+    const sameSite = resolved.origin === current.origin || resolved.origin === siteOrigin
+    if (sameSite && resolved.pathname === current.pathname) {
       if (fragment && !ids.has(fragment)) anchorErrors.push(`missing anchor #${fragment}`)
-    } else if (resolved.origin === current.origin) {
+    } else if (sameSite) {
       anchorTargets.push({ url: `${resolved.origin}${resolved.pathname}`, fragment })
     }
   }
@@ -196,7 +200,10 @@ export function inspectHtml(html, pageUrl) {
   const htmlLang = attributes(openingTags(html, "html")[0] ?? "").get("lang") ?? ""
   const localHrefs = unique(
     hrefs
-      .filter((href) => new URL(href).origin === page.origin)
+      .filter((href) => {
+        const origin = new URL(href).origin
+        return origin === page.origin || origin === siteOrigin
+      })
       .map((href) => new URL(href).pathname)
   )
   const tagUrls = unique(

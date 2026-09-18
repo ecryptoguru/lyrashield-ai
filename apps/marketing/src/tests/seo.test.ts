@@ -77,6 +77,29 @@ describe("marketing SEO metadata", () => {
     expect(seoHead).toContain('property="og:image:alt"')
   })
 
+  it("emits webmaster verification tags from the documented build config", () => {
+    // PUBLIC_GOOGLE_SITE_VERIFICATION / PUBLIC_BING_SITE_VERIFICATION are
+    // advertised in wrangler.jsonc vars, which are Worker runtime vars — a
+    // build-time import.meta.env read can never see them, so the tag would
+    // stay absent even with the documented var set. The codes resolve through
+    // the same wranglerVar → vite define path as the other build metadata.
+    const config = source("../../astro.config.mjs")
+    const seoHead = source("../components/SeoHead.astro")
+
+    expect(config).toContain('wranglerVar("PUBLIC_GOOGLE_SITE_VERIFICATION")')
+    expect(config).toContain('wranglerVar("PUBLIC_BING_SITE_VERIFICATION")')
+    expect(config).toContain("__MARKETING_GOOGLE_VERIFICATION__")
+    expect(config).toContain("__MARKETING_BING_VERIFICATION__")
+
+    expect(seoHead).toContain("const googleVerification = __MARKETING_GOOGLE_VERIFICATION__")
+    expect(seoHead).toContain("const bingVerification = __MARKETING_BING_VERIFICATION__")
+    expect(seoHead).not.toContain("import.meta.env.PUBLIC_GOOGLE_SITE_VERIFICATION")
+    expect(seoHead).not.toContain("import.meta.env.PUBLIC_BING_SITE_VERIFICATION")
+    // Both tags exist but only render when configured — never empty placeholders.
+    expect(seoHead).toContain('name="google-site-verification"')
+    expect(seoHead).toContain('name="msvalidate.01"')
+  })
+
   it("publishes citation-ready homepage entities and current evidence definitions", () => {
     const home = source("../pages/index.astro")
     const methodology = source("../pages/methodology.astro")
