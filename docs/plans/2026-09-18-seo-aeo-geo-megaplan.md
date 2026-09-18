@@ -304,3 +304,22 @@ var is set) and submit `sitemap-index.xml`. Register Bing Webmaster Tools — it
 Copilot citations — submit the same sitemap, and enable IndexNow with the committed key. Claim only
 profiles that genuinely exist and link them from the footer so `sameAs` has a real target. Re-check
 the Pages/Coverage reports after the first crawl cycle.
+
+## Close-out (2026-09-18)
+
+All four waves landed the same day. The site gate is strict: **241 pages, 0 baselined, 0 stale, 0
+violations**, down from an 184-entry allowlist at the gate's launch. Findings SF-01 through SF-06 and
+SF-08 through SF-12, SF-14 through SF-28 are closed; the exceptions and their reasons:
+
+| Finding                               | Outcome                                                                                                                                                                                                                                                                                        |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SF-07 (homepage `<loc>` vs canonical) | **Not achievable as planned.** `@astrojs/sitemap` rewrites `<loc>${host}/</loc>` to `<loc>${host}</loc>` whenever `trailingSlash` is `"never"`, so a `serialize` override is discarded. The two forms are the same URL to a crawler; recorded in `astro.config.mjs` and closed as a non-issue. |
+| SF-13 (named human author)            | **Founder decision, not taken.** No `Person` was attributed speculatively; the Organization author is unchanged.                                                                                                                                                                               |
+| SF-10 (`sameAs`)                      | **Partially closed.** `contactPoint` and the raster logo ship; `sameAs` stays absent because no verified product profile URL exists yet. Inventing one would be worse than the gap.                                                                                                            |
+| SF-23 (thin pages)                    | **Partially closed.** `/support`, `/security-reporting` and `/demo` gained depth from facts already published elsewhere. `/docs/approvals` and `/agents` were left as they are: adding prose there would have needed new evidence.                                                             |
+| SF-27 (responsive hero `srcset`)      | Backlog, unchanged.                                                                                                                                                                                                                                                                            |
+
+Wave 1 also fixed a defect the gate surfaced: the middleware's http→https upgrade tested
+`url.hostname`, which `wrangler dev` rewrites to the custom domain, so every SSR route (`llms.txt`,
+`rss.xml`, `agents.md`, `/api/*`) 301'd to `https://127.0.0.1:8787` on any local preview. The
+worker-entry scheme guard still enforces plaintext→https in production.
