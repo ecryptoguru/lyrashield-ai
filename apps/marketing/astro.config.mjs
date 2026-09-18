@@ -139,11 +139,14 @@ function contentLastmod() {
     if (date) map.set(pathname, date)
   }
 
-  // Static top-level pages: one .astro source each.
+  // Static top-level pages: one .astro source each. Every indexable top-level
+  // route must appear here or its sitemap entry loses lastmod — /demo was
+  // missing until the site gate learned to require one.
   for (const page of [
     "about",
     "agents",
     "ai-safety",
+    "demo",
     "evidence-vault",
     "methodology",
     "pricing",

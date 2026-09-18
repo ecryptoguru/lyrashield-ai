@@ -40,36 +40,49 @@ async function sitemapUrls(origin, fetchImpl) {
   const nested = locations.filter((location) => location.endsWith(".xml"))
   if (nested.length === 0) return locations
 
+  // Child sitemaps are fetched through the origin under test rather than the
+  // absolute loc, so a local preview validates the build it is serving instead
+  // of silently reading the live production sitemap.
   const urls = []
-  for (const sitemap of nested) {
-    const child = await fetchImpl(sitemap)
-    if (!child.ok) throw new Error(`${sitemap} returned ${child.status}`)
+  for (const location of nested) {
+    const childUrl = new URL(new URL(location, origin).pathname, origin).href
+    const child = await fetchImpl(childUrl)
+    if (!child.ok) throw new Error(`${childUrl} returned ${child.status}`)
     urls.push(...extractLocations(await child.text()))
   }
   return urls
 }
 
 export async function submitToIndexNow({ origin, fetchImpl = globalThis.fetch, dryRun = false }) {
-  const host = new URL(origin).host
-  const keyLocation = `${origin}/${INDEXNOW_KEY}.txt`
+  const fetchOrigin = new URL(origin).origin
+  const urls = [...new Set(await sitemapUrls(fetchOrigin, fetchImpl))]
+  if (urls.length === 0) throw new Error("the sitemap contained no URLs")
 
-  const keyResponse = await fetchImpl(keyLocation)
+  // The submitted host and keyLocation come from the sitemap, not from the
+  // origin this script fetched: a local `pnpm preview` serves a build whose
+  // sitemap points at the production host, and IndexNow requires keyLocation to
+  // live on the host being submitted.
+  const hosts = new Set(urls.map((url) => new URL(url).host))
+  if (hosts.size !== 1) throw new Error(`sitemap mixes hosts: ${[...hosts].join(", ")}`)
+  const host = [...hosts][0]
+  const protocol = new URL(urls[0]).protocol
+  const keyLocation = `${protocol}//${host}/${INDEXNOW_KEY}.txt`
+
+  // Verify the key is actually served before claiming anything to the provider.
+  const keyResponse = await fetchImpl(`${fetchOrigin}/${INDEXNOW_KEY}.txt`)
   if (!keyResponse.ok) {
     throw new Error(`IndexNow key file ${keyLocation} returned ${keyResponse.status}`)
   }
 
-  const urls = await sitemapUrls(origin, fetchImpl)
-  const urlList = [...new Set(urls)].filter((url) => new URL(url).host === host).slice(0, MAX_URLS)
-  if (urlList.length === 0) throw new Error("no same-host URLs found in the sitemap")
-
-  if (dryRun) return { submitted: urlList.length, status: 0 }
+  const urlList = urls.slice(0, MAX_URLS)
+  if (dryRun) return { host, submitted: urlList.length, status: 0 }
 
   const response = await fetchImpl(ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify({ host, key: INDEXNOW_KEY, keyLocation, urlList }),
   })
-  return { submitted: urlList.length, status: response.status }
+  return { host, submitted: urlList.length, status: response.status }
 }
 
 function argumentValue(args, name) {
@@ -90,8 +103,8 @@ async function main() {
     const result = await submitToIndexNow({ origin, dryRun: args.includes("--dry-run") })
     console.log(
       args.includes("--dry-run")
-        ? `IndexNow dry run: ${result.submitted} URL(s) would be submitted.`
-        : `IndexNow accepted ${result.submitted} URL(s) (HTTP ${result.status}).`
+        ? `IndexNow dry run: ${result.submitted} URL(s) on ${result.host} would be submitted.`
+        : `IndexNow accepted ${result.submitted} URL(s) for ${result.host} (HTTP ${result.status}).`
     )
   } catch (error) {
     // Never fail the release: IndexNow is a discovery hint, not a gate.

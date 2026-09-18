@@ -8,9 +8,10 @@ import {
   expectedCanonical,
   isBlogPostPath,
   pageViolations,
+  sitemapEntries,
   titleLimitFor,
 } from "../../scripts/crawl-built-site.mjs"
-import { INDEXNOW_KEY } from "../../scripts/indexnow.mjs"
+import { INDEXNOW_KEY, submitToIndexNow } from "../../scripts/indexnow.mjs"
 import { DEFAULT_OG_IMAGE, OG_CARD_PATHS, ogImageFor } from "../lib/og-images"
 
 const ORIGIN = "https://lyrashieldai.com"
@@ -44,6 +45,8 @@ function healthyFacts(path = "/pricing", overrides: Record<string, unknown> = {}
     jsonLdTypes: ["Organization", "WebSite", "WebPage", "BreadcrumbList"],
     jsonLdErrors: [],
     hasDraftMarker: false,
+    imagesMissingAlt: 0,
+    htmlLang: "en",
     ...overrides,
   }
 }
@@ -81,6 +84,8 @@ describe("site SEO gate rules", () => {
     ["og-image-missing", { ogImage: "" }],
     ["og-image-dimensions-missing", { ogImageHeight: "" }],
     ["canonical-mismatch", { canonical: `${ORIGIN}/wrong` }],
+    ["html-lang-missing", { htmlLang: "" }],
+    ["img-alt-missing", { imagesMissingAlt: 2 }],
   ])("reports %s", (rule, overrides) => {
     const violations = pageViolations({
       path: "/pricing",
@@ -164,6 +169,17 @@ describe("social cards", () => {
 })
 
 describe("machine-readable surface contracts", () => {
+  it("reads lastmod per sitemap URL", () => {
+    const xml = `<?xml version="1.0"?><urlset>
+      <url><loc>https://lyrashieldai.com/pricing</loc><lastmod>2026-09-18</lastmod></url>
+      <url><loc>https://lyrashieldai.com/demo</loc></url>
+    </urlset>`
+    expect(sitemapEntries(xml)).toEqual([
+      { path: "/pricing", lastmod: "2026-09-18" },
+      { path: "/demo", lastmod: "" },
+    ])
+  })
+
   it("names every required retrieval agent in robots.txt", () => {
     const robots = source("../pages/robots.txt.ts")
     for (const agent of REQUIRED_ROBOTS_AGENTS) {
@@ -175,6 +191,37 @@ describe("machine-readable surface contracts", () => {
     const keyFile = source(`../../public/${INDEXNOW_KEY}.txt`).trim()
     expect(keyFile).toBe(INDEXNOW_KEY)
     expect(INDEXNOW_KEY).toMatch(/^[a-f0-9]{32}$/)
+  })
+
+  it("derives the IndexNow host from the sitemap, not from the origin it fetched", async () => {
+    // A local preview serves a build whose sitemap points at production, so
+    // filtering by the fetch origin would silently submit nothing.
+    const responses = new Map([
+      [
+        "http://127.0.0.1:8787/sitemap-index.xml",
+        "<sitemapindex><sitemap><loc>https://lyrashieldai.com/sitemap-0.xml</loc></sitemap></sitemapindex>",
+      ],
+      [
+        "http://127.0.0.1:8787/sitemap-0.xml",
+        "<urlset>" +
+          "<url><loc>https://lyrashieldai.com/a</loc></url>" +
+          "<url><loc>https://lyrashieldai.com/b</loc></url>" +
+          "</urlset>",
+      ],
+      [`http://127.0.0.1:8787/${INDEXNOW_KEY}.txt`, INDEXNOW_KEY],
+    ])
+    const fetchImpl = async (input: URL | RequestInfo): Promise<Response> => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+      const body = responses.get(url)
+      return new Response(body ?? "", { status: body === undefined ? 404 : 200 })
+    }
+
+    const result = await submitToIndexNow({
+      origin: "http://127.0.0.1:8787",
+      fetchImpl: fetchImpl as typeof globalThis.fetch,
+      dryRun: true,
+    })
+    expect(result).toEqual({ host: "lyrashieldai.com", submitted: 2, status: 0 })
   })
 
   it("keeps the security.txt contact pointed at a monitored mailbox", () => {

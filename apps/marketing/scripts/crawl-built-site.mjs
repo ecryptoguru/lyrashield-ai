@@ -151,6 +151,25 @@ async function sitemapPaths(origin, fetchImpl) {
   return { paths, siteOrigin: siteOrigin ?? new URL(origin).origin }
 }
 
+/**
+ * `{ path, lastmod }` per sitemap URL, so the gate can require a real freshness
+ * signal without re-fetching every sitemap.
+ */
+export function sitemapEntries(xml) {
+  return [...xml.matchAll(/<url\b[^>]*>([\s\S]*?)<\/url\s*>/gi)].map((match) => {
+    const block = match[1] ?? ""
+    const loc = block.match(/<loc\b[^>]*>([\s\S]*?)<\/loc\s*>/i)?.[1]?.trim() ?? ""
+    const lastmod = block.match(/<lastmod\b[^>]*>([\s\S]*?)<\/lastmod\s*>/i)?.[1]?.trim() ?? ""
+    let path = loc
+    try {
+      path = new URL(loc).pathname
+    } catch {
+      // keep the raw loc when it is not a URL
+    }
+    return { path, lastmod }
+  })
+}
+
 /** Page-level violations for one already-fetched document. */
 export function pageViolations({ path, facts, origin }) {
   const violations = []
@@ -168,6 +187,10 @@ export function pageViolations({ path, facts, origin }) {
 
   if (facts.h1Count !== 1) add("h1-count", String(facts.h1Count))
   if (facts.mainCount !== 1) add("main-count", String(facts.mainCount))
+  if (!facts.htmlLang) add("html-lang-missing", "")
+  if (facts.imagesMissingAlt > 0) {
+    add("img-alt-missing", `${facts.imagesMissingAlt} image(s) without an alt attribute`)
+  }
 
   const expected = expectedCanonical(origin, path)
   if (facts.canonicalCount !== 1) add("canonical-count", String(facts.canonicalCount))
@@ -274,6 +297,18 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
 
   const { paths: discovered, siteOrigin } = await sitemapPaths(localOrigin, fetchImpl)
   const paths = [...discovered].sort()
+
+  // lastmod is the only freshness signal a crawler gets from the sitemap, and
+  // it is derived per-route from git — so a page added without registering its
+  // source loses it silently. /demo was the one route in that state.
+  const sitemapXml = await fetchText(fetchImpl, new URL(SITEMAP_PATH, localOrigin).href)
+  if (sitemapXml.text !== null) {
+    for (const entry of sitemapEntries(sitemapXml.text)) {
+      if (!entry.lastmod) {
+        violations.push({ rule: "sitemap-lastmod-missing", path: entry.path, detail: "" })
+      }
+    }
+  }
   const pages = await mapWithConcurrency(paths, FETCH_CONCURRENCY, async (path) => {
     const url = new URL(path, localOrigin).href
     const { status, text } = await fetchText(fetchImpl, url)
@@ -366,7 +401,9 @@ export function buildBaseline(violations, { date, notes = {} }) {
       const [rule, path] = key.split("\u0000")
       return { rule, path }
     })
-    .sort((a, b) => (a.rule === b.rule ? a.path.localeCompare(b.path) : a.rule.localeCompare(b.rule)))
+    .sort((a, b) =>
+      a.rule === b.rule ? a.path.localeCompare(b.path) : a.rule.localeCompare(b.rule)
+    )
   return { generatedAt: date, notes, entries }
 }
 
@@ -396,6 +433,20 @@ export const BASELINE_NOTES = {
   },
   "jsonld-breadcrumb-missing": {
     reason: "A non-root page emitted no BreadcrumbList.",
+    wave: null,
+  },
+  "html-lang-missing": {
+    reason: "The <html> element carries no lang attribute.",
+    wave: null,
+  },
+  "img-alt-missing": {
+    reason:
+      'An <img> has no alt attribute at all. Decorative images must use alt="" explicitly; a missing attribute is what screen readers and image crawlers cannot interpret.',
+    wave: null,
+  },
+  "sitemap-lastmod-missing": {
+    reason:
+      "A sitemap URL carries no lastmod. Every indexable route must map to a source file in astro.config.mjs's contentLastmod() so its real git date can be emitted.",
     wave: null,
   },
 }

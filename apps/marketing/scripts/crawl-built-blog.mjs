@@ -92,10 +92,13 @@ function extractRssLinks(xml) {
 export function inspectHtml(html, pageUrl) {
   const title = stripTags(pairedTagContents(html, "title")[0] ?? "")
   const metaTags = openingTags(html, "meta")
-  const noindex = metaTags.map(attributes).some((attrs) =>
-    ["robots", "googlebot"].includes(attrs.get("name")?.toLowerCase()) &&
-    /(?:^|[\s,])(noindex|none)(?:$|[\s,])/i.test(attrs.get("content") ?? "")
-  )
+  const noindex = metaTags
+    .map(attributes)
+    .some(
+      (attrs) =>
+        ["robots", "googlebot"].includes(attrs.get("name")?.toLowerCase()) &&
+        /(?:^|[\s,])(noindex|none)(?:$|[\s,])/i.test(attrs.get("content") ?? "")
+    )
   const description = metaTags
     .map(attributes)
     .find((attrs) => attrs.get("name")?.toLowerCase() === "description")
@@ -139,8 +142,11 @@ export function inspectHtml(html, pageUrl) {
   }
 
   const imageUrls = []
+  let imagesMissingAlt = 0
   for (const tag of openingTags(html, "img")) {
-    const src = attributes(tag).get("src")
+    const attrs = attributes(tag)
+    if (!attrs.has("alt")) imagesMissingAlt += 1
+    const src = attrs.get("src")
     const resolved = resolveHttpUrl(src, pageUrl)
     if (resolved) imageUrls.push(resolved.href)
   }
@@ -185,6 +191,7 @@ export function inspectHtml(html, pageUrl) {
   }
 
   const page = new URL(pageUrl)
+  const htmlLang = attributes(openingTags(html, "html")[0] ?? "").get("lang") ?? ""
   const localHrefs = unique(
     hrefs
       .filter((href) => new URL(href).origin === page.origin)
@@ -215,6 +222,8 @@ export function inspectHtml(html, pageUrl) {
     anchorTargets,
     anchorErrors: unique(anchorErrors),
     imageUrls: unique(imageUrls),
+    imagesMissingAlt,
+    htmlLang,
     ogImage,
     ogImageWidth,
     ogImageHeight,
@@ -397,9 +406,7 @@ export async function crawlBuiltBlog({
   const rssUrl = new URL(RSS_PATH, localOrigin).href
   const rss = await fetchText(fetchImpl, rssUrl, "RSS", errors)
   const rssLinks = rss === null ? [] : extractRssLinks(rss)
-  const rssPaths = new Set(
-    rssLinks.map((url) => normalizePath(new URL(url, localOrigin).pathname))
-  )
+  const rssPaths = new Set(rssLinks.map((url) => normalizePath(new URL(url, localOrigin).pathname)))
   const expectedRssItemCount = Math.min(expectedPaths.size, 20)
   if (rssLinks.length !== expectedRssItemCount || rssPaths.size !== expectedRssItemCount) {
     errors.push(`${rssUrl}: expected ${expectedRssItemCount} unique recent article items`)

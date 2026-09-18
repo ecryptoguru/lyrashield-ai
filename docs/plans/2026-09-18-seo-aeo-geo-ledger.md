@@ -131,3 +131,44 @@ pass → 0.
     Word counts: `/support` 292→395, `/security-reporting` 308→403, `/demo` 366→442.
   - Verify: 217 vitest tests, typecheck, lint, `build`, all six validators, `seo:crawl` (241 pages,
     0/0/0), `crawl-built-blog` (161 / 6 / 235), `test:browser` 41 passed.
+
+- 2026-09-18 (session 6) — Hardening pass: three more gate rules, one real gap fixed, one script
+  bug fixed, and the whole surface re-verified.
+  - **Gate grew three rules**: `img-alt-missing` (every `<img>` needs an explicit `alt`, decorative
+    ones included), `html-lang-missing`, and `sitemap-lastmod-missing`. All three pass on the
+    current build, and each is exercised by a unit test.
+  - **`/demo` had no `lastmod`** — it was the only sitemap URL missing one, because it was never
+    registered in `astro.config.mjs`'s static-page list. Fixed, and the new rule now catches the same
+    drift for any future page. All 241 URLs carry a real git date.
+  - **`scripts/indexnow.mjs` bug**: it filtered sitemap URLs by the _origin it fetched_, so a local
+    dry run always reported "no same-host URLs" and submitted nothing — and a sitemap served from a
+    different host than the key file would have silently no-op'd in production too. The submitted
+    host and `keyLocation` now come from the sitemap, child sitemaps are fetched through the origin
+    under test, and the key file is verified before anything is claimed. Dry run against the local
+    preview: `241 URL(s) on lyrashieldai.com would be submitted.`
+  - **Footer** links the public GitHub repository with `rel="me"` — a real URL, already cited in
+    `llms.txt`. `Organization.sameAs` stays empty: there is still no verified _product_ profile.
+  - **Gate proven to fail, not just pass**: injecting four regressions into the built
+    `pricing/index.html` (missing description, `img` without `alt`, stripped `lang`, wrong canonical)
+    produced exactly those four violations and exit code 1. Restored and re-verified green.
+  - **Performance verified rather than assumed**: on a throttled Slow-4G + 4× CPU profile the
+    homepage FCP 1320 ms / LCP 1392 ms / CLS 0.0155 / 368 KB; `/pricing` LCP 752 ms; `/agents`
+    1164 ms. The hero downloads its 26 KB AVIF (not the 93 KB JPEG), so the missing responsive
+    `srcset` (SF-27) is a verified non-issue and the deliberately-eager product screenshots are not
+    competing with the LCP element. No change made; recorded instead.
+  - **Machine-readable surfaces validated**: `rss.xml` parses with 20 items, no trailing-slash links,
+    `lastBuildDate` present, every item has `pubDate` and `guid`; `.well-known/security.txt` satisfies
+    RFC 9116 (Contact + Expires 364 days out + Canonical + Policy); `sitemap-0.xml` parses with 241
+    URLs, 241 `lastmod`, 161 image entries, no duplicates, no `http://`, no noindex pages;
+    `robots.txt` parses into 3 groups (wildcard, 19 retrieval agents, 4 training agents), all
+    allow-all.
+  - **Full repository suite**: `pnpm test` → core 4422 passed / 3 failed, marketing all passed,
+    motion 18 passed, ops passed. The 3 failures are `packages/config/src/env-runtime.test.ts`, which
+    passes 11/11 with the local `.env` absent: this machine's `.env` sets `MYRA_WRITES_ENABLED=1`
+    without the Google calendar credentials production validation then demands. Not related to this
+    branch, and CI has no `.env`. Four earlier file-load failures were a missing `@lyrashield/mcp`
+    build in this fresh worktree, fixed by `pnpm --filter @lyrashield/mcp build`.
+  - **Environment note for the next session**: a fresh worktree needs `.env` (root), `apps/web/.env`,
+    `pnpm --filter @lyrashield/db exec prisma generate`, `pnpm --filter @lyrashield/sdk build` and
+    `pnpm --filter @lyrashield/mcp build` before the core suite is meaningful. Without them the suite
+    reports 100+ phantom failures.
