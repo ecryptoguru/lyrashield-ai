@@ -50,7 +50,10 @@ const jsonLd = [
         <h1>Security guidance for AI-built apps.</h1>
         <p>{description}</p>
       </div>
-      <a class="link-underline" href="/rss.xml">Follow via RSS <span aria-hidden="true">↗</span></a>
+      <div class="blog-index__hero-links">
+        <a class="link-underline" href="/rss.xml">Follow via RSS <span aria-hidden="true">↗</span></a>
+        <a class="link-underline" href="/blog/editorial-policy">Editorial policy <span aria-hidden="true">↗</span></a>
+      </div>
     </header>
 
     {featuredPost && (
@@ -127,7 +130,8 @@ const jsonLd = [
   .blog-index__hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3rem; align-items: end; padding-bottom: clamp(3rem, 7vw, 6rem); }
   .blog-index__hero h1 { max-width: 58rem; margin: 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(3.25rem, 8vw, 7.25rem); font-weight: 800; line-height: .88; letter-spacing: -.06em; }
   .blog-index__hero p { max-width: 48rem; margin: 2rem 0 0; color: var(--color-text-muted); font-size: clamp(1.05rem, 2vw, 1.25rem); line-height: 1.7; }
-  .blog-index__hero > a { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .5rem; color: var(--color-accent); font-size: .9rem; font-weight: 700; text-decoration: none; }
+  .blog-index__hero-links { display: grid; justify-items: end; gap: .25rem; }
+  .blog-index__hero-links > a { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .5rem; color: var(--color-accent); font-size: .9rem; font-weight: 700; text-decoration: none; }
   .blog-index__hero a:focus-visible, .blog-index__starting-points a:focus-visible, .blog-index__pagination a:focus-visible, .category-card:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
   .blog-index__notice, .blog-index__featured > p { margin: 0; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; }
   .blog-index__notice { border-left: 2px solid var(--color-accent); padding-left: .75rem; }
@@ -160,6 +164,6 @@ const jsonLd = [
   .blog-index__pagination { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--color-border); padding-top: 2rem; margin-top: 4rem; color: var(--color-text-muted); font-size: .85rem; }
   .blog-index__pagination a { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--color-accent); font-weight: 700; text-decoration: none; }
   @media (max-width: 960px) { .blog-index__category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 720px) { .blog-index__hero, .blog-index__empty { grid-template-columns: 1fr; } .blog-index__hero { gap: 1rem; } }
+  @media (max-width: 720px) { .blog-index__hero, .blog-index__empty { grid-template-columns: 1fr; } .blog-index__hero { gap: 1rem; } .blog-index__hero-links { justify-items: start; } }
   @media (max-width: 600px) { .blog-index__category-grid { grid-template-columns: 1fr; } .category-card { min-height: 0; } }
 </style>

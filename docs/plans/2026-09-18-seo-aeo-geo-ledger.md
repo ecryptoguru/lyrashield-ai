@@ -9,19 +9,19 @@ stay untouched.
 
 ## Status
 
-| Wave | Scope | Status | PR | Notes |
-| --- | --- | --- | --- | --- |
-| 1 | Gate + crawler eligibility + machine-readable surfaces | ✅ complete 2026-09-18 | — | Gate landed first so waves 2–4 are enforced |
-| 2 | Entity + structured data | ✅ complete 2026-09-18 | — | Breadcrumb rule found 4 extra pages |
-| 3 | Metadata limits + OG cards + `/research` | ✅ complete 2026-09-18 | — | **Baseline drained to zero** |
-| 4 | Internal linking + thin pages | ⬜ not started | — | Gate is already strict; no baseline work left |
+| Wave | Scope                                                  | Status                 | PR  | Notes                                         |
+| ---- | ------------------------------------------------------ | ---------------------- | --- | --------------------------------------------- |
+| 1    | Gate + crawler eligibility + machine-readable surfaces | ✅ complete 2026-09-18 | —   | Gate landed first so waves 2–4 are enforced   |
+| 2    | Entity + structured data                               | ✅ complete 2026-09-18 | —   | Breadcrumb rule found 4 extra pages           |
+| 3    | Metadata limits + OG cards + `/research`               | ✅ complete 2026-09-18 | —   | **Baseline drained to zero**                  |
+| 4    | Internal linking + thin pages                          | ✅ complete 2026-09-18 | —   | Gate is already strict; no baseline work left |
 
-| Wave | Commits | Local verify | CI | Merged |
-| --- | --- | --- | --- | --- |
-| 1 | `983c146f` | PASS | — | — |
-| 2 | `72742681` | PASS | — | — |
-| 3 | see session log | PASS | — | — |
-| 4 | — | — | — | — |
+| Wave | Commits         | Local verify | CI  | Merged |
+| ---- | --------------- | ------------ | --- | ------ |
+| 1    | `983c146f`      | PASS         | —   | —      |
+| 2    | `72742681`      | PASS         | —   | —      |
+| 3    | `d3e6a1ce`      | PASS         | —   | —      |
+| 4    | see session log | PASS         | —   | —      |
 
 ## Baseline allowlist
 
@@ -116,3 +116,18 @@ pass → 0.
     emits two FAQPage entries with one name.
   - Baseline 177 → 0. Verify: 217 vitest tests, typecheck, lint, `build`, all six validators,
     `seo:crawl` (241 pages, 0/0/0), `crawl-built-blog` (161 / 6 / 235), `test:browser` 41 passed.
+
+- 2026-09-18 (session 5) — Wave 4 implemented and verified.
+  - **Internal linking**: `BlogCta.astro` gains a "Next steps" nav (Pricing, For coding agents,
+    Methodology, Free Lite Check), so all 161 posts now link to the money pages that previously
+    received **zero** links from the library. `/demo` joins the footer Product column and the desktop
+    Resources menu (not the mobile menu — its height budget is asserted by `theme.e2e.ts`), and the
+    `/blog` hub now links its editorial policy.
+  - **Thin pages**, bounded to facts already published elsewhere: `/support` gains a "Where to look
+    first" list linking the troubleshooting, REST API, approvals and methodology pages;
+    `/security-reporting` documents the `/.well-known/security.txt` route it is the policy for and
+    what is in scope; `/demo` states the booking constraints that `MYRA_COPY`/`MYRA_LIMITS` already
+    publish (30 minutes, 14-day horizon, host timezone, code-verified email, who you talk to).
+    Word counts: `/support` 292→395, `/security-reporting` 308→403, `/demo` 366→442.
+  - Verify: 217 vitest tests, typecheck, lint, `build`, all six validators, `seo:crawl` (241 pages,
+    0/0/0), `crawl-built-blog` (161 / 6 / 235), `test:browser` 41 passed.

@@ -51,6 +51,26 @@ const jsonLd: unknown[] = [
     </p>
     <p class="mt-2 text-xs leading-5 text-text-muted">{MYRA_COPY.demoLimit}</p>
 
+    <dl class="mt-8 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[10rem_1fr]">
+      <dt class="font-medium text-text">Length</dt>
+      <dd class="text-text-muted">{MYRA_LIMITS.demo.durationMinutes} minutes, over Google Meet.</dd>
+      <dt class="font-medium text-text">Availability</dt>
+      <dd class="text-text-muted">
+        The next {MYRA_LIMITS.demo.horizonDays} days, shown in your timezone (host timezone{" "}
+        {MYRA_LIMITS.demo.hostTimezone}).
+      </dd>
+      <dt class="font-medium text-text">Confirmation</dt>
+      <dd class="text-text-muted">
+        A one-time code verifies the email address before the booking is created; the manage link is
+        the only copy, so save it to reschedule or cancel.
+      </dd>
+      <dt class="font-medium text-text">Who you talk to</dt>
+      <dd class="text-text-muted">
+        Ankit Das, the founder. No sales sequence — bring what you are shipping and where a review
+        would fit your release process.
+      </dd>
+    </dl>
+
     <div id="demo-booking" class="mt-10 rounded-xl border border-border bg-bg-raised p-5 sm:p-6">
       <section id="demo-step-slot" aria-labelledby="demo-slot-heading">
         <h2 id="demo-slot-heading" class="text-base font-semibold text-text">Pick a time</h2>
