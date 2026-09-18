@@ -267,6 +267,24 @@ last_rules=$(sed -n '/^CALL 3$/,$p' "$iptables_log")
 printf '%s\n' "$last_rules" | grep -q -- '-d 8.8.4.4 --dport 443 -j ACCEPT'
 printf '%s\n' "$last_rules" | grep -q -- '-d 9.9.9.9 --dport 443 -j ACCEPT'
 
+# A rotated Redis host stays available only for the transition union. The
+# refreshed pin file and final firewall must contain the configured host only.
+reset_state
+printf '%s\n' 'retired-redis.test 9.9.9.9 6379' >"$pin_file"
+run_refresh "$output_file" "$error_file"
+grep -Fqx 'redis.test 8.8.8.8 6379' "$pin_file"
+if grep -Fq 'retired-redis.test' "$pin_file"; then
+  echo "Redis rotation retained the retired pin" >&2
+  exit 1
+fi
+first_rules=$(sed -n '/^CALL 1$/,/^CALL 2$/p' "$iptables_log")
+printf '%s\n' "$first_rules" | grep -q -- '-d 9.9.9.9 --dport 6379 -j ACCEPT'
+second_rules=$(sed -n '/^CALL 2$/,$p' "$iptables_log")
+if printf '%s\n' "$second_rules" | grep -q -- '-d 9.9.9.9 --dport 6379 -j ACCEPT'; then
+  echo "Redis rotation retained the retired firewall pin" >&2
+  exit 1
+fi
+
 # Stable pins do not touch the running container and never schedule a restart.
 reset_state
 printf '%s\n' \
