@@ -63,7 +63,8 @@ export default async function BillingPage({
   const billingRequest = new Request("https://app.lyrashieldai.com/dashboard/billing", {
     headers: requestHeaders,
   })
-  const { provider: checkoutProvider } = resolveRequestBillingProvider(billingRequest)
+  const { provider: checkoutProvider, region: checkoutRegion } =
+    resolveRequestBillingProvider(billingRequest)
   const returns = await searchParams
   const selectedPlan =
     parsePlanIntent(returns.plan) ??
@@ -160,6 +161,7 @@ export default async function BillingPage({
                   purchasesAvailable={purchasesAvailable}
                   trialAvailable={trialAvailable}
                   selectedPlan={selectedPlan}
+                  billingRegion={checkoutRegion}
                 />
               )}
             </div>

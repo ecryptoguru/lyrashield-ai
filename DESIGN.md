@@ -110,7 +110,9 @@ to the accent dot (`0 0 14px`). No heavy drop shadows in light theme —
 ## Shapes
 
 Squared-terminal aesthetic on the hero (radius `sm` 0.25rem); standard
-`md`–`xl` radii elsewhere per shared UI. Focus ring: amber `#f5b84b`, offset 4px.
+`md`–`xl` radii elsewhere per shared UI. Focus ring: amber, offset 4px —
+`#f5b84b` on the dark theme, `#b45309` (same hue one step deeper, ≥3:1
+against the light background) on the light theme.
 
 ## Components
 

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
 import { MYRA_COPY } from "@lyrashield/myra"
@@ -15,6 +16,35 @@ describe("MyraPanel shell", () => {
     expect(html).toContain('id="myra-dash-panel"')
     expect(html).toContain('aria-label="Myra support"')
     expect(html).toContain('aria-controls="myra-dash-panel"')
+  })
+
+  it("keeps the Help launcher in the bottom-20 band the activity chip clears", () => {
+    // F5 regression: below lg the WebMCP activity chip stacks at bottom-32 —
+    // Help stays the stable bottom-20 anchor, right-aligned with the chip.
+    expect(html).toContain("bottom-20")
+    expect(html).toContain("sm:right-6")
+    expect(html).toContain("lg:hidden")
+  })
+
+  it("is a complementary landmark at rest and a focus-managed dialog when the sheet opens", () => {
+    // Docked/SSR state: a complementary landmark, never a modal.
+    expect(html).toContain('role="complementary"')
+    expect(html).not.toContain("aria-modal")
+
+    // The modal behavior only exists after the launcher opens the sheet, so
+    // it is verified at source level: dialog semantics apply only below lg,
+    // focus enters on open, Tab/Shift+Tab stay inside, Escape closes, and
+    // focus returns to the launcher.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const src = readFileSync(new URL("./myra-panel.tsx", import.meta.url), "utf8")
+    expect(src).toContain('role={isModal ? "dialog" : "complementary"}')
+    expect(src).toContain("aria-modal={isModal || undefined}")
+    expect(src).toContain("mobileCloseRef.current?.focus()")
+    expect(src).toContain('e.key === "Escape"')
+    expect(src).toContain('e.key !== "Tab"')
+    expect(src).toContain("last.focus()")
+    expect(src).toContain("first.focus()")
+    expect(src).toContain("mobileLauncherRef.current?.focus()")
   })
 
   it("renders the header, log region, opener, and starter buttons", () => {

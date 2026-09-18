@@ -46,6 +46,22 @@ describe("BillingActions", () => {
         expect(html).toContain(`Choose ${label}, ${interval} billing`)
     }
   })
+  it("labels prices in the server-resolved catalog currency without touching checkout", () => {
+    // The chooser displays the catalog for the region the server resolved —
+    // USD remains the default and INR comes from the trusted request header,
+    // never from a client-selected currency.
+    const usd = renderToString(<BillingActions {...props} />)
+    expect(usd).toContain("Monthly · $29.00/mo")
+    expect(usd).toContain("Annual · $295.00/yr")
+    expect(usd).toContain("Prices in USD")
+
+    const inr = renderToString(<BillingActions {...props} billingRegion="inr" />)
+    expect(inr).toContain("Monthly · ₹2,900.00/mo")
+    expect(inr).toContain("Annual · ₹29,500.00/yr")
+    expect(inr).toContain("Monthly · ₹9,900.00/mo")
+    expect(inr).toContain("Prices in INR")
+    expect(inr).not.toContain("$")
+  })
   it("retains paid management without advertising a trial", () => {
     const html = renderToString(
       <BillingActions {...props} plan="STARTER" purchasesAvailable={false} />

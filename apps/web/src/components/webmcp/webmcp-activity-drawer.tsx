@@ -72,8 +72,12 @@ export function WebMcpActivityDrawer() {
   const status = latest ? STATUS_CONFIG[latest.status] : STATUS_CONFIG.completed
   const StatusIcon = status.icon
 
+  // The Myra Help launcher owns bottom-20 below lg — this chip stacks above
+  // it so a receipt never covers Help (their bands used to share bottom-20,
+  // and the higher z-index made Help unclickable at ~768px). At lg+ Help is
+  // hidden and the chip drops to its desktop corner.
   return (
-    <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 lg:bottom-6 sm:right-6">
+    <div className="fixed bottom-32 right-4 z-50 flex flex-col items-end gap-2 sm:right-6 lg:bottom-6">
       {/* Live region for running work; completed history is not re-announced. */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {latestRunning
@@ -113,7 +117,7 @@ export function WebMcpActivityDrawer() {
           id="webmcp-activity-panel"
           className={cn(
             "shadow-card-hover w-[calc(100vw-2rem)] max-w-sm overflow-hidden border",
-            "fixed bottom-32 right-4 lg:bottom-[4.5rem] sm:right-6"
+            "fixed bottom-44 right-4 sm:right-6 lg:bottom-[4.5rem]"
           )}
           role="dialog"
           aria-label="Agent activity history"

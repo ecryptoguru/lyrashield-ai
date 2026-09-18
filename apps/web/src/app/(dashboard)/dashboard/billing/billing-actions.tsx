@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react"
 import { buttonVariants } from "@lyrashield/ui"
-import { formatUSD, getPlan } from "@lyrashield/pricing"
+import { formatINR, formatUSD, getPlan } from "@lyrashield/pricing"
 import { useRouter } from "next/navigation"
 import { openRazorpaySubscriptionCheckout } from "@/lib/razorpay-checkout"
 import { apiPost, ApiError } from "@/lib/api-client"
@@ -17,7 +17,15 @@ interface BillingActionsProps {
   purchasesAvailable: boolean
   trialAvailable: boolean
   selectedPlan?: string | null
+  /**
+   * The checkout region the SERVER resolved for this request — display only.
+   * The client never picks a currency: checkout re-resolves region itself and
+   * stays authoritative over routing and amounts.
+   */
+  billingRegion?: "usd" | "inr"
 }
+
+const REGION_FORMAT = { usd: formatUSD, inr: formatINR } as const
 
 const PLANS = [
   ["STARTER", "Starter"],
@@ -32,6 +40,7 @@ export function BillingActions({
   purchasesAvailable,
   trialAvailable,
   selectedPlan,
+  billingRegion = "usd",
 }: BillingActionsProps) {
   const router = useRouter()
   const pending = useRef(false)
@@ -132,7 +141,7 @@ export function BillingActions({
         <div className="grid gap-3 sm:grid-cols-3" aria-label="Choose a plan">
           {PLANS.map(([targetPlan, label]) => {
             const definition = getPlan(targetPlan)
-            const usd = definition?.price.usd
+            const catalog = definition?.price[billingRegion]
             const targets =
               definition && definition.targetCaps > 0
                 ? `up to ${definition.targetCaps} targets`
@@ -149,11 +158,15 @@ export function BillingActions({
                 </div>
                 {(["monthly", "annual"] as const).map((interval) => {
                   const action = `checkout-${targetPlan}-${interval}`
-                  const price = usd ? (interval === "annual" ? usd.annual : usd.monthly) : undefined
+                  const price = catalog
+                    ? interval === "annual"
+                      ? catalog.annual
+                      : catalog.monthly
+                    : undefined
                   const amount =
                     price === undefined
                       ? null
-                      : `${formatUSD(price)}/${interval === "annual" ? "yr" : "mo"}`
+                      : `${REGION_FORMAT[billingRegion](price)}/${interval === "annual" ? "yr" : "mo"}`
                   return (
                     <button
                       key={interval}
@@ -179,7 +192,9 @@ export function BillingActions({
             )
           })}
           <p className="text-xs text-muted-foreground sm:col-span-3">
-            Prices in USD. Checkout bills in your local currency where the provider offers it.
+            {billingRegion === "inr"
+              ? "Prices in INR for your region's checkout. Final amounts are confirmed by the provider before payment."
+              : "Prices in USD. Checkout bills in your local currency where the provider offers it."}
           </p>
         </div>
       )}
