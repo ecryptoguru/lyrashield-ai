@@ -3,9 +3,13 @@
 Progress tracker for [`2026-09-18-seo-aeo-geo-megaplan.md`](./2026-09-18-seo-aeo-geo-megaplan.md).
 Read this first in any session; update it last. Commit early and often.
 
-Base: `origin/main` = `171e225d`. Worktree: `.worktrees/seo-aeo-geo` (branch `devin/seo-aeo-geo`),
-created from `origin/main` so the dirty `feat/myra-support-agent` tree and its user-owned deletions
-stay untouched.
+Base: `origin/main` = `171e225d`. Worktree: `.worktrees/seo-aeo-geo`, branch `devin/seo-aeo-geo`,
+pushed as **PR #702** — created from `origin/main` so the dirty `feat/myra-support-agent` tree and its
+user-owned deletions stay untouched.
+
+**Delivered as one PR, not four.** The waves are inherently stacked (waves 2–4 modify files wave 1
+creates), so separate PRs would have meant stacked branches and four CI runs over near-identical
+code. The six commits keep per-wave rollback granularity.
 
 ## Status
 
