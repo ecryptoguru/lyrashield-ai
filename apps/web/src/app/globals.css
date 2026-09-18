@@ -12,8 +12,19 @@
   --color-card-foreground: oklch(0.18 0.02 270);
   --color-popover: oklch(1 0 0);
   --color-popover-foreground: oklch(0.18 0.02 270);
-  --color-primary: oklch(0.48 0.16 245);
-  --color-primary-foreground: oklch(0.98 0.001 264);
+  /*
+   * DESIGN.md: "Single accent: cyan #54d6df (dark) / #087f78 (light). Purple/violet
+   * hues are banned." This was oklch(0.48 0.16 245) — a royal blue — so every primary
+   * button changed hue family when the theme switched.
+   *
+   * Hue 188 is the documented accent's hue. The lightness is one step deeper than the
+   * #087f78 reference because the accent is also used as TEXT on its own tints
+   * (`text-primary` on `bg-primary/10` in the active sidebar row and the plan badge):
+   * at #087f78 those measure 4.10/4.20:1 and fail 4.5:1. oklch(0.51 0.095 188) = #00766f
+   * clears both (4.62/4.73:1) and white button text on it is 5.49:1.
+   */
+  --color-primary: oklch(0.51 0.095 188);
+  --color-primary-foreground: oklch(1 0 0);
   --color-secondary: oklch(0.96 0.01 270);
   --color-secondary-foreground: oklch(0.22 0.02 270);
   --color-muted: oklch(0.96 0.005 270);
@@ -22,9 +33,18 @@
   --color-accent-foreground: oklch(0.22 0.02 270);
   --color-destructive: oklch(0.55 0.24 25);
   --color-destructive-foreground: oklch(0.98 0 0);
+  /*
+   * Solid fill for the destructive button variant. It is a separate token because the
+   * two jobs pull in opposite directions: `text-destructive` has to stay light enough to
+   * clear 4.5:1 on dark cards, while a solid fill with light text has to be dark enough.
+   * One value cannot do both, so the variant gets the fill and `destructive` stays the
+   * text/tint colour. #d50022 with #f8f8f8 text is 5.13:1.
+   */
+  --color-destructive-solid: oklch(0.55 0.24 25);
   --color-border: oklch(0.91 0.005 270);
   --color-input: oklch(0.91 0.005 270);
-  --color-ring: oklch(0.61 0.17 218);
+  /* DESIGN.md: "Focus ring: amber #f5b84b, offset 4px". */
+  --color-ring: #f5b84b;
   --color-success: oklch(0.55 0.14 164);
   --color-warning: oklch(0.65 0.15 72);
   --color-critical: oklch(0.55 0.21 25);
@@ -117,6 +137,33 @@
   p {
     text-wrap: pretty;
   }
+  /*
+   * DESIGN.md: "Focus ring: amber #f5b84b, offset 4px". `--color-ring` now carries the
+   * amber, but a ring with `--tw-ring-offset-width: 0px` (Tailwind's initial value) sits
+   * flush against the control, so on an accent-filled button the indicator was invisible.
+   * The ring utilities compose `--tw-ring-shadow` / `--tw-ring-offset-shadow` from these
+   * custom properties, so declaring the documented default once here gives every focusable
+   * control the 4px offset without hand-editing each component. Components that pass their
+   * own `ring-offset-*` utility still win — the utilities layer comes after the base layer.
+   */
+  :where(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [role="button"],
+    [role="link"],
+    [role="tab"],
+    [role="menuitem"],
+    [tabindex]
+  ):focus-visible {
+    --tw-ring-offset-width: 4px;
+    --tw-ring-offset-color: var(--color-background);
+    --tw-ring-offset-shadow: var(--tw-ring-inset,) 0 0 0 var(--tw-ring-offset-width)
+      var(--tw-ring-offset-color);
+  }
 }
 
 /* Premium dark mode */
@@ -137,9 +184,16 @@
   --color-accent-foreground: oklch(0.97 0.005 264);
   --color-destructive: oklch(0.62 0.24 25);
   --color-destructive-foreground: oklch(0.98 0 0);
+  /*
+   * Was oklch(0.62 0.24 25) = #f51d31, where #f8f8f8 text measured 3.87:1 at 12px
+   * (axe color-contrast on /dashboard/targets/[id]). Darkened to #d02c2e = 4.85:1.
+   * `--color-destructive` itself is left alone: it is the text/tint colour, and
+   * darkening it would push `text-destructive` below 4.5:1 on dark cards.
+   */
+  --color-destructive-solid: oklch(0.56 0.2 26);
   --color-border: oklch(0.28 0.01 264);
   --color-input: oklch(0.28 0.01 264);
-  --color-ring: oklch(0.72 0.16 218);
+  --color-ring: #f5b84b;
   --color-success: oklch(0.7 0.14 164);
   --color-warning: oklch(0.77 0.14 78);
   --color-critical: oklch(0.7 0.19 25);
