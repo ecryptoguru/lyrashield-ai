@@ -1,29 +1,76 @@
 #!/bin/sh
 set -eu
 
+config=${LYRASHIELD_WORKER_RUNTIME_CONFIG:-/etc/lyrashield/worker-runtime.conf}
+environment_file=${LYRASHIELD_WORKER_ENV_FILE:-/etc/lyrashield/worker.env}
+host_assets_dir=${LYRASHIELD_WORKER_HOST_ASSETS_DIR:-/opt/lyrashield-worker-host}
+container=lyrashield-worker
+
+# The one-shot preflight and Redis evals must see the same environment the
+# live worker gets. Prefer the host copy installed by an earlier promotion;
+# until the first promotion ships it, the workflow embeds the library in the
+# run-command payload.
+if [ -r "$host_assets_dir/worker-env.sh" ]; then
+  worker_env_lib="$host_assets_dir/worker-env.sh"
+elif [ -n "${LYRASHIELD_WORKER_ENV_LIB:-}" ] && [ -r "$LYRASHIELD_WORKER_ENV_LIB" ]; then
+  worker_env_lib=$LYRASHIELD_WORKER_ENV_LIB
+else
+  echo "worker-env.sh is required for worker environment parity" >&2
+  exit 1
+fi
+# shellcheck disable=SC1090
+. "$worker_env_lib"
+
+worker_image_from_config() {
+  image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$config" | head -n 1)
+  case "$image" in
+    *@sha256:????????????????????????????????????????????????????????????????) ;;
+    *)
+      echo "Worker image must be pinned by sha256 digest" >&2
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$image"
+}
+
+# Runs a one-shot worker-image container with the full worker environment: the
+# environment file plus the same --env set the live worker gets. The docker
+# socket and the shared root stay unmounted; the container only reaches
+# Postgres and Redis.
+worker_oneshot() {
+  code=$1
+  shift
+  image=$(worker_image_from_config)
+  env_args=$(lyrashield_worker_env_args "$config" "$environment_file")
+  # Intentional word splitting: worker-env.sh emits one `--env` argument pair
+  # per line and every emitted value is whitespace-free.
+  # shellcheck disable=SC2086
+  docker run --rm --network bridge \
+    --env-file "$environment_file" \
+    $env_args \
+    -w /app/apps/worker "$image" \
+    node --import tsx --input-type=module -e "$code" "$@"
+}
+
+queue_count='const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scanQueue.getJobCounts("wait","active","delayed","prioritized"),webhookQueue.getJobCounts("wait","active","delayed","prioritized")]); console.log(JSON.stringify({nonterminal,scan,webhook})); } finally { await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); }'
+queue_expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
+
 assert_empty_queues() {
-  container=lyrashield-worker
-  preflight=$(docker exec -w /app/apps/worker "$container" node --import tsx --input-type=module -e 'const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scanQueue.getJobCounts("wait","active","delayed","prioritized"),webhookQueue.getJobCounts("wait","active","delayed","prioritized")]); console.log(JSON.stringify({nonterminal,scan,webhook})); } finally { await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); }')
-  expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
-  [ "$preflight" = "$expected" ] || {
+  preflight=$(docker exec -w /app/apps/worker "$container" node --import tsx --input-type=module -e "$queue_count")
+  [ "$preflight" = "$queue_expected" ] || {
     echo "Worker promotion requires empty scan and webhook queues" >&2
     exit 1
   }
 }
 
 assert_empty_queues_with_refreshed_environment() {
-  config=${LYRASHIELD_WORKER_RUNTIME_CONFIG:-/etc/lyrashield/worker-runtime.conf}
-  environment_file=${LYRASHIELD_WORKER_ENV_FILE:-/etc/lyrashield/worker.env}
-  image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$config" | head -n 1)
-  case "$image" in
-    *@sha256:????????????????????????????????????????????????????????????????) ;;
-    *) echo "Worker preflight requires a digest-pinned worker image" >&2; exit 1 ;;
-  esac
   # Refresh the one-shot preflight environment without touching the active worker.
   systemctl restart lyrashield-worker-secrets.service
-  preflight=$(docker run --rm --network bridge --env-file "$environment_file" --env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com --env LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 -w /app/apps/worker "$image" node --import tsx --input-type=module -e 'const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scanQueue.getJobCounts("wait","active","delayed","prioritized"),webhookQueue.getJobCounts("wait","active","delayed","prioritized")]); console.log(JSON.stringify({nonterminal,scan,webhook})); } finally { await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); }')
-  expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
-  [ "$preflight" = "$expected" ] || {
+  if ! preflight=$(worker_oneshot "$queue_count"); then
+    echo "Worker promotion requires empty scan and webhook queues" >&2
+    exit 1
+  fi
+  [ "$preflight" = "$queue_expected" ] || {
     echo "Worker promotion requires empty scan and webhook queues" >&2
     exit 1
   }
@@ -37,16 +84,13 @@ fi
 target=${1:?worker image digest reference is required}
 expected_app=${2:?product revision is required}
 expected_engine=${3:?engine revision is required}
-config=${LYRASHIELD_WORKER_RUNTIME_CONFIG:-/etc/lyrashield/worker-runtime.conf}
-environment_file=${LYRASHIELD_WORKER_ENV_FILE:-/etc/lyrashield/worker.env}
-container=lyrashield-worker
 timer=lyrashield-worker-egress-refresh.timer
 service=lyrashield-worker.service
 promotion_state_dir=${LYRASHIELD_WORKER_PROMOTION_STATE_DIR:-/var/lib/lyrashield}
 host_libexec_dir=${LYRASHIELD_WORKER_HOST_LIBEXEC_DIR:-/usr/local/libexec}
 systemd_dir=${LYRASHIELD_WORKER_SYSTEMD_DIR:-/etc/systemd/system}
 
-for directory in "$promotion_state_dir" "$host_libexec_dir" "$systemd_dir"; do
+for directory in "$promotion_state_dir" "$host_libexec_dir" "$systemd_dir" "$host_assets_dir"; do
   case "$directory" in
     /*) ;;
     *) echo "Worker promotion paths must be absolute" >&2; exit 1 ;;
@@ -126,6 +170,14 @@ restore_host_assets() {
   install -m 0755 "$host_backup/refresh-secrets.sh" "$host_libexec_dir/lyrashield-refresh-secrets" || restore_failed=1
   install -m 0755 "$host_backup/refresh-egress.sh" "$host_libexec_dir/lyrashield-refresh-egress" || restore_failed=1
   install -m 0755 "$host_backup/capture-stop-provenance.sh" "$host_libexec_dir/lyrashield-capture-worker-stop-provenance" || restore_failed=1
+  # worker-env.sh is absent from backups taken before it shipped; remove the
+  # installed copy in that case so the old run-worker.sh never sees a partial
+  # library pair.
+  if [ -f "$host_backup/worker-env.sh" ]; then
+    install -m 0644 "$host_backup/worker-env.sh" "$host_assets_dir/worker-env.sh" || restore_failed=1
+  else
+    rm -f "$host_assets_dir/worker-env.sh" || restore_failed=1
+  fi
   install -m 0644 "$host_backup/lyrashield-worker.service" "$systemd_dir/lyrashield-worker.service" || restore_failed=1
   install -m 0644 "$host_backup/lyrashield-worker-secrets.service" "$systemd_dir/lyrashield-worker-secrets.service" || restore_failed=1
   install -m 0644 "$host_backup/lyrashield-worker-egress.service" "$systemd_dir/lyrashield-worker-egress.service" || restore_failed=1
@@ -250,6 +302,7 @@ docker rm "$asset_container" >/dev/null
 asset_container=
 for asset in \
   run-worker.sh \
+  worker-env.sh \
   refresh-secrets.sh \
   refresh-egress.sh \
   capture-stop-provenance.sh \
@@ -270,6 +323,10 @@ cp -p "$host_libexec_dir/lyrashield-run-worker" "$host_backup/run-worker.sh"
 cp -p "$host_libexec_dir/lyrashield-refresh-secrets" "$host_backup/refresh-secrets.sh"
 cp -p "$host_libexec_dir/lyrashield-refresh-egress" "$host_backup/refresh-egress.sh"
 cp -p "$host_libexec_dir/lyrashield-capture-worker-stop-provenance" "$host_backup/capture-stop-provenance.sh"
+# worker-env.sh has no host copy before the first promotion that ships it.
+if [ -f "$host_assets_dir/worker-env.sh" ]; then
+  cp -p "$host_assets_dir/worker-env.sh" "$host_backup/worker-env.sh"
+fi
 cp -p "$systemd_dir/lyrashield-worker.service" "$host_backup/lyrashield-worker.service"
 cp -p "$systemd_dir/lyrashield-worker-secrets.service" "$host_backup/lyrashield-worker-secrets.service"
 cp -p "$systemd_dir/lyrashield-worker-egress.service" "$host_backup/lyrashield-worker-egress.service"
@@ -277,6 +334,8 @@ cp -p "$systemd_dir/lyrashield-worker-egress-refresh.service" "$host_backup/lyra
 cp -p "$systemd_dir/lyrashield-worker-egress-refresh.timer" "$host_backup/lyrashield-worker-egress-refresh.timer"
 host_assets_changed=1
 install -m 0755 "$asset_stage/run-worker.sh" "$host_libexec_dir/lyrashield-run-worker"
+install -d -m 0755 "$host_assets_dir"
+install -m 0644 "$asset_stage/worker-env.sh" "$host_assets_dir/worker-env.sh"
 install -m 0755 "$asset_stage/refresh-secrets.sh" "$host_libexec_dir/lyrashield-refresh-secrets"
 install -m 0755 "$asset_stage/refresh-egress.sh" "$host_libexec_dir/lyrashield-refresh-egress"
 install -m 0755 "$asset_stage/capture-stop-provenance.sh" "$host_libexec_dir/lyrashield-capture-worker-stop-provenance"

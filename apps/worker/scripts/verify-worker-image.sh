@@ -47,6 +47,7 @@ docker run --rm --entrypoint sh "$image" -c '
 
   for asset in \
     run-worker.sh \
+    worker-env.sh \
     refresh-secrets.sh \
     refresh-egress.sh \
     capture-stop-provenance.sh \

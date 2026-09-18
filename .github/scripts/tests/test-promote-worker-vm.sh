@@ -20,9 +20,10 @@ engine_revision=$(printf 'c%.0s' {1..40})
 
 write_mocks() {
   local case_dir=$1
-  mkdir -p "$case_dir/bin" "$case_dir/image-assets" "$case_dir/host/libexec" "$case_dir/host/systemd" "$case_dir/promotion"
+  mkdir -p "$case_dir/bin" "$case_dir/image-assets" "$case_dir/host/libexec" "$case_dir/host/systemd" "$case_dir/host/assets" "$case_dir/promotion"
   for asset in \
     run-worker.sh \
+    worker-env.sh \
     refresh-secrets.sh \
     refresh-egress.sh \
     capture-stop-provenance.sh \
@@ -212,6 +213,8 @@ run_case() {
       LYRASHIELD_WORKER_ENV_FILE="$case_dir/worker.env" \
       LYRASHIELD_WORKER_PROMOTION_STATE_DIR="$case_dir/promotion" \
       LYRASHIELD_WORKER_HOST_LIBEXEC_DIR="$case_dir/host/libexec" \
+      LYRASHIELD_WORKER_HOST_ASSETS_DIR="$case_dir/host/assets" \
+      LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
       LYRASHIELD_WORKER_SYSTEMD_DIR="$case_dir/host/systemd" \
       sh "$script" "$target" "$app_revision" "$engine_revision" 2>&1
   )
@@ -237,6 +240,7 @@ run_case() {
   grep -Fq 'image prune --all --force' "$case_dir/docker.log"
   if [ "$expected" = success ]; then
     [ "$(grep -Fxc 'restart lyrashield-worker.service' "$case_dir/systemctl.log")" -eq 2 ]
+    [ -f "$case_dir/host/assets/worker-env.sh" ]
   fi
   if [ -n "$replacement_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
