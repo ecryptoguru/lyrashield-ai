@@ -1,7 +1,8 @@
 import type { Metadata } from "next"
+import { cache } from "react"
 import { getScanWithEvents, getScanResultManifestDetail, prisma } from "@lyrashield/db"
 import { defaultStandards, renderStandards } from "@lyrashield/security"
-import { redirect } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { Radar } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
@@ -9,8 +10,29 @@ import { PageHeader } from "@/components/page-header"
 import { RUN_SINGULAR } from "@/lib/terminology"
 import { ScanDetailClient } from "./scan-detail-client"
 
-export const metadata: Metadata = {
-  title: "Scan",
+/** Shared by generateMetadata and the page so a dead link costs one lookup. */
+const getScopedScan = cache((id: string, workspaceId: string) => getScanWithEvents(id, workspaceId))
+
+/**
+ * The document title has to be decided here, not by `notFound()`: the dashboard
+ * renders inside `(dashboard)/loading.tsx`, so the 200 shell (and this title)
+ * stream before the page resolves. Without this, a dead scan link keeps the
+ * resource's own title while the body shows the not-found card.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}): Promise<Metadata> {
+  const session = await getCachedSession()
+  if (!session) return { title: "Scan" }
+
+  const { id } = await params
+  const workspaceId = await getCachedWorkspaceId(session.userId)
+  if (!workspaceId) return { title: "Scan" }
+
+  const scan = await getScopedScan(id, workspaceId)
+  return { title: scan ? "Scan" : "Scan not found" }
 }
 
 export default async function ScanDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,17 +54,8 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     )
   }
 
-  const scan = await getScanWithEvents(id, workspaceId)
-  if (!scan) {
-    return (
-      <div className="rounded-lg border border-dashed p-12 text-center">
-        <h2 className="mb-2 text-lg font-semibold">Scan not found</h2>
-        <p className="text-muted-foreground text-sm">
-          This scan may have been deleted or you don&apos;t have access to it.
-        </p>
-      </div>
-    )
-  }
+  const scan = await getScopedScan(id, workspaceId)
+  if (!scan) notFound()
 
   // One parallel batch for the SSR payload: findings bounded to the same 100
   // the client table pages, the one-time manifest detail, and the scorecard

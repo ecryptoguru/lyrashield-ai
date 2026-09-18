@@ -125,7 +125,10 @@ export default async function OnboardingPage({
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center px-4 py-8">
+    <main
+      id="main-content"
+      className="relative flex min-h-screen flex-col items-center justify-center px-4 py-8"
+    >
       <SignOutButton />
       <ThemeToggle className="absolute top-4 right-4 z-10" />
       <ReferralClaim />
@@ -157,6 +160,6 @@ export default async function OnboardingPage({
         oauthReturnState={oauthReturnQuery ? params.oauth_return : undefined}
       />
       <InvitationAcceptBridge />
-    </div>
+    </main>
   )
 }

@@ -61,7 +61,10 @@ export default async function LiteCheckPage({ params }: { params: Promise<{ toke
   const scanUrl = new URL(`/scan${referral}`, marketingOrigin()).toString()
 
   return (
-    <main className="gradient-hero bg-background text-foreground min-h-screen px-4 py-6 sm:px-6 sm:py-12">
+    <main
+      id="main-content"
+      className="gradient-hero bg-background text-foreground min-h-screen px-4 py-6 sm:px-6 sm:py-12"
+    >
       <div className="mx-auto max-w-5xl">
         <header className="mb-8 flex min-h-12 items-center justify-between gap-4">
           <Link

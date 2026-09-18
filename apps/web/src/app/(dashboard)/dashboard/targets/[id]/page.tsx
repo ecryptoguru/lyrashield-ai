@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { cache } from "react"
 import { withWorkspaceRLS } from "@lyrashield/db"
 import { redirect, notFound } from "next/navigation"
 import Link from "next/link"
@@ -24,19 +25,9 @@ function scanStatusLabel(status: string): string {
   return getScanPresentation(status, {}).label
 }
 
-export const metadata: Metadata = {
-  title: "Target",
-}
-
-export default async function TargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await getCachedSession()
-  if (!session) redirect("/sign-in")
-
-  const { id } = await params
-  const workspaceId = await getCachedWorkspaceId(session.userId)
-  if (!workspaceId) notFound()
-
-  const target = await withWorkspaceRLS(workspaceId, (tx) =>
+/** Shared by generateMetadata and the page so a dead link costs one lookup. */
+const getScopedTarget = cache((id: string, workspaceId: string, userId: string) =>
+  withWorkspaceRLS(workspaceId, (tx) =>
     tx.target.findFirst({
       where: {
         id,
@@ -47,7 +38,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         workspace: {
           select: {
             members: {
-              where: { userId: session.userId, status: "active" },
+              where: { userId, status: "active" },
               take: 1,
               select: { role: true },
             },
@@ -76,7 +67,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
             shareEligible: true,
             expiresAt: true,
             shares: {
-              where: { revokedAt: null, createdById: session.userId },
+              where: { revokedAt: null, createdById: userId },
               orderBy: { createdAt: "desc" },
               take: 1,
               select: {
@@ -96,6 +87,39 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
       },
     })
   )
+)
+
+/**
+ * The document title has to be decided here, not by `notFound()`: the dashboard
+ * renders inside `(dashboard)/loading.tsx`, so the 200 shell (and this title)
+ * stream before the page resolves. Without this, a dead target link keeps the
+ * resource's own title while the body shows the not-found card.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}): Promise<Metadata> {
+  const session = await getCachedSession()
+  if (!session) return { title: "Target" }
+
+  const { id } = await params
+  const workspaceId = await getCachedWorkspaceId(session.userId)
+  if (!workspaceId) return { title: "Target" }
+
+  const target = await getScopedTarget(id, workspaceId, session.userId)
+  return { title: target?.workspace.members[0] ? "Target" : "Target not found" }
+}
+
+export default async function TargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const session = await getCachedSession()
+  if (!session) redirect("/sign-in")
+
+  const { id } = await params
+  const workspaceId = await getCachedWorkspaceId(session.userId)
+  if (!workspaceId) notFound()
+
+  const target = await getScopedTarget(id, workspaceId, session.userId)
 
   if (!target || !target.workspace.members[0]) {
     notFound()
