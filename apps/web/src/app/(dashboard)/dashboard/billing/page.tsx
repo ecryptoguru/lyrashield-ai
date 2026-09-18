@@ -133,7 +133,7 @@ export default async function BillingPage({
         {/* Plan Overview */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
+            <CardTitle as="h2" className="flex items-center justify-between">
               <span>Current Plan</span>
               {isTrial && <Badge variant="muted">Trial</Badge>}
               {billingAccount?.status === "canceled" && <Badge variant="danger">Canceled</Badge>}
@@ -188,7 +188,7 @@ export default async function BillingPage({
         {(isTrial || (trialState.isExpired && plan === "FREE")) && (
           <Card>
             <CardHeader>
-              <CardTitle>Trial Status</CardTitle>
+              <CardTitle as="h2">Trial Status</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -227,7 +227,7 @@ export default async function BillingPage({
         {/* Usage */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle as="h2" className="flex items-center gap-2">
               <Zap className="h-5 w-5" />
               Agent-Minute Usage
             </CardTitle>
@@ -297,7 +297,7 @@ export default async function BillingPage({
         {/* Minute Packs */}
         <Card>
           <CardHeader>
-            <CardTitle>Minute Packs</CardTitle>
+            <CardTitle as="h2">Minute Packs</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {balance.packs.length === 0 ? (
@@ -337,7 +337,7 @@ export default async function BillingPage({
         {isLaunchAssurance && !isComplimentary && canManageBilling && (
           <Card>
             <CardHeader>
-              <CardTitle>Overage Spend Limit</CardTitle>
+              <CardTitle as="h2">Overage Spend Limit</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
@@ -359,7 +359,7 @@ export default async function BillingPage({
         {canManageBilling && plan !== "FREE" && billingAccount && !isComplimentary && (
           <Card>
             <CardHeader>
-              <CardTitle>Manage Subscription</CardTitle>
+              <CardTitle as="h2">Manage Subscription</CardTitle>
             </CardHeader>
             <CardContent>
               <Link

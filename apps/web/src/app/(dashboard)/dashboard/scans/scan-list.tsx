@@ -68,7 +68,7 @@ export function ScanList({
             targetFilter || stateFilter !== "ALL"
               ? "Try a different target or state filter."
               : hasTargets
-                ? `Start your first ${RUN_SINGULAR.toLowerCase()} with "New ${RUN_SINGULAR}".`
+                ? `A ${RUN_SINGULAR.toLowerCase()} checks one target for security findings and records what it could and could not prove. Choose a target to start.`
                 : `Add a ${TARGET_SINGULAR.toLowerCase()} first, then you can run ${RUN_PLURAL.toLowerCase()} against it.`
           }
           action={

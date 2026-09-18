@@ -153,7 +153,8 @@ export function ReportCreateForm({
     <Card className="mb-5 p-5 sm:p-6">
       <div className="flex flex-col gap-5">
         <div>
-          <h3 className="font-semibold">Generate an assurance report</h3>
+          {/* Page-level section under the /dashboard/reports h1 — an h3 here skipped a level. */}
+          <h2 className="font-semibold">Generate an assurance report</h2>
           <p className="text-muted-foreground mt-1 text-xs">
             Create an immutable, visual snapshot tailored to its reader and retained scan scope.
           </p>
@@ -278,7 +279,7 @@ export function ReportCard({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
-            <h3 className="truncate font-medium" title={report.title}>
+            <h2 className="truncate font-medium" title={report.title}>
               <a
                 href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}`}
                 target="_blank"
@@ -288,7 +289,7 @@ export function ReportCard({
               >
                 {report.title}
               </a>
-            </h3>
+            </h2>
             <Badge variant="info">{REPORT_TYPE_LABEL[report.type] ?? report.type}</Badge>
             <Badge
               variant={
@@ -356,7 +357,7 @@ export function ReportsEmptyState() {
       description="Generate a security report from a completed scan to share with stakeholders."
       action={
         <Link href="/dashboard/scans" className={buttonVariants()}>
-          Start a review
+          Start a scan
         </Link>
       }
     />

@@ -184,7 +184,9 @@ export function AssuranceInventory({
           {canManage && (
             <Button
               type="button"
-              variant="outline"
+              // The first outstanding step owns the surface's single primary
+              // action (DESIGN.md): with no profile submitted, this is it.
+              variant={profile ? "outline" : "default"}
               size="sm"
               onClick={() => {
                 setError(null)
@@ -273,7 +275,9 @@ export function AssuranceInventory({
           {canManage && (
             <Button
               type="button"
-              variant="outline"
+              // Second step: primary only once the profile exists and the
+              // threat model is still outstanding.
+              variant={profile && !threatModel ? "default" : "outline"}
               size="sm"
               onClick={() => {
                 setError(null)

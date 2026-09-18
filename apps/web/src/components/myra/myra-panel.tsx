@@ -126,7 +126,7 @@ export function MyraPanel({
           <Button
             size="icon"
             variant="ghost"
-            className="hidden size-9 md:inline-flex"
+            className="hidden size-9 lg:inline-flex"
             aria-label={collapsed ? "Expand Myra panel" : "Collapse Myra panel"}
             onClick={() => setCollapsed((c) => !c)}
           >
@@ -139,7 +139,7 @@ export function MyraPanel({
           <Button
             size="icon"
             variant="ghost"
-            className="size-9 md:hidden"
+            className="size-9 lg:hidden"
             aria-label="Close Myra"
             onClick={closeMobile}
           >
@@ -375,7 +375,7 @@ export function MyraPanel({
         aria-expanded={mobileOpen}
         aria-controls="myra-dash-panel"
         onClick={() => setMobileOpen(true)}
-        className="fixed right-4 bottom-20 z-40 gap-1.5 shadow-md md:hidden"
+        className="fixed right-4 bottom-20 z-40 gap-1.5 shadow-md lg:hidden"
         style={{ marginBottom: "env(safe-area-inset-bottom)" }}
       >
         <MessageCircleQuestion className="size-4" aria-hidden="true" />
@@ -384,8 +384,8 @@ export function MyraPanel({
 
       {/*
         One DOM tree, two presentations:
-          <md  → hidden until the launcher opens it as a full-height fixed sheet
-          md+  → docked beside content; collapses to a slim rail, never a bubble
+          <lg  → hidden until the launcher opens it as a full-height fixed sheet
+          lg+  → docked beside content; collapses to a slim rail, never a bubble
       */}
       <aside
         id="myra-dash-panel"
@@ -393,8 +393,8 @@ export function MyraPanel({
         className={cn(
           "bg-background flex-col",
           mobileOpen ? "fixed inset-0 z-50 flex" : "hidden",
-          "md:sticky md:top-0 md:z-auto md:flex md:h-svh md:shrink-0 md:self-start md:border-l",
-          collapsed ? "md:w-14" : "md:w-88 xl:w-96"
+          "lg:sticky lg:top-0 lg:z-auto lg:flex lg:h-svh lg:shrink-0 lg:self-start lg:border-l",
+          collapsed ? "lg:w-14" : "lg:w-88 xl:w-96"
         )}
       >
         {collapsed && !mobileOpen ? (

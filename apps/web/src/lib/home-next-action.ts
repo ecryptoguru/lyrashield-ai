@@ -57,7 +57,7 @@ interface HomeDecision {
  * Priority order:
  * 1. active scan      -> view its progress
  * 2. no target        -> add the first target
- * 3. no evaluated run -> run the first review
+ * 3. no evaluated run -> run the first scan
  * 4. blockers         -> review the highest-priority finding
  * 5. gate not READY   -> strengthen the weakest evidence (missing coverage,
  *                        expired assessment, revision mismatch, uncertainty)
@@ -102,7 +102,7 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
     const href = scanComposerHref(recommended)
     const action: HomeNextAction = {
       eyebrow: "Get started",
-      title: "Run your first review",
+      title: "Run your first scan",
       description:
         "Start a scan to capture your first evidence record. Deterministic checks and, where applicable, an AI-assisted review inspect the target for you.",
       href,
@@ -182,7 +182,7 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
     const href = scanComposerHref(needingEvidence?.targetId ?? null)
     const action: HomeNextAction = {
       eyebrow: "Next step",
-      title: "Run a review to strengthen evidence",
+      title: "Run a scan to strengthen evidence",
       description:
         "At least one target lacks usable, current review evidence, so no launch decision is possible yet. Historical reports remain available.",
       href,

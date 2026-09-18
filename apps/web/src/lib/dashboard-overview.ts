@@ -182,7 +182,7 @@ export function applyTargetCoverageToVerdict(
     }
     return {
       verdict: "NOT_EVALUATED",
-      coverageCondition: `Run a review for every target before a launch decision: ${parts.join("; ")}.`,
+      coverageCondition: `Run a scan for every target before a launch decision: ${parts.join("; ")}.`,
     }
   }
   return { verdict, coverageCondition: null }

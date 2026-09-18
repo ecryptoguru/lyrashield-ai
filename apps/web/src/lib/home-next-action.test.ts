@@ -58,7 +58,7 @@ describe("deriveHomeDecision — one canonical action", () => {
 
   it("asks for a first scan when a target exists but nothing has been evaluated", () => {
     const decision = deriveHomeDecision(base)
-    expect(decision.action?.title).toBe("Run your first review")
+    expect(decision.action?.title).toBe("Run your first scan")
     expect(decision.action?.cta).toBe("Start a scan")
     expect(decision.primaryAction).toEqual({
       href: "/dashboard/scans?new=1",

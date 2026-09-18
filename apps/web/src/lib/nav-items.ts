@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Shield,
   CreditCard,
+  Bot,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -149,6 +150,17 @@ const BILLING_BASE: NavItem = {
 
 /** Secondary / Workspace destinations that are always present. */
 const WORKSPACE_NAV_ITEMS: NavItem[] = [
+  // UF-26: Launch Readiness (the release verdict) and Projects (a grouping of
+  // targets) were fully built but reachable only by URL — nothing in the shell
+  // linked to either, and neither had an active-item cue. They are work
+  // surfaces, so they lead the Workspace group.
+  {
+    href: "/dashboard/launch-readiness",
+    label: "Launch Readiness",
+    shortLabel: "Readiness",
+    icon: ShieldCheck,
+  },
+  { href: "/dashboard/projects", label: "Projects", shortLabel: "Projects", icon: Crosshair },
   // Deep Review v16 3.2: Fixes is not an independent destination. Proposed
   // fixes are the "Proposed fixes" tab of Findings (/dashboard/findings?tab=fixes);
   // the /dashboard/fixes route is a permanent redirect kept for old links and
@@ -214,6 +226,10 @@ export const NAV_ITEMS: NavItem[] = resolveNavItems({ pendingApprovals: 0 })
 /**
  * All navigation destinations, for page-title lookup. Includes Activity
  * regardless of pending count because its route is reachable by URL.
+ *
+ * This list is also the title allowlist: it may name routes that are not nav
+ * destinations (they are reachable by URL or from another page), but every
+ * route that needs a real screen name must appear here — see `resolvePageTitle`.
  */
 export const NAV_TITLE_ITEMS: NavItem[] = [
   ...LIFECYCLE_NAV_ITEMS,
@@ -221,18 +237,53 @@ export const NAV_TITLE_ITEMS: NavItem[] = [
   PLATFORM_ADMIN_BASE,
   BILLING_BASE,
   EVIDENCE_VAULT_BASE,
+  // Launch Readiness and Projects arrive via ...WORKSPACE_NAV_ITEMS (UF-26).
+  // UF-25: Coding Agents and Integrations are real destinations (reachable from
+  // the Connections page and by URL) but are not nav entries. Without a title
+  // entry the mobile header fell through to the Home label, so the screen was
+  // named "Home" while its own `<h1>` read "Coding Agents" / "Integrations".
+  { href: "/dashboard/agents", label: "Coding Agents", shortLabel: "Agents", icon: Bot },
   {
-    href: "/dashboard/launch-readiness",
-    label: "Launch Readiness",
-    shortLabel: "Readiness",
-    icon: ShieldCheck,
+    href: "/dashboard/integrations",
+    label: "Integrations",
+    shortLabel: "Integrations",
+    icon: Plug,
   },
-  { href: "/dashboard/projects", label: "Projects", shortLabel: "Projects", icon: Crosshair },
   // Compatibility route: a permanent redirect to the Findings "Proposed fixes"
   // tab. Kept here so the mobile page header resolves its title while redirecting.
   { href: "/dashboard/fixes", label: "Proposed fixes", shortLabel: "Fixes", icon: Bug },
   ...WORKSPACE_NAV_ITEMS,
 ]
+
+/**
+ * Shown when the current route has no explicit title entry. A neutral product
+ * name is the honest answer for an unlisted route — never another screen's
+ * label (UF-25: every unlisted `/dashboard/*` route titled itself "Home").
+ */
+export const PAGE_TITLE_FALLBACK = "LyraShield AI"
+
+/**
+ * Resolve the screen name for a pathname from `NAV_TITLE_ITEMS`.
+ *
+ * Matching is segment-boundary only: an entry claims a pathname when it equals
+ * its href (a trailing slash is ignored) or continues it at a segment boundary
+ * (`${href}/…`), and the longest match wins so `/dashboard/targets` beats
+ * `/dashboard`. The dashboard root is the single exception — it is the index
+ * route, so it claims only `/dashboard` and `/dashboard/`. Without that
+ * exception `/dashboard` prefix-matched every child route and any unlisted
+ * `/dashboard/*` page titled itself "Home".
+ *
+ * Query strings are not part of a pathname; callers pass `usePathname()`.
+ */
+export function resolvePageTitle(pathname: string): string {
+  const normalized = pathname.endsWith("/") ? pathname.slice(0, -1) : pathname
+  const exact = NAV_TITLE_ITEMS.find((item) => item.href === normalized)
+  if (exact) return exact.label
+  const match = NAV_TITLE_ITEMS.filter(
+    (item) => item.href !== "/dashboard" && normalized.startsWith(`${item.href}/`)
+  ).sort((a, b) => b.href.length - a.href.length)[0]
+  return match?.label ?? PAGE_TITLE_FALLBACK
+}
 
 /** Desktop sidebar primary group (lifecycle only). */
 export const PRIMARY_NAV_ITEMS: NavItem[] = LIFECYCLE_NAV_ITEMS
