@@ -327,7 +327,11 @@ describe("site gate transport/origin probes", () => {
         .join("")}</urlset>`,
     })
     for (const route of routes) {
-      store.set(route, { status: 200, body: pageOverrides.get(route) ?? healthyPage(route) })
+      const defaultBody =
+        route === "/security-reporting"
+          ? healthyPage(route, '<a href="mailto:security@lyrashieldai.com">Report</a>')
+          : healthyPage(route)
+      store.set(route, { status: 200, body: pageOverrides.get(route) ?? defaultBody })
     }
     store.set("/robots.txt", {
       status: 200,
@@ -341,7 +345,10 @@ describe("site gate transport/origin probes", () => {
         .join("\n"),
     })
     store.set("/rss.xml", { status: 200, body: "<rss></rss>" })
-    store.set("/.well-known/security.txt", { status: 200, body: "Expires: 2030-01-01" })
+    store.set("/.well-known/security.txt", {
+      status: 200,
+      body: "Contact: mailto:security@lyrashieldai.com\nExpires: 2030-01-01T00:00:00Z",
+    })
     store.set("/og/page.png", { status: 200, body: "png-bytes" })
 
     const requests: string[] = []
@@ -488,13 +495,28 @@ describe("site gate transport/origin probes", () => {
   it("fails security.txt without a valid future Expires field", async () => {
     for (const body of [
       "Contact: mailto:x@example.com",
-      "Expires: 2001-01-01T00:00:00.000Z",
-      "Expires: eventually",
+      "Contact: mailto:x@example.com\nExpires: 2001-01-01T00:00:00.000Z",
+      "Contact: mailto:x@example.com\nExpires: eventually",
+      "Contact: mailto:x@example.com\nExpires: 2030-01-01",
+      "Contact: mailto:x@example.com\nExpires: 2030-01-01T00:00:00Z\nExpires: 2031-01-01T00:00:00Z",
     ]) {
       const { store, fetchImpl } = buildFakeSite()
       store.set("/.well-known/security.txt", { status: 200, body })
       const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
       expect(rules(result), `body: ${body}`).toContain("security-txt-expires")
+    }
+  })
+
+  it("fails security.txt without a valid Contact URI", async () => {
+    for (const body of [
+      "Expires: 2030-01-01T00:00:00Z",
+      "Contact: not-an-address\nExpires: 2030-01-01T00:00:00Z",
+      "Contact: http://lyrashieldai.com/security-reporting\nExpires: 2030-01-01T00:00:00Z",
+    ]) {
+      const { store, fetchImpl } = buildFakeSite()
+      store.set("/.well-known/security.txt", { status: 200, body })
+      const result = await crawlBuiltSite({ origin: LOCAL, fetchImpl })
+      expect(rules(result), `body: ${body}`).toContain("security-txt-contact")
     }
   })
 

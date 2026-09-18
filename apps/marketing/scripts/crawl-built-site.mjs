@@ -77,6 +77,8 @@ const SITE_GRAPH_TYPES = new Set(["Organization", "WebSite"])
 
 const BLOG_POST_PATH = /^\/blog\/[^/]+$/
 const BLOG_PAGINATION_PATH = /^\/blog\/[1-9]\d*$/
+const RFC3339_DATE_TIME =
+  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 
 /**
  * Routes the astro.config.mjs sitemap filter deliberately excludes (noindex
@@ -365,11 +367,34 @@ export function siteViolations({
   if (securityTxt === null) {
     add("security-txt-missing", "/.well-known/security.txt", "did not return 200")
   } else {
-    // RFC 9116 requires Expires — without the check an expired file still
-    // passes the existence test while telling reporters the policy is stale.
-    const expires = securityTxt.match(/^Expires:\s*(\S+)\s*$/im)?.[1]
-    if (!expires) {
-      add("security-txt-expires", "/.well-known/security.txt", "missing Expires field")
+    const contacts = [...securityTxt.matchAll(/^Contact:\s*(\S+)\s*$/gim)].map(
+      (match) => match[1] ?? ""
+    )
+    const validContact = contacts.some((contact) => {
+      try {
+        const protocol = new URL(contact).protocol
+        return protocol === "mailto:" || protocol === "tel:" || protocol === "https:"
+      } catch {
+        return false
+      }
+    })
+    if (!validContact) {
+      add("security-txt-contact", "/.well-known/security.txt", "missing valid Contact URI")
+    }
+
+    // RFC 9116 requires exactly one RFC 3339 date-time Expires field.
+    const expiresFields = [...securityTxt.matchAll(/^Expires:\s*(\S+)\s*$/gim)].map(
+      (match) => match[1] ?? ""
+    )
+    const expires = expiresFields[0]
+    if (expiresFields.length !== 1 || !expires) {
+      add(
+        "security-txt-expires",
+        "/.well-known/security.txt",
+        `expected one Expires field, found ${expiresFields.length}`
+      )
+    } else if (!RFC3339_DATE_TIME.test(expires)) {
+      add("security-txt-expires", "/.well-known/security.txt", `not RFC 3339 date-time: ${expires}`)
     } else {
       const parsed = Date.parse(expires)
       if (Number.isNaN(parsed)) {
@@ -666,7 +691,12 @@ export const BASELINE_NOTES = {
   },
   "security-txt-expires": {
     reason:
-      "/.well-known/security.txt has no parseable future Expires field. RFC 9116 requires one; an expired file claims a stale disclosure policy.",
+      "/.well-known/security.txt must have exactly one future RFC 3339 date-time Expires field. A missing, malformed, duplicate or expired value makes the disclosure policy stale or invalid.",
+    wave: null,
+  },
+  "security-txt-contact": {
+    reason:
+      "/.well-known/security.txt has no valid Contact URI. RFC 9116 requires at least one usable reporting method.",
     wave: null,
   },
   "og-image-unreachable": {
