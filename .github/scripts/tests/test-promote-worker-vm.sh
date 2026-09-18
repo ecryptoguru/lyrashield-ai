@@ -49,6 +49,7 @@ write_mocks() {
   cat > "$case_dir/bin/systemctl" <<'MOCK'
 #!/bin/sh
 set -eu
+printf '%s\n' "$*" >> "$MOCK_SYSTEMCTL_LOG"
 command=$1
 shift
 [ "${1:-}" != "--quiet" ] || shift
@@ -179,6 +180,7 @@ run_case() {
   printf '%s' "$timer_enabled" > "$case_dir/timer-enabled"
   printf '%s' "$existing_stop" > "$case_dir/admission-stop"
   : > "$case_dir/docker.log"
+  : > "$case_dir/systemctl.log"
   printf 'LYRASHIELD_WORKER_IMAGE=%s\nGHCR_USERNAME=test-user\n' "$target" > "$case_dir/runtime.conf"
   printf 'GHCR_TOKEN=test-token\n' > "$case_dir/worker.env"
 
@@ -194,6 +196,7 @@ run_case() {
       MOCK_TIMER_ENABLED="$case_dir/timer-enabled" \
       MOCK_ADMISSION_STOP="$case_dir/admission-stop" \
       MOCK_DOCKER_LOG="$case_dir/docker.log" \
+      MOCK_SYSTEMCTL_LOG="$case_dir/systemctl.log" \
       MOCK_IMAGE_ASSETS="$case_dir/image-assets" \
       MOCK_FREE_BYTES="$free_bytes" \
       MOCK_FAIL_IMAGE_CHECK="$fail_image_check" \
@@ -225,6 +228,9 @@ run_case() {
     fi
   fi
   grep -Fq 'image prune --all --force' "$case_dir/docker.log"
+  if [ "$expected" = success ]; then
+    [ "$(grep -Fxc 'restart lyrashield-worker.service' "$case_dir/systemctl.log")" -eq 2 ]
+  fi
   if [ -n "$replacement_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
     grep -Fq 'Newer scan admission stop preserved' <<< "$output"

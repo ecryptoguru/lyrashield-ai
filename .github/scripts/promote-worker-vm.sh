@@ -10,8 +10,26 @@ assert_empty_queues() {
     exit 1
   }
 }
+
+assert_empty_queues_with_refreshed_environment() {
+  config=${LYRASHIELD_WORKER_RUNTIME_CONFIG:-/etc/lyrashield/worker-runtime.conf}
+  environment_file=${LYRASHIELD_WORKER_ENV_FILE:-/etc/lyrashield/worker.env}
+  image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$config" | head -n 1)
+  case "$image" in
+    *@sha256:????????????????????????????????????????????????????????????????) ;;
+    *) echo "Worker preflight requires a digest-pinned worker image" >&2; exit 1 ;;
+  esac
+  # Refresh the one-shot preflight environment without touching the active worker.
+  systemctl restart lyrashield-worker-secrets.service
+  preflight=$(docker run --rm --network bridge --env-file "$environment_file" -w /app/apps/worker "$image" node --import tsx --input-type=module -e 'const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scanQueue.getJobCounts("wait","active","delayed","prioritized"),webhookQueue.getJobCounts("wait","active","delayed","prioritized")]); console.log(JSON.stringify({nonterminal,scan,webhook})); } finally { await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); }')
+  expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
+  [ "$preflight" = "$expected" ] || {
+    echo "Worker promotion requires empty scan and webhook queues" >&2
+    exit 1
+  }
+}
 if [ "${1:-}" = "--preflight" ]; then
-  assert_empty_queues
+  assert_empty_queues_with_refreshed_environment
   echo "Worker empty-queue preflight passed"
   exit 0
 fi
@@ -168,6 +186,12 @@ systemctl is-active --quiet lyrashield-worker-egress-refresh.service && {
   exit 1
 }
 promotion_step=checking-current-worker
+wait_healthy
+
+# The isolated preflight already proved the refreshed Key Vault environment can
+# read the database and queues. Reload the active worker before it claims the
+# admission stop, so every following Redis operation uses that same endpoint.
+systemctl restart "$service"
 wait_healthy
 
 # JavaScript template literal is passed verbatim to the container.
