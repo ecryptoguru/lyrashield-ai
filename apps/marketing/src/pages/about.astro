@@ -1,9 +1,11 @@
 ---
-// Contact routing: the abuse mailbox is the one actually configured in
-// wrangler.jsonc (PUBLIC_ABUSE_EMAIL). Security vulnerabilities are routed
-// through /security-reporting rather than a raw mailto so the disclosure
+// Contact routing: the general contact mailbox is the one actually configured in
+// wrangler.jsonc (PUBLIC_ABUSE_EMAIL — the variable name predates this page
+// using it for partnership and product questions). Security vulnerabilities are
+// routed through /security-reporting rather than a raw mailto so the disclosure
 // policy and the monitored address stay in one place.
-const abuseEmail = (import.meta.env.PUBLIC_ABUSE_EMAIL as string | undefined) || "abuse@lyrashieldai.com"
+const abuseEmail =
+  (import.meta.env.PUBLIC_ABUSE_EMAIL as string | undefined) || "admin@lyrashieldai.com"
 // Fallback must stay in sync with DEFAULT_API_URL in packages/credentials/src/index.ts
 // (marketing deliberately has no dependency edge on that package).
 const appUrl =
