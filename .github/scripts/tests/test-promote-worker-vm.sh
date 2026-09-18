@@ -3,6 +3,13 @@ set -euo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 script="$repo/.github/scripts/promote-worker-vm.sh"
+first_current_restart_line=$(awk '/^systemctl restart "\$service"$/ { print NR; exit }' "$script")
+current_check_line=$(awk '/^promotion_step=checking-current-worker$/ { print NR; exit }' "$script")
+[ -n "$first_current_restart_line" ] && [ -n "$current_check_line" ]
+[ "$first_current_restart_line" -lt "$current_check_line" ] || {
+  echo "worker must restart with refreshed secrets before its current-health check" >&2
+  exit 1
+}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
