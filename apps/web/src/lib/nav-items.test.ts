@@ -95,7 +95,11 @@ describe("nav-items workspace destinations", () => {
   it("keeps Connections in the workspace group with agents and integrations reachable (W2-08)", () => {
     // Deep Review v16 3.2: Fixes folded into Findings as the "Proposed fixes"
     // tab; /dashboard/fixes remains a redirect for old links.
+    // UF-26: Launch Readiness and Projects are real work surfaces that were
+    // previously reachable only by URL; they now lead the Workspace group.
     expect(SECONDARY_NAV_ITEMS.map((item) => item.href)).toEqual([
+      "/dashboard/launch-readiness",
+      "/dashboard/projects",
       "/dashboard/notifications",
       "/dashboard/connections",
       "/dashboard/team",

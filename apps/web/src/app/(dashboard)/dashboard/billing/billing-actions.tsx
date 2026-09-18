@@ -151,7 +151,9 @@ export function BillingActions({
                   const action = `checkout-${targetPlan}-${interval}`
                   const price = usd ? (interval === "annual" ? usd.annual : usd.monthly) : undefined
                   const amount =
-                    price === undefined ? null : `${formatUSD(price)}/${interval === "annual" ? "yr" : "mo"}`
+                    price === undefined
+                      ? null
+                      : `${formatUSD(price)}/${interval === "annual" ? "yr" : "mo"}`
                   return (
                     <button
                       key={interval}

@@ -65,14 +65,15 @@ it("blocks all checkout and trial actions while a request is pending, including 
       })
   )
   const initial = render()
-  const checkout = initial.find(
-    (button) => String(button.props["aria-label"]).startsWith("Choose Pro, annual billing")
+  const checkout = initial.find((button) =>
+    String(button.props["aria-label"]).startsWith("Choose Pro, annual billing")
   )!
   const request = checkout.props.onClick!()
   expect(render().every((button) => button.props.disabled)).toBe(true)
   expect(
-    render().find((button) => String(button.props["aria-label"]).startsWith("Choose Pro, annual billing"))?.props
-      .children
+    render().find((button) =>
+      String(button.props["aria-label"]).startsWith("Choose Pro, annual billing")
+    )?.props.children
   ).toBe("Starting checkout…")
   await initial[0]!.props.onClick!()
   expect(post).toHaveBeenCalledTimes(1)
