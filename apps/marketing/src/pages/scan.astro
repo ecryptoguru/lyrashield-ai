@@ -73,7 +73,17 @@ const jsonLd = [
         </form>
       </div>
 
-      <div class="rounded-2xl border border-border bg-(--terminal-void) p-5 text-(--terminal-text) shadow-2xl sm:p-7" data-reveal="right" aria-label="Lite Check preview">
+      {/* `role="region"` rather than a bare div: the panel carries
+          `aria-label="Lite Check preview"` so assistive tech can name it, and
+          aria-label is prohibited on a role-less element (axe
+          `aria-prohibited-attr`). A named region also lets screen-reader users
+          jump straight to the preview from the landmark list. */}
+      <div
+        class="rounded-2xl border border-border bg-(--terminal-void) p-5 text-(--terminal-text) shadow-2xl sm:p-7"
+        data-reveal="right"
+        role="region"
+        aria-label="Lite Check preview"
+      >
         <div class="flex items-center justify-between border-b border-(--terminal-edge) pb-4 font-mono text-xs"><span class="text-(--terminal-cyan)">lyrashield / lite-check</span><span class="text-(--terminal-muted)">PASSIVE</span></div>
         <div class="space-y-4 py-6 font-mono text-sm leading-6" data-reveal-group>
           <p data-reveal="fade"><span class="mr-3 text-(--terminal-cyan)" data-countup="1">01</span>Fetch only public browser assets</p>

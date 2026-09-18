@@ -392,6 +392,11 @@ const navGroups: { heading: string; links: NavLink[] }[] =
     color: var(--color-text);
   }
 
+  /* Callout colours live in global.css; these two docs-scoped rules are not a
+     copy of them. `.callout strong` above sets the ordinary text colour for
+     every callout, which outranks global.css's `.callout--warn strong`, so the
+     warn variant has to re-assert the danger colour here. Keep both rules
+     token-driven (no literals) so a theme change still flows from one place. */
   .docs-main :global(.callout--warn) {
     border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-border));
     background: color-mix(in srgb, var(--color-danger) 5%, var(--color-bg-raised));
@@ -433,6 +438,9 @@ const navGroups: { heading: string; links: NavLink[] }[] =
   .docs-main :global(.nav-card__sub) {
     font-size: 0.775rem;
     color: var(--color-text-muted);
+    /* Long unbroken tokens (URLs, identifiers) pushed the docs grid past the
+       viewport at 768px; wrapping keeps the card inside its column. */
+    overflow-wrap: anywhere;
   }
 
   .docs-main :global(table) {
@@ -487,7 +495,10 @@ const navGroups: { heading: string; links: NavLink[] }[] =
     .docs-sidebar__link {
       border-radius: 0.4rem;
       border: 1px solid var(--color-border);
-      padding: 0.3rem 0.65rem;
+      /* Touch viewports: 0.8rem text at line-height 1.5 is 19.2px, so 12px of
+         block padding puts each row at ~45px — above the 44px target without
+         changing the type scale. Desktop keeps the denser 0.35rem rows. */
+      padding: 0.75rem 0.75rem;
       font-size: 0.8rem;
       margin: 0.2rem;
     }

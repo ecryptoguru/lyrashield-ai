@@ -19,6 +19,12 @@ const copyButtonClass =
 ---
 
 <div class="space-y-5">
+  {/* The lab's own sections below are h3 ("Tool inventory", "Findings by
+      control", …). Without a heading at this level they were the first headings
+      after the page h1, which skipped a level (UF-08). Screen-reader only: the
+      visible design is unchanged and the h3s stay subordinate to the lab. */}
+  <h2 class="sr-only">WebMCP Security Lab</h2>
+
   <div id="webmcp-tabs" class="flex flex-wrap gap-1 rounded-lg border border-border p-1" role="tablist" aria-label="WebMCP Security Lab sections">
     <button type="button" role="tab" aria-selected="true" tabindex="0" aria-controls="webmcp-panel-check" id="webmcp-tab-check" class={tabClass} data-tab="check">Check</button>
     <button type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="webmcp-panel-inventory" id="webmcp-tab-inventory" class={tabClass} data-tab="inventory">Inventory</button>
@@ -82,7 +88,11 @@ const copyButtonClass =
       <button id="webmcp-export-md" class={secondaryButtonClass} type="button">Export Markdown</button>
       <button id="webmcp-export-sarif" class={secondaryButtonClass} type="button">Export SARIF</button>
     </div>
-    <pre id="webmcp-export-preview" class="mt-4 hidden overflow-x-auto rounded border border-border bg-bg-raised p-3 font-mono text-xs text-text"></pre>
+    {/* Export payloads are long, unwrapped JSON/Markdown, so this scrolls
+        horizontally on narrow viewports. tabindex="0" is what makes the scroll
+        region reachable by keyboard (same treatment Astro/Shiki gives code
+        blocks); without it axe reports `scrollable-region-focusable`. */}
+    <pre id="webmcp-export-preview" tabindex="0" class="mt-4 hidden overflow-x-auto rounded border border-border bg-bg-raised p-3 font-mono text-xs text-text"></pre>
   </div>
 
   <div id="webmcp-panel-ci" role="tabpanel" aria-labelledby="webmcp-tab-ci" class={`${panelClass} hidden`}>
@@ -363,7 +373,7 @@ const copyButtonClass =
           const item = document.createElement("li")
           item.className = "text-sm text-text-muted"
           const fileLine = signal.file && signal.line ? `<span class="font-mono text-xs text-text-muted">${escapeHtml(signal.file)}:${signal.line}</span>` : ""
-          const snippet = signal.snippet ? `<pre class="mt-1 overflow-x-auto rounded border border-border bg-bg-raised p-2 font-mono text-xs text-text">${escapeHtml(signal.snippet)}</pre>` : ""
+          const snippet = signal.snippet ? `<pre tabindex="0" class="mt-1 overflow-x-auto rounded border border-border bg-bg-raised p-2 font-mono text-xs text-text">${escapeHtml(signal.snippet)}</pre>` : ""
           item.innerHTML = `${renderBadge(signal.state)} <span class="ml-1 font-medium text-text">${escapeHtml(signal.severity)}</span>${fileLine ? ` · ${fileLine}` : ""}<p class="mt-1 text-text">${escapeHtml(signal.remediation)}</p>${snippet}`
           list.appendChild(item)
         }
@@ -441,6 +451,7 @@ const copyButtonClass =
           li.innerHTML = `${renderBadge(signal.state)} <span class="font-medium text-text">${escapeHtml(signal.severity)}</span> ${location}<p class="mt-1">${escapeHtml(signal.remediation)}</p>`
           if (signal.snippet) {
             const snippet = document.createElement("pre")
+            snippet.tabIndex = 0
             snippet.className = "mt-1 overflow-x-auto rounded border border-border bg-bg-raised p-2 font-mono text-xs text-text"
             snippet.textContent = signal.snippet
             li.appendChild(snippet)
@@ -520,6 +531,7 @@ const copyButtonClass =
       const diff = state.getRewriteDiff()
       if (diff) {
         const diffBlock = document.createElement("pre")
+        diffBlock.tabIndex = 0
         diffBlock.className = "overflow-x-auto rounded border border-border bg-bg-raised p-3 font-mono text-xs text-text"
         diffBlock.textContent = diff
         wrap.appendChild(diffBlock)

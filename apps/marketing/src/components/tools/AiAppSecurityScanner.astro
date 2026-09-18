@@ -199,7 +199,7 @@ const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px
           const item = document.createElement("li")
           item.className = "text-sm text-text-muted"
           const fileLine = signal.file && signal.line ? `<span class="font-mono text-xs text-text-muted">${escapeHtml(signal.file)}:${signal.line}</span>` : ""
-          const snippet = signal.snippet ? `<pre class="mt-1 overflow-x-auto rounded border border-border bg-bg-raised p-2 font-mono text-xs text-text">${escapeHtml(signal.snippet)}</pre>` : ""
+          const snippet = signal.snippet ? `<pre tabindex="0" class="mt-1 overflow-x-auto rounded border border-border bg-bg-raised p-2 font-mono text-xs text-text">${escapeHtml(signal.snippet)}</pre>` : ""
           item.innerHTML = `${renderBadge(signal.state)} <span class="ml-1 font-medium text-text">${escapeHtml(signal.severity)}</span>${fileLine ? ` · ${fileLine}` : ""}<p class="mt-1 text-text">${escapeHtml(signal.remediation)}</p>${snippet}`
           list.appendChild(item)
         }
