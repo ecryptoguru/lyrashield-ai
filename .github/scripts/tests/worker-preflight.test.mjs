@@ -56,23 +56,87 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
   }
 })
 
+const preflightDockerStub = [
+  "#!/bin/sh",
+  'printf "%s\\n" "$*" >> "$DOCKER_LOG"',
+  'case "$1:$2" in',
+  "  image:inspect)",
+  '    case "$*" in',
+  "      *org.opencontainers.image.revision*) printf '%s\\n' 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' ;;",
+  "      *io.lyrashield.engine.revision*) printf '%s\\n' 'cccccccccccccccccccccccccccccccccccccccc' ;;",
+  "      *) exit 1 ;;",
+  "    esac ;;",
+  "  run:*)",
+  "    printf '%s\\n' \"$QUEUE_STATE\" ;;",
+  "  exec:lyrashield-worker)",
+  '    case "$*" in',
+  "      *printenv\\ REDIS_URL*) printf '%s\\n' \"$MOCK_LIVE_REDIS_URL\" ;;",
+  "      *printenv\\ DATABASE_URL*) printf '%s\\n' \"$MOCK_LIVE_DATABASE_URL\" ;;",
+  "      *) exit 1 ;;",
+  "    esac ;;",
+  "  *) exit 1 ;;",
+  "esac",
+].join("\n")
+
+const preflightEnvFile = [
+  "DATABASE_URL=postgres://worker:secret@postgres.internal:5432/lyrashield",
+  "DATABASE_SYSTEM_URL=postgres://worker:secret@postgres.internal:5432/lyrashield",
+  "REDIS_URL=rediss://default:secret@redis.internal:6379",
+  `BETTER_AUTH_SECRET=${"a".repeat(32)}`,
+  "BETTER_AUTH_URL=https://app.lyrashieldai.com",
+  "NEXT_PUBLIC_APP_URL=https://app.lyrashieldai.com",
+  "TRUSTED_PROXY_IP_HEADER=cf-connecting-ip",
+  "LYRASHIELD_WEB_SEARCH_API_KEY=test-search-key",
+  "GHCR_TOKEN=test-token",
+  "",
+].join("\n")
+
+// Parses the `docker run` line the stub recorded into the environment the
+// one-shot container would see: --env-file pairs first, then --env overrides.
+const preflightRunEnvironment = (dockerLog) => {
+  const runLine = readFileSync(dockerLog, "utf8")
+    .split("\n")
+    .find((line) => line.startsWith("run "))
+  assert.ok(runLine, "preflight did not run a one-shot container")
+  const tokens = runLine.split(" ")
+  const env = {}
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === "--env-file") {
+      for (const line of readFileSync(tokens[++i], "utf8").split("\n")) {
+        if (!line || line.startsWith("#")) continue
+        const separator = line.indexOf("=")
+        env[line.slice(0, separator)] = line.slice(separator + 1)
+      }
+    }
+    if (tokens[i] === "--env") {
+      const separator = tokens[++i].indexOf("=")
+      env[tokens[i].slice(0, separator)] = tokens[i].slice(separator + 1)
+    }
+  }
+  return { env, tokens }
+}
+
 test("worker preflight reads refreshed Key Vault credentials without restarting the active worker", () => {
   const directory = mkdtempSync(path.join(tmpdir(), "worker-preflight-"))
   try {
     const dockerLog = path.join(directory, "docker.log")
     const systemctlLog = path.join(directory, "systemctl.log")
     const runtimeConfig = path.join(directory, "worker-runtime.conf")
+    const envFile = path.join(directory, "worker.env")
+    writeFileSync(path.join(directory, "docker"), preflightDockerStub, { mode: 0o700 })
     writeFileSync(
-      path.join(directory, "docker"),
-      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$DOCKER_LOG"\n[ "$1" = run ] || exit 1\nprintf "%s\\n" "$QUEUE_STATE"\n',
+      path.join(directory, "systemctl"),
+      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n',
       {
         mode: 0o700,
       }
     )
-    writeFileSync(path.join(directory, "systemctl"), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n', {
-      mode: 0o700,
-    })
-    writeFileSync(runtimeConfig, "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+    writeFileSync(
+      runtimeConfig,
+      "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+    )
+    writeFileSync(envFile, preflightEnvFile)
     const empty = {
       nonterminal: 0,
       scan: { wait: 0, active: 0, delayed: 0, prioritized: 0 },
@@ -85,18 +149,38 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
           QUEUE_STATE: state,
           DOCKER_LOG: dockerLog,
           SYSTEMCTL_LOG: systemctlLog,
+          MOCK_LIVE_REDIS_URL: "rediss://default:other@redis.internal:6379",
+          MOCK_LIVE_DATABASE_URL: "postgres://worker:other@postgres.internal:5432/lyrashield",
           LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
-          LYRASHIELD_WORKER_ENV_FILE: path.join(directory, "worker.env"),
+          LYRASHIELD_WORKER_ENV_FILE: envFile,
+          LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
         },
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       })
     assert.match(run(JSON.stringify(empty)), /Worker empty-queue preflight passed/)
-    assert.match(readFileSync(systemctlLog, "utf8"), /^restart lyrashield-worker-secrets\.service$/m)
     assert.match(
-      readFileSync(dockerLog, "utf8"),
-      /run --rm --network bridge --env-file .*worker\.env --env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail\.com,ankit@lyrashieldai\.com --env LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 -w \/app\/apps\/worker ghcr\.io\/example\/worker@sha256:a+ node --import tsx --input-type=module -e /
+      readFileSync(systemctlLog, "utf8"),
+      /^restart lyrashield-worker-secrets\.service$/m
     )
+    const { tokens } = preflightRunEnvironment(dockerLog)
+    const passedNames = new Set()
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i] === "--env") passedNames.add(tokens[i + 1].split("=")[0])
+    }
+    for (const name of [
+      "NODE_ENV",
+      "PLATFORM_ADMIN_EMAILS",
+      "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION",
+      "LYRASHIELD_RUNTIME_BACKEND",
+      "LYRASHIELD_ENGINE_PATH",
+      "LYRASHIELD_IMAGE",
+      "LYRASHIELD_PRODUCT_REVISION",
+      "LYRASHIELD_WORKER_IMAGE_DIGEST",
+      "LYRASHIELD_ENGINE_REVISION",
+    ]) {
+      assert.ok(passedNames.has(name), `preflight is missing --env ${name}`)
+    }
     for (const state of [
       "",
       "not-json",
@@ -105,6 +189,171 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     ]) {
       assert.throws(() => run(state))
     }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("worker preflight reports a stale worker environment without printing endpoints", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "worker-preflight-stale-"))
+  try {
+    const dockerLog = path.join(directory, "docker.log")
+    const systemctlLog = path.join(directory, "systemctl.log")
+    const runtimeConfig = path.join(directory, "worker-runtime.conf")
+    const envFile = path.join(directory, "worker.env")
+    writeFileSync(path.join(directory, "docker"), preflightDockerStub, { mode: 0o700 })
+    writeFileSync(
+      path.join(directory, "systemctl"),
+      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n',
+      {
+        mode: 0o700,
+      }
+    )
+    writeFileSync(
+      runtimeConfig,
+      "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+    )
+    writeFileSync(envFile, preflightEnvFile)
+    const empty = {
+      nonterminal: 0,
+      scan: { wait: 0, active: 0, delayed: 0, prioritized: 0 },
+      webhook: { wait: 0, active: 0, delayed: 0, prioritized: 0 },
+    }
+    const run = (liveRedisUrl, liveDatabaseUrl) =>
+      execFileSync("/bin/sh", [".github/scripts/promote-worker-vm.sh", "--preflight"], {
+        env: {
+          PATH: directory + path.delimiter + process.env.PATH,
+          QUEUE_STATE: JSON.stringify(empty),
+          DOCKER_LOG: dockerLog,
+          SYSTEMCTL_LOG: systemctlLog,
+          MOCK_LIVE_REDIS_URL: liveRedisUrl,
+          MOCK_LIVE_DATABASE_URL: liveDatabaseUrl,
+          LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
+          LYRASHIELD_WORKER_ENV_FILE: envFile,
+          LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
+        },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+
+    // Same host[:port] on both sides passes.
+    assert.match(
+      run(
+        "rediss://default:rotated@redis.internal:6379",
+        "postgres://worker:rotated@postgres.internal:5432/lyrashield"
+      ),
+      /Worker empty-queue preflight passed/
+    )
+
+    // A rotated Redis or Postgres endpoint is named without exposing either
+    // endpoint. The one-shot preflight can safely continue with its refreshed
+    // environment so it can bootstrap the host asset that repairs the worker.
+    const staleMessage =
+      /Worker environment is stale; continuing with the refreshed one-shot preflight/
+    for (const [liveRedis, liveDatabase] of [
+      [
+        "rediss://default:old@exhausted.upstash.io:6379",
+        "postgres://worker:rotated@postgres.internal:5432/lyrashield",
+      ],
+      [
+        "rediss://default:rotated@redis.internal:6379",
+        "postgres://worker:old@retired.postgres.internal:5432/lyrashield",
+      ],
+      [
+        "rediss://default:old@redis.internal:6380",
+        "postgres://worker:rotated@postgres.internal:5432/lyrashield",
+      ],
+    ]) {
+      const output = run(liveRedis, liveDatabase)
+      assert.match(output, staleMessage)
+      assert.doesNotMatch(
+        output,
+        /exhausted\.upstash\.io|retired\.postgres\.internal|redis\.internal:6380/
+      )
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("preflight environment loads @lyrashield/config in production and matches the worker launcher", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "worker-preflight-env-"))
+  try {
+    const dockerLog = path.join(directory, "docker.log")
+    const systemctlLog = path.join(directory, "systemctl.log")
+    const runtimeConfig = path.join(directory, "worker-runtime.conf")
+    const envFile = path.join(directory, "worker.env")
+    writeFileSync(path.join(directory, "docker"), preflightDockerStub, { mode: 0o700 })
+    writeFileSync(
+      path.join(directory, "systemctl"),
+      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n',
+      {
+        mode: 0o700,
+      }
+    )
+    writeFileSync(
+      runtimeConfig,
+      "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+    )
+    writeFileSync(envFile, preflightEnvFile)
+    const empty = {
+      nonterminal: 0,
+      scan: { wait: 0, active: 0, delayed: 0, prioritized: 0 },
+      webhook: { wait: 0, active: 0, delayed: 0, prioritized: 0 },
+    }
+    execFileSync("/bin/sh", [".github/scripts/promote-worker-vm.sh", "--preflight"], {
+      env: {
+        PATH: directory + path.delimiter + process.env.PATH,
+        QUEUE_STATE: JSON.stringify(empty),
+        DOCKER_LOG: dockerLog,
+        SYSTEMCTL_LOG: systemctlLog,
+        MOCK_LIVE_REDIS_URL: "rediss://default:other@redis.internal:6379",
+        MOCK_LIVE_DATABASE_URL: "postgres://worker:other@postgres.internal:5432/lyrashield",
+        LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
+        LYRASHIELD_WORKER_ENV_FILE: envFile,
+        LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
+      },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+
+    const { env, tokens } = preflightRunEnvironment(dockerLog)
+    // (a) The preflight environment loads @lyrashield/config in production.
+    // TMPDIR is pointed at a writable directory because the compile-time
+    // worker root does not exist off the VM; every other value is passed
+    // exactly as the preflight assembled it. The spawn cwd mirrors the
+    // one-shot container's -w /app/apps/worker.
+    const spawn = execFileSync(
+      process.execPath,
+      ["--import", "tsx", "--input-type=module", "-e", 'await import("@lyrashield/config")'],
+      {
+        cwd: path.resolve("apps/worker"),
+        env: { ...env, NODE_ENV: "production", TMPDIR: directory },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    )
+    assert.ok(spawn !== null)
+
+    // (b) run-worker.sh and the preflight emit the same --env name set: the
+    // worker-side names come from ops/worker/worker-env.sh, which both call.
+    const workerNames = new Set()
+    for (const file of ["ops/worker/worker-env.sh", "ops/worker/run-worker.sh"]) {
+      let text = ""
+      try {
+        text = readFileSync(file, "utf8")
+      } catch {
+        continue
+      }
+      for (const match of text.matchAll(/--env ([A-Z_]+)=/g)) workerNames.add(match[1])
+    }
+    const passedNames = new Set()
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i] === "--env") passedNames.add(tokens[i + 1].split("=")[0])
+    }
+    assert.deepEqual([...passedNames].sort(), [...workerNames].sort())
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

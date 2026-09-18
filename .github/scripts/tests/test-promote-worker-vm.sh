@@ -3,13 +3,6 @@ set -euo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 script="$repo/.github/scripts/promote-worker-vm.sh"
-first_current_restart_line=$(awk '/^systemctl restart "\$service"$/ { print NR; exit }' "$script")
-current_check_line=$(awk '/^promotion_step=checking-current-worker$/ { print NR; exit }' "$script")
-[ -n "$first_current_restart_line" ] && [ -n "$current_check_line" ]
-[ "$first_current_restart_line" -lt "$current_check_line" ] || {
-  echo "worker must restart with refreshed secrets before its current-health check" >&2
-  exit 1
-}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
@@ -20,9 +13,10 @@ engine_revision=$(printf 'c%.0s' {1..40})
 
 write_mocks() {
   local case_dir=$1
-  mkdir -p "$case_dir/bin" "$case_dir/image-assets" "$case_dir/host/libexec" "$case_dir/host/systemd" "$case_dir/promotion"
+  mkdir -p "$case_dir/bin" "$case_dir/image-assets" "$case_dir/host/libexec" "$case_dir/host/systemd" "$case_dir/host/assets" "$case_dir/promotion"
   for asset in \
     run-worker.sh \
+    worker-env.sh \
     refresh-secrets.sh \
     refresh-egress.sh \
     capture-stop-provenance.sh \
@@ -57,6 +51,7 @@ write_mocks() {
 #!/bin/sh
 set -eu
 printf '%s\n' "$*" >> "$MOCK_SYSTEMCTL_LOG"
+printf 'systemctl %s\n' "$*" >> "$MOCK_ORDER_LOG"
 command=$1
 shift
 [ "${1:-}" != "--quiet" ] || shift
@@ -89,6 +84,7 @@ case "$command:$unit" in
     if [ -n "${MOCK_REPLACEMENT_STOP:-}" ] && [ -s "$MOCK_ADMISSION_STOP" ]; then
       printf '%s' "$MOCK_REPLACEMENT_STOP" > "$MOCK_ADMISSION_STOP"
     fi ;;
+  restart:lyrashield-worker-secrets.service) : ;;
   reset-failed:lyrashield-worker.service) ;;
   daemon-reload:) ;;
   *) echo "unexpected systemctl call: $command $unit" >&2; exit 1 ;;
@@ -99,10 +95,12 @@ MOCK
 #!/bin/sh
 set -eu
 printf '%s\n' "$*" >> "$MOCK_DOCKER_LOG"
+printf 'docker %s\n' "$*" >> "$MOCK_ORDER_LOG"
 case "$1:$2" in
   inspect:lyrashield-worker)
     case "$*" in
-      *State.Health*) printf 'healthy\n' ;;
+      *State.Health*)
+        if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf 'healthy\n'; else printf 'starting\n'; fi ;;
       *'{{.Image}}'*) printf '%s\n' 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' ;;
       *Config.Image*)
         if [ "${MOCK_FAIL_IMAGE_CHECK:-0}" = 1 ]; then
@@ -112,7 +110,7 @@ case "$1:$2" in
         fi ;;
       *) exit 1 ;;
     esac ;;
-  exec:-w)
+  run:*)
     case "$*" in
       *'redis.call("GET"'*)
         for argument in "$@"; do expected_stop=$argument; done
@@ -133,8 +131,15 @@ case "$1:$2" in
       *getSystemPrisma*) printf '%s\n' '{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}' ;;
       *) : ;;
     esac ;;
+  exec:-w)
+    echo "promotion must not evaluate inside the live worker: $*" >&2
+    exit 1 ;;
   exec:lyrashield-worker)
     case "$*" in
+      *printenv\ REDIS_URL*)
+        if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf '%s\n' 'rediss://current@redis.test:6379'; else printf '%s\n' 'rediss://retired@retired-redis.test:6379'; fi ;;
+      *printenv\ DATABASE_URL*)
+        if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf '%s\n' 'postgresql://current@database.test:5432/lyrashield'; else printf '%s\n' 'postgresql://retired@retired-database.test:5432/lyrashield'; fi ;;
       *LYRASHIELD_PRODUCT_REVISION*) printf '%s\n' "$MOCK_APP_REVISION" ;;
       *LYRASHIELD_ENGINE_REVISION*) printf '%s\n' "$MOCK_ENGINE_REVISION" ;;
       *LYRASHIELD_WORKER_IMAGE_DIGEST*) printf '%s\n' "${MOCK_TARGET##*@}" ;;
@@ -188,8 +193,9 @@ run_case() {
   printf '%s' "$existing_stop" > "$case_dir/admission-stop"
   : > "$case_dir/docker.log"
   : > "$case_dir/systemctl.log"
-  printf 'LYRASHIELD_WORKER_IMAGE=%s\nGHCR_USERNAME=test-user\n' "$target" > "$case_dir/runtime.conf"
-  printf 'GHCR_TOKEN=test-token\n' > "$case_dir/worker.env"
+  : > "$case_dir/order.log"
+  printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$target" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
+  printf 'GHCR_TOKEN=test-token\nREDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\n' > "$case_dir/worker.env"
 
   set +e
   output=$(
@@ -204,6 +210,7 @@ run_case() {
       MOCK_ADMISSION_STOP="$case_dir/admission-stop" \
       MOCK_DOCKER_LOG="$case_dir/docker.log" \
       MOCK_SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+      MOCK_ORDER_LOG="$case_dir/order.log" \
       MOCK_IMAGE_ASSETS="$case_dir/image-assets" \
       MOCK_FREE_BYTES="$free_bytes" \
       MOCK_FAIL_IMAGE_CHECK="$fail_image_check" \
@@ -212,6 +219,8 @@ run_case() {
       LYRASHIELD_WORKER_ENV_FILE="$case_dir/worker.env" \
       LYRASHIELD_WORKER_PROMOTION_STATE_DIR="$case_dir/promotion" \
       LYRASHIELD_WORKER_HOST_LIBEXEC_DIR="$case_dir/host/libexec" \
+      LYRASHIELD_WORKER_HOST_ASSETS_DIR="$case_dir/host/assets" \
+      LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
       LYRASHIELD_WORKER_SYSTEMD_DIR="$case_dir/host/systemd" \
       sh "$script" "$target" "$app_revision" "$engine_revision" 2>&1
   )
@@ -236,7 +245,16 @@ run_case() {
   fi
   grep -Fq 'image prune --all --force' "$case_dir/docker.log"
   if [ "$expected" = success ]; then
-    [ "$(grep -Fxc 'restart lyrashield-worker.service' "$case_dir/systemctl.log")" -eq 2 ]
+    # Exactly one restart and it happens after the admission-stop claim and
+    # the empty-queue check: a scan admitted before promotion finishes against
+    # the old worker before the container is replaced.
+    [ "$(grep -Fxc 'restart lyrashield-worker.service' "$case_dir/systemctl.log")" -eq 1 ]
+    restart_line=$(grep -Fn 'systemctl restart lyrashield-worker.service' "$case_dir/order.log" | cut -d: -f1)
+    claim_line=$(grep -Fn 'redis.call("EXISTS"' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
+    queue_line=$(grep -Fn 'getSystemPrisma' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
+    [ -n "$restart_line" ] && [ -n "$claim_line" ] && [ -n "$queue_line" ]
+    [ "$restart_line" -gt "$claim_line" ] && [ "$restart_line" -gt "$queue_line" ]
+    [ -f "$case_dir/host/assets/worker-env.sh" ]
   fi
   if [ -n "$replacement_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
