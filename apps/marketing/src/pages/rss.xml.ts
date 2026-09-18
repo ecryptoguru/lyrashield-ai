@@ -2,7 +2,9 @@ import type { APIRoute } from "astro"
 import { getCollection } from "astro:content"
 import rss from "@astrojs/rss"
 
-export const prerender = false
+// This is build-derived content. Prerender it so the Worker does not rebuild
+// the blog collection on each feed request.
+export const prerender = true
 
 export const GET: APIRoute = async (context) => {
   if (!__MARKETING_INDEXABLE__) {
