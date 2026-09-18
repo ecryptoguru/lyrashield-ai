@@ -219,6 +219,43 @@ async function requestTurnstileToken(): Promise<string | undefined> {
   }
 }
 
+// ─── Public capability probe ─────────────────────────────────────────────────
+
+export interface MyraStatus {
+  public: boolean
+  booking: boolean
+}
+
+const STATUS_TIMEOUT_MS = 2_000
+const STATUS_CLOSED: MyraStatus = Object.freeze({ public: false, booking: false })
+
+/**
+ * GET /api/myra/status — what the app will actually let this visitor do right
+ * now. Marketing renders only what this reports: the launcher needs
+ * `public`, the /demo slot picker needs `booking`. Any failure — network,
+ * non-2xx, malformed body — resolves to both false so a degraded app can
+ * never leave a dead Myra affordance on the page. Bounded at 2s: the probe
+ * sits in the critical render path of the launcher.
+ */
+export function fetchMyraStatus(apiBase = myraApiBase()): Promise<MyraStatus> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), STATUS_TIMEOUT_MS)
+  return fetch(`${apiBase}/api/myra/status`, {
+    headers: { accept: "application/json" },
+    signal: controller.signal,
+  })
+    .then(async (res) => {
+      if (!res.ok) return STATUS_CLOSED
+      const body = (await res.json().catch(() => ({}))) as {
+        public?: unknown
+        booking?: unknown
+      }
+      return { public: body.public === true, booking: body.booking === true }
+    })
+    .catch(() => STATUS_CLOSED)
+    .finally(() => clearTimeout(timer))
+}
+
 // ─── Session bootstrap ───────────────────────────────────────────────────────
 
 /**
