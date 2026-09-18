@@ -63,6 +63,38 @@ assert_empty_queues() {
   }
 }
 
+# Host[:port] of a URL with the scheme, credentials and path stripped. Values
+# are only ever compared; the comparison result is all that is reported.
+env_url_host_port() {
+  rest=${1#*://}
+  rest=${rest%%/*}
+  printf '%s\n' "${rest##*@}"
+}
+
+env_url_host() {
+  host_port=$(env_url_host_port "$1")
+  case "$host_port" in
+    \[*) printf '%s\n' "$host_port" ;;
+    *) printf '%s\n' "${host_port%%:*}" ;;
+  esac
+}
+
+# The live worker reads its environment once at service start. A rotated
+# secret lands in the refreshed environment file immediately but the running
+# container keeps the old endpoint, so compare both before trusting a healthy
+# heartbeat. Never print either endpoint.
+assert_worker_environment_fresh() {
+  live_redis=$(docker exec "$container" printenv REDIS_URL 2>/dev/null || true)
+  file_redis=$(sed -n 's/^REDIS_URL=//p' "$environment_file" | head -n 1)
+  live_database=$(docker exec "$container" printenv DATABASE_URL 2>/dev/null || true)
+  file_database=$(sed -n 's/^DATABASE_URL=//p' "$environment_file" | head -n 1)
+  if [ "$(env_url_host_port "$live_redis")" != "$(env_url_host_port "$file_redis")" ] ||
+    [ "$(env_url_host "$live_database")" != "$(env_url_host "$file_database")" ]; then
+    echo "Worker environment is stale: restart lyrashield-worker.service before promotion" >&2
+    exit 1
+  fi
+}
+
 assert_empty_queues_with_refreshed_environment() {
   # Refresh the one-shot preflight environment without touching the active worker.
   systemctl restart lyrashield-worker-secrets.service
@@ -74,6 +106,7 @@ assert_empty_queues_with_refreshed_environment() {
     echo "Worker promotion requires empty scan and webhook queues" >&2
     exit 1
   }
+  assert_worker_environment_fresh
 }
 if [ "${1:-}" = "--preflight" ]; then
   assert_empty_queues_with_refreshed_environment
