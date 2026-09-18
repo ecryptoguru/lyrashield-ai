@@ -74,14 +74,6 @@ env_url_host_port() {
   printf '%s\n' "${rest##*@}"
 }
 
-env_url_host() {
-  host_port=$(env_url_host_port "$1")
-  case "$host_port" in
-    \[*) printf '%s\n' "$host_port" ;;
-    *) printf '%s\n' "${host_port%%:*}" ;;
-  esac
-}
-
 # The live worker reads its environment once at service start. A rotated
 # secret lands in the refreshed environment file immediately but the running
 # container keeps the old endpoint, so compare both before trusting a healthy
@@ -114,7 +106,7 @@ assert_empty_queues_with_refreshed_environment() {
     exit 1
   }
   if ! worker_environment_is_fresh; then
-    echo "Worker environment is stale; continuing with the refreshed one-shot preflight" >&2
+    echo "Worker environment is stale; continuing with the refreshed one-shot preflight"
   fi
 }
 if [ "${1:-}" = "--preflight" ]; then

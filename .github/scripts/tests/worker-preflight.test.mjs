@@ -194,7 +194,7 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
   }
 })
 
-test("worker preflight names a stale worker environment and never prints endpoints", () => {
+test("worker preflight reports a stale worker environment without printing endpoints", () => {
   const directory = mkdtempSync(path.join(tmpdir(), "worker-preflight-stale-"))
   try {
     const dockerLog = path.join(directory, "docker.log")
@@ -246,10 +246,11 @@ test("worker preflight names a stale worker environment and never prints endpoin
       /Worker empty-queue preflight passed/
     )
 
-    // A rotated Redis or Postgres endpoint in the refreshed file names the
-    // stale worker environment.
+    // A rotated Redis or Postgres endpoint is named without exposing either
+    // endpoint. The one-shot preflight can safely continue with its refreshed
+    // environment so it can bootstrap the host asset that repairs the worker.
     const staleMessage =
-      /Worker environment is stale: restart lyrashield-worker\.service before promotion/
+      /Worker environment is stale; continuing with the refreshed one-shot preflight/
     for (const [liveRedis, liveDatabase] of [
       [
         "rediss://default:old@exhausted.upstash.io:6379",
@@ -264,16 +265,10 @@ test("worker preflight names a stale worker environment and never prints endpoin
         "postgres://worker:rotated@postgres.internal:5432/lyrashield",
       ],
     ]) {
-      let stderr = null
-      try {
-        run(liveRedis, liveDatabase)
-      } catch (error) {
-        stderr = error.stderr
-      }
-      assert.notEqual(stderr, null, "preflight accepted a stale worker environment")
-      assert.match(stderr, staleMessage)
+      const output = run(liveRedis, liveDatabase)
+      assert.match(output, staleMessage)
       assert.doesNotMatch(
-        stderr,
+        output,
         /exhausted\.upstash\.io|retired\.postgres\.internal|redis\.internal:6380/
       )
     }

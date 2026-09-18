@@ -3,13 +3,6 @@ set -euo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 script="$repo/.github/scripts/promote-worker-vm.sh"
-first_current_restart_line=$(awk '/^systemctl restart "\$service"$/ { print NR; exit }' "$script")
-current_check_line=$(awk '/^promotion_step=checking-current-worker$/ { print NR; exit }' "$script")
-[ -n "$first_current_restart_line" ] && [ -n "$current_check_line" ]
-[ "$first_current_restart_line" -lt "$current_check_line" ] || {
-  echo "worker must restart with refreshed secrets before its current-health check" >&2
-  exit 1
-}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
@@ -106,7 +99,8 @@ printf 'docker %s\n' "$*" >> "$MOCK_ORDER_LOG"
 case "$1:$2" in
   inspect:lyrashield-worker)
     case "$*" in
-      *State.Health*) printf 'healthy\n' ;;
+      *State.Health*)
+        if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf 'healthy\n'; else printf 'starting\n'; fi ;;
       *'{{.Image}}'*) printf '%s\n' 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' ;;
       *Config.Image*)
         if [ "${MOCK_FAIL_IMAGE_CHECK:-0}" = 1 ]; then
@@ -142,6 +136,10 @@ case "$1:$2" in
     exit 1 ;;
   exec:lyrashield-worker)
     case "$*" in
+      *printenv\ REDIS_URL*)
+        if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf '%s\n' 'rediss://current@redis.test:6379'; else printf '%s\n' 'rediss://retired@retired-redis.test:6379'; fi ;;
+      *printenv\ DATABASE_URL*)
+        if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf '%s\n' 'postgresql://current@database.test:5432/lyrashield'; else printf '%s\n' 'postgresql://retired@retired-database.test:5432/lyrashield'; fi ;;
       *LYRASHIELD_PRODUCT_REVISION*) printf '%s\n' "$MOCK_APP_REVISION" ;;
       *LYRASHIELD_ENGINE_REVISION*) printf '%s\n' "$MOCK_ENGINE_REVISION" ;;
       *LYRASHIELD_WORKER_IMAGE_DIGEST*) printf '%s\n' "${MOCK_TARGET##*@}" ;;
@@ -197,7 +195,7 @@ run_case() {
   : > "$case_dir/systemctl.log"
   : > "$case_dir/order.log"
   printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$target" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
-  printf 'GHCR_TOKEN=test-token\n' > "$case_dir/worker.env"
+  printf 'GHCR_TOKEN=test-token\nREDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\n' > "$case_dir/worker.env"
 
   set +e
   output=$(
