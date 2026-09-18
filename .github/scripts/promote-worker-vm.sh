@@ -56,7 +56,10 @@ queue_count='const {getSystemPrisma}=await import("@lyrashield/db"); const {getS
 queue_expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
 
 assert_empty_queues() {
-  preflight=$(docker exec -w /app/apps/worker "$container" node --import tsx --input-type=module -e "$queue_count")
+  if ! preflight=$(worker_oneshot "$queue_count"); then
+    echo "Worker promotion requires empty scan and webhook queues" >&2
+    exit 1
+  fi
   [ "$preflight" = "$queue_expected" ] || {
     echo "Worker promotion requires empty scan and webhook queues" >&2
     exit 1
@@ -83,13 +86,17 @@ env_url_host() {
 # secret lands in the refreshed environment file immediately but the running
 # container keeps the old endpoint, so compare both before trusting a healthy
 # heartbeat. Never print either endpoint.
-assert_worker_environment_fresh() {
+worker_environment_is_fresh() {
   live_redis=$(docker exec "$container" printenv REDIS_URL 2>/dev/null || true)
   file_redis=$(sed -n 's/^REDIS_URL=//p' "$environment_file" | head -n 1)
   live_database=$(docker exec "$container" printenv DATABASE_URL 2>/dev/null || true)
   file_database=$(sed -n 's/^DATABASE_URL=//p' "$environment_file" | head -n 1)
-  if [ "$(env_url_host_port "$live_redis")" != "$(env_url_host_port "$file_redis")" ] ||
-    [ "$(env_url_host "$live_database")" != "$(env_url_host "$file_database")" ]; then
+  [ "$(env_url_host_port "$live_redis")" = "$(env_url_host_port "$file_redis")" ] &&
+    [ "$(env_url_host_port "$live_database")" = "$(env_url_host_port "$file_database")" ]
+}
+
+assert_worker_environment_fresh() {
+  if ! worker_environment_is_fresh; then
     echo "Worker environment is stale: restart lyrashield-worker.service before promotion" >&2
     exit 1
   fi
@@ -106,7 +113,9 @@ assert_empty_queues_with_refreshed_environment() {
     echo "Worker promotion requires empty scan and webhook queues" >&2
     exit 1
   }
-  assert_worker_environment_fresh
+  if ! worker_environment_is_fresh; then
+    echo "Worker environment is stale; continuing with the refreshed one-shot preflight" >&2
+  fi
 }
 if [ "${1:-}" = "--preflight" ]; then
   assert_empty_queues_with_refreshed_environment
@@ -165,10 +174,11 @@ asset_container=
 asset_stage=
 host_backup=
 
+# Redis evals run in a one-shot container built from the refreshed environment
+# file, so the admission stop and the queue counts are evaluated against the
+# rotated endpoint rather than the stale environment inside the live worker.
 redis_eval() {
-  code=$1
-  shift
-  docker exec -w /app/apps/worker "$container" node --input-type=module -e "$code" "$@"
+  worker_oneshot "$@"
 }
 
 resume_admission() {
@@ -184,10 +194,14 @@ resume_admission() {
   admission_stop_value=
 }
 
+worker_is_healthy() {
+  health=$(docker inspect "$container" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null || true)
+  [ "$health" = healthy ]
+}
+
 wait_healthy() {
   for _ in $(seq 1 600); do
-    health=$(docker inspect "$container" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null || true)
-    [ "$health" = healthy ] && return 0
+    worker_is_healthy && return 0
     sleep 1
   done
   return 1
@@ -270,14 +284,22 @@ systemctl is-active --quiet lyrashield-worker-egress-refresh.service && {
   echo "Egress refresh did not quiesce" >&2
   exit 1
 }
-# The isolated preflight already proved the refreshed Key Vault environment can
-# read the database and queues. Reload the active worker before it claims the
-# admission stop or checks health, so every following Redis operation uses that
-# same endpoint.
-promotion_step=restarting-current-worker
-systemctl restart "$service"
 promotion_step=checking-current-worker
-wait_healthy
+if ! worker_is_healthy; then
+  if worker_environment_is_fresh; then
+    echo "Current worker is unhealthy with a fresh environment" >&2
+    exit 1
+  fi
+  echo "Current worker is unhealthy with a stale environment; continuing with refreshed one-shot checks" >&2
+fi
+
+# Refresh the Key Vault environment file before the admission claim and the
+# queue check so both evaluate the rotated endpoints. The live worker is not
+# restarted here: it keeps draining its old environment while the admission
+# stop and the empty-queue proof run against the new endpoint through
+# one-shot containers. The single restart later in this script is what cuts
+# the worker over.
+systemctl restart lyrashield-worker-secrets.service
 
 # JavaScript template literal is passed verbatim to the container.
 # shellcheck disable=SC2016
