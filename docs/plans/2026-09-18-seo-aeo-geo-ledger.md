@@ -197,3 +197,39 @@ pass → 0.
   - **Final CI on `34ea350d`: all green.** Lint/Typecheck/Test & Build 4m14s (this job runs
     `test:browser`, so the new SEO gate now executes on every marketing change), both secret-scan
     jobs, worker contract, changed-path detection and the LyraShield GitHub Action.
+
+- 2026-09-18 (session 8) — Review findings fixed, the concurrent-session conflict resolved, and the
+  contact address moved to `admin@`.
+  - **All nine CodeRabbit findings on #702 fixed** (`ce037464`). One was a real bug in the gate:
+    `sitemapEntries()` was being fed the sitemap _index_, which carries `<sitemap>` blocks rather
+    than `<url>` blocks, so the `sitemap-lastmod-missing` rule found nothing and had never fired.
+    Entries are now collected while walking the child sitemap(s), with a `sitemap-entries-missing`
+    rule for the empty case. **Proved live**: removing `/demo`'s lastmod from the built sitemap now
+    yields `sitemap-lastmod-missing: /demo` and exit 1. Also fixed: an unreachable `robots.txt`
+    skipped the whole agent check (`robots-missing` now reports it), IndexNow reported every
+    response as accepted (only 200/202 are), `Base.astro` hardcoded both contact emails while the
+    pages honour env overrides, and four copy findings (approvals scope, amp "Agent Skill",
+    research "plans to publish", vibe-security-50 "operational or human evidence") plus the README's
+    inaccurate Lighthouse "requires" wording.
+  - **Concurrent-session conflict caught and instrumented** (`05dce911`). While working, another
+    session on `feat/myra-support-agent` began switching `/security-reporting` from `security@` to
+    `support@`. `/.well-known/security.txt` is a static file and cannot follow
+    `PUBLIC_SECURITY_EMAIL`, so it would have gone stale silently — advertising an address the page
+    no longer publishes. The gate now requires the security.txt `Contact` to be published on
+    `/security-reporting`; **proved live** by making the built reporting page publish `support@`
+    while the file still said `security@` → `security-txt-contact-mismatch`, exit 1.
+  - **Contact address moved to `admin@lyrashieldai.com`** (`f3157941`) on request, replacing
+    `abuse@` in `wrangler.jsonc` (the deployed Worker var) and in `/about`'s fallback. `/terms`
+    renders it as the abuse contact, `/about` for partnership and product questions. The
+    `PUBLIC_ABUSE_EMAIL` variable name is unchanged: renaming it would touch `turbo.json`,
+    `.env.example`, `astro.config.mjs` and the terms page for no functional gain.
+  - **Mailbox reality check**: `dig MX lyrashieldai.com` → `smtp.google.com`, so domain mail is on
+    **Google Workspace**, not Cloudflare Email Routing. `admin@`, `support@`, `security@`, `sales@`
+    and `marketing@` are all aliases on one mailbox, so no address published on the site points at an
+    unread inbox — including the `security@` in `security.txt`. The only Cloudflare-side change the
+    address needs is the `wrangler.jsonc` var, which the `deploy-marketing` job applies on merge to
+    main; there are no other Cloudflare references to the old address.
+  - **Unused aliases**: `sales@` and `marketing@` are live but not wired to anything. `/demo` has no
+    contact address and `/about` sends partnerships to `admin@`. Left as-is rather than guessed at.
+  - Verify: gate (241 pages, 0/0/0), lint, typecheck, 217 unit tests, build, all six validators,
+    blog crawl (161 / 6 / 235), `test:browser` 41 passed, prettier.
