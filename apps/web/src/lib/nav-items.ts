@@ -150,6 +150,17 @@ const BILLING_BASE: NavItem = {
 
 /** Secondary / Workspace destinations that are always present. */
 const WORKSPACE_NAV_ITEMS: NavItem[] = [
+  // UF-26: Launch Readiness (the release verdict) and Projects (a grouping of
+  // targets) were fully built but reachable only by URL — nothing in the shell
+  // linked to either, and neither had an active-item cue. They are work
+  // surfaces, so they lead the Workspace group.
+  {
+    href: "/dashboard/launch-readiness",
+    label: "Launch Readiness",
+    shortLabel: "Readiness",
+    icon: ShieldCheck,
+  },
+  { href: "/dashboard/projects", label: "Projects", shortLabel: "Projects", icon: Crosshair },
   // Deep Review v16 3.2: Fixes is not an independent destination. Proposed
   // fixes are the "Proposed fixes" tab of Findings (/dashboard/findings?tab=fixes);
   // the /dashboard/fixes route is a permanent redirect kept for old links and
@@ -226,13 +237,7 @@ export const NAV_TITLE_ITEMS: NavItem[] = [
   PLATFORM_ADMIN_BASE,
   BILLING_BASE,
   EVIDENCE_VAULT_BASE,
-  {
-    href: "/dashboard/launch-readiness",
-    label: "Launch Readiness",
-    shortLabel: "Readiness",
-    icon: ShieldCheck,
-  },
-  { href: "/dashboard/projects", label: "Projects", shortLabel: "Projects", icon: Crosshair },
+  // Launch Readiness and Projects arrive via ...WORKSPACE_NAV_ITEMS (UF-26).
   // UF-25: Coding Agents and Integrations are real destinations (reachable from
   // the Connections page and by URL) but are not nav entries. Without a title
   // entry the mobile header fell through to the Home label, so the screen was
