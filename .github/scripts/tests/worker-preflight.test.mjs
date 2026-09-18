@@ -187,6 +187,74 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
   }
 })
 
+test("worker preflight names a stale worker environment and never prints endpoints", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "worker-preflight-stale-"))
+  try {
+    const dockerLog = path.join(directory, "docker.log")
+    const systemctlLog = path.join(directory, "systemctl.log")
+    const runtimeConfig = path.join(directory, "worker-runtime.conf")
+    const envFile = path.join(directory, "worker.env")
+    writeFileSync(path.join(directory, "docker"), preflightDockerStub, { mode: 0o700 })
+    writeFileSync(path.join(directory, "systemctl"), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n', {
+      mode: 0o700,
+    })
+    writeFileSync(
+      runtimeConfig,
+      "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+    )
+    writeFileSync(envFile, preflightEnvFile)
+    const empty = {
+      nonterminal: 0,
+      scan: { wait: 0, active: 0, delayed: 0, prioritized: 0 },
+      webhook: { wait: 0, active: 0, delayed: 0, prioritized: 0 },
+    }
+    const run = (liveRedisUrl, liveDatabaseUrl) =>
+      execFileSync("/bin/sh", [".github/scripts/promote-worker-vm.sh", "--preflight"], {
+        env: {
+          PATH: directory + path.delimiter + process.env.PATH,
+          QUEUE_STATE: JSON.stringify(empty),
+          DOCKER_LOG: dockerLog,
+          SYSTEMCTL_LOG: systemctlLog,
+          MOCK_LIVE_REDIS_URL: liveRedisUrl,
+          MOCK_LIVE_DATABASE_URL: liveDatabaseUrl,
+          LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
+          LYRASHIELD_WORKER_ENV_FILE: envFile,
+          LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
+        },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+
+    // Same host[:port] on both sides passes.
+    assert.match(
+      run("rediss://default:rotated@redis.internal:6379", "postgres://worker:rotated@postgres.internal:5432/lyrashield"),
+      /Worker empty-queue preflight passed/
+    )
+
+    // A rotated Redis or Postgres endpoint in the refreshed file names the
+    // stale worker environment.
+    const staleMessage = /Worker environment is stale: restart lyrashield-worker\.service before promotion/
+    for (const [liveRedis, liveDatabase] of [
+      ["rediss://default:old@exhausted.upstash.io:6379", "postgres://worker:rotated@postgres.internal:5432/lyrashield"],
+      ["rediss://default:rotated@redis.internal:6379", "postgres://worker:old@retired.postgres.internal:5432/lyrashield"],
+      ["rediss://default:old@redis.internal:6380", "postgres://worker:rotated@postgres.internal:5432/lyrashield"],
+    ]) {
+      let stderr = null
+      try {
+        run(liveRedis, liveDatabase)
+      } catch (error) {
+        stderr = error.stderr
+      }
+      assert.notEqual(stderr, null, "preflight accepted a stale worker environment")
+      assert.match(stderr, staleMessage)
+      assert.doesNotMatch(stderr, /exhausted\.upstash\.io|retired\.postgres\.internal|redis\.internal:6380/)
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("preflight environment loads @lyrashield/config in production and matches the worker launcher", () => {
   const directory = mkdtempSync(path.join(tmpdir(), "worker-preflight-env-"))
   try {
