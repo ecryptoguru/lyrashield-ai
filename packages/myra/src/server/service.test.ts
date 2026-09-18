@@ -109,9 +109,9 @@ describe("Myra write gate on confirmProposal", () => {
   it("denies an allowlisted user whose email is not verified", async () => {
     env.MYRA_WRITES_ENABLED = "1"
     env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
-    await expect(
-      confirmProposal(userCtx({ emailVerified: false }), "p1")
-    ).rejects.toMatchObject({ code: "WRITES_DISABLED" })
+    await expect(confirmProposal(userCtx({ emailVerified: false }), "p1")).rejects.toMatchObject({
+      code: "WRITES_DISABLED",
+    })
   })
 
   it("admits the verified allowlisted user", async () => {

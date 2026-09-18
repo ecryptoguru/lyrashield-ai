@@ -86,10 +86,7 @@ describe("marketing surfaces honor the status probe", () => {
   it("keeps the launcher hidden until status reports public:true", () => {
     const panel = read("../components/myra/MyraPanel.astro")
     // The button ships hidden — the script reveals it only on public:true.
-    const launcher = panel.slice(
-      panel.indexOf('id="myra-launcher"'),
-      panel.indexOf("Help")
-    )
+    const launcher = panel.slice(panel.indexOf('id="myra-launcher"'), panel.indexOf("Help"))
     expect(launcher).toContain("hidden")
     expect(panel).toContain("fetchMyraStatus")
     expect(panel).toContain("status.public")
@@ -111,8 +108,6 @@ describe("marketing surfaces honor the status probe", () => {
     expect(statusIndex).toBeGreaterThan(-1)
     expect(statusIndex).toBeLessThan(fetchSlotsIndex)
     // The page must not promise self-serve slot picking while booking is closed.
-    expect(demo).not.toContain(
-      "Choose a time in your timezone. We will send a calendar invite"
-    )
+    expect(demo).not.toContain("Choose a time in your timezone. We will send a calendar invite")
   })
 })

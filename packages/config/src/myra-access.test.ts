@@ -1,10 +1,6 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import {
-  isMyraAllowedEmail,
-  myraDashboardAllowed,
-  normalizeMyraAllowedEmails,
-} from "./myra-access"
+import { isMyraAllowedEmail, myraDashboardAllowed, normalizeMyraAllowedEmails } from "./myra-access"
 
 describe("Myra account allowlist", () => {
   it("normalizes email casing and grants exact membership only", () => {

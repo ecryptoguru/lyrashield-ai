@@ -12,13 +12,8 @@ vi.mock("@lyrashield/config", () => ({
   env,
   isMyraAllowedEmail: (email: string, allowlist: string) =>
     allowlist.split(",").includes(email.trim().toLowerCase()),
-  myraDashboardAllowed: (input: {
-    email: string
-    emailVerified: boolean
-    allowlist: string
-  }) =>
-    input.emailVerified &&
-    input.allowlist.split(",").includes(input.email.trim().toLowerCase()),
+  myraDashboardAllowed: (input: { email: string; emailVerified: boolean; allowlist: string }) =>
+    input.emailVerified && input.allowlist.split(",").includes(input.email.trim().toLowerCase()),
 }))
 
 const { myraPrincipalEnabled, myraWritesEnabled } = await import("./_lib")
