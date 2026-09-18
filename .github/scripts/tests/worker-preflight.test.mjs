@@ -95,7 +95,7 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     assert.match(readFileSync(systemctlLog, "utf8"), /^restart lyrashield-worker-secrets\.service$/m)
     assert.match(
       readFileSync(dockerLog, "utf8"),
-      /run --rm --network bridge --env-file .*worker\.env -w \/app\/apps\/worker ghcr\.io\/example\/worker@sha256:a+ node --import tsx --input-type=module -e /
+      /run --rm --network bridge --env-file .*worker\.env --env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail\.com,ankit@lyrashieldai\.com --env LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 -w \/app\/apps\/worker ghcr\.io\/example\/worker@sha256:a+ node --import tsx --input-type=module -e /
     )
     for (const state of [
       "",
