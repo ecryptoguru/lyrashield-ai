@@ -110,5 +110,9 @@ describe("marketing surfaces honor the status probe", () => {
     expect(closedIndex).toBeLessThan(slotIndex)
     expect(statusIndex).toBeGreaterThan(-1)
     expect(statusIndex).toBeLessThan(fetchSlotsIndex)
+    // The page must not promise self-serve slot picking while booking is closed.
+    expect(demo).not.toContain(
+      "Choose a time in your timezone. We will send a calendar invite"
+    )
   })
 })
