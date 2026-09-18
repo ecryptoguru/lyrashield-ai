@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
+import { allRoutes } from "../../scripts/redirects-lib.mjs"
 import {
   REQUIRED_ROBOTS_AGENTS,
   applyBaseline,
@@ -10,6 +11,7 @@ import {
   titleLimitFor,
 } from "../../scripts/crawl-built-site.mjs"
 import { INDEXNOW_KEY } from "../../scripts/indexnow.mjs"
+import { DEFAULT_OG_IMAGE, OG_CARD_PATHS, ogImageFor } from "../lib/og-images"
 
 const ORIGIN = "https://lyrashieldai.com"
 
@@ -126,6 +128,38 @@ describe("site SEO gate rules", () => {
     expect(result.fresh.map((violation) => violation.path)).toEqual(["/b"])
     expect(result.baselined.map((violation) => violation.path)).toEqual(["/a"])
     expect(result.stale).toEqual([["og-image-default", "/gone"]])
+  })
+})
+
+describe("social cards", () => {
+  it("ships every card the map points at", () => {
+    for (const card of OG_CARD_PATHS) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      expect(existsSync(new URL(`../../public${card}`, import.meta.url)), card).toBe(true)
+    }
+  })
+
+  it("gives every built route a section card instead of the fallback", () => {
+    // /terms and /terms-of-sale are noindex and outside the sitemap, so they
+    // keep the neutral fallback card; every indexed route gets a section card.
+    const noindexRoutes = new Set(["/terms", "/terms-of-sale"])
+    for (const route of allRoutes()) {
+      if (noindexRoutes.has(route)) continue
+      // Blog posts pass their own per-post image; the tag hubs and the hub
+      // itself use the section card.
+      expect(ogImageFor(route), `${route} must not fall back to the default card`).not.toBe(
+        DEFAULT_OG_IMAGE
+      )
+    }
+  })
+
+  it("resolves the section card by longest path prefix", () => {
+    expect(ogImageFor("/")).toBe("/og/home.png")
+    expect(ogImageFor("/pricing")).toBe("/og/pricing.png")
+    expect(ogImageFor("/docs/integrations/zed")).toBe("/og/docs.png")
+    expect(ogImageFor("/blog/tags/verification")).toBe("/og/blog.png")
+    expect(ogImageFor("/support")).toBe("/og/company.png")
+    expect(ogImageFor("/not-a-real-page")).toBe(DEFAULT_OG_IMAGE)
   })
 })
 

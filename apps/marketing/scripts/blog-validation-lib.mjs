@@ -497,9 +497,17 @@ export function validateArticle(article, programEntry, context = {}) {
     errors.push("FAQ count must be between 2 and 4")
   }
   if (Array.isArray(data.faq)) {
+    const seenQuestions = new Set()
     for (const [index, item] of data.faq.entries()) {
       if (!item?.q?.trim() || !item?.a?.trim())
         errors.push(`FAQ ${index + 1} requires a question and answer`)
+      // A repeated question emits a second FAQPage entry with the same name,
+      // which is invalid structured data rather than a style preference.
+      const question = item?.q?.trim().toLowerCase()
+      if (question) {
+        if (seenQuestions.has(question)) errors.push(`duplicate FAQ question: ${item.q.trim()}`)
+        seenQuestions.add(question)
+      }
     }
   }
 

@@ -371,27 +371,32 @@ export function buildBaseline(violations, { date, notes = {} }) {
 }
 
 /**
- * Why each baselined rule is tolerated and which wave removes it. Keeping this
- * next to the entries makes the allowlist reviewable instead of a list of
- * paths a reader has to reverse-engineer.
+ * What each rule means, so a future entry is easy to judge. The allowlist
+ * itself is empty as of the Wave 3 close-out — every rule below is enforced
+ * strictly, and an entry should only ever be added with a wave that removes it.
  */
 export const BASELINE_NOTES = {
   "title-too-long": {
     reason:
-      "Rendered titles above the budget: 57 blog posts carry the ' | LyraShield AI Blog' suffix and 10 docs guides append ' | LyraShield AI'.",
-    wave: 3,
+      "Rendered title above the budget: 60 characters for static pages, 65 for blog posts (they carry a longer brand suffix).",
+    wave: null,
   },
   "description-too-long": {
-    reason: "Meta descriptions above 160 characters on docs guides, tag hubs and three landing pages.",
-    wave: 3,
+    reason: "Meta description above 160 characters.",
+    wave: null,
   },
   "og-image-default": {
-    reason: "Non-blog pages still share /og/og-default.png; blog posts already carry unique cards.",
-    wave: 3,
+    reason:
+      "A sitemap page fell back to /og/og-default.png instead of a section card from src/lib/og-images.ts.",
+    wave: null,
   },
   "jsonld-page-entity-missing": {
-    reason: "Pages that emit only the site graph (Organization + WebSite) and no page-level entity.",
-    wave: 2,
+    reason: "Page emitted only the site graph (Organization + WebSite) and no page-level entity.",
+    wave: null,
+  },
+  "jsonld-breadcrumb-missing": {
+    reason: "A non-root page emitted no BreadcrumbList.",
+    wave: null,
   },
 }
 

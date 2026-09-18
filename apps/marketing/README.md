@@ -167,11 +167,21 @@ pnpm --filter @lyrashield/marketing seo:crawl # terminal 2
 
 Known violations are pinned in `scripts/seo-baseline.json`, so the gate can land
 before the fixes that drain it: it fails on anything **not** baselined and warns
-about stale entries so the allowlist cannot rot. Regenerate it after draining a
-wave:
+about stale entries so the allowlist cannot rot. The allowlist is empty as of
+2026-09-18; regenerate it only when a new rule needs a bounded drain:
 
 ```bash
 pnpm --filter @lyrashield/marketing seo:baseline
+```
+
+Social cards for the non-blog surfaces are committed PNGs rendered by
+`scripts/generate-og-cards.mjs` — a design-time tool, not a build step. It
+renders each card in Chromium at exactly 1200x630 using the DESIGN.md tokens
+and the bundled fonts. Re-run it only when the copy or the tokens change, and
+update `src/lib/og-images.ts` if the card set changes:
+
+```bash
+node apps/marketing/scripts/generate-og-cards.mjs
 ```
 
 The same gate runs in CI as `tests-browser/seo.e2e.ts`, reusing the Playwright

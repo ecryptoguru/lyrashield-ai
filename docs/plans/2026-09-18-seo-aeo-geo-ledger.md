@@ -12,43 +12,39 @@ stay untouched.
 | Wave | Scope | Status | PR | Notes |
 | --- | --- | --- | --- | --- |
 | 1 | Gate + crawler eligibility + machine-readable surfaces | ✅ complete 2026-09-18 | — | Gate landed first so waves 2–4 are enforced |
-| 2 | Entity + structured data | ⬜ not started | — | `sameAs` blocked on founder decision 1 |
-| 3 | Metadata limits + OG cards + `/research` | ⬜ not started | — | Drains most baseline entries |
-| 4 | Internal linking + thin pages + strict gate | ⬜ not started | — | Empties `seo-baseline.json` |
+| 2 | Entity + structured data | ✅ complete 2026-09-18 | — | Breadcrumb rule found 4 extra pages |
+| 3 | Metadata limits + OG cards + `/research` | ✅ complete 2026-09-18 | — | **Baseline drained to zero** |
+| 4 | Internal linking + thin pages | ⬜ not started | — | Gate is already strict; no baseline work left |
 
 | Wave | Commits | Local verify | CI | Merged |
 | --- | --- | --- | --- | --- |
-| 1 | see session log | PASS | — | — |
-| 2 | — | — | — | — |
-| 3 | — | — | — | — |
+| 1 | `983c146f` | PASS | — | — |
+| 2 | `72742681` | PASS | — | — |
+| 3 | see session log | PASS | — | — |
 | 4 | — | — | — | — |
 
 ## Baseline allowlist
 
-`apps/marketing/scripts/seo-baseline.json` holds the violations measured on 2026-09-18 and must be
-empty when Wave 4 lands. Each entry names the wave that removes it; the file's `notes` block carries
-the same mapping for reviewers.
+`apps/marketing/scripts/seo-baseline.json` is **empty** as of the Wave 3 close-out: 241 pages, 0
+baselined, 0 stale, 0 new violations. Its `notes` block documents what each rule means so a future
+entry is easy to judge; every rule is now enforced strictly.
 
-| Rule | Count at Wave 1 close | Removed by |
-| --- | --- | --- |
-| `title-too-long` | 68 (57 blog posts, 10 docs guides, 1 tag hub) | Wave 3 |
-| `description-too-long` | 29 (20 docs, 6 tag hubs, `/pricing`, `/research`, `/vibe-security-50`) | Wave 3 |
-| `og-image-default` | 80 (every non-blog-post page) | Wave 3 |
-| `jsonld-page-entity-missing` | 3 (`/demo`, `/support`, `/security-reporting`) | Wave 2 |
-
-Wave 1 drained `robots-agent-missing`, `llms-url-missing`, `rss-trailing-slash` and
-`security-txt-missing` from the initial 184-entry baseline.
+Drain history: 184 entries at the Wave 1 gate launch → 177 after Wave 2 → 5 after the Wave 3 copy
+pass → 0.
 
 ## Founder decisions required
 
 1. Verified profile URLs for `Organization.sameAs` (GitHub org, LinkedIn company page, X handle).
+   `contactPoint` and the raster logo now ship; `sameAs` stays absent rather than invented.
 2. `foundingDate` / `legalName` / registered address, if publishable.
-3. Named human author for blog posts vs strengthening the Organization author.
+3. Named human author for blog posts vs strengthening the Organization author. The Organization
+   author is unchanged; no Person was attributed speculatively.
 4. Google/Bing verification codes — set `PUBLIC_GOOGLE_SITE_VERIFICATION` /
    `PUBLIC_BING_SITE_VERIFICATION` in `wrangler.jsonc` and the tag renders. IndexNow already ships
    with a generated key (`public/a74cf3dd89f266a1c0b8d92a06c50f2b.txt`); rotate by replacing that file
    and `INDEXNOW_KEY` in `scripts/indexnow.mjs` together.
-5. Whether and when to publish anonymized scan statistics on `/research`.
+5. Whether and when to publish anonymized scan statistics on `/research`. The page now states
+   plainly that it reports no results yet.
 
 ## Do not touch
 
@@ -66,13 +62,15 @@ Wave 1 drained `robots-agent-missing`, `llms-url-missing`, `rss-trailing-slash` 
 - `pnpm preview` sets `LYRASHIELD_LOCAL_PREVIEW=1` for its own build. Without it the middleware
   http→https upgrade fires locally (wrangler dev rewrites the request host to the custom domain) and
   301s every SSR route, so `llms.txt`, `rss.xml`, `agents.md` and `/api/*` are unreadable locally.
+- `/api/waitlist/position?code=INVALID` returns 500 locally (D1 state), not 404 as in production. The
+  browser suite does not cover it; the CI smoke check asserts it against production.
 
 ## Session log
 
 - 2026-09-18 — Plan written from a read-only production crawl of all 241 sitemap URLs plus source
   review. Worktree created from `origin/main`.
-- 2026-09-18 (session 2) — Wave 1 implemented and verified locally.
-  - **Gate**: new `scripts/crawl-built-site.mjs` (+ `seo-baseline.json`, `tests-browser/seo.e2e.ts`,
+- 2026-09-18 (session 2) — Wave 1 implemented and verified locally (`983c146f`).
+  - **Gate**: `scripts/crawl-built-site.mjs` (+ `seo-baseline.json`, `tests-browser/seo.e2e.ts`,
     `seo:crawl` / `seo:baseline` scripts, `src/tests/site-seo-gate.test.ts`). `inspectHtml` in
     `crawl-built-blog.mjs` gained `ogImage*` and `jsonLdTypes` additively.
   - **Root-cause fix found by the gate**: the middleware's http→https upgrade tested
@@ -92,3 +90,29 @@ Wave 1 drained `robots-agent-missing`, `llms-url-missing`, `rss-trailing-slash` 
   - **Verify**: lint, typecheck (0 errors), 212 vitest tests, `build`, all six blog/compare/redirect
     validators, `seo:crawl` (241 pages, 0 new, 0 stale), `crawl-built-blog` (161 articles / 6 tag
     archives / 235 images), `test:browser` (41 passed, including both new SEO specs). Prettier clean.
+- 2026-09-18 (session 3) — Wave 2 implemented and verified (`72742681`).
+  - `Organization.logo` is now an `ImageObject` over `/logo.png` (1024x1024) instead of the SVG;
+    `contactPoint` covers support and security reporting with the mailboxes already published on
+    `/support`, `/privacy` and `/security-reporting`.
+  - `/pricing`, `/demo`, `/support` and `/security-reporting` emit `WebPage` + `BreadcrumbList`.
+  - New gate rule `jsonld-breadcrumb-missing` (every non-root page) found four more pages missing the
+    trail: `/agents` and the Aider, Pi and Devin guides. All four fixed.
+  - Baseline 184 → 177. Verify: 213 vitest tests, typecheck, lint, `test:browser` 41 passed.
+- 2026-09-18 (session 4) — Wave 3 implemented and verified; **the baseline is empty**.
+  - **OG cards**: `scripts/generate-og-cards.mjs` renders 15 section cards at exactly 1200x630 in
+    Chromium using the DESIGN.md tokens and the bundled fonts; `src/lib/og-images.ts` maps every
+    built route to a card, and `Base.astro` uses the map when a page passes no `ogImage`.
+    `/og/og-default.png` remains only for routes outside the sitemap.
+  - **Titles**: blog suffix `" | LyraShield AI Blog"` → `" | LyraShield AI"` (161 posts), then the
+    26 posts still over 65 rendered characters rewritten; 10 docs titles trimmed to ≤ 62; the tag-hub
+    title template trimmed. No duplicate titles.
+  - **Descriptions**: 20 docs guides, `/pricing`, `/vibe-security-50` and the six tag hubs trimmed to
+    ≤ 160 characters. Two single-quoted docs descriptions (`cline`, `vscode`) were missed by the
+    first pass and caught by the gate.
+  - **`/research`**: title/description/lede now describe what the page is (planned research, sample
+    protection, how to cite) and state plainly that no results are reported yet.
+  - **FAQ dedupe**: the repeated question in `claude-code-security-workflow.mdx` is now distinct, and
+    `blog-validation-lib.mjs` rejects duplicate FAQ questions (with a unit test) because a repeat
+    emits two FAQPage entries with one name.
+  - Baseline 177 → 0. Verify: 217 vitest tests, typecheck, lint, `build`, all six validators,
+    `seo:crawl` (241 pages, 0/0/0), `crawl-built-blog` (161 / 6 / 235), `test:browser` 41 passed.

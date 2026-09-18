@@ -14,7 +14,7 @@ faq:
     a: Use plan mode for read only exploration then switch to controlled execution with approval prompts. Require review before edits to auth, payment or infra code.
   - q: What evidence should I keep for Claude Code releases?
     a: Keep SARIF from secret and dependency scans plus a log of MCP servers used and the pull request with permission settings. That supports later verification and audit.
-  - q: Where does Claude Code store MCP server config?
+  - q: How should I scope the LyraShield MCP server for a team?
     a: Claude Code stores MCP servers in .mcp.json at the project root for team scope or the user config for local scope. Use project scope for the LyraShield server so CI and local checks share one entry, and keep the lsk_ key in an env reference rather than a literal in the file.
 ---
 

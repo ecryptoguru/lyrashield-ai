@@ -5,6 +5,7 @@ import JsonLd from "@components/JsonLd.astro"
 import Header from "@components/Header.astro"
 import Footer from "@components/Footer.astro"
 import MyraPanel from "@components/myra/MyraPanel.astro"
+import { ogImageFor } from "../lib/og-images"
 import bricolageWoff2 from "@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2?url"
 
 interface Props {
@@ -44,6 +45,9 @@ const {
 const siteUrl = Astro.site?.toString() || "http://localhost:4321"
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const xUrl = __MARKETING_X_URL__
+// Section card unless the page names its own (blog posts pass their per-post
+// image through this prop).
+const resolvedOgImage = ogImage ?? ogImageFor(Astro.url.pathname)
 // Default-off flag: the support panel only mounts when explicitly enabled.
 const myraEnabled = import.meta.env.PUBLIC_MYRA_MARKETING_ENABLED === "1"
 const siteDescription =
@@ -130,7 +134,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
       title={title}
       description={description}
       canonical={canonical}
-      ogImage={ogImage}
+      ogImage={resolvedOgImage}
       ogImageAlt={ogImageAlt}
       ogImageWidth={ogImageWidth}
       ogImageHeight={ogImageHeight}

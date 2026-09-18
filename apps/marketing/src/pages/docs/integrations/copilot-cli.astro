@@ -4,9 +4,9 @@ import DocsLayout from "@layouts/DocsLayout.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const title = "LyraShield MCP for GitHub Copilot CLI — Setup Guide"
+const title = "LyraShield MCP for GitHub Copilot CLI"
 const description =
-  "Connect LyraShield to GitHub Copilot CLI. Configure ~/.copilot/mcp-config.json or .mcp.json with the stdio server, or use the remote HTTP endpoint for cloud environments."
+  "Connect LyraShield to GitHub Copilot CLI. Configure ~/.copilot/mcp-config.json with the stdio server, or use the remote HTTP endpoint in cloud environments."
 const updatedDate = "2026-09-09"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({

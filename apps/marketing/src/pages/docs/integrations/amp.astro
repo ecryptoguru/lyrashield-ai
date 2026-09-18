@@ -4,9 +4,9 @@ import DocsLayout from "@layouts/DocsLayout.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const title = "LyraShield MCP for Amp (Sourcegraph) — Setup Guide"
+const title = "LyraShield MCP for Amp (Sourcegraph)"
 const description =
-  "Add the LyraShield MCP server to Amp using its CLI. Keep credentials in your shell environment, and choose an always-available server or a task-scoped Agent Skill."
+  "Add the LyraShield MCP server to Amp using its CLI. Keep credentials in your shell environment, and choose an always-on or task-scoped server."
 const updatedDate = "2026-08-13"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({

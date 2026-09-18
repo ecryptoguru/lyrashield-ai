@@ -488,6 +488,19 @@ ${filler}
     ).toContain("body FAQ heading duplicates frontmatter FAQ")
   })
 
+  it("rejects a repeated FAQ question, which would emit two FAQPage entries with one name", () => {
+    const faq = [
+      { q: "Where does the config live?", a: "In .mcp.json at the project root." },
+      { q: "  where does the config live?  ", a: "Also in the user config for local scope." },
+    ]
+    expect(
+      validateArticle(
+        { slug: "post", data: { faq }, body: "Body copy without an H1." },
+        { slug: "post" }
+      )
+    ).toContain("duplicate FAQ question: where does the config live?")
+  })
+
   it("validates catalog paths, dimensions, budgets, hashes, clusters, and adjacency", () => {
     const root = mkdtempSync(join(tmpdir(), "blog-validation-"))
     const imageRoot = join(root, "public/images/blog/library/verification-01")
