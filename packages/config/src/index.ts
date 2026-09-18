@@ -2,4 +2,8 @@ export { env, isProd, isDev, isTest, resolveWorkerExecutionProvenanceFrom } from
 export { resolveWorkerExecutionProvenance, type WorkerExecutionProvenance } from "./env"
 export type { Env } from "./env"
 export { APPROVED_PLATFORM_ADMIN_EMAILS, normalizePlatformAdminEmails } from "./platform-admin"
-export { isMyraAllowedEmail, normalizeMyraAllowedEmails } from "./myra-access"
+export {
+  isMyraAllowedEmail,
+  myraDashboardAllowed,
+  normalizeMyraAllowedEmails,
+} from "./myra-access"

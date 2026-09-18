@@ -12,7 +12,7 @@
  * convention used across apps/web; error codes come from MYRA_ERROR_CODES so
  * the shared client can key on them.
  */
-import { env, isMyraAllowedEmail } from "@lyrashield/config"
+import { env, isMyraAllowedEmail, myraDashboardAllowed } from "@lyrashield/config"
 import {
   MYRA_ERROR_CODES,
   type MyraError,
@@ -60,8 +60,11 @@ export function myraPrincipalEnabled(principal: MyraPrincipal): boolean {
   if (principal.kind === "user") {
     return (
       myraDashboardEnabled() &&
-      principal.emailVerified &&
-      isMyraAllowedEmail(principal.email, env.MYRA_ALLOWED_EMAILS)
+      myraDashboardAllowed({
+        email: principal.email,
+        emailVerified: principal.emailVerified,
+        allowlist: env.MYRA_ALLOWED_EMAILS,
+      })
     )
   }
   if (principal.kind === "anonymous") return myraPublicEnabled()
