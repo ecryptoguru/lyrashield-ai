@@ -455,6 +455,18 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
       violations.push({ rule: "sitemap-lastmod-missing", path: entry.path, detail: "" })
     }
   }
+
+  // Probe machine-readable surfaces before crawling every page. llms.txt and
+  // rss.xml load Astro content collections in the Worker; keeping them on the
+  // cold path avoids a late request timing out after the page crawl has already
+  // consumed the local preview's budget.
+  const machineTexts = []
+  for (const path of ["/robots.txt", "/llms.txt", "/rss.xml", "/.well-known/security.txt"]) {
+    const { text } = await fetchText(fetchImpl, new URL(path, localOrigin).href)
+    machineTexts.push(text)
+  }
+  const [robots, llms, rss, securityTxt] = machineTexts
+
   const pages = await mapWithConcurrency(paths, FETCH_CONCURRENCY, async (path) => {
     const url = new URL(path, localOrigin).href
     const { status, text } = await fetchText(fetchImpl, url)
@@ -469,16 +481,6 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
   for (const [path, facts] of pageFacts) {
     violations.push(...pageViolations({ path, facts, origin: siteOrigin }))
   }
-
-  // llms.txt and rss.xml both load Astro content collections. Fetch these
-  // small control surfaces sequentially so a cold local Worker does not build
-  // both collections at once and trip the per-request timeout in CI.
-  const machineTexts = []
-  for (const path of ["/robots.txt", "/llms.txt", "/rss.xml", "/.well-known/security.txt"]) {
-    const { text } = await fetchText(fetchImpl, new URL(path, localOrigin).href)
-    machineTexts.push(text)
-  }
-  const [robots, llms, rss, securityTxt] = machineTexts
 
   const site = siteViolations({
     pageFacts,
@@ -507,8 +509,9 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
     }
   }
 
+  const machinePaths = new Set(["/robots.txt", "/llms.txt", "/rss.xml", "/.well-known/security.txt"])
   const linkResults = await mapWithConcurrency(
-    site.externalPaths,
+    site.externalPaths.filter((path) => !machinePaths.has(path)),
     FETCH_CONCURRENCY,
     async (path) => {
       // A followed redirect to a 200 is fine: /docs/integrations/windsurf and
