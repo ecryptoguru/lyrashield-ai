@@ -46,8 +46,10 @@ worker_oneshot() {
   # per line and every emitted value is whitespace-free.
   # shellcheck disable=SC2086
   docker run --rm --network bridge \
+    --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --env-file "$environment_file" \
     $env_args \
+    --env TMPDIR=/tmp \
     -w /app/apps/worker "$image" \
     node --import tsx --input-type=module -e "$code" "$@"
 }
