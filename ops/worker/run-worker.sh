@@ -3,6 +3,14 @@ set -eu
 
 runtime_config="${LYRASHIELD_WORKER_RUNTIME_CONFIG:-/etc/lyrashield/worker-runtime.conf}"
 environment_file="${LYRASHIELD_WORKER_ENV_FILE:-/etc/lyrashield/worker.env}"
+worker_env_lib="${LYRASHIELD_WORKER_ENV_LIB:-/opt/lyrashield-worker-host/worker-env.sh}"
+
+if [ ! -r "$worker_env_lib" ]; then
+  echo "Worker environment library is unavailable: $worker_env_lib" >&2
+  exit 1
+fi
+# shellcheck disable=SC1090
+. "$worker_env_lib"
 
 if [ ! -r "$runtime_config" ]; then
   echo "Worker runtime configuration is unavailable: $runtime_config" >&2
@@ -36,14 +44,6 @@ case "$LYRASHIELD_SANDBOX_IMAGE" in
     exit 1
     ;;
 esac
-
-is_40_hex() {
-  value=$1
-  case "$value" in
-    ''|*[!0-9a-fA-F]*) return 1 ;;
-  esac
-  [ "${#value}" -eq 40 ]
-}
 
 is_64_hex() {
   value=$1
@@ -137,32 +137,16 @@ for image in "$LYRASHIELD_WORKER_IMAGE" "$LYRASHIELD_SANDBOX_IMAGE"; do
   fi
 done
 
-app_revision=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
-engine_revision=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')
-is_40_hex "$app_revision" || {
-  echo "Worker image app revision label must be a 40-character SHA" >&2
-  exit 1
-}
-is_40_hex "$engine_revision" || {
-  echo "Worker image engine revision label must be a 40-character SHA" >&2
-  exit 1
-}
+worker_shared_root=/var/lib/lyrashield/worker
+# Computing the argument list here keeps the image-label provenance validation
+# ahead of the privileged shared-root chown below.
+env_args=$(lyrashield_worker_env_args "$runtime_config" "$environment_file" "$worker_shared_root")
 
 socket_group=$(stat -c '%g' /var/run/docker.sock)
 pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"
 if [ ! -s "$pin_file" ]; then
   echo "Worker egress pins are unavailable: $pin_file" >&2
   exit 1
-fi
-
-# Enable web search by default only when an API key is present in the worker env.
-if [ -z "${LYRASHIELD_WEB_SEARCH_ENABLED:-}" ]; then
-  web_search_api_key=$(extract_env_value LYRASHIELD_WEB_SEARCH_API_KEY "$environment_file")
-  if [ -n "$web_search_api_key" ]; then
-    LYRASHIELD_WEB_SEARCH_ENABLED=1
-  else
-    LYRASHIELD_WEB_SEARCH_ENABLED=0
-  fi
 fi
 
 set --
@@ -186,7 +170,6 @@ while read -r pinned_host pinned_address pinned_port extra; do
   set -- "$@" --add-host "${pinned_host}:${pinned_address}"
 done <"$pin_file"
 
-worker_shared_root=/var/lib/lyrashield/worker
 install -d -m 700 "$worker_shared_root" "$worker_shared_root/lyrashield_runs" "$worker_shared_root/tmp"
 
 docker rm -f lyrashield-worker >/dev/null 2>&1 || true
@@ -198,35 +181,15 @@ docker run --rm \
   "$LYRASHIELD_WORKER_IMAGE" \
   -c "chown -R lyrashield:lyrashield '$worker_shared_root' && chmod 700 '$worker_shared_root' '$worker_shared_root/lyrashield_runs' '$worker_shared_root/tmp'"
 
+# Intentional word splitting: worker-env.sh emits one `--env` argument pair per
+# line and every emitted value is whitespace-free.
+# shellcheck disable=SC2086
 docker create \
   --name lyrashield-worker \
   --network bridge \
   "$@" \
   --env-file "$environment_file" \
-  --env NODE_ENV=production \
-  --env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com \
-  --env LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 \
-  --env LYRASHIELD_WORKER_CONCURRENCY=1 \
-  --env PLATFORM_MAX_SCAN_BUDGET_USD=50 \
-  --env LYRASHIELD_RUNTIME_BACKEND=docker \
-  --env LYRASHIELD_ENGINE_PATH=/opt/lyrashield-venv/bin/lyrashield \
-  --env LYRASHIELD_ENGINE_WORK_ROOT="$worker_shared_root" \
-  --env TMPDIR="$worker_shared_root/tmp" \
-  --env LYRASHIELD_ENGINE_SANDBOX_NETWORK="$LYRASHIELD_SANDBOX_NETWORK" \
-  --env LYRASHIELD_IMAGE="$LYRASHIELD_SANDBOX_IMAGE" \
-  --env LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST="${LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST:-0}" \
-  --env LYRASHIELD_TELEMETRY=0 \
-  --env LYRASHIELD_LOCAL_EVIDENCE_STORAGE=0 \
-  --env LYRASHIELD_WEB_SEARCH_ENABLED="${LYRASHIELD_WEB_SEARCH_ENABLED}" \
-  --env LYRASHIELD_WEB_SEARCH_PROVIDER="${LYRASHIELD_WEB_SEARCH_PROVIDER:-parallel}" \
-  --env LYRASHIELD_WEB_SEARCH_MODE="${LYRASHIELD_WEB_SEARCH_MODE:-turbo}" \
-  --env LYRASHIELD_WEB_SEARCH_MAX_RESULTS="${LYRASHIELD_WEB_SEARCH_MAX_RESULTS:-5}" \
-  --env LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL="${LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL:-4000}" \
-  --env LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN="${LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN:-50}" \
-  --env LYRASHIELD_WEB_SEARCH_BUDGET_USD="${LYRASHIELD_WEB_SEARCH_BUDGET_USD:-1.0}" \
-  --env LYRASHIELD_PRODUCT_REVISION="$app_revision" \
-  --env LYRASHIELD_WORKER_IMAGE_DIGEST="$worker_digest" \
-  --env LYRASHIELD_ENGINE_REVISION="$engine_revision" \
+  $env_args \
   --group-add "$socket_group" \
   --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
   --mount type=bind,src="$worker_shared_root",dst="$worker_shared_root" \
