@@ -353,6 +353,23 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
   })
   violations.push(...site.violations)
 
+  // /.well-known/security.txt is a static file, so it cannot read
+  // PUBLIC_SECURITY_EMAIL the way the pages do. That makes it the one surface
+  // that goes stale silently when the published disclosure address changes —
+  // exactly what happened when another branch switched the reporting page to
+  // support@. Tie the file to the page it is the policy for.
+  if (securityTxt !== null) {
+    const contact = securityTxt.match(/^Contact:\s*mailto:([^\s]+)/im)?.[1]?.toLowerCase()
+    const policyFacts = pageFacts.get("/security-reporting")
+    if (contact && policyFacts && !policyFacts.mailtoLinks.includes(contact)) {
+      violations.push({
+        rule: "security-txt-contact-mismatch",
+        path: "/.well-known/security.txt",
+        detail: `${contact} is not published on /security-reporting`,
+      })
+    }
+  }
+
   const linkResults = await mapWithConcurrency(
     site.externalPaths,
     FETCH_CONCURRENCY,
@@ -469,6 +486,11 @@ export const BASELINE_NOTES = {
   "robots-missing": {
     reason:
       "robots.txt did not return 200. The agent-coverage check cannot run without it, and a missing robots.txt is itself a crawl-access problem.",
+    wave: null,
+  },
+  "security-txt-contact-mismatch": {
+    reason:
+      "The Contact address in /.well-known/security.txt is not published on /security-reporting. The file is static and cannot follow PUBLIC_SECURITY_EMAIL, so it must be updated whenever the published disclosure address changes.",
     wave: null,
   },
 }

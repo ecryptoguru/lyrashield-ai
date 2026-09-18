@@ -123,11 +123,13 @@ export function inspectHtml(html, pageUrl) {
   }
 
   const hrefs = []
+  const mailtoLinks = []
   const anchorTargets = []
   const anchorErrors = []
   for (const tag of openingTags(html, "a")) {
     const href = attributes(tag).get("href")
     if (!href) continue
+    if (/^mailto:/i.test(href)) mailtoLinks.push(decodeURIComponent(href.slice(7)).toLowerCase())
     const resolved = resolveHttpUrl(href, pageUrl)
     if (resolved) hrefs.push(resolved.href)
     if (!resolved || !resolved.hash) continue
@@ -218,6 +220,7 @@ export function inspectHtml(html, pageUrl) {
     ids,
     hrefs: unique(hrefs),
     localHrefs,
+    mailtoLinks: unique(mailtoLinks),
     tagUrls,
     anchorTargets,
     anchorErrors: unique(anchorErrors),

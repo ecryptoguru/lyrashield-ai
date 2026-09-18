@@ -48,6 +48,7 @@ function healthyFacts(path = "/pricing", overrides: Record<string, unknown> = {}
     hasDraftMarker: false,
     imagesMissingAlt: 0,
     htmlLang: "en",
+    mailtoLinks: [],
     ...overrides,
   }
 }
