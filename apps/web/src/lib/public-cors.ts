@@ -31,6 +31,13 @@ export function publicCorsHeaders(request: Request): Record<string, string> {
   if (!origin || !trustedOrigins().has(origin)) return {}
   return {
     "Access-Control-Allow-Origin": origin,
+    // The marketing Myra flows call these endpoints with
+    // `credentials: "include"` (the app cookie session is an optional
+    // credential for signed-in visitors). A browser rejects a credentialed
+    // cross-origin response that omits this header, which surfaced as an
+    // opaque "Failed to fetch" on /demo and in the support panel. It is only
+    // ever sent next to a specific allowlisted origin, never "*".
+    "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Methods": ALLOWED_METHODS,
     "Access-Control-Allow-Headers": "Content-Type",
     Vary: "Origin",

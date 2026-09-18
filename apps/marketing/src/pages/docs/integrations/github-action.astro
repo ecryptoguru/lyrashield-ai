@@ -3,9 +3,9 @@ import DocsLayout from "@layouts/DocsLayout.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const title = "LyraShield GitHub Action — Diff-Aware CI Security Gate"
+const title = "LyraShield GitHub Action — Diff-Aware Gate"
 const description =
-  "Add the LyraShield GitHub Action to your workflow for a one-step, diff-aware security gate: secret detection, risky-pattern checks, and SARIF output. Runs entirely in your own runner — no LyraShield account or API key required."
+  "Add the LyraShield GitHub Action for a diff-aware security gate: secret detection, risky-pattern checks and SARIF output. Runs in your runner, no account."
 const updatedDate = "2026-07-31"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({

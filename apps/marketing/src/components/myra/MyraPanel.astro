@@ -16,6 +16,11 @@ import { MYRA_COPY } from "@lyrashield/myra"
   Help
 </button>
 
+<!-- Keep the challenge host outside the hidden panel. A queued token attempt
+     can start after the panel closes, and interaction-only challenges must
+     remain visible and reachable. Empty when nothing needs verifying. -->
+<div data-myra-turnstile class="fixed bottom-20 right-5 z-50 empty:hidden"></div>
+
 <section
   id="myra-panel"
   hidden

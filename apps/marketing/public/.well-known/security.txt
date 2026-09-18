@@ -1,0 +1,5 @@
+Contact: mailto:security@lyrashieldai.com
+Expires: 2027-09-18T00:00:00.000Z
+Canonical: https://lyrashieldai.com/.well-known/security.txt
+Policy: https://lyrashieldai.com/security-reporting
+Preferred-Languages: en

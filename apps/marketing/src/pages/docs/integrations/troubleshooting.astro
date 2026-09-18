@@ -6,7 +6,7 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP Troubleshooting & Gotchas"
 const description =
-  "Fix common LyraShield MCP integration problems: VS Code uses 'servers' not 'mcpServers', Gemini CLI uses httpUrl for Streamable HTTP, Zed uses context_servers, and OpenCode uses {env:VAR} interpolation."
+  "Fix common LyraShield MCP problems: VS Code uses 'servers' not 'mcpServers', Gemini CLI uses httpUrl, Zed uses context_servers, OpenCode uses {env:VAR}."
 const updatedDate = "2026-07-31"
 
 const agents = listAgents()

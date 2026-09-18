@@ -6,7 +6,7 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for MiMo Code — Setup Guide"
 const description =
-  "Connect LyraShield to MiMo Code (Xiaomi). Configure .mimocode/mimocode.jsonc with the mcp root key — not mcpServers — using array-command format for stdio or type: remote for HTTP."
+  "Connect LyraShield to MiMo Code (Xiaomi). Configure .mimocode/mimocode.jsonc with the mcp root key (not mcpServers) using array-command format for stdio."
 const updatedDate = "2026-09-09"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({

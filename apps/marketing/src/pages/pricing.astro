@@ -14,7 +14,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/pricing", origin).toString()
 const title = "Pricing — Cloud & Local Plans | LyraShield AI"
 const description =
-  "Cloud plans from $29 a month with a limited free trial of 60 agent-minutes and no card. Prepaid minute packs and annual billing are available; Local launches later."
+  "Cloud plans from $29 a month with a free trial of 60 agent-minutes and no card. Prepaid minute packs and annual billing are available; Local launches later."
 
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
 const enterprisePlan = getPlan("ENTERPRISE")
@@ -68,6 +68,14 @@ const jsonLd = [
     description,
     url: canonical,
     isPartOf: { "@id": `${origin}/#website` },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Pricing", item: canonical },
+    ],
   },
   {
     "@context": "https://schema.org",

@@ -5,6 +5,7 @@ import JsonLd from "@components/JsonLd.astro"
 import Header from "@components/Header.astro"
 import Footer from "@components/Footer.astro"
 import MyraPanel from "@components/myra/MyraPanel.astro"
+import { ogImageFor } from "../lib/og-images"
 import bricolageWoff2 from "@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2?url"
 
 interface Props {
@@ -44,10 +45,32 @@ const {
 const siteUrl = Astro.site?.toString() || "http://localhost:4321"
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const xUrl = __MARKETING_X_URL__
+// Section card unless the page names its own (blog posts pass their per-post
+// image through this prop).
+const resolvedOgImage = ogImage ?? ogImageFor(Astro.url.pathname)
 // Default-off flag: the support panel only mounts when explicitly enabled.
-const myraEnabled = import.meta.env.PUBLIC_MYRA_MARKETING_ENABLED === "1"
+const myraEnabled = __MARKETING_MYRA_ENABLED__
 const siteDescription =
   "LyraShield AI records what was tested, separates detected risks from retest-confirmed fixes, and creates an assurance report for AI-built apps."
+
+// Google's logo guidance requires a raster image, and the SVG that renders in
+// the UI is not one. /logo.png is 1024x1024 and already served; declare the
+// dimensions so the consumer does not have to fetch it to find out.
+const organizationLogo = {
+  "@type": "ImageObject",
+  url: new URL("/logo.png", siteOrigin).toString(),
+  width: 1024,
+  height: 1024,
+}
+
+// Both mailboxes are already published on /support, /privacy and
+// /security-reporting; the structured data states the same destinations
+// rather than inventing a new channel. Read through the same env overrides
+// those pages honour, or the JSON-LD would advertise a stale address.
+const supportEmail =
+  (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
+const securityEmail =
+  (import.meta.env.PUBLIC_SECURITY_EMAIL as string | undefined) || "support@lyrashieldai.com"
 
 const siteGraph: unknown[] = [
   {
@@ -56,7 +79,7 @@ const siteGraph: unknown[] = [
     "@id": `${siteOrigin}/#organization`,
     name: "LyraShield AI",
     url: siteUrl,
-    logo: new URL("/logo.svg", siteOrigin).toString(),
+    logo: organizationLogo,
     description: siteDescription,
     knowsAbout: [
       "AI application security",
@@ -65,6 +88,28 @@ const siteGraph: unknown[] = [
       "independent finding verification",
       "security retesting",
     ],
+    // Both mailboxes are already published on /support, /privacy and
+    // /security-reporting; the structured data states the same destinations
+    // rather than inventing a new channel.
+    contactPoint: [
+      {
+        "@type": "ContactPoint",
+        contactType: "customer support",
+        email: supportEmail,
+        url: new URL("/support", siteOrigin).toString(),
+        availableLanguage: ["en"],
+      },
+      {
+        "@type": "ContactPoint",
+        contactType: "security",
+        email: securityEmail,
+        url: new URL("/security-reporting", siteOrigin).toString(),
+        availableLanguage: ["en"],
+      },
+    ],
+    // Only profiles that genuinely exist belong here. PUBLIC_X_URL is the one
+    // configured product handle; add GitHub/LinkedIn only once a real
+    // organization profile exists (see the megaplan's founder decisions).
     ...(xUrl ? { sameAs: [xUrl] } : {}),
     founder: {
       "@type": "Person",
@@ -98,7 +143,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
       title={title}
       description={description}
       canonical={canonical}
-      ogImage={ogImage}
+      ogImage={resolvedOgImage}
       ogImageAlt={ogImageAlt}
       ogImageWidth={ogImageWidth}
       ogImageHeight={ogImageHeight}
