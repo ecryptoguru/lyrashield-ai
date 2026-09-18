@@ -70,7 +70,7 @@ faq:
 - You want self-hosted or air-gapped deployment with bring-your-own-model for data sovereignty
 - You want proactive design-time review of specs before code is written (Foresight)
 
-## See the evidence approach in action.
+## See the evidence approach in action
 
 Read the methodology or try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 

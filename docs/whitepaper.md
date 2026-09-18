@@ -1,6 +1,6 @@
 # LyraShield AI — Whitepaper
 
-**Version 1.0.0 — 2026-09-12**
+## Version 1.0.0 — 2026-09-12
 
 > The authoritative public description of LyraShield AI: the problem, the product, the evidence model, the commercial structure, and the boundaries of what we claim. Companion documents: [`litepaper.md`](./litepaper.md) (executive overview) and [`yellowpaper.md`](./yellowpaper.md) (technical specification).
 

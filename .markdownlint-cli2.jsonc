@@ -1,0 +1,36 @@
+// Markdown hygiene for hand-written docs. Runs as a non-blocking CI check —
+// generated/vendor trees are excluded by glob, not by disabling rules.
+{
+  "globs": ["**/*.md"],
+  "ignores": [
+    "**/node_modules/**",
+    ".worktrees/**",
+    ".devin/**",
+    ".next/**",
+    "dist/**",
+    "apps/desktop/src-tauri/**",
+    "apps/marketing/src/content/blog-images/**",
+    "artifacts/**",
+    "dogfood-output/**",
+    "evals/reports/**",
+    "lyrashield_runs/**",
+    "tmp-*/**",
+    "CHANGELOG.md"
+  ],
+  "config": {
+    "default": true,
+    // Docs carry long URLs and tables that cannot wrap.
+    "MD013": false,
+    // Inline HTML is used deliberately for layout anchors in docs.
+    "MD033": false,
+    // Several docs open with front matter or a comment before the H1.
+    "MD041": false,
+    // Code blocks inside list items are indented by list depth.
+    "MD046": false,
+    // The docs repeat heading names across sections by convention
+    // ("Evidence", "Test plan").
+    "MD024": false,
+    // The docs intentionally paste bare URLs in reference sections.
+    "MD034": false
+  }
+}

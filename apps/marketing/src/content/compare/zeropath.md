@@ -71,7 +71,7 @@ faq:
 - You want fix PRs delivered with natural-language refinement and one-click merge
 - You need broad multi-language SAST (15+) with taint and data-flow analysis
 
-## See the evidence approach in action.
+## See the evidence approach in action
 
 Read the methodology or try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 

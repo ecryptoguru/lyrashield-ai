@@ -72,7 +72,7 @@ faq:
 - You need SCA with reachability analysis
 - You want AI-powered triage to reduce false positive noise
 
-## Start a check.
+## Start a check
 
 LyraShield AI is live and open for registration — create an account and run your first authorized check through the release-assurance loop: target, review, evidence, fix, retest, report. Prefer to explore first? Read the evidence methodology or try the free browser-local tools.
 

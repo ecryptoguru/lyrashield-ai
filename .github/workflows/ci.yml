@@ -328,6 +328,11 @@ jobs:
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm format:check
 
+      # Advisory only — reports markdown hygiene without blocking the merge.
+      - name: Markdown lint (non-blocking)
+        continue-on-error: true
+        run: pnpm lint:md
+
       - name: Typecheck
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm typecheck

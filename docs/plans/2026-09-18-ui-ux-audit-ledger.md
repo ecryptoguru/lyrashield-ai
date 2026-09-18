@@ -28,7 +28,7 @@ Base for every fix branch: `origin/main` = `171e225d` (production is built from 
 
 The wave branches below were consolidated into open PRs: #702 (SEO), #704
 (Wave 1 Myra/demo), #705 (Wave 2 marketing), #706 (Waves 3–5 console), and
-#703 (the earlier nine-branch integration). "None pushed" below was true at
+`#703` (the earlier nine-branch integration). "None pushed" below was true at
 session 3, not at PR creation.
 
 | Wave  | Branch                      | Worktree                      | Commit(s)                            | Local verify                                                                                                                                                                                                                                                              |

@@ -74,7 +74,7 @@ faq:
 
 Many teams use both: Snyk for continuous vulnerability scanning and dependency management, and LyraShield AI for release assurance before deployment.
 
-## Start a check.
+## Start a check
 
 LyraShield AI is live and open for registration — create an account and run your first authorized check through the release-assurance loop: target, review, evidence, fix, retest, report. Prefer to explore first? Read the evidence methodology or try the free browser-local tools.
 

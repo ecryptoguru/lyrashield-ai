@@ -71,7 +71,7 @@ faq:
 - You need real-time IDE/MCP security inside AI coding assistants (Mobb Vibe Shield)
 - You want published, per-developer pricing with a free tier for public repos
 
-## See the evidence approach in action.
+## See the evidence approach in action
 
 Read the methodology or try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 

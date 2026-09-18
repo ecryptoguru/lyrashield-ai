@@ -107,31 +107,31 @@ Motion V2 serves one continuous H.264 track per aspect ratio. The runtime coales
 
 1. Run migrations to create the D1 database:
 
-```bash
-pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrashield-marketing-waitlist --local
-```
+   ```bash
+   pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrashield-marketing-waitlist --local
+   ```
 
-Production D1 is provisioned and migrations `0001`–`0003` are applied for `lyrashieldai.com`. For a new environment, create the D1 database in that Cloudflare account, then update `wrangler.jsonc` with its `database_id`. The configured Cloudflare Rate Limit binding is the primary limiter; the endpoint retains an atomic D1 sliding-window fallback if that binding errors or is unavailable. Set `WAITLIST_IP_SALT` via:
+   Production D1 is provisioned and migrations `0001`–`0003` are applied for `lyrashieldai.com`. For a new environment, create the D1 database in that Cloudflare account, then update `wrangler.jsonc` with its `database_id`. The configured Cloudflare Rate Limit binding is the primary limiter; the endpoint retains an atomic D1 sliding-window fallback if that binding errors or is unavailable. Set `WAITLIST_IP_SALT` via:
 
-```bash
-pnpm --filter @lyrashield/marketing exec wrangler secret put WAITLIST_IP_SALT
-```
+   ```bash
+   pnpm --filter @lyrashield/marketing exec wrangler secret put WAITLIST_IP_SALT
+   ```
 
 2. Build and deploy:
 
-```bash
-# Preview / staging
-PUBLIC_SITE_URL=https://lyrashield-marketing.YOUR_SUBDOMAIN.workers.dev \
-PUBLIC_SCANNER_URL=https://scanner.YOUR_SUBDOMAIN.workers.dev \
-PUBLIC_INDEXABLE=false pnpm --filter @lyrashield/marketing build
-pnpm --filter @lyrashield/marketing exec wrangler versions upload --config dist/server/wrangler.json
+   ```bash
+   # Preview / staging
+   PUBLIC_SITE_URL=https://lyrashield-marketing.YOUR_SUBDOMAIN.workers.dev \
+   PUBLIC_SCANNER_URL=https://scanner.YOUR_SUBDOMAIN.workers.dev \
+   PUBLIC_INDEXABLE=false pnpm --filter @lyrashield/marketing build
+   pnpm --filter @lyrashield/marketing exec wrangler versions upload --config dist/server/wrangler.json
 
-# Production (only after founder approval and domain attach)
-PUBLIC_SITE_URL=https://lyrashieldai.com \
-PUBLIC_SCANNER_URL=https://scanner.example.com \
-PUBLIC_INDEXABLE=true pnpm --filter @lyrashield/marketing build
-pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
-```
+   # Production (only after founder approval and domain attach)
+   PUBLIC_SITE_URL=https://lyrashieldai.com \
+   PUBLIC_SCANNER_URL=https://scanner.example.com \
+   PUBLIC_INDEXABLE=true pnpm --filter @lyrashield/marketing build
+   pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
+   ```
 
 3. Production uses `PUBLIC_INDEXABLE=true` on `lyrashieldai.com`. Marketing, methodology, resource, browser-local tool, and passive `/scan` routes are indexable because `PUBLIC_SCANNER_URL`, Turnstile, and the abuse contact are configured. `/terms` and `/terms-of-sale` remain individually `noindex` and excluded from the sitemap. `/docs` permanently redirects to the real `/docs/integrations` platform rather than appearing as an empty sitemap route. Cloudflare permanently redirects `www.lyrashieldai.com` to the apex with path and query preservation so canonical URLs have one origin. Preview builds may still use `PUBLIC_INDEXABLE=false`.
 
