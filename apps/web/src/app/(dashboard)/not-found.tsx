@@ -10,6 +10,11 @@ import { NotFoundCard } from "@/app/not-found"
  * 2. The title is resolved through Next's not-found convention, which is what
  *    replaces the dead resource's own title ("Target | LyraShield AI") on a
  *    link that no longer resolves.
+ *
+ * Dashboard routes stream: `(dashboard)/loading.tsx` flushes a 200 shell
+ * before the page resolves, so `notFound()` cannot change the response status.
+ * The copy is therefore status-neutral — the root boundary keeps the 404
+ * language for routes that really do answer 404.
  */
 export const metadata: Metadata = {
   title: "Not found",
@@ -17,5 +22,5 @@ export const metadata: Metadata = {
 }
 
 export default function DashboardNotFound() {
-  return <NotFoundCard />
+  return <NotFoundCard eyebrow="Not in evidence" title="This page isn't in evidence" />
 }

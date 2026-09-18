@@ -117,7 +117,7 @@ export function GithubIntegration({
             Connected{accountLogin?.accountLogin ? ` as ${accountLogin.accountLogin}` : ""}
           </Badge>
         ) : (
-          <Button onClick={handleConnect} disabled={loading}>
+          <Button onClick={handleConnect} disabled={loading} className="gap-2">
             {loading ? <Spinner /> : <GithubIcon className="h-4 w-4" aria-hidden="true" />}
             Connect GitHub
           </Button>
