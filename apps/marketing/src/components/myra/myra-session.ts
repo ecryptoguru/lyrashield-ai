@@ -212,10 +212,7 @@ export function ensureMyraSession(
 
 let sessionBootstrap: Promise<void> | null = null
 
-async function mintMyraSession(
-  apiBase: string,
-  surface: "MARKETING" | "DASHBOARD"
-): Promise<void> {
+async function mintMyraSession(apiBase: string, surface: "MARKETING" | "DASHBOARD"): Promise<void> {
   const turnstileToken = await getTurnstileToken()
   const res = await fetch(`${apiBase}/api/myra/session`, {
     method: "POST",
