@@ -470,12 +470,15 @@ export async function crawlBuiltSite({ origin, fetchImpl = globalThis.fetch }) {
     violations.push(...pageViolations({ path, facts, origin: siteOrigin }))
   }
 
-  const [robots, llms, rss, securityTxt] = await Promise.all(
-    ["/robots.txt", "/llms.txt", "/rss.xml", "/.well-known/security.txt"].map(async (path) => {
-      const { text } = await fetchText(fetchImpl, new URL(path, localOrigin).href)
-      return text
-    })
-  )
+  // llms.txt and rss.xml both load Astro content collections. Fetch these
+  // small control surfaces sequentially so a cold local Worker does not build
+  // both collections at once and trip the per-request timeout in CI.
+  const machineTexts = []
+  for (const path of ["/robots.txt", "/llms.txt", "/rss.xml", "/.well-known/security.txt"]) {
+    const { text } = await fetchText(fetchImpl, new URL(path, localOrigin).href)
+    machineTexts.push(text)
+  }
+  const [robots, llms, rss, securityTxt] = machineTexts
 
   const site = siteViolations({
     pageFacts,
