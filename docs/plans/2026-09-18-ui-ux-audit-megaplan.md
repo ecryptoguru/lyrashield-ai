@@ -97,54 +97,54 @@ Priority combines user impact, reach (how many pages/users), evidence strength, 
 
 ## Findings register
 
-| ID | Priority | Surface | Finding | Evidence | Decision |
-| --- | --- | --- | --- | --- | --- |
-| UF-01 | P0 | marketing `/demo` | Booking dead end: slots 404, misleading error, no fallback; uncaught error per load | `marketing-landing/screenshots/demo-*.png`, network trace | Fix in Wave 1 (founder decision on intended state) |
-| UF-02 | P0 | marketing (Myra) | Turnstile `size:"invisible"` invalid → token can never mint → flows fail closed | `demo-*-errors.json`; `myra-session.ts:51,111` | Fix in Wave 1 |
-| UF-03 | P1 | marketing light theme | 3 contrast failures (4.44:1, 3.47:1, 3.04:1) | `cross-cutting/raw/*light*-a11y.json` | Fix in Wave 2 |
-| UF-04 | P1 | marketing content | 2 dead external citations (ASVS ×16 files, GenAI red-teaming) | `cross-cutting/links-status.txt` | Fix in Wave 2 |
-| UF-05 | P1 | marketing `/pricing` | Scrollable comparison table not keyboard-focusable (axe serious) | `pricing-mobile-a11y.json` | Fix in Wave 2 |
-| UF-06 | P1 | app public/affiliates | Missing `<main>` landmark + uncontained regions (5 routes) | `app-auth/raw/*-a11y.json` | Fix in Wave 3 |
-| UF-07 | P1 | dashboard | `/dashboard/scans/<invalid>` has no `h1` | `scans-invalid-id-*-a11y.json` | Fix in Wave 3 |
-| UF-08 | P1 | both | Heading-order skips on 6 routes | per-page `*-a11y.json` | Fix in Wave 3 |
-| UF-09 | P1 | dashboard | Destructive badge 3.87:1 on target detail (dark) | `target-detail-desktop-a11y.json` | Fix in Wave 3 |
-| UF-10 | P1 | marketing docs/blog | Code blocks overflow mobile (up to 962 px) | `marketing-templates/raw/summary.jsonl` | Fix in Wave 2 |
-| UF-11 | P2 | marketing home | Lite Scan form overflows tablet by 8 px | `home-tablet-metrics.json` | Fix in Wave 2 |
-| UF-12 | P1 | marketing `/webmcp` | Table overflow + not keyboard-focusable | `webmcp-mobile-a11y.json` | Fix in Wave 2 |
-| UF-13 | P2 | marketing tools | 3 tool pages overflow tablet by 8 px | `marketing-templates/raw/summary.jsonl` | Fix in Wave 2 |
-| UF-14 | P2 | marketing docs | Sidebar links 31 px tall on mobile | `marketing-templates/raw/summary.jsonl` | Fix in Wave 2 |
-| UF-15 | P2 | dashboard | Mobile sheet Close control 16×16 | interaction capture | Fix in Wave 3 |
-| UF-16 | P2 | app auth | Native-only field validation (no `aria-invalid`/`aria-describedby`) | sign-in interaction probe | Fix in Wave 4 |
-| UF-17 | P3 | marketing | Sub-12 px mono text (mostly intentional) | `summary.jsonl` tiny-text counts | Review in Wave 4; likely no change |
-| UF-18 | P3 | dashboard | Mobile tables scroll without a hint; action columns hidden below `sm` (by design) | `targets-mobile.png` | Record-only unless a hint is cheap |
-| UF-19 | P3 | marketing `/scan` | `aria-label` on a role-less `div` | `scan-desktop-a11y.json` | Fix opportunistically in Wave 2 |
+| ID    | Priority | Surface               | Finding                                                                             | Evidence                                                  | Decision                                           |
+| ----- | -------- | --------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------- |
+| UF-01 | P0       | marketing `/demo`     | Booking dead end: slots 404, misleading error, no fallback; uncaught error per load | `marketing-landing/screenshots/demo-*.png`, network trace | Fix in Wave 1 (founder decision on intended state) |
+| UF-02 | P0       | marketing (Myra)      | Turnstile `size:"invisible"` invalid → token can never mint → flows fail closed     | `demo-*-errors.json`; `myra-session.ts:51,111`            | Fix in Wave 1                                      |
+| UF-03 | P1       | marketing light theme | 3 contrast failures (4.44:1, 3.47:1, 3.04:1)                                        | `cross-cutting/raw/*light*-a11y.json`                     | Fix in Wave 2                                      |
+| UF-04 | P1       | marketing content     | 2 dead external citations (ASVS ×16 files, GenAI red-teaming)                       | `cross-cutting/links-status.txt`                          | Fix in Wave 2                                      |
+| UF-05 | P1       | marketing `/pricing`  | Scrollable comparison table not keyboard-focusable (axe serious)                    | `pricing-mobile-a11y.json`                                | Fix in Wave 2                                      |
+| UF-06 | P1       | app public/affiliates | Missing `<main>` landmark + uncontained regions (5 routes)                          | `app-auth/raw/*-a11y.json`                                | Fix in Wave 3                                      |
+| UF-07 | P1       | dashboard             | `/dashboard/scans/<invalid>` has no `h1`                                            | `scans-invalid-id-*-a11y.json`                            | Fix in Wave 3                                      |
+| UF-08 | P1       | both                  | Heading-order skips on 6 routes                                                     | per-page `*-a11y.json`                                    | Fix in Wave 3                                      |
+| UF-09 | P1       | dashboard             | Destructive badge 3.87:1 on target detail (dark)                                    | `target-detail-desktop-a11y.json`                         | Fix in Wave 3                                      |
+| UF-10 | P1       | marketing docs/blog   | Code blocks overflow mobile (up to 962 px)                                          | `marketing-templates/raw/summary.jsonl`                   | Fix in Wave 2                                      |
+| UF-11 | P2       | marketing home        | Lite Scan form overflows tablet by 8 px                                             | `home-tablet-metrics.json`                                | Fix in Wave 2                                      |
+| UF-12 | P1       | marketing `/webmcp`   | Table overflow + not keyboard-focusable                                             | `webmcp-mobile-a11y.json`                                 | Fix in Wave 2                                      |
+| UF-13 | P2       | marketing tools       | 3 tool pages overflow tablet by 8 px                                                | `marketing-templates/raw/summary.jsonl`                   | Fix in Wave 2                                      |
+| UF-14 | P2       | marketing docs        | Sidebar links 31 px tall on mobile                                                  | `marketing-templates/raw/summary.jsonl`                   | Fix in Wave 2                                      |
+| UF-15 | P2       | dashboard             | Mobile sheet Close control 16×16                                                    | interaction capture                                       | Fix in Wave 3                                      |
+| UF-16 | P2       | app auth              | Native-only field validation (no `aria-invalid`/`aria-describedby`)                 | sign-in interaction probe                                 | Fix in Wave 4                                      |
+| UF-17 | P3       | marketing             | Sub-12 px mono text (mostly intentional)                                            | `summary.jsonl` tiny-text counts                          | Review in Wave 4; likely no change                 |
+| UF-18 | P3       | dashboard             | Mobile tables scroll without a hint; action columns hidden below `sm` (by design)   | `targets-mobile.png`                                      | Record-only unless a hint is cheap                 |
+| UF-19 | P3       | marketing `/scan`     | `aria-label` on a role-less `div`                                                   | `scan-desktop-a11y.json`                                  | Fix opportunistically in Wave 2                    |
 
 ### Dashboard deep pass (W5) — register additions
 
 Full repro and evidence: `findings/dashboard-secondary.md`. Coordinator re-verified the soft-404
 status, the light-theme primary token, the orphaned Projects route, and the mobile "Home" header.
 
-| ID | Priority | Surface | Finding | Source | Decision |
-| --- | --- | --- | --- | --- | --- |
-| UF-20 | P1 | dashboard | Invalid scan id → unstructured dead end, no `h1`, no recovery (supersedes the UF-07 summary) | `scans/[id]/page.tsx:36-45` | Wave 3 |
-| UF-21 | P2 | dashboard | Invalid detail routes are HTTP 200 soft 404s while the copy claims 404 | `targets/[id]`, `scans/[id]` | Wave 3 (same change as UF-20) |
-| UF-22 | P2 | dashboard | 404 card's primary CTA ejects to the marketing site; competing CTAs | `app/not-found.tsx` | Wave 3 |
-| UF-23 | P1 | dashboard | Billing `h1→h3` skip, root cause `CardTitle` default `h3` (extends UF-08) | `packages/ui/src/card.tsx:30` | Wave 3 |
-| UF-24 | P2 | dashboard | Empty states duplicate the primary CTA; labels disagree | `projects-client.tsx` | Wave 4 |
-| UF-25 | P2 | dashboard | Mobile header titles `/dashboard/agents` + `/integrations` as "Home" | `mobile-page-header.tsx:20-23` | Wave 4 |
-| UF-26 | P2 | dashboard | `/dashboard/projects` orphaned; agents/integrations/launch-readiness nav-less | `lib/nav-items.ts` | Wave 4 (needs IA decision) |
-| UF-27 | P1 | dashboard | 768px keeps the 288px sidebar, crushing content to 480px (root cause of tablet overflow) | `(dashboard)/layout.tsx` | Wave 3 |
-| UF-28 | P1 | dashboard | Targets table overflows 210–281px at tablet/mobile, inverted column priority, no scroll cue | targets table | Wave 3 |
-| UF-29 | P1 | dashboard | Light-theme primary is royal blue, not the documented teal accent | `globals.css:15` | Wave 3 |
-| UF-30 | P1 | dashboard | Focus ring is cyan/0-offset, not amber/4px; nav links fall back to UA outline | `globals.css:27,142` | Wave 3 |
-| UF-31 | P2 | dashboard | Sheet close control 16×16 (duplicate of UF-15) | `packages/ui/src/sheet.tsx` | Wave 3 |
-| UF-32 | P3 | dashboard | GitHub icon/label 0px gap in "Connect GitHub" | integrations page | Wave 4 |
-| UF-33 | P2 | dashboard | Literal "target(s)" placeholder in Launch Readiness copy | `lib/launch-readiness.ts:498` | Wave 4 |
-| UF-34 | P2 | dashboard | "Run a review" terminology drift (5 files) | `findings/evidence-list.tsx` | Wave 4 |
-| UF-35 | P3 | dashboard | Scans empty state is self-referential, no inline CTA | scans list | Wave 4 |
-| UF-36 | P3 | dashboard | Evidence Vault has zero primary actions despite an outstanding step | `ai-assurance/page.tsx` | Wave 4 |
-| UF-37 | P3 | dashboard | Cancelling an inline create form drops focus to `<body>` | `projects-client.tsx` | Wave 4 |
-| UF-38 | P3 | dashboard | Billing plan chooser shows no price/minutes | `billing-actions.tsx` | Wave 4 (product decision) |
+| ID    | Priority | Surface   | Finding                                                                                      | Source                         | Decision                      |
+| ----- | -------- | --------- | -------------------------------------------------------------------------------------------- | ------------------------------ | ----------------------------- |
+| UF-20 | P1       | dashboard | Invalid scan id → unstructured dead end, no `h1`, no recovery (supersedes the UF-07 summary) | `scans/[id]/page.tsx:36-45`    | Wave 3                        |
+| UF-21 | P2       | dashboard | Invalid detail routes are HTTP 200 soft 404s while the copy claims 404                       | `targets/[id]`, `scans/[id]`   | Wave 3 (same change as UF-20) |
+| UF-22 | P2       | dashboard | 404 card's primary CTA ejects to the marketing site; competing CTAs                          | `app/not-found.tsx`            | Wave 3                        |
+| UF-23 | P1       | dashboard | Billing `h1→h3` skip, root cause `CardTitle` default `h3` (extends UF-08)                    | `packages/ui/src/card.tsx:30`  | Wave 3                        |
+| UF-24 | P2       | dashboard | Empty states duplicate the primary CTA; labels disagree                                      | `projects-client.tsx`          | Wave 4                        |
+| UF-25 | P2       | dashboard | Mobile header titles `/dashboard/agents` + `/integrations` as "Home"                         | `mobile-page-header.tsx:20-23` | Wave 4                        |
+| UF-26 | P2       | dashboard | `/dashboard/projects` orphaned; agents/integrations/launch-readiness nav-less                | `lib/nav-items.ts`             | Wave 4 (needs IA decision)    |
+| UF-27 | P1       | dashboard | 768px keeps the 288px sidebar, crushing content to 480px (root cause of tablet overflow)     | `(dashboard)/layout.tsx`       | Wave 3                        |
+| UF-28 | P1       | dashboard | Targets table overflows 210–281px at tablet/mobile, inverted column priority, no scroll cue  | targets table                  | Wave 3                        |
+| UF-29 | P1       | dashboard | Light-theme primary is royal blue, not the documented teal accent                            | `globals.css:15`               | Wave 3                        |
+| UF-30 | P1       | dashboard | Focus ring is cyan/0-offset, not amber/4px; nav links fall back to UA outline                | `globals.css:27,142`           | Wave 3                        |
+| UF-31 | P2       | dashboard | Sheet close control 16×16 (duplicate of UF-15)                                               | `packages/ui/src/sheet.tsx`    | Wave 3                        |
+| UF-32 | P3       | dashboard | GitHub icon/label 0px gap in "Connect GitHub"                                                | integrations page              | Wave 4                        |
+| UF-33 | P2       | dashboard | Literal "target(s)" placeholder in Launch Readiness copy                                     | `lib/launch-readiness.ts:498`  | Wave 4                        |
+| UF-34 | P2       | dashboard | "Run a review" terminology drift (5 files)                                                   | `findings/evidence-list.tsx`   | Wave 4                        |
+| UF-35 | P3       | dashboard | Scans empty state is self-referential, no inline CTA                                         | scans list                     | Wave 4                        |
+| UF-36 | P3       | dashboard | Evidence Vault has zero primary actions despite an outstanding step                          | `ai-assurance/page.tsx`        | Wave 4                        |
+| UF-37 | P3       | dashboard | Cancelling an inline create form drops focus to `<body>`                                     | `projects-client.tsx`          | Wave 4                        |
+| UF-38 | P3       | dashboard | Billing plan chooser shows no price/minutes                                                  | `billing-actions.tsx`          | Wave 4 (product decision)     |
 
 ### Findings raised during fix verification (2026-09-18, session 2)
 
@@ -152,18 +152,18 @@ Executing Wave 1 exposed three defects that only appear once the public Myra sur
 enabled — the reason "make it live" was not just a flag flip. All three are fixed with regression
 coverage in Wave 1; the rest are recorded for the owner of the shell.
 
-| ID | Priority | Surface | Finding | Decision |
-| --- | --- | --- | --- | --- |
-| UF-39 | **P0** | app CORS | No `Access-Control-Allow-Credentials` while every marketing Myra call sends `credentials: "include"` → opaque "Failed to fetch" before the endpoint ran. Public Myra/demo could never work. | Fixed in Wave 1 + `public-cors.test.ts` |
-| UF-40 | P1 | marketing Myra | `/demo` bootstrapped the session twice; two Turnstile challenges raced one widget, one caller timed out and minted an unauthenticated session. | Fixed in Wave 1 (single-flight) |
-| UF-41 | P1 | marketing Myra | Challenge hosts were unusable (`empty:hidden` = `display:none` when empty; `offsetParent` is null inside the fixed panel), so the widget always fell back to a hidden holder. | Fixed in Wave 1 |
-| UF-42 | P2 | dashboard Myra | `myra-panel.tsx` still uses `md:` breakpoints; with the sidebar now collapsing below `lg` it docks a 352px column at 768px. | Open — needs an owner |
-| UF-43 | P2 | dashboard | `webmcp-activity-drawer.tsx:76` `md:bottom-6` overlaps the mobile bottom bar at 768px. | Open — needs an owner |
-| UF-44 | P3 | marketing docs | Docs pages exceed the viewport at 768px (`docW=800`), `.nav-card__sub` unwrapped text. | Open — one-line fix |
-| UF-45 | P3 | marketing docs | `DocsLayout.astro` duplicates the `.callout--warn` rule with higher specificity; the light-theme override reaches it via an explicit selector. | Open — tidy-up |
-| UF-46 | P3 | test suite | Visual baselines need intentional re-rendering after the tablet-shell, table and light-primary changes (tablet ×8, mobile `targets-list`, desktop `targets-list`, plus every light-theme snapshot). | Open — part of the wave PRs |
-| UF-47 | P2 | app tokens | The amber focus ring is 1.70:1 against the **light** `--bg` (11.49:1 in dark) — below the 3:1 guidance for focus indicators; `DESIGN.md` documents one amber for both themes, so Wave 3E flagged rather than changed it. | Open — light-theme ring colour decision |
-| UF-48 | P2 | dashboard routing | Dashboard detail routes still answer **HTTP 200** for an invalid id even though they now render the 404 card. Wave 3D proved the cause: `(dashboard)/loading.tsx` and `dashboard/loading.tsx` flush a 200 shell before the page resolves (delete them → 404; restore → 200). Public routes now return real 404s. | Open — streaming-UX decision |
+| ID    | Priority | Surface           | Finding                                                                                                                                                                                                                                                                                                          | Decision                                |
+| ----- | -------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| UF-39 | **P0**   | app CORS          | No `Access-Control-Allow-Credentials` while every marketing Myra call sends `credentials: "include"` → opaque "Failed to fetch" before the endpoint ran. Public Myra/demo could never work.                                                                                                                      | Fixed in Wave 1 + `public-cors.test.ts` |
+| UF-40 | P1       | marketing Myra    | `/demo` bootstrapped the session twice; two Turnstile challenges raced one widget, one caller timed out and minted an unauthenticated session.                                                                                                                                                                   | Fixed in Wave 1 (single-flight)         |
+| UF-41 | P1       | marketing Myra    | Challenge hosts were unusable (`empty:hidden` = `display:none` when empty; `offsetParent` is null inside the fixed panel), so the widget always fell back to a hidden holder.                                                                                                                                    | Fixed in Wave 1                         |
+| UF-42 | P2       | dashboard Myra    | `myra-panel.tsx` still uses `md:` breakpoints; with the sidebar now collapsing below `lg` it docks a 352px column at 768px.                                                                                                                                                                                      | Open — needs an owner                   |
+| UF-43 | P2       | dashboard         | `webmcp-activity-drawer.tsx:76` `md:bottom-6` overlaps the mobile bottom bar at 768px.                                                                                                                                                                                                                           | Open — needs an owner                   |
+| UF-44 | P3       | marketing docs    | Docs pages exceed the viewport at 768px (`docW=800`), `.nav-card__sub` unwrapped text.                                                                                                                                                                                                                           | Open — one-line fix                     |
+| UF-45 | P3       | marketing docs    | `DocsLayout.astro` duplicates the `.callout--warn` rule with higher specificity; the light-theme override reaches it via an explicit selector.                                                                                                                                                                   | Open — tidy-up                          |
+| UF-46 | P3       | test suite        | Visual baselines need intentional re-rendering after the tablet-shell, table and light-primary changes (tablet ×8, mobile `targets-list`, desktop `targets-list`, plus every light-theme snapshot).                                                                                                              | Open — part of the wave PRs             |
+| UF-47 | P2       | app tokens        | The amber focus ring is 1.70:1 against the **light** `--bg` (11.49:1 in dark) — below the 3:1 guidance for focus indicators; `DESIGN.md` documents one amber for both themes, so Wave 3E flagged rather than changed it.                                                                                         | Open — light-theme ring colour decision |
+| UF-48 | P2       | dashboard routing | Dashboard detail routes still answer **HTTP 200** for an invalid id even though they now render the 404 card. Wave 3D proved the cause: `(dashboard)/loading.tsx` and `dashboard/loading.tsx` flush a 200 shell before the page resolves (delete them → 404; restore → 200). Public routes now return real 404s. | Open — streaming-UX decision            |
 
 ## Constraints that must remain explicit
 
@@ -333,14 +333,14 @@ Verification: as Wave 3, plus manual keyboard pass on the forms and a copy revie
 Parallelise by **file ownership**, never by hope. One writer per file set per wave; the coordinator
 reviews every PR against the register.
 
-| Wave | Agents (profiles) | Disjoint file sets | Serialisation rule |
-| --- | --- | --- | --- |
-| 0 | 1 × `qa-automation-engineer` | `e2e/`, `apps/marketing/scripts/` | Must land first; other waves rebase on it |
-| 1 | 1 × `frontend-specialist` | `myra-session.ts`, `demo.astro` | Single writer (both files interact) |
-| 2 | 3 × `frontend-specialist` + 1 × `seo-specialist` | (a) content/MDX citations; (b) `styles/global.css` + highlighter theme; (c) `pricing.astro`/`webmcp.astro`/docs layout/tool pages; (d) docs sidebar | (b) and (c) both touch shared styles — coordinate the token change first, then the layout work; (a) is fully independent |
-| 3 | 3 × `frontend-specialist` | (a) failure surfaces + not-found (`scans/[id]`, `targets/[id]`, `app/not-found.tsx`); (b) design tokens (`globals.css`) + shared `CardTitle`; (c) shell/table (`(dashboard)/layout.tsx`, targets table, `packages/ui/src/sheet.tsx`) | (b) must land first — (a) and (c) depend on the token/heading decisions; (c)'s table change must not fight (b)'s token change in the same file |
-| 4 | 2 × `frontend-specialist` + 1 × `qa-automation-engineer` | (a) forms/validation; (b) console IA + copy; (c) keyboard/focus verification | IA decisions (UF-26, UF-38) must be recorded in the ledger before (b) starts; (c) is read-only |
-| Verify | 1 × `qa-automation-engineer` per wave | read-only | Verification agents must not trust implementation summaries — re-run the harness and inspect screenshots |
+| Wave   | Agents (profiles)                                        | Disjoint file sets                                                                                                                                                                                                                   | Serialisation rule                                                                                                                             |
+| ------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0      | 1 × `qa-automation-engineer`                             | `e2e/`, `apps/marketing/scripts/`                                                                                                                                                                                                    | Must land first; other waves rebase on it                                                                                                      |
+| 1      | 1 × `frontend-specialist`                                | `myra-session.ts`, `demo.astro`                                                                                                                                                                                                      | Single writer (both files interact)                                                                                                            |
+| 2      | 3 × `frontend-specialist` + 1 × `seo-specialist`         | (a) content/MDX citations; (b) `styles/global.css` + highlighter theme; (c) `pricing.astro`/`webmcp.astro`/docs layout/tool pages; (d) docs sidebar                                                                                  | (b) and (c) both touch shared styles — coordinate the token change first, then the layout work; (a) is fully independent                       |
+| 3      | 3 × `frontend-specialist`                                | (a) failure surfaces + not-found (`scans/[id]`, `targets/[id]`, `app/not-found.tsx`); (b) design tokens (`globals.css`) + shared `CardTitle`; (c) shell/table (`(dashboard)/layout.tsx`, targets table, `packages/ui/src/sheet.tsx`) | (b) must land first — (a) and (c) depend on the token/heading decisions; (c)'s table change must not fight (b)'s token change in the same file |
+| 4      | 2 × `frontend-specialist` + 1 × `qa-automation-engineer` | (a) forms/validation; (b) console IA + copy; (c) keyboard/focus verification                                                                                                                                                         | IA decisions (UF-26, UF-38) must be recorded in the ledger before (b) starts; (c) is read-only                                                 |
+| Verify | 1 × `qa-automation-engineer` per wave                    | read-only                                                                                                                                                                                                                            | Verification agents must not trust implementation summaries — re-run the harness and inspect screenshots                                       |
 
 Coordinator duties (per the repo's orchestration skill): write the worker brief with exact files and
 line references from the register; keep ≤4 workers per round; synthesise results; reject any PR whose
@@ -369,12 +369,12 @@ diff touches files outside its declared set; ensure the ledger is updated before
 
 ## Evidence index
 
-| Path | Contents |
-| --- | --- |
-| `dogfood-output/ui-ux-audit-2026-09-18/findings/AUDIT-FINDINGS.md` | Full register with repro and source traces |
-| `.../cross-cutting/aggregate-analysis.txt` | Cross-workstream aggregation (violations, overflow, errors, tap targets) |
-| `.../cross-cutting/links-status.txt`, `sitemap-status.txt` | Link integrity + sitemap results |
-| `.../cross-cutting/raw/*light*-a11y.json` | Light-theme axe results |
-| `.../<workstream>/raw/summary.jsonl` | Per-capture machine-readable summaries |
-| `.../<workstream>/screenshots/*.png` | 289 captures at three viewports |
-| `.../scripts/` | Audit harness (capture, metrics, summarise, aggregate) — reusable for Wave 0 and re-audits |
+| Path                                                               | Contents                                                                                   |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `dogfood-output/ui-ux-audit-2026-09-18/findings/AUDIT-FINDINGS.md` | Full register with repro and source traces                                                 |
+| `.../cross-cutting/aggregate-analysis.txt`                         | Cross-workstream aggregation (violations, overflow, errors, tap targets)                   |
+| `.../cross-cutting/links-status.txt`, `sitemap-status.txt`         | Link integrity + sitemap results                                                           |
+| `.../cross-cutting/raw/*light*-a11y.json`                          | Light-theme axe results                                                                    |
+| `.../<workstream>/raw/summary.jsonl`                               | Per-capture machine-readable summaries                                                     |
+| `.../<workstream>/screenshots/*.png`                               | 289 captures at three viewports                                                            |
+| `.../scripts/`                                                     | Audit harness (capture, metrics, summarise, aggregate) — reusable for Wave 0 and re-audits |
