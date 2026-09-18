@@ -56,12 +56,23 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
   }
 })
 
-test("worker preflight accepts only empty queues and needs no promotion configuration", () => {
+test("worker preflight reads refreshed Key Vault credentials without restarting the active worker", () => {
   const directory = mkdtempSync(path.join(tmpdir(), "worker-preflight-"))
   try {
-    writeFileSync(path.join(directory, "docker"), '#!/bin/sh\nprintf "%s\\n" "$QUEUE_STATE"\n', {
+    const dockerLog = path.join(directory, "docker.log")
+    const systemctlLog = path.join(directory, "systemctl.log")
+    const runtimeConfig = path.join(directory, "worker-runtime.conf")
+    writeFileSync(
+      path.join(directory, "docker"),
+      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$DOCKER_LOG"\n[ "$1" = run ] || exit 1\nprintf "%s\\n" "$QUEUE_STATE"\n',
+      {
+        mode: 0o700,
+      }
+    )
+    writeFileSync(path.join(directory, "systemctl"), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SYSTEMCTL_LOG"\n', {
       mode: 0o700,
     })
+    writeFileSync(runtimeConfig, "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
     const empty = {
       nonterminal: 0,
       scan: { wait: 0, active: 0, delayed: 0, prioritized: 0 },
@@ -69,11 +80,23 @@ test("worker preflight accepts only empty queues and needs no promotion configur
     }
     const run = (state) =>
       execFileSync("/bin/sh", [".github/scripts/promote-worker-vm.sh", "--preflight"], {
-        env: { PATH: directory, QUEUE_STATE: state },
+        env: {
+          PATH: directory + path.delimiter + process.env.PATH,
+          QUEUE_STATE: state,
+          DOCKER_LOG: dockerLog,
+          SYSTEMCTL_LOG: systemctlLog,
+          LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
+          LYRASHIELD_WORKER_ENV_FILE: path.join(directory, "worker.env"),
+        },
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       })
     assert.match(run(JSON.stringify(empty)), /Worker empty-queue preflight passed/)
+    assert.match(readFileSync(systemctlLog, "utf8"), /^restart lyrashield-worker-secrets\.service$/m)
+    assert.match(
+      readFileSync(dockerLog, "utf8"),
+      /run --rm --network bridge --env-file .*worker\.env -w \/app\/apps\/worker ghcr\.io\/example\/worker@sha256:a+ node --import tsx --input-type=module -e /
+    )
     for (const state of [
       "",
       "not-json",
