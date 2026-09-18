@@ -107,7 +107,7 @@ export function MyraPanel({
   }, [])
 
   useEffect(() => {
-    if (!mobileOpen) return
+    if (!isModal) return
     const panel = panelRef.current
     // Focus enters the sheet when it opens. The close button is the entry
     // point rather than the composer — focusing the textarea would pop the
@@ -119,10 +119,7 @@ export function MyraPanel({
         closeMobile()
         return
       }
-      // Tab containment applies only while the sheet is the full-screen
-      // modal (below lg). At lg the panel is docked page content and Tab
-      // must move freely in and out of it.
-      if (e.key !== "Tab" || !panel || window.matchMedia(LG_MEDIA_QUERY).matches) return
+      if (e.key !== "Tab" || !panel) return
       const focusables = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
         (el) => el.offsetParent !== null || el === document.activeElement
       )
@@ -146,7 +143,7 @@ export function MyraPanel({
       document.removeEventListener("keydown", onKey)
       document.body.style.overflow = prevOverflow
     }
-  }, [mobileOpen, closeMobile])
+  }, [isModal, closeMobile])
 
   if (!enabled) return null
 

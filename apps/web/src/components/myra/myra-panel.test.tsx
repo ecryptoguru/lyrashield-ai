@@ -45,6 +45,11 @@ describe("MyraPanel shell", () => {
     expect(src).toContain("last.focus()")
     expect(src).toContain("first.focus()")
     expect(src).toContain("mobileLauncherRef.current?.focus()")
+    // Scroll locking follows the actual modal state, so widening an open
+    // mobile sheet to lg runs cleanup and restores body scrolling.
+    expect(src).toContain("if (!isModal) return")
+    expect(src).toContain("}, [isModal, closeMobile])")
+    expect(src).not.toContain("}, [mobileOpen, closeMobile])")
   })
 
   it("renders the header, log region, opener, and starter buttons", () => {
