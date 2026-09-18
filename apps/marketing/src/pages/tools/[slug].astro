@@ -80,6 +80,28 @@ const labelClass = "block text-sm font-medium text-text"
   {tool.slug === "webmcp-security-checker" && <WebMcpSecurityLab />}
 </ToolLayout>
 
+<style is:global>
+  /* "What this checks" / "What this cannot prove" (ToolLayout grid).
+     global.css pre-shifts `data-reveal="left" | "right"` elements ±2rem on the X
+     axis until they scroll into view. At 768px those two columns sit flush with
+     the section's 24px content gutter, so while still un-revealed the right
+     column measured 344px wide ending at x=776 — 8px past the viewport — and the
+     page reported a 776px scroll width (UF-13). Revealing them vertically keeps
+     the same entrance animation without the horizontal overhang at any width.
+     Specificity: one step above global.css's directional rules, one step below
+     its `.is-revealed` reset (which is restated here so source order cannot
+     matter). */
+  html.reveal-ready section[data-reveal-group] > [data-reveal="left"],
+  html.reveal-ready section[data-reveal-group] > [data-reveal="right"] {
+    transform: translateY(var(--reveal-shift, 1.75rem));
+  }
+
+  html.reveal-ready section[data-reveal-group] > [data-reveal="left"].is-revealed,
+  html.reveal-ready section[data-reveal-group] > [data-reveal="right"].is-revealed {
+    transform: none;
+  }
+</style>
+
 <script>
   import { checkHeaders, checkRlsSql, checkSetCookie, inspectJwt, scanTextForSecrets } from "../../lib/tool-checks"
 
