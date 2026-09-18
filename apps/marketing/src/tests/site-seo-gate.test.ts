@@ -11,7 +11,7 @@ import {
   sitemapEntries,
   titleLimitFor,
 } from "../../scripts/crawl-built-site.mjs"
-import { INDEXNOW_KEY, submitToIndexNow } from "../../scripts/indexnow.mjs"
+import { readIndexNowKey, submitToIndexNow } from "../../scripts/indexnow.mjs"
 import { DEFAULT_OG_IMAGE, OG_CARD_PATHS, ogImageFor } from "../lib/og-images"
 
 const ORIGIN = "https://lyrashieldai.com"
@@ -187,15 +187,20 @@ describe("machine-readable surface contracts", () => {
     }
   })
 
-  it("hosts the IndexNow key file the submission script declares", () => {
-    const keyFile = source(`../../public/${INDEXNOW_KEY}.txt`).trim()
-    expect(keyFile).toBe(INDEXNOW_KEY)
-    expect(INDEXNOW_KEY).toMatch(/^[a-f0-9]{32}$/)
+  it("resolves the IndexNow key from the file the protocol serves", async () => {
+    // The key is public by design (IndexNow fetches it from the site), but it
+    // must not exist as a source literal: gitleaks cannot tell a hosted
+    // verification token from a leaked credential.
+    const key = await readIndexNowKey()
+    expect(key).toMatch(/^[a-f0-9]{32}$/)
+    expect(source(`../../public/${key}.txt`).trim()).toBe(key)
+    expect(source("../../scripts/indexnow.mjs")).not.toContain(key)
   })
 
   it("derives the IndexNow host from the sitemap, not from the origin it fetched", async () => {
     // A local preview serves a build whose sitemap points at production, so
     // filtering by the fetch origin would silently submit nothing.
+    const key = await readIndexNowKey()
     const responses = new Map([
       [
         "http://127.0.0.1:8787/sitemap-index.xml",
@@ -208,7 +213,7 @@ describe("machine-readable surface contracts", () => {
           "<url><loc>https://lyrashieldai.com/b</loc></url>" +
           "</urlset>",
       ],
-      [`http://127.0.0.1:8787/${INDEXNOW_KEY}.txt`, INDEXNOW_KEY],
+      [`http://127.0.0.1:8787/${key}.txt`, key],
     ])
     const fetchImpl = async (input: URL | RequestInfo): Promise<Response> => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url

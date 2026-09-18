@@ -5,8 +5,13 @@
  *
  * Bing's index is what Microsoft Copilot answers from, so this is the one
  * off-site discovery signal that is fully in-repo. The protocol requires the
- * key to be hosted at the origin, which is why `public/<key>.txt` is committed
- * alongside this script and asserted by `src/tests/site-seo-gate.test.ts`.
+ * key to be hosted at the origin, which is why `public/<key>.txt` is committed.
+ *
+ * The key is deliberately NOT a literal in this file. It is public by design —
+ * IndexNow works by fetching it from the site — but a 32-hex constant in source
+ * is indistinguishable from a leaked credential to a secret scanner, and
+ * gitleaks failed the diff gate on it. Reading it from the file the protocol
+ * serves keeps one source of truth and keeps the scan honest.
  *
  * Non-fatal by design: a network failure or a non-2xx response must never fail
  * a release. The caller decides what to do with the exit code.
@@ -16,13 +21,31 @@
  *   node scripts/indexnow.mjs --origin https://lyrashieldai.com --dry-run
  */
 
-import { readFile } from "node:fs/promises"
+import { readdir, readFile } from "node:fs/promises"
 
 const ENDPOINT = "https://api.indexnow.org/indexnow"
 const MAX_URLS = 10_000
+const KEY_FILE = /^([a-f0-9]{32})\.txt$/
+const PUBLIC_DIR = new URL("../public/", import.meta.url)
 
-/** Must match the committed `public/<key>.txt` file. */
-export const INDEXNOW_KEY = "a74cf3dd89f266a1c0b8d92a06c50f2b"
+/**
+ * Resolve the hosted IndexNow key: exactly one `public/<32 hex>.txt` whose
+ * content is its own filename stem. Anything else fails loudly rather than
+ * submitting a key the site cannot prove it owns.
+ */
+export async function readIndexNowKey() {
+  const candidates = (await readdir(PUBLIC_DIR)).filter((name) => KEY_FILE.test(name))
+  if (candidates.length !== 1) {
+    throw new Error(
+      `expected exactly one public/<32 hex>.txt IndexNow key file, found ${candidates.length}`
+    )
+  }
+  const file = candidates[0]
+  const key = file.replace(/\.txt$/, "")
+  const contents = (await readFile(new URL(file, PUBLIC_DIR), "utf8")).trim()
+  if (contents !== key) throw new Error(`public/${file} must contain exactly its own key`)
+  return key
+}
 
 export function extractLocations(xml) {
   return [...xml.matchAll(/<loc\b[^>]*>([\s\S]*?)<\/loc\s*>/gi)]
@@ -54,6 +77,7 @@ async function sitemapUrls(origin, fetchImpl) {
 }
 
 export async function submitToIndexNow({ origin, fetchImpl = globalThis.fetch, dryRun = false }) {
+  const key = await readIndexNowKey()
   const fetchOrigin = new URL(origin).origin
   const urls = [...new Set(await sitemapUrls(fetchOrigin, fetchImpl))]
   if (urls.length === 0) throw new Error("the sitemap contained no URLs")
@@ -66,10 +90,10 @@ export async function submitToIndexNow({ origin, fetchImpl = globalThis.fetch, d
   if (hosts.size !== 1) throw new Error(`sitemap mixes hosts: ${[...hosts].join(", ")}`)
   const host = [...hosts][0]
   const protocol = new URL(urls[0]).protocol
-  const keyLocation = `${protocol}//${host}/${INDEXNOW_KEY}.txt`
+  const keyLocation = `${protocol}//${host}/${key}.txt`
 
   // Verify the key is actually served before claiming anything to the provider.
-  const keyResponse = await fetchImpl(`${fetchOrigin}/${INDEXNOW_KEY}.txt`)
+  const keyResponse = await fetchImpl(`${fetchOrigin}/${key}.txt`)
   if (!keyResponse.ok) {
     throw new Error(`IndexNow key file ${keyLocation} returned ${keyResponse.status}`)
   }
@@ -80,7 +104,7 @@ export async function submitToIndexNow({ origin, fetchImpl = globalThis.fetch, d
   const response = await fetchImpl(ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ host, key: INDEXNOW_KEY, keyLocation, urlList }),
+    body: JSON.stringify({ host, key, keyLocation, urlList }),
   })
   return { host, submitted: urlList.length, status: response.status }
 }
