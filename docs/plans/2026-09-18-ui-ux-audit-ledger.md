@@ -10,19 +10,19 @@ Base for every fix branch: `origin/main` = `171e225d` (production is built from 
 
 ## Status
 
-| Phase                                            | Status                                   | Notes                                                                                                                     |
-| ------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Production audit (270 captures)                  | ✅ complete 2026-09-18                   | Read-only; evidence under `dogfood-output/ui-ux-audit-2026-09-18/`                                                        |
-| Findings register                                | ✅ complete                              | 38 audit findings + 10 found during fix verification (UF-39…UF-48)                                                        |
+| Phase                                            | Status                                        | Notes                                                                                                                                                           |
+| ------------------------------------------------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production audit (270 captures)                  | ✅ complete 2026-09-18                        | Read-only; evidence under `dogfood-output/ui-ux-audit-2026-09-18/`                                                                                              |
+| Findings register                                | ✅ complete                                   | 38 audit findings + 10 found during fix verification (UF-39…UF-48)                                                                                              |
 | **Wave 1 — Myra/demo live and working (P0)**     | ✅ **implemented + verified (surface level)** | 3 commits on `fix/ui-ux-wave1-myra-demo`; verified: slot loading, session mint, panel render — the full calendar-booking lifecycle was not exercised end-to-end |
-| Wave 2A — dead citations                         | ✅ implemented                           | 1 commit on `fix/ui-ux-w2-citations`                                                                                      |
-| Wave 2B — light-theme contrast                   | ✅ implemented                           | 1 commit on `fix/ui-ux-w2-contrast`                                                                                       |
-| Wave 2C — keyboard access, overflow, tap targets | ✅ implemented                           | 1 commit on `fix/ui-ux-w2-layout`                                                                                         |
-| Wave 3D — landmarks + failure surfaces           | ✅ implemented (one item blocked)        | 1 commit on `fix/ui-ux-w3-app-a11y`; dashboard soft-404 fix blocked — see UF-48                                           |
-| Wave 3E — design tokens + shared UI              | ✅ implemented                           | 1 commit on `fix/ui-ux-w3-tokens`                                                                                         |
-| Wave 3F — shell, table, header                   | ✅ implemented                           | 1 commit on `fix/ui-ux-w3-shell`                                                                                          |
-| Wave 4 — polish, copy, billing chooser           | ✅ implemented                           | `fix/ui-ux-w4-polish`; UF-26/32/35/36 finished on `fix/ui-ux-w5-remainder`                                                |
-| Wave 5 — remainder + integration + close-out     | ✅ **verified on merged branch**         | `fix/ui-ux-w5-remainder` + `fix/ui-ux-integration` (all 9 branches merged, 67 files); production enablement still pending |
+| Wave 2A — dead citations                         | ✅ implemented                                | 1 commit on `fix/ui-ux-w2-citations`                                                                                                                            |
+| Wave 2B — light-theme contrast                   | ✅ implemented                                | 1 commit on `fix/ui-ux-w2-contrast`                                                                                                                             |
+| Wave 2C — keyboard access, overflow, tap targets | ✅ implemented                                | 1 commit on `fix/ui-ux-w2-layout`                                                                                                                               |
+| Wave 3D — landmarks + failure surfaces           | ✅ implemented (one item blocked)             | 1 commit on `fix/ui-ux-w3-app-a11y`; dashboard soft-404 fix blocked — see UF-48                                                                                 |
+| Wave 3E — design tokens + shared UI              | ✅ implemented                                | 1 commit on `fix/ui-ux-w3-tokens`                                                                                                                               |
+| Wave 3F — shell, table, header                   | ✅ implemented                                | 1 commit on `fix/ui-ux-w3-shell`                                                                                                                                |
+| Wave 4 — polish, copy, billing chooser           | ✅ implemented                                | `fix/ui-ux-w4-polish`; UF-26/32/35/36 finished on `fix/ui-ux-w5-remainder`                                                                                      |
+| Wave 5 — remainder + integration + close-out     | ✅ **verified on merged branch**              | `fix/ui-ux-w5-remainder` + `fix/ui-ux-integration` (all 9 branches merged, 67 files); production enablement still pending                                       |
 
 ## Branches and commits
 
