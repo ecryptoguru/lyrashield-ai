@@ -338,6 +338,8 @@ export function relaySessionHostAllowed(session: RelaySessionBinding, host: stri
   return session.hosts.some(
     (scoped) => normalized === scoped || normalized.endsWith(`.${scoped}`)
   )
+}
+
 // ── Outbound connector scopes ───────────────────────────────────────────────
 // Connector tools (packages/integrations/src/connectors) run through the same
 // scoped relay as live-target traffic. The grant is the read-only contract:
