@@ -341,6 +341,14 @@ jobs:
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm typecheck:e2e
 
+      - name: Typecheck portable browser harness
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        run: pnpm typecheck:browser-harness
+
+      - name: Lint portable browser harness
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        run: pnpm lint:browser-harness
+
       - name: Typecheck marketing
         if: needs.changes.outputs.marketing == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
         run: pnpm --filter @lyrashield/marketing typecheck
@@ -493,6 +501,11 @@ jobs:
         # activation/connect/renew/verify flows can't read NULL-workspaceId or
         # cross-workspace License rows under FORCE RLS.
         run: DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" DATABASE_SYSTEM_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public" pnpm exec playwright test
+
+      - name: Portable browser harness
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        timeout-minutes: 10
+        run: pnpm test:browser-harness
 
       - name: No code changes
         if: needs.changes.outputs.docs-only == 'true'
@@ -904,3 +917,27 @@ jobs:
 
       - name: Build
         run: pnpm --filter @lyrashield/desktop-frontend build
+
+      - name: Typecheck portable browser harness
+        if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        run: pnpm typecheck:browser-harness
+
+      - name: Lint portable browser harness
+        if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        run: pnpm lint:browser-harness
+
+      - name: Install Playwright Chromium for desktop browser harness
+        if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        timeout-minutes: 15
+        run: |
+          for source in /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources; do
+            if [ -f "$source" ]; then
+              sudo mv "$source" "$source.disabled"
+            fi
+          done
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Portable browser harness for Desktop
+        if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        timeout-minutes: 10
+        run: pnpm test:browser-harness

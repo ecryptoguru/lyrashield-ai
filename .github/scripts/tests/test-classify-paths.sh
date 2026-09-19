@@ -193,6 +193,13 @@ for path in apps/marketing/src/content/compare/snyk.md apps/web/README.md; do
   assert_eq "$path: docs-only" "false" "$(get_field "$out" "docs-only")"
 done
 
+# Browser harness changes enter the shared test path without triggering either deploy.
+out=$(run_classify $'e2e/browser/polling.spec.ts')
+assert_eq "browser harness: shared" "true" "$(get_field "$out" "shared")"
+assert_eq "browser harness: app" "false" "$(get_field "$out" "app")"
+assert_eq "browser harness: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
+assert_eq "browser harness: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
+
 echo "Results: $pass passed, $fail failed"
 if [[ "$fail" -gt 0 ]]; then
   exit 1

@@ -10,6 +10,8 @@
     "lint:md": "markdownlint-cli2",
     "typecheck": "turbo typecheck",
     "typecheck:e2e": "pnpm --filter @lyrashield/db exec tsc --noEmit -p ../../e2e/tsconfig.json",
+    "typecheck:browser-harness": "pnpm --filter @lyrashield/web exec tsc --noEmit -p ../../e2e/browser/tsconfig.json",
+    "lint:browser-harness": "pnpm exec eslint e2e/browser --max-warnings 0",
     "format": "prettier --write \"**/*.{ts,tsx,md,json,yml,yaml}\"",
     "format:check": "git ls-files -z -- '*.ts' '*.tsx' '*.md' '*.json' '*.yml' '*.yaml' | xargs -0 prettier --check",
     "db:generate": "pnpm --filter @lyrashield/db generate",
@@ -23,6 +25,7 @@
     "test:motion": "node --test apps/marketing-motion/tests/*.test.mjs",
     "test": "node run-all-tests.mjs",
     "test:e2e": "playwright test --grep-invert '@visual'",
+    "test:browser-harness": "playwright test -c e2e/browser/playwright.config.ts",
     "test:watch": "vitest --exclude '**/dist/**'",
     "verify:worker-image": "sh apps/worker/scripts/verify-worker-image.sh",
     "admin:provision": "pnpm --filter @lyrashield/db exec tsx scripts/provision-platform-admins.ts"

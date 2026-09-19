@@ -39,6 +39,8 @@ export function useActiveScansPolling({
     const controller = new AbortController()
     let timeoutId: number | undefined
     let isAborted = false
+    let inFlight = false
+    let refreshOnVisible = false
     let pollEtag: string | undefined
     const pollStartedAt = Date.now()
 
@@ -51,9 +53,15 @@ export function useActiveScansPolling({
     const POLL_SLOW_THRESHOLD_MS = 60_000
 
     const nextInterval = (elapsedMs: number): number => {
-      if (elapsedMs < POLL_SLOW_THRESHOLD_MS) return POLL_FAST_INTERVAL_MS
-      if (elapsedMs < POLL_MEDIUM_THRESHOLD_MS) return POLL_MEDIUM_INTERVAL_MS
+      if (elapsedMs < POLL_MEDIUM_THRESHOLD_MS) return POLL_FAST_INTERVAL_MS
+      if (elapsedMs < POLL_SLOW_THRESHOLD_MS) return POLL_MEDIUM_INTERVAL_MS
       return POLL_SLOW_INTERVAL_MS
+    }
+
+    const schedule = (delayMs: number) => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+      timeoutId = undefined
+      if (!isAborted && !document.hidden) timeoutId = window.setTimeout(poll, delayMs)
     }
 
     // Battery/network: while the tab is hidden the poll loop suspends entirely
@@ -61,7 +69,9 @@ export function useActiveScansPolling({
     // immediate refetch when the tab becomes visible, so the list catches up
     // right away instead of waiting out the (up to 60s) backoff interval.
     const poll = async () => {
-      if (document.hidden) return
+      timeoutId = undefined
+      if (isAborted || document.hidden || inFlight) return
+      inFlight = true
       try {
         // Poll the bounded first page so a scan's terminal state replaces its
         // previous active row. The ETag from the previous tick makes an
@@ -71,6 +81,7 @@ export function useActiveScansPolling({
           schema: scansPaginatedSchema,
           ...(pollEtag ? { etag: pollEtag } : {}),
         })
+        if (controller.signal.aborted) return
         if (etag) pollEtag = etag
         if (data) {
           firstPageIdsRef.current = new Set(data.items.map((scan) => scan.id))
@@ -93,9 +104,11 @@ export function useActiveScansPolling({
             )
           : null
 
+        if (controller.signal.aborted) return
         setPollStale(false)
-        if (!controller.signal.aborted && (data || resolvedMissing)) {
+        if (data || resolvedMissing) {
           setScans((current) => {
+            if (controller.signal.aborted) return current
             if (!unfiltered) {
               // A filtered view replaces its page wholesale: rows that no
               // longer match the filter must not linger from a previous page.
@@ -110,19 +123,26 @@ export function useActiveScansPolling({
         }
       } catch {
         if (!controller.signal.aborted) setPollStale(true)
+      } finally {
+        inFlight = false
+        if (!isAborted && !document.hidden) {
+          const delay = refreshOnVisible ? 0 : nextInterval(Date.now() - pollStartedAt)
+          refreshOnVisible = false
+          schedule(delay)
+        }
       }
-      if (isAborted) return
-      const elapsed = Date.now() - pollStartedAt
-      const nextPollDelay = nextInterval(elapsed)
-      timeoutId = window.setTimeout(poll, nextPollDelay)
     }
 
-    timeoutId = window.setTimeout(poll, INITIAL_POLL_DELAY_MS)
+    schedule(INITIAL_POLL_DELAY_MS)
 
     const onVisibility = () => {
-      if (!document.hidden && hasActiveScans && !isAborted) {
-        window.clearTimeout(timeoutId)
-        timeoutId = window.setTimeout(poll, VISIBILITY_POLL_DELAY_MS)
+      if (document.hidden) {
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+        timeoutId = undefined
+        refreshOnVisible = false
+      } else if (hasActiveScans && !isAborted) {
+        if (inFlight) refreshOnVisible = true
+        else schedule(VISIBILITY_POLL_DELAY_MS)
       }
     }
     document.addEventListener("visibilitychange", onVisibility)

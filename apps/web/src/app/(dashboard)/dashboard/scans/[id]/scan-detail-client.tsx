@@ -155,9 +155,10 @@ export function ScanDetailClient({
           `/api/scans/${scan.id}?workspaceId=${encodeURIComponent(scan.workspaceId)}${cursorParam}`,
           { signal, etag: etagRef.current, schema: scanPollDataSchema }
         )
+        if (signal.aborted) return
         etagRef.current = etag
         setRefreshError(false)
-        if (!data || signal.aborted) return
+        if (!data) return
 
         const updated = data
         const nextScan: ScanData = {
@@ -245,6 +246,8 @@ export function ScanDetailClient({
     const controller = new AbortController()
     let timeoutId: number | undefined
     let isAborted = false
+    let inFlight = false
+    let refreshOnVisible = false
 
     const nextInterval = (elapsedMs: number): number => {
       if (elapsedMs < 60_000) return 5_000
@@ -256,21 +259,39 @@ export function ScanDetailClient({
     // — no timer spin and no fetches. `onVisibility` below resumes it with one
     // immediate refetch when the tab becomes visible, so state catches up right
     // away instead of waiting out the (up to 60s) backoff interval.
-    const poll = async () => {
-      if (document.hidden) return
-      await refresh(controller.signal)
-      if (isAborted) return
-      const startedAtMs = scan.startedAt ? new Date(scan.startedAt).getTime() : Date.now()
-      const elapsed = Date.now() - startedAtMs
-      timeoutId = window.setTimeout(poll, nextInterval(elapsed))
+    const schedule = (delayMs: number) => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+      timeoutId = undefined
+      if (!isAborted && !document.hidden) timeoutId = window.setTimeout(poll, delayMs)
     }
 
-    timeoutId = window.setTimeout(poll, 5_000)
+    const poll = async () => {
+      timeoutId = undefined
+      if (isAborted || document.hidden || inFlight) return
+      inFlight = true
+      try {
+        await refresh(controller.signal)
+      } finally {
+        inFlight = false
+        if (!isAborted && !document.hidden) {
+          const startedAtMs = scan.startedAt ? new Date(scan.startedAt).getTime() : Date.now()
+          const delay = refreshOnVisible ? 0 : nextInterval(Date.now() - startedAtMs)
+          refreshOnVisible = false
+          schedule(delay)
+        }
+      }
+    }
+
+    schedule(5_000)
 
     const onVisibility = () => {
-      if (!document.hidden && isActive && !isAborted) {
-        window.clearTimeout(timeoutId)
-        timeoutId = window.setTimeout(poll, 0)
+      if (document.hidden) {
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+        timeoutId = undefined
+        refreshOnVisible = false
+      } else if (isActive && !isAborted) {
+        if (inFlight) refreshOnVisible = true
+        else schedule(0)
       }
     }
     document.addEventListener("visibilitychange", onVisibility)
