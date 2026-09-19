@@ -104,8 +104,7 @@ export async function verifyScanAdmission(params: {
         errorMessage: "Stored execution plan does not match the scan profile.",
       }
     } else if (
-      executionPlan.capabilities.includes("engine") !==
-      (engineBacked && !deterministicRetest)
+      executionPlan.capabilities.includes("engine") !== (engineBacked && !deterministicRetest)
     ) {
       admissionError = {
         errorCategory: "SCAN_PLAN_MISMATCH",

@@ -310,27 +310,14 @@ export const CreateScanSchema = z.object({
   // Review Changes comparison refs (branch names or full SHAs). The server
   // resolves them to immutable git object IDs through the authorized source
   // integration before the scan is admitted; abbreviated SHAs never persist.
-  baseRef: z
-    .string()
-    .min(1)
-    .max(255)
-    .refine(isValidGitRef, "Invalid Git ref")
-    .optional(),
-  headRef: z
-    .string()
-    .min(1)
-    .max(255)
-    .refine(isValidGitRef, "Invalid Git ref")
-    .optional(),
+  baseRef: z.string().min(1).max(255).refine(isValidGitRef, "Invalid Git ref").optional(),
+  headRef: z.string().min(1).max(255).refine(isValidGitRef, "Invalid Git ref").optional(),
   // Immutable input-evidence references. IDs are recorded verbatim into the
   // server-owned execution plan (same cap as the plan contract); existence,
   // workspace scope, checksum and content-type are enforced by the artifact
   // staging boundary before anything mounts them — never by trusting this
   // list. Clients must never pass host paths.
-  attachmentIds: z
-    .array(z.string().trim().min(1).max(128))
-    .max(20)
-    .optional(),
+  attachmentIds: z.array(z.string().trim().min(1).max(128)).max(20).optional(),
   // AUTHENTICATED_ASSESSMENT only: references the recorded scoped
   // authorization artifact (a READY live-safety authorization record). The
   // server verifies it covers the exact target host before admission; it is
