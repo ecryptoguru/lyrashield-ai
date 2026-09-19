@@ -114,7 +114,11 @@ export async function invokeScanConnectorTool(
     resourceOf: (input) => connectorToolResource(tool, input),
     capOutput: capConnectorOutput,
     resolveCredential: (connection) =>
-      resolveConnectorCredential(params.workspaceId, tool.provider as ConnectorProviderId, connection),
+      resolveConnectorCredential(
+        params.workspaceId,
+        tool.provider as ConnectorProviderId,
+        connection
+      ),
     execute: ({ connection, credential, input }) =>
       tool.execute(
         {

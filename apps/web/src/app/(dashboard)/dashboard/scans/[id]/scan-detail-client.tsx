@@ -920,7 +920,7 @@ export function ScanDetailClient({
                     Evidence quality
                   </h2>
                   <p className="text-muted-foreground mt-1 text-sm">
-                    Measured facts computed from this run&apos;s stored evidence. Ratios are
+                    Measured facts computed from this scan&apos;s stored evidence. Ratios are
                     heuristics, not accuracy claims — model-declared coverage is counted
                     separately and never treated as a measured outcome.
                   </p>

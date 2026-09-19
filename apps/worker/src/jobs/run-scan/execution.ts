@@ -411,8 +411,7 @@ export async function executeScanTarget(params: {
             engineBudgetMs: engineTimeoutMsForGrant,
             // The beta grant always carries read-only methods regardless of
             // policy; admission already denied a destructive-allowed policy.
-            destructiveTestsAllowed:
-              !isAuthAssessment && policy?.destructiveTestsAllowed === true,
+            destructiveTestsAllowed: !isAuthAssessment && policy?.destructiveTestsAllowed === true,
             blockedPaths: isAuthAssessment
               ? [
                   ...new Set([
