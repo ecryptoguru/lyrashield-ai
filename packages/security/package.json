@@ -51,7 +51,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "webmcp-types": "^0.1.5"
+    "@types/node": "^24.13.5",
+    "webmcp-types": "^0.1.8"
   }
 }
