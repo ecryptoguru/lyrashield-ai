@@ -35,7 +35,6 @@ import { AiSecurityScoreCard } from "./ai-score-card"
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { track } from "@/lib/analytics"
 import { safeApiErrorMessage } from "@/components/api-error-card"
-import { RUN_SINGULAR } from "@/lib/terminology"
 import { scanRecoveryHref } from "../scans-client.utils"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
 import type { CleanResultScorecard, FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
@@ -737,8 +736,8 @@ export function ScanDetailClient({
                 Scope and plan
               </h2>
               <p className="text-muted-foreground mt-1 text-sm">
-                The immutable plan recorded when this {RUN_SINGULAR.toLowerCase()} was created — the
-                run cannot widen it.
+                The immutable plan recorded at creation — it cannot be widened
+                afterward.
               </p>
               <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                 <div>
@@ -886,88 +885,6 @@ export function ScanDetailClient({
               </div>
             </section>
           )}
-
-          {(() => {
-            const quality = scan.integrity.quality as
-              | {
-                  version?: string
-                  facts?: {
-                    findings?: {
-                      total?: number
-                      validatedCount?: number
-                      verifiedCount?: number
-                      nonConclusiveCount?: number
-                    }
-                    coverage?: {
-                      receiptsTotal?: number
-                      engineDeclaredReceipts?: number
-                      connectorReceipts?: number
-                    }
-                    evidence?: { ingestionWarningCount?: number }
-                  }
-                  estimates?: {
-                    assessedReceiptRatio?: { kind?: string; value?: number | null; basis?: string }
-                    verifiedFindingRatio?: { kind?: string; value?: number | null; basis?: string }
-                  }
-                }
-              | null
-              | undefined
-            if (!quality?.facts) return null
-            const findings = quality.facts.findings
-            const coverage = quality.facts.coverage
-            return (
-              <Card className="mb-6 p-4" aria-labelledby="quality-surface-heading">
-                <div>
-                  <h2 id="quality-surface-heading" className="font-semibold">
-                    Evidence quality
-                  </h2>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    Measured facts computed from this run&apos;s stored evidence. Ratios are
-                    heuristics, not accuracy claims — model-declared coverage is counted separately
-                    and never treated as a measured outcome.
-                  </p>
-                </div>
-                <dl className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-md border p-3">
-                    <dt className="text-muted-foreground text-xs">Findings (measured)</dt>
-                    <dd className="mt-1 text-sm font-medium">
-                      {findings?.total ?? 0} retained · {findings?.verifiedCount ?? 0} verified ·{" "}
-                      {findings?.validatedCount ?? 0} validated
-                    </dd>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {findings?.nonConclusiveCount ?? 0} non-conclusive (blocked/inconclusive/
-                      unlabeled). Verified means independently confirmed; validated is deterministic
-                      checking only.
-                    </p>
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <dt className="text-muted-foreground text-xs">Coverage receipts (measured)</dt>
-                    <dd className="mt-1 text-sm font-medium">
-                      {coverage?.receiptsTotal ?? 0} recorded ·{" "}
-                      {coverage?.engineDeclaredReceipts ?? 0} engine-declared ·{" "}
-                      {coverage?.connectorReceipts ?? 0} connector
-                    </dd>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      Engine-declared entries are the engine&apos;s own assertions, not measured
-                      outcomes.
-                    </p>
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <dt className="text-muted-foreground text-xs">Assessed share (heuristic)</dt>
-                    <dd className="mt-1 text-sm font-medium">
-                      {quality.estimates?.assessedReceiptRatio?.value == null
-                        ? "Not assessable"
-                        : `${Math.round(quality.estimates.assessedReceiptRatio.value * 100)}%`}
-                    </dd>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {quality.estimates?.assessedReceiptRatio?.basis ??
-                        "Ratio of completed receipts — heuristic only."}
-                    </p>
-                  </div>
-                </dl>
-              </Card>
-            )
-          })()}
 
           {(scan.integrity.coverage.length > 0 || reviewProfile.model) && (
             <Card className="mb-6 p-4" aria-labelledby="review-profile-heading">
