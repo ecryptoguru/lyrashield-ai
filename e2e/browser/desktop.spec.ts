@@ -135,6 +135,15 @@ test("listener registration finishes before replay; stored detail restores fast 
       )
     )
     .toBeGreaterThan(0)
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as unknown as { desktopState: { calls: { command: string }[] } }
+        ).desktopState.calls.some((c) => c.command === "get_scan_events")
+      )
+    )
+    .toBe(true)
   const replayCall = await page.evaluate(() =>
     (
       window as unknown as {
