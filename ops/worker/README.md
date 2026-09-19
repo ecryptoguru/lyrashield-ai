@@ -21,7 +21,7 @@ The production worker image must run from its own `worker` stage on the digest-p
 
 ## Install
 
-Copy the four scripts to `/usr/local/libexec/`, including `capture-stop-provenance.sh` as `/usr/local/libexec/lyrashield-capture-worker-stop-provenance`; copy the units to `/etc/systemd/system/`, and make the scripts root-executable. Create `/etc/lyrashield/worker-runtime.conf` with mode `0600`:
+Copy the four scripts to `/usr/local/libexec/`, including `capture-stop-provenance.sh` as `/usr/local/libexec/lyrashield-capture-worker-stop-provenance`; copy `worker-env.sh` to `/opt/lyrashield-worker-host/worker-env.sh`; copy the units to `/etc/systemd/system/`, and make the scripts root-executable. Create `/etc/lyrashield/worker-runtime.conf` with mode `0600`:
 
 ```sh
 LYRASHIELD_WORKER_IMAGE=ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:<approved-worker-digest>
@@ -31,7 +31,7 @@ LYRASHIELD_SANDBOX_NETWORK=lyrashield-sandbox
 GHCR_USERNAME=<github-username-or-bot>
 ```
 
-`/etc/lyrashield/worker.env` supplies the remaining runtime variables. Defaults in `run-worker.sh` set `NODE_ENV=production`, the exact two-account platform-admin allowlist, `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0`, and `LYRASHIELD_WORKER_CONCURRENCY=1`; override email verification or concurrency there when needed. The platform-admin allowlist is code-owned and must not drift.
+`/etc/lyrashield/worker.env` supplies the remaining runtime variables. Defaults in `worker-env.sh` set `NODE_ENV=production`, the exact two-account platform-admin allowlist, `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0`, and `LYRASHIELD_WORKER_CONCURRENCY=1`; override email verification or concurrency there when needed. `run-worker.sh` and the promotion preflight both source `worker-env.sh`, so the live worker and every one-shot check see an identical environment. The platform-admin allowlist is code-owned and must not drift.
 
 `run-worker.sh` bind-mounts `/var/lib/lyrashield/worker` at the same absolute path in the worker. Engine workspaces and `TMPDIR` must remain below this shared root because the worker uses the host Docker daemon: sandbox bind sources created only inside the worker container are invisible to that daemon and fail closed before model execution.
 

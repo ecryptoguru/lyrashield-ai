@@ -110,8 +110,13 @@ load_approved_pin_file() {
     fi
     validate_approved_ip_tuple "$pinned_host" "$pinned_address" "$pinned_port"
     if ! grep -Fqx "$pinned_host $pinned_port" "$temporary_approved_endpoints"; then
-      echo "Worker egress pin contains an unapproved host or port" >&2
-      exit 1
+      if [ "$refresh_pins" != "1" ]; then
+        echo "Worker egress pin contains an unapproved host or port" >&2
+        exit 1
+      fi
+      # A credential rotation can replace an endpoint host. Keep the prior,
+      # validated pin only in the transition union; the refreshed pin file
+      # below contains current approved endpoints only.
     fi
     printf '%s %s %s\n' "$pinned_host" "$pinned_address" "$pinned_port" >>"$destination_file"
   done <"$source_file"

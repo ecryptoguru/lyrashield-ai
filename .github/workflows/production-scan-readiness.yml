@@ -18,8 +18,35 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: Probe the worker-backed readiness endpoint
+        id: probe
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --max-time 15 --retry 2 --retry-all-errors --retry-delay 5 \
-            https://app.lyrashieldai.com/api/ready/scans \
-            | grep -Fqx '{"status":"ready","checks":{"worker":true}}'
+          response=$(curl --silent --show-error --max-time 15 --retry 2 --retry-all-errors --retry-delay 5 \
+            --write-out $'\n%{http_code}' \
+            https://app.lyrashieldai.com/api/ready/scans || printf '\n000')
+          http_status=$(printf '%s\n' "$response" | tail -n 1)
+          body=$(printf '%s\n' "$response" | sed '$d')
+          {
+            echo "http_status=$http_status"
+            echo "body=$body"
+          } >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$body" | grep -Fqx '{"status":"ready","checks":{"worker":true}}'
+
+      # No external notification channel exists in this repository yet, so a
+      # failure writes the probe status and body to the step summary where the
+      # failed run surfaces it on the Actions page.
+      - name: Report readiness failure
+        if: failure()
+        env:
+          PROBE_STATUS: ${{ steps.probe.outputs.http_status }}
+          PROBE_BODY: ${{ steps.probe.outputs.body }}
+        run: |
+          {
+            echo "### Production scan readiness probe failed"
+            echo ""
+            echo "- HTTP status: \`${PROBE_STATUS:-unavailable}\`"
+            echo "- Response body: \`${PROBE_BODY:-unavailable}\`"
+            echo ""
+            echo "The scan worker is not ready. Restart lyrashield-worker.service on the VM"
+            echo "and check the last Release production run before rerunning this probe."
+          } >> "$GITHUB_STEP_SUMMARY"

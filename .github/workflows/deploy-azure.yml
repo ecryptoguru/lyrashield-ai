@@ -1319,10 +1319,13 @@ jobs:
         run: |
           source ops/deployment/azure-vm-run-command.sh
           payload=$(base64 --wrap=0 .github/scripts/promote-worker-vm.sh)
+          # Until the first promotion installs worker-env.sh on the host the
+          # script sources the copy embedded in this payload.
+          worker_env_payload=$(base64 --wrap=0 ops/worker/worker-env.sh)
           result=$(azure_vm_run_command_with_retry \
             --name "$WORKER_VM_NAME" --resource-group "$RG" \
             --command-id RunShellScript \
-            --scripts "printf '%s' '$payload' | base64 -d | sh -s -- --preflight" \
+            --scripts "printf '%s' '$worker_env_payload' | base64 -d > /tmp/lyrashield-worker-env.sh && printf '%s' '$payload' | base64 -d | LYRASHIELD_WORKER_ENV_LIB=/tmp/lyrashield-worker-env.sh sh -s -- --preflight" \
             --query 'value[0].message' --output tsv)
           printf '%s\n' "$result"
           grep -q "Worker empty-queue preflight passed" <<< "$result"
@@ -1573,13 +1576,16 @@ jobs:
         run: |
           source ops/deployment/azure-vm-run-command.sh
           payload=$(base64 --wrap=0 .github/scripts/promote-worker-vm.sh)
+          # Until the first promotion installs worker-env.sh on the host the
+          # script sources the copy embedded in this payload.
+          worker_env_payload=$(base64 --wrap=0 ops/worker/worker-env.sh)
           worker_ref="${WORKER_IMAGE%@*}@${WORKER_DIGEST}"
           export AZURE_VM_RUN_COMMAND_TIMEOUT_SECONDS=1800
           result=$(azure_vm_run_command_with_retry \
             --name "$WORKER_VM_NAME" \
             --resource-group "$RG" \
             --command-id RunShellScript \
-            --scripts "printf '%s' '$payload' | base64 -d | sh -s -- '$worker_ref' '$DEPLOY_SHA' '$ENGINE_REVISION'" \
+            --scripts "printf '%s' '$worker_env_payload' | base64 -d > /tmp/lyrashield-worker-env.sh && printf '%s' '$payload' | base64 -d | LYRASHIELD_WORKER_ENV_LIB=/tmp/lyrashield-worker-env.sh sh -s -- '$worker_ref' '$DEPLOY_SHA' '$ENGINE_REVISION'" \
             --query 'value[0].message' \
             --output tsv)
           printf '%s\n' "$result"
