@@ -432,6 +432,60 @@ pub async fn get_events(
     Ok(out)
 }
 
+// Commit the terminal status and replay event together. The runner is the only writer.
+pub async fn persist_terminal(
+    app: &AppHandle,
+    scan_id: &str,
+    event: &ScanEvent,
+    exit_code: Option<i32>,
+) -> Result<(), String> {
+    let path = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| e.to_string())?
+        .join("lyrashield.db");
+    let scan_id = scan_id.to_owned();
+    let event = event.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut conn = connect_database(&path)?;
+        persist_terminal_in(&mut conn, &scan_id, &event, exit_code)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn persist_terminal_in(
+    conn: &mut rusqlite::Connection,
+    scan_id: &str,
+    event: &ScanEvent,
+    process_exit_code: Option<i32>,
+) -> Result<(), String> {
+    let (status, exit_code, error) = match event {
+        ScanEvent::Completed { exit_code, .. } => ("completed", Some(*exit_code), None),
+        ScanEvent::Cancelled { .. } => ("cancelled", Some(CrashCode::Cancelled as i32), None),
+        ScanEvent::Failed { error, .. } => (
+            "failed",
+            process_exit_code.or(Some(CrashCode::EngineCrash as i32)),
+            Some(error.as_str()),
+        ),
+        _ => return Err("terminal event required".into()),
+    };
+    let payload = serde_json::to_string(event).map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let tx = conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(|e| e.to_string())?;
+    let changed = tx.execute("UPDATE scans SET status=?1, completed_at=?2, exit_code=?3, error=?4, finding_count=(SELECT COUNT(*) FROM findings WHERE scan_id=?5) WHERE scan_id=?5 AND status IN ('pending','running')",
+        rusqlite::params![status, now, exit_code, error, scan_id]).map_err(|e| e.to_string())?;
+    if changed == 0 {
+        return Err("scan is missing or already terminal".into());
+    }
+    tx.execute("INSERT INTO scan_events (scan_id,seq,kind,payload,created_at) SELECT ?1, COALESCE(MAX(seq)+1,0), ?2, ?3, ?4 FROM scan_events WHERE scan_id=?1",
+        rusqlite::params![scan_id, status, payload, now]).map_err(|e| e.to_string())?;
+    tx.commit()
+        .map_err(|e| format!("terminal persistence failed: {}", e))
+}
+
 pub async fn set_terminal(
     app: &AppHandle,
     scan_id: &str,
@@ -677,6 +731,150 @@ fn get_string(row: &HashMap<String, JsonValue>, key: &str) -> Result<String, Str
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn browser_fixtures_match_real_native_wire_and_export_inputs() {
+        let wire: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../../e2e/browser/desktop-wire.json"))
+                .unwrap();
+        let summary: super::ScanSummary = serde_json::from_value(wire["summary"].clone()).unwrap();
+        assert_eq!(serde_json::to_value(summary).unwrap(), wire["summary"]);
+        let detail: super::ScanDetail = serde_json::from_value(wire["detail"].clone()).unwrap();
+        assert_eq!(serde_json::to_value(&detail).unwrap(), wire["detail"]);
+        for event in wire["events"].as_array().unwrap() {
+            let actual: super::ScanEvent = serde_json::from_value(event.clone()).unwrap();
+            assert_eq!(serde_json::to_value(actual).unwrap(), *event);
+        }
+        for result in wire["syncResults"].as_array().unwrap() {
+            let actual: crate::sync::SyncResult = serde_json::from_value(result.clone()).unwrap();
+            assert_eq!(serde_json::to_value(actual).unwrap(), *result);
+        }
+        let sarif: serde_json::Value = serde_json::from_str(
+            &super::export_sarif(&detail.findings[..1], &detail.scan_id).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(sarif["runs"][0]["results"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]
+                ["uri"],
+            "src/example.ts"
+        );
+    }
+
+    #[test]
+    fn completed_scan_rejects_late_cancel_and_failure_preserves_exit_code() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut conn = super::open_database(&dir.path().join("terminal.db")).unwrap();
+        for id in ["done", "failed"] {
+            conn.execute("INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES (?1,'local','standard','running','now')", [id]).unwrap();
+        }
+        super::persist_terminal_in(
+            &mut conn,
+            "done",
+            &super::ScanEvent::Completed {
+                scan_id: "done".into(),
+                exit_code: 0,
+                finding_count: 0,
+            },
+            Some(0),
+        )
+        .unwrap();
+        assert!(super::persist_terminal_in(
+            &mut conn,
+            "done",
+            &super::ScanEvent::Cancelled {
+                scan_id: "done".into()
+            },
+            None
+        )
+        .is_err());
+        assert_eq!(
+            conn.query_row("SELECT status FROM scans WHERE scan_id='done'", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .unwrap(),
+            "completed"
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM scan_events WHERE scan_id='done'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+        super::persist_terminal_in(
+            &mut conn,
+            "failed",
+            &super::ScanEvent::Failed {
+                scan_id: "failed".into(),
+                error: "Engine exited with code 7".into(),
+            },
+            Some(7),
+        )
+        .unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT exit_code FROM scans WHERE scan_id='failed'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            7
+        );
+    }
+
+    #[test]
+    fn terminal_status_and_replay_commit_together_and_cannot_be_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.db");
+        let mut conn = super::open_database(&path).unwrap();
+        conn.execute("INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES ('s','local','standard','running','now')", []).unwrap();
+        conn.execute("INSERT INTO scan_events (scan_id,seq,kind,payload,created_at) VALUES ('s',9,'progress','{}','now')", []).unwrap();
+        // An event failure rolls status back as well; no false cancelled receipt.
+        conn.execute_batch("CREATE TRIGGER fail_terminal BEFORE INSERT ON scan_events BEGIN SELECT RAISE(ABORT, 'disk write failed'); END;").unwrap();
+        let cancelled = super::ScanEvent::Cancelled {
+            scan_id: "s".into(),
+        };
+        assert!(super::persist_terminal_in(&mut conn, "s", &cancelled, None).is_err());
+        assert_eq!(
+            conn.query_row("SELECT status FROM scans WHERE scan_id='s'", [], |r| r
+                .get::<_, String>(
+                0
+            ))
+            .unwrap(),
+            "running"
+        );
+        conn.execute_batch("DROP TRIGGER fail_terminal").unwrap();
+        super::persist_terminal_in(&mut conn, "s", &cancelled, None).unwrap();
+        let completed = super::ScanEvent::Completed {
+            scan_id: "s".into(),
+            exit_code: 0,
+            finding_count: 0,
+        };
+        assert!(super::persist_terminal_in(&mut conn, "s", &completed, None).is_err());
+        assert!(super::persist_terminal_in(&mut conn, "s", &cancelled, None).is_err());
+        drop(conn);
+        let conn = super::connect_database(&path).unwrap();
+        let (status, kind, seq): (String, String, i64) = conn
+            .query_row(
+                "SELECT status,kind,seq FROM scans JOIN scan_events USING(scan_id) WHERE seq=10",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            (status.as_str(), kind.as_str(), seq),
+            ("cancelled", "cancelled", 10)
+        );
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM scan_events", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            2
+        );
+    }
+
     use super::*;
     #[test]
     fn normal_reads_do_not_acquire_migration_write_locks() {
