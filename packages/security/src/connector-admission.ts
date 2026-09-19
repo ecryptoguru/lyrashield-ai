@@ -10,11 +10,7 @@
 
 export type ConnectorAdmissionMode = "off" | "canary" | "public"
 export type ConnectorAdmissionReason =
-  | "connectors_off"
-  | "invalid_allowlist"
-  | "not_canary"
-  | "canary"
-  | "public"
+  "connectors_off" | "invalid_allowlist" | "not_canary" | "canary" | "public"
 
 export interface ConnectorAdmissionDecision {
   allowed: boolean

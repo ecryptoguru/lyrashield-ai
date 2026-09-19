@@ -271,19 +271,36 @@ describe("capConnectorOutput", () => {
 describe("connector admission", () => {
   it("off denies everyone, canary admits only the allowlist, malformed fails closed", () => {
     expect(
-      evaluateConnectorAdmission({ mode: "off", workspaceId: "ws_canary", canaryWorkspaceIds: "ws_canary" }).allowed
+      evaluateConnectorAdmission({
+        mode: "off",
+        workspaceId: "ws_canary",
+        canaryWorkspaceIds: "ws_canary",
+      }).allowed
     ).toBe(false)
     expect(
-      evaluateConnectorAdmission({ mode: "canary", workspaceId: "ws_canary", canaryWorkspaceIds: "ws_canary,ws_two" }).allowed
+      evaluateConnectorAdmission({
+        mode: "canary",
+        workspaceId: "ws_canary",
+        canaryWorkspaceIds: "ws_canary,ws_two",
+      }).allowed
     ).toBe(true)
     expect(
-      evaluateConnectorAdmission({ mode: "canary", workspaceId: "ws_other", canaryWorkspaceIds: "ws_canary" }).allowed
+      evaluateConnectorAdmission({
+        mode: "canary",
+        workspaceId: "ws_other",
+        canaryWorkspaceIds: "ws_canary",
+      }).allowed
     ).toBe(false)
     expect(
-      evaluateConnectorAdmission({ mode: "canary", workspaceId: "ws_1", canaryWorkspaceIds: "bad id!" }).allowed
+      evaluateConnectorAdmission({
+        mode: "canary",
+        workspaceId: "ws_1",
+        canaryWorkspaceIds: "bad id!",
+      }).allowed
     ).toBe(false)
     expect(
-      evaluateConnectorAdmission({ mode: "public", workspaceId: "any", canaryWorkspaceIds: "" }).allowed
+      evaluateConnectorAdmission({ mode: "public", workspaceId: "any", canaryWorkspaceIds: "" })
+        .allowed
     ).toBe(true)
   })
 })

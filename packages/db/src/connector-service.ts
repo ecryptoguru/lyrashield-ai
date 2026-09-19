@@ -108,8 +108,7 @@ export interface ConnectorToolSpec {
 }
 
 export type ConnectorCredentialShape =
-  | { kind: "github_installation"; installationId: number }
-  | { kind: "slack_bot"; botToken: string }
+  { kind: "github_installation"; installationId: number } | { kind: "slack_bot"; botToken: string }
 
 export interface ConnectorInvocationParams {
   workspaceId: string
@@ -127,9 +126,7 @@ export interface ConnectorInvocationParams {
    */
   resourceOf?: (input: Record<string, unknown>) => string | undefined
   /** Resolve the connection's credential (vault read / token mint). */
-  resolveCredential: (
-    connection: Integration
-  ) => Promise<ConnectorCredentialShape | null>
+  resolveCredential: (connection: Integration) => Promise<ConnectorCredentialShape | null>
   /** Execute the provider call; receives the resolved credential + validated input. */
   execute: (args: {
     connection: Integration
@@ -143,7 +140,10 @@ export interface ConnectorInvocationParams {
   isAdmitted?: (workspaceId: string) => boolean
   now?: () => number
   /** Serialized-output cap hook; defaults to a JSON.stringify byte cap. */
-  capOutput?: (output: unknown, maxBytes: number) => {
+  capOutput?: (
+    output: unknown,
+    maxBytes: number
+  ) => {
     output: unknown
     truncated: boolean
     bytes: number
@@ -237,8 +237,7 @@ function metadataExpiresAt(raw: unknown): number | null {
 // ── Pure authorization check (unit-testable, no DB) ─────────────────────────
 
 export type ConnectorAuthzResult =
-  | { authorized: true }
-  | { authorized: false; code: ConnectorDenialCode; reason: string }
+  { authorized: true } | { authorized: false; code: ConnectorDenialCode; reason: string }
 
 export function checkConnectorAuthorization(params: {
   connection: Pick<
@@ -729,11 +728,7 @@ export async function upsertConnectorConnection(
       // P2002: the provider identity is already claimed — either another
       // workspace's live row (invisible under the workspace guard) or this
       // workspace's soft-deleted row. Fail closed rather than rebind or hide.
-      if (
-        err instanceof Error &&
-        "code" in err &&
-        (err as { code?: string }).code === "P2002"
-      ) {
+      if (err instanceof Error && "code" in err && (err as { code?: string }).code === "P2002") {
         throw new ConnectorConnectionError(
           "This provider connection is already claimed by another workspace",
           "ALREADY_CLAIMED"
@@ -762,7 +757,9 @@ export async function setConnectorConnectionStatus(params: {
     })
     if (!existing) return null
     const priorMetadata =
-      existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+      existing.metadata &&
+      typeof existing.metadata === "object" &&
+      !Array.isArray(existing.metadata)
         ? (existing.metadata as Record<string, unknown>)
         : {}
     const metadata =

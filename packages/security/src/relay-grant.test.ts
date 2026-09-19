@@ -164,10 +164,7 @@ describe("connector relay scope", () => {
       expect(verified.scope).toEqual(scope)
     }
     // Expiry is enforced on connector grants like any other grant.
-    const expired = mintRelayGrant(
-      { ...scope, exp: Date.now() - 1 },
-      SECRET
-    )
+    const expired = mintRelayGrant({ ...scope, exp: Date.now() - 1 }, SECRET)
     expect(verifyRelayGrant(expired, SECRET)).toEqual({ ok: false, reason: "expired" })
   })
 

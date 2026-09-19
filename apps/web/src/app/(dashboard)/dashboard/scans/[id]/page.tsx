@@ -69,76 +69,76 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
   const wantsScorecard = scan.status === "COMPLETED" && !!scan.targetId
   const [findings, manifestDetail, qualitySurface, scoreSnapshot, membership, planRow] =
     await Promise.all([
-    prisma.finding.findMany({
-      where: { scanId: id, workspaceId, deletedAt: null },
-      select: {
-        id: true,
-        title: true,
-        severity: true,
-        status: true,
-        cwe: true,
-        owaspCategory: true,
-        cvssScore: true,
-        summary: true,
-        verified: true,
-        verificationStatus: true,
-        verificationMethod: true,
-        verificationReason: true,
-        createdAt: true,
-      },
-      orderBy: { severity: "desc" },
-      take: 100,
-    }),
-    // One-time server fetch of the manifest detail (urlExecution lives inside
-    // the tens-of-KB manifest JSON, which getScanWithEvents deliberately
-    // excludes so the polling API does not ship it on every request).
-    getScanResultManifestDetail(id, workspaceId),
-    // Measured quality surface — derived only from stored scan evidence
-    // (receipts, finding tiers, manifest); labeled heuristics stay separate.
-    getScanQualitySurface(id, workspaceId),
-    scan.status === "COMPLETED" && scan.targetId
-      ? prisma.scoreSnapshot.findFirst({
-          where: {
-            scanId: scan.id,
-            workspaceId,
-            targetId: scan.targetId,
-            shareEligible: true,
-            expiresAt: { gt: new Date() },
-          },
-          select: {
-            grade: true,
-            shares: {
-              where: { revokedAt: null, createdById: session.userId },
-              orderBy: { createdAt: "desc" },
-              take: 1,
-              select: {
-                id: true,
-                slug: true,
-                publicPayload: true,
-                viewCount: true,
-                _count: { select: { events: { where: { eventType: "SHARE" } } } },
-                referralCode: {
-                  select: { code: true, _count: { select: { attributions: true } } },
+      prisma.finding.findMany({
+        where: { scanId: id, workspaceId, deletedAt: null },
+        select: {
+          id: true,
+          title: true,
+          severity: true,
+          status: true,
+          cwe: true,
+          owaspCategory: true,
+          cvssScore: true,
+          summary: true,
+          verified: true,
+          verificationStatus: true,
+          verificationMethod: true,
+          verificationReason: true,
+          createdAt: true,
+        },
+        orderBy: { severity: "desc" },
+        take: 100,
+      }),
+      // One-time server fetch of the manifest detail (urlExecution lives inside
+      // the tens-of-KB manifest JSON, which getScanWithEvents deliberately
+      // excludes so the polling API does not ship it on every request).
+      getScanResultManifestDetail(id, workspaceId),
+      // Measured quality surface — derived only from stored scan evidence
+      // (receipts, finding tiers, manifest); labeled heuristics stay separate.
+      getScanQualitySurface(id, workspaceId),
+      scan.status === "COMPLETED" && scan.targetId
+        ? prisma.scoreSnapshot.findFirst({
+            where: {
+              scanId: scan.id,
+              workspaceId,
+              targetId: scan.targetId,
+              shareEligible: true,
+              expiresAt: { gt: new Date() },
+            },
+            select: {
+              grade: true,
+              shares: {
+                where: { revokedAt: null, createdById: session.userId },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+                select: {
+                  id: true,
+                  slug: true,
+                  publicPayload: true,
+                  viewCount: true,
+                  _count: { select: { events: { where: { eventType: "SHARE" } } } },
+                  referralCode: {
+                    select: { code: true, _count: { select: { attributions: true } } },
+                  },
                 },
               },
             },
-          },
-        })
-      : null,
-    wantsScorecard
-      ? prisma.workspaceMember.findFirst({
-          where: { workspaceId, userId: session.userId, status: "active" },
-          select: { role: true },
-        })
-      : null,
-    // The immutable execution plan is fetched only here (never on the poll
-    // path) and projected to an allowlisted summary — the client sees
-    // workflow/scope/limits, never provider routing or cost internals.
-    prisma.scan.findFirst({
-      where: { id, workspaceId, deletedAt: null },
-      select: { executionPlan: true },
-    }),
-  ])
+          })
+        : null,
+      wantsScorecard
+        ? prisma.workspaceMember.findFirst({
+            where: { workspaceId, userId: session.userId, status: "active" },
+            select: { role: true },
+          })
+        : null,
+      // The immutable execution plan is fetched only here (never on the poll
+      // path) and projected to an allowlisted summary — the client sees
+      // workflow/scope/limits, never provider routing or cost internals.
+      prisma.scan.findFirst({
+        where: { id, workspaceId, deletedAt: null },
+        select: { executionPlan: true },
+      }),
+    ])
 
   const target = scan.target
 

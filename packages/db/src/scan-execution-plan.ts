@@ -21,8 +21,7 @@ export function computeScanExecutionPlanHash(plan: ScanExecutionPlan): string {
 }
 
 export type StoredExecutionPlanCheck =
-  | { ok: true; plan: ScanExecutionPlan }
-  | { ok: false; errorCategory: string; errorMessage: string }
+  { ok: true; plan: ScanExecutionPlan } | { ok: false; errorCategory: string; errorMessage: string }
 
 /**
  * Validate a stored `Scan.executionPlan` against its `executionPlanHash`.

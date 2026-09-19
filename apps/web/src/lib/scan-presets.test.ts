@@ -83,9 +83,9 @@ describe("getManualScanOptions", () => {
     expect(engineBackedUrl?.authorizationHint).toContain("verified domain")
     // No preset copy may claim certification or guaranteed detection.
     for (const option of getManualScanOptions({ type: "REPO" })) {
-      expect(
-        `${option.label} ${option.description} ${option.hint}`
-      ).not.toMatch(/certif|guarantee|universal|compliant/i)
+      expect(`${option.label} ${option.description} ${option.hint}`).not.toMatch(
+        /certif|guarantee|universal|compliant/i
+      )
     }
   })
 

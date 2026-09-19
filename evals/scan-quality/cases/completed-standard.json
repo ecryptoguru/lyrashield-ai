@@ -14,10 +14,31 @@
       { "scanner": "sast", "controlId": "vibe-01", "status": "COMPLETED" },
       { "scanner": "sast", "controlId": "vibe-02", "status": "COMPLETED" },
       { "scanner": "secrets", "controlId": "vibe-21", "status": "COMPLETED" },
-      { "scanner": "sca", "controlId": "vibe-30", "status": "PARTIAL", "reason": "registry timeout" },
-      { "scanner": "engine", "controlId": "engine-scope:auth-flow", "status": "COMPLETED", "metadata": { "declaredBy": "engine_model" } },
-      { "scanner": "engine", "controlId": "engine-gap:0:coverage_limit", "status": "PARTIAL", "reason": "declared gap", "metadata": { "declaredBy": "engine_runtime" } },
-      { "scanner": "connector", "controlId": "connector:github.get_repository", "status": "COMPLETED", "metadata": { "declaredBy": "connector_runtime" } }
+      {
+        "scanner": "sca",
+        "controlId": "vibe-30",
+        "status": "PARTIAL",
+        "reason": "registry timeout"
+      },
+      {
+        "scanner": "engine",
+        "controlId": "engine-scope:auth-flow",
+        "status": "COMPLETED",
+        "metadata": { "declaredBy": "engine_model" }
+      },
+      {
+        "scanner": "engine",
+        "controlId": "engine-gap:0:coverage_limit",
+        "status": "PARTIAL",
+        "reason": "declared gap",
+        "metadata": { "declaredBy": "engine_runtime" }
+      },
+      {
+        "scanner": "connector",
+        "controlId": "connector:github.get_repository",
+        "status": "COMPLETED",
+        "metadata": { "declaredBy": "connector_runtime" }
+      }
     ],
     "findings": [
       { "verificationStatus": "DETECTED", "severity": "HIGH" },

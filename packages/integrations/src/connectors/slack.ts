@@ -121,9 +121,10 @@ function projectChannel(item: unknown) {
     isPrivate: channel.is_private === true,
     isArchived: channel.is_archived === true,
     numMembers: typeof channel.num_members === "number" ? channel.num_members : null,
-    topic: isRecord(channel.topic) && typeof channel.topic.value === "string"
-      ? channel.topic.value.slice(0, 300)
-      : null,
+    topic:
+      isRecord(channel.topic) && typeof channel.topic.value === "string"
+        ? channel.topic.value.slice(0, 300)
+        : null,
   }
 }
 
@@ -235,12 +236,7 @@ export const slackConnectorTools: ConnectorTool[] = [
     },
     async execute(ctx, input) {
       const { channel } = input as { channel: string }
-      const data = await slackApi(
-        botTokenOf(ctx),
-        "conversations.info",
-        { channel },
-        ctx.fetchFn
-      )
+      const data = await slackApi(botTokenOf(ctx), "conversations.info", { channel }, ctx.fetchFn)
       return { channel: projectChannel(data.channel) }
     },
   },

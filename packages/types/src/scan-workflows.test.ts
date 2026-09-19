@@ -6,11 +6,7 @@ import {
   SCAN_EXECUTION_PLAN_VERSION,
   ScanWorkflowSchema,
 } from "./scan-execution-plan"
-import {
-  CreateScanInputSchema,
-  CreateScanSchema,
-  FindingVerificationStatusSchema,
-} from "./index"
+import { CreateScanInputSchema, CreateScanSchema, FindingVerificationStatusSchema } from "./index"
 
 /**
  * The checked-in scan-workflows fixture is the single parity contract every
@@ -19,10 +15,7 @@ import {
  * with the schemas and plan builder it describes.
  */
 const fixture = JSON.parse(
-  readFileSync(
-    fileURLToPath(new URL("./fixtures/scan-workflows.json", import.meta.url)),
-    "utf8"
-  )
+  readFileSync(fileURLToPath(new URL("./fixtures/scan-workflows.json", import.meta.url)), "utf8")
 ) as {
   version: string
   workflows: string[]
@@ -49,9 +42,7 @@ const FULL_SHA = "a".repeat(40)
 
 describe("scan-workflows parity fixture", () => {
   it("covers exactly the workflows the contract exposes", () => {
-    expect([...fixture.workflows].sort()).toEqual(
-      [...ScanWorkflowSchema.options].sort()
-    )
+    expect([...fixture.workflows].sort()).toEqual([...ScanWorkflowSchema.options].sort())
     expect(fixture.version).toBe("scan-workflows/1.0.0")
   })
 
@@ -61,9 +52,7 @@ describe("scan-workflows parity fixture", () => {
       ...fixture.verificationStatuses.nonConclusive,
     ]
     // Fixture tiers cover the shared enum exactly — nothing collapses.
-    expect([...all].sort()).toEqual(
-      [...FindingVerificationStatusSchema.options].sort()
-    )
+    expect([...all].sort()).toEqual([...FindingVerificationStatusSchema.options].sort())
     expect(new Set(all).size).toBe(all.length)
     expect(fixture.verificationStatuses.neverConflate).toBe(true)
     // DETECTED is detection only — never VALIDATED or VERIFIED.
@@ -73,12 +62,8 @@ describe("scan-workflows parity fixture", () => {
   })
 
   it("requires a REVIEW_CHANGES fixture for REPO and rejections for live targets", () => {
-    const diffCases = fixture.cases.filter(
-      (c) => c.request.workflow === "REVIEW_CHANGES"
-    )
-    expect(diffCases.some((c) => c.targetType === "REPO" && c.expectedPlan)).toBe(
-      true
-    )
+    const diffCases = fixture.cases.filter((c) => c.request.workflow === "REVIEW_CHANGES")
+    expect(diffCases.some((c) => c.targetType === "REPO" && c.expectedPlan)).toBe(true)
     for (const c of diffCases.filter((c) => c.targetType !== "REPO")) {
       expect(c.expectError).toBe("SCAN_PLAN_INVALID")
     }

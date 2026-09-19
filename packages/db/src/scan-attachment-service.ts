@@ -78,11 +78,7 @@ export interface CreateScanAttachmentRecordInput {
 export async function createScanAttachmentRecord(
   input: CreateScanAttachmentRecordInput
 ): Promise<ScanAttachmentSummary> {
-  const validation = validateScanAttachmentUpload(
-    input.filename,
-    input.mediaType,
-    input.byteLength
-  )
+  const validation = validateScanAttachmentUpload(input.filename, input.mediaType, input.byteLength)
   if (!validation.ok) {
     throw new ScanAttachmentError(
       validation.code as ScanAttachmentErrorCode,

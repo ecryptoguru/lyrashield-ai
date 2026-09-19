@@ -44,8 +44,7 @@ export function validateCase(
   const problems: string[] = []
   if (!isRecord(raw)) return { ok: false, problems: ["case file is not an object"] }
   if (typeof raw.id !== "string" || !raw.id) problems.push("id must be a non-empty string")
-  if (typeof raw.title !== "string" || !raw.title)
-    problems.push("title must be a non-empty string")
+  if (typeof raw.title !== "string" || !raw.title) problems.push("title must be a non-empty string")
   if (!isRecord(raw.evidence)) problems.push("evidence must be an object")
   else {
     const evidence = raw.evidence
