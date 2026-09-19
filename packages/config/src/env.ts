@@ -420,7 +420,10 @@ const envSchema = z
     MYRA_OPERATOR_ENABLED: z.enum(["0", "1"]).optional().default("0"),
     // Calendar provider adapter for demo booking. "google" requires the
     // MYRA_GOOGLE_* credentials below; "mock" never touches a real calendar.
-    MYRA_CALENDAR_PROVIDER: z.enum(["mock", "google"]).optional().default("mock"),
+    MYRA_CALENDAR_PROVIDER: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.enum(["mock", "google"]).optional().default("mock")
+    ),
     // Model provider: "mock" (default, deterministic local composition) or
     // "azure" (Azure OpenAI/Foundry chat deployments). "azure" without
     // endpoint+key fails closed.

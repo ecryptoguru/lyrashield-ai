@@ -59,12 +59,16 @@ describe("GET /api/myra/status", () => {
 
     env.MYRA_PUBLIC_BOOKING_ENABLED = "1"
     body = await (await GET(statusRequest())).json()
-    expect(body).toEqual({ public: false, booking: true })
+    expect(body).toEqual({ public: false, booking: false })
+
+    env.MYRA_PUBLIC_ENABLED = "1"
+    body = await (await GET(statusRequest())).json()
+    expect(body).toEqual({ public: true, booking: true })
 
     // The flag never opens booking while writes themselves are off.
     env.MYRA_WRITES_ENABLED = "0"
     body = await (await GET(statusRequest())).json()
-    expect(body).toEqual({ public: false, booking: false })
+    expect(body).toEqual({ public: true, booking: false })
   })
 
   it("sends CORS headers to the marketing origin and none elsewhere", async () => {
@@ -74,5 +78,9 @@ describe("GET /api/myra/status", () => {
 
     const denied = await GET(statusRequest("https://evil.example.com"))
     expect(denied.headers.get("Access-Control-Allow-Origin")).toBeNull()
+    expect(denied.headers.get("Vary")).toBe("Origin")
+
+    const noOrigin = await GET(statusRequest())
+    expect(noOrigin.headers.get("Vary")).toBe("Origin")
   })
 })

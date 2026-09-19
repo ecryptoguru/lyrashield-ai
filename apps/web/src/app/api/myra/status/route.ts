@@ -22,19 +22,22 @@ export function OPTIONS(request: Request): Response {
 }
 
 export function GET(request: Request): Response {
+  const publicEnabled = env.MYRA_PUBLIC_ENABLED === "1"
   return Response.json(
     {
-      public: env.MYRA_PUBLIC_ENABLED === "1",
+      public: publicEnabled,
       // Booking is publicly completable when writes are on and either public
       // booking is explicitly enabled or no account allowlist narrows writes
       // to verified, allowlisted users.
       booking:
+        publicEnabled &&
         env.MYRA_WRITES_ENABLED === "1" &&
         (env.MYRA_PUBLIC_BOOKING_ENABLED === "1" || !env.MYRA_ALLOWED_EMAILS),
     },
     {
       headers: {
         ...myraCorsHeaders(request),
+        Vary: "Origin",
         // Marketing caches this probe per page load; keep it short-lived so a
         // flag flip shows up quickly, but cacheable at the edge.
         "Cache-Control": "public, max-age=60",

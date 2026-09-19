@@ -30,6 +30,7 @@ const myraBaseEnv = {
   MYRA_ALLOWED_EMAILS: "",
   MYRA_GENERATION_ENABLED: "0",
   MYRA_WRITES_ENABLED: "0",
+  MYRA_PUBLIC_BOOKING_ENABLED: "0",
   MYRA_OPERATOR_ENABLED: "0",
   MYRA_CALENDAR_PROVIDER: "mock",
   MYRA_PROVIDER: "mock",
@@ -144,6 +145,11 @@ describe("Myra production calendar guards", () => {
 
   it("still allows the mock provider when writes are disabled", async () => {
     const mod = await importEnv({ MYRA_WRITES_ENABLED: "0" })
+    expect(mod.env.MYRA_CALENDAR_PROVIDER).toBe("mock")
+  })
+
+  it("normalizes an unset deployment provider to mock while booking writes are disabled", async () => {
+    const mod = await importEnv({ MYRA_CALENDAR_PROVIDER: "" })
     expect(mod.env.MYRA_CALENDAR_PROVIDER).toBe("mock")
   })
 
