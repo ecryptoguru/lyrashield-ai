@@ -4,10 +4,11 @@ async function mockMyra(
   page: import("@playwright/test").Page,
   booking = true,
   interactive = false,
-  statusTimeout = false
+  statusTimeout = false,
+  iframeChallenge = false
 ) {
   await page.addInitScript(
-    ({ bookingOpen, interactiveChallenge, statusTimeout }) => {
+    ({ bookingOpen, interactiveChallenge, statusTimeout, iframeChallenge }) => {
       const calls: { path: string; credentials?: RequestCredentials }[] = []
       Object.assign(window, { __myraCalls: calls })
       const originalFetch = window.fetch.bind(window)
@@ -68,6 +69,14 @@ async function mockMyra(
         turnstile: {
           render: (_host: Element, options: { callback?: (token: string) => void }) => {
             Object.assign(window, { __challengeWasInert: Boolean(_host.closest("[inert]")) })
+            if (iframeChallenge) {
+              const frame = document.createElement("iframe")
+              frame.srcdoc = '<button type="button">Complete iframe challenge</button>'
+              frame.style.width = "180px"
+              frame.style.height = "64px"
+              _host.appendChild(frame)
+              return "widget-1"
+            }
             const challenge = document.createElement("button")
             challenge.type = "button"
             challenge.textContent = "Complete challenge"
@@ -84,7 +93,7 @@ async function mockMyra(
         },
       })
     },
-    { bookingOpen: booking, interactiveChallenge: interactive, statusTimeout }
+    { bookingOpen: booking, interactiveChallenge: interactive, statusTimeout, iframeChallenge }
   )
 }
 
@@ -170,6 +179,25 @@ test("resizing an open desktop panel to mobile moves focus into the modal", asyn
   await page.locator("main a[href]").first().focus()
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(dialog).toHaveAttribute("aria-modal", "true")
+  await expect(dialog.locator(":focus")).toHaveCount(1)
+})
+
+test("reverse Tab from a Turnstile iframe stays inside the mobile dialog", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockMyra(page, false, true, false, true)
+  await page.goto("/demo")
+  await page.getByRole("button", { name: "Help" }).click()
+  const challenge = page
+    .frameLocator("body > [data-myra-turnstile] iframe")
+    .getByRole("button", { name: "Complete iframe challenge" })
+  await challenge.focus()
+  await page.keyboard.press("Shift+Tab")
+  const dialog = page.getByRole("dialog", { name: "Myra support" })
+  await expect(dialog.locator(":focus")).toHaveCount(1)
+  await page.keyboard.press("Tab")
+  await expect(page.locator("body > [data-myra-turnstile] iframe")).toBeFocused()
+  await challenge.focus()
+  await page.keyboard.press("Tab")
   await expect(dialog.locator(":focus")).toHaveCount(1)
 })
 

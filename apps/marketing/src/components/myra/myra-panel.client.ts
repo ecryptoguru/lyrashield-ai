@@ -68,12 +68,20 @@ export function initMyraPanel() {
   let restoredFocus: HTMLElement | null = null
   let conversation: MyraConversation
   const mobile = window.matchMedia("(max-width: 639px)")
+  const focusBoundary = document.getElementById("myra-focus-boundary") as HTMLButtonElement | null
+  const focusableSelector =
+    'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])'
+  const focusableIn = (root: HTMLElement | null) =>
+    Array.from(root?.querySelectorAll<HTMLElement>(focusableSelector) ?? []).filter(
+      (item) => !item.hidden && item.getClientRects().length > 0
+    )
   const previousInert = new Map<HTMLElement, boolean>()
   let previousOverflow = ""
 
   function updateModal() {
     const modal = open && mobile.matches
     panelEl.setAttribute("aria-modal", String(modal))
+    if (focusBoundary) focusBoundary.hidden = !modal
     if (modal && previousInert.size === 0) {
       previousOverflow = document.body.style.overflow
       document.body.style.overflow = "hidden"
@@ -81,6 +89,7 @@ export function initMyraPanel() {
         if (
           !(child instanceof HTMLElement) ||
           child === panelEl ||
+          child === focusBoundary ||
           child.matches("[data-myra-turnstile]")
         )
           continue
@@ -98,6 +107,9 @@ export function initMyraPanel() {
   }
 
   mobile.addEventListener("change", updateModal)
+  focusBoundary?.addEventListener("focus", () => {
+    if (open && mobile.matches) (focusableIn(panelEl).at(-1) ?? inputEl).focus()
+  })
 
   const rendererContext: MyraDomRendererContext = {
     client,
@@ -223,28 +235,28 @@ export function initMyraPanel() {
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Tab" && open && mobile.matches) {
-      const focusableSelector =
-        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])'
-      const focusable = Array.from(panelEl.querySelectorAll<HTMLElement>(focusableSelector)).filter(
-        (item) => !item.hidden && item.getClientRects().length > 0
-      )
+      const focusable = focusableIn(panelEl)
       const first = focusable[0]
       const last = focusable.at(-1)
       const challengeHost = document.querySelector<HTMLElement>("body > [data-myra-turnstile]")
-      const challengeFirst = Array.from(
-        challengeHost?.querySelectorAll<HTMLElement>(focusableSelector) ?? []
-      ).find((item) => !item.hidden && item.getClientRects().length > 0)
-      if (
-        first &&
-        last &&
-        (e.shiftKey
-          ? document.activeElement === first ||
-            document.activeElement === challengeFirst ||
-            document.activeElement === challengeHost
-          : document.activeElement === last)
-      ) {
+      const challengeFocusable = focusableIn(challengeHost)
+      const challengeFirst = challengeFocusable[0]
+      const challengeLast = challengeFocusable.at(-1)
+      const active = document.activeElement
+      const target = e.shiftKey
+        ? active === first
+          ? (challengeLast ?? last)
+          : active === challengeFirst || active === challengeHost
+            ? last
+            : null
+        : active === last
+          ? (challengeFirst ?? first)
+          : active === challengeLast
+            ? first
+            : null
+      if (target) {
         e.preventDefault()
-        ;(e.shiftKey ? last : first).focus()
+        target.focus()
       }
     }
     if (e.key === "Escape" && open) {
