@@ -62,7 +62,7 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
   const budget = Number(maxBudgetUsd)
   const budgetValid = Number.isFinite(budget) && budget >= 0.01 && budget <= 100
 
-  const selectedDepth = DEPTH_OPTIONS.find((d) => d.value === mode) ?? DEPTH_OPTIONS[1]
+  const selectedDepth = DEPTH_OPTIONS.find((d) => d.value === mode)
 
   async function handleStart() {
     setLoading(true)
@@ -188,10 +188,12 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {selectedDepth.profileLabel}: {selectedDepth.description} Up to{" "}
-              {selectedDepth.maxEngineMinutes} engine minutes.
-            </p>
+            {selectedDepth && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {selectedDepth.profileLabel}: {selectedDepth.description} Up to{" "}
+                {selectedDepth.maxEngineMinutes} engine minutes.
+              </p>
+            )}
           </div>
 
           <div>
