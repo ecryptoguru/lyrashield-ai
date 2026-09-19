@@ -123,6 +123,7 @@ export type ScanEvent =
   | { type: "completed"; scanId: string; exitCode: number; findingCount: number }
   | { type: "failed"; scanId: string; error: string }
   | { type: "cancelled"; scanId: string }
+  | { type: "error"; scanId: string; error: string }
 
 export type UpdateCheckResult =
   | { state: "available"; version: string; currentVersion: string; notes: string | null }
@@ -149,5 +150,5 @@ export interface SyncConnection {
 export type SyncResult =
   | { status: "success"; syncedCount: number; newSeq: number; newCursor: string }
   | { status: "entitlement_missing"; message: string }
-  | { status: "cursor_rewind"; serverSeq: number; serverCursor: string; message: string }
+  | { status: "cursor_rewind"; serverSeq: number; message: string }
   | { status: "error"; message: string }

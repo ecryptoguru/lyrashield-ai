@@ -1,12 +1,20 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { ScanMode, ScanTarget } from "../lib/types"
 import { startScan } from "../lib/tauri"
 
 interface Props {
+  onBack: () => void
   onScanStarted: (scanId: string) => void
 }
 
-export function ScanScreen({ onScanStarted }: Props) {
+export function ScanScreen({ onScanStarted, onBack }: Props) {
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   const [targetType, setTargetType] = useState<"repo" | "url" | "local_path">("local_path")
   const [path, setPath] = useState("")
   const [url, setUrl] = useState("")
@@ -35,11 +43,11 @@ export function ScanScreen({ onScanStarted }: Props) {
         return
       }
       const scanId = await startScan(target, mode, instruction || undefined, budget)
-      onScanStarted(scanId)
+      if (mounted.current) onScanStarted(scanId)
     } catch (e) {
-      setError(String(e))
+      if (mounted.current) setError(String(e))
     } finally {
-      setLoading(false)
+      if (mounted.current) setLoading(false)
     }
   }
 
@@ -55,6 +63,9 @@ export function ScanScreen({ onScanStarted }: Props) {
   return (
     <div className="flex h-screen overflow-y-auto bg-background">
       <div className="mx-auto w-full max-w-2xl space-y-6 p-8">
+        <button onClick={onBack} className="text-sm text-muted-foreground hover:text-foreground">
+          ← Back
+        </button>
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold text-foreground">New Scan</h1>
           <p className="text-sm text-muted-foreground">Choose a target and scan mode.</p>
