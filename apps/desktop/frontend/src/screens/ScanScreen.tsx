@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import type { ScanMode, ScanTarget } from "../lib/types"
+import type { ScanBackend, ScanMode, ScanTarget, ScanWorkflow } from "../lib/types"
 import { startScan } from "../lib/tauri"
 // Depth labels, capability explanations, and execution ceilings come from the
 // checked-in contract fixture generated from @lyrashield/types profile data —
@@ -43,6 +43,32 @@ const DEPTH_OPTIONS: DepthOption[] = depthContract.depths.map((depth) => ({
   maxEngineMinutes: depth.executionLimits.maxEngineMinutes,
 }))
 
+// Workflow is an explicit choice — never inferred from the target shape.
+// AUTHENTICATED_ASSESSMENT is hosted-only and intentionally not offered.
+const WORKFLOW_OPTIONS: { value: ScanWorkflow; label: string; hint: string }[] = [
+  {
+    value: "REVIEW_TARGET",
+    label: "Review Target",
+    hint: "Full review of the selected target at the chosen depth.",
+  },
+  {
+    value: "REVIEW_CHANGES",
+    label: "Review Changes",
+    hint: "Diff-scoped review — compares base and head refs on a repository checkout.",
+  },
+]
+
+// Backend mode is an explicit choice too: the local bundled BYOK engine, or a
+// recorded hosted scan submitted to LyraShield Cloud. Cloud is only ever a
+// user action — never a silent substitution for a local run.
+const BACKEND_OPTIONS: { value: ScanBackend; label: string }[] = [
+  { value: "local", label: "Local engine (BYOK)" },
+  { value: "cloud", label: "LyraShield Cloud" },
+]
+
+const CLOUD_UNAVAILABLE_REASON =
+  "LyraShield Cloud needs a connected workspace and a write-scoped Cloud Sync API key — configure them in Cloud Sync."
+
 export function ScanScreen({ onScanStarted, onBack }: Props) {
   const mounted = useRef(true)
   useEffect(() => {
@@ -55,6 +81,10 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
   const [path, setPath] = useState("")
   const [branch, setBranch] = useState("")
   const [mode, setMode] = useState<ScanMode>("standard")
+  const [workflow, setWorkflow] = useState<ScanWorkflow>("REVIEW_TARGET")
+  const [backend, setBackend] = useState<ScanBackend>("local")
+  const [diffBase, setDiffBase] = useState("")
+  const [diffHead, setDiffHead] = useState("")
   const [instruction, setInstruction] = useState("")
   const [maxBudgetUsd, setMaxBudgetUsd] = useState("3.20")
   const [loading, setLoading] = useState(false)
@@ -62,7 +92,19 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
   const budget = Number(maxBudgetUsd)
   const budgetValid = Number.isFinite(budget) && budget >= 0.01 && budget <= 100
 
-  const selectedDepth = DEPTH_OPTIONS.find((d) => d.value === mode) ?? DEPTH_OPTIONS[1]
+  const selectedDepth = DEPTH_OPTIONS.find((d) => d.value === mode)
+
+  // Review Changes only makes sense against a repository checkout — keep the
+  // two selections consistent instead of failing at the Rust boundary.
+  function selectWorkflow(w: ScanWorkflow) {
+    setWorkflow(w)
+    if (w === "REVIEW_CHANGES") setTargetType("repo")
+  }
+
+  function selectTargetType(t: LaunchableTargetType) {
+    setTargetType(t)
+    if (t !== "repo" && workflow === "REVIEW_CHANGES") setWorkflow("REVIEW_TARGET")
+  }
 
   async function handleStart() {
     setLoading(true)
@@ -77,7 +119,20 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
         setError("Enter a BYOK budget between $0.01 and $100.00.")
         return
       }
-      const scanId = await startScan(target, mode, instruction || undefined, budget)
+      const reviewChanges = workflow === "REVIEW_CHANGES"
+      if (reviewChanges && (targetType !== "repo" || !diffBase.trim())) {
+        setError("Review Changes needs a repository target and a base ref to compare against.")
+        return
+      }
+      const scanId = await startScan(
+        target,
+        mode,
+        workflow,
+        reviewChanges ? diffBase.trim() || undefined : undefined,
+        reviewChanges ? diffHead.trim() || undefined : undefined,
+        instruction || undefined,
+        budget
+      )
       if (mounted.current) onScanStarted(scanId)
     } catch (e) {
       if (mounted.current) setError(String(e))
@@ -107,7 +162,7 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
                 <button
                   key={t.value}
                   aria-pressed={targetType === t.value}
-                  onClick={() => setTargetType(t.value)}
+                  onClick={() => selectTargetType(t.value)}
                   className={`rounded-md border px-3 py-1.5 text-sm ${
                     targetType === t.value
                       ? "border-primary bg-primary text-primary-foreground"
@@ -128,6 +183,32 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
               URL targets are unavailable locally: {URL_TARGET_UNAVAILABLE_REASON}
+            </p>
+          </div>
+
+          <div>
+            <p id="scan-workflow" className="mb-2 block text-sm font-medium text-foreground">
+              Workflow
+            </p>
+            <div role="group" aria-labelledby="scan-workflow" className="flex flex-wrap gap-2">
+              {WORKFLOW_OPTIONS.map((w) => (
+                <button
+                  key={w.value}
+                  aria-pressed={workflow === w.value}
+                  onClick={() => selectWorkflow(w.value)}
+                  title={w.hint}
+                  className={`rounded-md border px-3 py-1.5 text-sm ${
+                    workflow === w.value
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border hover:bg-accent"
+                  }`}
+                >
+                  {w.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {WORKFLOW_OPTIONS.find((w) => w.value === workflow)?.hint}
             </p>
           </div>
 
@@ -168,6 +249,43 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
             </div>
           )}
 
+          {workflow === "REVIEW_CHANGES" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label
+                  htmlFor="diff-base"
+                  className="mb-1 block text-sm font-medium text-foreground"
+                >
+                  Base ref
+                </label>
+                <input
+                  id="diff-base"
+                  type="text"
+                  value={diffBase}
+                  onChange={(e) => setDiffBase(e.target.value)}
+                  placeholder="main or commit SHA"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="diff-head"
+                  className="mb-1 block text-sm font-medium text-foreground"
+                >
+                  Head ref (optional)
+                </label>
+                <input
+                  id="diff-head"
+                  type="text"
+                  value={diffHead}
+                  onChange={(e) => setDiffHead(e.target.value)}
+                  placeholder="HEAD"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
+                />
+              </div>
+            </div>
+          )}
+
           <div>
             <p id="scan-mode" className="mb-2 block text-sm font-medium text-foreground">
               Scan depth
@@ -188,9 +306,48 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
                 </button>
               ))}
             </div>
+            {selectedDepth && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {selectedDepth.profileLabel}: {selectedDepth.description} Up to{" "}
+                {selectedDepth.maxEngineMinutes} engine minutes.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <p id="scan-backend" className="mb-2 block text-sm font-medium text-foreground">
+              Backend
+            </p>
+            <div role="group" aria-labelledby="scan-backend" className="flex flex-wrap gap-2">
+              {BACKEND_OPTIONS.map((b) =>
+                b.value === "cloud" ? (
+                  <button
+                    key={b.value}
+                    disabled
+                    aria-disabled="true"
+                    title={CLOUD_UNAVAILABLE_REASON}
+                    className="rounded-md border border-border px-3 py-1.5 text-sm opacity-50"
+                  >
+                    {b.label}
+                  </button>
+                ) : (
+                  <button
+                    key={b.value}
+                    aria-pressed={backend === b.value}
+                    onClick={() => setBackend(b.value)}
+                    className={`rounded-md border px-3 py-1.5 text-sm ${
+                      backend === b.value
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border hover:bg-accent"
+                    }`}
+                  >
+                    {b.label}
+                  </button>
+                )
+              )}
+            </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              {selectedDepth.profileLabel}: {selectedDepth.description} Up to{" "}
-              {selectedDepth.maxEngineMinutes} engine minutes.
+              Cloud submission is unavailable locally: {CLOUD_UNAVAILABLE_REASON}
             </p>
           </div>
 
@@ -243,7 +400,12 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
 
           <button
             onClick={handleStart}
-            disabled={loading || !path.trim() || !budgetValid}
+            disabled={
+              loading ||
+              !path.trim() ||
+              !budgetValid ||
+              (workflow === "REVIEW_CHANGES" && !diffBase.trim())
+            }
             className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {loading ? "Starting scan…" : "Start Scan"}
