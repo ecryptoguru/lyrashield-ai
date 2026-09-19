@@ -209,7 +209,7 @@ preserves unrelated work, and stops when executable evidence no longer proves th
   only the posts still over 65 rendered characters (SF-16), preserving each post's leading keyword.
 - **Descriptions** — trim the 11 over-length descriptions to ≤ 160 without dropping the primary
   entity or the qualification (SF-17).
-- **`/research`** — reword title, description and lede to describe what the page is today
+- **`/research`** — reword title, description, and lede to describe what the page is today
   (methodology, privacy handling, planned research areas, how to cite), keep it indexed, and record
   the publish-statistics work as a later, founder-gated item (SF-01).
 - **FAQ dedupe** — fix the duplicate question and add a duplicate-question rule to
@@ -266,7 +266,7 @@ block now carries `logo.png`, a `contactPoint` and non-empty `sameAs`; assert th
 ### Measurement protocol (design only — not built)
 
 Freeze 12–20 queries across four intents (brand, category, comparison "X vs LyraShield", problem "how
-do I secure an AI-built app"). Run each on ChatGPT, Claude, Perplexity and Gemini plus Google AI
+do I secure an AI-built app"). Run each on ChatGPT, Claude, Perplexity, and Gemini plus Google AI
 Overview results, same location and time window, at least three runs, before and after the deploy.
 Record brand mentions, citations, and answer accuracy separately. These edits may improve clarity and
 extractability; they do not guarantee retrieval, mention, citation, ranking, traffic, or coverage.
