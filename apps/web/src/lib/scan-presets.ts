@@ -47,8 +47,8 @@ export const SCAN_PRESETS = {
 type ScanPresetId = keyof typeof SCAN_PRESETS
 
 const SCAN_PRESET_ORDER: ScanPresetId[] = [
-  "CODE_REVIEW",
   "RELEASE_CHECK",
+  "CODE_REVIEW",
   "REVIEW_CHANGES",
   "DEEP_REVIEW",
   "WEEKLY_MONITOR",

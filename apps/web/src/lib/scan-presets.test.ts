@@ -30,8 +30,8 @@ describe("getManualScanOptions", () => {
   it("returns the repository review options for a repo target", () => {
     const options = getManualScanOptions({ type: "REPO" })
     expect(options.map((o) => o.id)).toEqual([
-      "CODE_REVIEW",
       "RELEASE_CHECK",
+      "CODE_REVIEW",
       "REVIEW_CHANGES",
       "DEEP_REVIEW",
     ])
@@ -162,8 +162,8 @@ describe("getManualScanOptions", () => {
   it("returns the repository fallback for unknown target types", () => {
     const options = getManualScanOptions({ type: "CLOUD_ACCOUNT" })
     expect(options.map((o) => o.id)).toEqual([
-      "CODE_REVIEW",
       "RELEASE_CHECK",
+      "CODE_REVIEW",
       "REVIEW_CHANGES",
       "DEEP_REVIEW",
     ])
