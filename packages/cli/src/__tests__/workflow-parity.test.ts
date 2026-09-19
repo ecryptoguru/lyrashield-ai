@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- checked-in fixture reads */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
