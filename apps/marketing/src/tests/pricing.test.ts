@@ -101,4 +101,10 @@ describe("pricing page", () => {
     expect(pricingPage).toContain("PACK_VALIDITY_DAYS")
     expect(pricingPage).not.toContain("6 months")
   })
+
+  it("keeps the pack-validity sentence on one line so the build renders the space", () => {
+    // A line break between the expression and "days" collapses to "180days"
+    // in the built HTML.
+    expect(pricingPage).toContain("{PACK_VALIDITY_DAYS} days from purchase")
+  })
 })
