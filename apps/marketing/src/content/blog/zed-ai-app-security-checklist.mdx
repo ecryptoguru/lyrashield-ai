@@ -9,13 +9,13 @@ draft: false
 heroImage: agent-security-12
 faq:
   - q: How does Zed handle MCP servers securely
-    a: Zed reads MCP config as JSON and spawns local servers via stdio or connects to remote with TLS and Bearer auth. Lock it by allow listing only required tools, disabling code mode when unused, and storing tokens in env vars not in JSON.
+    a: Zed reads MCP config as JSON and supports local stdio and remote HTTP. A remote entry without an Authorization header starts browser OAuth. Review tool permissions in Zed and avoid storing API keys in shared settings.
   - q: Do I need LyraShield to use Zed safely
     a: You can ship safer code with disciplined review and open source scanners. LyraShield adds agent-native verification, SCA, and secret checks, plus a shipped diff-aware GitHub Action gate.
   - q: What is the fastest win for Zed security
     a: Rotate leaked secrets, enforce branch protection with SARIF upload, and restrict MCP tool permissions to read only where possible to reduce blast radius.
   - q: Where does Zed store MCP server config?
-    a: Zed stores MCP servers in settings.json under context_servers with local stdio and remote HTTP entries. Use the pinned npx -y @lyrashield/mcp@0.2.8 command for local and the remote endpoint with a Bearer lsk_ key for team use. Keep the key in an env reference, never as a literal in the committed config.
+    a: Zed stores MCP servers in settings.json under context_servers. Local entries use flat command, args, and env fields; remote entries use url and can authenticate with OAuth. Keep any API-key fallback out of shared settings.
 ---
 
 When you ship apps with Zed, AI generated code can introduce secrets, vulnerable dependencies, and weak auth that reach production fast. This checklist gives a direct security review for Zed, from MCP hardening to merge gates and retest, with verified configs you can copy. Pair it with our pillar guide at [vibe coding security guide](/blog/vibe-coding-security-guide) and apply it on every pull request.
@@ -28,39 +28,30 @@ The official MCP spec defines how tool listing and invocation works over stdio a
 
 ## Locking down MCP configuration for Zed
 
-Zed configures MCP via settings.json with context_servers. Open settings.json and add a context_servers block, set each server with command or url, then list allowed tools. Zed docs show both local stdio and remote streamable HTTP options, and you should default to local audited servers. Vendor guidance is at [Zed context servers](https://zed.dev/docs/extensions/context-servers).
+Zed configures MCP via `settings.json` with `context_servers`. Open settings and add a local command or a remote URL. Zed's [current MCP guide](https://zed.dev/docs/ai/mcp) documents both shapes and the separate tool permission settings.
 
 Secure it in four practical steps.
 
-Fastest path: run `npx lyrashield init`, which detects Zed and writes the MCP config for you. Verify with `npx lyrashield doctor`, then run `npx lyrashield login` to store credentials in ~/.lyrashield/credentials.json with nothing committed to your repo. The manual config below is what the CLI writes, kept for reference.
+After adding the entry, restart Zed and check Settings → AI → MCP Servers. Call a read-only LyraShield tool from the Agent Panel; a local doctor result alone does not prove Zed discovered the server. Remote OAuth authenticates in Zed, while local stdio uses local LyraShield credentials.
 
-First, never inline secrets in JSON. Use `${VAR}` references and load values from env or your secret manager, with a .env file gitignored and keys rotated monthly.
+First, never inline secrets in JSON. For local stdio, keep the credential in LyraShield's local store or an environment secret. Remote OAuth needs no API-key placeholder.
 
-Second, set allow lists explicitly. Prefer empty auto approve and then include only read only tools you need. If the tool supports trust or codemode flags, disable code execution unless required and require explicit user approval for file writes.
+Second, review Zed's `agent.tool_permissions` settings. Confirm read-only tools before granting access to write tools, and keep server-side workspace grants narrow.
 
-Third, pin versions and audit local servers. For stdio, use `npx -y @lyrashield/mcp@0.2.8` only after you pin a version and check publish provenance. For remote, require TLS and Bearer auth with lsk\_ keys stored outside the repo and bound to least privilege scopes.
+Third, pin versions and audit local servers. For stdio, use the published `@lyrashield/mcp@0.2.8` package. For remote, require HTTPS and complete Zed's OAuth flow; use an API key only as a deliberate fallback.
 
-Fourth, commit project scoped configs and add a CI check that validates JSON schema and rejects new servers that request file write or network access without review. That keeps Zed aligned with your security policy and makes malicious config changes visible in pull requests.
+Fourth, commit project scoped configs and add a CI check that validates JSON schema and rejects new servers that request file write or network access without review. That keeps Zed aligned with your security policy and makes malicious config changes visible in pull requests. The example shows both transport shapes; enable only the connection you intend to use.
 
 ```json
 {
   "context_servers": {
     "lyrashield": {
-      "command": {
-        "path": "npx",
-        "args": ["-y", "@lyrashield/mcp@0.2.8"],
-        "env": {
-          "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
-        }
-      },
-      "settings": {}
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp@0.2.8"],
+      "env": {}
     },
-    "docs-remote": {
-      "type": "streamableHttp",
-      "url": "https://app.lyrashieldai.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer ${LYRASHIELD_API_KEY}"
-      }
+    "lyrashield-remote": {
+      "url": "https://app.lyrashieldai.com/api/mcp"
     }
   }
 }

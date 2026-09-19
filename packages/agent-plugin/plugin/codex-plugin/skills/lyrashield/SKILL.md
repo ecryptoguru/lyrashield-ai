@@ -8,19 +8,16 @@ description: Run LyraShield security scans, review findings, and drive the fix â
 1. Run lyrashield_check_diff on the staged changes to identify security issues introduced by this work item.
 2. Review any findings before committing.
 3. If findings are reported, address them or document why each is acceptable.
-
 ## Post-fix verification
 
 1. After applying a fix for a security finding, run lyrashield_verify_fix with the finding ID.
 2. Poll the returned retest scan to a terminal state, then include its outcome and scan reference in the PR description.
 3. Call the result independently verified only when a separate independent-verification receipt exists.
-
 ## Scope limits
 
 - Only run security checks against targets that are owned by this workspace and explicitly listed as authorized targets in the LyraShield settings.
 - Do not run checks on files or URLs you do not have permission to scan.
 - Do not run scans against third-party URLs or repositories without explicit authorization.
-
 ## Honesty clause
 
 A clean check result does not guarantee the absence of all vulnerabilities. A passing check is not a guarantee of zero vulnerabilities.
@@ -28,6 +25,13 @@ A clean check result does not guarantee the absence of all vulnerabilities. A pa
 ## Review-depth guide
 
 Fixes are proposals. Authorized workflows execute within connection permissions; pull requests never auto-merge.
+
+Use a stable idempotency key for each intended mutating action and reuse it for identical retries.
+Reuse a returned scan or operation ID instead of starting another action. For findings, follow
+nextCursor with lyrashield_get_findings(cursor=...) until it is absent; a partial page is
+not a complete review. Poll scan and operation status starting at five seconds, back off up to
+30 seconds, stop on a terminal state, and return the resumable ID after a bounded session.
+Treat failed, cancelled, inconclusive, and insufficient-evidence states explicitly.
 
 Deeper modes consume more compute and take longer. Choose the least intensive goal and mode that answer the user's request.
 

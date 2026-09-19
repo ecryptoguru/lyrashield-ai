@@ -7,7 +7,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for Gemini CLI — Setup Guide"
 const description =
   "Connect LyraShield to Gemini CLI. Declare LYRASHIELD_API_KEY in the env block (Gemini filters sensitive inherited names) and avoid underscores in the name."
-const updatedDate = "2026-08-07"
+const updatedDate = "2026-09-19"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
@@ -44,7 +44,7 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
     Run <code>npx lyrashield install gemini-cli</code> from your project root. It detects Gemini
     CLI, writes the correct config automatically, and never inlines your API key into a file you
     might commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
-    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+    <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
   </p>
   <pre><code>npx lyrashield install gemini-cli</code></pre>
   <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
@@ -70,6 +70,11 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
   </p>
 
   <AgentSnippet agentId="gemini-cli" transport="stdio" />
+  <p>
+    Gemini CLI loads <code>GEMINI.md</code> by default. If your
+    <code>settings.json</code> sets <code>context.fileName</code>, place LyraShield guidance in
+    one of those configured files instead. The CLI rules command respects that setting.
+  </p>
 
   <h2>Remote HTTP setup</h2>
   <p>
@@ -86,7 +91,7 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The{" "}
+    <strong>Local stdio requirements:</strong> Node.js 24+ and a local OAuth login or workspace API key. The{" "}
     <code>@lyrashield/mcp</code> package is published on npm, so{" "}
     <code>npx -y @lyrashield/mcp@0.2.8</code> resolves directly.
   </div>

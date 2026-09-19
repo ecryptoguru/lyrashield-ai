@@ -33,8 +33,8 @@ describe("plugin install transport", () => {
     await handleInstall(["claude-code-agent-plugin", "--transport", "stdio"], output)
     expect(mocks.install).toHaveBeenCalledWith(expect.objectContaining({ transport: "stdio" }))
   })
-  it("requires local credentials for the Kiro stdio plugin", async () => {
-    expect(await handleInstall(["kiro-agent-plugin"], output)).toBe(3)
-    expect(mocks.install).not.toHaveBeenCalled()
+  it("can preview a Kiro plugin without local credentials", async () => {
+    expect(await handleInstall(["kiro-agent-plugin", "--dry-run"], output)).toBe(0)
+    expect(mocks.install).toHaveBeenCalledWith(expect.objectContaining({ dryRun: true }))
   })
 })
