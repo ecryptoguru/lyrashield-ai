@@ -149,7 +149,9 @@ export function SupportCaseDetail(props: {
             </dl>
             <div className="mt-4 border-t pt-3">
               <h3 className="text-muted-foreground font-mono text-xs uppercase">Summary</h3>
-              <p className="mt-1.5 text-sm wrap-break-word whitespace-pre-wrap">{selected.summary}</p>
+              <p className="mt-1.5 text-sm wrap-break-word whitespace-pre-wrap">
+                {selected.summary}
+              </p>
             </div>
 
             {selected.handoffSummary ? (
@@ -293,7 +295,9 @@ export function SupportCaseDetail(props: {
                         {formatTime(reply.createdAt)}
                       </span>
                     </div>
-                    <p className="mt-1.5 text-sm wrap-break-word whitespace-pre-wrap">{reply.body}</p>
+                    <p className="mt-1.5 text-sm wrap-break-word whitespace-pre-wrap">
+                      {reply.body}
+                    </p>
                   </li>
                 ))}
               </ul>
