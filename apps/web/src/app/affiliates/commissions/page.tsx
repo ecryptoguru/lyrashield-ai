@@ -88,7 +88,9 @@ export default async function AffiliateCommissionsPage() {
             ) : (
               commissions.map((c) => (
                 <tr key={c.id} className="border-b">
-                  <td className="py-2 pr-4"><LocalTime value={c.earnedAt} /></td>
+                  <td className="py-2 pr-4">
+                    <LocalTime value={c.earnedAt} />
+                  </td>
                   <td className="py-2 pr-4">
                     {c.availableAt ? <LocalTime value={c.availableAt} /> : "—"}
                   </td>

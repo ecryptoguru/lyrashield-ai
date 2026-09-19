@@ -22,9 +22,7 @@ export default defineConfig({
       ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
       : undefined,
   },
-  projects: [
-    { name: "chromium", testIgnore: /marketing-/, use: { ...devices["Desktop Chrome"] } },
-  ],
+  projects: [{ name: "chromium", testIgnore: /marketing-/, use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command:
       // The standalone Next.js server doesn't load .env, so forward the

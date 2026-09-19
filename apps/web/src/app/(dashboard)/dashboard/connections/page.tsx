@@ -97,7 +97,8 @@ export default async function ConnectionsPage() {
                           {" · "}
                           {connection.lastSuccessfulOperationAt ? (
                             <>
-                              Last used <LocalTime value={connection.lastSuccessfulOperationAt} withTime />
+                              Last used{" "}
+                              <LocalTime value={connection.lastSuccessfulOperationAt} withTime />
                             </>
                           ) : (
                             "No successful operation recorded"

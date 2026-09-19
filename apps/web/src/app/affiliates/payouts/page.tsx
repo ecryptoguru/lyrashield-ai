@@ -182,7 +182,9 @@ export default async function AffiliatePayoutsPage() {
               ) : (
                 affiliate.payouts.map((p) => (
                   <tr key={p.id} className="border-b">
-                    <td className="py-2 pr-4"><LocalTime value={p.requestedAt} /></td>
+                    <td className="py-2 pr-4">
+                      <LocalTime value={p.requestedAt} />
+                    </td>
                     <td className="py-2 pr-4">
                       {p.amount.toString()} {p.currency}
                       {p.isReserveRelease && (
@@ -207,9 +209,7 @@ export default async function AffiliatePayoutsPage() {
                         {p.status}
                       </span>
                     </td>
-                    <td className="py-2 pr-4">
-                      {p.paidAt ? <LocalTime value={p.paidAt} /> : "—"}
-                    </td>
+                    <td className="py-2 pr-4">{p.paidAt ? <LocalTime value={p.paidAt} /> : "—"}</td>
                   </tr>
                 ))
               )}
