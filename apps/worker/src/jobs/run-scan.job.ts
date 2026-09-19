@@ -73,7 +73,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
   const log = logger
   const authority = await verifyScanJobAuthority(job)
   if (!authority.ok) return authority.result
-  const { data, scanRecord, workspaceId } = authority
+  const { data, scanRecord, workspaceId, executionPlan } = authority
   const { scanId, targetId, goal, mode, policyId } = data
   const elapsedScanMs = scanElapsedClock(scanRecord.startedAt)
 
@@ -102,7 +102,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
       if (resumedFinalization) return resumedFinalization
 
-      const preparation = await prepareScanExecution({ scanId, targetId, goal, mode })
+      const preparation = await prepareScanExecution({
+        scanId,
+        targetId,
+        goal,
+        mode,
+        executionPlan,
+      })
       if (!preparation.ok) return preparation.result
       const { target } = preparation
       urlProfile = preparation.urlProfile
@@ -209,6 +215,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         engineBacked,
         deterministicRetest,
         scanRecord,
+        executionPlan,
+        targetType: target.type,
+        destructiveTestsAllowed: policy?.destructiveTestsAllowed === true,
+        // Plan-required admission is deployable independently of the additive
+        // migration: OFF drains legacy null-plan rows on their original path;
+        // ON requires every job to carry a stored, hash-verified plan.
+        planRequired: env.LYRASHIELD_SCAN_PLAN_REQUIRED === "1",
       })
       if (!admission.ok) return admission.result
 
@@ -234,6 +247,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         engineBacked,
         urlEngineBacked,
         scanProfile,
+        executionPlan,
       })
       if (!execution.ok) return execution.result
       engineResult = execution.engineResult

@@ -25,6 +25,7 @@ import {
   type EngineRunResult,
 } from "../../engine/runner"
 import { resolveScanBudgetUsd, type TargetType } from "../../engine/command-builder"
+import type { ScanExecutionPlan } from "@lyrashield/types"
 import type { ScanJobData, ScanJobResult } from "../../types"
 import { requireEngineModel, resolveEngineRuntimeBudgetMs } from "./lifecycle-utils"
 import type { ScanExecutionTarget } from "./preparation"
@@ -68,6 +69,8 @@ export async function executeScanTarget(params: {
   engineBacked: boolean
   urlEngineBacked: boolean
   scanProfile: { canonicalMode: string } | null
+  /** Hash-verified stored execution plan; null on legacy pre-plan rows. */
+  executionPlan?: ScanExecutionPlan | null
 }): Promise<ScanExecutionResult> {
   const {
     scanId,
@@ -87,6 +90,7 @@ export async function executeScanTarget(params: {
     engineBacked,
     urlEngineBacked,
     scanProfile,
+    executionPlan,
   } = params
 
   let engineResult: EngineRunResult
@@ -346,6 +350,9 @@ export async function executeScanTarget(params: {
                 }),
           maxBudgetUsd,
           ...(relayCtx ? { relay: relayCtx } : {}),
+          // The stored plan drives --scope-mode and, for Review Changes, the
+          // immutable --diff-base/--diff-head/--repository-revision pins.
+          executionPlan: executionPlan ?? null,
         },
         scanId,
         engineTimeoutMs,

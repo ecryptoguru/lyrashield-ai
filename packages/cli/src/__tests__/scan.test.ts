@@ -213,6 +213,66 @@ describe("handleScan", () => {
     expect(code).toBe(2)
     expect(output.error).toHaveBeenCalledWith("Invalid repo format: not-a-repo")
   })
+
+  describe("Review Changes refs", () => {
+    it("submits a recorded REVIEW_CHANGES scan when --base/--head are given", async () => {
+      const output = makeOutput()
+      const code = await handleScan(
+        ["--target", "t-1", "--goal", "CHECK_PR", "--base", "main", "--head", "feature/42"],
+        output
+      )
+      expect(code).toBe(0)
+
+      const body = getScanBody()?.body
+      expect(body).toMatchObject({
+        targetId: "t-1",
+        goal: "CHECK_PR",
+        workflow: "REVIEW_CHANGES",
+        baseRef: "main",
+        headRef: "feature/42",
+      })
+    })
+
+    it("lets --head default server-side when only --base is given", async () => {
+      const output = makeOutput()
+      const code = await handleScan(["--target", "t-1", "--base", "release/1"], output)
+      expect(code).toBe(0)
+
+      const body = getScanBody()?.body
+      expect(body).toMatchObject({ workflow: "REVIEW_CHANGES", baseRef: "release/1" })
+      expect(body).not.toHaveProperty("headRef")
+    })
+
+    it("omits workflow fields for a plain scan without refs", async () => {
+      const output = makeOutput()
+      const code = await handleScan(["--target", "t-1"], output)
+      expect(code).toBe(0)
+
+      const body = getScanBody()?.body
+      expect(body).not.toHaveProperty("workflow")
+      expect(body).not.toHaveProperty("baseRef")
+      expect(body).not.toHaveProperty("headRef")
+    })
+
+    it("rejects --head without --base before submitting", async () => {
+      const output = makeOutput()
+      const code = await handleScan(["--target", "t-1", "--head", "feature/42"], output)
+      expect(code).toBe(2)
+      expect(output.error).toHaveBeenCalledWith(expect.stringContaining("--head requires --base"))
+      expect((await createClient()).request).not.toHaveBeenCalled()
+    })
+
+    it("rejects refs combined with --scan-id", async () => {
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify({ version: "2.1.0", runs: [] }))
+      const output = makeOutput()
+      const code = await handleScan(
+        ["--scan-id", "s-1", "--sarif", "report.sarif", "--base", "main"],
+        output
+      )
+      expect(code).toBe(2)
+      expect(output.error).toHaveBeenCalledWith(expect.stringContaining("--scan-id"))
+    })
+  })
 })
 
 describe("SARIF submission", () => {

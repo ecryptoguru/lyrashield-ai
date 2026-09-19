@@ -56,6 +56,12 @@ vi.mock("../../../lib/queue", () => ({
   ScanWorkerUnavailableError: class ScanWorkerUnavailableError extends Error {},
 }))
 
+vi.mock("@lyrashield/integrations", () => ({
+  getBranchRefSha: vi.fn(),
+  getDefaultBranch: vi.fn(),
+  getMergeBaseSha: vi.fn(),
+}))
+
 vi.mock("@lyrashield/billing", () => ({
   assertScanAllowed: vi.fn().mockResolvedValue({ allowed: true }),
   assertTargetAllowed: vi.fn().mockResolvedValue({ allowed: true }),
@@ -89,6 +95,7 @@ import {
 } from "../../../lib/queue"
 import { checkFreeUrlScanRateLimit } from "../../../lib/rate-limit"
 import { assertScanAllowed } from "@lyrashield/billing"
+import { getBranchRefSha, getMergeBaseSha } from "@lyrashield/integrations"
 
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost:3000/api/scans", {
@@ -545,6 +552,335 @@ describe("POST /api/scans", () => {
     )
 
     expect(res.status).toBe(403)
+  })
+
+  describe("execution plan workflow inputs", () => {
+    const repoTarget = {
+      id: "repo-1",
+      type: "REPO",
+      installationId: "1234",
+      repoOwner: "acme",
+      repoName: "app",
+      repoFullName: "acme/app",
+      branch: "main",
+    }
+
+    it("rejects refs without workflow REVIEW_CHANGES", async () => {
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-1",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          baseRef: "main",
+        })
+      )
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects REVIEW_CHANGES without a baseRef", async () => {
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-1",
+          targetId: "repo-1",
+          goal: "CHECK_PR",
+          workflow: "REVIEW_CHANGES",
+        })
+      )
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects AUTHENTICATED_ASSESSMENT until the workflow is available", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-1",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "DEEP",
+          workflow: "AUTHENTICATED_ASSESSMENT",
+        })
+      )
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("SCAN_WORKFLOW_UNAVAILABLE")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects REVIEW_CHANGES on a non-repository target", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue({
+        id: "web-1",
+        type: "WEB_APP",
+        url: "https://example.com",
+        apiSpecUrl: null,
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-1",
+          targetId: "web-1",
+          goal: "CHECK_PR",
+          mode: "SAFE",
+          workflow: "REVIEW_CHANGES",
+          baseRef: "main",
+        })
+      )
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("SCAN_PLAN_INVALID")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects REVIEW_CHANGES when the repo is not connected via the GitHub App", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue({
+        ...repoTarget,
+        installationId: null,
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-1",
+          targetId: "repo-1",
+          goal: "CHECK_PR",
+          mode: "SAFE",
+          workflow: "REVIEW_CHANGES",
+          baseRef: "main",
+        })
+      )
+      expect(res.status).toBe(409)
+      expect((await res.json()).error.code).toBe("SCAN_SOURCE_UNAVAILABLE")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("resolves immutable revisions through the authorized integration before createScan", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(getBranchRefSha)
+        .mockResolvedValueOnce("a".repeat(40)) // head (target.branch)
+        .mockResolvedValueOnce("b".repeat(40)) // base ref
+      vi.mocked(getMergeBaseSha).mockResolvedValue("c".repeat(40))
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-rc",
+        status: "QUEUED",
+        goal: "CHECK_PR",
+        mode: "QUICK",
+        targetId: "repo-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-rc",
+          targetId: "repo-1",
+          goal: "CHECK_PR",
+          mode: "QUICK",
+          workflow: "REVIEW_CHANGES",
+          baseRef: "release/1",
+        })
+      )
+
+      expect(res.status).toBe(201)
+      expect(getMergeBaseSha).toHaveBeenCalledWith(
+        1234,
+        "acme",
+        "app",
+        "b".repeat(40),
+        "a".repeat(40)
+      )
+      expect(createScan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workflow: "REVIEW_CHANGES",
+          source: {
+            revision: "a".repeat(40),
+            baseRevision: "b".repeat(40),
+            mergeBaseRevision: "c".repeat(40),
+          },
+        })
+      )
+    })
+
+    it("denies REVIEW_CHANGES when refs cannot be resolved", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(getBranchRefSha).mockRejectedValue(new Error("Failed to get branch ref: 404"))
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-rc-fail",
+          targetId: "repo-1",
+          goal: "CHECK_PR",
+          mode: "QUICK",
+          workflow: "REVIEW_CHANGES",
+          baseRef: "no-such-branch",
+        })
+      )
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("SCAN_REF_UNRESOLVED")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("denies REVIEW_CHANGES when the refs share no merge base", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(getBranchRefSha)
+        .mockResolvedValueOnce("a".repeat(40))
+        .mockResolvedValueOnce("b".repeat(40))
+      vi.mocked(getMergeBaseSha).mockResolvedValue(null)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-rc-nomb",
+          targetId: "repo-1",
+          goal: "CHECK_PR",
+          mode: "QUICK",
+          workflow: "REVIEW_CHANGES",
+          baseRef: "release/1",
+        })
+      )
+
+      expect(res.status).toBe(409)
+      expect((await res.json()).error.code).toBe("SCAN_NO_MERGE_BASE")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("resolves an explicit headRef instead of the target branch", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(getBranchRefSha)
+        .mockResolvedValueOnce("e".repeat(40)) // headRef "feature/42"
+        .mockResolvedValueOnce("b".repeat(40)) // baseRef
+      vi.mocked(getMergeBaseSha).mockResolvedValue("c".repeat(40))
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-rc-head",
+        status: "QUEUED",
+        goal: "CHECK_PR",
+        mode: "QUICK",
+        targetId: "repo-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-rc-head",
+          targetId: "repo-1",
+          goal: "CHECK_PR",
+          mode: "QUICK",
+          workflow: "REVIEW_CHANGES",
+          baseRef: "release/1",
+          headRef: "feature/42",
+        })
+      )
+
+      expect(res.status).toBe(201)
+      expect(getBranchRefSha).toHaveBeenNthCalledWith(1, 1234, "acme", "app", "feature/42")
+      expect(getBranchRefSha).toHaveBeenNthCalledWith(2, 1234, "acme", "app", "release/1")
+      expect(createScan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workflow: "REVIEW_CHANGES",
+          source: {
+            revision: "e".repeat(40),
+            baseRevision: "b".repeat(40),
+            mergeBaseRevision: "c".repeat(40),
+          },
+        })
+      )
+    })
+
+    it("passes a full-SHA headRef through without a ref lookup", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      const headSha = "f".repeat(40)
+      vi.mocked(getBranchRefSha).mockResolvedValue("b".repeat(40)) // baseRef only
+      vi.mocked(getMergeBaseSha).mockResolvedValue("c".repeat(40))
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-rc-sha",
+        status: "QUEUED",
+        goal: "CHECK_PR",
+        mode: "QUICK",
+        targetId: "repo-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-rc-sha",
+          targetId: "repo-1",
+          goal: "CHECK_PR",
+          mode: "QUICK",
+          workflow: "REVIEW_CHANGES",
+          baseRef: "release/1",
+          headRef: headSha,
+        })
+      )
+
+      expect(res.status).toBe(201)
+      // A full object ID is already immutable — no branch-ref resolution call.
+      expect(getBranchRefSha).toHaveBeenCalledTimes(1)
+      expect(getMergeBaseSha).toHaveBeenCalledWith(
+        1234,
+        "acme",
+        "app",
+        "b".repeat(40),
+        headSha
+      )
+      expect(createScan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: expect.objectContaining({ revision: headSha }),
+        })
+      )
+    })
+
+    it("pins the head revision for a plain repo scan when resolvable", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(getBranchRefSha).mockResolvedValue("d".repeat(40))
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-pin",
+        status: "QUEUED",
+        goal: "TEST_APP",
+        mode: "QUICK",
+        targetId: "repo-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-pin",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "QUICK",
+        })
+      )
+
+      expect(res.status).toBe(201)
+      expect(getBranchRefSha).toHaveBeenCalledWith(1234, "acme", "app", "main")
+      expect(createScan).toHaveBeenCalledWith(
+        expect.objectContaining({ source: { revision: "d".repeat(40) } })
+      )
+    })
+
+    it("still creates the scan when head pinning is unavailable", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(getBranchRefSha).mockRejectedValue(new Error("GitHub API unreachable"))
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-nopin",
+        status: "QUEUED",
+        goal: "TEST_APP",
+        mode: "QUICK",
+        targetId: "repo-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-nopin",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "QUICK",
+        })
+      )
+
+      expect(res.status).toBe(201)
+      const call = vi.mocked(createScan).mock.calls[0]![0]
+      expect(call).not.toHaveProperty("source")
+    })
   })
 
   const webTarget = {

@@ -400,6 +400,33 @@ export async function getBranchRefSha(
 }
 
 /**
+ * Resolve the effective merge base of base...head through the authorized
+ * GitHub App installation. Returns the merge-base commit SHA, or null when
+ * the histories are unrelated. Callers must persist the resolved value — the
+ * comparison is only authoritative as an immutable object ID.
+ */
+export async function getMergeBaseSha(
+  installationId: number,
+  owner: string,
+  repo: string,
+  base: string,
+  head: string
+): Promise<string | null> {
+  const token = await getInstallationToken(installationId)
+  // Callers pass resolved SHAs or git-validated refs only — no encoding, same
+  // contract as getBranchRefSha above.
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/compare/${base}...${head}`,
+    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS } }
+  )
+  if (!res.ok) {
+    throw new Error(`Failed to compare refs: ${res.status}`)
+  }
+  const data = (await res.json()) as { merge_base_commit?: { sha?: string } | null }
+  return data.merge_base_commit?.sha ?? null
+}
+
+/**
  * Fetch a file's text content at a ref (branch/SHA). Used by the WP3 fix-PR
  * pipeline to read the current content a validated patch applies against.
  * Returns null when the path does not exist at that ref (404).

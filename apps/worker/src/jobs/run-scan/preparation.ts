@@ -1,7 +1,11 @@
 import { prisma, updateScanStatus, type ScanStatus } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { checkInstructionSafety } from "@lyrashield/security"
-import { resolveTargetScanMode, type UrlScanProfile } from "@lyrashield/types"
+import {
+  resolveTargetScanMode,
+  type ScanExecutionPlan,
+  type UrlScanProfile,
+} from "@lyrashield/types"
 import { assertEvidenceStorageConfigured } from "../../engine/evidence-storage"
 import type { TargetType } from "../../engine/command-builder"
 import { runPreflight } from "../preflight.job"
@@ -29,8 +33,17 @@ export async function prepareScanExecution(params: {
   targetId: string
   goal: string
   mode: ScanJobData["mode"]
+  /**
+   * Stored execution plan already hash-validated by verifyScanJobAuthority
+   * (verifyStoredScanExecutionPlan). A DIFF-scope plan — the Review Changes
+   * workflow — must still name all three immutable source revisions on a
+   * repository target before any provider work; missing provenance is a
+   * named preflight failure, never a silent fallback to a snapshot scan of
+   * a different change set than the one the plan recorded.
+   */
+  executionPlan?: ScanExecutionPlan | null
 }): Promise<ScanPreparationResult> {
-  const { scanId, targetId, goal, mode } = params
+  const { scanId, targetId, goal, mode, executionPlan } = params
 
   // 1. Preflight checks
   await updateScanStatus(scanId, "PREFLIGHT" as ScanStatus)
@@ -80,6 +93,44 @@ export async function prepareScanExecution(params: {
         errorCategory: "TARGET_NOT_FOUND",
         errorMessage: "Target not found",
       },
+    }
+  }
+
+  // Review Changes fail-closed guard: a DIFF-scope plan must name the head,
+  // requested base, and effective merge base as full object IDs against a
+  // repository target. A plan that reaches here without them is malformed
+  // (or the target changed type); the scan fails with a named preflight
+  // category rather than silently scanning a full snapshot — that would
+  // analyze a different change set than the recorded comparison.
+  if (executionPlan?.scope === "DIFF" || executionPlan?.workflow === "REVIEW_CHANGES") {
+    const source = executionPlan.source
+    if (
+      target.type !== "REPO" ||
+      !source?.revision ||
+      !source.baseRevision ||
+      !source.mergeBaseRevision
+    ) {
+      const errorMessage =
+        "Stored execution plan is missing the immutable source revisions a Review Changes run requires"
+      logger.warn("Review Changes plan lacks immutable source provenance", {
+        scanId,
+        targetType: target.type,
+        hasRevision: Boolean(source?.revision),
+        hasBaseRevision: Boolean(source?.baseRevision),
+        hasMergeBaseRevision: Boolean(source?.mergeBaseRevision),
+      })
+      await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+        errorCategory: "SCAN_PLAN_INVALID",
+        errorMessage,
+      })
+      return {
+        ok: false,
+        result: {
+          status: "failed",
+          errorCategory: "SCAN_PLAN_INVALID",
+          errorMessage,
+        },
+      }
     }
   }
 

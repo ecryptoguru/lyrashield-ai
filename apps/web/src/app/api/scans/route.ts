@@ -14,8 +14,9 @@ import {
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
-  CreateScanSchema,
+  CreateScanInputSchema,
   MAX_CONCURRENT_WORKSPACE_SCANS,
+  ScanExecutionPlanInputError,
   ScanStatusSchema,
   resolveScanProfile,
   resolveTargetScanMode,
@@ -39,12 +40,31 @@ import {
   ScanWorkerUnavailableError,
 } from "../../../lib/queue"
 import {
+  getBranchRefSha,
+  getDefaultBranch,
+  getMergeBaseSha,
+} from "@lyrashield/integrations"
+import {
   checkFreeUrlScanRateLimit,
   checkScanCreateRateLimit,
   clientIpFromRequest,
 } from "../../../lib/rate-limit"
 
 const ACTIVE_SCAN_STATUSES = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"] as const
+
+/** Full lowercase git object IDs (SHA-1 = 40, SHA-256 = 64) pass through as
+ * immutable revisions; anything else resolves through the installation. */
+const FULL_GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+
+async function resolveRepoRevision(
+  installationId: number,
+  owner: string,
+  repo: string,
+  ref: string
+): Promise<string> {
+  if (FULL_GIT_OBJECT_ID.test(ref)) return ref
+  return getBranchRefSha(installationId, owner, repo, ref)
+}
 const ScanIdQuerySchema = z
   .array(z.string().trim().min(1).max(128))
   .min(1)
@@ -99,7 +119,7 @@ async function post(request: Request) {
     return apiError("INVALID_JSON", "Request body must be valid JSON", 400)
   }
 
-  const parsed = CreateScanSchema.safeParse(body)
+  const parsed = CreateScanInputSchema.safeParse(body)
   if (!parsed.success) {
     return apiError("VALIDATION_ERROR", parsed.error.message, 400)
   }
@@ -359,6 +379,108 @@ async function post(request: Request) {
       throw error
     }
 
+    // Resolve repository refs through the authorized source integration BEFORE
+    // createScan takes the short DB admission lock, so the stored execution
+    // plan records immutable object IDs — never moving refs. Clients supply
+    // workflow intent only; the server owns the plan.
+    let planSource:
+      | { revision: string; baseRevision?: string; mergeBaseRevision?: string }
+      | undefined
+    if (data.workflow === "AUTHENTICATED_ASSESSMENT") {
+      return apiError(
+        "SCAN_WORKFLOW_UNAVAILABLE",
+        "Authenticated assessment is not available yet.",
+        400
+      )
+    }
+    if (data.workflow === "REVIEW_CHANGES") {
+      if (target.type !== "REPO") {
+        return apiError(
+          "SCAN_PLAN_INVALID",
+          "Review Changes requires a repository target.",
+          400
+        )
+      }
+      const installationId = target.installationId ? Number(target.installationId) : null
+      const repoOwner = target.repoOwner ?? target.repoFullName?.split("/")[0]
+      const repoName = target.repoName ?? target.repoFullName?.split("/")[1]
+      if (!installationId || !repoOwner || !repoName) {
+        return apiError(
+          "SCAN_SOURCE_UNAVAILABLE",
+          "Review Changes requires a repository connected through the GitHub App.",
+          409
+        )
+      }
+      try {
+        const headSha = await resolveRepoRevision(
+          installationId,
+          repoOwner,
+          repoName,
+          data.headRef ??
+            target.branch ??
+            (await getDefaultBranch(installationId, repoOwner, repoName))
+        )
+        const baseSha = await resolveRepoRevision(
+          installationId,
+          repoOwner,
+          repoName,
+          data.baseRef!
+        )
+        const mergeBaseSha = await getMergeBaseSha(
+          installationId,
+          repoOwner,
+          repoName,
+          baseSha,
+          headSha
+        )
+        if (!mergeBaseSha) {
+          return apiError(
+            "SCAN_NO_MERGE_BASE",
+            "The selected refs have no common merge base.",
+            409
+          )
+        }
+        planSource = {
+          revision: headSha,
+          baseRevision: baseSha,
+          mergeBaseRevision: mergeBaseSha,
+        }
+      } catch (resolveErr) {
+        logger.warn("Failed to resolve Review Changes refs", {
+          workspaceId,
+          targetId: data.targetId,
+          error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr),
+        })
+        return apiError(
+          "SCAN_REF_UNRESOLVED",
+          "Could not resolve the requested refs to immutable revisions.",
+          400
+        )
+      }
+    } else if (target.type === "REPO" && target.installationId) {
+      // Pin the head revision when the authorized integration can resolve it.
+      // REVIEW_TARGET keeps provenance honestly absent when the repository is
+      // unreachable rather than failing scan admission on a resolver outage.
+      const installationId = Number(target.installationId)
+      const repoOwner = target.repoOwner ?? target.repoFullName?.split("/")[0]
+      const repoName = target.repoName ?? target.repoFullName?.split("/")[1]
+      if (repoOwner && repoName) {
+        try {
+          const branch =
+            target.branch ?? (await getDefaultBranch(installationId, repoOwner, repoName))
+          planSource = {
+            revision: await resolveRepoRevision(installationId, repoOwner, repoName, branch),
+          }
+        } catch (resolveErr) {
+          logger.warn("Head revision resolution failed; plan records no source pin", {
+            workspaceId,
+            targetId: data.targetId,
+            error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr),
+          })
+        }
+      }
+    }
+
     submissionAttempted = true
     const scan = await createScan({
       workspaceId,
@@ -367,6 +489,8 @@ async function post(request: Request) {
       mode: canonicalMode,
       policyId,
       createdById: session.userId,
+      workflow: data.workflow,
+      ...(planSource ? { source: planSource } : {}),
     })
 
     submittedScanId = scan.id
@@ -478,6 +602,9 @@ async function post(request: Request) {
     }
     if (error instanceof Error && error.message === "Target not found in this workspace") {
       return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+    }
+    if (error instanceof ScanExecutionPlanInputError) {
+      return apiError("SCAN_PLAN_INVALID", error.message, 400)
     }
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
