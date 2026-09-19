@@ -56,7 +56,7 @@
     "@lyrashield/credentials": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/sdk": "workspace:*",
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.13.5",
     "tsup": "^8.5.1",
     "typescript": "6.0.3",
     "vitest": "^4.1.11"
