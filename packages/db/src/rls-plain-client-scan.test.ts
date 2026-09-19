@@ -188,6 +188,8 @@ const ALLOWLIST: Record<string, string> = {
     "controlEvidence read under requirePermission-bound context (extension-wrapped)",
   "apps/web/src/app/api/connections/route.ts":
     "target count under requireWorkspaceAccess-bound context (extension-wrapped)",
+  "apps/web/src/app/api/findings/[id]/route.ts":
+    "evidence read under requirePermission-bound context (extension-wrapped)",
   "apps/web/src/app/api/findings/[id]/retests/route.ts":
     "scan/target/findingCandidate/retest reads under requirePermission-bound context (extension-wrapped)",
   "apps/web/src/app/api/integrations/github/install/route.ts":
