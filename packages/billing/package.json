@@ -19,7 +19,7 @@
     "@lyrashield/licenses": "workspace:*",
     "@azure/keyvault-secrets": "^4.9.0",
     "@azure/identity": "^4.13.0",
-    "zod": "^4.5.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

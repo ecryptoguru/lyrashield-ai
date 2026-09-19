@@ -33,7 +33,7 @@
     "ioredis": "^5.11.1",
     "tsx": "^4.23.12",
     "yaml": "^2.9.0",
-    "zod": "^4.0.0"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
