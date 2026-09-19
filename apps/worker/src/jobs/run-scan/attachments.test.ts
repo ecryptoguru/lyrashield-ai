@@ -65,7 +65,9 @@ describe("stageScanAttachments", () => {
   })
 
   it("returns null when the plan records no attachments", async () => {
-    expect(await stageScanAttachments({ scanId, workspaceId: "ws-1", attachmentIds: [] })).toBeNull()
+    expect(
+      await stageScanAttachments({ scanId, workspaceId: "ws-1", attachmentIds: [] })
+    ).toBeNull()
     expect(resolveScanAttachments).not.toHaveBeenCalled()
   })
 

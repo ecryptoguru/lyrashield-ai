@@ -7,11 +7,7 @@ import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { addScanEvent } from "@lyrashield/db"
 import { buildEngineCommand, type ScanConfig, type EngineCommand } from "./command-builder"
-import {
-  parseEngineOutput,
-  type EngineArtifactInput,
-  type ParsedScanOutput,
-} from "./output-parser"
+import { parseEngineOutput, type EngineArtifactInput, type ParsedScanOutput } from "./output-parser"
 import {
   parseEngineTriageArtifact,
   type EngineTriageArtifact,

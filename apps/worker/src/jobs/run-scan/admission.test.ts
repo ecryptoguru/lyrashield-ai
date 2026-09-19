@@ -204,9 +204,9 @@ describe("verifyScanAdmission", () => {
 
     it("admits mixed rows during drain: legacy null-plan and stored-plan scans", async () => {
       // Flag OFF (default) — a pre-plan row runs its original path.
-      await expect(
-        verifyScanAdmission(params({ planRequired: false }))
-      ).resolves.toEqual({ ok: true })
+      await expect(verifyScanAdmission(params({ planRequired: false }))).resolves.toEqual({
+        ok: true,
+      })
       // A new plan-bearing row validates and admits in the same drain window.
       await expect(
         verifyScanAdmission(
@@ -216,9 +216,7 @@ describe("verifyScanAdmission", () => {
     })
 
     it("denies a legacy null-plan scan when plan admission is required", async () => {
-      await expect(
-        verifyScanAdmission(params({ planRequired: true }))
-      ).resolves.toEqual({
+      await expect(verifyScanAdmission(params({ planRequired: true }))).resolves.toEqual({
         ok: false,
         result: {
           status: "failed",
@@ -244,9 +242,7 @@ describe("verifyScanAdmission", () => {
 
     it("denies when the plan target type differs from the stored target", async () => {
       await expect(
-        verifyScanAdmission(
-          params({ executionPlan: repoDeepPlan(), targetType: "WEB_APP" })
-        )
+        verifyScanAdmission(params({ executionPlan: repoDeepPlan(), targetType: "WEB_APP" }))
       ).resolves.toMatchObject({
         ok: false,
         result: { errorCategory: "SCAN_PLAN_MISMATCH" },
@@ -256,9 +252,7 @@ describe("verifyScanAdmission", () => {
     it("denies when the recorded profile does not match the stored mode", async () => {
       const quickPlan = buildScanExecutionPlan({ targetType: "REPO", mode: "QUICK" })
       await expect(
-        verifyScanAdmission(
-          params({ executionPlan: quickPlan, targetType: "REPO" })
-        )
+        verifyScanAdmission(params({ executionPlan: quickPlan, targetType: "REPO" }))
       ).resolves.toMatchObject({
         ok: false,
         result: { errorCategory: "SCAN_PLAN_MISMATCH" },

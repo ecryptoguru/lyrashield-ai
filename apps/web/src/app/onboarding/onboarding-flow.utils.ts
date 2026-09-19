@@ -33,7 +33,11 @@ export async function ensureOnboardingTargetId(
 
 export function getOnboardingReviewOptions(path: OnboardingPath): ManualScanOption[] {
   const type = path === "github" ? "REPO" : path === "url" ? "WEB_APP" : path === "api" ? "API" : ""
-  return getManualScanOptions({ type, hasApiSpec: false }).filter((option) => option.available)
+  // Onboarding has no revision context — options that require base/head refs
+  // (Review Changes) stay out of the first-run choices.
+  return getManualScanOptions({ type, hasApiSpec: false }).filter(
+    (option) => option.available && !option.requiresRevisionInputs
+  )
 }
 
 interface UrlTargetPayload {

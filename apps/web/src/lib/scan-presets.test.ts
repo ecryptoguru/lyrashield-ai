@@ -42,8 +42,8 @@ describe("getManualScanOptions", () => {
   it("returns the repository review options for a repo target", () => {
     const options = getManualScanOptions({ type: "REPO" })
     expect(options.map((o) => o.id)).toEqual([
-      "CODE_REVIEW",
       "RELEASE_CHECK",
+      "CODE_REVIEW",
       "REVIEW_CHANGES",
       "DEEP_REVIEW",
     ])
@@ -83,9 +83,9 @@ describe("getManualScanOptions", () => {
     expect(engineBackedUrl?.authorizationHint).toContain("verified domain")
     // No preset copy may claim certification or guaranteed detection.
     for (const option of getManualScanOptions({ type: "REPO" })) {
-      expect(
-        `${option.label} ${option.description} ${option.hint}`
-      ).not.toMatch(/certif|guarantee|universal|compliant/i)
+      expect(`${option.label} ${option.description} ${option.hint}`).not.toMatch(
+        /certif|guarantee|universal|compliant/i
+      )
     }
   })
 
@@ -174,8 +174,8 @@ describe("getManualScanOptions", () => {
   it("returns the repository fallback for unknown target types", () => {
     const options = getManualScanOptions({ type: "CLOUD_ACCOUNT" })
     expect(options.map((o) => o.id)).toEqual([
-      "CODE_REVIEW",
       "RELEASE_CHECK",
+      "CODE_REVIEW",
       "REVIEW_CHANGES",
       "DEEP_REVIEW",
     ])

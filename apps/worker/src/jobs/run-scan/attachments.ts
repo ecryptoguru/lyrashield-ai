@@ -68,7 +68,11 @@ async function writeReadOnlyVerified(path: string, content: Buffer, expectedSha:
   let handle
   try {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- staging path is derived from the artifact id, not caller input
-    handle = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o400)
+    handle = await open(
+      path,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o400
+    )
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     if (code === "EEXIST") {
@@ -168,7 +172,11 @@ export async function stageScanAttachments(params: {
   }
   const manifestContent = JSON.stringify(manifest, null, 2)
   const manifestPath = join(dir, "manifest.json")
-  await writeReadOnlyVerified(manifestPath, Buffer.from(manifestContent, "utf8"), sha256Hex(Buffer.from(manifestContent, "utf8")))
+  await writeReadOnlyVerified(
+    manifestPath,
+    Buffer.from(manifestContent, "utf8"),
+    sha256Hex(Buffer.from(manifestContent, "utf8"))
+  )
 
   const staged: StagedScanAttachments = {
     dir,
