@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- checked-in fixture reads */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
@@ -15,9 +16,7 @@ import { loadDefaultProject } from "../projects.js"
  */
 const fixture = JSON.parse(
   readFileSync(
-    fileURLToPath(
-      new URL("../../../types/src/fixtures/scan-workflows.json", import.meta.url)
-    ),
+    fileURLToPath(new URL("../../../types/src/fixtures/scan-workflows.json", import.meta.url)),
     "utf8"
   )
 ) as {
@@ -63,9 +62,7 @@ function getScanBody() {
   const call = (createClient as ReturnType<typeof vi.fn>).mock.results[0]
   if (!call) return undefined
   const client = call.value as { request: ReturnType<typeof vi.fn> }
-  return client.request.mock.calls[0]?.[2] as
-    | { body?: Record<string, unknown> }
-    | undefined
+  return client.request.mock.calls[0]?.[2] as { body?: Record<string, unknown> } | undefined
 }
 
 beforeEach(() => {
@@ -112,7 +109,13 @@ describe("scan workflow parity matrix (CLI)", () => {
         expect(body).not.toHaveProperty("headRef")
       }
       // The CLI must never ship server-owned plan fields.
-      for (const key of ["executionPlan", "executionPlanHash", "limits", "capabilities", "planHash"]) {
+      for (const key of [
+        "executionPlan",
+        "executionPlanHash",
+        "limits",
+        "capabilities",
+        "planHash",
+      ]) {
         expect(body).not.toHaveProperty(key)
       }
     }

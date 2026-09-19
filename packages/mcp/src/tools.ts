@@ -312,11 +312,7 @@ const WORKFLOW_INPUT_PROPERTIES = {
   },
 } as const
 
-const VALID_WORKFLOWS = new Set([
-  "REVIEW_TARGET",
-  "REVIEW_CHANGES",
-  "AUTHENTICATED_ASSESSMENT",
-])
+const VALID_WORKFLOWS = new Set(["REVIEW_TARGET", "REVIEW_CHANGES", "AUTHENTICATED_ASSESSMENT"])
 
 /**
  * Validate and project the caller's workflow inputs onto the scan-create
@@ -335,9 +331,7 @@ function workflowInputFields(args: Record<string, unknown>): Record<string, unkn
     typeof args.authorizationRef === "string" ? args.authorizationRef : undefined
 
   if (workflow !== undefined && !VALID_WORKFLOWS.has(workflow)) {
-    throw new Error(
-      `Invalid workflow. Choose: ${[...VALID_WORKFLOWS].join(", ")}`
-    )
+    throw new Error(`Invalid workflow. Choose: ${[...VALID_WORKFLOWS].join(", ")}`)
   }
   if (headRef && !baseRef) {
     throw new Error("headRef requires baseRef so the change set can be compared.")
