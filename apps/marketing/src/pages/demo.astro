@@ -46,8 +46,7 @@ const jsonLd: unknown[] = [
       retest workflow works and where a review would fit your release process.
     </p>
     <p class="mt-4 text-sm leading-6 text-text-muted">
-      Choose a time in your timezone. We will send a calendar invite once your booking is
-      confirmed.
+      Demo booking opens soon. Until then, request a time and we follow up by email.
     </p>
     <p class="mt-2 text-xs leading-5 text-text-muted">{MYRA_COPY.demoLimit}</p>
 
@@ -72,7 +71,24 @@ const jsonLd: unknown[] = [
     </dl>
 
     <div id="demo-booking" class="mt-10 rounded-xl border border-border bg-bg-raised p-5 sm:p-6">
-      <section id="demo-step-slot" aria-labelledby="demo-slot-heading">
+      <!-- Honest default: self-serve booking is closed until /api/myra/status
+           reports booking:true. The request-by-email fallback is the primary
+           path; the script swaps these two sections when booking opens. -->
+      <section id="demo-booking-closed" aria-labelledby="demo-closed-heading">
+        <h2 id="demo-closed-heading" class="text-base font-semibold text-text">
+          Demo booking opens soon
+        </h2>
+        <p class="mt-2 text-sm leading-6 text-text-muted">
+          Demo booking opens soon. Request a time and we follow up by email.
+        </p>
+        <a
+          href="/support"
+          class="mt-4 inline-flex min-h-11 items-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
+          >Request a time</a
+        >
+      </section>
+
+      <section id="demo-step-slot" hidden aria-labelledby="demo-slot-heading">
         <h2 id="demo-slot-heading" class="text-base font-semibold text-text">Pick a time</h2>
         <div class="mt-3">
           <label for="demo-tz" class="block text-sm font-medium text-text">Your timezone</label>
@@ -345,6 +361,7 @@ const jsonLd: unknown[] = [
   import { createMyraClient, MYRA_COPY, MYRA_LIMITS } from "@lyrashield/myra"
   import {
     ensureMyraSession,
+    fetchMyraStatus,
     getMyraSessionId,
     getMyraToken,
     getTurnstileToken,
@@ -407,6 +424,7 @@ const jsonLd: unknown[] = [
   const manageError = $("demo-manage-error")
   const manageReslots = $("demo-manage-reslots")
   const manageSlotsEl = $("demo-manage-slots")
+  const bookingClosed = $("demo-booking-closed")
 
   /** Fragment keeps the credential out of HTTP requests; query remains backward-compatible. */
   const manageToken =
@@ -486,7 +504,15 @@ const jsonLd: unknown[] = [
   }
 
   function showStep(step: HTMLElement | null) {
-    for (const s of [stepSlot, stepDetails, stepVerify, stepReview, stepDone, stepManage]) {
+    for (const s of [
+      bookingClosed,
+      stepSlot,
+      stepDetails,
+      stepVerify,
+      stepReview,
+      stepDone,
+      stepManage,
+    ]) {
       if (s) s.hidden = s !== step
     }
   }
@@ -1023,7 +1049,14 @@ const jsonLd: unknown[] = [
   })
 
   if (!manageToken) {
-    void ensureMyraSession(apiBase).catch(() => {})
-    void fetchSlots()
+    // Self-serve booking only runs when the app says anonymous booking is
+    // open; otherwise the request-by-email fallback stays the primary path
+    // and no booking request is ever fired.
+    void fetchMyraStatus(apiBase).then((status) => {
+      if (!status.booking) return
+      showStep(stepSlot)
+      void ensureMyraSession(apiBase).catch(() => {})
+      void fetchSlots()
+    })
   }
 </script>

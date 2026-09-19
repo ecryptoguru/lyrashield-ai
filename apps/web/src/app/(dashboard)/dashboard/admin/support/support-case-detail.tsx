@@ -144,13 +144,15 @@ export function SupportCaseDetail(props: {
               {detailMeta.map(([k, v]) => (
                 <div key={k}>
                   <dt className="text-muted-foreground font-mono uppercase">{k}</dt>
-                  <dd className="mt-0.5 break-words">{v}</dd>
+                  <dd className="mt-0.5 wrap-break-word">{v}</dd>
                 </div>
               ))}
             </dl>
             <div className="mt-4 border-t pt-3">
               <h3 className="text-muted-foreground font-mono text-xs uppercase">Summary</h3>
-              <p className="mt-1.5 text-sm break-words whitespace-pre-wrap">{selected.summary}</p>
+              <p className="mt-1.5 text-sm wrap-break-word whitespace-pre-wrap">
+                {selected.summary}
+              </p>
             </div>
 
             {selected.handoffSummary ? (
@@ -158,7 +160,7 @@ export function SupportCaseDetail(props: {
                 <h3 className="text-muted-foreground font-mono text-xs uppercase">
                   Last handoff to Myra
                 </h3>
-                <p className="mt-1.5 text-sm break-words whitespace-pre-wrap">
+                <p className="mt-1.5 text-sm wrap-break-word whitespace-pre-wrap">
                   {selected.handoffSummary}
                 </p>
               </div>
@@ -294,7 +296,9 @@ export function SupportCaseDetail(props: {
                         {formatTime(reply.createdAt)}
                       </span>
                     </div>
-                    <p className="mt-1.5 text-sm break-words whitespace-pre-wrap">{reply.body}</p>
+                    <p className="mt-1.5 text-sm wrap-break-word whitespace-pre-wrap">
+                      {reply.body}
+                    </p>
                   </li>
                 ))}
               </ul>

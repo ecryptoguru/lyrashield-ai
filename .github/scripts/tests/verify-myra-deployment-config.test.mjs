@@ -7,6 +7,7 @@ const script = ".github/scripts/verify-myra-deployment-config.mjs"
 const baseEnv = {
   ...process.env,
   MYRA_WRITES_ENABLED: "0",
+  MYRA_PUBLIC_BOOKING_ENABLED: "0",
   MYRA_DASHBOARD_ENABLED: "0",
   MYRA_ALLOWED_EMAILS: "",
   MYRA_CALENDAR_PROVIDER: "mock",
@@ -67,6 +68,23 @@ test("rejects writes enabled with no provider value at all", () => {
   fails({ ...googleEnv, MYRA_CALENDAR_PROVIDER: "" }, "MYRA_CALENDAR_PROVIDER")
 })
 
+test("accepts an unset provider while writes are off", () => {
+  assert.match(run({ MYRA_CALENDAR_PROVIDER: "" }), /calendar provider unset; writes are off/)
+  assert.match(run({ MYRA_CALENDAR_PROVIDER: "" }), /Myra deployment configuration is valid/)
+  assert.match(
+    run({
+      MYRA_DASHBOARD_ENABLED: "1",
+      MYRA_ALLOWED_EMAILS: "ankit@lyrashieldai.com",
+      MYRA_CALENDAR_PROVIDER: "",
+    }),
+    /Myra deployment configuration is valid/
+  )
+})
+
+test("rejects an unrecognized provider value even while writes are off", () => {
+  fails({ MYRA_CALENDAR_PROVIDER: "caldav" }, "MYRA_CALENDAR_PROVIDER")
+})
+
 test("rejects writes enabled without usable Google credentials", () => {
   fails({ ...googleEnv, MYRA_GOOGLE_CLIENT_SECRET: "" }, "MYRA_GOOGLE_CLIENT_SECRET")
   fails(
@@ -76,6 +94,30 @@ test("rejects writes enabled without usable Google credentials", () => {
       MYRA_GOOGLE_TOKEN_JSON: "",
     },
     "MYRA_GOOGLE_REFRESH_TOKEN or MYRA_GOOGLE_TOKEN_JSON"
+  )
+})
+
+test("applies the google calendar rule when only public booking is enabled", () => {
+  const publicBookingEnv = {
+    MYRA_PUBLIC_BOOKING_ENABLED: "1",
+    MYRA_WRITES_ENABLED: "0",
+  }
+  fails({ ...publicBookingEnv, MYRA_CALENDAR_PROVIDER: "mock" }, "MYRA_CALENDAR_PROVIDER")
+  fails({ ...publicBookingEnv, MYRA_CALENDAR_PROVIDER: "" }, "MYRA_CALENDAR_PROVIDER")
+  fails(
+    { ...publicBookingEnv, MYRA_CALENDAR_PROVIDER: "google", MYRA_GOOGLE_CLIENT_ID: "id" },
+    "MYRA_GOOGLE_CLIENT_SECRET"
+  )
+  assert.match(
+    run({
+      ...publicBookingEnv,
+      MYRA_ALLOWED_EMAILS: "ankit@lyrashieldai.com",
+      MYRA_CALENDAR_PROVIDER: "google",
+      MYRA_GOOGLE_CLIENT_ID: "id",
+      MYRA_GOOGLE_CLIENT_SECRET: "secret",
+      MYRA_GOOGLE_TOKEN_JSON: "json",
+    }),
+    /Myra deployment configuration is valid/
   )
 })
 

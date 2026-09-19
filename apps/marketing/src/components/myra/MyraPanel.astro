@@ -5,6 +5,7 @@ import { MYRA_COPY } from "@lyrashield/myra"
 <button
   type="button"
   id="myra-launcher"
+  hidden
   aria-expanded="false"
   aria-controls="myra-panel"
   class="fixed bottom-5 right-5 z-40 inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-bg-raised px-4 font-mono text-xs font-semibold tracking-[.12em] text-text shadow-lg hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
@@ -125,8 +126,17 @@ import { MYRA_COPY } from "@lyrashield/myra"
 </section>
 
 <script>
+  import { fetchMyraStatus } from "./myra-session"
+
   const launcher = document.getElementById("myra-launcher")
   let pending: Promise<{ open: () => void }> | null = null
+
+  // The launcher is a dead affordance whenever the app's public Myra surface
+  // is off — reveal it only after the status probe confirms it is live. Any
+  // probe failure resolves to public:false and the launcher stays hidden.
+  void fetchMyraStatus().then((status) => {
+    if (status.public) launcher?.removeAttribute("hidden")
+  })
 
   async function loadAndOpen() {
     pending ??= import("./myra-panel.client").then((mod) => mod.initMyraPanel())
