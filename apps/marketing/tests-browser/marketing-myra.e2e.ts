@@ -3,10 +3,11 @@ import { expect, test } from "@playwright/test"
 async function mockMyra(
   page: import("@playwright/test").Page,
   booking = true,
-  interactive = false
+  interactive = false,
+  statusTimeout = false
 ) {
   await page.addInitScript(
-    ({ bookingOpen, interactiveChallenge }) => {
+    ({ bookingOpen, interactiveChallenge, statusTimeout }) => {
       const calls: { path: string; credentials?: RequestCredentials }[] = []
       Object.assign(window, { __myraCalls: calls })
       const originalFetch = window.fetch.bind(window)
@@ -22,6 +23,14 @@ async function mockMyra(
           return originalFetch(input, init)
         }
         calls.push({ path: url.pathname, credentials: init?.credentials })
+        if (url.pathname === "/api/myra/status" && statusTimeout)
+          return new Promise<Response>((_, reject) =>
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("status timeout", "AbortError")),
+              { once: true }
+            )
+          )
         if (url.pathname === "/api/myra/status")
           return Response.json({ public: true, booking: bookingOpen })
         if (url.pathname === "/api/myra/session") {
@@ -75,7 +84,7 @@ async function mockMyra(
         },
       })
     },
-    { bookingOpen: booking, interactiveChallenge: interactive }
+    { bookingOpen: booking, interactiveChallenge: interactive, statusTimeout }
   )
 }
 
@@ -118,7 +127,7 @@ test("mobile Myra challenge stays outside the inert demo page", async ({ page })
   await page.setViewportSize({ width: 390, height: 844 })
   await mockMyra(page, false, true)
   await page.goto("/demo")
-  await expect(page.getByRole("heading", { name: "Demo booking opens soon" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Request a demo time" })).toBeVisible()
   expect(
     await page.evaluate(() =>
       (window as unknown as { __myraCalls: { path: string }[] }).__myraCalls.some(
@@ -143,9 +152,35 @@ test("mobile Myra challenge stays outside the inert demo page", async ({ page })
     .toBe(false)
   const challenge = page.getByRole("button", { name: "Complete challenge" })
   await challenge.focus()
+  await page.keyboard.press("Shift+Tab")
+  await expect(page.getByRole("dialog", { name: "Myra support" }).locator(":focus")).toHaveCount(1)
+  await challenge.focus()
   await page.keyboard.press("Tab")
   await expect(page.getByRole("dialog", { name: "Myra support" }).locator(":focus")).toHaveCount(1)
   await challenge.click()
+})
+
+test("resizing an open desktop panel to mobile moves focus into the modal", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 })
+  await mockMyra(page)
+  await page.goto("/")
+  await page.getByRole("button", { name: "Help" }).click()
+  const dialog = page.getByRole("dialog", { name: "Myra support" })
+  await expect(dialog).toHaveAttribute("aria-modal", "false")
+  await page.locator("main a[href]").first().focus()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(dialog).toHaveAttribute("aria-modal", "true")
+  await expect(dialog.locator(":focus")).toHaveCount(1)
+})
+
+test("status timeout keeps demo fallback availability-neutral", async ({ page }) => {
+  await mockMyra(page, true, false, true)
+  await page.goto("/demo")
+  await expect(page.getByRole("heading", { name: "Request a demo time" })).toBeVisible()
+  await page.waitForTimeout(2200)
+  await expect(page.getByRole("heading", { name: "Request a demo time" })).toBeVisible()
+  await expect(page.getByText("Demo booking opens soon")).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Request a time" })).toBeVisible()
 })
 
 test("demo booking and management use public requests without cookies", async ({ page }) => {

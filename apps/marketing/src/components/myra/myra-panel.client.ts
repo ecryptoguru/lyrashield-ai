@@ -87,6 +87,9 @@ export function initMyraPanel() {
         previousInert.set(child, child.inert)
         child.inert = true
       }
+      const active = document.activeElement
+      const challengeHost = document.querySelector("body > [data-myra-turnstile]")
+      if (!panelEl.contains(active) && !challengeHost?.contains(active)) inputEl.focus()
     } else if (!modal && previousInert.size > 0) {
       for (const [child, wasInert] of previousInert) child.inert = wasInert
       previousInert.clear()
@@ -220,17 +223,25 @@ export function initMyraPanel() {
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Tab" && open && mobile.matches) {
-      const focusable = Array.from(
-        panelEl.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-      ).filter((item) => !item.hidden && item.getClientRects().length > 0)
+      const focusableSelector =
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])'
+      const focusable = Array.from(panelEl.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+        (item) => !item.hidden && item.getClientRects().length > 0
+      )
       const first = focusable[0]
       const last = focusable.at(-1)
+      const challengeHost = document.querySelector<HTMLElement>("body > [data-myra-turnstile]")
+      const challengeFirst = Array.from(
+        challengeHost?.querySelectorAll<HTMLElement>(focusableSelector) ?? []
+      ).find((item) => !item.hidden && item.getClientRects().length > 0)
       if (
         first &&
         last &&
-        (e.shiftKey ? document.activeElement === first : document.activeElement === last)
+        (e.shiftKey
+          ? document.activeElement === first ||
+            document.activeElement === challengeFirst ||
+            document.activeElement === challengeHost
+          : document.activeElement === last)
       ) {
         e.preventDefault()
         ;(e.shiftKey ? last : first).focus()
