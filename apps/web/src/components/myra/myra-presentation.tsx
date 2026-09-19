@@ -49,7 +49,7 @@ function InlineText({ text }: { text: string }) {
           <a
             key={i}
             href={seg.href}
-            className="text-primary underline underline-offset-4 break-words"
+            className="text-primary underline underline-offset-4 wrap-break-word"
             {...(seg.href.startsWith("/") ? {} : { target: "_blank", rel: "noopener noreferrer" })}
           >
             {seg.text}
@@ -129,7 +129,7 @@ export function MyraComponentView({
       return (
         <a
           href={href}
-          className="text-primary text-sm underline underline-offset-4 break-words"
+          className="text-primary text-sm underline underline-offset-4 wrap-break-word"
           {...(href.startsWith("/") ? {} : { target: "_blank", rel: "noopener noreferrer" })}
         >
           {component.label}
@@ -256,7 +256,7 @@ export function MyraComponentView({
         <div className="border-primary/40 rounded-lg border p-3">
           <p className="text-sm font-medium">{MYRA_COPY.caseDraft}</p>
           <p className="mt-1 text-sm font-semibold">{component.subject}</p>
-          <p className="mt-1 text-sm break-words whitespace-pre-wrap">{component.summary}</p>
+          <p className="mt-1 text-sm wrap-break-word whitespace-pre-wrap">{component.summary}</p>
           <p className="text-muted-foreground mt-2 font-mono text-xs">
             Replies go to {component.replyDestination}
           </p>
