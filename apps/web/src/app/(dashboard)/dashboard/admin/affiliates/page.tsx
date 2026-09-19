@@ -3,6 +3,7 @@ import { getCachedSession } from "@/lib/cache"
 import { redirect } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { EmailText } from "@/components/email-text"
+import { LocalTime } from "@/components/local-time"
 import { isPlatformOperator } from "@lyrashield/auth/server"
 import { AffiliateAdminActions } from "./admin-actions"
 
@@ -84,7 +85,7 @@ export default async function AffiliateAdminPage() {
                     <EmailText value={aff.user.name ?? aff.user.email} />
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    Applied {new Date(aff.createdAt).toLocaleDateString()}
+                    Applied <LocalTime value={aff.createdAt} />
                   </div>
                 </div>
                 <AffiliateAdminActions affiliateId={aff.id} />
@@ -169,7 +170,7 @@ export default async function AffiliateAdminPage() {
                   </div>
                   <div className="text-sm text-muted-foreground">
                     {p.amount.toString()} {p.currency} · Requested{" "}
-                    {new Date(p.requestedAt).toLocaleDateString()}
+                    <LocalTime value={p.requestedAt} />
                   </div>
                 </div>
                 <AffiliateAdminActions

@@ -5,21 +5,21 @@
    (`CLINE_MCP_SETTINGS_PATH` can override it), or to the IDE extension's settings JSON opened
    from MCP Servers → Configure:
 
-```json
-{
-  "mcpServers": {
-    "lyrashield": {
-      "type": "streamableHttp",
-      "url": "https://app.lyrashieldai.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer <YOUR_LYRASHIELD_API_KEY>"
-      },
-      "disabled": false,
-      "autoApprove": []
-    }
-  }
-}
-```
+   ```json
+   {
+     "mcpServers": {
+       "lyrashield": {
+         "type": "streamableHttp",
+         "url": "https://app.lyrashieldai.com/api/mcp",
+         "headers": {
+           "Authorization": "Bearer <YOUR_LYRASHIELD_API_KEY>"
+         },
+         "disabled": false,
+         "autoApprove": []
+       }
+     }
+   }
+   ```
 
 3. Replace `<YOUR_LYRASHIELD_API_KEY>` with your API key from https://app.lyrashieldai.com/dashboard/settings.
 4. Save the file. Cline will discover the tools automatically.

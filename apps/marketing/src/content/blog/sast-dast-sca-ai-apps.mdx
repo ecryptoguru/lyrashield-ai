@@ -97,7 +97,7 @@ Next, deploy the exact candidate commit to an isolated environment. Give DAST te
 
 Use the threat model to choose manual tests. A model that identifies an administrator-to-agent trust boundary should produce a test for that boundary. A generic scanner cannot infer the business decision behind every privileged action.
 
-Finally, triage results by evidence. Deduplicate reports that describe the same root cause without erasing their separate observations. Preserve the originating method, target commit, location or request, prerequisites, and coverage. After remediation, rerun the technique capable of observing the original condition. A SAST fix needs a fresh static result and relevant tests. A DAST finding needs a fresh build and controlled runtime retest. A dependency update needs a fresh resolved graph and artifact check.
+Finally, triage results by evidence. Deduplicate reports that describe the same root cause without erasing their separate observations. Preserve the originating method, target commit, location, or request, prerequisites, and coverage. After remediation, rerun the technique capable of observing the original condition. A SAST fix needs a fresh static result and relevant tests. A DAST finding needs a fresh build and controlled runtime retest. A dependency update needs a fresh resolved graph and artifact check.
 
 ## What the layers still cannot prove
 

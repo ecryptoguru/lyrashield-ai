@@ -12,7 +12,7 @@ draft: false
 heroImage: agent-security-03
 faq:
   - q: "Is a container enough to sandbox a coding agent?"
-    a: "No. A container shares the host kernel and inherits its configured mounts, privileges, devices, and network access. Add non-root execution, minimal mounts, syscall and capability restrictions, resource limits, egress policy, and host hardening."
+    a: "No. A container shares the host kernel and inherits its configured mounts, privileges, devices, and network access. Add non-root execution, minimal mounts, syscall, and capability restrictions, resource limits, egress policy, and host hardening."
   - q: "Should a coding agent have internet access?"
     a: "Only when the task requires it. Prefer no network, then allow specific registries, source hosts, or APIs through a controlled proxy. Record destinations and deny unknown outbound traffic."
   - q: "How should an agent receive secrets?"
@@ -21,7 +21,7 @@ faq:
     a: "Yes, but running directly under a developer account is weak isolation. Use a separate operating-system identity or disposable virtualized environment, narrow filesystem permissions, and prevent access to personal credentials and production tools."
 ---
 
-**Direct answer:** Run coding agents in a disposable environment with only the repository, tools, and short-lived credentials required for the task. Use a non-root identity, minimal mounts, process and resource limits, and an explicit outbound destination policy. A container alone is incomplete isolation, and isolation without egress control can still expose accessible data.
+**Direct answer:** Run coding agents in a disposable environment with only the repository, tools, and short-lived credentials required for the task. Use a non-root identity, minimal mounts, process, and resource limits, and an explicit outbound destination policy. A container alone is incomplete isolation, and isolation without egress control can still expose accessible data.
 
 A coding agent may read source, write files, run commands, install dependencies, and make network requests in one session. A mistaken command or injected instruction inherits whatever that runtime can reach.
 
@@ -57,7 +57,7 @@ Broad mounts and host credentials make setup errors disappear, which is why this
 
 Build the workspace from a pinned, reviewed image. Copy or mount a specific repository snapshot rather than the developer's home directory. Make source inputs read-only when the task only reviews code, and give write access to a separate output directory for proposed patches and test artifacts.
 
-Run as a dedicated non-root user. Drop operating-system capabilities the task does not need. Set `no-new-privileges`, process limits, memory and CPU bounds, a read-only root filesystem, and a small temporary filesystem. Keep host sockets, device nodes, SSH agents, browser profiles, cloud configuration, and package-publishing credentials outside the workspace.
+Run as a dedicated non-root user. Drop operating-system capabilities the task does not need. Set `no-new-privileges`, process limits, memory, and CPU bounds, a read-only root filesystem, and a small temporary filesystem. Keep host sockets, device nodes, SSH agents, browser profiles, cloud configuration, and package-publishing credentials outside the workspace.
 
 An illustrative review profile might include:
 

@@ -14,7 +14,6 @@ function fakeAdapter(): CalendarAdapter & { cancelEvent: ReturnType<typeof vi.fn
 }
 
 function fakeDb(opts: {
-  replacements?: { rescheduledFromId: string | null }[]
   staleOriginals?: { id: string; providerEventId: string | null }[]
   pendingCancellations?: { id: string; providerEventId: string }[]
 }) {
@@ -27,11 +26,7 @@ function fakeDb(opts: {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       update: vi.fn().mockResolvedValue({}),
-      findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
-        if ("rescheduledFromId" in where) return opts.replacements ?? []
-        if ("id" in where) return opts.staleOriginals ?? []
-        return opts.pendingCancellations ?? []
-      }),
+      findMany: vi.fn(async () => opts.pendingCancellations ?? []),
     },
     myraConversation: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
     myraPublicSession: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
@@ -39,6 +34,7 @@ function fakeDb(opts: {
     supportCase: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
     myraAuditEvent: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
     $executeRaw: vi.fn().mockResolvedValue(0),
+    $queryRaw: vi.fn().mockResolvedValue(opts.staleOriginals ?? []),
   }
 }
 
@@ -46,7 +42,6 @@ describe("pruneMyraRetention rescheduled-original reconcile", () => {
   it("cancels a confirmed original superseded by a confirmed replacement", async () => {
     const adapter = fakeAdapter()
     const db = fakeDb({
-      replacements: [{ rescheduledFromId: "orig-1" }],
       staleOriginals: [{ id: "orig-1", providerEventId: "evt-1" }],
     })
 
@@ -65,9 +60,23 @@ describe("pruneMyraRetention rescheduled-original reconcile", () => {
     expect(counts.rescheduledOriginals).toBe(1)
   })
 
+  it("bounds outstanding originals instead of repeatedly scanning historical replacements", async () => {
+    const adapter = fakeAdapter()
+    const db = fakeDb({})
+
+    await pruneMyraRetention(db as never, adapter)
+
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1)
+    const query = db.$queryRaw.mock.calls[0]?.[0] as { strings?: string[] }
+    const sql = query.strings?.join(" ") ?? ""
+    expect(sql).toContain("original.status IN ('CONFIRMED', 'HELD')")
+    expect(sql).toContain('replacement."rescheduledFromId" = original.id')
+    expect(sql).toContain("LIMIT 100")
+  })
+
   it("leaves originals alone while no confirmed replacement exists", async () => {
     const adapter = fakeAdapter()
-    const db = fakeDb({ replacements: [] })
+    const db = fakeDb({})
 
     const counts = await pruneMyraRetention(db as never, adapter)
 
@@ -80,7 +89,6 @@ describe("pruneMyraRetention rescheduled-original reconcile", () => {
     const adapter = fakeAdapter()
     adapter.cancelEvent.mockRejectedValue(new Error("provider down"))
     const db = fakeDb({
-      replacements: [{ rescheduledFromId: "orig-1" }],
       staleOriginals: [{ id: "orig-1", providerEventId: "evt-1" }],
     })
 

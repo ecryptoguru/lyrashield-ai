@@ -54,13 +54,13 @@ Use LyraShield AI when the specific need is a release decision for an AI-built a
 
 The two tools fit different points in the workflow. Corgea runs continuously, adapting to the codebase and reducing noise over time, which suits a team whose priority is remediation throughput. LyraShield runs at the release gate, where the question is whether the app is safe to ship and the deliverable is an evidence record a reviewer can trust. Because both target AI-generated code and both validate findings, a team can use Corgea for day-to-day remediation and LyraShield for the focused assurance run before production.
 
-| Dimension | Corgea | LyraShield AI |
-|---|---|---|
-| Primary goal | Adaptive triage and auto-fix | Release assurance with proof for AI-built apps |
+| Dimension       | Corgea                                          | LyraShield AI                                          |
+| --------------- | ----------------------------------------------- | ------------------------------------------------------ |
+| Primary goal    | Adaptive triage and auto-fix                    | Release assurance with proof for AI-built apps         |
 | Detection model | Multi-agent SAST, AI pentesting, design reviews | Agentic pentest plus SCA plus secrets, evidence states |
-| Fix model | Fix pull requests for engineering approval | Approval-gated fix proposals, retest before close |
-| Adaptation | Auto-Discovery and Learning policies | MCP inside AI coding agents plus GitHub Action |
-| Output | Findings, fix PRs, pentest results | Immutable assurance record, SARIF |
+| Fix model       | Fix pull requests for engineering approval      | Approval-gated fix proposals, retest before close      |
+| Adaptation      | Auto-Discovery and Learning policies            | MCP inside AI coding agents plus GitHub Action         |
+| Output          | Findings, fix PRs, pentest results              | Immutable assurance record, SARIF                      |
 
 For the detailed breakdown see the [Corgea comparison page](/compare/corgea). If you are securing a Bolt-built app, the [Bolt app security checklist](/blog/bolt-app-security-checklist) is a useful companion.
 

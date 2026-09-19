@@ -22,7 +22,7 @@ VS Code with GitHub Copilot Chat and MCP can edit across your workspace and call
 
 ## How VS Code AI expands risk
 
-Copilot Chat agent mode can read, edit and run commands across your workspace while MCP servers expose additional tools. A single prompt can search files, add dependencies and call an external API. Without guardrails, broad edits can miss auth checks, leave secrets in workspace settings and add vulnerable packages.
+Copilot Chat agent mode can read, edit, and run commands across your workspace while MCP servers expose additional tools. A single prompt can search files, add dependencies and call an external API. Without guardrails, broad edits can miss auth checks, leave secrets in workspace settings and add vulnerable packages.
 
 Common review misses include debug endpoints that bypass auth, error handlers that log secrets and package additions with install scripts that run code. Explicit policy and verifiable evidence reduce that risk.
 
@@ -80,7 +80,7 @@ Discovery of servers from mcp dot json is covered in the [VS Code MCP servers gu
 
 Copilot Chat agent mode can read and edit files and run terminal commands when approved. Define scope explicitly.
 
-Configure chat to require approval for terminal commands, package installs and edits outside src, tests and docs. Deny edits to .env, secrets and production configs and infra manifests unless security owner approves. Document allowed commands in your guide, for example npm run lint, npm run test and npm run build are allowed, while curl with secrets, git push to main from agent context and unscoped docker commands are denied.
+Configure chat to require approval for terminal commands, package installs and edits outside src, tests, and docs. Deny edits to .env, secrets, and production configs and infra manifests unless security owner approves. Document allowed commands in your guide, for example npm run lint, npm run test and npm run build are allowed, while curl with secrets, git push to main from agent context and unscoped docker commands are denied.
 
 Use .github/copilot-instructions.md to state auth and validation expectations:
 
@@ -90,7 +90,7 @@ No direct shell exec with untrusted input. If exec is needed for image handling,
 
 Dependency addition needs lockfile review and audit before merge, not auto acceptance.
 
-Auth, payment or file upload change needs tests and reviewer and must be flagged in pull request description.
+Auth, payment, or file upload change needs tests and reviewer and must be flagged in pull request description.
 
 Version prompt files as code and review them like source. Docs on prompt files at [GitHub prompt files](https://docs.github.com/en/copilot/tutorials/customization-library/prompt-files/your-first-prompt-file) and custom instructions at [Copilot instructions](https://docs.github.com/en/copilot/customizing-copilot/adding-custom-instructions-for-github-copilot) describe file locations and precedence. Capture chat summary and list of edited files in pull request for context.
 
@@ -134,7 +134,7 @@ LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps
 
 MCP fits VS Code design. Local stdio via npx -y @lyrashield/mcp@0.2.8 with inputs avoids raw keys, remote https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key via inputs. GitHub Action diff aware scan and SARIF output target pull request review.
 
-Build transparency: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. VS Code uses the supported config-file integration, and the runner-local Action provides an advisory SARIF gate. Production availability remains bounded by release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
+Build transparency: LyraShield is live in open beta with open registration. The scan pipeline, findings, and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. VS Code uses the supported config-file integration, and the runner-local Action provides an advisory SARIF gate. Production availability remains bounded by release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 ## Final gates before release
 

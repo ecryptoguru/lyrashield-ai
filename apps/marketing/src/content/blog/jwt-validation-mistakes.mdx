@@ -109,7 +109,7 @@ For asymmetric signing, providers often publish a JSON Web Key Set. Fetch it onl
 
 Treat `kid` as a selector within the trusted set, not a path, query, or remote location. A missing key should lead to a controlled refresh and then denial, not a fallback to skipping verification.
 
-Bound key-set retrieval like any other network dependency. Use the issuer's configured HTTPS location, response-size and time limits, and a cache policy that can survive a short provider outage without trusting stale material forever. An attacker-controlled `jku`, `x5u`, or similar header must not redirect the verifier to an arbitrary key server. If the product supports such headers, pin them to the established trust relationship and library guidance.
+Bound key-set retrieval like any other network dependency. Use the issuer's configured HTTPS location, response-size, and time limits, and a cache policy that can survive a short provider outage without trusting stale material forever. An attacker-controlled `jku`, `x5u`, or similar header must not redirect the verifier to an arbitrary key server. If the product supports such headers, pin them to the established trust relationship and library guidance.
 
 For symmetric algorithms, the verifier and issuer share a secret. Never use a public asymmetric key as an HMAC secret. Keep different token families on separate keys where practical so a token accepted in one context cannot cross into another.
 

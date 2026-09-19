@@ -62,6 +62,7 @@ Group findings by authorization, injection, secrets, and dependency handling. Co
 Use `lyrashield_generate_fix_plan` only where that authenticated interface is available; it provides read-only remediation guidance. A developer or coding agent applies the reviewed change. Record the proposal through an approved surface, queue a new retest, and wait for the resulting receipt before calling the issue remediated. Neither a Pi edit nor disappearance from an incomplete scan proves resolution.
 
 If the CLI cannot establish target identity, coverage, or fresh evidence, preserve the insufficient state. Do not convert an unavailable or incomplete result into a clean gate simply because the source diff looks safe.
+
 ## 5. Wire a diff aware GitHub Action gate
 
 Local Pi checks are fast, but you need PR enforcement that survives skipped local steps. Add the official LyraShield GitHub Action in diff aware mode and upload SARIF for native annotations.
@@ -109,12 +110,12 @@ Add reviewed project guidance through the Pi mechanism your team already uses. D
 
 This guidance encodes Target to Scan to Evidence State to Fix Proposal to Retest to Report as daily behavior. Store it through your chosen project guidance mechanism so new Pi sessions receive consistent guardrails. Teams that commit this file see identical verification across fresh clones, which reduces drift between what the local agent checks and what CI enforces later in the pull request.
 
-| Stage            | Pi agent behavior                             | LyraShield contribution                                                | Proof artifact               |
-| ---------------- | --------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------- |
-| Local generation | Scaffolds API and UI from terminal prompts    | N/A                                                                    | Prompt plus diff             |
-| Local check      | Pauses for the standalone CLI                | Findings with evidence states plus SCA plus secrets with file evidence | Scan and finding identifiers |
-| PR gate          | Pushes diff to GitHub                         | Diff aware scan plus SARIF plus fail on high                           | GitHub check and annotations |
-| Fix loop         | Developer applies a reviewed remediation      | Recorded proposal plus server-owned retest                             | Retest outcome and scan ref  |
+| Stage            | Pi agent behavior                          | LyraShield contribution                                                | Proof artifact               |
+| ---------------- | ------------------------------------------ | ---------------------------------------------------------------------- | ---------------------------- |
+| Local generation | Scaffolds API and UI from terminal prompts | N/A                                                                    | Prompt plus diff             |
+| Local check      | Pauses for the standalone CLI              | Findings with evidence states plus SCA plus secrets with file evidence | Scan and finding identifiers |
+| PR gate          | Pushes diff to GitHub                      | Diff aware scan plus SARIF plus fail on high                           | GitHub check and annotations |
+| Fix loop         | Developer applies a reviewed remediation   | Recorded proposal plus server-owned retest                             | Retest outcome and scan ref  |
 
 ## Why pair Pi with LyraShield
 

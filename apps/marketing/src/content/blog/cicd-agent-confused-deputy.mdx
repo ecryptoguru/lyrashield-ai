@@ -17,7 +17,7 @@ faq:
   - q: "What GITHUB_TOKEN permissions should an agentic CI job receive?"
     a: "Start with no permissions or read-only contents, then grant each job only the specific permission its task requires. A review job usually should not write repository content, change workflows, publish packages, or deploy."
   - q: "Does OIDC make a deployment workflow safe?"
-    a: "OIDC removes the need for a long-lived cloud secret, but the cloud trust policy still decides who can obtain access. Bind claims to the intended repository, workflow or environment, branch or tag where appropriate, and expected audience."
+    a: "OIDC removes the need for a long-lived cloud secret, but the cloud trust policy still decides who can obtain access. Bind claims to the intended repository, workflow, or environment, branch, or tag where appropriate, and expected audience."
   - q: "Can a self-hosted runner process pull requests safely?"
     a: "It needs strong isolation and lifecycle controls. GitHub warns that self-hosted runners may be persistently compromised by untrusted workflow code. Public fork jobs should use disposable isolated runners without production credentials or deployment network access."
 ---

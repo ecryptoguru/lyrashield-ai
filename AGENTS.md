@@ -164,6 +164,25 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Affiliate annual rate is flat 25%; 30% tier applies monthly only. No commission on packs, trials, or self-referrals.
 - Marketing deploy uses generated `apps/marketing/dist/server/wrangler.json`, not source `wrangler.jsonc`.
 
+## Verification and release commands
+
+Local gates — run the ones a change touches before opening a PR:
+
+- `pnpm install`, `pnpm lint`, `pnpm typecheck`, `pnpm typecheck:e2e`, `pnpm format:check`.
+- `pnpm lint:md` — advisory markdownlint pass (`.markdownlint-cli2.jsonc`); wired non-blocking in CI.
+- `pnpm test:core` (vitest unit suite), `pnpm test:marketing`, `pnpm test:motion`, `pnpm test` (full runner), `pnpm test:e2e` (Playwright; needs the test database).
+- `pnpm db:generate`, `pnpm db:migrate`, `pnpm prisma:migrate:check` (migration drift).
+- `pnpm verify:worker-image` — worker image contract on the checked-out Dockerfile and host assets.
+- Deploy-script suites: `node --test .github/scripts/tests/*.test.mjs` and `bash .github/scripts/tests/*.sh`. These mock `docker`/`systemctl`/`curl` and never touch a real VM.
+
+Release pipeline — GitHub Actions only; production steps are founder-dispatched:
+
+- `ci.yml` gates every PR: SCA/secret scan, path classification, lint/typecheck/test/build, pinned engine-worker contract, desktop jobs, marketing deploy on main push.
+- `release-production.yml` dispatches `deploy-azure.yml`: builds the digest-pinned worker image, promotes `lyrashield-worker.service` through `.github/scripts/promote-worker-vm.sh` (admission stop → secrets refresh → empty-queue preflight → restart → readiness), then rolls app/scanner and the Cloudflare marketing worker.
+- `promote-worker-vm.sh --preflight` runs only the queue check against the refreshed environment file; it never restarts the live worker.
+- `production-scan-readiness.yml` probes `https://app.lyrashieldai.com/api/ready/scans` and writes the probe status/body to the step summary on failure.
+- Local `.env` values are developer-specific (Myra flags, provider credentials); a red `env-runtime` test or web build caused by them is environmental, not a regression — compare against a clean checkout before claiming breakage.
+
 ## Repository hygiene
 
 - Build outputs and generated media are gitignored; never commit `.next`, `dist`, `.turbo`, motion renders, media-local, generated Prisma client, or `node_modules`.

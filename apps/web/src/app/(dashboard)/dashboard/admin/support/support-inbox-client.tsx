@@ -9,7 +9,7 @@
  * client only renders what GET /api/myra/operator/cases returns — it never
  * infers access.
  */
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Badge, Button, Card, Spinner, cn } from "@lyrashield/ui"
 import {
   SupportCaseDetail,
@@ -105,20 +105,33 @@ export function SupportInbox() {
   const [elevationCode, setElevationCode] = useState("")
   const [announce, setAnnounce] = useState("")
 
+  // Every fetch carries its own AbortController; a newer invocation aborts the
+  // previous one and the effect cleanups abort on unmount, so a slow stale
+  // response can never overwrite fresher list or detail state.
+  const listAbortRef = useRef<AbortController | null>(null)
+  const detailAbortRef = useRef<AbortController | null>(null)
+
   // setState only inside promise callbacks — an effect may call these, but
   // never synchronously set state (react-hooks/set-state-in-effect).
   const loadList = useCallback(
     (cursor?: string) => {
+      listAbortRef.current?.abort()
+      const controller = new AbortController()
+      listAbortRef.current = controller
       const params = new URLSearchParams()
       if (statusFilter) params.set("status", statusFilter)
       if (cursor) params.set("cursor", cursor)
       const qs = params.toString()
-      return fetch(`/api/myra/operator/cases${qs ? `?${qs}` : ""}`, { cache: "no-store" })
+      return fetch(`/api/myra/operator/cases${qs ? `?${qs}` : ""}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      })
         .then(async (res) => {
           if (!res.ok) await readError(res)
           const body = (await res.json()) as {
             data?: CaseRow[] | { cases?: CaseRow[]; nextCursor?: string | null }
           }
+          if (controller.signal.aborted) return
           const data = body.data
           const page = Array.isArray(data) ? data : (data?.cases ?? [])
           setNextCursor(Array.isArray(data) ? null : (data?.nextCursor ?? null))
@@ -126,10 +139,12 @@ export function SupportInbox() {
           setListError(null)
         })
         .catch((e) => {
+          if (controller.signal.aborted) return
           setListError(e instanceof Error ? e.message : "Could not load cases.")
           if (!cursor) setRows([])
         })
         .finally(() => {
+          if (controller.signal.aborted) return
           setLoadingList(false)
           setLoadingMore(false)
         })
@@ -138,28 +153,41 @@ export function SupportInbox() {
   )
 
   const loadDetail = useCallback((id: string) => {
-    return fetch(`/api/myra/operator/cases/${id}`, { cache: "no-store" })
+    detailAbortRef.current?.abort()
+    const controller = new AbortController()
+    detailAbortRef.current = controller
+    return fetch(`/api/myra/operator/cases/${id}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
       .then(async (res) => {
         if (!res.ok) await readError(res)
         const body = (await res.json()) as {
           data?: { case: CaseDetail; replies: CaseReply[] }
         }
+        if (controller.signal.aborted) return
         setDetail(body.data ?? null)
         setDetailError(null)
       })
       .catch((e) => {
+        if (controller.signal.aborted) return
         setDetailError(e instanceof Error ? e.message : "Could not load that case.")
         setDetail(null)
       })
-      .finally(() => setLoadingDetail(false))
+      .finally(() => {
+        if (controller.signal.aborted) return
+        setLoadingDetail(false)
+      })
   }, [])
 
   useEffect(() => {
     void loadList()
+    return () => listAbortRef.current?.abort()
   }, [loadList])
 
   useEffect(() => {
     if (selectedId) void loadDetail(selectedId)
+    return () => detailAbortRef.current?.abort()
   }, [selectedId, loadDetail])
 
   const selectCase = useCallback((id: string | null) => {

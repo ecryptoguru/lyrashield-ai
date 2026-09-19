@@ -75,22 +75,25 @@ interface ProviderCancellation {
 async function reconcileRescheduledOriginals(
   db: MyraDb
 ): Promise<{ count: number; cancellations: ProviderCancellation[] }> {
-  const replacements = await db.demoBooking.findMany({
-    where: { status: "CONFIRMED", rescheduledFromId: { not: null } },
-    select: { rescheduledFromId: true },
-  })
-  const originalIds = [
-    ...new Set(
-      replacements
-        .map((r) => r.rescheduledFromId)
-        .filter((id): id is string => typeof id === "string")
-    ),
-  ]
-  if (originalIds.length === 0) return { count: 0, cancellations: [] }
-  const stale = await db.demoBooking.findMany({
-    where: { id: { in: originalIds }, status: { in: ["CONFIRMED", "HELD"] } },
-    select: { id: true, providerEventId: true },
-  })
+  // Bound outstanding work, not historical replacements. Selecting the first
+  // 100 replacement rows would revisit already-canceled originals forever and
+  // starve later bookings. EXISTS preserves the reschedule link while limiting
+  // each sweep to originals that still need reconciliation.
+  const stale = await db.$queryRaw<Array<{ id: string; providerEventId: string | null }>>(
+    Prisma.sql`
+      SELECT original.id, original."providerEventId"
+      FROM "demo_bookings" AS original
+      WHERE original.status IN ('CONFIRMED', 'HELD')
+        AND EXISTS (
+          SELECT 1
+          FROM "demo_bookings" AS replacement
+          WHERE replacement."rescheduledFromId" = original.id
+            AND replacement.status = 'CONFIRMED'
+        )
+      ORDER BY original."createdAt" ASC, original.id ASC
+      LIMIT 100
+    `
+  )
   const now = new Date()
   for (const original of stale) {
     await db.demoBooking.update({

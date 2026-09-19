@@ -1,6 +1,6 @@
 # LyraShield AI — Litepaper
 
-**Version 1.0.0 — 2026-09-12**
+## Version 1.0.0 — 2026-09-12
 
 > A short, public overview of LyraShield AI: what it does, who it is for, and how it earns trust. For the full product narrative see [`whitepaper.md`](./whitepaper.md); for the technical specification see [`yellowpaper.md`](./yellowpaper.md).
 

@@ -8,16 +8,19 @@ description: Run LyraShield security scans, review findings, and drive the fix â
 1. Run lyrashield_check_diff on the staged changes to identify security issues introduced by this work item.
 2. Review any findings before committing.
 3. If findings are reported, address them or document why each is acceptable.
+
 ## Post-fix verification
 
 1. After applying a fix for a security finding, run lyrashield_verify_fix with the finding ID.
 2. Poll the returned retest scan to a terminal state, then include its outcome and scan reference in the PR description.
 3. Call the result independently verified only when a separate independent-verification receipt exists.
+
 ## Scope limits
 
 - Only run security checks against targets that are owned by this workspace and explicitly listed as authorized targets in the LyraShield settings.
 - Do not run checks on files or URLs you do not have permission to scan.
 - Do not run scans against third-party URLs or repositories without explicit authorization.
+
 ## Honesty clause
 
 A clean check result does not guarantee the absence of all vulnerabilities. A passing check is not a guarantee of zero vulnerabilities.

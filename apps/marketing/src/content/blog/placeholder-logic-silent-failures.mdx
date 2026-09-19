@@ -18,7 +18,7 @@ faq:
   - q: "Why can mocked tests miss fake success?"
     a: "A mock can reproduce the same assumption as the implementation and bypass the real database, queue, provider, or transaction boundary. Keep focused unit tests, then cross the real boundary with synthetic data."
   - q: "What counts as retest evidence?"
-    a: "Record the changed commit, clean environment, command or request, expected invariant, observed response, durable state, and limitations. A passing retest supports only the behavior and boundaries it exercised."
+    a: "Record the changed commit, clean environment, command, or request, expected invariant, observed response, durable state, and limitations. A passing retest supports only the behavior and boundaries it exercised."
 ---
 
 **Direct answer:** Search generated code for stubs, constant success values, empty catch blocks, invented defaults, and calculations without boundary tests. Then perform the real state change and inspect its durable result rather than stopping at its response. Pattern checks help, but silent business failures usually need domain assertions, controlled failures, and fresh runtime evidence.

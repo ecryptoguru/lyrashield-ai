@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { prisma } from "@lyrashield/db"
 import { getCachedSession } from "@/lib/cache"
 import { PageHeader } from "@/components/page-header"
+import { LocalTime } from "@/components/local-time"
 
 export const metadata = {
   title: "Commissions — Affiliate Dashboard — LyraShield AI",
@@ -87,9 +88,11 @@ export default async function AffiliateCommissionsPage() {
             ) : (
               commissions.map((c) => (
                 <tr key={c.id} className="border-b">
-                  <td className="py-2 pr-4">{new Date(c.earnedAt).toLocaleDateString()}</td>
                   <td className="py-2 pr-4">
-                    {c.availableAt ? new Date(c.availableAt).toLocaleDateString() : "—"}
+                    <LocalTime value={c.earnedAt} />
+                  </td>
+                  <td className="py-2 pr-4">
+                    {c.availableAt ? <LocalTime value={c.availableAt} /> : "—"}
                   </td>
                   <td className="py-2 pr-4">{c.rateBps / 100}%</td>
                   <td className="py-2 pr-4">

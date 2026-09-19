@@ -18,7 +18,7 @@ faq:
     a: "Supports OAuth with auth:oauth and openclaw mcp login. Tokens stored under OpenClaw state, not in config literals."
 ---
 
-OpenClaw is a local-first personal AI gateway with 29 chat channels, client and server MCP, and a managed registry via openclaw mcp CLI and Control UI. To ship apps securely with OpenClaw, pin ~/.openclaw/openclaw.json as security policy, set toolFilter allowlists and timeouts per server, validate channel inputs that can trigger repo writes, use TLS or mTLS for remote transports, and enforce diff-aware SARIF gates with human review on auth and payment paths.
+OpenClaw is a local-first personal AI gateway with 29 chat channels, client, and server MCP, and a managed registry via openclaw mcp CLI and Control UI. To ship apps securely with OpenClaw, pin ~/.openclaw/openclaw.json as security policy, set toolFilter allowlists and timeouts per server, validate channel inputs that can trigger repo writes, use TLS or mTLS for remote transports, and enforce diff-aware SARIF gates with human review on auth and payment paths.
 
 Record the exact OpenClaw version, enabled channels, MCP server definitions, tool filters, and authentication method with each acceptance run. A successful static config check establishes syntax only; use `doctor --probe` for connection evidence and retain the resulting scope separately from the application security assessment.
 
@@ -163,7 +163,6 @@ Target PR gate:
 | 5   | Channel input validation                           | Gateway, 29 channels                                                   | Chat message triggers repo write/push           |
 | 6   | Diff-aware SARIF gate + CODEOWNERS                 | `.github/workflows/*`, `CODEOWNERS`                                    | AI auth bypass ships, no owner on auth file     |
 
-
 ## Why pair OpenClaw with LyraShield
 
 OpenClaw gateway configuration should be reviewed as executable access policy. The [OWASP Top 10](https://owasp.org/www-project-top-ten/) supplies a baseline for authorization and injection review, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) covers hardcoded credential exposure, and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) defines MCP transport and tool contracts. These references are not a security guarantee. They help reviewers inspect which channels and tools can act, where credentials resolve, and whether a release record binds the configuration revision to its stated limits. Repeat this review after changing a gateway, channel, skill, MCP server, or approval boundary.
@@ -172,7 +171,7 @@ Keep that record scoped to the gateway revision reviewed.
 
 OpenClaw gives you local-first gateway power: one control plane for 29 channels, client-and-server MCP, and a verified registry with `doctor`/`probe`. LyraShield is the narrow verifier on that gateway: release assurance for AI-built apps with `target, review, evidence, fix, retest, report` and SCA and secrets feeding SARIF, not another general-purpose agent. LyraShield separates detection from proof: every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-The integration surface matches OpenClaw primitives: local `npx -y @lyrashield/mcp@0.2.8` for developer machines and remote `https://app.lyrashieldai.com/api/mcp` with revocable authentication, both behind `toolFilter` and `requestTimeoutMs`. The combination is about channel-to-release integrity: least-privilege MCP inspection, an advisory diff-aware CI gate, and a separate recorded retest. The platform is live in open beta; scans, findings and evidence, approval-gated fix proposals, retests, reports, and billing are implemented. Production availability remains bounded by release gates, and automatic server-generated Fix PR execution is not enabled.
+The integration surface matches OpenClaw primitives: local `npx -y @lyrashield/mcp@0.2.8` for developer machines and remote `https://app.lyrashieldai.com/api/mcp` with revocable authentication, both behind `toolFilter` and `requestTimeoutMs`. The combination is about channel-to-release integrity: least-privilege MCP inspection, an advisory diff-aware CI gate, and a separate recorded retest. The platform is live in open beta; scans, findings, and evidence, approval-gated fix proposals, retests, reports, and billing are implemented. Production availability remains bounded by release gates, and automatic server-generated Fix PR execution is not enabled.
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
 

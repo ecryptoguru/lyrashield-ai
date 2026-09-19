@@ -111,7 +111,7 @@ service firebase.storage {
 
 This rule constrains path, size, and declared content type. It does not prove the bytes are a safe image, remove active content, generate a safe filename, or scan malware. If files are later rendered inline or processed by other systems, add a quarantine and server-side inspection workflow. The [secure file-upload guide](/blog/secure-file-uploads-ai-apps) covers those downstream checks.
 
-Also test overwrite and delete separately. A rule that allows `write` may permit both creation and replacement. If objects should be immutable, express and test that condition rather than relying on the UI to avoid overwrites.
+Also test overwrite and delete separately. A rule that allows `write` may permit both creation and replacement. If objects should be immutable, express, and test that condition rather than relying on the UI to avoid overwrites.
 
 ## Deploy rules as versioned code
 

@@ -22,7 +22,7 @@ faq:
     a: "Not by itself. Server Components keep execution off the browser, but they must still authenticate the caller, authorize the requested resource, and avoid passing excessive data into Client Components."
 ---
 
-**Direct answer:** Treat every callable Server Action and Route Handler as an API. Keep secrets and database access in server-only modules, authenticate and authorize close to the data source, validate every argument, return minimal data-transfer objects, and test endpoints directly as signed-out, allowed, and cross-account callers. Proxy, hidden buttons, and Server Components do not replace resource authorization.
+**Direct answer:** Treat every callable Server Action and Route Handler as an API. Keep secrets and database access in server-only modules, authenticate, and authorize close to the data source, validate every argument, return minimal data-transfer objects, and test endpoints directly as signed-out, allowed, and cross-account callers. Proxy, hidden buttons, and Server Components do not replace resource authorization.
 
 _Next.js App Router data-security, authentication, Proxy, and environment-variable guidance was reviewed against official documentation on July 17, 2026. The current Next.js documentation uses Proxy for the feature previously called Middleware._
 

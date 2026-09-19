@@ -216,7 +216,7 @@ export function ProjectsClient({
         </form>
       )}
 
-      {projects.length === 0 ? (
+      {projects.length === 0 && !showForm ? (
         <EmptyState
           icon={FolderKanban}
           title="No projects yet"

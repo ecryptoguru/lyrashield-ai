@@ -71,7 +71,7 @@ faq:
 - You need a fast, compliance-oriented AI pentest with SOC 2 / ISO 27001 evidence
 - You want published, per-developer pricing with a free tier
 
-## See the evidence approach in action.
+## See the evidence approach in action
 
 Read the methodology or try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 

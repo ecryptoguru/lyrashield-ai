@@ -103,7 +103,7 @@ const jsonLd: unknown[] = [
     idempotency key makes retries return the stored operation instead of repeating it.
   </p>
   <p>
-    Requests outside the recorded grant, expired or revoked connections and lost workspace access
+    Requests outside the recorded grant, expired, or revoked connections and lost workspace access
     never inherit delegated permission; out-of-grant delegated calls are denied. A mutating call
     authenticated with an API key receives a connect_required response pointing at OAuth connect.
     Exact-input approval remains only for legacy nondelegated hosted credentials. LyraShield-generated

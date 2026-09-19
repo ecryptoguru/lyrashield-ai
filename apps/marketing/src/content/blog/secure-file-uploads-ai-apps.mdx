@@ -87,7 +87,7 @@ Inspect magic bytes or content signatures with a maintained library, but do not 
 
 Require agreement between the allowed extension, detected format, and successful parser. If the endpoint accepts JPEG and PNG, reject a valid PDF renamed to `.png` even when both formats are acceptable elsewhere.
 
-For images, decode and rewrite to a known output format where product requirements permit. Enforce pixel dimensions and frame count as well as compressed bytes. Strip unnecessary metadata. Rewriting reduces ambiguity but does not prove the original file harmless for every other parser.
+For images, decode, and rewrite to a known output format where product requirements permit. Enforce pixel dimensions and frame count as well as compressed bytes. Strip unnecessary metadata. Rewriting reduces ambiguity but does not prove the original file harmless for every other parser.
 
 ## Generate names and isolate storage
 
@@ -112,7 +112,7 @@ Separate quarantine from accepted storage or use an explicit state that delivery
 
 ## Scan, rewrite, and fail closed
 
-Antivirus and content-disarm tools can reduce risk for supported formats. Record the engine, signature or rules version, result, time, and any limitation needed for operations. A timeout, unsupported format, or unavailable scanner is not a clean result.
+Antivirus and content-disarm tools can reduce risk for supported formats. Record the engine, signature, or rules version, result, time, and any limitation needed for operations. A timeout, unsupported format, or unavailable scanner is not a clean result.
 
 Decide whether the upload waits, remains quarantined for asynchronous processing, or fails. Never publish first and rely on later deletion.
 

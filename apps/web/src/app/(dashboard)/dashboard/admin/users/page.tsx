@@ -5,6 +5,7 @@ import { requirePlatformAdminIdentity } from "@lyrashield/auth/server"
 import { Badge, buttonVariants } from "@lyrashield/ui"
 import { PageHeader } from "@/components/page-header"
 import { EmailText } from "@/components/email-text"
+import { LocalTime } from "@/components/local-time"
 import { getPlatformAdminUsers, parseAdminCursor } from "@/lib/platform-admin-lists"
 
 export const dynamic = "force-dynamic"
@@ -65,7 +66,7 @@ export default async function PlatformAdminUsersPage({
                 <td className="px-4 py-3">{user.twoFactorEnabled ? "Enabled" : "Not enabled"}</td>
                 <td className="px-4 py-3">
                   <time dateTime={user.createdAt.toISOString()}>
-                    {user.createdAt.toLocaleDateString()}
+                    <LocalTime value={user.createdAt} />
                   </time>
                 </td>
               </tr>

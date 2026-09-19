@@ -117,7 +117,7 @@ Read-only is a verb, not a risk rating. A file reader can expose an environment 
 
 Give each read tool a server-owned root and field allowlist. Resolve paths after normalization, reject symbolic links that leave the root, and cap bytes, rows, pages, and execution time. For databases, offer named queries or constrained filters rather than arbitrary SQL. For SaaS tools, map the authenticated user to approved accounts and resources on the server.
 
-Return a receipt with the resource class, snapshot or version, truncation state, and policy decision. Do not echo bearer tokens, cookies, connection strings, or unrestricted upstream errors. If the tool truncates a result, make that limitation visible so the model does not describe a partial result as complete.
+Return a receipt with the resource class, snapshot, or version, truncation state, and policy decision. Do not echo bearer tokens, cookies, connection strings, or unrestricted upstream errors. If the tool truncates a result, make that limitation visible so the model does not describe a partial result as complete.
 
 Test disclosure boundaries with two synthetic tenants and files at the edge of the approved root. A passing read test covers those fixtures and policies. It does not prove that every backend field, alias, link, or pagination path is constrained.
 
@@ -131,7 +131,7 @@ Then place an inert canary instruction in a tool result. The result may ask the 
 
 These tests cover named tools, policies, identities, and protocol versions. They cannot prove that every client renders approval correctly, that a trusted server is free of malicious code, or that business authorization is complete.
 
-The current official [MCP security best-practices guide](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices) covers token theft, confused-deputy risks, session and consent boundaries, and tool changes. Use it with the exact versioned [tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) and [authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization) specifications implemented by the system.
+The current official [MCP security best-practices guide](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices) covers token theft, confused-deputy risks, session, and consent boundaries, and tool changes. Use it with the exact versioned [tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) and [authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization) specifications implemented by the system.
 
 The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can record whether tool scope, token ownership, and approval rules have named owners. It does not connect to an MCP server or verify its permissions.
 

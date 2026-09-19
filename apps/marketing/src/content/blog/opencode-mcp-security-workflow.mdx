@@ -12,7 +12,7 @@ faq:
   - q: "Does OpenCode support remote MCP with Bearer?"
     a: "Yes. Use type remote with URL https://app.lyrashieldai.com/api/mcp and pass LYRASHIELD_API_KEY as Bearer via env. The same pattern is used in the GitHub Action."
   - q: "What matches LyraShield v1 scope?"
-    a: "Scans, SCA, secrets, findings and evidence, approval-gated fix proposals, retests, reports, billing, MCP, and the local GitHub Action are implemented. Automatic server-generated Fix PR execution and live paid activation are not enabled."
+    a: "Scans, SCA, secrets, findings, and evidence, approval-gated fix proposals, retests, reports, billing, MCP, and the local GitHub Action are implemented. Automatic server-generated Fix PR execution and live paid activation are not enabled."
   - q: "Where does OpenCode read MCP config from?"
     a: "OpenCode reads named servers directly under the root mcp object in opencode.json. Local entries use type local, a command array, and environment; remote entries use type remote, url, and headers. Use OpenCode's {env:NAME} substitution for secrets."
 ---
@@ -136,13 +136,13 @@ This codifies the same behavior you wired in Zed and Codex flows. For team rollo
 
 The agent rules snippet matters because OpenCode loads rules from your rules directory into every session context, so the security loop becomes default behavior. Each bullet maps to a stage in Target to Scan to Evidence State to Fix Proposal to Retest to Report. The "allow only findings with evidence states to block" line prevents the agent from halting on heuristic noise that LyraShield already filtered out. Treat the Fix Proposal bullet as approval gated fix proposals requiring review, not unattended fixes, until that capability ships.
 
-| Config key    | Purpose              | Example                                          |
-| ------------- | -------------------- | ------------------------------------------------ |
-| type          | Transport mode       | local or remote                                  |
-| command       | Launch local MCP     | [npx, -y, @lyrashield/mcp@0.2.8]                 |
-| environment   | Inject local secrets | LYRASHIELD_API_KEY via `{env:}`                  |
-| enabled       | Toggle server        | true to enable                                   |
-| url, headers  | Remote endpoint auth | https://app.lyrashieldai.com/api/mcp with Bearer |
+| Config key   | Purpose              | Example                                          |
+| ------------ | -------------------- | ------------------------------------------------ |
+| type         | Transport mode       | local or remote                                  |
+| command      | Launch local MCP     | [npx, -y, @lyrashield/mcp@0.2.8]                 |
+| environment  | Inject local secrets | LYRASHIELD_API_KEY via `{env:}`                  |
+| enabled      | Toggle server        | true to enable                                   |
+| url, headers | Remote endpoint auth | https://app.lyrashieldai.com/api/mcp with Bearer |
 
 ## 7. Why pair OpenCode with LyraShield
 

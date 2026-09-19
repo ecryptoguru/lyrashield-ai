@@ -17,7 +17,7 @@ export const SCAN_PRESETS = {
   CODE_REVIEW: {
     label: "Code review",
     description: "Broader repository and dependency analysis.",
-    hint: "Full repo scan with dependency and risky-pattern checks.",
+    hint: "Dependency and risky-pattern checks across the repository.",
     goal: "TEST_APP",
     mode: "STANDARD",
   },

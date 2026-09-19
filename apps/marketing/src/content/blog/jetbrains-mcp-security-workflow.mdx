@@ -100,7 +100,7 @@ The runner-local Action needs no LyraShield API key. It emits and uploads SARIF 
 
 ## 6. Add agent rules for continuous guardrails
 
-jetbrains supports project rules that agent reads each task, baking security into definition of done without relying on memory. Add rule forcing LyraShield scan before marking feature complete, covering user input, auth, file upload, secrets or external fetch, and include retest.
+jetbrains supports project rules that agent reads each task, baking security into definition of done without relying on memory. Add rule forcing LyraShield scan before marking feature complete, covering user input, auth, file upload, secrets, or external fetch, and include retest.
 
 Location varies. Cursor uses .cursor/rules/security.mdc with globs, Claude Code uses CLAUDE.md, Windsurf uses .windsurf/rules/security.md, VS Code uses .github/copilot-instructions.md, JetBrains uses .jetbrains/ai-assistant/rules/security.md. Choose location traveling with repo so new clones get same expectation.
 
@@ -122,10 +122,10 @@ Test rule by scaffolding endpoint accepting query param and confirming scan trig
 
 Jetbrains speeds AI development but can repeat patterns [OWASP Top 10](https://owasp.org/www-project-top-ten/) warns about such as trusting generated SQL or leaving debug endpoints enabled. LyraShield adds verification without changing UX, exposing scan and findings as native tools agent knows how to call.
 
-The current product ships MCP, bounded scans, findings and evidence, approval-gated fix proposals, retests, reports, SCA, secrets, and the runner-local SARIF gate. The local Action is advisory and does not create hosted evidence states; use a recorded scan and retest when assurance evidence is required. Advisory dependency matches use [OSV](https://osv.dev/) data and still require resolved-version review.
+The current product ships MCP, bounded scans, findings, and evidence, approval-gated fix proposals, retests, reports, SCA, secrets, and the runner-local SARIF gate. The local Action is advisory and does not create hosted evidence states; use a recorded scan and retest when assurance evidence is required. Advisory dependency matches use [OSV](https://osv.dev/) data and still require resolved-version review.
 
 Local feedback plus CI gate creates defense in depth matching how AI apps evolve, many small edits per hour. For policy framing revisit [vibe coding security guide](/blog/vibe-coding-security-guide) and [NIST SSDF](https://csrc.nist.gov/projects/ssdf). External refs such as [CWE Top 25](https://cwe.mitre.org/top25/) and [OSV database](https://osv.dev/) provide standardized ids for prioritization, making triage consistent.
 
-Close loop by tracking findings as tasks, rerunning scans after fixes to confirm resolution, and ensuring SARIF appears in GitHub code scanning with file and line mapping. Run [AI app security checklist](/tools/ai-app-security-checklist) before launch to cover injection, auth, secrets, headers and supply chain in one pass.
+Close loop by tracking findings as tasks, rerunning scans after fixes to confirm resolution, and ensuring SARIF appears in GitHub code scanning with file and line mapping. Run [AI app security checklist](/tools/ai-app-security-checklist) before launch to cover injection, auth, secrets, headers, and supply chain in one pass.
 
 When ready to centralize results across jetbrains sessions and pull requests with dashboards and retention, [create an account at LyraShield AI](https://lyrashieldai.com) for early access to team policies. LyraShield is designed to grow with your jetbrains workflow, bringing findings with evidence states, proposals requiring review, and retest evidence into existing loop without claiming hands off merges.

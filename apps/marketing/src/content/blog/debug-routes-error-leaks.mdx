@@ -21,7 +21,7 @@ faq:
     a: "No. Map expected failures to stable, appropriate status codes such as 400, 401, 403, 404, or 409. Reserve 500-class responses for server failures and keep the public body free of internal details."
 ---
 
-**Direct answer:** Disable development debuggers in production, remove or authenticate convenience routes, and send every unexpected exception through a central mapper. Return a stable public message with an opaque correlation ID. Keep stack traces and request context in access-controlled logs after redaction. Generic errors reduce disclosure, but they do not fix the underlying fault or replace monitoring.
+**Direct answer:** Disable development debuggers in production, remove, or authenticate convenience routes, and send every unexpected exception through a central mapper. Return a stable public message with an opaque correlation ID. Keep stack traces and request context in access-controlled logs after redaction. Generic errors reduce disclosure, but they do not fix the underlying fault or replace monitoring.
 
 A failed request should tell the caller enough to recover without teaching them how the service is assembled. Raw stack traces do the opposite. They can reveal framework versions, source paths, table names, query structure, hostnames, and fragments of data that happened to be present when the exception was raised.
 

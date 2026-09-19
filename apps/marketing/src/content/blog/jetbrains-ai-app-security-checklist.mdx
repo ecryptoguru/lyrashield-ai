@@ -11,7 +11,7 @@ faq:
   - q: How does JetBrains AI Assistant handle MCP servers securely
     a: JetBrains AI Assistant reads MCP config as JSON and spawns local servers via stdio or connects to remote with TLS and Bearer auth. Lock it by allow listing only required tools, disabling code mode when unused, and storing tokens in env vars not in JSON.
   - q: Do I need LyraShield to use JetBrains AI Assistant safely
-    a: You can ship safer code with disciplined review and open source scanners. LyraShield adds agent-native verification, SCA and secret checks, plus a shipped diff-aware GitHub Action gate.
+    a: You can ship safer code with disciplined review and open source scanners. LyraShield adds agent-native verification, SCA, and secret checks, plus a shipped diff-aware GitHub Action gate.
   - q: What is the fastest win for JetBrains AI Assistant security
     a: Rotate leaked secrets, enforce branch protection with SARIF upload, and restrict MCP tool permissions to read only where possible to reduce blast radius.
   - q: Where does JetBrains AI Assistant store MCP server config?
@@ -67,7 +67,7 @@ Fourth, commit project scoped configs and add a CI check that validates JSON sch
 
 Document every MCP server in a central inventory with purpose, trust level, and owner. Rotate keys monthly and log tool calls where your IDE allows it. Require two reviewers for any change to MCP config.
 
-## Secrets, dependencies and prompt injection hardening
+## Secrets, dependencies, and prompt injection hardening
 
 AI assistants accelerate copy paste of sample code that contains placeholder tokens or private URLs. Scan every AI diff for secrets before commit. Use gitleaks or cloud secret scanning and block merges on high confidence findings. CWE 798 and CWE 200 cover credential exposure and sensitive data leakage patterns that appear often in generated code [CWE 200 for sensitive data exposure](https://cwe.mitre.org/data/definitions/200.html).
 
@@ -105,7 +105,7 @@ Supply chain hygiene matters because AI generated code often pulls transitive de
 
 LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](https://lyrashieldai.com). Our core loop is target, review, evidence, fix, retest, report, built for teams shipping with JetBrains AI Assistant and other AI coding tools. We separate detection from proof: findings come with evidence you can verify, and every result is an immutable assurance record tied to the exact commit and scan.
 
-The platform is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.8` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
+The platform is live in open beta with open registration. The scan pipeline, findings, and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.8` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 LyraShield sits after your JetBrains AI Assistant drafts and before merge, giving you verified findings instead of noisy rescans. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval, and retest runs the same scanners on the fix commit to confirm remediation.
 

@@ -1,21 +1,21 @@
 ---
 title: Hermes Agent App Security Checklist
-description: 'Harden Hermes agent: config, skill supply chain, MCP tool filtering, mTLS, and CI gates for AI-built apps.'
-pubDate: '2026-07-30'
+description: "Harden Hermes agent: config, skill supply chain, MCP tool filtering, mTLS, and CI gates for AI-built apps."
+pubDate: "2026-07-30"
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-19
 faq:
-  - q: 'Where is Hermes MCP config?'
-    a: '~/.hermes/config.yaml under mcp_servers. Secrets go in ~/.hermes/.env. Use /reload-mcp after changes.'
-  - q: 'How do I filter MCP tools in Hermes?'
-    a: 'Use tools.include whitelist or tools.exclude blacklist, plus resources: false/prompts: false to disable wrappers.'
-  - q: 'How do I add LyraShield to Hermes?'
-    a: 'Add mcp_servers.lyrashield with command npx -y @lyrashield/mcp@0.2.8 for stdio or url https://app.lyrashieldai.com/api/mcp with Bearer header for remote.'
-  - q: 'Do self-improving skills create security risk?'
-    a: 'Skills that write skills expand attack surface. Review skill diffs, pin versions, and require approval for skill creation.'
+  - q: "Where is Hermes MCP config?"
+    a: "~/.hermes/config.yaml under mcp_servers. Secrets go in ~/.hermes/.env. Use /reload-mcp after changes."
+  - q: "How do I filter MCP tools in Hermes?"
+    a: "Use tools.include whitelist or tools.exclude blacklist, plus resources: false/prompts: false to disable wrappers."
+  - q: "How do I add LyraShield to Hermes?"
+    a: "Add mcp_servers.lyrashield with command npx -y @lyrashield/mcp@0.2.8 for stdio or url https://app.lyrashieldai.com/api/mcp with Bearer header for remote."
+  - q: "Do self-improving skills create security risk?"
+    a: "Skills that write skills expand attack surface. Review skill diffs, pin versions, and require approval for skill creation."
 ---
 
 Hermes from Nous Research is a self-improving, runs-anywhere agent with model-agnostic backends and first-class MCP, so its config surface needs least-privilege controls. This checklist is the hardening path grounded in Hermes's real `~/.hermes/config.yaml` shape and the [Hermes integration docs](/docs/integrations/hermes). Start with the [vibe coding security guide](/blog/vibe-coding-security-guide) for the shared baseline, then apply the Hermes controls below.
@@ -27,11 +27,11 @@ Hermes stores non-secret settings in `~/.hermes/config.yaml`, secrets in `~/.her
 ```yaml
 mcp_servers:
   <name>:
-    command: "..."   # stdio
+    command: "..." # stdio
     args: []
     env: {}
     # OR
-    url: "..."       # HTTP
+    url: "..." # HTTP
     headers: {}
     ssl_verify: true
     client_cert: "/path/to/cert.pem"
@@ -47,6 +47,7 @@ mcp_servers:
 ```
 
 Actions:
+
 - Commit nothing from `~/.hermes/` except a template. Track `config.yaml` shape in-repo as `hermes/config.yaml.example` with `enabled: false` defaults.
 - Never place `LYRASHIELD_API_KEY` in `config.yaml` directly. Use `${VAR}` or `${env:VAR}` referencing `~/.hermes/.env`, both resolve identically per Hermes docs. Literal tokens in YAML leak in dotfile backups.
 - Version `SOUL.md` changes. Identity edits change tool-use obedience. Treat `SOUL.md` edits as security-relevant PRs.
@@ -56,6 +57,7 @@ Actions:
 Hermes's USP is self-improving skills, agents that create sub-skills via `skill_manage`. That is recursive code generation with persistent memory. Without gating, a skill can add an MCP server, broaden `tools.include`, and grant itself `supports_parallel_tool_calls: true`.
 
 Baseline:
+
 - Gate skill creation. Require explicit command or prompt approval, track `~/.hermes/skills/` in a review branch, and diff skill code like application code.
 - Pin skill versions. If a skill installs an MCP server from the catalog, pin the catalog entry and filter immediately.
 - Disable resource/prompt wrappers unless needed. Even if `resources: true`, Hermes only registers utility tools if the MCP session exposes them, but leaving them enabled widens exfiltration surface. Default to:
@@ -79,6 +81,7 @@ Fastest path: run `npx lyrashield init`, which detects Hermes and writes its MCP
 LyraShield integration, matching [hermes integration guide](/docs/integrations/hermes):
 
 Stdio, minimal, local-first:
+
 ```yaml
 mcp_servers:
   lyrashield:
@@ -95,6 +98,7 @@ mcp_servers:
 ```
 
 Remote, centralized revocation with Bearer:
+
 ```yaml
 mcp_servers:
   lyrashield:
@@ -102,7 +106,7 @@ mcp_servers:
     headers:
       Authorization: "Bearer ${env:LYRASHIELD_API_KEY}"
     timeout: 120
-    auth: oauth  # if your org proxies with OAuth; else omit
+    auth: oauth # if your org proxies with OAuth; else omit
     tools:
       exclude: [delete_*]
       resources: false
@@ -110,6 +114,7 @@ mcp_servers:
 ```
 
 Hardening checklist:
+
 - Whitelist, don't blacklist for sensitive servers. `include` wins over `exclude`, use it for any server with write authority.
 - Set `keepalive_interval` below server session TTL for long runs.
 - For private endpoints, pin `ssl_verify` to a CA bundle PEM path and use `client_cert` + `client_key` for mTLS per the reference. Do not set `ssl_verify: false` outside ephemeral lab envs.
@@ -122,6 +127,7 @@ Compare with [amp-app-security-checklist](/blog/amp-app-security-checklist) for 
 Hermes is explicit about backends: local, Docker, remote, provider-agnostic via auxiliary models routing to your main model unless configured. Each backend changes data residency and log handling (`~/.hermes/logs/` auto-redacts secrets).
 
 Actions:
+
 - Declare allowed backends in `config.yaml` (`terminal.backend`, provider list) and block others via org policy.
 - Route auxiliary tasks (image analysis, web summarization) to cheap, logged providers if your main reasoning model is expensive and privacy-sensitive.
 - For remote MCP, verify `connect_timeout` bounds the `initialize` handshake. Set lower than tool `timeout` to fail fast on unreachable verifiers.
@@ -131,20 +137,20 @@ Actions:
 Hermes can iterate quickly across backends, which magnifies the need for deterministic gates. AI-built code skews toward CWE-20, CWE-284 (Improper Access Control), and CWE-798 when agents copy `.env.example` into runtime.
 
 Target PR gate:
+
 - SBOM check: generate CycloneDX for app + skills; see CycloneDX spec at [github.com/CycloneDX/specification](https://github.com/CycloneDX/specification) for component mapping.
 - License + secrets scan on `~/.hermes/skills/` diff and app repo diff. Hermes logs live under `logs/`, ensure CI does not upload them as artifacts with secrets.
 - SCA on lockfile changes agents introduce. Hermes skills that add dependencies must pass the same SCA gate as human contributors.
 - GitHub Action that is diff-aware and SARIF-emitting. LyraShield's shipped Action runs local secret and risky-pattern checks and uploads SARIF; the open-beta platform handles the separate evidence, fix-proposal, retest, and report loop.
 
-| # | Control | Where to Check | Risk If Skipped |
-|---|---------|----------------|-----------------|
-| 1 | Separate `config.yaml` vs `.env` | `~/.hermes/.env`, `${env:VAR}` in YAML | Tokens in dotfile backups, committed secrets |
-| 2 | Skill creation approval | `~/.hermes/skills/`, PR diff for skill files | Recursive skill adds broad MCP server |
-| 3 | Tool allowlist `tools.include` | `mcp_servers.*.tools` | Agent calls destructive MCP tools not intended |
-| 4 | mTLS/PKI pinning | `ssl_verify`, `client_cert`, `client_key` | MITM on private MCP endpoint |
-| 5 | Lifecycle timeouts | `idle_timeout_seconds`, `max_lifetime_seconds`, `timeout` | Hung stdio server holds auth, stale session |
-| 6 | Disable wrappers | `resources: false`, `prompts: false` | Resource exfil via `list_resources` |
-
+| #   | Control                          | Where to Check                                            | Risk If Skipped                                |
+| --- | -------------------------------- | --------------------------------------------------------- | ---------------------------------------------- |
+| 1   | Separate `config.yaml` vs `.env` | `~/.hermes/.env`, `${env:VAR}` in YAML                    | Tokens in dotfile backups, committed secrets   |
+| 2   | Skill creation approval          | `~/.hermes/skills/`, PR diff for skill files              | Recursive skill adds broad MCP server          |
+| 3   | Tool allowlist `tools.include`   | `mcp_servers.*.tools`                                     | Agent calls destructive MCP tools not intended |
+| 4   | mTLS/PKI pinning                 | `ssl_verify`, `client_cert`, `client_key`                 | MITM on private MCP endpoint                   |
+| 5   | Lifecycle timeouts               | `idle_timeout_seconds`, `max_lifetime_seconds`, `timeout` | Hung stdio server holds auth, stale session    |
+| 6   | Disable wrappers                 | `resources: false`, `prompts: false`                      | Resource exfil via `list_resources`            |
 
 ## Why pair Hermes with LyraShield
 

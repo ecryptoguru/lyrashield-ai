@@ -54,13 +54,13 @@ Use LyraShield AI when the decision is specifically about releasing an AI-built 
 
 SonarQube and LyraShield address different moments and produce different artifacts, which is why they coexist well. SonarQube runs continuously and enforces quality across every pull request and build, which is where most code health work happens. LyraShield runs at the release gate and produces the evidence record that supports the ship decision. A team that has SonarQube's quality gate already in place gets daily value from it, and adds LyraShield when the question shifts from code health to release safety.
 
-| Dimension | SonarQube | LyraShield AI |
-|---|---|---|
-| Primary goal | Code quality and security verification | Release assurance with proof for AI-built apps |
-| Detection model | SAST, taint analysis, secrets, 30-plus languages | Agentic pentest plus SCA plus secrets, evidence states |
-| Fix model | AI CodeFix suggestions | Approval-gated fix proposals, retest before close |
-| Agent integration | MCP Server, IDE, CI | MCP inside AI coding agents plus GitHub Action |
-| Output | Quality gate, dashboards, reports | Immutable assurance record, SARIF |
+| Dimension         | SonarQube                                        | LyraShield AI                                          |
+| ----------------- | ------------------------------------------------ | ------------------------------------------------------ |
+| Primary goal      | Code quality and security verification           | Release assurance with proof for AI-built apps         |
+| Detection model   | SAST, taint analysis, secrets, 30-plus languages | Agentic pentest plus SCA plus secrets, evidence states |
+| Fix model         | AI CodeFix suggestions                           | Approval-gated fix proposals, retest before close      |
+| Agent integration | MCP Server, IDE, CI                              | MCP inside AI coding agents plus GitHub Action         |
+| Output            | Quality gate, dashboards, reports                | Immutable assurance record, SARIF                      |
 
 For the detailed breakdown see the [SonarQube comparison page](/compare/sonarqube). If your team uses Windsurf, the [Windsurf security workflow](/blog/windsurf-security-workflow) guide pairs well with either tool.
 

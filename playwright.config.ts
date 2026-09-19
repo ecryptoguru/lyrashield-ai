@@ -22,16 +22,7 @@ export default defineConfig({
       ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
       : undefined,
   },
-  projects: [
-    { name: "chromium", testIgnore: /visual|marketing-/, use: { ...devices["Desktop Chrome"] } },
-    { name: "visual-mobile", testMatch: /visual\/.*\.spec\.ts/, use: { ...devices["iPhone 13"] } },
-    { name: "visual-tablet", testMatch: /visual\/.*\.spec\.ts/, use: { ...devices["iPad Mini"] } },
-    {
-      name: "visual-desktop",
-      testMatch: /visual\/.*\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 1000 } },
-    },
-  ],
+  projects: [{ name: "chromium", testIgnore: /marketing-/, use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command:
       // The standalone Next.js server doesn't load .env, so forward the

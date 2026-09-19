@@ -7,6 +7,7 @@ import { Bot, Plug } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+import { LocalTime } from "@/components/local-time"
 import { Badge, Card, CardContent, CardHeader, CardTitle, buttonVariants } from "@lyrashield/ui"
 
 export const metadata: Metadata = {
@@ -92,15 +93,25 @@ export default async function ConnectionsPage() {
                           {" · "}
                           {health.usability}
                           {" · "}
-                          Connected {new Date(connection.createdAt).toLocaleDateString()}
+                          Connected <LocalTime value={connection.createdAt} />
                           {" · "}
-                          {connection.lastSuccessfulOperationAt
-                            ? `Last used ${new Date(connection.lastSuccessfulOperationAt).toLocaleString()}`
-                            : "No successful operation recorded"}
+                          {connection.lastSuccessfulOperationAt ? (
+                            <>
+                              Last used{" "}
+                              <LocalTime value={connection.lastSuccessfulOperationAt} withTime />
+                            </>
+                          ) : (
+                            "No successful operation recorded"
+                          )}
                           {connection.allTargets ? " · all current and future targets" : ""}
-                          {connection.expiresAt
-                            ? ` · authorization expires ${new Date(connection.expiresAt).toLocaleDateString()}`
-                            : ""}
+                          {connection.expiresAt ? (
+                            <>
+                              {" · authorization expires "}
+                              <LocalTime value={connection.expiresAt} />
+                            </>
+                          ) : (
+                            ""
+                          )}
                         </p>
                       </div>
                       <Badge variant={connectionStatusVariant(health.status)}>

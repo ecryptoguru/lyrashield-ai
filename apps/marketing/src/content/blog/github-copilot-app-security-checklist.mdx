@@ -1,7 +1,7 @@
 ---
 title: GitHub Copilot App Security Checklist for Teams
 description: A security checklist for reviewing GitHub Copilot generated apps covering permissions, secrets, dependencies, and verifiable evidence with LyraShield AI.
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -39,12 +39,12 @@ A checklist run is only useful if you can prove it happened and what it found, s
 
 Wire the checklist into your pull request flow so review cannot be skipped under deadline pressure. Block merge when secrets are found, when a dependency has an unpatched high severity advisory, or when the evidence record is missing. Run the LyraShield GitHub Action on the changed diff so only new risks block the build, not preexisting ones that would otherwise stall every pull request. Surface results in the pull request comment so reviewers see the verdict alongside the suggestion, and require an explicit human acknowledgement before a blocked finding is dismissed. This mirrors how teams apply CI gates generally, as described in the [GitHub Actions security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions). Treat the gate as the last automated checkpoint before a human merges, not as a substitute for reading the diff. When a finding is dismissed, require the reviewer to record why in the evidence record, so the dismissal is auditable later rather than a silent override. Strengthen the gate by tiering the block conditions so a critical secret leak stops the build immediately while a medium severity advisory allows a tracked override with a remediation due date, because an all or nothing gate trains reviewers to dismiss everything just to ship.
 
-| Checklist area | What to review | Gate action |
-| --- | --- | --- |
+| Checklist area               | What to review                               | Gate action             |
+| ---------------------------- | -------------------------------------------- | ----------------------- |
 | Permissions and instructions | Instruction file, enterprise indexing policy | Review like source code |
-| Secrets handling | Suggested keys, tokens, connection strings | Block merge, rotate |
-| Dependencies | New packages, pinned versions, advisories | Block on high severity |
-| Evidence | Scan output linked to commit | Require before merge |
+| Secrets handling             | Suggested keys, tokens, connection strings   | Block merge, rotate     |
+| Dependencies                 | New packages, pinned versions, advisories    | Block on high severity  |
+| Evidence                     | Scan output linked to commit                 | Require before merge    |
 
 ## Why pair GitHub Copilot with LyraShield AI
 

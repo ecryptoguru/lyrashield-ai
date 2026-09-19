@@ -74,7 +74,7 @@ faq:
 
 The LyraShield GitHub Action complements GHAS — it adds diff-aware pattern checks that run in your own runner with no account required, while GHAS provides CodeQL-based analysis.
 
-## Start a check.
+## Start a check
 
 LyraShield AI is live and open for registration — create an account and run your first authorized check through the release-assurance loop: target, review, evidence, fix, retest, report. Prefer to explore first? Read the evidence methodology or try the free browser-local tools.
 

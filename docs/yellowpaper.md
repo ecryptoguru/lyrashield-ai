@@ -1,6 +1,6 @@
 # LyraShield AI — Yellowpaper
 
-**Version 1.0.0 — 2026-09-12**
+## Version 1.0.0 — 2026-09-12
 
 > The technical specification for LyraShield AI: system architecture, scan pipeline, coverage contracts, evidence integrity, tenancy, and distribution interfaces. Public-safe — provider internals, model identifiers, and operational cost data are deliberately excluded. For product narrative see [`whitepaper.md`](./whitepaper.md); for the short overview see [`litepaper.md`](./litepaper.md).
 

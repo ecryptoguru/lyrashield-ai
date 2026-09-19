@@ -8,13 +8,13 @@ A candidate is a user whose `trialStartedAt` is set while the account has neithe
 
 1. Run a dry pass and read the candidate list (ids and created dates only — never emails):
 
-   ```
+   ```bash
    DATABASE_SYSTEM_URL=<system-url> pnpm --filter @lyrashield/db exec tsx scripts/backfill-clear-wrong-trial-claims.ts
    ```
 
 2. Review the `candidates` array. Apply with the explicit confirmation flag:
 
-   ```
+   ```bash
    DATABASE_SYSTEM_URL=<system-url> pnpm --filter @lyrashield/db exec tsx scripts/backfill-clear-wrong-trial-claims.ts --apply=backfill-clear-wrong-trial-claims
    ```
 

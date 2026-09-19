@@ -54,13 +54,13 @@ Use LyraShield AI when the bottleneck is the release decision for an AI-built ap
 
 For teams already running Semgrep, adding LyraShield does not require ripping out existing rules or CI configuration. LyraShield emits SARIF and ships as a GitHub Action, so its findings can appear alongside Semgrep's in the same pull request or code scanning view. The division of labor is straightforward: Semgrep handles continuous, customizable detection that developers trust and can extend, and LyraShield handles the release-assurance run that produces proof and an immutable record. That complementary pattern avoids tool sprawl while giving each tool the job it does best.
 
-| Dimension | Semgrep | LyraShield AI |
-|---|---|---|
-| Primary goal | Pattern detection and custom rules | Release assurance with proof for AI-built apps |
-| Detection model | SAST, SCA, secrets (platform); SAST only (CE) | Agentic pentest plus SCA plus secrets, evidence states |
-| Customization | User-written rules in code-like syntax | Approval-gated fix proposals, retest before close |
-| Agent integration | CLI, IDE plugins, CI | MCP inside AI coding agents plus GitHub Action |
-| Output | SARIF, JSON, PR comments | Immutable assurance record, SARIF |
+| Dimension         | Semgrep                                       | LyraShield AI                                          |
+| ----------------- | --------------------------------------------- | ------------------------------------------------------ |
+| Primary goal      | Pattern detection and custom rules            | Release assurance with proof for AI-built apps         |
+| Detection model   | SAST, SCA, secrets (platform); SAST only (CE) | Agentic pentest plus SCA plus secrets, evidence states |
+| Customization     | User-written rules in code-like syntax        | Approval-gated fix proposals, retest before close      |
+| Agent integration | CLI, IDE plugins, CI                          | MCP inside AI coding agents plus GitHub Action         |
+| Output            | SARIF, JSON, PR comments                      | Immutable assurance record, SARIF                      |
 
 For the detailed breakdown see the [Semgrep comparison page](/compare/semgrep). The [Claude Code security workflow](/blog/claude-code-security-workflow) guide covers how agent-native checks fit alongside traditional scanners.
 
