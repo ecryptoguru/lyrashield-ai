@@ -23,6 +23,10 @@ export interface ScanInput {
   /** Review Changes comparison refs (branch names or full SHAs). */
   baseRef?: string
   headRef?: string
+  /** Existing workspace-scoped scan attachment IDs (uploaded via the
+   * attachments API). The server verifies ownership, freshness, type, and
+   * checksum; host paths are never accepted. */
+  attachmentIds?: string[]
 }
 
 export interface GetScanOptions {

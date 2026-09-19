@@ -30,9 +30,41 @@ export interface ScanData {
     repoFullName: string | null
   } | null
   events: ScanEvent[]
+  /** Allowlisted projection of the immutable execution plan — never the raw
+   * plan blob. Server-derived; absent on scans created before plans existed. */
+  executionPlan: {
+    workflow: string
+    targetType: string
+    depth: string
+    scope: string
+    profileId: string
+    sourceRevision: string | null
+    baseRevision: string | null
+    maxDurationMinutes: number | null
+    maxRequests: number | null
+    attachmentCount: number
+    authorizationRequired: boolean
+    /** Declared capability ids for this run (e.g. engine, sca, secrets). */
+    capabilities: string[]
+  } | null
   integrity: {
     manifestChecksum: string | null
     urlExecution?: Record<string, unknown> | null
+    /** Engine-declared scoped coverage from the sealed manifest — labeled as
+     * engine assertions, never control outcomes. */
+    scopedCoverage?: Record<string, unknown> | null
+    /** Threat-model reference + bounded engine-declared entry previews. */
+    threatModel?: {
+      checksum: string
+      byteLength: number
+      modelCount: number
+      schemaVersion?: string
+      entries?: { target: string; preview: string }[]
+    } | null
+    /** Checksum-verified attachment staging receipt. */
+    attachments?: { count: number; totalBytes: number; manifestChecksum: string } | null
+    /** Bounded ingestion issues recorded while reading engine evidence. */
+    ingestionWarnings?: string[]
     coverage: Array<{
       scanner: string
       controlId: string

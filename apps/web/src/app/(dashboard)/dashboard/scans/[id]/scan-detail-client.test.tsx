@@ -23,6 +23,7 @@ const scan: ScanData = {
   createdAt: "2026-01-01T00:00:00.000Z",
   target: null,
   events: [],
+  executionPlan: null,
   integrity: {
     manifestChecksum: "abc123",
     coverage: [
@@ -77,5 +78,89 @@ describe("scan detail badge labels", () => {
   it("labels verification state through the verification label map", () => {
     expect(html).toContain("Independently verified")
     expect(html).not.toContain(">VERIFIED<")
+  })
+})
+
+describe("scan detail — truthful scope and declared coverage", () => {
+  const plannedScan: ScanData = {
+    ...scan,
+    executionPlan: {
+      workflow: "REVIEW_CHANGES",
+      targetType: "REPO",
+      depth: "QUICK",
+      scope: "DIFF",
+      profileId: "repo-quick",
+      sourceRevision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      baseRevision: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      maxDurationMinutes: 15,
+      maxRequests: null,
+      attachmentCount: 2,
+      authorizationRequired: false,
+      capabilities: ["engine", "secrets", "sca"],
+    },
+    integrity: {
+      ...scan.integrity,
+      scopedCoverage: {
+        entries: [{ id: "scope-1", subject: "src/auth", outcome: "no_issue_found" }],
+        gaps: [{ kind: "unreachable", detail: "vendor/ directory not analyzed" }],
+        completeness: { complete: false, caveats: ["coverage.json declared partial scope"] },
+      },
+      threatModel: {
+        checksum: "c".repeat(64),
+        byteLength: 2048,
+        modelCount: 1,
+        entries: [{ target: "checkout", preview: "Attacker controls cart input" }],
+      },
+      attachments: { count: 2, totalBytes: 4096, manifestChecksum: "d".repeat(64) },
+      ingestionWarnings: ["coverage.json exceeded the entry cap; tail dropped"],
+    },
+  }
+  const plannedHtml = renderToString(
+    <ScanDetailClient scan={plannedScan} findings={[]} scorecard={null} />
+  )
+
+  it("renders the recorded workflow, depth, scope, limits, and attachments", () => {
+    expect(plannedHtml).toContain("Scope and plan")
+    expect(plannedHtml).toContain("Review changes")
+    expect(plannedHtml).toContain("Recorded diff")
+    expect(plannedHtml).toContain("bbbbbbb") // truncated base revision
+    expect(plannedHtml).toContain("Up to 15 minutes")
+    expect(plannedHtml).toContain("2 recorded inputs")
+    // The plan card never carries provider routing or cost internals.
+    expect(plannedHtml).not.toMatch(/maxBudgetUsd|providerCost|USD/)
+  })
+
+  it("renders engine-declared coverage and threat-model entries under disclosure", () => {
+    expect(plannedHtml).toContain("Declared coverage and inputs")
+    expect(plannedHtml).toContain("Requested vs achieved coverage")
+    expect(plannedHtml).toContain("src/auth")
+    expect(plannedHtml).toContain("vendor/ directory not analyzed")
+    expect(plannedHtml).toContain("coverage.json declared partial scope")
+    expect(plannedHtml).toContain("Threat-model assumptions")
+    expect(plannedHtml).toContain("Attacker controls cart input")
+    expect(plannedHtml).toContain("engine&#x27;s own assertions")
+  })
+
+  it("renders the attachment staging receipt and ingestion warnings", () => {
+    expect(plannedHtml).toContain("staged read-only")
+    expect(plannedHtml).toContain("dddddddddddd") // truncated manifest checksum
+    expect(plannedHtml).toContain("evidence ingestion issue")
+  })
+
+  it("names an attachment verification failure instead of a generic crash", () => {
+    const failedHtml = renderToString(
+      <ScanDetailClient
+        scan={{
+          ...scan,
+          status: "FAILED",
+          errorCategory: "SCAN_ATTACHMENT_UNAVAILABLE",
+          errorMessage: "A supporting file could not be verified",
+        }}
+        findings={[]}
+        scorecard={null}
+      />
+    )
+    expect(failedHtml).toContain("Supporting file unavailable")
+    expect(failedHtml).not.toContain("Clean")
   })
 })

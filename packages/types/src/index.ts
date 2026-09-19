@@ -306,6 +306,11 @@ export const CreateScanSchema = z.object({
     .max(255)
     .refine(isValidGitRef, "Invalid Git ref")
     .optional(),
+  // Existing workspace-scoped scan attachment IDs (uploaded via
+  // /api/scans/attachments). The server verifies ownership, status, checksum,
+  // type, and limits before they enter the immutable plan; host paths are
+  // never accepted here.
+  attachmentIds: z.array(z.string().min(1).max(128)).max(20).optional(),
 })
 
 /** Create-scan input with cross-field workflow rules applied. Kept as a
@@ -593,5 +598,6 @@ export type FindingQueryInput = z.infer<typeof FindingQuerySchema>
 export * from "./url-scan-capabilities"
 export * from "./scan-profile"
 export * from "./scan-execution-plan"
+export * from "./scan-attachments"
 export * from "./retest-profile"
 export * from "./plain-language"

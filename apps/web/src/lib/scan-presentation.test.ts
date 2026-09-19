@@ -34,6 +34,37 @@ describe("scan presentation", () => {
       })
     ).toMatchObject({ label: "Minutes exhausted", recoveryAction: "usage" })
   })
+
+  it("names explicit failure causes truthfully — never a clean score", () => {
+    const cases: Array<[string, string]> = [
+      ["NO_ANALYZABLE_CHANGES", "No analyzable changes"],
+      ["SCAN_SOURCE_UNAVAILABLE", "Source unavailable"],
+      ["SCAN_NO_MERGE_BASE", "Source unavailable"],
+      ["RELAY_SCOPE_UNAVAILABLE", "Authorization unavailable"],
+      ["AUTHORIZATION_REVOKED", "Authorization unavailable"],
+      ["EVIDENCE_STORAGE_CONFIGURATION", "Evidence export failed"],
+      ["SCAN_ATTACHMENT_UNAVAILABLE", "Supporting file unavailable"],
+      ["SCAN_ATTACHMENT_CHECKSUM_MISMATCH", "Supporting file unavailable"],
+      ["PROMPT_INJECTION", "Unsupported input"],
+      ["UNSUPPORTED_CHECKS", "Unsupported checks"],
+    ]
+    for (const [errorCategory, label] of cases) {
+      const presentation = getScanPresentation("FAILED", { errorCategory })
+      expect(presentation.label, errorCategory).toBe(label)
+      // Every named failure stays non-assuring — an incomplete scan never
+      // presents as a clean security score.
+      expect(presentation.assuranceAvailable, errorCategory).toBe(false)
+    }
+  })
+
+  it("keeps queued and running states non-assuring", () => {
+    for (const status of ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"]) {
+      expect(getScanPresentation(status).assuranceAvailable).toBe(false)
+    }
+    expect(getScanPresentation("COMPLETED").assuranceAvailable).toBe(true)
+    expect(getScanPresentation("TIMED_OUT").assuranceAvailable).toBe(false)
+    expect(getScanPresentation("CANCELLED").assuranceAvailable).toBe(false)
+  })
 })
 
 describe("scan state filters", () => {

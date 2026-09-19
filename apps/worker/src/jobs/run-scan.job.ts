@@ -256,6 +256,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       engineModel = execution.engineModel
       maxBudgetUsd = execution.maxBudgetUsd
       engineStartedAtMs = execution.engineStartedAtMs
+      const stagedAttachments = execution.stagedAttachments ?? null
 
       if (target.type !== "REPO" && globalScanTimeoutReached) {
         const timeoutMessage = timeoutErrorMessage(scanRuntimeBudgetMs)
@@ -394,6 +395,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
           workerExecution,
+          ...(stagedAttachments ? { attachments: stagedAttachments } : {}),
           terminalOutcome: {
             status: "STOPPED_BUDGET",
             errorCategory: "BUDGET_EXCEEDED",
@@ -453,6 +455,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
           workerExecution,
+          ...(stagedAttachments ? { attachments: stagedAttachments } : {}),
           terminalOutcome: {
             status: "FAILED",
             errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
@@ -609,6 +612,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         maxBudgetUsd,
         workerExecution,
         engineExecution,
+        stagedAttachments,
         terminalErrorAfterMeter: () => agentMinuteTerminalError ?? engineTerminalError,
         meterEngineRun,
         onDurableResult: (result) => {

@@ -3,6 +3,7 @@ import {
   getScanPreset,
   getScanPresetEstimate,
   getManualScanOptions,
+  getDefaultScanOptionId,
   SCAN_PRESETS,
 } from "./scan-presets"
 
@@ -26,11 +27,54 @@ describe("scan presets", () => {
 })
 
 describe("getManualScanOptions", () => {
-  it("returns the three repository review options for a repo target", () => {
+  it("returns the repository review options for a repo target", () => {
     const options = getManualScanOptions({ type: "REPO" })
-    expect(options.map((o) => o.id)).toEqual(["RELEASE_CHECK", "CODE_REVIEW", "DEEP_REVIEW"])
+    expect(options.map((o) => o.id)).toEqual([
+      "CODE_REVIEW",
+      "RELEASE_CHECK",
+      "REVIEW_CHANGES",
+      "DEEP_REVIEW",
+    ])
     expect(options.every((o) => o.available)).toBe(true)
     expect(options.every((option) => !Object.hasOwn(option, "maxBudgetUsd"))).toBe(true)
+  })
+
+  it("defaults repository review to the Standard-depth code review", () => {
+    const options = getManualScanOptions({ type: "REPO" })
+    expect(getDefaultScanOptionId(options)).toBe("CODE_REVIEW")
+    const option = options.find((o) => o.id === "CODE_REVIEW")
+    expect(option).toMatchObject({ mode: "STANDARD", workflow: "REVIEW_TARGET" })
+  })
+
+  it("defaults Review Changes to Quick and requires immutable revision inputs", () => {
+    const options = getManualScanOptions({ type: "REPO" })
+    const option = options.find((o) => o.id === "REVIEW_CHANGES")
+    expect(option).toMatchObject({
+      mode: "QUICK",
+      workflow: "REVIEW_CHANGES",
+      requiresRevisionInputs: true,
+      available: true,
+    })
+  })
+
+  it("exposes truthful scope, limits, checks, and authorization metadata", () => {
+    for (const option of getManualScanOptions({ type: "REPO" })) {
+      expect(option.scopeSummary.length).toBeGreaterThan(0)
+      expect(option.limitsSummary.length).toBeGreaterThan(0)
+      expect(option.applicableChecks.length).toBeGreaterThan(0)
+      // No provider/model cost may ever leak into creation UX.
+      expect(option.limitsSummary).not.toMatch(/\$|USD|cost/i)
+    }
+    const engineBackedUrl = getManualScanOptions({ type: "WEB_APP" }).find(
+      (o) => o.id === "WEB_APP_STANDARD"
+    )
+    expect(engineBackedUrl?.authorizationHint).toContain("verified domain")
+    // No preset copy may claim certification or guaranteed detection.
+    for (const option of getManualScanOptions({ type: "REPO" })) {
+      expect(
+        `${option.label} ${option.description} ${option.hint}`
+      ).not.toMatch(/certif|guarantee|universal|compliant/i)
+    }
   })
 
   it("returns Safe, Standard, and Deep web review options", () => {
@@ -117,6 +161,11 @@ describe("getManualScanOptions", () => {
 
   it("returns the repository fallback for unknown target types", () => {
     const options = getManualScanOptions({ type: "CLOUD_ACCOUNT" })
-    expect(options.map((o) => o.id)).toEqual(["RELEASE_CHECK", "CODE_REVIEW", "DEEP_REVIEW"])
+    expect(options.map((o) => o.id)).toEqual([
+      "CODE_REVIEW",
+      "RELEASE_CHECK",
+      "REVIEW_CHANGES",
+      "DEEP_REVIEW",
+    ])
   })
 })

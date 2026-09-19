@@ -27,6 +27,12 @@ import {
 import { resolveScanBudgetUsd, type TargetType } from "../../engine/command-builder"
 import type { ScanExecutionPlan } from "@lyrashield/types"
 import type { ScanJobData, ScanJobResult } from "../../types"
+import {
+  stageScanAttachments,
+  ScanAttachmentStagingError,
+  type StagedScanAttachments,
+} from "./attachments"
+import { ScanAttachmentError } from "@lyrashield/db"
 import { requireEngineModel, resolveEngineRuntimeBudgetMs } from "./lifecycle-utils"
 import type { ScanExecutionTarget } from "./preparation"
 import type { ScanTerminalError } from "./settlement"
@@ -48,6 +54,12 @@ export type ScanExecutionResult =
       engineModel?: string
       maxBudgetUsd: number
       engineStartedAtMs: number | null
+      /** Checksum-verified attachment staging receipt for the result manifest. */
+      stagedAttachments?: {
+        count: number
+        totalBytes: number
+        manifestChecksum: string
+      }
     }
   | { ok: false; result: ScanJobResult }
 
@@ -99,6 +111,9 @@ export async function executeScanTarget(params: {
   let deterministicCheckout: Awaited<ReturnType<typeof checkoutDeterministicRetest>> | undefined
   let engineProfile: ReturnType<typeof resolveEngineProfile> | undefined
   let engineModel: string | undefined
+  let stagedAttachments: StagedScanAttachments | null = null
+
+  const plannedAttachmentIds = executionPlan?.attachmentIds ?? []
 
   if (deterministicRetest) {
     if (target.repoProvider !== "github") {
@@ -205,6 +220,71 @@ export async function executeScanTarget(params: {
           errorCategory: "CANCELLED",
           errorMessage: "Scan cancelled by user",
         },
+      }
+    }
+
+    // Stage recorded attachments BEFORE any billable/provider work: each
+    // stored object is re-resolved workspace-scoped, decrypted, verified
+    // against its recorded sha256, and written read-only under the engine
+    // workspace's `attachments/` input directory alongside the manifest the
+    // engine consumes. Attachment bytes are untrusted input data — they are
+    // never read into instructions, scope, credentials, model routing, or
+    // budget, so a hostile attachment cannot widen the run. A missing,
+    // deleted, or tampered input fails closed rather than running against a
+    // different input set than the immutable plan recorded.
+    if (plannedAttachmentIds.length > 0) {
+      try {
+        stagedAttachments = await stageScanAttachments({
+          scanId,
+          workspaceId,
+          attachmentIds: plannedAttachmentIds,
+        })
+        if (stagedAttachments) {
+          await addScanEvent(
+            scanId,
+            "attachments_staged",
+            "info",
+            `${stagedAttachments.entries.length} supporting file(s) staged read-only for the engine`,
+            {
+              count: stagedAttachments.entries.length,
+              totalBytes: stagedAttachments.totalBytes,
+              manifestChecksum: stagedAttachments.manifestChecksum,
+            }
+          )
+        }
+      } catch (error) {
+        const isKnown =
+          error instanceof ScanAttachmentError || error instanceof ScanAttachmentStagingError
+        logger.warn("Scan attachment staging failed", {
+          scanId,
+          workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        try {
+          await addScanEvent(
+            scanId,
+            "attachments_failed",
+            "error",
+            "A supporting file could not be verified or is no longer available",
+            {
+              code: isKnown ? error.code : "SCAN_ATTACHMENT_STAGING",
+            }
+          )
+        } catch (eventErr) {
+          logger.warn("Failed to persist attachments_failed event", {
+            scanId,
+            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+          })
+        }
+        return {
+          ok: false,
+          result: {
+            status: "failed",
+            errorCategory: isKnown ? error.code : "SCAN_ATTACHMENT_UNAVAILABLE",
+            errorMessage:
+              "A supporting file could not be verified or is no longer available. Re-upload it and start a new scan.",
+          },
+        }
       }
     }
 
@@ -428,6 +508,26 @@ export async function executeScanTarget(params: {
     }
   }
 
+  // Deterministic tiers never stage attachments into an engine workspace —
+  // record honestly that the recorded inputs were not consumed rather than
+  // implying they influenced the result.
+  if (!engineBacked && plannedAttachmentIds.length > 0) {
+    try {
+      await addScanEvent(
+        scanId,
+        "attachments_not_consumed",
+        "info",
+        "Supporting files were recorded for this scan but are only staged for engine-backed reviews",
+        { count: plannedAttachmentIds.length }
+      )
+    } catch (eventErr) {
+      logger.warn("Failed to persist attachments_not_consumed event", {
+        scanId,
+        error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+      })
+    }
+  }
+
   return {
     ok: true,
     engineResult,
@@ -436,6 +536,15 @@ export async function executeScanTarget(params: {
     ...(engineModel ? { engineModel } : {}),
     maxBudgetUsd,
     engineStartedAtMs,
+    ...(stagedAttachments
+      ? {
+          stagedAttachments: {
+            count: stagedAttachments.entries.length,
+            totalBytes: stagedAttachments.totalBytes,
+            manifestChecksum: stagedAttachments.manifestChecksum,
+          },
+        }
+      : {}),
   }
 }
 
