@@ -81,7 +81,8 @@ showing scope, evidence state and limits — never by decoration.
   muted `#91a7b8`. Light theme: `--bg #f5f9fc`, raised `#ffffff`, text `#102235`,
   muted `#5f7081`.
 - Single accent: cyan `#54d6df` (dark) / `#087f78` (light). Accent-dim for
-  tinted fills only.
+  tinted fills only. The amber focus ring (Shapes) is an accessibility
+  indicator, not a second brand accent.
 - Semantic: danger `#ff7168`/`#e5534b`; warning/amber `#f3b95f`. Success uses
   the shared `success` token in `@lyrashield/ui`.
 - **Purple/violet hues are banned.** Gradients stay cyan/teal or neutral.
