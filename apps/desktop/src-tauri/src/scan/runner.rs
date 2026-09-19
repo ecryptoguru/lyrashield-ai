@@ -140,6 +140,22 @@ pub fn validate_max_budget_usd(value: f64) -> Result<f64, String> {
     Ok(value)
 }
 
+/// Validate a launch request before any scan record, credential work, or
+/// subprocess exists. Returns the canonical engine `--scan-mode` argument.
+///
+/// Rejects the obsolete `url` mode (a target kind, never an engine scan mode)
+/// and any other non-depth stored value — never silently picking a tier.
+/// Rejects URL targets: hosted URL scans run through domain verification and
+/// the scoped relay / deterministic surface transport, none of which exist
+/// locally. LyraShield Local never substitutes a BYOK-billed AI scan for them.
+fn validate_launch(config: &ScanConfig) -> Result<&'static str, String> {
+    let engine_mode = config.mode.engine_arg()?;
+    if matches!(config.target, ScanTarget::Url { .. }) {
+        return Err("URL targets require the hosted, domain-verified scan relay — launch them from the web app. LyraShield Local has no deterministic URL transport and never substitutes a BYOK AI scan.".into());
+    }
+    Ok(engine_mode)
+}
+
 // Only the owner touches the child. Cancellation never waits for a child mutex.
 async fn wait_for_child(
     child: &mut Child,
@@ -455,6 +471,9 @@ pub async fn create_scan_record(app: AppHandle, config: &ScanConfig) -> Result<(
 
 pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, String> {
     validate_max_budget_usd(config.max_budget_usd)?;
+    // Depth/target contract is validated before any durable record or spawn:
+    // a rejected launch must leave no pending scan behind.
+    validate_launch(&config)?;
     let scan_id = config.scan_id.clone();
     // Durable identity BEFORE spawn — persistence failure prevents spawn
     create_scan_record(app.clone(), &config)
@@ -550,6 +569,9 @@ async fn run_scan(
     let engine_cmd = crate::runtime::resolve_engine_bin()?;
 
     let max_budget_usd = validate_max_budget_usd(config.max_budget_usd)?;
+    // Re-check at spawn time so no call path can ever emit `--scan-mode url`
+    // or a silently substituted tier.
+    let engine_mode = config.mode.engine_arg()?;
     let mut args: Vec<String> = vec![
         "--non-interactive".into(),
         "--run-name".into(),
@@ -557,7 +579,7 @@ async fn run_scan(
         "--target".into(),
         config.target.target_arg(),
         "--scan-mode".into(),
-        config.mode.engine_arg().into(),
+        engine_mode.into(),
         "--max-budget-usd".into(),
         max_budget_usd.to_string(),
     ];
@@ -938,6 +960,61 @@ mod tests {
     fn ordinary_progress_text_is_unchanged() {
         let line = "Scanned 200 files; no credential-shaped output";
         assert_eq!(redact_credentials(line), line);
+    }
+
+    fn launch_config(mode: ScanMode, target: ScanTarget) -> ScanConfig {
+        ScanConfig {
+            scan_id: "s".into(),
+            target,
+            mode,
+            instruction: None,
+            max_budget_usd: 3.2,
+        }
+    }
+
+    #[test]
+    fn launch_validation_rejects_url_mode_before_spawn() {
+        // A Url-mode launch must fail validation — no record, no spawn, no
+        // silent tier substitution.
+        let config = launch_config(
+            ScanMode::Url,
+            ScanTarget::LocalPath {
+                path: "/tmp/x".into(),
+            },
+        );
+        let err = super::validate_launch(&config).unwrap_err();
+        assert!(err.contains("target kind"));
+    }
+
+    #[test]
+    fn launch_validation_rejects_url_targets_without_local_transport() {
+        // Hosted URL scans need domain verification + the scoped relay; Local
+        // must refuse rather than quietly billing a BYOK AI run.
+        for mode in [ScanMode::Quick, ScanMode::Standard, ScanMode::Deep] {
+            let config = launch_config(
+                mode,
+                ScanTarget::Url {
+                    url: "https://example.com".into(),
+                },
+            );
+            assert!(super::validate_launch(&config).is_err());
+        }
+    }
+
+    #[test]
+    fn launch_validation_maps_legacy_aliases_to_canonical_depths() {
+        let local = ScanTarget::LocalPath { path: "/x".into() };
+        let cases = [
+            (ScanMode::Safe, "quick"),
+            (ScanMode::Quick, "quick"),
+            (ScanMode::Standard, "standard"),
+            (ScanMode::Deep, "deep"),
+            (ScanMode::Custom, "deep"),
+        ];
+        for (mode, expected) in cases {
+            let config = launch_config(mode, local.clone());
+            assert_eq!(super::validate_launch(&config).unwrap(), expected);
+        }
     }
 
     #[test]
