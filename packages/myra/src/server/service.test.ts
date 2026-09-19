@@ -11,6 +11,7 @@ import type { ResolvedMyraRequest } from "./context"
 const env = vi.hoisted(() => ({
   MYRA_WRITES_ENABLED: "0",
   MYRA_ALLOWED_EMAILS: "",
+  MYRA_PUBLIC_BOOKING_ENABLED: "0",
 }))
 
 const proposalRecord = vi.hoisted(() => ({ value: null as unknown }))
@@ -52,7 +53,7 @@ vi.mock("./tools/cases", () => ({
 vi.mock("./tools/registry", () => ({ runTool: vi.fn() }))
 vi.mock("../sanitize", () => ({ screenSecrets: (value: unknown) => value }))
 
-const { confirmProposal } = await import("./service")
+const { confirmProposal, handleMessage } = await import("./service")
 
 const anonymousCtx: ResolvedMyraRequest = {
   principal: { kind: "anonymous", publicSessionId: "ps-1" },
@@ -81,6 +82,7 @@ describe("Myra write gate on confirmProposal", () => {
   beforeEach(() => {
     env.MYRA_WRITES_ENABLED = "0"
     env.MYRA_ALLOWED_EMAILS = ""
+    env.MYRA_PUBLIC_BOOKING_ENABLED = "0"
     proposalRecord.value = {
       id: "p1",
       conversationId: "c1",
@@ -128,5 +130,62 @@ describe("Myra write gate on confirmProposal", () => {
     await expect(
       confirmProposal(userCtx({ email: "dev@example.com" }), "p1")
     ).resolves.toMatchObject({ status: "COMPLETED" })
+  })
+
+  it("admits an anonymous book_demo confirm when public booking is on", async () => {
+    // D1 ruled: public booking wanted with a collected and verified attendee
+    // identity. The gate admits the operation; the executor re-runs
+    // verifyAttendee inside confirm (mocked here).
+    env.MYRA_WRITES_ENABLED = "1"
+    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
+    env.MYRA_PUBLIC_BOOKING_ENABLED = "1"
+    await expect(confirmProposal(anonymousCtx, "p1")).resolves.toMatchObject({
+      status: "COMPLETED",
+    })
+  })
+
+  it("admits an anonymous manage_own_demo confirm when public booking is on", async () => {
+    env.MYRA_WRITES_ENABLED = "1"
+    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
+    env.MYRA_PUBLIC_BOOKING_ENABLED = "1"
+    proposalRecord.value = { ...proposalRecord.value, operationName: "manage_own_demo" }
+    await expect(confirmProposal(anonymousCtx, "p1")).resolves.toMatchObject({
+      status: "COMPLETED",
+    })
+  })
+
+  it("still denies an anonymous submit_support_case confirm when public booking is on", async () => {
+    env.MYRA_WRITES_ENABLED = "1"
+    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
+    env.MYRA_PUBLIC_BOOKING_ENABLED = "1"
+    proposalRecord.value = { ...proposalRecord.value, operationName: "submit_support_case" }
+    await expect(confirmProposal(anonymousCtx, "p1")).rejects.toMatchObject({
+      code: "WRITES_DISABLED",
+    })
+  })
+})
+
+describe("Anonymous booking request validation", () => {
+  it("rejects a booking request missing the attendee name or email", async () => {
+    const events: Array<{ type: string }> = []
+    for await (const event of handleMessage(anonymousCtx, {
+      text: "Book this slot",
+      surface: "MARKETING",
+      bookingRequest: {
+        slotStart: "2026-10-01T10:30:00.000Z",
+        timezone: "Asia/Kolkata",
+      },
+    })) {
+      events.push(event)
+    }
+    expect(events).toEqual([
+      {
+        type: "error",
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Name and email are required to book a demo.",
+        },
+      },
+    ])
   })
 })

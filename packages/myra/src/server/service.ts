@@ -59,15 +59,26 @@ const EXECUTORS: Record<string, OperationExecutor> = {
   manage_own_demo: executeManageDemo,
 }
 
-function assertWritesAllowed(ctx: ResolvedMyraRequest): void {
+// The only writes an anonymous principal may confirm once the account
+// allowlist is set — public demo booking and the manage-own-demo link. Both
+// still run the demo-booking email verification inside the executor.
+const PUBLIC_BOOKING_OPERATIONS: ReadonlySet<string> = new Set(["book_demo", "manage_own_demo"])
+
+function assertWritesAllowed(ctx: ResolvedMyraRequest, operationName: string): void {
+  if (env.MYRA_WRITES_ENABLED !== "1") {
+    throw err("WRITES_DISABLED", "Actions are temporarily disabled.")
+  }
+  // An empty allowlist keeps the non-production shape where every principal
+  // may write; production always sets one when writes are on.
+  if (!env.MYRA_ALLOWED_EMAILS) return
   const principal = ctx.principal
-  if (
-    env.MYRA_WRITES_ENABLED !== "1" ||
-    (env.MYRA_ALLOWED_EMAILS &&
-      (principal.kind !== "user" ||
-        !principal.emailVerified ||
-        !isMyraAllowedEmail(principal.email, env.MYRA_ALLOWED_EMAILS)))
-  ) {
+  const allowed =
+    principal.kind === "anonymous"
+      ? env.MYRA_PUBLIC_BOOKING_ENABLED === "1" && PUBLIC_BOOKING_OPERATIONS.has(operationName)
+      : principal.kind === "user" &&
+        principal.emailVerified &&
+        isMyraAllowedEmail(principal.email, env.MYRA_ALLOWED_EMAILS)
+  if (!allowed) {
     throw err("WRITES_DISABLED", "Actions are temporarily disabled.")
   }
 }
@@ -139,6 +150,24 @@ export async function* handleMessage(
     yield {
       type: "error",
       error: { code: "VALIDATION_ERROR", message: "Message is empty or too long." },
+    }
+    return
+  }
+
+  // Anonymous booking is never truly anonymous: the attendee identity is
+  // collected up front and verified before confirm. A picker submission
+  // missing name or email fails here rather than at the tool schema.
+  if (
+    ctx.principal.kind === "anonymous" &&
+    input.bookingRequest &&
+    (!input.bookingRequest.name || !input.bookingRequest.email)
+  ) {
+    yield {
+      type: "error",
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Name and email are required to book a demo.",
+      },
     }
     return
   }
@@ -261,11 +290,14 @@ export async function confirmProposal(
 }> {
   // Fail closed on the validated write gate — the unvalidated
   // MYRA_WRITES_DISABLED process.env switch was removed (Deep Review v18).
-  assertWritesAllowed(ctx)
+  // The proposal loads inside the caller's owner scope before the gate so the
+  // gate can rule on the operation name; a denied principal can never learn
+  // whether someone else's proposal id exists.
   const proposal = await withOwnerScope(ctx.principal, (tx) =>
     tx.myraOperation.findUnique({ where: { id: proposalId } })
   )
   if (!proposal) throw err("NOT_FOUND", "Proposal not found.")
+  assertWritesAllowed(ctx, proposal.operationName)
   const executor = EXECUTORS[proposal.operationName]
   if (!executor) throw err("VALIDATION_ERROR", "Unknown operation.")
 
@@ -509,7 +541,7 @@ export async function getOwnCase(ctx: ResolvedMyraRequest, idOrRef: string) {
 }
 
 export async function replyToOwnCase(ctx: ResolvedMyraRequest, caseId: string, body: string) {
-  assertWritesAllowed(ctx)
+  assertWritesAllowed(ctx, "send_case_reply")
   const screened = screenSecrets(body)
   const toolCtx = toolContext(ctx, null)
   const result = await runSendCaseReply(toolCtx, { caseId, body: screened.text })

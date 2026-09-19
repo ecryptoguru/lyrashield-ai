@@ -4,6 +4,7 @@ const env = vi.hoisted(() => ({
   MYRA_PUBLIC_ENABLED: "0",
   MYRA_WRITES_ENABLED: "0",
   MYRA_ALLOWED_EMAILS: "",
+  MYRA_PUBLIC_BOOKING_ENABLED: "0",
 }))
 
 vi.mock("@lyrashield/config", () => ({ env }))
@@ -21,6 +22,7 @@ describe("GET /api/myra/status", () => {
     env.MYRA_PUBLIC_ENABLED = "0"
     env.MYRA_WRITES_ENABLED = "0"
     env.MYRA_ALLOWED_EMAILS = ""
+    env.MYRA_PUBLIC_BOOKING_ENABLED = "0"
     vi.stubEnv("NEXT_PUBLIC_MARKETING_URL", "https://lyrashieldai.com")
     return () => vi.unstubAllEnvs()
   })
@@ -45,6 +47,24 @@ describe("GET /api/myra/status", () => {
     env.MYRA_ALLOWED_EMAILS = ""
     body = await (await GET(statusRequest())).json()
     expect(body).toEqual({ public: true, booking: false })
+  })
+
+  it("reports booking:true for an allowlisted deployment once public booking is on", async () => {
+    // D1 ruled: public demo booking is wanted — the flag reopens the picker
+    // on deployments that always set the account allowlist.
+    env.MYRA_WRITES_ENABLED = "1"
+    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
+    let body = await (await GET(statusRequest())).json()
+    expect(body).toEqual({ public: false, booking: false })
+
+    env.MYRA_PUBLIC_BOOKING_ENABLED = "1"
+    body = await (await GET(statusRequest())).json()
+    expect(body).toEqual({ public: false, booking: true })
+
+    // The flag never opens booking while writes themselves are off.
+    env.MYRA_WRITES_ENABLED = "0"
+    body = await (await GET(statusRequest())).json()
+    expect(body).toEqual({ public: false, booking: false })
   })
 
   it("sends CORS headers to the marketing origin and none elsewhere", async () => {
