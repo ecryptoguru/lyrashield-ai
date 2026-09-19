@@ -42,6 +42,7 @@ export class MyraClientError extends Error {
 
 export function createMyraClient(options: MyraClientOptions) {
   const fetchImpl = options.fetchImpl ?? fetch
+  const credentials = options.surface === "MARKETING" ? "omit" : "include"
 
   function headers(extra?: Record<string, string>): Record<string, string> {
     const h: Record<string, string> = {
@@ -104,7 +105,7 @@ export function createMyraClient(options: MyraClientOptions) {
       const sessionMemory = options.getSessionMemory?.()
       const res = await fetchImpl(`${options.apiBase}/api/myra/message`, {
         method: "POST",
-        credentials: "include",
+        credentials,
         signal: input.signal,
         headers: headers(),
         body: JSON.stringify({
@@ -126,7 +127,7 @@ export function createMyraClient(options: MyraClientOptions) {
     async suggest(text: string, signal?: AbortSignal) {
       const res = await fetchImpl(`${options.apiBase}/api/myra/suggest`, {
         method: "POST",
-        credentials: "include",
+        credentials,
         signal,
         headers: headers({ accept: "application/json" }),
         body: JSON.stringify({
@@ -144,7 +145,7 @@ export function createMyraClient(options: MyraClientOptions) {
     async confirmProposal(proposalId: string) {
       const res = await fetchImpl(`${options.apiBase}/api/myra/proposals/confirm`, {
         method: "POST",
-        credentials: "include",
+        credentials,
         headers: headers({ accept: "application/json" }),
         body: JSON.stringify({ proposalId }),
       })
@@ -155,7 +156,7 @@ export function createMyraClient(options: MyraClientOptions) {
     async cancelProposal(proposalId: string) {
       const res = await fetchImpl(`${options.apiBase}/api/myra/proposals/cancel`, {
         method: "POST",
-        credentials: "include",
+        credentials,
         headers: headers({ accept: "application/json" }),
         body: JSON.stringify({ proposalId }),
       })
@@ -166,7 +167,7 @@ export function createMyraClient(options: MyraClientOptions) {
     async clearMemory() {
       const res = await fetchImpl(`${options.apiBase}/api/myra/memory`, {
         method: "DELETE",
-        credentials: "include",
+        credentials,
         headers: headers({ accept: "application/json" }),
       })
       if (!res.ok) await readError(res)
@@ -175,7 +176,7 @@ export function createMyraClient(options: MyraClientOptions) {
 
     async listCases() {
       const res = await fetchImpl(`${options.apiBase}/api/myra/cases`, {
-        credentials: "include",
+        credentials,
         headers: headers({ accept: "application/json" }),
       })
       if (!res.ok) await readError(res)
@@ -184,7 +185,7 @@ export function createMyraClient(options: MyraClientOptions) {
 
     async getCase(id: string) {
       const res = await fetchImpl(`${options.apiBase}/api/myra/cases/${encodeURIComponent(id)}`, {
-        credentials: "include",
+        credentials,
         headers: headers({ accept: "application/json" }),
       })
       if (!res.ok) await readError(res)
@@ -196,7 +197,7 @@ export function createMyraClient(options: MyraClientOptions) {
         `${options.apiBase}/api/myra/cases/${encodeURIComponent(id)}/replies`,
         {
           method: "POST",
-          credentials: "include",
+          credentials,
           headers: headers({ accept: "application/json" }),
           body: JSON.stringify({ body }),
         }

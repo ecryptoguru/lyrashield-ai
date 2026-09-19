@@ -49,3 +49,50 @@ describe("createMyraClient clearMemory", () => {
     })
   })
 })
+
+describe("marketing public-token requests", () => {
+  it("omits browser cookies from every shared client operation", async () => {
+    const requests: { url: string; init?: RequestInit }[] = []
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({ url: String(url), init })
+      if (String(url).endsWith("/message")) {
+        return new Response('data: {"type":"done"}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        })
+      }
+      return Response.json({ suggestions: [], data: {} })
+    }) as typeof fetch
+    const client = createMyraClient({
+      apiBase: "https://app.example.com",
+      surface: "MARKETING",
+      getPublicToken: () => "public-token",
+      fetchImpl,
+    })
+
+    for await (const event of client.sendMessage({ text: "Hi" })) {
+      expect(event).toBeDefined()
+    }
+    await client.suggest("plan")
+    await client.confirmProposal("proposal")
+    await client.cancelProposal("proposal")
+    await client.clearMemory()
+    await client.listCases()
+    await client.getCase("case")
+    await client.replyToCase("case", "Reply")
+
+    expect(requests.map(({ url }) => new URL(url).pathname)).toEqual([
+      "/api/myra/message",
+      "/api/myra/suggest",
+      "/api/myra/proposals/confirm",
+      "/api/myra/proposals/cancel",
+      "/api/myra/memory",
+      "/api/myra/cases",
+      "/api/myra/cases/case",
+      "/api/myra/cases/case/replies",
+    ])
+    for (const { init } of requests) {
+      expect(init?.credentials).toBe("omit")
+      expect(new Headers(init?.headers).get("x-myra-session")).toBe("public-token")
+    }
+  })
+})

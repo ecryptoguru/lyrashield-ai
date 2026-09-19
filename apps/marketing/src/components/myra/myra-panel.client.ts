@@ -67,6 +67,49 @@ export function initMyraPanel() {
   let bootstrapped = false
   let restoredFocus: HTMLElement | null = null
   let conversation: MyraConversation
+  const mobile = window.matchMedia("(max-width: 639px)")
+  const focusBoundary = document.getElementById("myra-focus-boundary") as HTMLButtonElement | null
+  const focusableSelector =
+    'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])'
+  const focusableIn = (root: HTMLElement | null) =>
+    Array.from(root?.querySelectorAll<HTMLElement>(focusableSelector) ?? []).filter(
+      (item) => !item.hidden && item.getClientRects().length > 0
+    )
+  const previousInert = new Map<HTMLElement, boolean>()
+  let previousOverflow = ""
+
+  function updateModal() {
+    const modal = open && mobile.matches
+    panelEl.setAttribute("aria-modal", String(modal))
+    if (focusBoundary) focusBoundary.hidden = !modal
+    if (modal && previousInert.size === 0) {
+      previousOverflow = document.body.style.overflow
+      document.body.style.overflow = "hidden"
+      for (const child of document.body.children) {
+        if (
+          !(child instanceof HTMLElement) ||
+          child === panelEl ||
+          child === focusBoundary ||
+          child.matches("[data-myra-turnstile]")
+        )
+          continue
+        previousInert.set(child, child.inert)
+        child.inert = true
+      }
+      const active = document.activeElement
+      const challengeHost = document.querySelector("body > [data-myra-turnstile]")
+      if (!panelEl.contains(active) && !challengeHost?.contains(active)) inputEl.focus()
+    } else if (!modal && previousInert.size > 0) {
+      for (const [child, wasInert] of previousInert) child.inert = wasInert
+      previousInert.clear()
+      document.body.style.overflow = previousOverflow
+    }
+  }
+
+  mobile.addEventListener("change", updateModal)
+  focusBoundary?.addEventListener("focus", () => {
+    if (open && mobile.matches) (focusableIn(panelEl).at(-1) ?? inputEl).focus()
+  })
 
   const rendererContext: MyraDomRendererContext = {
     client,
@@ -145,6 +188,7 @@ export function initMyraPanel() {
     panelEl.hidden = false
     launcherEl.hidden = true
     launcherEl.setAttribute("aria-expanded", "true")
+    updateModal()
     if (!bootstrapped) {
       bootstrapped = true
       bootstrapSession().catch(() => {
@@ -163,6 +207,7 @@ export function initMyraPanel() {
     panelEl.hidden = true
     launcherEl.hidden = false
     launcherEl.setAttribute("aria-expanded", "false")
+    updateModal()
     ;(restoredFocus ?? launcherEl).focus()
     announce("Myra panel closed.")
   }
@@ -189,12 +234,51 @@ export function initMyraPanel() {
   talkBtn?.addEventListener("click", openCaseComposer)
 
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Tab" && open && mobile.matches) {
+      const focusable = focusableIn(panelEl)
+      const first = focusable[0]
+      const last = focusable.at(-1)
+      const challengeHost = document.querySelector<HTMLElement>("body > [data-myra-turnstile]")
+      const challengeFocusable = focusableIn(challengeHost)
+      const challengeFirst = challengeFocusable[0]
+      const challengeLast = challengeFocusable.at(-1)
+      const active = document.activeElement
+      const target = e.shiftKey
+        ? active === first
+          ? (challengeLast ?? last)
+          : active === challengeFirst || active === challengeHost
+            ? last
+            : null
+        : active === last
+          ? (challengeFirst ?? first)
+          : active === challengeLast
+            ? first
+            : null
+      if (target) {
+        e.preventDefault()
+        target.focus()
+      }
+    }
     if (e.key === "Escape" && open) {
       if (suggestions.isOpen()) {
         suggestions.hideSuggest()
         return
       }
       closePanel()
+    }
+  })
+
+  document.addEventListener("focusin", (e) => {
+    if (!open || !mobile.matches) return
+    const target = e.target as Node | null
+    if (
+      target &&
+      !panelEl.contains(target) &&
+      !Array.from(document.querySelectorAll("[data-myra-turnstile]")).some((host) =>
+        host.contains(target)
+      )
+    ) {
+      inputEl.focus()
     }
   })
 

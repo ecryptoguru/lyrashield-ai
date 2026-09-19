@@ -235,7 +235,7 @@ function renderVerifyStep(
       .then((turnstileToken) =>
         fetch(`${context.apiBase}/api/myra/identity/request`, {
           method: "POST",
-          credentials: "include",
+          credentials: "omit",
           headers: myraHeaders(),
           body: JSON.stringify({
             email: email.value.trim(),
@@ -261,7 +261,7 @@ function renderVerifyStep(
     verify.disabled = true
     fetch(`${context.apiBase}/api/myra/identity/confirm`, {
       method: "POST",
-      credentials: "include",
+      credentials: "omit",
       headers: myraHeaders(),
       body: JSON.stringify({
         email: email.value.trim(),
