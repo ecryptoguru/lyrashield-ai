@@ -38,8 +38,7 @@ vi.mock("@lyrashield/evidence-storage", () => ({
 vi.mock("@lyrashield/db", () => ({
   addScanEvent: mocks.addScanEvent,
   prisma: mocks.prisma,
-  resolveAuthenticatedAssessmentAuthorization:
-    mocks.resolveAuthenticatedAssessmentAuthorization,
+  resolveAuthenticatedAssessmentAuthorization: mocks.resolveAuthenticatedAssessmentAuthorization,
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -391,9 +390,7 @@ describe("executeScanTarget authenticated staging beta", () => {
       (call) => call[1] === "auth_session_bound"
     )
     expect(boundEvent).toBeDefined()
-    expect(JSON.stringify(mocks.addScanEvent.mock.calls)).not.toContain(
-      "test-session-material"
-    )
+    expect(JSON.stringify(mocks.addScanEvent.mock.calls)).not.toContain("test-session-material")
   })
 
   it("is a bounded stop when the authorization was revoked mid-run", async () => {

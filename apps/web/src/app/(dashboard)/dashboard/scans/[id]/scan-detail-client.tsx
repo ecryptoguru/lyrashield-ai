@@ -737,8 +737,8 @@ export function ScanDetailClient({
                 Scope and plan
               </h2>
               <p className="text-muted-foreground mt-1 text-sm">
-                The immutable plan recorded when this {RUN_SINGULAR.toLowerCase()} was created —
-                the run cannot widen it.
+                The immutable plan recorded when this {RUN_SINGULAR.toLowerCase()} was created — the
+                run cannot widen it.
               </p>
               <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                 <div>

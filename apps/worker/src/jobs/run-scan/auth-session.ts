@@ -57,10 +57,7 @@ const CredentialSessionScopeSchema = z
  *   HEADER         → `<scope.headerName>: <scope.valuePrefix?><material>`
  */
 function sessionHeadersForKind(
-  credential: Pick<
-    AuthenticatedAssessmentAuthorization,
-    "credentialKind" | "credentialScope"
-  >,
+  credential: Pick<AuthenticatedAssessmentAuthorization, "credentialKind" | "credentialScope">,
   material: string
 ): Record<string, string> {
   const scope = CredentialSessionScopeSchema.safeParse(credential.credentialScope ?? {})
@@ -144,10 +141,7 @@ export function resolveRelaySessionBinding(
   // The session expires with the credential OR the grant, whichever is first —
   // the relay enforces this per request, so an expiring session is a bounded
   // stop, never a silent downgrade to unauthenticated traffic.
-  const exp = Math.min(
-    authorization.credentialExpiresAt.getTime(),
-    options.grantExpiresAtMs
-  )
+  const exp = Math.min(authorization.credentialExpiresAt.getTime(), options.grantExpiresAtMs)
 
   logger.info("Resolved authenticated-assessment session binding", {
     credentialId: authorization.credentialId,

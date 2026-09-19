@@ -846,9 +846,7 @@ describe("POST /api/scans", () => {
           authorizationRef: "authz_1",
         })
       )
-      expect(enqueueScanJob).toHaveBeenCalledWith(
-        expect.objectContaining({ scanId: "scan-beta" })
-      )
+      expect(enqueueScanJob).toHaveBeenCalledWith(expect.objectContaining({ scanId: "scan-beta" }))
     })
 
     it("rejects REVIEW_CHANGES on a non-repository target", async () => {
@@ -1055,13 +1053,7 @@ describe("POST /api/scans", () => {
       expect(res.status).toBe(201)
       // A full object ID is already immutable — no branch-ref resolution call.
       expect(getBranchRefSha).toHaveBeenCalledTimes(1)
-      expect(getMergeBaseSha).toHaveBeenCalledWith(
-        1234,
-        "acme",
-        "app",
-        "b".repeat(40),
-        headSha
-      )
+      expect(getMergeBaseSha).toHaveBeenCalledWith(1234, "acme", "app", "b".repeat(40), headSha)
       expect(createScan).toHaveBeenCalledWith(
         expect.objectContaining({
           source: expect.objectContaining({ revision: headSha }),
@@ -1516,9 +1508,7 @@ describe("FREE-plan URL scan per-IP limit", () => {
 
       expect(res.status).toBe(201)
       expect(resolveScanAttachments).toHaveBeenCalledWith("ws-att", ["att-1"])
-      expect(createScan).toHaveBeenCalledWith(
-        expect.objectContaining({ attachmentIds: ["att-1"] })
-      )
+      expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ attachmentIds: ["att-1"] }))
     })
 
     it("rejects a cross-workspace or unknown attachment id", async () => {
@@ -1603,9 +1593,7 @@ describe("FREE-plan URL scan per-IP limit", () => {
       )
 
       expect(res.status).toBe(201)
-      expect(createScan).toHaveBeenCalledWith(
-        expect.objectContaining({ attachmentIds: ["att-1"] })
-      )
+      expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ attachmentIds: ["att-1"] }))
     })
   })
 })

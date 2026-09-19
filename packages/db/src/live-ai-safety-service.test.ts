@@ -231,9 +231,7 @@ describe("resolveAuthenticatedAssessmentAuthorization", () => {
   })
 
   it("resolves a READY authorization covering the exact staging host", async () => {
-    await expect(
-      resolveAuthenticatedAssessmentAuthorization(input)
-    ).resolves.toMatchObject({
+    await expect(resolveAuthenticatedAssessmentAuthorization(input)).resolves.toMatchObject({
       planId: "plan-1",
       approvedHost: "staging.example.com",
       credentialId: "cred-1",
@@ -258,18 +256,18 @@ describe("resolveAuthenticatedAssessmentAuthorization", () => {
 
   it("rejects a missing or cross-target authorization reference", async () => {
     mockPrisma.liveAiSafetyPlan.findFirst.mockResolvedValue(null)
-    await expect(
-      resolveAuthenticatedAssessmentAuthorization(input)
-    ).rejects.toMatchObject<Partial<LiveAiSafetyError>>({
+    await expect(resolveAuthenticatedAssessmentAuthorization(input)).rejects.toMatchObject<
+      Partial<LiveAiSafetyError>
+    >({
       code: "AUTH_ASSESSMENT_AUTH_NOT_FOUND",
     })
     mockPrisma.liveAiSafetyPlan.findFirst.mockResolvedValue({
       ...readyPlan,
       targetId: "other-target",
     })
-    await expect(
-      resolveAuthenticatedAssessmentAuthorization(input)
-    ).rejects.toMatchObject<Partial<LiveAiSafetyError>>({
+    await expect(resolveAuthenticatedAssessmentAuthorization(input)).rejects.toMatchObject<
+      Partial<LiveAiSafetyError>
+    >({
       code: "AUTH_ASSESSMENT_AUTH_NOT_FOUND",
     })
   })
@@ -278,9 +276,9 @@ describe("resolveAuthenticatedAssessmentAuthorization", () => {
     "rejects a %s authorization — only READY may run",
     async (status) => {
       mockPrisma.liveAiSafetyPlan.findFirst.mockResolvedValue({ ...readyPlan, status })
-      await expect(
-        resolveAuthenticatedAssessmentAuthorization(input)
-      ).rejects.toMatchObject<Partial<LiveAiSafetyError>>({
+      await expect(resolveAuthenticatedAssessmentAuthorization(input)).rejects.toMatchObject<
+        Partial<LiveAiSafetyError>
+      >({
         code: "AUTH_ASSESSMENT_AUTH_NOT_READY",
       })
     }
@@ -290,9 +288,9 @@ describe("resolveAuthenticatedAssessmentAuthorization", () => {
     "rejects a %s target environment — staging/preview only",
     async (environment) => {
       mockPrisma.target.findFirst.mockResolvedValue({ ...stagingTarget, environment })
-      await expect(
-        resolveAuthenticatedAssessmentAuthorization(input)
-      ).rejects.toMatchObject<Partial<LiveAiSafetyError>>({
+      await expect(resolveAuthenticatedAssessmentAuthorization(input)).rejects.toMatchObject<
+        Partial<LiveAiSafetyError>
+      >({
         code: "AUTH_ASSESSMENT_PRODUCTION_DENIED",
       })
     }
@@ -303,9 +301,9 @@ describe("resolveAuthenticatedAssessmentAuthorization", () => {
       ...stagingTarget,
       url: "https://other.example.com/app",
     })
-    await expect(
-      resolveAuthenticatedAssessmentAuthorization(input)
-    ).rejects.toMatchObject<Partial<LiveAiSafetyError>>({
+    await expect(resolveAuthenticatedAssessmentAuthorization(input)).rejects.toMatchObject<
+      Partial<LiveAiSafetyError>
+    >({
       code: "AUTH_ASSESSMENT_HOST_MISMATCH",
     })
   })
@@ -319,9 +317,9 @@ describe("resolveAuthenticatedAssessmentAuthorization", () => {
         expiresAt: new Date("2026-09-19T11:00:00.000Z"),
       },
     })
-    await expect(
-      resolveAuthenticatedAssessmentAuthorization(input)
-    ).rejects.toMatchObject<Partial<LiveAiSafetyError>>({
+    await expect(resolveAuthenticatedAssessmentAuthorization(input)).rejects.toMatchObject<
+      Partial<LiveAiSafetyError>
+    >({
       code: "DOMAIN_VERIFICATION_REQUIRED",
     })
   })
@@ -332,9 +330,9 @@ describe("resolveAuthenticatedAssessmentAuthorization", () => {
       authMode: "NO_AUTH",
       credentialId: null,
     })
-    await expect(
-      resolveAuthenticatedAssessmentAuthorization(input)
-    ).rejects.toMatchObject<Partial<LiveAiSafetyError>>({
+    await expect(resolveAuthenticatedAssessmentAuthorization(input)).rejects.toMatchObject<
+      Partial<LiveAiSafetyError>
+    >({
       code: "AUTH_ASSESSMENT_SESSION_REQUIRED",
     })
   })
@@ -344,9 +342,9 @@ describe("resolveAuthenticatedAssessmentAuthorization", () => {
       ...testCredential,
       expiresAt: new Date("2026-09-19T11:00:00.000Z"),
     })
-    await expect(
-      resolveAuthenticatedAssessmentAuthorization(input)
-    ).rejects.toMatchObject<Partial<LiveAiSafetyError>>({
+    await expect(resolveAuthenticatedAssessmentAuthorization(input)).rejects.toMatchObject<
+      Partial<LiveAiSafetyError>
+    >({
       code: "AUTH_ASSESSMENT_SESSION_EXPIRED",
     })
     mockPrisma.credentialSet.findFirst.mockResolvedValue({
@@ -354,18 +352,18 @@ describe("resolveAuthenticatedAssessmentAuthorization", () => {
       createdAt: new Date("2026-09-10T00:00:00.000Z"),
       expiresAt: new Date("2026-09-20T00:00:00.000Z"),
     })
-    await expect(
-      resolveAuthenticatedAssessmentAuthorization(input)
-    ).rejects.toMatchObject<Partial<LiveAiSafetyError>>({
+    await expect(resolveAuthenticatedAssessmentAuthorization(input)).rejects.toMatchObject<
+      Partial<LiveAiSafetyError>
+    >({
       code: "AUTH_ASSESSMENT_SESSION_TOO_LONG",
     })
   })
 
   it("rejects a credential row that does not resolve in the workspace/target scope", async () => {
     mockPrisma.credentialSet.findFirst.mockResolvedValue(null)
-    await expect(
-      resolveAuthenticatedAssessmentAuthorization(input)
-    ).rejects.toMatchObject<Partial<LiveAiSafetyError>>({
+    await expect(resolveAuthenticatedAssessmentAuthorization(input)).rejects.toMatchObject<
+      Partial<LiveAiSafetyError>
+    >({
       code: "AUTH_ASSESSMENT_SESSION_NOT_FOUND",
     })
   })

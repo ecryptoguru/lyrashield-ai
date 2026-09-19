@@ -95,9 +95,7 @@ function extensionOf(filename: string): string {
   return dot === -1 ? "" : filename.slice(dot).toLowerCase()
 }
 
-export type ScanAttachmentValidation =
-  | { ok: true; extension: string }
-  | { ok: false; code: string }
+export type ScanAttachmentValidation = { ok: true; extension: string } | { ok: false; code: string }
 
 /**
  * Validate a client-declared filename/mediaType pair against the v1 allowlist.

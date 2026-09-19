@@ -159,7 +159,9 @@ export async function handleScan(args: string[], output: Output): Promise<number
     return 2
   }
   if (parsed["scan-id"] && (baseRef || headRef)) {
-    output.error("--base/--head start a new Review Changes scan; they cannot combine with --scan-id.")
+    output.error(
+      "--base/--head start a new Review Changes scan; they cannot combine with --scan-id."
+    )
     return 2
   }
 

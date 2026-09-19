@@ -134,9 +134,9 @@ describe("relay grant", () => {
   it.each([0, -1, 1.5, "1048576", 64 * 1024 * 1024 + 1])(
     "rejects malformed maxResponseBytes %j",
     (maxResponseBytes) => {
-      const payload = Buffer.from(
-        JSON.stringify({ ...baseScope, maxResponseBytes })
-      ).toString("base64url")
+      const payload = Buffer.from(JSON.stringify({ ...baseScope, maxResponseBytes })).toString(
+        "base64url"
+      )
       const signature = createHmac("sha256", SECRET).update(payload).digest("base64url")
       expect(verifyRelayGrant(`lrg1.${payload}.${signature}`, SECRET)).toEqual({
         ok: false,

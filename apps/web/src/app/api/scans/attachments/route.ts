@@ -153,9 +153,7 @@ async function post(request: Request) {
       return privateResponse(apiSuccess(record, 201))
     } catch (error) {
       if (stored) {
-        await Promise.resolve(
-          deleteEncryptedArtifact(stored.storageUri, workspaceId)
-        ).catch(() => {
+        await Promise.resolve(deleteEncryptedArtifact(stored.storageUri, workspaceId)).catch(() => {
           logger.error("Failed to compensate attachment upload")
         })
       }

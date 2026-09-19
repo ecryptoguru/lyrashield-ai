@@ -8,8 +8,7 @@ const spec = buildOpenApiSpec() as {
 
 function responseSchema(path: string, method: string, status: string): unknown {
   const responses = spec.paths[path]?.[method]?.responses as
-    | Record<string, Record<string, unknown>>
-    | undefined
+    Record<string, Record<string, unknown>> | undefined
   return responses?.[status]?.content?.["application/json"]?.schema
 }
 
@@ -34,11 +33,7 @@ describe("openapi workflow/provenance contract", () => {
     }
     const workflow = props.workflow as { enum?: string[] }
     expect(workflow.enum).toEqual(
-      expect.arrayContaining([
-        "REVIEW_TARGET",
-        "REVIEW_CHANGES",
-        "AUTHENTICATED_ASSESSMENT",
-      ])
+      expect.arrayContaining(["REVIEW_TARGET", "REVIEW_CHANGES", "AUTHENTICATED_ASSESSMENT"])
     )
     const scope = props.scope as { enum?: string[] }
     expect(scope.enum).toEqual(["SNAPSHOT", "DIFF", "LIVE"])
@@ -46,13 +41,7 @@ describe("openapi workflow/provenance contract", () => {
 
   it("exposes distinct verification tiers on the Finding component", () => {
     const status = spec.components.schemas.FindingVerificationStatus
-    expect(status?.enum).toEqual([
-      "DETECTED",
-      "VALIDATED",
-      "VERIFIED",
-      "BLOCKED",
-      "INCONCLUSIVE",
-    ])
+    expect(status?.enum).toEqual(["DETECTED", "VALIDATED", "VERIFIED", "BLOCKED", "INCONCLUSIVE"])
     const finding = spec.components.schemas.Finding
     const props = finding?.properties as Record<string, unknown>
     expect(props.verified).toBeDefined()
@@ -78,12 +67,10 @@ describe("openapi workflow/provenance contract", () => {
       ["/scans", "post", "201"],
       ["/scans/{id}", "get", "200"],
     ] as const) {
-      expect(JSON.stringify(responseSchema(path, method, status))).toContain(
-        scanRef.$ref
-      )
+      expect(JSON.stringify(responseSchema(path, method, status))).toContain(scanRef.$ref)
     }
-    expect(
-      JSON.stringify(responseSchema("/findings", "get", "200"))
-    ).toContain("#/components/schemas/Finding")
+    expect(JSON.stringify(responseSchema("/findings", "get", "200"))).toContain(
+      "#/components/schemas/Finding"
+    )
   })
 })

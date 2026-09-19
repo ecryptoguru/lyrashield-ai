@@ -457,9 +457,7 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
         }
       : {}),
     ...(input.threatModel ? { threatModel: input.threatModel } : {}),
-    ...(input.httpExchangeEvidence
-      ? { httpExchangeEvidence: input.httpExchangeEvidence }
-      : {}),
+    ...(input.httpExchangeEvidence ? { httpExchangeEvidence: input.httpExchangeEvidence } : {}),
     ...(input.attachments ? { attachments: input.attachments } : {}),
     ...(input.ingestionWarnings?.length
       ? { ingestionWarnings: input.ingestionWarnings.slice(0, 100) }

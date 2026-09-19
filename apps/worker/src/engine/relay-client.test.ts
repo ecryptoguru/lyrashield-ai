@@ -152,9 +152,9 @@ describe("mintScanRelayGrant", () => {
     { maxRequests: 25, maxResponseBytes: 2 * 1_048_576 },
     { maxRequests: 0, maxResponseBytes: 1_048_576 },
   ])("refuses beta ceilings above the contract %j", (authenticatedBeta) => {
-    expect(() =>
-      mintScanRelayGrant({ ...baseInput, authenticatedBeta }, CONFIG)
-    ).toThrow("RELAY_SCOPE_INVALID")
+    expect(() => mintScanRelayGrant({ ...baseInput, authenticatedBeta }, CONFIG)).toThrow(
+      "RELAY_SCOPE_INVALID"
+    )
   })
 })
 
@@ -203,8 +203,6 @@ describe("registerRelayGrant", () => {
     expect(url).toBe("http://relay.test/v1/register/scan-1")
     expect(JSON.parse(String(init.body))).toEqual({ session })
     // The grant header itself never carries session material.
-    expect((init.headers as Record<string, string>)["x-lyra-relay-grant"]).toBe(
-      "signed-grant"
-    )
+    expect((init.headers as Record<string, string>)["x-lyra-relay-grant"]).toBe("signed-grant")
   })
 })

@@ -188,8 +188,7 @@ export async function verifyScanJobAuthority(
           }
         : {
             errorCategory: "SCAN_PLAN_MISMATCH",
-            errorMessage:
-              "Stored execution plan depth does not match the recorded scan mode",
+            errorMessage: "Stored execution plan depth does not match the recorded scan mode",
           }
       logger.warn("Stored scan execution plan failed validation", {
         scanId,

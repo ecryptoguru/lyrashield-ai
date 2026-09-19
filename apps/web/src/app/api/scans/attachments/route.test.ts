@@ -38,7 +38,9 @@ vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: { scan: { view: "scan:view", create: "scan:create" } },
 }))
 
-vi.mock("@lyrashield/logger", async () => (await import("../../../../__tests__/mocks")).loggerModule())
+vi.mock("@lyrashield/logger", async () =>
+  (await import("../../../../__tests__/mocks")).loggerModule()
+)
 
 import { POST, GET } from "./route"
 import { createScanAttachmentRecord, listScanAttachments, prisma } from "@lyrashield/db"

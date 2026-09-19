@@ -66,15 +66,15 @@ describe("forward database constraints", () => {
   })
 
   it("adds the execution plan columns additively without touching Scan RLS", () => {
-    const sql = migration(
-      "../prisma/migrations/20260919000000_scan_execution_plan/migration.sql"
-    )
+    const sql = migration("../prisma/migrations/20260919000000_scan_execution_plan/migration.sql")
     expect(sql).toContain('ALTER TABLE "Scan" ADD COLUMN')
     expect(sql).toContain('"executionPlan" JSONB')
     expect(sql).toContain('"executionPlanHash" TEXT')
     // Rollback-compatible: nullable columns only — no RLS/policy/privilege
     // changes and no NOT NULL that would break readers on the prior schema.
-    expect(sql).not.toMatch(/ROW LEVEL SECURITY|CREATE POLICY|DROP POLICY|REVOKE|GRANT|NOT NULL|DROP /i)
+    expect(sql).not.toMatch(
+      /ROW LEVEL SECURITY|CREATE POLICY|DROP POLICY|REVOKE|GRANT|NOT NULL|DROP /i
+    )
   })
 
   it("keeps Myra generation reservations restricted to unbound service work", () => {

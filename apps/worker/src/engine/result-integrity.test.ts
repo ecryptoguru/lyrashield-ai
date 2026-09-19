@@ -1027,8 +1027,9 @@ describe("result integrity", () => {
         },
       })
 
-      const receiptCall = vi.mocked(prisma.scanCoverageReceipt.createMany).mock
-        .calls[0][0] as { data: Array<Record<string, unknown>> }
+      const receiptCall = vi.mocked(prisma.scanCoverageReceipt.createMany).mock.calls[0][0] as {
+        data: Array<Record<string, unknown>>
+      }
       const scoped = receiptCall.data.filter(
         (row) => typeof row.controlId === "string" && row.controlId.startsWith("engine-scope:")
       )
@@ -1062,12 +1063,11 @@ describe("result integrity", () => {
       })
       // Scoped rows never collide with deterministic families or vibe controls.
       expect(
-        receiptCall.data.every(
-          (row) =>
-            !String(row.controlId).startsWith("engine-scope:") &&
-            !String(row.controlId).startsWith("engine-gap:")
-              ? !String(row.scanner).startsWith("engine-")
-              : true
+        receiptCall.data.every((row) =>
+          !String(row.controlId).startsWith("engine-scope:") &&
+          !String(row.controlId).startsWith("engine-gap:")
+            ? !String(row.scanner).startsWith("engine-")
+            : true
         )
       ).toBe(true)
     })
@@ -1084,9 +1084,7 @@ describe("result integrity", () => {
         ingestionWarnings: ["coverage.json: malformed entries dropped"],
         scopedCoverage: {
           schemaVersion: "1",
-          entries: [
-            { id: "a1b2c3", subject: "src/auth/login.ts", outcome: "reported" },
-          ],
+          entries: [{ id: "a1b2c3", subject: "src/auth/login.ts", outcome: "reported" }],
           gaps: [],
           completeness: { complete: true, caveats: [] },
         },

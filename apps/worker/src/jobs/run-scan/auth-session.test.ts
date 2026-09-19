@@ -104,10 +104,7 @@ describe("resolveRelaySessionBinding", () => {
       )
     ).toThrowError(expect.objectContaining({ code: "AUTH_SESSION_HEADER_UNSUPPORTED" }))
     expect(() =>
-      resolveRelaySessionBinding(
-        { ...baseAuthorization, credentialKind: "PROD_API_KEY" },
-        options
-      )
+      resolveRelaySessionBinding({ ...baseAuthorization, credentialKind: "PROD_API_KEY" }, options)
     ).toThrowError(expect.objectContaining({ code: "AUTH_SESSION_KIND_UNSUPPORTED" }))
   })
 

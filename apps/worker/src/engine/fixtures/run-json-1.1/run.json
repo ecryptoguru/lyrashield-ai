@@ -15,7 +15,10 @@
     "exchanges": 2
   },
   "targets_info": [
-    { "type": "repository", "details": { "cloned_repo_path": "/tmp/lyrashield_repo/repo_scan-2_def/app" } }
+    {
+      "type": "repository",
+      "details": { "cloned_repo_path": "/tmp/lyrashield_repo/repo_scan-2_def/app" }
+    }
   ],
   "cleanup": { "sandbox_removed": true },
   "llm_usage": {

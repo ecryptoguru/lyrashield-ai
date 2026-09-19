@@ -15,7 +15,15 @@
     "gaps": 1
   },
   "machine_observed": {
-    "agents": [{ "agent_id": "agent-101", "agent_name": "vulnerability-scanner", "status": "completed", "skills": ["sql_injection"], "is_root": false }],
+    "agents": [
+      {
+        "agent_id": "agent-101",
+        "agent_name": "vulnerability-scanner",
+        "status": "completed",
+        "skills": ["sql_injection"],
+        "is_root": false
+      }
+    ],
     "skills_exercised": ["sql_injection"],
     "findings_filed": 2,
     "source": "runtime"

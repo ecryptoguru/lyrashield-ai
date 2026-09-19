@@ -6,8 +6,8 @@ vi.mock("./client", () => ({
 
 // withWorkspaceRLS passes a tx client; tests supply a mocked tx.
 vi.mock("./rls", () => ({
-  withWorkspaceRLS: vi.fn(
-    async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) => fn(mockTx)
+  withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
+    fn(mockTx)
   ),
 }))
 
@@ -124,7 +124,10 @@ describe("resolveScanAttachments — admission matrix", () => {
     )
     mockTx.scanAttachment.findMany.mockResolvedValue(rows)
     await expect(
-      resolveScanAttachments("ws-1", rows.map((r) => r.id as string))
+      resolveScanAttachments(
+        "ws-1",
+        rows.map((r) => r.id as string)
+      )
     ).rejects.toMatchObject({
       code: "SCAN_ATTACHMENT_LIMIT_EXCEEDED",
     })
