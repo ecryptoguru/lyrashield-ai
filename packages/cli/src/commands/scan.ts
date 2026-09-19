@@ -77,7 +77,18 @@ async function resolveTarget(
 
 export async function handleScan(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
-    string: ["target", "goal", "mode", "repo", "name", "idempotency-key", "sarif", "scan-id"],
+    string: [
+      "target",
+      "goal",
+      "mode",
+      "repo",
+      "name",
+      "idempotency-key",
+      "sarif",
+      "scan-id",
+      "base",
+      "head",
+    ],
     boolean: ["watch", "auto"],
     default: { goal: "TEST_APP", mode: "STANDARD" },
     alias: { t: "target", g: "goal", m: "mode" },
@@ -137,6 +148,21 @@ export async function handleScan(args: string[], output: Output): Promise<number
     return 2
   }
 
+  // Review Changes: --base/--head submit a RECORDED diff-scope scan. The
+  // server resolves both refs to immutable git object IDs through the
+  // authorized GitHub integration and persists them in the execution plan;
+  // this is unrelated to `check-diff`, which stays a local advisory check.
+  const baseRef = parsed.base as string | undefined
+  const headRef = parsed.head as string | undefined
+  if (headRef && !baseRef) {
+    output.error("--head requires --base so the change set can be compared.")
+    return 2
+  }
+  if (parsed["scan-id"] && (baseRef || headRef)) {
+    output.error("--base/--head start a new Review Changes scan; they cannot combine with --scan-id.")
+    return 2
+  }
+
   // Fail before submitting. Warning after a successful POST and still exiting 0
   // would tell a CI script the scan was followed to completion when it was not,
   // and re-running would submit a second scan against the workspace budget.
@@ -150,7 +176,19 @@ export async function handleScan(args: string[], output: Output): Promise<number
   const res = parsed["scan-id"]
     ? { id: parsed["scan-id"] as string }
     : ((await client.request("POST", "/scans", {
-        body: { workspaceId, targetId: resolved.targetId, goal, mode },
+        body: {
+          workspaceId,
+          targetId: resolved.targetId,
+          goal,
+          mode,
+          ...(baseRef
+            ? {
+                workflow: "REVIEW_CHANGES",
+                baseRef,
+                ...(headRef ? { headRef } : {}),
+              }
+            : {}),
+        },
         headers: { "Idempotency-Key": parsed["idempotency-key"] ?? crypto.randomUUID() },
       })) as { id: string })
 

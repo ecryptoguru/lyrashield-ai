@@ -73,8 +73,8 @@ Commands:
   install <agent>      Configure a single agent
   uninstall <agent>    Remove LyraShield entry for a single agent
   project              Manage the default project
-  scan                 Start a security scan
-  pr-scan              Start a PR-focused scan (alias for scan --goal CHECK_PR)
+  scan                 Start a security scan [--base <ref> --head <ref> for Review Changes]
+  pr-scan              Start a PR-focused scan (alias for scan --goal CHECK_PR; --base/--head record a Review Changes run)
   status [scanId]      Show scan status
   findings             List findings
   explain <findingId>  Explain a finding
