@@ -341,6 +341,38 @@ describe("Turnstile challenge lifecycle", () => {
 })
 
 describe("session bootstrap deduplication", () => {
+  it("mints a marketing public token without browser cookies", async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.credentials).toBe("omit")
+      return Response.json({ data: { publicToken: "pub", sessionId: "sid" } })
+    })
+    ;(globalThis as { fetch?: unknown }).fetch = fetchImpl
+    const { ensureMyraSession } = await loadSession()
+    doc.hosts.push(turnstileHost())
+
+    const pending = ensureMyraSession("https://api.test")
+    await tick()
+    turnstile.renders[0]?.options.callback?.("token-1")
+    await pending
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps authenticated dashboard bootstrap cookie based", async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.credentials).toBe("include")
+      return Response.json({ data: { principal: "user" } })
+    })
+    ;(globalThis as { fetch?: unknown }).fetch = fetchImpl
+    const { ensureMyraSession } = await loadSession()
+    doc.hosts.push(turnstileHost())
+
+    const pending = ensureMyraSession("https://api.test", "DASHBOARD")
+    await tick()
+    turnstile.renders[0]?.options.callback?.("token-1")
+    await pending
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
   it("concurrent ensureMyraSession callers share one mint and one challenge", async () => {
     const fetches: string[] = []
     ;(globalThis as { fetch?: unknown }).fetch = vi.fn(async (url: string) => {

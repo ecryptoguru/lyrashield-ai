@@ -97,7 +97,7 @@ export function openMyraCaseComposer(options: {
     verify.disabled = true
     fetch(`${apiBase}/api/myra/identity/confirm`, {
       method: "POST",
-      credentials: "include",
+      credentials: "omit",
       headers: myraHeaders(),
       body: JSON.stringify({
         email: email.value.trim(),
@@ -136,7 +136,7 @@ export function openMyraCaseComposer(options: {
       .then((turnstileToken) =>
         fetch(`${apiBase}/api/myra/identity/request`, {
           method: "POST",
-          credentials: "include",
+          credentials: "omit",
           headers: myraHeaders(),
           body: JSON.stringify({
             email: emailText,
