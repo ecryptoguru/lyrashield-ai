@@ -133,6 +133,16 @@ describe("scoped relay", () => {
       if (req.url === "/echo") {
         res.writeHead(200, { "Content-Type": "application/json" })
         res.end(JSON.stringify({ ok: true, grant: req.headers["x-lyra-relay-grant"] ?? null }))
+      } else if (req.url === "/echo-auth") {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(
+          JSON.stringify({
+            ok: true,
+            authorization: req.headers["authorization"] ?? null,
+            cookie: req.headers["cookie"] ?? null,
+            grant: req.headers["x-lyra-relay-grant"] ?? null,
+          })
+        )
       } else if (req.url === "/stream") {
         activeStreams++
         res.writeHead(200)
@@ -524,5 +534,174 @@ describe("scoped relay", () => {
       grant(scopeFor(UPSTREAM_HOST, { scanId: "scan_badport" }))
     )
     expect(badPort.established).toBe(false)
+  })
+
+  it("injects the registered session headers on in-scope requests only", async () => {
+    const scope = scopeFor(UPSTREAM_HOST, {
+      scanId: "scan_session",
+      hosts: [UPSTREAM_HOST, "other.test"],
+      methods: ["GET", "HEAD", "OPTIONS"],
+    })
+    const token = mintRelayGrant(scope, RELAY_SECRET)
+    const registered = proxy.relay?.register(scope.scanId, token, {
+      headers: { authorization: "Bearer test-session-material" },
+      hosts: [UPSTREAM_HOST],
+      exp: scope.exp - 1_000,
+    })
+    expect(registered).toEqual({ ok: true })
+
+    const withSession = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/echo-auth`,
+      token
+    )
+    expect(withSession.status).toBe(200)
+    expect(withSession.raw).toContain('"authorization":"Bearer test-session-material"')
+    // The grant itself stays credential-free end to end.
+    expect(withSession.raw).toContain('"grant":null')
+
+    // A different grant-scoped host receives the request but no session.
+    const otherHost = await rawForward(
+      proxy.port,
+      `http://other.test:${upstreamPort}/echo-auth`,
+      token
+    )
+    expect(otherHost.status).toBe(200)
+    expect(otherHost.raw).toContain('"authorization":null')
+  })
+
+  it("denies the request when the registered session expired — a bounded stop", async () => {
+    const scope = scopeFor(UPSTREAM_HOST, { scanId: "scan_session_expired" })
+    const token = mintRelayGrant(scope, RELAY_SECRET)
+    // Registration races the expiry: mint the binding valid, then let it lapse.
+    const exp = Math.min(scope.exp - 1_000, Date.now() + 40)
+    expect(
+      proxy.relay?.register(scope.scanId, token, {
+        headers: { cookie: "s=test" },
+        hosts: [UPSTREAM_HOST],
+        exp,
+      })
+    ).toEqual({ ok: true })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    const res = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/echo-auth`,
+      token
+    )
+    expect(res.status).toBe(403)
+    expect(res.raw).toContain("session_expired")
+  })
+
+  it("rejects a session binding that outlives or outscopes the grant", async () => {
+    const scope = scopeFor(UPSTREAM_HOST, { scanId: "scan_session_bad" })
+    const token = mintRelayGrant(scope, RELAY_SECRET)
+    const withinGrant = scope.exp - 1_000
+    expect(
+      proxy.relay?.register(scope.scanId, token, {
+        headers: { authorization: "Bearer x" },
+        hosts: ["evil.example.com"],
+        exp: withinGrant,
+      })
+    ).toEqual({ ok: false, reason: "session_out_of_scope" })
+    expect(
+      proxy.relay?.register(scope.scanId, token, {
+        headers: { authorization: "Bearer x" },
+        hosts: [UPSTREAM_HOST],
+        exp: scope.exp + 60_000,
+      })
+    ).toEqual({ ok: false, reason: "session_out_of_scope" })
+    expect(
+      proxy.relay?.register(scope.scanId, token, {
+        headers: { "x-forwarded-for": "1.2.3.4" },
+        hosts: [UPSTREAM_HOST],
+        exp: withinGrant,
+      })
+    ).toEqual({ ok: false, reason: "session_header_not_allowed" })
+    // Registration failed closed — no state was admitted for the scan.
+    const res = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/echo`,
+      token
+    )
+    expect(res.raw).toContain("unregistered_grant")
+  })
+
+  it("denies non-read methods under the beta grant — POST never forwards", async () => {
+    const scope = scopeFor(UPSTREAM_HOST, {
+      scanId: "scan_beta_methods",
+      methods: ["GET", "HEAD", "OPTIONS"],
+      maxRequests: 25,
+      maxBytes: 25 * 1_048_576,
+      maxResponseBytes: 1_048_576,
+    })
+    const token = grant(scope)
+    const res = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/echo`,
+      token,
+      "POST",
+      "name=value"
+    )
+    expect(res.status).toBe(403)
+    expect(res.raw).toContain("method_not_allowed")
+    const put = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/echo`,
+      token,
+      "PUT"
+    )
+    expect(put.status).toBe(403)
+  })
+
+  it("stops the beta scan at the exact request and response caps with explicit reasons", async () => {
+    const scope = scopeFor(UPSTREAM_HOST, {
+      scanId: "scan_beta_caps",
+      methods: ["GET", "HEAD", "OPTIONS"],
+      maxRequests: 25,
+      maxBytes: 25 * 1_048_576,
+      maxResponseBytes: 1_048_576,
+      perPathPerMinute: 60,
+    })
+    const token = grant(scope)
+    const url = `http://${UPSTREAM_HOST}:${upstreamPort}/echo`
+    for (let i = 0; i < 25; i++) {
+      expect((await rawForward(proxy.port, url, token)).status).toBe(200)
+    }
+    const twentySixth = await rawForward(proxy.port, url, token)
+    expect(twentySixth.status).toBe(403)
+    expect(twentySixth.raw).toContain("request_cap")
+    // The per-response cap denies a declared-oversize body outright.
+    const big = await rawForward(
+      proxy.port,
+      `http://${UPSTREAM_HOST}:${upstreamPort}/big`,
+      grant(
+        scopeFor(UPSTREAM_HOST, {
+          scanId: "scan_beta_bytes",
+          methods: ["GET"],
+          maxRequests: 25,
+          maxBytes: 25 * 1_048_576,
+          maxResponseBytes: 1_048_576,
+        })
+      )
+    )
+    expect(big.status).toBe(403)
+    expect(big.raw).toContain("byte_cap")
+  })
+
+  it("keeps session material out of the audit trail", async () => {
+    const scope = scopeFor(UPSTREAM_HOST, { scanId: "scan_session_audit" })
+    const token = mintRelayGrant(scope, RELAY_SECRET)
+    proxy.relay?.register(scope.scanId, token, {
+      headers: { authorization: "Bearer test-session-material" },
+      hosts: [UPSTREAM_HOST],
+      exp: scope.exp - 1_000,
+    })
+    await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/echo-auth`, token)
+    const audit = await fetch(`http://127.0.0.1:${proxy.port}/v1/audit/scan_session_audit`, {
+      headers: { Authorization: `Bearer ${ADMIN}` },
+    }).then((r) => r.text())
+    expect(audit).toContain("/echo-auth")
+    expect(audit).not.toContain("test-session-material")
+    expect(audit).not.toContain("authorization")
   })
 })

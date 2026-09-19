@@ -19,6 +19,154 @@ export class LiveAiSafetyError extends Error {
   }
 }
 
+/**
+ * Authenticated-assessment staging beta: a test session must be pre-created
+ * and short-lived. The bound from record creation to expiry is capped so a
+ * long-lived or production credential can never satisfy the check.
+ */
+export const AUTH_ASSESSMENT_SESSION_MAX_LIFETIME_MS = 24 * 60 * 60 * 1000
+
+/**
+ * The verified authorization context for an AUTHENTICATED_ASSESSMENT plan —
+ * metadata only. `credentialVaultRef`/`credentialScope` stay references into
+ * the secret store; the session material itself is resolved at the trusted
+ * relay boundary and never enters the plan, logs, or this record's callers.
+ */
+export interface AuthenticatedAssessmentAuthorization {
+  planId: string
+  approvedHost: string
+  incidentContact: string
+  credentialId: string
+  credentialKind: string
+  credentialVaultRef: string
+  credentialScope: unknown
+  credentialExpiresAt: Date
+  /** The authorization cannot outlive the recorded domain proof. */
+  domainVerificationExpiresAt: Date
+}
+
+/**
+ * Verify that `authorizationRef` names a recorded, scoped authorization for
+ * the AUTHENTICATED_ASSESSMENT workflow on this exact target. The artifact is
+ * a READY `LiveAiSafetyPlan` row — it already records the approved host, the
+ * bound domain-verification proof, the staging consent (target environment),
+ * the incident contact, and the scoped test-session credential reference.
+ * Both the scan-create route and the worker execution-time re-check call
+ * this; any revoked, expired, or mismatched input fails closed.
+ */
+export async function resolveAuthenticatedAssessmentAuthorization(input: {
+  workspaceId: string
+  targetId: string
+  authorizationRef: string
+  now?: Date
+}): Promise<AuthenticatedAssessmentAuthorization> {
+  const now = input.now ?? new Date()
+  return withWorkspaceRLS(input.workspaceId, async (tx) => {
+    const [plan, target] = await Promise.all([
+      tx.liveAiSafetyPlan.findFirst({
+        where: { id: input.authorizationRef, workspaceId: input.workspaceId },
+        select: {
+          id: true,
+          targetId: true,
+          status: true,
+          approvedHost: true,
+          authMode: true,
+          credentialId: true,
+          incidentContact: true,
+          domainVerification: {
+            select: { id: true, status: true, expiresAt: true },
+          },
+        },
+      }),
+      tx.target.findFirst({
+        where: { id: input.targetId, workspaceId: input.workspaceId, deletedAt: null },
+        select: { id: true, type: true, url: true, environment: true },
+      }),
+    ])
+
+    if (!plan || plan.targetId !== input.targetId) {
+      throw new LiveAiSafetyError("AUTH_ASSESSMENT_AUTH_NOT_FOUND")
+    }
+    // READY is the only admissible state — a plan that was consumed, stopped,
+    // or revoked before execution is a bounded stop, not a fallback.
+    if (plan.status !== "READY") {
+      throw new LiveAiSafetyError("AUTH_ASSESSMENT_AUTH_NOT_READY")
+    }
+    if (!target) throw new LiveAiSafetyError("TARGET_NOT_FOUND")
+    if (target.type !== "WEB_APP" && target.type !== "API") {
+      throw new LiveAiSafetyError("AUTH_ASSESSMENT_TARGET_UNSUPPORTED")
+    }
+    // Production targets are never eligible for the staging beta.
+    if (target.environment !== "STAGING" && target.environment !== "PREVIEW") {
+      throw new LiveAiSafetyError("AUTH_ASSESSMENT_PRODUCTION_DENIED")
+    }
+    if (!target.url) throw new LiveAiSafetyError("AUTH_ASSESSMENT_HOST_MISMATCH")
+
+    // The recorded authorization must cover this exact target host — domain
+    // ownership alone never authorizes a different host or another workflow.
+    const targetHost = normalizeDomainForProof(target.url)
+    const approvedHost = normalizeDomainForProof(plan.approvedHost)
+    if (!targetHost || !approvedHost || targetHost !== approvedHost) {
+      throw new LiveAiSafetyError("AUTH_ASSESSMENT_HOST_MISMATCH")
+    }
+
+    const verification = plan.domainVerification
+    if (
+      !verification ||
+      verification.status !== "VERIFIED" ||
+      verification.expiresAt <= now
+    ) {
+      throw new LiveAiSafetyError("DOMAIN_VERIFICATION_REQUIRED")
+    }
+    if (!plan.incidentContact) {
+      throw new LiveAiSafetyError("AUTH_ASSESSMENT_INCIDENT_CONTACT_REQUIRED")
+    }
+
+    // Only a pre-created scoped test session may back this workflow — never a
+    // production credential or an unauthenticated plan.
+    if (plan.authMode !== "TEST_CREDENTIAL" || !plan.credentialId) {
+      throw new LiveAiSafetyError("AUTH_ASSESSMENT_SESSION_REQUIRED")
+    }
+    const credential = await tx.credentialSet.findFirst({
+      where: {
+        id: plan.credentialId,
+        workspaceId: input.workspaceId,
+        OR: [{ targetId: null }, { targetId: input.targetId }],
+      },
+      select: {
+        id: true,
+        kind: true,
+        vaultRef: true,
+        scope: true,
+        expiresAt: true,
+        createdAt: true,
+      },
+    })
+    if (!credential) throw new LiveAiSafetyError("AUTH_ASSESSMENT_SESSION_NOT_FOUND")
+    if (!credential.expiresAt || credential.expiresAt <= now) {
+      throw new LiveAiSafetyError("AUTH_ASSESSMENT_SESSION_EXPIRED")
+    }
+    if (
+      credential.expiresAt.getTime() - credential.createdAt.getTime() >
+      AUTH_ASSESSMENT_SESSION_MAX_LIFETIME_MS
+    ) {
+      throw new LiveAiSafetyError("AUTH_ASSESSMENT_SESSION_TOO_LONG")
+    }
+
+    return {
+      planId: plan.id,
+      approvedHost,
+      incidentContact: plan.incidentContact,
+      credentialId: credential.id,
+      credentialKind: credential.kind,
+      credentialVaultRef: credential.vaultRef,
+      credentialScope: credential.scope,
+      credentialExpiresAt: credential.expiresAt,
+      domainVerificationExpiresAt: verification.expiresAt,
+    }
+  })
+}
+
 function requireDomain(value: string): string {
   const domain = normalizeDomainForProof(value)
   if (!domain) throw new LiveAiSafetyError("DOMAIN_VERIFICATION_INVALID_DOMAIN")

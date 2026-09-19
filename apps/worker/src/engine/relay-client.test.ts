@@ -120,6 +120,42 @@ describe("mintScanRelayGrant", () => {
     // Verified apex keeps its subdomain scope; out-of-apex references are dropped.
     expect(scope.hosts.sort()).toEqual(["api.example.com", "example.com"])
   })
+
+  it("clamps the authenticated beta to read-only methods and exact plan ceilings", () => {
+    const { grant, scope } = mintScanRelayGrant(
+      {
+        ...baseInput,
+        mode: "DEEP",
+        destructiveTestsAllowed: true, // ignored for the beta — never widens
+        authenticatedBeta: { maxRequests: 25, maxResponseBytes: 1_048_576 },
+      },
+      CONFIG
+    )
+    expect(scope.methods).toEqual(["GET", "HEAD", "OPTIONS"])
+    expect(scope.maxRequests).toBe(25)
+    expect(scope.maxResponseBytes).toBe(1_048_576)
+    // Aggregate budget: the request counter times the per-response cap.
+    expect(scope.maxBytes).toBe(25 * 1_048_576)
+    // The minted token verifies — the cap survives the signed round-trip.
+    // (The verifier normalizes host ordering on decode.)
+    const verified = verifyRelayGrant(grant, CONFIG.signingSecret)
+    expect(verified.ok).toBe(true)
+    if (verified.ok) {
+      expect(verified.scope.maxResponseBytes).toBe(1_048_576)
+      expect(verified.scope.methods.sort()).toEqual(scope.methods.sort())
+      expect(verified.scope.hosts.sort()).toEqual(scope.hosts.sort())
+    }
+  })
+
+  it.each([
+    { maxRequests: 26, maxResponseBytes: 1_048_576 },
+    { maxRequests: 25, maxResponseBytes: 2 * 1_048_576 },
+    { maxRequests: 0, maxResponseBytes: 1_048_576 },
+  ])("refuses beta ceilings above the contract %j", (authenticatedBeta) => {
+    expect(() =>
+      mintScanRelayGrant({ ...baseInput, authenticatedBeta }, CONFIG)
+    ).toThrow("RELAY_SCOPE_INVALID")
+  })
 })
 
 describe("registerRelayGrant", () => {
@@ -153,4 +189,22 @@ describe("registerRelayGrant", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1)
     }
   )
+
+  it("carries the session binding on the admin channel, never in the grant", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }))
+    vi.stubGlobal("fetch", fetchMock)
+    const session = {
+      headers: { authorization: "Bearer test-session-material" },
+      hosts: ["app.example.com"],
+      exp: Date.now() + 60_000,
+    }
+    await registerRelayGrant("scan-1", "signed-grant", CONFIG, session)
+    const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
+    expect(url).toBe("http://relay.test/v1/register/scan-1")
+    expect(JSON.parse(String(init.body))).toEqual({ session })
+    // The grant header itself never carries session material.
+    expect((init.headers as Record<string, string>)["x-lyra-relay-grant"]).toBe(
+      "signed-grant"
+    )
+  })
 })

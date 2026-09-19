@@ -14,8 +14,11 @@ import {
   relayHostAllowed,
   relayMethodAllowed,
   relayPathAllowed,
+  relaySessionHostAllowed,
+  validateRelaySessionBinding,
   verifyRelayGrant,
   type RelayGrantScope,
+  type RelaySessionBinding,
 } from "@lyrashield/security"
 
 /**
@@ -73,6 +76,12 @@ interface RateWindow {
 interface ScanRelayState {
   scope: RelayGrantScope
   grant: string
+  /**
+   * Optional authenticated-session binding registered over the admin channel
+   * alongside the grant. Values are injected into forwarded requests at this
+   * boundary only — they are never logged, audited, or visible to the client.
+   */
+  session?: RelaySessionBinding
   active: Set<AbortController>
   requestCount: number
   bytesTotal: number
@@ -82,8 +91,16 @@ interface ScanRelayState {
 }
 
 export interface RelayHandler {
-  /** Admin-only admission; bearer requests never create or reset scan state. */
-  register(scanId: string, grant: string | undefined): { ok: true } | { ok: false; reason: string }
+  /**
+   * Admin-only admission; bearer requests never create or reset scan state.
+   * `session` is the optional authenticated-beta binding — validated against
+   * the grant scope before the state is admitted.
+   */
+  register(
+    scanId: string,
+    grant: string | undefined,
+    session?: unknown
+  ): { ok: true } | { ok: false; reason: string }
   handleForward(req: IncomingMessage, res: ServerResponse): Promise<void>
   handleConnect(req: IncomingMessage, clientSocket: Duplex, head: Buffer): void
   revoke(scanId: string): void
@@ -316,6 +333,14 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
         return
       }
 
+      // Authenticated-beta session binding: an expired session is a bounded
+      // stop — the request is denied rather than silently forwarded without
+      // the authenticated context the scan was authorized to exercise.
+      if (state.session && state.session.exp <= Date.now()) {
+        denyForward(res, state, scope.scanId, "session_expired", host, method, auditPath)
+        return
+      }
+
       let body: Buffer | undefined
       if (method !== "GET" && method !== "HEAD") {
         const chunks: Buffer[] = []
@@ -348,6 +373,21 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
         headers[key] = Array.isArray(value) ? value.join(", ") : value
       }
 
+      // Session headers apply only to hosts the binding authorizes, and
+      // override any client-supplied values for those names — the sandboxed
+      // engine must never originate credential material itself.
+      if (state.session && relaySessionHostAllowed(state.session, host)) {
+        for (const [name, value] of Object.entries(state.session.headers)) {
+          headers[name] = value
+        }
+      }
+
+      // The grant may narrow the global response ceiling (authenticated beta).
+      const maxResponseBytes = Math.min(
+        MAX_RELAY_RESPONSE_BODY,
+        scope.maxResponseBytes ?? MAX_RELAY_RESPONSE_BODY
+      )
+
       let bytes = 0
       const dispatcher = new Agent({
         connect: { lookup: pinnedLookup(resolved.addresses), ...(deps?.ca ? { ca: deps.ca } : {}) },
@@ -366,7 +406,7 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
         // silently truncating would hand the client an indistinguishable prefix.
         const declaredLength = Number(upstream.headers["content-length"] ?? 0)
         if (
-          declaredLength > MAX_RELAY_RESPONSE_BODY ||
+          declaredLength > maxResponseBytes ||
           declaredLength > scope.maxBytes - state.bytesTotal
         ) {
           upstream.body.destroy()
@@ -386,7 +426,7 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
         let truncated = false
         for await (const chunk of upstream.body) {
           const size = (chunk as Buffer).byteLength
-          if (bytes + size > MAX_RELAY_RESPONSE_BODY || state.bytesTotal + size > scope.maxBytes) {
+          if (bytes + size > maxResponseBytes || state.bytesTotal + size > scope.maxBytes) {
             truncated = true
             break
           }
@@ -485,19 +525,32 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
   sweeper.unref()
 
   return {
-    register(scanId, grant) {
+    register(scanId, grant, session) {
       const verified = verifyRelayGrant(grant, signingSecret)
       if (!verified.ok) return verified
       const { scope } = verified
       if (scope.scanId !== scanId) return { ok: false, reason: "scope_mismatch" }
       if (revoked.has(scanId)) return { ok: false, reason: "revoked" }
+      // The session binding may only narrow the grant — an out-of-scope or
+      // malformed binding fails registration closed; it is never relaxed.
+      let binding: RelaySessionBinding | undefined
+      if (session !== undefined) {
+        const validated = validateRelaySessionBinding(scope, session)
+        if (!validated.ok) return { ok: false, reason: validated.reason }
+        binding = validated.session
+      }
       const existing = states.get(scanId)
-      if (existing)
-        return existing.grant === grant ? { ok: true } : { ok: false, reason: "scope_changed" }
+      if (existing) {
+        const sameGrant = existing.grant === grant
+        const sameSession =
+          JSON.stringify(existing.session ?? null) === JSON.stringify(binding ?? null)
+        return sameGrant && sameSession ? { ok: true } : { ok: false, reason: "scope_changed" }
+      }
       if (closedAudits.has(scanId)) return { ok: false, reason: "closed_scan" }
       states.set(scanId, {
         scope,
         grant: grant!,
+        ...(binding ? { session: binding } : {}),
         active: new Set(),
         requestCount: 0,
         bytesTotal: 0,

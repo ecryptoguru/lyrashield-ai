@@ -281,7 +281,7 @@ const WORKFLOW_INPUT_PROPERTIES = {
   workflow: {
     type: "string",
     description:
-      "Recorded workflow: REVIEW_TARGET (default snapshot/live review) or REVIEW_CHANGES (immutable diff review on a repository target, requires baseRef). AUTHENTICATED_ASSESSMENT is unavailable.",
+      "Recorded workflow: REVIEW_TARGET (default snapshot/live review) or REVIEW_CHANGES (immutable diff review on a repository target, requires baseRef). AUTHENTICATED_ASSESSMENT is a gated staging beta — it requires authorizationRef and is denied server-side unless the deployment enables it for this workspace/target.",
   },
   baseRef: {
     type: "string",
@@ -299,6 +299,11 @@ const WORKFLOW_INPUT_PROPERTIES = {
     description:
       "Optional IDs of previously staged workspace input-evidence attachments recorded into the execution plan. Never host paths.",
   },
+  authorizationRef: {
+    type: "string",
+    description:
+      "AUTHENTICATED_ASSESSMENT only: the recorded scoped authorization reference. Never a credential.",
+  },
 } as const
 
 const VALID_WORKFLOWS = new Set([
@@ -310,15 +315,18 @@ const VALID_WORKFLOWS = new Set([
 /**
  * Validate and project the caller's workflow inputs onto the scan-create
  * body. Throws on inconsistent input so the error is local and clear rather
- * than a remote 400. AUTHENTICATED_ASSESSMENT is passed through untouched —
- * the server answers it with the canonical SCAN_WORKFLOW_UNAVAILABLE so the
- * denial is consistent across every client.
+ * than a remote 400. AUTHENTICATED_ASSESSMENT is passed through with its
+ * authorizationRef — the server applies the gated beta admission (flag +
+ * allowlist + recorded scoped authorization) so the denial is consistent
+ * across every client.
  */
 function workflowInputFields(args: Record<string, unknown>): Record<string, unknown> {
   const workflow = typeof args.workflow === "string" ? args.workflow : undefined
   const baseRef = typeof args.baseRef === "string" ? args.baseRef : undefined
   const headRef = typeof args.headRef === "string" ? args.headRef : undefined
   const attachmentIds = args.attachmentIds
+  const authorizationRef =
+    typeof args.authorizationRef === "string" ? args.authorizationRef : undefined
 
   if (workflow !== undefined && !VALID_WORKFLOWS.has(workflow)) {
     throw new Error(
@@ -333,6 +341,9 @@ function workflowInputFields(args: Record<string, unknown>): Record<string, unkn
   }
   if (workflow === "REVIEW_CHANGES" && !baseRef) {
     throw new Error("REVIEW_CHANGES requires a baseRef to compare against.")
+  }
+  if (authorizationRef && workflow !== "AUTHENTICATED_ASSESSMENT") {
+    throw new Error("authorizationRef is only valid with workflow AUTHENTICATED_ASSESSMENT.")
   }
   if (attachmentIds !== undefined) {
     if (
@@ -349,6 +360,7 @@ function workflowInputFields(args: Record<string, unknown>): Record<string, unkn
     ...(baseRef ? { baseRef } : {}),
     ...(headRef ? { headRef } : {}),
     ...(attachmentIds !== undefined ? { attachmentIds } : {}),
+    ...(authorizationRef ? { authorizationRef } : {}),
   }
 }
 

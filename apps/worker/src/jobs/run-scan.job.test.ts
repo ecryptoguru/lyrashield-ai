@@ -28,11 +28,26 @@ import {
   checkoutDeterministicRetest,
 } from "../engine/deterministic-retest"
 
+const configMocks = vi.hoisted(() => ({
+  authBeta: { enabled: "0", allowlist: "" },
+}))
+
 vi.mock("@lyrashield/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/config")>()
   return {
     ...actual,
     resolveWorkerExecutionProvenance: vi.fn(() => null),
+    env: new Proxy(actual.env, {
+      get(target, prop) {
+        if (prop === "LYRASHIELD_AUTH_ASSESSMENT_ENABLED") {
+          return configMocks.authBeta.enabled
+        }
+        if (prop === "LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST") {
+          return configMocks.authBeta.allowlist
+        }
+        return Reflect.get(target, prop)
+      },
+    }),
   }
 })
 
@@ -43,6 +58,14 @@ vi.mock("@lyrashield/db", async () => {
   >("@lyrashield/db/src/scan-execution-plan")
   return {
   verifyStoredScanExecutionPlan: planModule.verifyStoredScanExecutionPlan,
+  resolveAuthenticatedAssessmentAuthorization: vi.fn(),
+  LiveAiSafetyError: class LiveAiSafetyError extends Error {
+    readonly code: string
+    constructor(code: string) {
+      super(code)
+      this.code = code
+    }
+  },
   prisma: {
     auditLog: { create: vi.fn().mockResolvedValue({}) },
     workspaceMember: { findFirst: vi.fn().mockResolvedValue({ role: "OWNER" }) },
@@ -265,6 +288,7 @@ import {
   persistResultManifest,
 } from "../engine/result-integrity"
 import { resolveWorkerExecutionProvenance } from "@lyrashield/config"
+import { verifyRelayGrant } from "@lyrashield/security"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import {
   assertEvidenceStorageConfigured,
@@ -283,6 +307,7 @@ import {
   AGENT_MINUTES_EXHAUSTED_ERROR_CATEGORY,
   AGENT_MINUTES_EXHAUSTED_ERROR_MESSAGE,
   AGENT_MINUTES_OVERAGE_LIMIT_ERROR_MESSAGE,
+  buildScanExecutionPlan,
 } from "@lyrashield/types"
 import {
   completeScanWithScore,
@@ -292,7 +317,12 @@ import {
   addScanEvent,
   withScanFinalizationClaim,
   prisma,
+  resolveAuthenticatedAssessmentAuthorization,
 } from "@lyrashield/db"
+
+const { computeScanExecutionPlanHash } = await vi.importActual<
+  typeof import("@lyrashield/db/src/scan-execution-plan")
+>("@lyrashield/db/src/scan-execution-plan")
 
 const mockJob = {
   id: "scan-1",
@@ -315,6 +345,8 @@ function mockStoredScanAuthority(
     determinismMode: string
     sponsorAccountId: string | null
     triggerType: string
+    executionPlan: unknown
+    executionPlanHash: string | null
   }> = {}
 ) {
   systemScanFindUnique.mockResolvedValue({
@@ -703,7 +735,8 @@ describe("processScanJob", () => {
       expect(registerRelayGrant).toHaveBeenCalledWith(
         "scan-1",
         expect.stringMatching(/^lrg1\./),
-        expect.objectContaining({ url: "http://relay.test" })
+        expect.objectContaining({ url: "http://relay.test" }),
+        undefined
       )
       expect(vi.mocked(registerRelayGrant).mock.invocationCallOrder[0]).toBeLessThan(
         vi.mocked(runEngine).mock.invocationCallOrder[0]!
@@ -763,6 +796,133 @@ describe("processScanJob", () => {
         status: "failed",
       })
       expect(revokeRelayGrant).toHaveBeenCalled()
+    })
+  })
+
+  describe("authenticated staging beta end to end", () => {
+    const betaPlan = buildScanExecutionPlan({
+      workflow: "AUTHENTICATED_ASSESSMENT",
+      targetType: "WEB_APP",
+      mode: "DEEP",
+      authorizationRef: "authz_1",
+    })
+    const betaJob = {
+      id: "scan-1",
+      data: { ...mockJob.data, mode: "DEEP" },
+    } as never
+    const stagingTarget = { ...mockUrlTarget, environment: "STAGING" }
+    const betaAuthorization = {
+      planId: "authz_1",
+      approvedHost: "example.com",
+      incidentContact: "security@example.com",
+      credentialId: "cred-1",
+      credentialKind: "BEARER_TOKEN",
+      credentialVaultRef: "env:LYRASHIELD_TEST_SESSION_ACME",
+      credentialScope: null,
+      credentialExpiresAt: new Date(Date.now() + 3_600_000),
+      domainVerificationExpiresAt: new Date(Date.now() + 86_400_000),
+    }
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      configMocks.authBeta.enabled = "1"
+      configMocks.authBeta.allowlist = "ws-1:target-1"
+      process.env.LYRASHIELD_TARGET_RELAY_URL = "http://relay.test"
+      process.env.LYRASHIELD_RELAY_SIGNING_SECRET = "test-signing-secret"
+      process.env.LYRASHIELD_EGRESS_PROXY_SECRET = "test-egress-secret"
+      process.env.LYRASHIELD_TEST_SESSION_ACME = "test-session-material"
+      mockStoredScanAuthority({
+        mode: "DEEP",
+        executionPlan: betaPlan,
+        executionPlanHash: computeScanExecutionPlanHash(betaPlan),
+      })
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(stagingTarget as never)
+      vi.mocked(prisma.policy.findFirst).mockResolvedValue(null)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+        id: "proof-1",
+      } as never)
+      vi.mocked(resolveAuthenticatedAssessmentAuthorization).mockResolvedValue(
+        betaAuthorization as never
+      )
+      vi.mocked(runEngine).mockImplementation(
+        ({ scanId }: { scanId: string }) =>
+          ({
+            exitCode: 0,
+            output: {
+              ingestionIssues: [],
+              vulnerabilities: [],
+              findingsComplete: true,
+              runRecord: {
+                run_id: scanId,
+                run_name: scanId,
+                status: "completed",
+                llm_usage: completeUsage,
+              },
+              summary: "Scan completed with 0 findings",
+              findingCount: 0,
+            },
+          }) as never
+      )
+      vi.mocked(runPreflight).mockResolvedValue({ passed: true, checks: [] })
+    })
+
+    afterEach(() => {
+      configMocks.authBeta.enabled = "0"
+      configMocks.authBeta.allowlist = ""
+      delete process.env.LYRASHIELD_TARGET_RELAY_URL
+      delete process.env.LYRASHIELD_RELAY_SIGNING_SECRET
+      delete process.env.LYRASHIELD_EGRESS_PROXY_SECRET
+      delete process.env.LYRASHIELD_TEST_SESSION_ACME
+    })
+
+    it("admits the beta plan and mints the read-only, capped relay grant with a bound session", async () => {
+      await expect(processScanJob(betaJob)).resolves.toMatchObject({ status: "completed" })
+
+      // The real mint produced the beta contract: read methods only, exact
+      // request + per-response ceilings.
+      const registerCall = vi.mocked(registerRelayGrant).mock.calls[0]!
+      expect(registerCall[0]).toBe("scan-1")
+      const verified = verifyRelayGrant(registerCall[1], "test-signing-secret")
+      expect(verified.ok).toBe(true)
+      if (verified.ok) {
+        expect(verified.scope.methods.sort()).toEqual(["GET", "HEAD", "OPTIONS"])
+        expect(verified.scope.maxRequests).toBe(25)
+        expect(verified.scope.maxResponseBytes).toBe(1_048_576)
+      }
+      // The resolved test-session binding is registered on the admin channel —
+      // headers arrive at the relay, never inside the signed grant.
+      const session = registerCall[3] as {
+        headers: Record<string, string>
+        hosts: string[]
+        exp: number
+      }
+      expect(session.headers).toEqual({ authorization: "Bearer test-session-material" })
+      expect(session.hosts).toEqual(["example.com"])
+      expect(session.exp).toBeLessThanOrEqual(verified.ok ? verified.scope.exp : 0)
+      expect(vi.mocked(runEngine).mock.calls[0]![0]).toMatchObject({ maxBudgetUsd: 5 })
+    })
+
+    it("denies the beta at execution time when the gate is closed again", async () => {
+      configMocks.authBeta.enabled = "0"
+      await expect(processScanJob(betaJob)).resolves.toMatchObject({
+        status: "failed",
+        errorCategory: "SCAN_WORKFLOW_UNAVAILABLE",
+      })
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(registerRelayGrant).not.toHaveBeenCalled()
+    })
+
+    it("is a bounded stop when the recorded authorization was revoked before execution", async () => {
+      const { LiveAiSafetyError } = await import("@lyrashield/db")
+      vi.mocked(resolveAuthenticatedAssessmentAuthorization).mockRejectedValue(
+        new LiveAiSafetyError("AUTH_ASSESSMENT_AUTH_NOT_READY")
+      )
+      await expect(processScanJob(betaJob)).resolves.toMatchObject({
+        status: "failed",
+        errorCategory: "SCAN_AUTHORIZATION_REVOKED",
+      })
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(registerRelayGrant).not.toHaveBeenCalled()
     })
   })
 

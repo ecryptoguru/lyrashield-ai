@@ -80,6 +80,43 @@ export const AUTHENTICATED_ASSESSMENT_BETA_LIMITS = {
   maxResponseBytes: 1_048_576,
 } as const
 
+/**
+ * Fixed path denylist for the authenticated staging beta. These are appended
+ * to the workspace policy's own blockedPaths — the workflow permits only
+ * explicitly approved GET/HEAD/OPTIONS reads, so well-known side-effectful
+ * GET endpoints (logout, purchases, account deletion, admin, invitations) are
+ * denied at the relay even when the policy does not name them. Prefixes are
+ * normalized by the relay's path matcher before comparison.
+ */
+export const AUTHENTICATED_ASSESSMENT_DENIED_PATHS = [
+  "/logout",
+  "/log-out",
+  "/signout",
+  "/sign-out",
+  "/checkout",
+  "/cart",
+  "/purchase",
+  "/payment",
+  "/pay",
+  "/order",
+  "/subscribe",
+  "/unsubscribe",
+  "/billing",
+  "/invoice",
+  "/upgrade",
+  "/downgrade",
+  "/delete",
+  "/deactivate",
+  "/destroy",
+  "/admin",
+  "/invite",
+  "/account/delete",
+  "/settings/billing",
+  "/settings/delete",
+  "/api/keys",
+  "/api-keys",
+] as const
+
 export const ScanExecutionPlanSchema = z
   .object({
     version: z.literal(SCAN_EXECUTION_PLAN_VERSION),

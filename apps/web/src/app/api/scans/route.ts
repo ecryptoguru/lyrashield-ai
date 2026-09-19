@@ -9,6 +9,8 @@ import {
   completeAgentOperation,
   failAgentOperation,
   resolveScanAttachments,
+  resolveAuthenticatedAssessmentAuthorization,
+  LiveAiSafetyError,
   ScanAttachmentError,
   WorkspaceScanConcurrencyLimitError,
   type ScanListItem,
@@ -25,6 +27,7 @@ import {
 } from "@lyrashield/types"
 import { parseScanStateFilter, scanStateStatuses } from "@/lib/scan-presentation"
 import { normalizeDomainForProof } from "@lyrashield/security"
+import { env, evaluateAuthAssessmentAdmission } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { z } from "zod"
@@ -281,7 +284,7 @@ async function post(request: Request) {
         ? { id: data.policyId, workspaceId, deletedAt: null }
         : { workspaceId, name: "Default Policy", deletedAt: null },
       orderBy: data.policyId ? undefined : { createdAt: "asc" },
-      select: { id: true },
+      select: { id: true, destructiveTestsAllowed: true },
     })
     if (data.policyId && !policy) {
       return apiError("POLICY_NOT_FOUND", "Policy not found in this workspace", 404)
@@ -409,11 +412,64 @@ async function post(request: Request) {
       | { revision: string; baseRevision?: string; mergeBaseRevision?: string }
       | undefined
     if (data.workflow === "AUTHENTICATED_ASSESSMENT") {
-      return apiError(
-        "SCAN_WORKFLOW_UNAVAILABLE",
-        "Authenticated assessment is not available yet.",
-        400
-      )
+      // Gated staging beta — fail closed at every layer. BOTH the environment
+      // flag and the explicit per-workspace/target allowlist must admit this
+      // pair; absence of either keeps the workflow unavailable.
+      const betaAdmission = evaluateAuthAssessmentAdmission({
+        enabled: env.LYRASHIELD_AUTH_ASSESSMENT_ENABLED === "1",
+        allowlist: env.LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST,
+        workspaceId,
+        targetId: data.targetId,
+      })
+      if (!betaAdmission.allowed) {
+        return apiError(
+          "SCAN_WORKFLOW_UNAVAILABLE",
+          "Authenticated assessment is not enabled for this workspace and target.",
+          400
+        )
+      }
+      if (target.type !== "WEB_APP" && target.type !== "API") {
+        return apiError(
+          "SCAN_PLAN_INVALID",
+          "Authenticated assessment requires a live web app or API target.",
+          400
+        )
+      }
+      // The beta never runs under a destructive-allowed policy.
+      if (policy?.destructiveTestsAllowed === true) {
+        return apiError(
+          "SCAN_PLAN_DENIED",
+          "The selected policy allows destructive tests, which the authenticated assessment forbids.",
+          400
+        )
+      }
+      // The authorization reference must name a recorded, scoped artifact —
+      // verified staging consent, current domain proof, incident contact, and
+      // a bound short-lived test-session credential — covering this exact
+      // target host. The worker re-verifies all of it at execution time.
+      if (!data.authorizationRef) {
+        return apiError(
+          "SCAN_AUTHORIZATION_REQUIRED",
+          "Authenticated assessment requires a recorded scoped authorization reference.",
+          400
+        )
+      }
+      try {
+        await resolveAuthenticatedAssessmentAuthorization({
+          workspaceId,
+          targetId: data.targetId,
+          authorizationRef: data.authorizationRef,
+        })
+      } catch (authErr) {
+        if (authErr instanceof LiveAiSafetyError) {
+          return apiError(
+            authErr.code,
+            "The recorded assessment authorization does not cover this target.",
+            authErr.code === "AUTH_ASSESSMENT_PRODUCTION_DENIED" ? 403 : 400
+          )
+        }
+        throw authErr
+      }
     }
     if (data.workflow === "REVIEW_CHANGES") {
       if (target.type !== "REPO") {
@@ -513,6 +569,9 @@ async function post(request: Request) {
       createdById: session.userId,
       workflow: data.workflow,
       ...(planSource ? { source: planSource } : {}),
+      // Verified above for AUTHENTICATED_ASSESSMENT; the schema rejects it on
+      // every other workflow, so this only ever carries a checked reference.
+      ...(data.authorizationRef ? { authorizationRef: data.authorizationRef } : {}),
       // Recorded verbatim into the immutable plan as input-evidence
       // references — the deduped, scope/checksum-validated list resolved
       // above. This API never treats the list as proof of staged input.
