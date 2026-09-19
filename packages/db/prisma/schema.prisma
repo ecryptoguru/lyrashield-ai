@@ -833,6 +833,10 @@ model Scan {
   determinismMode       String?    @default("default")
   durationMs            Int?
   finalizationStartedAt DateTime?
+  // Immutable server-owned execution plan snapshot + its canonical-JSON sha256.
+  // Written once at creation; NULL on scans created before the column existed.
+  executionPlan         Json?
+  executionPlanHash     String?
   sarifUri              String?
   createdById           String
   // Immutable billing identity for this scan; NULL on legacy scans means createdById.

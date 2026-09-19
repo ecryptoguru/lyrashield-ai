@@ -13,6 +13,7 @@ export {
   getInstallAppUrl,
   getDefaultBranch,
   getBranchRefSha,
+  getMergeBaseSha,
   getFileContent,
   createBranch,
   createOrUpdateFile,

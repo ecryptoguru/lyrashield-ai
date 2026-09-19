@@ -31,6 +31,7 @@ vi.mock("./lifecycle-utils", () => ({
   refreshGateVerdictAfterTerminalScan: mocks.refreshGate,
 }))
 
+import { buildScanExecutionPlan } from "@lyrashield/types"
 import { verifyScanAdmission } from "./admission"
 
 const scanRecord = {
@@ -187,5 +188,140 @@ describe("verifyScanAdmission", () => {
       ok: true,
     })
     expect(mocks.evaluateScanEntitlement).not.toHaveBeenCalled()
+  })
+
+  describe("execution-plan admission", () => {
+    const repoDeepPlan = () => buildScanExecutionPlan({ targetType: "REPO", mode: "DEEP" })
+
+    it("admits mixed rows during drain: legacy null-plan and stored-plan scans", async () => {
+      // Flag OFF (default) — a pre-plan row runs its original path.
+      await expect(
+        verifyScanAdmission(params({ planRequired: false }))
+      ).resolves.toEqual({ ok: true })
+      // A new plan-bearing row validates and admits in the same drain window.
+      await expect(
+        verifyScanAdmission(
+          params({ executionPlan: repoDeepPlan(), targetType: "REPO", planRequired: false })
+        )
+      ).resolves.toEqual({ ok: true })
+    })
+
+    it("denies a legacy null-plan scan when plan admission is required", async () => {
+      await expect(
+        verifyScanAdmission(params({ planRequired: true }))
+      ).resolves.toEqual({
+        ok: false,
+        result: {
+          status: "failed",
+          errorCategory: "SCAN_PLAN_REQUIRED",
+          errorMessage: expect.stringContaining("execution plan"),
+        },
+      })
+      expect(mocks.updateScanStatus).toHaveBeenCalledWith(
+        "scan-1",
+        "FAILED",
+        expect.objectContaining({ errorCategory: "SCAN_PLAN_REQUIRED" })
+      )
+      expect(mocks.evaluateScanEntitlement).not.toHaveBeenCalled()
+    })
+
+    it("admits a stored plan that matches the current admission policy", async () => {
+      await expect(
+        verifyScanAdmission(
+          params({ executionPlan: repoDeepPlan(), targetType: "REPO", planRequired: true })
+        )
+      ).resolves.toEqual({ ok: true })
+    })
+
+    it("denies when the plan target type differs from the stored target", async () => {
+      await expect(
+        verifyScanAdmission(
+          params({ executionPlan: repoDeepPlan(), targetType: "WEB_APP" })
+        )
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_PLAN_MISMATCH" },
+      })
+    })
+
+    it("denies when the recorded profile does not match the stored mode", async () => {
+      const quickPlan = buildScanExecutionPlan({ targetType: "REPO", mode: "QUICK" })
+      await expect(
+        verifyScanAdmission(
+          params({ executionPlan: quickPlan, targetType: "REPO" })
+        )
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_PLAN_MISMATCH" },
+      })
+    })
+
+    it("denies when the plan engine capability no longer matches the scan", async () => {
+      // Recorded plan claims engine, but this is a deterministic retest.
+      await expect(
+        verifyScanAdmission(
+          params({
+            executionPlan: repoDeepPlan(),
+            targetType: "REPO",
+            deterministicRetest: true,
+          })
+        )
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_PLAN_MISMATCH" },
+      })
+      // ...and the inverse: a plan without engine for an engine-backed scan.
+      const noEngine = { ...repoDeepPlan(), capabilities: ["sca", "secrets"] }
+      await expect(
+        verifyScanAdmission(params({ executionPlan: noEngine, targetType: "REPO" }))
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_PLAN_MISMATCH" },
+      })
+    })
+
+    it("denies when the recorded plan exceeds the limits the profile now allows", async () => {
+      const inflated = {
+        ...repoDeepPlan(),
+        limits: { ...repoDeepPlan().limits, maxBudgetUsd: 99 },
+      }
+      await expect(
+        verifyScanAdmission(params({ executionPlan: inflated, targetType: "REPO" }))
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_PLAN_LIMITS_EXCEEDED" },
+      })
+    })
+
+    it("denies AUTHENTICATED_ASSESSMENT when the current policy allows destructive tests", async () => {
+      const betaPlan = buildScanExecutionPlan({
+        workflow: "AUTHENTICATED_ASSESSMENT",
+        targetType: "API",
+        mode: "DEEP",
+        authorizationRef: "authz_1",
+      })
+      await expect(
+        verifyScanAdmission(
+          params({
+            executionPlan: betaPlan,
+            targetType: "API",
+            destructiveTestsAllowed: true,
+          })
+        )
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_PLAN_DENIED" },
+      })
+      // The same plan admits under a non-destructive policy.
+      await expect(
+        verifyScanAdmission(
+          params({
+            executionPlan: betaPlan,
+            targetType: "API",
+            destructiveTestsAllowed: false,
+          })
+        )
+      ).resolves.toEqual({ ok: true })
+    })
   })
 })

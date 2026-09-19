@@ -63,6 +63,12 @@ vi.mock("../../../lib/queue", () => ({
   ScanWorkerUnavailableError: class ScanWorkerUnavailableError extends Error {},
 }))
 
+vi.mock("@lyrashield/integrations", () => ({
+  getBranchRefSha: vi.fn(),
+  getDefaultBranch: vi.fn(),
+  getMergeBaseSha: vi.fn(),
+}))
+
 vi.mock("@lyrashield/billing", () => ({
   assertScanAllowed: vi.fn().mockResolvedValue({ allowed: true }),
   assertTargetAllowed: vi.fn().mockResolvedValue({ allowed: true }),
@@ -166,5 +172,29 @@ describe("scan operation route regressions", () => {
     const calls = vi.mocked(claimOrGetAgentOperation).mock.calls
     expect(calls[0]?.[0].input).not.toEqual(calls[1]?.[0].input)
     expect(calls[0]?.[0].input).toHaveProperty("policyId", "policy-a")
+  })
+  it("binds workflow inputs to operation input", async () => {
+    const plain = request()
+    const reviewChanges = makeRequest({
+      workspaceId: "ws-1",
+      targetId: "t1",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      policyId: "policy-a",
+      workflow: "REVIEW_CHANGES",
+      baseRef: "main",
+    })
+    reviewChanges.headers.set("Idempotency-Key", "review-probe")
+    // REVIEW_CHANGES on this target short-circuits after the claim (no
+    // GitHub-connected repo) — the claim input binding is what we assert.
+    vi.mocked(failAgentOperation).mockResolvedValue({} as never)
+    await POST(plain)
+    await POST(reviewChanges)
+    const calls = vi.mocked(claimOrGetAgentOperation).mock.calls
+    expect(calls[0]?.[0].input).not.toEqual(calls[1]?.[0].input)
+    expect(calls[1]?.[0].input).toMatchObject({
+      workflow: "REVIEW_CHANGES",
+      baseRef: "main",
+    })
   })
 })
