@@ -21,6 +21,11 @@ const eslintConfig = [
     },
     rules: {
       "@next/next/no-html-link-for-pages": "off",
+    },
+  },
+  {
+    files: ["**/*.{ts,tsx,mts,cts}"],
+    rules: {
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       "@typescript-eslint/no-explicit-any": "warn",
     },
