@@ -1,0 +1,98 @@
+[
+  {
+    "id": "vuln-1-1-0001",
+    "title": "SQL injection in login handler",
+    "severity": "high",
+    "timestamp": "2026-09-10 11:03:12 UTC",
+    "target": "https://app.example.com",
+    "endpoint": "/api/login",
+    "method": "POST",
+    "cwe": "CWE-89",
+    "cvss": 8.6,
+    "cvss_breakdown": { "attack_vector": "N", "privileges_required": "N" },
+    "description": "The username parameter is concatenated into the SQL query.",
+    "impact": "Authentication bypass and data exfiltration.",
+    "technical_analysis": "loginHandler builds the query via template literal.",
+    "evidence": "Exchange 42 returned the user list with a tautology payload.",
+    "assumptions": "The endpoint is reachable without authentication.",
+    "fix_effort": "low",
+    "finding_class": "code_vulnerability",
+    "poc_description": "POST /api/login with username=' OR '1'='1",
+    "remediation_steps": "Use a parameterized query for the username predicate.",
+    "control_ids": [10, 30],
+    "code_locations": [
+      {
+        "file": "src/auth/login.ts",
+        "start_line": 88,
+        "end_line": 91,
+        "label": "query construction",
+        "snippet": "const q = `SELECT * FROM users WHERE name='${u}'`"
+      }
+    ],
+    "agent_id": "agent-101",
+    "agent_name": "vulnerability-scanner",
+    "counterevidence": "A WAF rule could still block exploitation in production.",
+    "confidence": "high",
+    "confidence_rationale": "The vulnerable sink is reachable and the payload round-trips.",
+    "severity_change_conditions": "Downgrade to medium if authentication precedes this handler.",
+    "fix_verification": {
+      "kind": "engine_attestation",
+      "statement": "The filing agent replayed the request and observed the bypass.",
+      "method": "proxy_replay",
+      "evidence_refs": ["42"]
+    },
+    "contextual_cvss_reasoning": "No authentication precedes the endpoint; impact is data-scoped.",
+    "advisory_cvss": {
+      "score": 8.6,
+      "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H",
+      "source": "engine_analysis",
+      "metric_reasoning": "Unauthenticated remote reach with full data impact."
+    },
+    "http_exchange_ids": ["42", "43"],
+    "update_history": [
+      {
+        "timestamp": "2026-09-10 11:04:00 UTC",
+        "fields": ["cvss", "severity"],
+        "reason": "Confirmed unauthenticated reachability via exchange 42.",
+        "agent_id": "agent-101",
+        "agent_name": "vulnerability-scanner",
+        "previous_severity": "medium",
+        "previous_cvss": 6.5
+      }
+    ],
+    "updated_at": "2026-09-10 11:04:00 UTC",
+    "evidence_warnings": ["poc script omitted from verbatim ledger"],
+    "evidence_contract_version": "1.1",
+    "verification_state": "engine_asserted",
+    "verified": true,
+    "verified_at": "2026-09-10 11:04:30 UTC",
+    "verified_by": "agent-101",
+    "poc_verified": true,
+    "execution_evidence": "raw replay output that must not persist verbatim",
+    "runtime_proof": "sandbox-observed behavior blob"
+  },
+  {
+    "id": "vuln-1-1-0002",
+    "title": "Dependency advisory for acme-orm",
+    "severity": "medium",
+    "timestamp": "2026-09-10 11:05:41 UTC",
+    "cwe": "CWE-1035",
+    "finding_class": "dependency_cve",
+    "cve": "CVE-2026-9001",
+    "advisory_cvss": 7.5,
+    "dependency_metadata": {
+      "package_name": "acme-orm",
+      "package_ecosystem": "npm",
+      "installed_version": "4.2.0",
+      "fixed_version": "4.2.3",
+      "advisory_cvss": 7.5,
+      "contextual_cvss_score": 6.1,
+      "cvss_breakdown": { "attack_vector": "N", "attack_complexity": "L" },
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-example"
+    },
+    "confidence": "medium",
+    "confidence_rationale": "Dependency is pinned but the vulnerable code path may be unused.",
+    "http_exchange_ids": ["999999"],
+    "evidence_warnings": ["transitive dependency; reachability unproven"]
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "run_id": "fixture-run-1-0",
+  "run_name": "scan-fixture-1-0",
+  "start_time": "2026-09-10 10:00:00 UTC",
+  "end_time": "2026-09-10 10:05:12 UTC",
+  "status": "completed",
+  "scan_mode": "quick",
+  "engine_version": "1.6.4",
+  "model": "azure_ai/gpt-5.6-luna",
+  "reasoning_effort": "medium",
+  "targets_info": [
+    { "type": "repository", "details": { "cloned_repo_path": "/tmp/lyrashield_repo/repo_scan-1_abc/app" } }
+  ],
+  "cleanup": { "sandbox_removed": true },
+  "llm_usage": {
+    "request_count": 12,
+    "input_tokens": 182340,
+    "cached_input_tokens": 81000,
+    "output_tokens": 4120,
+    "total_tokens": 186460,
+    "total_cost_usd": 0.0812
+  }
+}

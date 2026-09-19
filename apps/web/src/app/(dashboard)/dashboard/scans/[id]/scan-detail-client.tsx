@@ -354,8 +354,14 @@ export function ScanDetailClient({
   const visibleEvents = expandedEvents ? displayEvents : displayEvents.slice(-10)
   const coverageWarnings = getScannerCoverageWarnings(scan.events)
   const hasLimitedCoverage = coverageWarnings.length > 0
+  // run.json 1.1 scoped coverage (engine-scope:*/engine-gap:*) is a model
+  // self-report carried for evidence — it never joins the deterministic
+  // scanner-family rows or the vibe control rows.
+  const isEngineDeclaredReceipt = (controlId: string) =>
+    controlId.startsWith("engine-scope:") || controlId.startsWith("engine-gap:")
   const familyCoverage = scan.integrity.coverage.filter(
-    (receipt) => !receipt.controlId.startsWith("vibe-")
+    (receipt) =>
+      !receipt.controlId.startsWith("vibe-") && !isEngineDeclaredReceipt(receipt.controlId)
   )
   const controlCoverage = scan.integrity.coverage.filter((receipt) =>
     receipt.controlId.startsWith("vibe-")

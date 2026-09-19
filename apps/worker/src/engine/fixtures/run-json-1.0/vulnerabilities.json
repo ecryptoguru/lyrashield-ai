@@ -1,0 +1,34 @@
+[
+  {
+    "id": "vuln-1-0-0001",
+    "title": "Hardcoded API token in client config",
+    "severity": "high",
+    "timestamp": "2026-09-10 10:02:31 UTC",
+    "target": "acme/app",
+    "cwe": "CWE-798",
+    "cvss": 7.5,
+    "description": "A live-format API token is committed to the repository.",
+    "impact": "Credential disclosure allows third-party API access.",
+    "technical_analysis": "src/config.ts initializes the SDK with a literal token.",
+    "evidence": "src/config.ts line 12 contains a token matching the vendor format.",
+    "assumptions": "The committed token is live.",
+    "finding_class": "static_secret",
+    "poc_description": "The token authenticates against the vendor API.",
+    "remediation_steps": "Rotate the token and load it from the environment.",
+    "fix_effort": "trivial",
+    "control_ids": [3, 37],
+    "code_locations": [
+      {
+        "file": "src/config.ts",
+        "start_line": 12,
+        "end_line": 12,
+        "label": "token literal",
+        "snippet": "const API_KEY = \"ak_live_example\"",
+        "fix_before": "const API_KEY = \"ak_live_example\"",
+        "fix_after": "const API_KEY = process.env.ACME_API_KEY"
+      }
+    ],
+    "agent_id": "agent-001",
+    "agent_name": "vulnerability-scanner"
+  }
+]

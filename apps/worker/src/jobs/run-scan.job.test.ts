@@ -133,6 +133,7 @@ vi.mock("../engine/runner", () => ({
   runEngine: vi.fn().mockImplementation(({ scanId }: { scanId: string }) => ({
     exitCode: 0,
     output: {
+      ingestionIssues: [],
       vulnerabilities: [],
       findingsComplete: true,
       runRecord: {
@@ -632,6 +633,7 @@ describe("processScanJob", () => {
           ({
             exitCode: 0,
             output: {
+              ingestionIssues: [],
               vulnerabilities: [],
               findingsComplete: true,
               runRecord: {
@@ -853,6 +855,7 @@ describe("processScanJob", () => {
         ({
           exitCode: 0,
           output: {
+            ingestionIssues: [],
             vulnerabilities: [],
             findingsComplete: true,
             runRecord: {
@@ -937,6 +940,7 @@ describe("processScanJob", () => {
       vi.mocked(runEngine).mockResolvedValueOnce({
         exitCode: 0,
         output: {
+          ingestionIssues: [],
           vulnerabilities: [],
           findingsComplete: false,
           findingCount: 0,
@@ -1194,6 +1198,7 @@ describe("processScanJob", () => {
       vi.mocked(runEngine).mockResolvedValueOnce({
         exitCode: 0,
         output: {
+          ingestionIssues: [],
           vulnerabilities: [{ title: "Retained finding" }],
           findingCount: 1,
           findingsComplete: false,
@@ -1235,6 +1240,7 @@ describe("processScanJob", () => {
       return {
         exitCode: 0,
         output: {
+          ingestionIssues: [],
           vulnerabilities: [],
           findingsComplete: true,
           runRecord: {
@@ -1457,6 +1463,7 @@ describe("processScanJob", () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 0,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         findingsComplete: true,
         runRecord: {
@@ -1526,6 +1533,7 @@ describe("processScanJob", () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 0,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         findingsComplete: true,
         runRecord: {
@@ -1586,6 +1594,7 @@ describe("processScanJob", () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 0,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         findingsComplete: true,
         runRecord: {
@@ -1643,6 +1652,7 @@ describe("processScanJob", () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 0,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         findingsComplete: true,
         runRecord: { run_id: "scan-1", run_name: "scan-1", status: "completed" },
@@ -1669,6 +1679,7 @@ describe("processScanJob", () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 0,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         findingsComplete: true,
         runRecord: {
@@ -1822,6 +1833,7 @@ describe("processScanJob", () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 3,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         findingsComplete: false,
         runRecord: null,
@@ -1849,6 +1861,7 @@ describe("processScanJob", () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 1,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         findingsComplete: false,
         runRecord: {
@@ -1874,6 +1887,7 @@ describe("processScanJob", () => {
       exitCode: -1,
       cancelled: true,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         runRecord: null,
         summary: "Cancelled",
@@ -1917,6 +1931,7 @@ describe("processScanJob", () => {
       exitCode: -1,
       timedOut: true,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         runRecord: null,
         summary: "Timed out",
@@ -1952,6 +1967,7 @@ describe("processScanJob", () => {
       timedOut: true,
       timeoutReason: "INACTIVITY",
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         runRecord: null,
         summary: "Stalled",
@@ -1977,6 +1993,7 @@ describe("processScanJob", () => {
       exitCode: -1,
       budgetKilled: true,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         findingsComplete: false,
         runRecord: {
@@ -2049,6 +2066,7 @@ describe("processScanJob", () => {
       exitCode: 0,
       budgetKilled: false,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         findingsComplete: true,
         runRecord: {
@@ -2375,6 +2393,7 @@ describe("processScanJob", () => {
       sourceCheckoutPath: "/tmp/strix_repos/r1/repo",
       sourceRevision: "c".repeat(40),
       output: {
+        ingestionIssues: [],
         vulnerabilities: vulns,
         findingsComplete: true,
         runRecord: {
@@ -2429,6 +2448,7 @@ describe("processScanJob", () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 0,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         findingsComplete: true,
         runRecord: {
@@ -2505,6 +2525,7 @@ describe("processScanJob", () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 2,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [{ id: "v1", title: "XSS", severity: "high", timestamp: "now" }],
         findingsComplete: true,
         runRecord: {
@@ -2553,6 +2574,7 @@ describe("processScanJob", () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 0,
       output: {
+        ingestionIssues: [],
         vulnerabilities: [],
         findingsComplete: true,
         runRecord: {

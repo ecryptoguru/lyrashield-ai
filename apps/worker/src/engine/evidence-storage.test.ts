@@ -38,7 +38,9 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { warn: vi.fn(), error: vi.fn() },
 }))
 
-const { uploadEvidence, EvidenceStorageConfigurationError } = await import("./evidence-storage")
+const { uploadEvidence, uploadScanArtifact, EvidenceStorageConfigurationError } = await import(
+  "./evidence-storage"
+)
 
 describe("uploadEvidence", () => {
   const localDir = join(tmpdir(), `lyrashield-evidence-test-${Date.now()}`)
@@ -213,5 +215,57 @@ describe("uploadEvidence", () => {
       })
     ).rejects.toThrow(/LYRASHIELD_EVIDENCE_KEK/)
     expect(send).not.toHaveBeenCalled()
+  })
+})
+
+describe("uploadScanArtifact", () => {
+  const localDir = join(tmpdir(), `lyrashield-evidence-scan-test-${Date.now()}`)
+
+  beforeEach(() => {
+    send.mockReset()
+    Object.assign(evidenceEnv, {
+      S3_ENDPOINT: undefined,
+      S3_BUCKET: undefined,
+      S3_ACCESS_KEY: undefined,
+      S3_SECRET_KEY: undefined,
+      S3_REGION: undefined,
+      NODE_ENV: "test",
+      LYRASHIELD_LOCAL_EVIDENCE_STORAGE: "0",
+      LYRASHIELD_LOCAL_EVIDENCE_DIR: localDir,
+      BETTER_AUTH_SECRET: "a".repeat(32),
+      LYRASHIELD_EVIDENCE_KEK: undefined,
+    })
+  })
+
+  afterEach(async () => rm(localDir, { recursive: true, force: true }))
+
+  it("stores the artifact under the scan owner and returns its byte length", async () => {
+    evidenceEnv.LYRASHIELD_LOCAL_EVIDENCE_STORAGE = "1"
+    const result = await uploadScanArtifact({
+      workspaceId: "ws-1",
+      scanId: "scan-9",
+      type: "http_exchanges",
+      artifactId: "http-exchanges",
+      content: '{"exchanges":[]}',
+      contentType: "application/json; charset=utf-8",
+    })
+
+    expect(result.storageUri).toContain("scan-9")
+    expect(result.byteLength).toBeGreaterThan(0)
+    expect(result.checksum).toMatch(/^[0-9a-f]{64}$/)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- result URI is produced by uploadScanArtifact
+    const encrypted = await readFile(fileURLToPath(result.storageUri))
+    expect(encrypted.toString("utf8")).not.toContain('"exchanges"')
+  })
+
+  it("fails closed when durable evidence storage is not configured", async () => {
+    await expect(
+      uploadScanArtifact({
+        workspaceId: "ws-1",
+        scanId: "scan-9",
+        type: "threat_model",
+        content: "{}",
+      })
+    ).rejects.toBeInstanceOf(EvidenceStorageConfigurationError)
   })
 })

@@ -126,6 +126,10 @@ export async function executeScanTarget(params: {
         summary:
           "Deterministic repository retest completed; model analysis was outside this retest scope.",
         findingsComplete: true,
+        ingestionIssues: [],
+        scopedCoverage: null,
+        threatModels: null,
+        httpExchangeExport: null,
       },
     }
     try {
@@ -407,6 +411,10 @@ export async function executeScanTarget(params: {
         findingCount: 0,
         summary: "Deterministic surface review completed; the engine is not part of this tier.",
         findingsComplete: true,
+        ingestionIssues: [],
+        scopedCoverage: null,
+        threatModels: null,
+        httpExchangeExport: null,
       },
     }
   } else {

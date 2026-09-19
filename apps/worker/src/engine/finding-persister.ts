@@ -25,6 +25,13 @@ interface PersistFindingsParams {
    * Optional and additive — callers without a checkout (URL/API targets) omit it.
    */
   sourceRevision?: string
+  /**
+   * Checksum of this scan's encrypted proxy-exchange export (run.json 1.1).
+   * Threaded into each finding's claim context and detection receipt so a
+   * finding's http_exchange_ids bind to the exact artifact they validated
+   * against — the refs alone are opaque without it.
+   */
+  httpExchangeArtifactChecksum?: string
   /** Stop admitting findings after the grace period; await in-flight writes. */
   assertCanStart?: () => void
 }
@@ -40,7 +47,8 @@ interface PersistedFinding {
 async function persistEvidence(
   findingId: string,
   workspaceId: string,
-  vuln: EngineVulnerability | NormalizedFinding
+  vuln: EngineVulnerability | NormalizedFinding,
+  httpExchangeArtifactChecksum?: string
 ): Promise<void> {
   const artifacts: Array<{
     type: "poc" | "code_location" | "claim_context"
@@ -74,6 +82,27 @@ async function persistEvidence(
     dependencyMetadata: vuln.dependency_metadata,
     cvssBreakdown: vuln.cvss_breakdown,
     controlIds: vuln.control_ids,
+    // ── run.json 1.1 evidence fields (engine-asserted, never verification) ──
+    counterevidence: vuln.counterevidence,
+    engineConfidence: vuln.engine_confidence,
+    confidenceRationale: vuln.confidence_rationale,
+    severityChangeConditions: vuln.severity_change_conditions,
+    fixVerification: vuln.fix_verification,
+    contextualCvssReasoning: vuln.contextual_cvss_reasoning,
+    advisoryCvss: vuln.advisory_cvss,
+    httpExchangeIds: vuln.http_exchange_ids,
+    httpExchangeRefsDropped: vuln.http_exchange_refs_dropped,
+    httpExchangeArtifactChecksum:
+      vuln.http_exchange_ids?.length && httpExchangeArtifactChecksum
+        ? httpExchangeArtifactChecksum
+        : undefined,
+    updateHistory: vuln.update_history,
+    updatedAt: vuln.updated_at,
+    evidenceWarnings: vuln.evidence_warnings,
+    evidenceContractVersion: vuln.evidence_contract_version,
+    // The engine's declared verification_state is evidence about what the
+    // engine claimed — never the app's verification status.
+    engineVerificationState: vuln.engine_verification_state,
   }
   if (Object.values(claimContext).some((value) => value !== undefined)) {
     artifacts.push({
@@ -251,7 +280,7 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
     }
 
     async function finalizeFinding(findingId: string): Promise<void> {
-      await persistEvidence(findingId, workspaceId, vuln)
+      await persistEvidence(findingId, workspaceId, vuln, params.httpExchangeArtifactChecksum)
       await persistDetectionReceipt({
         scanId,
         workspaceId,
@@ -260,6 +289,7 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
         finding: vuln,
         severity,
         dedupeKey,
+        httpExchangeArtifactChecksum: params.httpExchangeArtifactChecksum,
       })
     }
 

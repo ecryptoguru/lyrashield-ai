@@ -295,6 +295,90 @@ describe("persistFindings", () => {
     )
   })
 
+  it("persists 1.1 evidence verbatim through claim_context without promoting trust", async () => {
+    const vulnerability = {
+      id: "vuln-1-1",
+      title: "SQL injection in login handler",
+      severity: "high" as const,
+      timestamp: "2026-09-10T11:03:12Z",
+      engine_confidence: "high" as const,
+      counterevidence: "A WAF rule could still block exploitation.",
+      confidence_rationale: "Sink reachable; payload round-trips.",
+      severity_change_conditions: "Downgrade if auth precedes handler.",
+      fix_verification: {
+        kind: "engine_attestation",
+        statement: "Filing agent replayed the request.",
+        method: "proxy_replay",
+        evidence_refs: ["42"],
+      },
+      contextual_cvss_reasoning: "Unauthenticated remote reach.",
+      advisory_cvss: { score: 8.6, vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H" },
+      http_exchange_ids: ["42", "43"],
+      update_history: [
+        { timestamp: "t", fields: ["severity"], previous_severity: "medium" as const },
+      ],
+      updated_at: "2026-09-10T11:04:00Z",
+      evidence_warnings: ["poc script omitted"],
+      evidence_contract_version: "1.1",
+      engine_verification_state: "engine_asserted",
+    }
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([])
+    vi.mocked(prisma.finding.create).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    vi.mocked(uploadEvidence).mockResolvedValue({
+      storageUri: "s3://bucket/evidence",
+      checksum: "sha256-checksum",
+      encryptionKeyRef: "vault://test",
+    })
+
+    await persistFindings({
+      scanId: "scan-2",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: [vulnerability],
+      httpExchangeArtifactChecksum: "d".repeat(64),
+    })
+
+    const claimContextCall = vi
+      .mocked(uploadEvidence)
+      .mock.calls.find((call) => call[0].type === "claim_context")
+    expect(claimContextCall).toBeDefined()
+    const claimContext = JSON.parse(String(claimContextCall![0].content)) as Record<
+      string,
+      unknown
+    >
+    expect(claimContext).toMatchObject({
+      engineConfidence: "high",
+      counterevidence: "A WAF rule could still block exploitation.",
+      confidenceRationale: "Sink reachable; payload round-trips.",
+      severityChangeConditions: "Downgrade if auth precedes handler.",
+      fixVerification: {
+        kind: "engine_attestation",
+        statement: "Filing agent replayed the request.",
+        method: "proxy_replay",
+        evidence_refs: ["42"],
+      },
+      contextualCvssReasoning: "Unauthenticated remote reach.",
+      advisoryCvss: { score: 8.6 },
+      httpExchangeIds: ["42", "43"],
+      httpExchangeArtifactChecksum: "d".repeat(64),
+      updateHistory: [{ timestamp: "t", fields: ["severity"], previous_severity: "medium" }],
+      updatedAt: "2026-09-10T11:04:00Z",
+      evidenceWarnings: ["poc script omitted"],
+      evidenceContractVersion: "1.1",
+      engineVerificationState: "engine_asserted",
+    })
+    // An engine-asserted verification_state never elevates app trust: the
+    // finding stays DETECTED/INCONCLUSIVE-classified by the app, verified=false.
+    expect(prisma.finding.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ verified: false }),
+    })
+    const created = vi.mocked(prisma.finding.create).mock.calls[0][0] as {
+      data: { verificationStatus: string }
+    }
+    expect(["DETECTED", "INCONCLUSIVE"]).toContain(created.data.verificationStatus)
+  })
+
   it("marks engine-only claims without deterministic corroboration as inconclusive", async () => {
     vi.mocked(prisma.finding.findMany).mockResolvedValue([])
     vi.mocked(prisma.finding.create).mockResolvedValue({ id: "finding-1" } as never)

@@ -330,6 +330,12 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
   let anyCompleted = false
   const receiptsByScanner = new Map<string, GateCoverageReceiptInput[]>()
   for (const r of receipts) {
+    // run.json 1.1 engine-declared scoped coverage (engine-scope:*/engine-gap:*)
+    // is a model self-report — evidence metadata, never a deterministic
+    // control outcome — so it cannot satisfy or fail the coverage gate.
+    if (r.controlId.startsWith("engine-scope:") || r.controlId.startsWith("engine-gap:")) {
+      continue
+    }
     const grouped = receiptsByScanner.get(r.scanner) ?? []
     grouped.push(r)
     receiptsByScanner.set(r.scanner, grouped)

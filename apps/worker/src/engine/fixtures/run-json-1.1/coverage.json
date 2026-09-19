@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-10 11:12:30 UTC",
+  "run_id": "fixture-run-1-1",
+  "run_name": "scan-fixture-1-1",
+  "scope": {
+    "targets": [{ "type": "repository", "details": {} }],
+    "scan_mode": "standard",
+    "instruction": ""
+  },
+  "summary": {
+    "surfaces_reviewed": 3,
+    "outcomes": { "reported": 1, "no_issue_found": 1, "needs_follow_up": 1 },
+    "findings_filed": 2,
+    "gaps": 1
+  },
+  "machine_observed": {
+    "agents": [{ "agent_id": "agent-101", "agent_name": "vulnerability-scanner", "status": "completed", "skills": ["sql_injection"], "is_root": false }],
+    "skills_exercised": ["sql_injection"],
+    "findings_filed": 2,
+    "source": "runtime"
+  },
+  "completeness": {
+    "complete": false,
+    "scan_status": "completed",
+    "exit_reason": "finished_by_tool",
+    "caveats": ["Coverage reflects agent-reported entries only."]
+  },
+  "entries": [
+    {
+      "id": "a1b2c3",
+      "surface": "src/auth/login.ts",
+      "subject": "src/auth/login.ts",
+      "risk_area": "SQL injection",
+      "outcome": "reported",
+      "investigation_status": "reported",
+      "outcome_label": "Finding reported",
+      "evidence": "vuln-1-1-0001",
+      "reason": "vuln-1-1-0001",
+      "recorded_by": "vulnerability-scanner",
+      "recorded_at": "2026-09-10 11:03:30 UTC",
+      "updated_at": "2026-09-10 11:04:00 UTC",
+      "previous_outcomes": ["needs_follow_up"],
+      "source": "model_declared",
+      "evidence_refs": ["42"]
+    },
+    {
+      "id": "d4e5f6",
+      "surface": "src/utils/format.ts",
+      "subject": "src/utils/format.ts",
+      "risk_area": "cross-site scripting",
+      "outcome": "no_issue_found",
+      "investigation_status": "no_issue_found",
+      "outcome_label": "No issue identified",
+      "evidence": "Output is escaped at the render boundary.",
+      "reason": "Output is escaped at the render boundary.",
+      "recorded_by": "vulnerability-scanner",
+      "recorded_at": "2026-09-10 11:06:00 UTC",
+      "updated_at": "2026-09-10 11:06:00 UTC",
+      "previous_outcomes": [],
+      "source": "model_declared",
+      "evidence_refs": []
+    },
+    {
+      "id": "7a8b9c",
+      "surface": "src/api/admin.ts",
+      "subject": "src/api/admin.ts",
+      "risk_area": "authorization",
+      "outcome": "needs_follow_up",
+      "investigation_status": "needs_follow_up",
+      "outcome_label": "Requires further review",
+      "evidence": "Agent limit reached mid-review.",
+      "reason": "Agent limit reached mid-review.",
+      "recorded_by": "vulnerability-scanner",
+      "recorded_at": "2026-09-10 11:09:00 UTC",
+      "updated_at": "2026-09-10 11:09:00 UTC",
+      "previous_outcomes": [],
+      "source": "model_declared",
+      "evidence_refs": []
+    }
+  ],
+  "gaps": [
+    {
+      "kind": "agent_recorded_no_coverage",
+      "agent_name": "config-scanner",
+      "detail": "config-scanner ran (status: completed) without recording any coverage. Whatever it examined is absent from this record."
+    }
+  ],
+  "truncated": { "entries_dropped": 0, "entry_limit": 500 }
+}

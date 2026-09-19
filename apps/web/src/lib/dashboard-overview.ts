@@ -114,6 +114,15 @@ const APPLICABLE_RECEIPT_STATUSES = new Set([
 ])
 
 /**
+ * run.json 1.1 engine-declared scoped coverage rows (engine-scope:* /
+ * engine-gap:*) are model self-reports, not deterministic scanner outcomes —
+ * they never decide whether a run's coverage is complete.
+ */
+function isEngineDeclaredReceipt(controlId: string): boolean {
+  return controlId.startsWith("engine-scope:") || controlId.startsWith("engine-gap:")
+}
+
+/**
  * Coverage state for one scan from its coverage-receipt statuses.
  *
  * NOT_APPLICABLE receipts are excluded first: a scanner that does not apply to
@@ -512,13 +521,14 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     ? await withWorkspaceRLS(workspaceId, (tx) =>
         tx.scanCoverageReceipt.findMany({
           where: { scanId: { in: scanIdsInScope }, scan: { workspaceId, deletedAt: null } },
-          select: { scanId: true, status: true },
+          select: { scanId: true, status: true, controlId: true },
         })
       )
     : []
 
   const receiptsByScanId = new Map<string, string[]>()
   for (const receipt of receipts) {
+    if (isEngineDeclaredReceipt(receipt.controlId)) continue
     const statuses = receiptsByScanId.get(receipt.scanId)
     if (statuses) statuses.push(receipt.status)
     else receiptsByScanId.set(receipt.scanId, [receipt.status])
@@ -590,12 +600,13 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
       withWorkspaceRLS(workspaceId, (tx) =>
         tx.scanCoverageReceipt.findMany({
           where: { scanId: { in: extraScanIds }, scan: { workspaceId, deletedAt: null } },
-          select: { scanId: true, status: true },
+          select: { scanId: true, status: true, controlId: true },
         })
       ),
     ])
     activeScanRow = row
     for (const receipt of extraReceipts) {
+      if (isEngineDeclaredReceipt(receipt.controlId)) continue
       const statuses = receiptsByScanId.get(receipt.scanId)
       if (statuses) statuses.push(receipt.status)
       else receiptsByScanId.set(receipt.scanId, [receipt.status])

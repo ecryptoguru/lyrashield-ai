@@ -211,9 +211,14 @@ export async function completeScanWithScore(
     })
     // Public scorecards fail closed when an applicable scanner family did not
     // finish. Control-level inconclusive/evidence-required outcomes are honest
-    // result states, not scanner execution failures.
+    // result states, not scanner execution failures. Engine-declared scoped
+    // coverage rows (engine-scope:*/engine-gap:*) are model self-reports —
+    // not scanner execution — so they are excluded here as well.
     const scannerReceipts = scan.coverageReceipts.filter(
-      (receipt) => !receipt.controlId.startsWith("vibe-")
+      (receipt) =>
+        !receipt.controlId.startsWith("vibe-") &&
+        !receipt.controlId.startsWith("engine-scope:") &&
+        !receipt.controlId.startsWith("engine-gap:")
     )
     const coverageComplete =
       scannerReceipts.length > 0 &&

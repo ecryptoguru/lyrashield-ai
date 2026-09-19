@@ -1,0 +1,70 @@
+{
+  "schema_version": "lyrashield-http-exchanges/1.0",
+  "generated_at": "2026-09-10 11:12:31 UTC",
+  "binding": {
+    "run_id": "fixture-run-1-1",
+    "run_name": "scan-fixture-1-1",
+    "targets": [{ "type": "repository", "details": {} }],
+    "report_artifacts_revision": 4,
+    "findings": { "vuln-1-1-0001": ["42", "43"] }
+  },
+  "exchanges": [
+    {
+      "proxy_request_id": "42",
+      "request": {
+        "method": "POST",
+        "host": "app.example.com",
+        "port": 443,
+        "path": "/api/login",
+        "target": "/api/login",
+        "is_tls": true,
+        "created_at": "2026-09-10T11:03:00+00:00",
+        "headers": { "content-type": "application/json", "authorization": "[REDACTED]" },
+        "body_sample": "{\"username\":\"' OR '1'='1\"}",
+        "body_truncated": false,
+        "body_bytes": 34,
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "response": {
+        "status_code": 200,
+        "length": 1840,
+        "roundtrip_ms": 121,
+        "created_at": "2026-09-10T11:03:00+00:00",
+        "headers": { "content-type": "application/json" },
+        "body_sample": "{\"users\":[...]}",
+        "body_truncated": false,
+        "body_bytes": 1840,
+        "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    },
+    {
+      "proxy_request_id": "43",
+      "request": {
+        "method": "GET",
+        "host": "app.example.com",
+        "port": 443,
+        "path": "/api/users",
+        "target": "/api/users",
+        "is_tls": true,
+        "created_at": "2026-09-10T11:03:10+00:00",
+        "headers": { "cookie": "[REDACTED]" },
+        "body_sample": "",
+        "body_truncated": false,
+        "body_bytes": 0,
+        "sha256": null
+      },
+      "response": {
+        "status_code": 403,
+        "length": 96,
+        "roundtrip_ms": 44,
+        "created_at": "2026-09-10T11:03:10+00:00",
+        "headers": { "content-type": "application/json" },
+        "body_sample": "{\"error\":\"forbidden\"}",
+        "body_truncated": false,
+        "body_bytes": 96,
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      }
+    }
+  ],
+  "missing_request_ids": ["999999"]
+}
