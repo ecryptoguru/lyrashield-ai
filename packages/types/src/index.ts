@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { ScanWorkflowSchema } from "./scan-execution-plan"
 
 export * from "./ai-safety-tests"
 export * from "./agent-operations"
@@ -286,6 +287,45 @@ export const CreateScanSchema = z.object({
   mode: ScanModeSchema.default("SAFE"),
   policyId: z.string().optional(),
   focus: ScanFocusSchema.optional(),
+  // Optional workflow inputs. The server constructs and owns the immutable
+  // execution plan — clients can never supply plans, hashes, internal
+  // budgets, provider routes, or capabilities.
+  workflow: ScanWorkflowSchema.optional(),
+  // Review Changes comparison refs (branch names or full SHAs). The server
+  // resolves them to immutable git object IDs through the authorized source
+  // integration before the scan is admitted; abbreviated SHAs never persist.
+  baseRef: z
+    .string()
+    .min(1)
+    .max(255)
+    .refine(isValidGitRef, "Invalid Git ref")
+    .optional(),
+  headRef: z
+    .string()
+    .min(1)
+    .max(255)
+    .refine(isValidGitRef, "Invalid Git ref")
+    .optional(),
+})
+
+/** Create-scan input with cross-field workflow rules applied. Kept as a
+ * wrapper so CreateScanSchema stays a plain object for .pick()/JSON-schema
+ * consumers (eligibility preflight, OpenAPI). */
+export const CreateScanInputSchema = CreateScanSchema.superRefine((data, ctx) => {
+  if ((data.baseRef || data.headRef) && data.workflow !== "REVIEW_CHANGES") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["workflow"],
+      message: "baseRef/headRef are only valid with workflow REVIEW_CHANGES",
+    })
+  }
+  if (data.workflow === "REVIEW_CHANGES" && !data.baseRef) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["baseRef"],
+      message: "REVIEW_CHANGES requires a baseRef to compare against",
+    })
+  }
 })
 
 export type CreateScanInput = z.infer<typeof CreateScanSchema>
@@ -552,5 +592,6 @@ export type FindingQueryInput = z.infer<typeof FindingQuerySchema>
 
 export * from "./url-scan-capabilities"
 export * from "./scan-profile"
+export * from "./scan-execution-plan"
 export * from "./retest-profile"
 export * from "./plain-language"

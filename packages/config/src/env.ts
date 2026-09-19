@@ -194,6 +194,11 @@ const envSchema = z
     // Disabled by default. When enabled, eligible paid repository scans may
     // request an additive, redacted engine triage overlay within this cap.
     LYRASHIELD_AI_TRIAGE_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Deployable independently of the additive executionPlan migration. OFF:
+    // legacy null-plan scan rows drain on their original path. ON: worker
+    // admission requires every scan job to carry a stored, hash-verified
+    // execution plan; missing plans are denied, never fabricated.
+    LYRASHIELD_SCAN_PLAN_REQUIRED: z.enum(["0", "1"]).optional().default("0"),
     LYRASHIELD_AI_TRIAGE_MAX_BUDGET_USD: z.coerce.number().positive().max(5).default(0.2),
     // Docker sandbox resource limits passed to the Strix engine (e.g. "4g", "2", "512").
     STRIX_SANDBOX_MEM_LIMIT: z.string().optional().default("4g"),

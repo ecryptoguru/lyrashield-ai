@@ -1,7 +1,13 @@
 import type { Job } from "bullmq"
-import { getSystemPrisma, updateScanStatus, type ScanStatus } from "@lyrashield/db"
+import {
+  getSystemPrisma,
+  updateScanStatus,
+  verifyStoredScanExecutionPlan,
+  type ScanStatus,
+} from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { containsPromptInjection } from "@lyrashield/security"
+import { normalizePlanDepth, type ScanExecutionPlan } from "@lyrashield/types"
 import { ScanJobDataSchema, type ScanJobData, type ScanJobResult } from "../../types"
 
 export interface StoredScanAuthority {
@@ -16,6 +22,13 @@ export interface StoredScanAuthority {
   createdById: string
   sponsorAccountId: string | null
   triggerType: string | null
+  /**
+   * Immutable server-owned execution plan snapshot + canonical-JSON sha256,
+   * written once at scan creation. NULL on legacy rows — the bounded drain
+   * path treats them as pre-plan scans; provenance is never fabricated.
+   */
+  executionPlan: unknown
+  executionPlanHash: string | null
 }
 
 export type ScanAuthorityResult =
@@ -24,6 +37,8 @@ export type ScanAuthorityResult =
       data: ScanJobData
       scanRecord: StoredScanAuthority
       workspaceId: string
+      /** Validated stored plan, or null for a legacy pre-plan scan row. */
+      executionPlan: ScanExecutionPlan | null
     }
   | { ok: false; result: ScanJobResult }
 
@@ -107,6 +122,8 @@ export async function verifyScanJobAuthority(
         createdById: true,
         sponsorAccountId: true,
         triggerType: true,
+        executionPlan: true,
+        executionPlanHash: true,
       },
     })
   } catch (err) {
@@ -149,5 +166,65 @@ export async function verifyScanJobAuthority(
     }
   }
 
-  return { ok: true, data: parseResult.data, scanRecord, workspaceId: scanRecord.workspaceId }
+  // Validate the immutable execution plan snapshot when the row carries one:
+  // contract schema, supported version, and the recorded canonical-JSON hash.
+  // A stored plan that fails any check is evidence of tampering or an
+  // incompatible writer — fail closed; the plan is never repaired, widened,
+  // or substituted here or downstream.
+  let executionPlan: ScanExecutionPlan | null = null
+  if (scanRecord.executionPlan !== null && scanRecord.executionPlan !== undefined) {
+    const planCheck = verifyStoredScanExecutionPlan(
+      scanRecord.executionPlan,
+      scanRecord.executionPlanHash
+    )
+    const recordedDepth = planCheck.ok ? normalizePlanDepth(scanRecord.mode) : null
+    const depthMismatch =
+      planCheck.ok && (recordedDepth === null || planCheck.plan.depth !== recordedDepth)
+    if (!planCheck.ok || depthMismatch) {
+      const denial = !planCheck.ok
+        ? {
+            errorCategory: planCheck.errorCategory,
+            errorMessage: planCheck.errorMessage,
+          }
+        : {
+            errorCategory: "SCAN_PLAN_MISMATCH",
+            errorMessage:
+              "Stored execution plan depth does not match the recorded scan mode",
+          }
+      logger.warn("Stored scan execution plan failed validation", {
+        scanId,
+        jobId: job.id,
+        errorCategory: denial.errorCategory,
+      })
+      try {
+        await updateScanStatus(
+          scanId,
+          "FAILED" as ScanStatus,
+          {
+            errorCategory: denial.errorCategory,
+            errorMessage: denial.errorMessage,
+          },
+          scanRecord.workspaceId
+        )
+      } catch (statusErr) {
+        logger.warn("Failed to mark invalid-plan scan as failed", {
+          scanId,
+          errorType: statusErr instanceof Error ? statusErr.name : "UNKNOWN",
+        })
+      }
+      return {
+        ok: false,
+        result: { status: "failed", ...denial },
+      }
+    }
+    executionPlan = planCheck.plan
+  }
+
+  return {
+    ok: true,
+    data: parseResult.data,
+    scanRecord,
+    workspaceId: scanRecord.workspaceId,
+    executionPlan,
+  }
 }

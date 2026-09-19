@@ -14,6 +14,16 @@ function sortKeys<T>(value: T): T {
   return value
 }
 
+/**
+ * Deterministic canonical JSON for integrity hashing: every object's keys are
+ * recursively sorted so equal payloads produce byte-identical strings
+ * regardless of the order fields were assigned. Used for the scan execution
+ * plan hash and any other canonical-JSON contract.
+ */
+export function canonicalizeJson(value: unknown): string {
+  return JSON.stringify(sortKeys(value))
+}
+
 export function buildCanonicalInput(tool: WebMcpToolSurface): Record<string, unknown> {
   return sortKeys({
     kind: tool.kind,

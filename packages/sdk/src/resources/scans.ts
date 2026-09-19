@@ -18,6 +18,11 @@ export interface ScanInput {
   targetId: string
   goal?: string
   mode?: string
+  /** Optional workflow selection; the server owns the execution plan. */
+  workflow?: "REVIEW_TARGET" | "REVIEW_CHANGES" | "AUTHENTICATED_ASSESSMENT"
+  /** Review Changes comparison refs (branch names or full SHAs). */
+  baseRef?: string
+  headRef?: string
 }
 
 export interface GetScanOptions {

@@ -183,6 +183,12 @@ export {
   TERMINAL_SCAN_STATUSES,
   VALID_TRANSITIONS,
 } from "./scan-transitions"
+export {
+  canonicalizeScanExecutionPlan,
+  computeScanExecutionPlanHash,
+  verifyStoredScanExecutionPlan,
+  type StoredExecutionPlanCheck,
+} from "./scan-execution-plan"
 export { softDeleteTarget, TargetHasActiveScanError, TargetNotFoundError } from "./target-service"
 export {
   completeScanWithScore,

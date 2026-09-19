@@ -1,6 +1,11 @@
 export { WEBMCP_CONTROLS, WEBMCP_CONTROLS_BY_ID, WEBMCP_CONTROL_IDS } from "./controls"
 
-export { buildCanonicalInput, computeDefinitionHash, computeInventoryHash } from "./canonicalize"
+export {
+  buildCanonicalInput,
+  canonicalizeJson,
+  computeDefinitionHash,
+  computeInventoryHash,
+} from "./canonicalize"
 
 export { sha256, sha256Sync } from "./hash"
 

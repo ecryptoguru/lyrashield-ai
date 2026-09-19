@@ -1,4 +1,5 @@
 import { prisma } from "./client"
+import { Prisma } from "./generated/prisma"
 import type {
   Scan,
   ScanEvent,
@@ -9,11 +10,14 @@ import type {
 } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import {
+  buildScanExecutionPlan,
   DeterminismModeSchema,
   MAX_CONCURRENT_WORKSPACE_SCANS,
   ScanIdSchema,
   type DeterminismMode,
+  type ScanWorkflow,
 } from "@lyrashield/types"
+import { computeScanExecutionPlanHash } from "./scan-execution-plan"
 import { isTerminalScanStatus, isValidTransition } from "./scan-transitions"
 import { withWorkspaceRLS } from "./rls"
 import { getWorkspaceContext } from "./extension"
@@ -27,6 +31,25 @@ export interface CreateScanParams {
   createdById: string
   triggerType?: string
   determinismMode?: DeterminismMode
+  /**
+   * Optional workflow input (defaults to REVIEW_TARGET). The server constructs
+   * and persists the authoritative ScanExecutionPlan snapshot — callers supply
+   * workflow intent and already-resolved provenance only, never plan fields,
+   * limits, or capabilities.
+   */
+  workflow?: ScanWorkflow
+  /**
+   * Immutable git object IDs resolved through the authorized source
+   * integration BEFORE the admission lock is taken. Required for
+   * REVIEW_CHANGES (revision + baseRevision + mergeBaseRevision).
+   */
+  source?: {
+    revision: string
+    baseRevision?: string
+    mergeBaseRevision?: string
+  }
+  attachmentIds?: string[]
+  authorizationRef?: string
 }
 
 export class WorkspaceScanConcurrencyLimitError extends Error {
@@ -121,7 +144,7 @@ export async function createScan(
 
     const target = await tx.target.findFirst({
       where: { id: params.targetId, workspaceId: params.workspaceId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, type: true },
     })
     if (!target) throw new Error("Target not found in this workspace")
 
@@ -142,6 +165,21 @@ export async function createScan(
     })
     if (!workspace) throw new Error("Workspace not found")
 
+    // Build the authoritative execution plan from trusted inputs (the stored
+    // target's type, the canonical profile registry, resolved provenance) and
+    // persist it ONCE with the scan row — before queue publication. Updates
+    // require a new scan; the queue carries scan identity only.
+    const executionPlan = buildScanExecutionPlan({
+      workflow: params.workflow,
+      targetType: target.type,
+      mode: (params.mode ?? "QUICK") as Scan["mode"],
+      deterministicOnly: determinismMode === "targeted_scanner",
+      ...(params.source ? { source: params.source } : {}),
+      ...(params.attachmentIds ? { attachmentIds: params.attachmentIds } : {}),
+      ...(params.authorizationRef ? { authorizationRef: params.authorizationRef } : {}),
+    })
+    const executionPlanHash = computeScanExecutionPlanHash(executionPlan)
+
     const scan = await tx.scan.create({
       data: {
         workspaceId: params.workspaceId,
@@ -154,6 +192,8 @@ export async function createScan(
         determinismMode,
         createdById: params.createdById,
         sponsorAccountId: workspace.agencySponsorAccountId ?? params.createdById,
+        executionPlan: executionPlan as Prisma.InputJsonValue,
+        executionPlanHash,
       },
     })
     await tx.scanEvent.create({

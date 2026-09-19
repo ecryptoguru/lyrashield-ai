@@ -36,7 +36,13 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
   }
 })
 
-vi.mock("@lyrashield/db", () => ({
+vi.mock("@lyrashield/db", async () => {
+  // Keep the real stored-plan verifier — the fixtures exercise it directly.
+  const planModule = await vi.importActual<
+    typeof import("@lyrashield/db/src/scan-execution-plan")
+  >("@lyrashield/db/src/scan-execution-plan")
+  return {
+  verifyStoredScanExecutionPlan: planModule.verifyStoredScanExecutionPlan,
   prisma: {
     auditLog: { create: vi.fn().mockResolvedValue({}) },
     workspaceMember: { findFirst: vi.fn().mockResolvedValue({ role: "OWNER" }) },
@@ -81,7 +87,8 @@ vi.mock("@lyrashield/db", () => ({
   ),
   runWithWorkspaceContext: <T>(_wsId: string | null, fn: () => T): T => fn(),
   runWithAccountContext: <T>(_accountId: string | null, fn: () => T): T => fn(),
-}))
+  }
+})
 
 vi.mock("@lyrashield/logger", () => ({
   logger: {
@@ -317,6 +324,9 @@ function mockStoredScanAuthority(
     mode: "SAFE",
     policyId: null,
     createdById: "user-1",
+    // Legacy pre-plan row: the bounded drain path runs it unchanged.
+    executionPlan: null,
+    executionPlanHash: null,
     ...overrides,
   })
 }
