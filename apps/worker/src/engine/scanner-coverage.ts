@@ -1,8 +1,4 @@
-import type {
-  EngineCoverageGap,
-  ScopedCoverageEntry,
-  ScopedCoverageOutcome,
-} from "./output-parser"
+import type { EngineCoverageGap, ScopedCoverageEntry, ScopedCoverageOutcome } from "./output-parser"
 
 type ScannerCoverageStatus = "partial" | "unsupported" | "bounded"
 
@@ -117,9 +113,7 @@ export function scopedCoverageReceipts(
         ...(entry.recordedBy ? { recordedBy: entry.recordedBy } : {}),
         ...(entry.recordedAt ? { recordedAt: entry.recordedAt } : {}),
         ...(entry.updatedAt ? { updatedAt: entry.updatedAt } : {}),
-        ...(entry.previousOutcomes?.length
-          ? { previousOutcomes: entry.previousOutcomes }
-          : {}),
+        ...(entry.previousOutcomes?.length ? { previousOutcomes: entry.previousOutcomes } : {}),
       },
     })
   }

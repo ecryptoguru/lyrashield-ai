@@ -289,11 +289,7 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
               <p id="scan-target-type" className="mb-2 block text-sm font-medium text-foreground">
                 Target type
               </p>
-              <div
-                role="group"
-                aria-labelledby="scan-target-type"
-                className="flex flex-wrap gap-2"
-              >
+              <div role="group" aria-labelledby="scan-target-type" className="flex flex-wrap gap-2">
                 {TARGET_OPTIONS.map((t) => (
                   <button
                     key={t.value}

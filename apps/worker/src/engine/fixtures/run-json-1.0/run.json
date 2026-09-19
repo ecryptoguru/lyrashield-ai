@@ -9,7 +9,10 @@
   "model": "azure_ai/gpt-5.6-luna",
   "reasoning_effort": "medium",
   "targets_info": [
-    { "type": "repository", "details": { "cloned_repo_path": "/tmp/lyrashield_repo/repo_scan-1_abc/app" } }
+    {
+      "type": "repository",
+      "details": { "cloned_repo_path": "/tmp/lyrashield_repo/repo_scan-1_abc/app" }
+    }
   ],
   "cleanup": { "sandbox_removed": true },
   "llm_usage": {

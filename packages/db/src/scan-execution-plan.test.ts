@@ -169,9 +169,7 @@ describe("createScan execution plan persistence", () => {
       profileId: "REPO_STANDARD",
       scope: "SNAPSHOT",
     })
-    expect(data.executionPlanHash).toBe(
-      computeScanExecutionPlanHash(parsed.data!)
-    )
+    expect(data.executionPlanHash).toBe(computeScanExecutionPlanHash(parsed.data!))
     // The advisory admission lock precedes the row write in the same tx.
     expect(tx.$executeRaw).toHaveBeenCalled()
   })

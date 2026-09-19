@@ -14,9 +14,7 @@ import { ScanSchema, FindingSchema } from "../schemas"
  */
 const fixture = JSON.parse(
   readFileSync(
-    fileURLToPath(
-      new URL("../../../types/src/fixtures/scan-workflows.json", import.meta.url)
-    ),
+    fileURLToPath(new URL("../../../types/src/fixtures/scan-workflows.json", import.meta.url)),
     "utf8"
   )
 ) as {
@@ -59,41 +57,50 @@ describe("scan workflow parity matrix", () => {
     })
   })
 
-  it.each(fixture.cases)(
-    "serializes the fixture request verbatim: $name",
-    async (fixtureCase) => {
-      mockFetch.mockResolvedValueOnce(
-        mockResponse({
-          success: true,
-          data: { id: "scan-1", goal: "TEST_APP", mode: fixtureCase.request.mode, status: "QUEUED", createdAt: "2026-09-19T00:00:00.000Z" },
-        })
-      )
-
-      await createScan(client, {
-        targetId: `target-${fixtureCase.targetType.toLowerCase()}`,
-        goal: "TEST_APP",
-        ...fixtureCase.request,
+  it.each(fixture.cases)("serializes the fixture request verbatim: $name", async (fixtureCase) => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        success: true,
+        data: {
+          id: "scan-1",
+          goal: "TEST_APP",
+          mode: fixtureCase.request.mode,
+          status: "QUEUED",
+          createdAt: "2026-09-19T00:00:00.000Z",
+        },
       })
+    )
 
-      const init = mockFetch.mock.calls[0]![1] as RequestInit
-      const body = JSON.parse(init.body as string)
-      // The request fields cross the wire unchanged — no renaming, no
-      // inference, no client-supplied plan fields.
-      for (const [key, value] of Object.entries(fixtureCase.request)) {
-        expect(body[key]).toEqual(value)
-      }
-      expect(body).not.toHaveProperty("executionPlan")
-      expect(body).not.toHaveProperty("executionPlanHash")
-      expect(body).not.toHaveProperty("limits")
-      expect(body).not.toHaveProperty("capabilities")
+    await createScan(client, {
+      targetId: `target-${fixtureCase.targetType.toLowerCase()}`,
+      goal: "TEST_APP",
+      ...fixtureCase.request,
+    })
+
+    const init = mockFetch.mock.calls[0]![1] as RequestInit
+    const body = JSON.parse(init.body as string)
+    // The request fields cross the wire unchanged — no renaming, no
+    // inference, no client-supplied plan fields.
+    for (const [key, value] of Object.entries(fixtureCase.request)) {
+      expect(body[key]).toEqual(value)
     }
-  )
+    expect(body).not.toHaveProperty("executionPlan")
+    expect(body).not.toHaveProperty("executionPlanHash")
+    expect(body).not.toHaveProperty("limits")
+    expect(body).not.toHaveProperty("capabilities")
+  })
 
   it("forwards attachmentIds as immutable input references", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({
         success: true,
-        data: { id: "scan-2", goal: "TEST_APP", mode: "STANDARD", status: "QUEUED", createdAt: "2026-09-19T00:00:00.000Z" },
+        data: {
+          id: "scan-2",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          status: "QUEUED",
+          createdAt: "2026-09-19T00:00:00.000Z",
+        },
       })
     )
 
@@ -205,8 +212,6 @@ describe("scan workflow parity matrix", () => {
     })
     expect(verified.verificationStatus).toBe("VERIFIED")
     // A bogus tier fails validation instead of silently normalizing.
-    expect(
-      FindingSchema.safeParse({ ...base, verificationStatus: "PROVEN" }).success
-    ).toBe(false)
+    expect(FindingSchema.safeParse({ ...base, verificationStatus: "PROVEN" }).success).toBe(false)
   })
 })
