@@ -465,10 +465,10 @@ export function ScansClient({
   useEffect(() => {
     if (!showCreate) return
     const controller = new AbortController()
-    apiGet(
-      `/api/scans/attachments?workspaceId=${encodeURIComponent(workspaceId)}`,
-      { schema: scanAttachmentListSchema, signal: controller.signal }
-    )
+    apiGet(`/api/scans/attachments?workspaceId=${encodeURIComponent(workspaceId)}`, {
+      schema: scanAttachmentListSchema,
+      signal: controller.signal,
+    })
       .then((result) => {
         if (!controller.signal.aborted) setAttachments(result.items)
       })

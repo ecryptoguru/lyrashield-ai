@@ -213,11 +213,7 @@ export interface EngineRunRecord {
 
 /** Agent-reported coverage outcome from coverage.json (upstream VALID_OUTCOMES). */
 export type ScopedCoverageOutcome =
-  | "reported"
-  | "no_issue_found"
-  | "ruled_out"
-  | "not_applicable"
-  | "needs_follow_up"
+  "reported" | "no_issue_found" | "ruled_out" | "not_applicable" | "needs_follow_up"
 
 /**
  * One model-declared scoped coverage entry. `subject` is the surface the
@@ -727,10 +723,7 @@ function parseEvidenceWarnings(
     )
   }
   if (value.length > 10) {
-    recordIngestionIssue(
-      issues,
-      `finding ${findingId}: evidence_warnings truncated at 10 entries`
-    )
+    recordIngestionIssue(issues, `finding ${findingId}: evidence_warnings truncated at 10 entries`)
   }
   return warnings.length > 0 ? warnings : undefined
 }
@@ -1200,8 +1193,7 @@ function validateVulnerability(
   const updatedAt = evidenceString(v.updated_at, "updated_at", id, ctx?.issues)
   const evidenceWarnings = parseEvidenceWarnings(v.evidence_warnings, id, ctx?.issues)
   const evidenceContractVersion =
-    typeof v.evidence_contract_version === "string" &&
-    v.evidence_contract_version.length <= 64
+    typeof v.evidence_contract_version === "string" && v.evidence_contract_version.length <= 64
       ? v.evidence_contract_version
       : undefined
   // The engine's declared verification_state is carried verbatim as
@@ -1484,7 +1476,12 @@ function parseEvidenceExportOutcome(
   value: unknown
 ): NonNullable<EngineRunRecord["evidence_export"]> | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
-  const record = value as { status?: unknown; reason?: unknown; exchanges?: unknown; missing_request_ids?: unknown }
+  const record = value as {
+    status?: unknown
+    reason?: unknown
+    exchanges?: unknown
+    missing_request_ids?: unknown
+  }
   const status = ["exported", "partial", "skipped", "failed"].includes(String(record.status))
     ? (String(record.status) as "exported" | "partial" | "skipped" | "failed")
     : undefined
@@ -1509,11 +1506,7 @@ function parseEvidenceExportOutcome(
   }
 }
 
-function parseJsonArtifact(
-  raw: string,
-  artifact: string,
-  issues?: string[]
-): unknown | undefined {
+function parseJsonArtifact(raw: string, artifact: string, issues?: string[]): unknown | undefined {
   try {
     return JSON.parse(raw) as unknown
   } catch {
@@ -1564,9 +1557,7 @@ function parseEngineCoverage(
   const entries: ScopedCoverageEntry[] = []
   const seenIds = new Set<string>()
   let dropped = 0
-  for (const [index, rawEntry] of rawEntries
-    .slice(0, MAX_SCOPED_COVERAGE_ENTRIES)
-    .entries()) {
+  for (const [index, rawEntry] of rawEntries.slice(0, MAX_SCOPED_COVERAGE_ENTRIES).entries()) {
     const parsedEntry = scopedCoverageEntrySchema.safeParse(rawEntry)
     if (!parsedEntry.success) {
       dropped += 1
@@ -1603,9 +1594,7 @@ function parseEngineCoverage(
       ...(entry.recorded_by ? { recordedBy: entry.recorded_by } : {}),
       ...(entry.recorded_at ? { recordedAt: entry.recorded_at } : {}),
       ...(entry.updated_at ? { updatedAt: entry.updated_at } : {}),
-      ...(entry.previous_outcomes?.length
-        ? { previousOutcomes: entry.previous_outcomes }
-        : {}),
+      ...(entry.previous_outcomes?.length ? { previousOutcomes: entry.previous_outcomes } : {}),
     })
   }
   if (dropped > 0) {
@@ -1638,10 +1627,7 @@ function parseEngineCoverage(
     })
   }
   if (droppedGaps > 0) {
-    recordIngestionIssue(
-      issues,
-      `coverage.json: ${droppedGaps} malformed gap(s) dropped`
-    )
+    recordIngestionIssue(issues, `coverage.json: ${droppedGaps} malformed gap(s) dropped`)
   }
   return {
     ...(doc.schema_version !== undefined ? { schemaVersion: String(doc.schema_version) } : {}),
@@ -1669,10 +1655,7 @@ function parseThreatModels(
 ): ParsedThreatModels | null {
   if (raw === undefined) return null
   if (raw === null) {
-    recordIngestionIssue(
-      issues,
-      "threat_models.json unreadable or oversized — artifact ignored"
-    )
+    recordIngestionIssue(issues, "threat_models.json unreadable or oversized — artifact ignored")
     return null
   }
   if (!raw.trim()) return null
@@ -1716,7 +1699,10 @@ function parseThreatModels(
       typeof (model as { target?: unknown }).target !== "string" ||
       typeof (model as { content?: unknown }).content !== "string"
     ) {
-      recordIngestionIssue(issues, `threat_models.json: model ${key.slice(0, 64)} malformed — dropped`)
+      recordIngestionIssue(
+        issues,
+        `threat_models.json: model ${key.slice(0, 64)} malformed — dropped`
+      )
       continue
     }
     models.push({
@@ -1812,9 +1798,7 @@ function parseHttpExchangeExport(
     ...(doc.generated_at ? { generated_at: doc.generated_at } : {}),
     ...(doc.binding ? { binding: doc.binding } : {}),
     exchanges: doc.exchanges,
-    ...(doc.missing_request_ids?.length
-      ? { missing_request_ids: doc.missing_request_ids }
-      : {}),
+    ...(doc.missing_request_ids?.length ? { missing_request_ids: doc.missing_request_ids } : {}),
     ...(doc.truncated ? { truncated: doc.truncated } : {}),
   })
   return {

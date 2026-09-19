@@ -133,16 +133,11 @@ export const ScanExecutionPlanSchema = z
           message: "REVIEW_CHANGES requires DIFF scope",
         })
       }
-      if (
-        !plan.source?.revision ||
-        !plan.source?.baseRevision ||
-        !plan.source?.mergeBaseRevision
-      ) {
+      if (!plan.source?.revision || !plan.source?.baseRevision || !plan.source?.mergeBaseRevision) {
         ctx.addIssue({
           code: "custom",
           path: ["source"],
-          message:
-            "REVIEW_CHANGES requires resolved revision, baseRevision, and mergeBaseRevision",
+          message: "REVIEW_CHANGES requires resolved revision, baseRevision, and mergeBaseRevision",
         })
       }
     }
@@ -247,9 +242,7 @@ export interface BuildScanExecutionPlanInput {
  * from the shared profile registry — the caller supplies only workflow and
  * already-resolved provenance, never limits or capabilities directly.
  */
-export function buildScanExecutionPlan(
-  input: BuildScanExecutionPlanInput
-): ScanExecutionPlan {
+export function buildScanExecutionPlan(input: BuildScanExecutionPlanInput): ScanExecutionPlan {
   const workflow: ScanWorkflow = input.workflow ?? "REVIEW_TARGET"
   const targetType = ScanPlanTargetTypeSchema.safeParse(input.targetType)
   if (!targetType.success) {

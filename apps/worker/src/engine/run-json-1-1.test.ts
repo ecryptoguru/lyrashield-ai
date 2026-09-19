@@ -77,18 +77,15 @@ describe("run.json 1.1 golden fixture", () => {
     expect(finding).toMatchObject({
       counterevidence: "A WAF rule could still block exploitation in production.",
       engine_confidence: "high",
-      confidence_rationale:
-        "The vulnerable sink is reachable and the payload round-trips.",
-      severity_change_conditions:
-        "Downgrade to medium if authentication precedes this handler.",
+      confidence_rationale: "The vulnerable sink is reachable and the payload round-trips.",
+      severity_change_conditions: "Downgrade to medium if authentication precedes this handler.",
       fix_verification: {
         kind: "engine_attestation",
         statement: "The filing agent replayed the request and observed the bypass.",
         method: "proxy_replay",
         evidence_refs: ["42"],
       },
-      contextual_cvss_reasoning:
-        "No authentication precedes the endpoint; impact is data-scoped.",
+      contextual_cvss_reasoning: "No authentication precedes the endpoint; impact is data-scoped.",
       advisory_cvss: {
         score: 8.6,
         vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H",
@@ -181,9 +178,7 @@ describe("run.json 1.1 golden fixture", () => {
     const finding = result.vulnerabilities.find((v) => v.id === "vuln-1-1-0001")
     expect(finding?.http_exchange_ids).toBeUndefined()
     expect(finding?.http_exchange_refs_dropped).toBe(true)
-    expect(
-      result.ingestionIssues.some((i) => i.includes("exchange export unavailable"))
-    ).toBe(true)
+    expect(result.ingestionIssues.some((i) => i.includes("exchange export unavailable"))).toBe(true)
   })
 
   it("treats an unreadable export as unavailable, never as proof", () => {
@@ -193,9 +188,9 @@ describe("run.json 1.1 golden fixture", () => {
       httpExchangesRaw: null,
     })
     expect(result.httpExchangeExport).toBeNull()
-    expect(
-      result.ingestionIssues.some((i) => i.includes("http_exchanges.json unreadable"))
-    ).toBe(true)
+    expect(result.ingestionIssues.some((i) => i.includes("http_exchanges.json unreadable"))).toBe(
+      true
+    )
   })
 
   it("parses the scoped coverage ledger into declared entries and gaps", () => {

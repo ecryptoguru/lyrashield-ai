@@ -343,10 +343,7 @@ describe("persistFindings", () => {
       .mocked(uploadEvidence)
       .mock.calls.find((call) => call[0].type === "claim_context")
     expect(claimContextCall).toBeDefined()
-    const claimContext = JSON.parse(String(claimContextCall![0].content)) as Record<
-      string,
-      unknown
-    >
+    const claimContext = JSON.parse(String(claimContextCall![0].content)) as Record<string, unknown>
     expect(claimContext).toMatchObject({
       engineConfidence: "high",
       counterevidence: "A WAF rule could still block exploitation.",

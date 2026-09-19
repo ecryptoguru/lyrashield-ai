@@ -76,9 +76,9 @@ describe("ScanExecutionPlanSchema", () => {
 
   it("enforces the contract version literal", () => {
     for (const version of ["lyrashield-scan-plan/0.9.0", "lyrashield-scan-plan/2.0.0", ""]) {
-      expect(
-        ScanExecutionPlanSchema.safeParse({ ...REPO_SNAPSHOT_PLAN, version }).success
-      ).toBe(false)
+      expect(ScanExecutionPlanSchema.safeParse({ ...REPO_SNAPSHOT_PLAN, version }).success).toBe(
+        false
+      )
     }
   })
 
@@ -157,8 +157,7 @@ describe("ScanExecutionPlanSchema", () => {
 
     it("rejects non-REPO targets", () => {
       expect(
-        ScanExecutionPlanSchema.safeParse({ ...REVIEW_CHANGES_PLAN, targetType: "WEB_APP" })
-          .success
+        ScanExecutionPlanSchema.safeParse({ ...REVIEW_CHANGES_PLAN, targetType: "WEB_APP" }).success
       ).toBe(false)
     })
 
@@ -168,16 +167,13 @@ describe("ScanExecutionPlanSchema", () => {
       ).toBe(false)
     })
 
-    it.each(["baseRevision", "mergeBaseRevision"] as const)(
-      "rejects a missing %s",
-      (field) => {
-        const source = { ...REVIEW_CHANGES_PLAN.source } as Record<string, string>
-        delete source[field]
-        expect(
-          ScanExecutionPlanSchema.safeParse({ ...REVIEW_CHANGES_PLAN, source }).success
-        ).toBe(false)
-      }
-    )
+    it.each(["baseRevision", "mergeBaseRevision"] as const)("rejects a missing %s", (field) => {
+      const source = { ...REVIEW_CHANGES_PLAN.source } as Record<string, string>
+      delete source[field]
+      expect(ScanExecutionPlanSchema.safeParse({ ...REVIEW_CHANGES_PLAN, source }).success).toBe(
+        false
+      )
+    })
   })
 
   describe("REVIEW_TARGET scope pairing", () => {
@@ -185,9 +181,9 @@ describe("ScanExecutionPlanSchema", () => {
       expect(
         ScanExecutionPlanSchema.safeParse({ ...REPO_SNAPSHOT_PLAN, scope: "LIVE" }).success
       ).toBe(false)
-      expect(
-        ScanExecutionPlanSchema.safeParse({ ...LIVE_PLAN, scope: "SNAPSHOT" }).success
-      ).toBe(false)
+      expect(ScanExecutionPlanSchema.safeParse({ ...LIVE_PLAN, scope: "SNAPSHOT" }).success).toBe(
+        false
+      )
     })
   })
 
@@ -207,17 +203,17 @@ describe("ScanExecutionPlanSchema", () => {
       ["maxBudgetUsd", 4.99],
     ] as const)("rejects %s = %d (looser or tighter than the beta ceiling)", (field, value) => {
       const limits = { ...AUTHENTICATED_PLAN.limits, [field]: value }
-      expect(
-        ScanExecutionPlanSchema.safeParse({ ...AUTHENTICATED_PLAN, limits }).success
-      ).toBe(false)
+      expect(ScanExecutionPlanSchema.safeParse({ ...AUTHENTICATED_PLAN, limits }).success).toBe(
+        false
+      )
     })
 
     it("rejects omitted optional ceilings", () => {
       const limits = { ...AUTHENTICATED_PLAN.limits } as Record<string, unknown>
       delete limits["maxRequests"]
-      expect(
-        ScanExecutionPlanSchema.safeParse({ ...AUTHENTICATED_PLAN, limits }).success
-      ).toBe(false)
+      expect(ScanExecutionPlanSchema.safeParse({ ...AUTHENTICATED_PLAN, limits }).success).toBe(
+        false
+      )
     })
 
     it("requires a live WEB_APP/API target, DEEP depth, and an authorizationRef", () => {
@@ -325,11 +321,11 @@ describe("buildScanExecutionPlan", () => {
   })
 
   it("rejects target types outside the plan contract", () => {
-    expect(() =>
-      buildScanExecutionPlan({ targetType: "CLOUD_ACCOUNT", mode: "QUICK" })
-    ).toThrow("TARGET_TYPE_UNSUPPORTED")
-    expect(() =>
-      buildScanExecutionPlan({ targetType: "REPO", mode: "EXPENSIVE" })
-    ).toThrow("SCAN_MODE_UNSUPPORTED")
+    expect(() => buildScanExecutionPlan({ targetType: "CLOUD_ACCOUNT", mode: "QUICK" })).toThrow(
+      "TARGET_TYPE_UNSUPPORTED"
+    )
+    expect(() => buildScanExecutionPlan({ targetType: "REPO", mode: "EXPENSIVE" })).toThrow(
+      "SCAN_MODE_UNSUPPORTED"
+    )
   })
 })

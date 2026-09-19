@@ -41,11 +41,7 @@ import {
   enqueueScanJob,
   ScanWorkerUnavailableError,
 } from "../../../lib/queue"
-import {
-  getBranchRefSha,
-  getDefaultBranch,
-  getMergeBaseSha,
-} from "@lyrashield/integrations"
+import { getBranchRefSha, getDefaultBranch, getMergeBaseSha } from "@lyrashield/integrations"
 import {
   checkFreeUrlScanRateLimit,
   checkScanCreateRateLimit,
@@ -406,8 +402,7 @@ async function post(request: Request) {
     // plan records immutable object IDs — never moving refs. Clients supply
     // workflow intent only; the server owns the plan.
     let planSource:
-      | { revision: string; baseRevision?: string; mergeBaseRevision?: string }
-      | undefined
+      { revision: string; baseRevision?: string; mergeBaseRevision?: string } | undefined
     if (data.workflow === "AUTHENTICATED_ASSESSMENT") {
       return apiError(
         "SCAN_WORKFLOW_UNAVAILABLE",
@@ -417,11 +412,7 @@ async function post(request: Request) {
     }
     if (data.workflow === "REVIEW_CHANGES") {
       if (target.type !== "REPO") {
-        return apiError(
-          "SCAN_PLAN_INVALID",
-          "Review Changes requires a repository target.",
-          400
-        )
+        return apiError("SCAN_PLAN_INVALID", "Review Changes requires a repository target.", 400)
       }
       const installationId = target.installationId ? Number(target.installationId) : null
       const repoOwner = target.repoOwner ?? target.repoFullName?.split("/")[0]
@@ -456,11 +447,7 @@ async function post(request: Request) {
           headSha
         )
         if (!mergeBaseSha) {
-          return apiError(
-            "SCAN_NO_MERGE_BASE",
-            "The selected refs have no common merge base.",
-            409
-          )
+          return apiError("SCAN_NO_MERGE_BASE", "The selected refs have no common merge base.", 409)
         }
         planSource = {
           revision: headSha,

@@ -44,9 +44,9 @@ describe("validateScanAttachmentUpload", () => {
       ok: false,
       code: "SCAN_ATTACHMENT_TYPE_NOT_ALLOWED",
     })
-    expect(validateScanAttachmentUpload("notes.txt", "application/x-msdownload", 512)).toMatchObject(
-      { ok: false, code: "SCAN_ATTACHMENT_TYPE_NOT_ALLOWED" }
-    )
+    expect(
+      validateScanAttachmentUpload("notes.txt", "application/x-msdownload", 512)
+    ).toMatchObject({ ok: false, code: "SCAN_ATTACHMENT_TYPE_NOT_ALLOWED" })
   })
 
   it("rejects path-like and dotfile names", () => {

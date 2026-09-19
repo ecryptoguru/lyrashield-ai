@@ -38,9 +38,8 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { warn: vi.fn(), error: vi.fn() },
 }))
 
-const { uploadEvidence, uploadScanArtifact, EvidenceStorageConfigurationError } = await import(
-  "./evidence-storage"
-)
+const { uploadEvidence, uploadScanArtifact, EvidenceStorageConfigurationError } =
+  await import("./evidence-storage")
 
 describe("uploadEvidence", () => {
   const localDir = join(tmpdir(), `lyrashield-evidence-test-${Date.now()}`)
