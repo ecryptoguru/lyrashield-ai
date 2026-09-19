@@ -6,6 +6,7 @@ import { PayoutRequestButton } from "./payout-request-button"
 import { PayoutMethodForm } from "./payout-method-form"
 import { checkPayoutEligibility, computeReserve } from "@lyrashield/affiliate"
 import { env } from "@lyrashield/config"
+import { LocalTime } from "@/components/local-time"
 
 export const metadata = {
   title: "Payouts — Affiliate Dashboard — LyraShield AI",
@@ -130,7 +131,7 @@ export default async function AffiliatePayoutsPage() {
         <h2 className="mb-4 text-lg font-semibold">Request a Payout</h2>
         <p className="mb-4 text-sm text-muted-foreground">
           Minimum payout: ${minPayoutUsd.toFixed(2)} · Next payout date:{" "}
-          {nextPayout.toLocaleDateString()}
+          <LocalTime value={nextPayout} />
         </p>
         <PayoutRequestButton
           eligible={eligibility.eligible}
@@ -181,7 +182,7 @@ export default async function AffiliatePayoutsPage() {
               ) : (
                 affiliate.payouts.map((p) => (
                   <tr key={p.id} className="border-b">
-                    <td className="py-2 pr-4">{new Date(p.requestedAt).toLocaleDateString()}</td>
+                    <td className="py-2 pr-4"><LocalTime value={p.requestedAt} /></td>
                     <td className="py-2 pr-4">
                       {p.amount.toString()} {p.currency}
                       {p.isReserveRelease && (
@@ -207,7 +208,7 @@ export default async function AffiliatePayoutsPage() {
                       </span>
                     </td>
                     <td className="py-2 pr-4">
-                      {p.paidAt ? new Date(p.paidAt).toLocaleDateString() : "—"}
+                      {p.paidAt ? <LocalTime value={p.paidAt} /> : "—"}
                     </td>
                   </tr>
                 ))

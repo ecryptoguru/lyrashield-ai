@@ -5,6 +5,7 @@ import { requirePlatformAdminIdentity } from "@lyrashield/auth/server"
 import { Badge, buttonVariants } from "@lyrashield/ui"
 import { PageHeader } from "@/components/page-header"
 import { getPlatformAdminWorkspaces, parseAdminCursor } from "@/lib/platform-admin-lists"
+import { LocalTime } from "@/components/local-time"
 
 export const dynamic = "force-dynamic"
 
@@ -60,7 +61,7 @@ export default async function PlatformAdminWorkspacesPage({
                 <td className="px-4 py-3 tabular-nums">{workspace.targetCount}</td>
                 <td className="px-4 py-3">
                   <time dateTime={workspace.createdAt.toISOString()}>
-                    {workspace.createdAt.toLocaleDateString()}
+                    <LocalTime value={workspace.createdAt} />
                   </time>
                 </td>
               </tr>

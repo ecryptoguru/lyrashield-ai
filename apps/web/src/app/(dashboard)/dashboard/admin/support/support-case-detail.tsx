@@ -1,5 +1,6 @@
 import type React from "react"
 import { Badge, Button, Card, Input, Spinner } from "@lyrashield/ui"
+import { formatDateTime } from "@/lib/date-format"
 
 export type CaseStatus = "NEW" | "OPEN" | "PENDING_USER" | "RESOLVED"
 
@@ -61,7 +62,7 @@ function authorVariant(author: CaseReply["authorType"]) {
 function formatTime(iso: string | null | undefined): string {
   if (!iso) return "—"
   const d = new Date(iso)
-  return Number.isNaN(d.valueOf()) ? "—" : d.toLocaleString()
+  return Number.isNaN(d.valueOf()) ? "—" : formatDateTime(d)
 }
 
 export function SupportCaseDetail(props: {

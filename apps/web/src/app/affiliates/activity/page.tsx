@@ -3,6 +3,7 @@ import { prisma } from "@lyrashield/db"
 import { getCachedSession } from "@/lib/cache"
 import { PageHeader } from "@/components/page-header"
 import { ActivityTabs } from "./activity-tabs"
+import { LocalTime } from "@/components/local-time"
 
 export const metadata = {
   title: "Activity — Affiliate Dashboard — LyraShield AI",
@@ -201,7 +202,7 @@ export default async function AffiliateActivityPage({
                   {tab === "clicks" && (
                     <>
                       <td className="py-2 pr-4">
-                        {new Date(row.clickedAt as string).toLocaleDateString()}
+                        <LocalTime value={row.clickedAt as string} />
                       </td>
                       <td className="py-2 pr-4">{(row.subid as string) ?? "—"}</td>
                       <td className="py-2 pr-4 max-w-xs truncate">
@@ -215,7 +216,7 @@ export default async function AffiliateActivityPage({
                   {tab === "signups" && (
                     <>
                       <td className="py-2 pr-4">
-                        {new Date(row.createdAt as string).toLocaleDateString()}
+                        <LocalTime value={row.createdAt as string} />
                       </td>
                       <td className="py-2 pr-4 font-mono">{row.id as string}</td>
                     </>
@@ -223,7 +224,7 @@ export default async function AffiliateActivityPage({
                   {tab === "conversions" && (
                     <>
                       <td className="py-2 pr-4">
-                        {new Date(row.occurredAt as string).toLocaleDateString()}
+                        <LocalTime value={row.occurredAt as string} />
                       </td>
                       <td className="py-2 pr-4">
                         {row.commissionableAmount as string} {row.currency as string}

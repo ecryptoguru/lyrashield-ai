@@ -5,6 +5,7 @@ import { requirePlatformAdminIdentity } from "@lyrashield/auth/server"
 import { Badge, buttonVariants } from "@lyrashield/ui"
 import { PageHeader } from "@/components/page-header"
 import { getPlatformAdminScans, parseAdminCursor } from "@/lib/platform-admin-lists"
+import { LocalTime } from "@/components/local-time"
 
 export const dynamic = "force-dynamic"
 
@@ -70,13 +71,13 @@ export default async function PlatformAdminScansPage({
                 <td className="px-4 py-3">{scan.target?.name ?? "Deleted target"}</td>
                 <td className="px-4 py-3">
                   <time dateTime={scan.createdAt.toISOString()}>
-                    {scan.createdAt.toLocaleString()}
+                    <LocalTime value={scan.createdAt} withTime />
                   </time>
                 </td>
                 <td className="px-4 py-3">
                   {scan.startedAt ? (
                     <time dateTime={scan.startedAt.toISOString()}>
-                      {scan.startedAt.toLocaleString()}
+                      <LocalTime value={scan.startedAt} withTime />
                     </time>
                   ) : (
                     "—"
@@ -85,7 +86,7 @@ export default async function PlatformAdminScansPage({
                 <td className="px-4 py-3">
                   {scan.endedAt ? (
                     <time dateTime={scan.endedAt.toISOString()}>
-                      {scan.endedAt.toLocaleString()}
+                      <LocalTime value={scan.endedAt} withTime />
                     </time>
                   ) : (
                     "—"
