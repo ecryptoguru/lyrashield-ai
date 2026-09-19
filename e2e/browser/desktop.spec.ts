@@ -24,7 +24,11 @@ async function native(
   await page.addInitScript(
     ({ options, wire }) => {
       const state = {
-        calls: [] as { command: string; args?: Record<string, unknown> }[],
+        calls: [] as {
+          command: string
+          args?: Record<string, unknown>
+          resolvedListeners: number
+        }[],
         listeners: new Map<string, (event: { payload: unknown }) => void>(),
         failures: 0,
         listenCalls: 0,
