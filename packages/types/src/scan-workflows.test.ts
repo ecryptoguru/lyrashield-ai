@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- checked-in fixture reads */
 import { describe, expect, it } from "vitest"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
@@ -15,7 +16,6 @@ import { CreateScanInputSchema, CreateScanSchema, FindingVerificationStatusSchem
  * with the schemas and plan builder it describes.
  */
 const fixture = JSON.parse(
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- checked-in parity fixture
   readFileSync(fileURLToPath(new URL("./fixtures/scan-workflows.json", import.meta.url)), "utf8")
 ) as {
   version: string
