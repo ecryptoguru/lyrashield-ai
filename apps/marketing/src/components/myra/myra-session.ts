@@ -137,7 +137,7 @@ function loadTurnstile(): Promise<TurnstileGlobal | undefined> {
  *  positioned). */
 function pickTurnstileHost(): HTMLElement | null {
   for (const host of document.querySelectorAll<HTMLElement>(MYRA_TURNSTILE_SELECTOR)) {
-    if (host.getClientRects().length > 0) return host
+    if (host.getClientRects().length > 0 && !host.closest?.("[inert]")) return host
   }
   return null
 }
@@ -283,7 +283,7 @@ async function mintMyraSession(apiBase: string, surface: "MARKETING" | "DASHBOAR
   const turnstileToken = await getTurnstileToken()
   const res = await fetch(`${apiBase}/api/myra/session`, {
     method: "POST",
-    credentials: "include",
+    credentials: surface === "MARKETING" ? "omit" : "include",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ surface, ...(turnstileToken ? { turnstileToken } : {}) }),
   })

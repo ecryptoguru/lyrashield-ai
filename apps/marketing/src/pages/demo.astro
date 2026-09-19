@@ -46,7 +46,7 @@ const jsonLd: unknown[] = [
       retest workflow works and where a review would fit your release process.
     </p>
     <p class="mt-4 text-sm leading-6 text-text-muted">
-      Demo booking opens soon. Until then, request a time and we follow up by email.
+      Choose a time below when booking is available, or request a time and we will follow up by email.
     </p>
     <p class="mt-2 text-xs leading-5 text-text-muted">{MYRA_COPY.demoLimit}</p>
 
@@ -528,7 +528,7 @@ const jsonLd: unknown[] = [
       await ensureMyraSession(apiBase).catch(() => {})
       const res = await fetch(`${apiBase}/api/myra/demo/slots`, {
         method: "POST",
-        credentials: "include",
+        credentials: "omit",
         headers: myraHeaders(),
         body: JSON.stringify({ timezone: selectedTz, from: toDateParam(windowFrom) }),
       })
@@ -594,7 +594,7 @@ const jsonLd: unknown[] = [
     const turnstileToken = await getTurnstileToken()
     const res = await fetch(`${apiBase}/api/myra/identity/request`, {
       method: "POST",
-      credentials: "include",
+      credentials: "omit",
       headers: myraHeaders(),
       body: JSON.stringify({
         email: emailInput?.value.trim() ?? "",
@@ -609,7 +609,7 @@ const jsonLd: unknown[] = [
   async function confirmCode() {
     const res = await fetch(`${apiBase}/api/myra/identity/confirm`, {
       method: "POST",
-      credentials: "include",
+      credentials: "omit",
       headers: myraHeaders(),
       body: JSON.stringify({
         email: emailInput?.value.trim() ?? "",
@@ -838,7 +838,7 @@ const jsonLd: unknown[] = [
     const token = newManageToken ?? manageToken
     const res = await fetch(`${apiBase}/api/myra/demo/manage/${encodeURIComponent(token)}`, {
       headers: myraHeaders(),
-      credentials: "include",
+      credentials: "omit",
     })
     if (!res.ok) await readMyraError(res)
     const json = (await res.json()) as {
@@ -854,7 +854,7 @@ const jsonLd: unknown[] = [
     const token = newManageToken ?? manageToken
     const res = await fetch(`${apiBase}/api/myra/demo/manage/${encodeURIComponent(token)}`, {
       method: "POST",
-      credentials: "include",
+      credentials: "omit",
       headers: myraHeaders(),
       body: JSON.stringify({ action, ...(newSlotStart ? { newSlotStart } : {}) }),
     })
@@ -879,7 +879,7 @@ const jsonLd: unknown[] = [
     try {
       const res = await fetch(`${apiBase}/api/myra/demo/slots`, {
         method: "POST",
-        credentials: "include",
+        credentials: "omit",
         headers: myraHeaders(),
         body: JSON.stringify({ timezone: selectedTz, from: toDateParam(new Date()) }),
       })

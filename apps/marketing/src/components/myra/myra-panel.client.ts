@@ -67,6 +67,34 @@ export function initMyraPanel() {
   let bootstrapped = false
   let restoredFocus: HTMLElement | null = null
   let conversation: MyraConversation
+  const mobile = window.matchMedia("(max-width: 639px)")
+  const previousInert = new Map<HTMLElement, boolean>()
+  let previousOverflow = ""
+
+  function updateModal() {
+    const modal = open && mobile.matches
+    panelEl.setAttribute("aria-modal", String(modal))
+    if (modal && previousInert.size === 0) {
+      previousOverflow = document.body.style.overflow
+      document.body.style.overflow = "hidden"
+      for (const child of document.body.children) {
+        if (
+          !(child instanceof HTMLElement) ||
+          child === panelEl ||
+          child.matches("[data-myra-turnstile]")
+        )
+          continue
+        previousInert.set(child, child.inert)
+        child.inert = true
+      }
+    } else if (!modal && previousInert.size > 0) {
+      for (const [child, wasInert] of previousInert) child.inert = wasInert
+      previousInert.clear()
+      document.body.style.overflow = previousOverflow
+    }
+  }
+
+  mobile.addEventListener("change", updateModal)
 
   const rendererContext: MyraDomRendererContext = {
     client,
@@ -145,6 +173,7 @@ export function initMyraPanel() {
     panelEl.hidden = false
     launcherEl.hidden = true
     launcherEl.setAttribute("aria-expanded", "true")
+    updateModal()
     if (!bootstrapped) {
       bootstrapped = true
       bootstrapSession().catch(() => {
@@ -163,6 +192,7 @@ export function initMyraPanel() {
     panelEl.hidden = true
     launcherEl.hidden = false
     launcherEl.setAttribute("aria-expanded", "false")
+    updateModal()
     ;(restoredFocus ?? launcherEl).focus()
     announce("Myra panel closed.")
   }
@@ -189,12 +219,43 @@ export function initMyraPanel() {
   talkBtn?.addEventListener("click", openCaseComposer)
 
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Tab" && open && mobile.matches) {
+      const focusable = Array.from(
+        panelEl.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((item) => !item.hidden && item.getClientRects().length > 0)
+      const first = focusable[0]
+      const last = focusable.at(-1)
+      if (
+        first &&
+        last &&
+        (e.shiftKey ? document.activeElement === first : document.activeElement === last)
+      ) {
+        e.preventDefault()
+        ;(e.shiftKey ? last : first).focus()
+      }
+    }
     if (e.key === "Escape" && open) {
       if (suggestions.isOpen()) {
         suggestions.hideSuggest()
         return
       }
       closePanel()
+    }
+  })
+
+  document.addEventListener("focusin", (e) => {
+    if (!open || !mobile.matches) return
+    const target = e.target as Node | null
+    if (
+      target &&
+      !panelEl.contains(target) &&
+      !Array.from(document.querySelectorAll("[data-myra-turnstile]")).some((host) =>
+        host.contains(target)
+      )
+    ) {
+      inputEl.focus()
     }
   })
 
