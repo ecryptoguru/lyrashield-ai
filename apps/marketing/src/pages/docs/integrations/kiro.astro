@@ -6,7 +6,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for Kiro — Setup Guide"
 const description =
   "Connect LyraShield to Kiro through its documented workspace or user MCP settings file."
-const updatedDate = "2026-09-08"
+const updatedDate = "2026-09-19"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
@@ -85,6 +85,18 @@ const jsonLd: unknown[] = [
     local MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the{" "}
     <code>LYRASHIELD_API_KEY</code> environment variable). Nothing with a key needs to be committed.
   </div>
+
+  <h2>Remote OAuth alternative</h2>
+  <p>
+    Current Kiro supports URL-only remote MCP servers and browser OAuth. The registry retains
+    local stdio as the preferred workflow until a real Kiro read call and lifecycle receipt are
+    retained for hosted OAuth. Do not create a duplicate if a local LyraShield entry already works.
+  </p>
+  <pre><code>{`{
+  "mcpServers": {
+    "lyrashield": { "url": "https://app.lyrashieldai.com/api/mcp" }
+  }
+}`}</code></pre>
 
   <h2>Verify the connection</h2>
   <p>
