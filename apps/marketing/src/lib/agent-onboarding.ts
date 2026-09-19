@@ -24,6 +24,12 @@ interface AgentOnboardingClient {
   href: string
   strategy: AgentEntry["installStrategy"]
   strategyLabel: string
+  integrationKind: "mcp" | "standalone-cli"
+  supportTier: string
+  evidence: string
+  clientVersion: string | null
+  platforms: readonly string[]
+  preferredTransport: string | null
 }
 
 interface AgentOnboardingClientGroup {
@@ -54,7 +60,16 @@ function buildClients(): AgentOnboardingClient[] {
     name: agent.displayName.replace(/\s*\(Agent Plugin\)$/, ""),
     href: `/docs/integrations/${agent.docsSlug}`,
     strategy: agent.installStrategy,
-    strategyLabel: STRATEGY_LABEL[agent.installStrategy],
+    strategyLabel:
+      agent.integrationKind === "standalone-cli"
+        ? "Standalone CLI and CI"
+        : STRATEGY_LABEL[agent.installStrategy],
+    integrationKind: agent.integrationKind ?? "mcp",
+    supportTier: agent.supportTier ?? "COMPATIBLE",
+    evidence: agent.verification?.evidence ?? "DOCUMENTATION",
+    clientVersion: agent.verification?.clientVersion ?? null,
+    platforms: agent.verification?.platforms ?? [],
+    preferredTransport: agent.preferredTransport ?? null,
   }))
 }
 
@@ -77,7 +92,7 @@ export const agentOnboarding = {
   safety: [
     "Read-only tools are available after workspace authentication.",
     "Fixes are proposals for review, not automatic code changes or merges.",
-    "Mutating tools require write scope and explicit human approval outside the agent.",
+    "Hosted writes require a browser-confirmed connection grant and execution-time scope checks. Nondelegated callers receive connect_required; local stdio clients use local approval.",
   ],
   clients,
   clientGroups: buildClientGroups(clients),
@@ -113,7 +128,10 @@ export function renderAgentOnboardingMarkdown(origin: string): string {
       [
         `### ${group.label}`,
         "",
-        ...group.clients.map((client) => `- [${client.name}](${origin}${client.href})`),
+        ...group.clients.map(
+          (client) =>
+            `- [${client.name}](${origin}${client.href}) — ${client.strategyLabel}; ${client.supportTier.toLowerCase()} (${client.evidence.toLowerCase().replaceAll("_", " ")} evidence)`
+        ),
         "",
       ].join("\n")
     )
@@ -135,7 +153,7 @@ export function renderAgentOnboardingMarkdown(origin: string): string {
     `Read the [Agent Plugin guide](${origin}/docs/integrations/agent-plugins).`,
     "",
     renderWebMcpSection(origin),
-    `## Supported coding agents (${agentOnboarding.clients.length})`,
+    `## Documented client workflows (${agentOnboarding.clients.length})`,
     "",
     clientSections,
   ].join("\n")

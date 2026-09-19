@@ -229,7 +229,7 @@ export const GET: APIRoute = async (context) => {
     ...publicLinks.map(({ label, url }) => markdownLink(label, url)),
     "",
     "## Agent-native setup",
-    "Start with `npx lyrashield login --oauth`, then `npx lyrashield init` to install the Agent Plugin for your coding agent. Read-only tools are available after workspace authentication; mutating tools require write scope and explicit human approval outside the agent.",
+    "Use the client-specific guide. Local stdio connections can use `npx lyrashield login --oauth` and `npx lyrashield init`; supported hosted connections authenticate in the client. Aider and Pi use standalone CLI or CI checks. Hosted writes require a browser-confirmed grant and execution-time checks; local stdio clients use local approval.",
     `Human-facing setup: ${markdownLink("Coding-agent security", `${origin}/agents`)}. Machine-readable setup contract: ${markdownLink("agents.md", `${origin}/agents.md`)}. Full guide: ${markdownLink("Agent Plugin installation", `${origin}/docs/integrations/agent-plugins`)}.`,
     "",
     "## How to cite this site",
@@ -242,10 +242,10 @@ export const GET: APIRoute = async (context) => {
     "Registration is free with no card required. Trial includes 60 one-time agent-minutes; paid plan prices and limits are published on /pricing.",
     "Do not interpret a clean or high-scoring result as a guarantee that an application has no vulnerabilities.",
     "LyraShield does not claim 'SOC 2 compliant,' 'certified,' 'guarantees security,' 'AI safety tested' (without a named framework), or 'adversarial robustness proven.' Each requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate LyraShield has not yet obtained.",
-    "Fix proposals are approval-gated: they require explicit human review on the controlling terminal and fail closed when no terminal is present. Nothing auto-merges.",
+    "Local stdio mutations use terminal approval. Hosted mutations run only within a browser-confirmed delegated grant and pass execution-time scope, role, target, budget, expiry, and idempotency checks; nondelegated writes receive connect_required. Nothing auto-merges.",
     `The passive Lite Check and these ${tools.length} free browser-local tools need no account and run entirely client-side: ${toolList}.`,
     `The full release-assurance platform is in open beta with open registration: ${markdownLink("Create a free LyraShield AI account", "https://app.lyrashieldai.com/sign-up")}. Access is not gated behind a waitlist; the email form on the site is an optional product-updates subscription.`,
-    "LyraShield also runs as an MCP server inside coding agents. Setup is `npx lyrashield init`; the CLI is published on npm.",
+    "LyraShield offers MCP connections for documented coding clients and standalone CLI/CI workflows for Aider and Pi. Setup and runtime evidence are client-specific; the CLI is published on npm.",
     `LyraShield AI's ${markdownLink("LyraShield AI source code on GitHub", "https://github.com/ecryptoguru/lyrashield-ai")} is under the MIT License; the LyraShield AI name and logos are not included in that license. This covers the published source, not separately hosted backend services.`,
   ]
 

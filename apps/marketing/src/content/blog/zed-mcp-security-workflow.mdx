@@ -8,28 +8,28 @@ draft: false
 heroImage: agent-security-12
 faq:
   - q: "How does Zed MCP integration work with LyraShield AI?"
-    a: "Zed exposes MCP servers through settings.json context_servers. You register LyraShield locally with npx or remotely with a Bearer key, then call scan tools directly from the agent panel and review findings with evidence states inline before creating a Fix Proposal."
+    a: "Zed reads settings.json context_servers. Add a local command or a remote URL; a remote entry without an Authorization header starts Zed's MCP OAuth flow. Confirm discovery and call a read-only LyraShield tool in the Agent Panel."
   - q: "What does the GitHub Action gate add beyond editor checks?"
     a: "The diff aware gate runs on pull requests, blocks risky code paths with SARIF results, and keeps retest and report steps consistent between local Zed runs and CI. It is designed to enforce the same policy for every contributor."
-  - q: "Is LyraShield scanning live today?"
-    a: "Scans, findings, and evidence, approval-gated fix proposals, retests, reports, billing, MCP, and the local GitHub Action are implemented. Automatic server-generated Fix PR execution and live paid activation are not enabled."
-  - q: "How should I manage the Bearer lsk_ key across local and CI setups?"
-    a: "Treat the lsk_ key like any secret. Load it from your shell env for local stdio, from a password manager for remote HTTP in Zed, and from GitHub Actions encrypted secrets for the diff gate. Never hardcode it in settings.json and never commit it, because context_servers files are often shared between machines and repos."
+  - q: "Does valid Zed configuration prove the integration works?"
+    a: "No. Restart Zed, inspect its MCP status, then make a read-only tool call from the intended workspace. Keep transport, authentication, and client-side tool permissions as separate checks."
+  - q: "How should I manage API-key fallback credentials?"
+    a: "A key is only needed for the API-key fallback. Keep it outside shared settings and use encrypted CI secrets where applicable. Zed's remote OAuth path does not require a local LyraShield CLI login or an lsk_ placeholder."
 ---
 
-Fastest path: run `npx lyrashield init`, which detects Zed and writes the MCP config. Verify with `npx lyrashield doctor`, then `npx lyrashield login` to store credentials in ~/.lyrashield/credentials.json. The manual config below is what the CLI writes, kept for reference.
+Add one of the configurations below to Zed's `settings.json`. Restart Zed, confirm the server in Settings → AI → MCP Servers, then make a read-only tool call from the Agent Panel. `lyrashield doctor` checks local setup; it does not prove that Zed discovered or called a tool.
 
-You can secure AI built apps in Zed by connecting LyraShield AI through the [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and reviewing findings with recorded evidence states directly from the editor, then enforcing the same policy in CI with a diff aware GitHub Action gate. Zed reads servers from `settings.json` under `context_servers`, supporting local stdio and remote HTTP with a bearer key.
+You can secure AI built apps in Zed by connecting LyraShield AI through the [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and reviewing findings with recorded evidence states directly from the editor, then enforcing the same policy in CI with a diff aware GitHub Action gate. Zed reads servers from `settings.json` under `context_servers`, supporting local stdio and remote HTTP with browser OAuth or a separately configured API key.
 
-Zed is fast and agent native, which makes it popular for vibe coding, but speed can leave security gaps when dependencies and routes are scaffolded by agents. The [vibe coding security guide](/blog/vibe-coding-security-guide) frames this problem as unverified generation at scale. LyraShield AI is an agent native AppSec layer for AI built software that follows a loop of Target to Scan to Evidence State to Fix Proposal to Retest to Report. This post shows the exact Zed configuration for both local and remote MCP, how to verify the connection, how to run an inline check, and how to wire CI so findings stay actionable.
+Zed is fast and agent native, which makes it popular for vibe coding, but speed can leave security gaps when dependencies and routes are scaffolded by agents. The [vibe coding security guide](/blog/vibe-coding-security-guide) frames this problem as unverified generation at scale. LyraShield AI follows a loop of Target to Scan to Evidence State to Fix Proposal to Retest to Report. This post shows current Zed configuration forms and a verification path. Zed documents remote OAuth, but that is not a substitute for a real-client read receipt for your version and platform.
 
 ## 1. Prerequisites and setup
 
-Use a current Zed release, Node 24 or newer for the LyraShield package, a LyraShield API key prefixed `lsk_` for remote mode, and a GitHub repo where you can add workflows. Restart Zed after you save the MCP configuration, then confirm the server in the Agent Panel. For remote mode, store your key as an environment variable and never commit it. Zed reads MCP servers from `settings.json` under `context_servers`, and the [official Zed MCP guide](https://zed.dev/docs/ai/mcp) describes this field as the point where you add custom tools. Confirm you can read secrets scans and dependency data locally by checking your project against [OWASP Top 10](https://owasp.org/www-project-top-ten/) patterns and by reviewing vulnerable deps on [OSV](https://osv.dev/). If you have not used MCP before, skim the [MCP spec overview](https://modelcontextprotocol.io/specification/2025-03-26) to see how tools, resources, and prompts are exposed. Before editing `settings.json`, decide which transport suits your work, since both register under `context_servers` and you can switch without rewriting prompts.
+Use a current Zed release, Node 24 or newer for local stdio, and a GitHub repo where you can add workflows. Zed reads MCP servers from `settings.json` under `context_servers`; the [official Zed MCP guide](https://zed.dev/docs/ai/mcp) documents the current flat local command and remote URL forms. Remote OAuth starts in Zed when no Authorization header is configured. Do not add a key merely to preview the setup. Restart Zed after changing settings and verify a read-only call before relying on inline findings.
 
 ## 2. Configure the MCP server in Zed
 
-Zed supports local stdio and remote HTTP MCP servers. Use local for air gapped work and remote for shared team keys. Add one of these blocks to your Zed `settings.json`. The full reference lives in the [Zed integration guide](/docs/integrations/zed). Do not add bare paths elsewhere in your docs, always use markdown links like the [Zed integration guide](/docs/integrations/zed) to keep references valid.
+Zed supports local stdio and remote HTTP MCP servers. Add one of these blocks to your Zed `settings.json`. The full reference lives in the [Zed integration guide](/docs/integrations/zed). An older nested `command.path` entry should be migrated to Zed's current flat `command`, `args`, and `env` fields after backing up the existing settings file.
 
 Local stdio mode:
 
@@ -37,44 +37,33 @@ Local stdio mode:
 {
   "context_servers": {
     "lyrashield": {
-      "source": "custom",
-      "command": {
-        "path": "npx",
-        "args": ["-y", "@lyrashield/mcp@0.2.8"],
-        "env": {
-          "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
-        }
-      }
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp@0.2.8"],
+      "env": {}
     }
   }
 }
 ```
 
-Remote HTTP mode with Bearer:
+Remote HTTP mode with browser OAuth:
 
 ```json
 {
   "context_servers": {
     "lyrashield-remote": {
-      "source": "custom",
-      "command": {
-        "path": "npx",
-        "args": ["-y", "@lyrashield/mcp@0.2.8"],
-        "env": {
-          "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}",
-          "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp"
-        }
-      }
+      "url": "https://app.lyrashieldai.com/api/mcp"
     }
   }
 }
 ```
 
-The remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and authenticates with `Authorization: Bearer lsk_...`. The stdio entry uses the pinned command `npx -y @lyrashield/mcp@0.2.8` as requested. You can also run the remote endpoint directly from tools that support streamable HTTP. Keep `$VAR` expansion explicit as shown, since Zed expands variables at launch. For comparison of editor setups, see the [Zed AI app security checklist](/blog/zed-ai-app-security-checklist) which walks through the same pattern for checklist driven reviews. The remote endpoint is configured by the client rather than MCP command arguments. In stdio mode the binary lives in the `npx` cache, pin a version if reproducibility matters. In remote mode the server is managed, but at the cost of network dependency, so editor and CI share the same finding IDs.
+The remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp). Zed handles the OAuth browser flow for this entry; an API-key `headers` form is available only if your team deliberately chooses it. Local stdio uses the published `@lyrashield/mcp@0.2.8` package and requires a valid local LyraShield credential before authenticated calls. See the [Zed AI app security checklist](/blog/zed-ai-app-security-checklist) for client-side permission review. The runner-local CI Action is a separate check and does not share hosted finding IDs by default.
 
 ## 3. Verify the connection in Zed
 
-Restart Zed after editing `settings.json`, then open the Agent Panel and run `/context_servers` to list active servers. You should see `lyrashield` or `lyrashield-remote` with a green status. Call `lyrashield_list_targets`, start an authorized scan, and poll it with `lyrashield_get_scan_status`. If you see a permission error, confirm that `LYRASHIELD_API_KEY` is set in the shell that launched Zed because context servers inherit environment variables at startup. A 401 from the remote endpoint means the key must be rotated and exported again.
+Restart Zed after editing `settings.json`, then open Settings → AI → MCP Servers and check for an active indicator. In the Agent Panel, call `lyrashield_list_targets` and confirm an actual response before starting an authorized scan. For remote OAuth, finish Zed's browser connection flow if prompted. For local stdio, check the local credential source if authentication fails. An API-key fallback has its own credential and rotation path.
+
+Record the Zed version, operating system, selected workspace, server transport, and the returned target ID in your acceptance note. A green server indicator proves discovery, while the read response proves that this client session reached the intended LyraShield workspace. Repeat this check after a Zed or MCP package upgrade.
 
 ## 4. Run an inline security check from the editor
 

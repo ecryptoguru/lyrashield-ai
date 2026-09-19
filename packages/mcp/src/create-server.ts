@@ -8,12 +8,12 @@ import { logger } from "@lyrashield/logger"
 
 export const SERVER_NAME = "lyrashield-mcp"
 export const SERVER_TITLE = "LyraShield AI"
-export const SERVER_VERSION = "0.2.8"
+export const SERVER_VERSION = "0.2.9"
 export const SERVER_DESCRIPTION =
   "Bounded security scans, recorded evidence states, fix proposals, retests, and launch-readiness review."
 export const SERVER_WEBSITE_URL = "https://lyrashieldai.com"
 export const SERVER_INSTRUCTIONS =
-  "Start with lyrashield_list_workspaces and lyrashield_list_targets. Use read-only tools to inspect recorded evidence. Authorized mutations run automatically within connection permissions. Reuse an idempotency key only for identical retries; a conflict is not a request for human approval. A queued scan ID is a LyraShield domain result, not an MCP protocol task; poll it with lyrashield_get_scan_status."
+  "Start with lyrashield_list_workspaces and lyrashield_list_targets. Follow nextCursor with cursor for paged targets and findings; absence of a cursor means the list is complete. Use read-only tools to inspect recorded evidence. Authorized mutations run within connection permissions. Use stable idempotency keys for identical retries and reuse returned scan or operation IDs; conflicting input needs a new key. A queued scan ID is a LyraShield domain result, not an MCP protocol task. Poll lyrashield_get_scan_status after five seconds, back off to 30 seconds, stop at a terminal state, and return the resumable ID after a bounded session."
 
 export interface RemoteApprovalContext {
   workspaceId: string

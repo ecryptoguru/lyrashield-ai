@@ -74,7 +74,7 @@ workflows for selected targets and scan profiles so matching calls need no addit
 review; mutating calls from API-key callers receive a `connect_required` response pointing at OAuth
 connect and the legacy exact-input approval path remains only for nondelegated hosted credentials.
 
-Kiro uses the local `npx -y @lyrashield/mcp@0.2.8` stdio adapter. Run `lyrashield login --oauth`
+Kiro uses the local `npx -y @lyrashield/mcp@0.2.9` stdio adapter. Run `lyrashield login --oauth`
 first; the server then reads the user-only `~/.lyrashield/credentials.json` file. Environment
 variables remain an explicit CI/headless fallback, with `LYRASHIELD_API_KEY` taking precedence.
 Headless writes without an approval channel fail closed on the local stdio server; API-key writes
@@ -86,7 +86,7 @@ against the remote endpoint receive `connect_required` instead.
 
 ## Version and release receipts
 
-- Package: `@lyrashield/agent-plugin` 0.1.27; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/agent-plugin` 0.1.28; runtime: Node.js 24 or newer.
 - Standard schema: Agent Plugins 1.0.0.
 - `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
   OAuth-first manifests, mutation exclusions, artifact versions, and the public export boundary.

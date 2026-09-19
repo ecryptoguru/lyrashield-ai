@@ -125,7 +125,7 @@ Capture screenshots or logs for manual checks that cannot be automated. A simple
 
 ## Why pair cursor with LyraShield
 
-LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.com. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, every finding produces an immutable assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
+LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.com. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
 MCP integration fits Cursor. Local stdio via npx -y @lyrashield/mcp@0.2.8 keeps tokens in env vars, and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
 

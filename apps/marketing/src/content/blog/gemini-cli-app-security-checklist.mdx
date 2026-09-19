@@ -32,7 +32,7 @@ Gemini CLI stores MCP in settings.json under mcpServers, with per server trust, 
 
 Secure it in four practical steps.
 
-Fastest path: run `npx lyrashield init`, which detects Gemini CLI and writes the MCP config for you. Verify with `npx lyrashield doctor`, then run `npx lyrashield login` to store credentials in ~/.lyrashield/credentials.json with nothing committed to your repo. The manual config below is what the CLI writes, kept for reference.
+Configure the MCP server in Gemini CLI settings, restart the client, and call a read-only LyraShield tool to confirm discovery. Local stdio uses local LyraShield credentials; hosted authentication follows the remote connection. `lyrashield doctor` alone cannot prove Gemini loaded the server. Gemini reads `GEMINI.md` by default; use another guidance filename only when `context.fileName` includes it in [Gemini CLI settings](https://geminicli.com/docs/cli/gemini-md/).
 
 First, never inline secrets in JSON. Use `$VAR_NAME` or `${VAR_NAME}` references and load values from the launching environment or your secret manager, with local dotenv files gitignored and keys rotated when exposure is suspected.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach, beforeEach, vi } from "vitest"
-import { mkdtemp, rm, access, readFile, writeFile, mkdir, readdir } from "node:fs/promises"
+import { mkdtemp, rm, access, readFile, writeFile, mkdir, symlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import type { AgentEntry } from "@lyrashield/agent-registry"
@@ -157,15 +157,14 @@ describe("installAgentPlugin", () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it("fails when no credentials are available", async () => {
+  it("stages plugin files without requiring local credentials", async () => {
     delete process.env.LYRASHIELD_API_KEY
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
     const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent = makeAgent(dest)
 
     const result = await installAgentPlugin({ agent, cwd: tempDir, yes: true })
-    expect(result.outcome).toBe("MANUAL_REQUIRED")
-    expect(result.message).toContain("lyrashield login")
+    expect(result.outcome).toBe("CONFIGURED")
 
     await rm(tempDir, { recursive: true, force: true })
   })
@@ -193,8 +192,22 @@ describe("installAgentPlugin", () => {
     expect(result.message).toContain("Would copy")
 
     await expect(access(dest)).rejects.toThrow()
+    await expect(access(path.dirname(dest))).rejects.toThrow()
 
     await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it("rejects a symlinked plugin parent without changing the target", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
+    const outside = await mkdtemp(path.join(tmpdir(), "lyra-outside-"))
+    await symlink(outside, path.join(tempDir, "plugins"))
+    const dest = path.join(tempDir, "plugins", "lyrashield")
+    const result = await installAgentPlugin({ agent: makeAgent(dest), cwd: tempDir, yes: true })
+    expect(result.outcome).toBe("FAILED")
+    expect(result.message).toContain("symlink")
+    await expect(access(path.join(outside, "lyrashield"))).rejects.toThrow()
+    await rm(tempDir, { recursive: true, force: true })
+    await rm(outside, { recursive: true, force: true })
   })
 
   it("installs to a fresh destination without --yes", async () => {
@@ -234,7 +247,7 @@ describe("installAgentPlugin", () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it("overwrites existing install and removes backup on success", async () => {
+  it("retains a backup with user customizations on replacement", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
     const dest = path.join(tempDir, "plugins", "lyrashield")
     const agent = makeAgent(dest)
@@ -255,15 +268,30 @@ describe("installAgentPlugin", () => {
     // The old user customization should be gone (overwritten)
     await expect(access(path.join(dest, "user-custom.txt"))).rejects.toThrow()
 
-    // No backup directory should remain
-    const entries = await readdir(tempDir)
-    expect(entries.some((e) => e.includes("lyrashield-backup"))).toBe(false)
+    expect(result.backupPath).toContain("lyrashield-backup")
+    expect(await readFile(path.join(result.backupPath!, "user-custom.txt"), "utf-8")).toBe(
+      "user data"
+    )
 
     await rm(tempDir, { recursive: true, force: true })
   })
 })
 
 describe("uninstallAgentPlugin", () => {
+  it("previews removal without deleting the plugin", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
+    const dest = path.join(tempDir, "plugins", "lyrashield")
+    await mkdir(dest, { recursive: true })
+    await writeFile(path.join(dest, "user-custom.txt"), "keep", "utf-8")
+    const result = await uninstallAgentPlugin({
+      agent: makeAgent(dest),
+      cwd: tempDir,
+      dryRun: true,
+    })
+    expect(result.message).toContain("Would remove")
+    expect(await readFile(path.join(dest, "user-custom.txt"), "utf-8")).toBe("keep")
+    await rm(tempDir, { recursive: true, force: true })
+  })
   it("removes the Codex plugin through its marketplace manager", async () => {
     execFileMock.mockImplementation(
       (_command: unknown, _args: unknown, _options: unknown, callback: unknown) => {

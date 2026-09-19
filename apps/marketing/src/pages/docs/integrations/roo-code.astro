@@ -68,7 +68,7 @@ const jsonLd: unknown[] = [
     Run <code>npx lyrashield install roo-code</code> from your project root. It detects Roo Code,
     writes the correct config automatically, and never inlines your API key into a file you might
     commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
-    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+    <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
   </p>
   <pre><code>npx lyrashield install roo-code</code></pre>
   <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
@@ -97,7 +97,7 @@ const jsonLd: unknown[] = [
     <strong>Remote authorization:</strong> Browser-confirmed OAuth delegations run matching actions
     without repeated approval. Mutating calls authenticated with an API key receive a
     connect_required response pointing at OAuth connect and out-of-grant delegated calls are denied.
-    Exact-input approval remains only for legacy nondelegated hosted credentials.
+    Local stdio approval is separate from hosted delegation.
   </div>
 
   <h2>Verify the connection</h2>
@@ -108,7 +108,7 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The{" "}
+    <strong>Requirements:</strong> For local stdio, Node.js 24+ and a local OAuth login or workspace API key. Remote OAuth needs no local key. The{" "}
     <code>@lyrashield/mcp</code> package is published on npm, so{" "}
     <code>npx -y @lyrashield/mcp@0.2.8</code> resolves directly.
   </div>

@@ -1,0 +1,96 @@
+name: Marketplace release
+
+# Deep Review v16 4.3: the marketplace repo is the release artifact clients
+# install from (marketplace add ecryptoguru/lyrashield-marketplace), but it
+# had only validate.yml — no release record, no checksums, no tag. This
+# workflow publishes a versioned GitHub Release documenting exactly what
+# clients get for a given version: the manifest's declared version must
+# match the requested one, and the per-file sha256 checksums the manifest
+# already carries are exported as a SHA256SUMS artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Plugin version to release (must match manifest.json)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketplace-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Validate before releasing
+        run: node scripts/validate.mjs --release
+
+      - name: Verify manifest version and generate checksums
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # Fail closed on any mismatch: the release record must describe
+          # exactly the manifest clients consume.
+          # shellcheck disable=SC2016
+          node -e '
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+            const requested = process.env.REQUESTED_VERSION;
+            if (manifest.version !== requested) {
+              console.error(`::error::manifest.json declares ${manifest.version} but ${requested} was requested. Update the export first.`);
+              process.exit(1);
+            }
+            const lines = manifest.files
+              .map((f) => `${f.sha256}  ${f.path}`)
+              .sort((a, b) => a.localeCompare(b));
+            fs.writeFileSync("SHA256SUMS", lines.join("\n") + "\n");
+            console.log(`Verified manifest version ${requested}; wrote ${lines.length} checksums.`);
+          '
+          cat SHA256SUMS
+
+      - name: Refuse an existing release tag
+        env:
+          RELEASE_TAG: v${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "::error::${RELEASE_TAG} already exists; use a new immutable version."
+            exit 1
+          fi
+
+      - name: Create release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          tag_name: v${{ inputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: lyrashield agent-plugin v${{ inputs.version }}
+          body: |
+            Marketplace export for the LyraShield Agent Plugin, version ${{ inputs.version }}.
+
+            Clients install from this repository directly:
+
+            ```
+            claude plugin marketplace add ecryptoguru/lyrashield-marketplace
+            claude plugin install lyrashield@lyrashield-ai
+            ```
+
+            The attached `SHA256SUMS` lists the per-file checksums declared by
+            `manifest.json` for this release — verify any checked-out file
+            against it with `sha256sum -c`.
+          files: SHA256SUMS
