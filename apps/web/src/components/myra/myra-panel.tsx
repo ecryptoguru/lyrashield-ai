@@ -223,7 +223,7 @@ export function MyraPanel({
         {turns.map((turn) => (
           <div key={turn.id} className="space-y-2">
             <div className="bg-accent ml-auto w-fit max-w-[85%] rounded-lg px-3 py-2">
-              <p className="text-sm break-words whitespace-pre-wrap">{turn.userText}</p>
+              <p className="text-sm wrap-break-word whitespace-pre-wrap">{turn.userText}</p>
             </div>
             <div className="space-y-2">
               {turn.parts.map((part, i) =>

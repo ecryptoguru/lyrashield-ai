@@ -16,6 +16,9 @@ build/
 .env.*.local
 .dev.vars
 
+# OAuth client credentials downloaded from provider consoles
+client_secret_*.json
+
 # IDE
 .idea/
 .vscode/
