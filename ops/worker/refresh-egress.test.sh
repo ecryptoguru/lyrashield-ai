@@ -6,6 +6,7 @@ export CDPATH
 repo_root=$(cd -- "$(dirname "$0")/../.." && pwd)
 grep -Fqx 'Restart=always' "$repo_root/ops/worker/lyrashield-worker.service"
 grep -Fqx 'ExecStartPre=/usr/bin/env LYRASHIELD_REFRESH_PINNED_HOSTS=1 /usr/local/libexec/lyrashield-refresh-egress' "$repo_root/ops/worker/lyrashield-worker.service"
+grep -Fqx 'Environment=LYRASHIELD_REFRESH_PINNED_HOSTS=1' "$repo_root/ops/worker/lyrashield-worker-egress.service"
 if grep -Rq 'LYRASHIELD_RESTART_WORKER_ON_PIN_CHANGE\|try-restart lyrashield-worker' \
   "$repo_root/ops/worker/refresh-egress.sh" \
   "$repo_root/ops/worker/lyrashield-worker-egress-refresh.service"; then
