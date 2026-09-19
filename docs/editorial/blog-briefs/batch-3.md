@@ -1,7 +1,7 @@
 # Batch 3 editorial briefs
 
 Date: 2026-07-17
-Status: research complete, drafting and review in progress
+Status: research complete, drafting, and review in progress
 Owner: LyraShield Team
 Scope: topics 36 through 52 from the approved 100-article program
 
@@ -20,7 +20,7 @@ All public drafts must link to `/blog/vibe-coding-security-guide` in the first t
 - Reader problem: The app records generic errors or provider logs, but nobody has defined which security events matter, who receives an alert, or how to tell whether logging has stopped.
 - Unique angle: Build a small launch-ready detection loop around application events and ownership. Do not turn the article into a SIEM buying guide or a general observability tutorial.
 - Direct-answer thesis: Before launch, define a short list of security-relevant events, record enough context to investigate them without logging secrets, route high-severity signals to a named owner, and test both the alert and the failure path. Logs alone are not monitoring. A working alert must reach someone who can act.
-- Entities: OWASP Logging Cheat Sheet, OWASP Developer Guide, NIST SP 800-92, application audit events, alert routing, retention, log injection, DNT and GPC privacy boundaries.
+- Entities: OWASP Logging Cheat Sheet, OWASP Developer Guide, NIST SP 800-92, application audit events, alert routing, retention, log injection, DNT, and GPC privacy boundaries.
 - Cannibalization check: Topic 36 owns launch monitoring design. Topic 85 owns the later weekly scan routine. Topic 86 owns response to a confirmed critical finding. Topic 93 owns public API endpoint hardening. Avoid weekly cadence, incident containment, and API-specific rate-limit detail here.
 - Required sources: S01, S02, S03, S04.
 - Authority link: Link from the opening control inventory to `/blog/vibe-coding-security-guide` with anchor `the six-layer vibe coding security guide`.
@@ -38,7 +38,7 @@ All public drafts must link to `/blog/vibe-coding-security-guide` in the first t
 - Reader problem: Backups are enabled, but the team has never restored a clean copy or measured whether it meets recovery objectives before granting an agent production access.
 - Unique angle: Treat restore proof as a precondition for destructive automation. Focus on a safe isolated restore drill, integrity checks, recovery time, recovery point, and documented rollback authority.
 - Direct-answer thesis: A backup is only useful after a restore test proves that the data can be recovered into an isolated environment, opened by the application, checked for integrity, and restored within the required time and data-loss window. Run that drill before any coding agent receives a production credential or destructive tool.
-- Entities: NIST SP 800-34 Rev. 1, recovery time objective, recovery point objective, immutable or offline copies, restore drill, least privilege, production approval.
+- Entities: NIST SP 800-34 Rev. 1, recovery time objective, recovery point objective, immutable, or offline copies, restore drill, least privilege, production approval.
 - Cannibalization check: Topic 37 owns backup recoverability. Topic 45 owns limiting destructive permissions. Topic 86 owns incident response. Topic 100 owns key exposure recovery. Permission examples may support the restore gate but must not replace the restore procedure.
 - Required sources: S05, S06, S07, S20.
 - Authority link: Link from the explanation of operational evidence to `/blog/vibe-coding-security-guide` with anchor `release assurance for AI-built applications`.
@@ -56,7 +56,7 @@ All public drafts must link to `/blog/vibe-coding-security-guide` in the first t
 - Reader problem: An assistant added a plausible dependency and version, but the developer has not verified the package identity, resolved version, transitive graph, or known advisories.
 - Unique angle: Separate package existence and provenance from known-vulnerability matching. Show why an SCA alert is a detected condition that still needs reachability, compatibility, and retest review.
 - Direct-answer thesis: Verify every AI-suggested dependency in the official registry, lock the exact resolved version, inspect the full dependency diff, and compare resolved packages with current advisories. A clean vulnerability scan only means no matching advisory was found in its covered data. It does not prove the package is trustworthy or safe at runtime.
-- Entities: GitHub dependency graph, Dependabot alerts, dependency review, GitHub Advisory Database, OSV, lockfiles, direct and transitive dependencies, known vulnerability.
+- Entities: GitHub dependency graph, Dependabot alerts, dependency review, GitHub Advisory Database, OSV, lockfiles, direct, and transitive dependencies, known vulnerability.
 - Cannibalization check: Topic 38 owns known-CVE review. Topic 39 owns nonexistent or impersonating packages. Topic 40 owns lifecycle scripts and transitive execution. Topic 74 owns pre-launch dependency scanning. Keep registry identity checks short and refer readers onward.
 - Required sources: S08, S09, S10, S11, S12.
 - Authority link: Link after distinguishing detection from proof to `/blog/vibe-coding-security-guide` with anchor `evidence-state model for security findings`.
@@ -163,7 +163,7 @@ All public drafts must link to `/blog/vibe-coding-security-guide` in the first t
 - Target length: 1,500 words
 - Reader problem: A coding agent runs with host filesystem access and unrestricted outbound network access, so a bad command or injected instruction can reach secrets or external destinations.
 - Unique angle: Treat sandboxing and egress as separate controls. Give a practical boundary model for disposable workspaces, minimal mounts, non-root execution, resource limits, destination allowlists, and artifact review.
-- Direct-answer thesis: Run coding agents in a disposable environment with only the repository and credentials they need. Use a non-root identity, minimal mounts, process and resource limits, and an explicit outbound destination policy. A container alone is not a complete sandbox, and a sandbox without egress control can still send data to an external service.
+- Direct-answer thesis: Run coding agents in a disposable environment with only the repository and credentials they need. Use a non-root identity, minimal mounts, process, and resource limits, and an explicit outbound destination policy. A container alone is not a complete sandbox, and a sandbox without egress control can still send data to an external service.
 - Entities: sandbox, container, rootless mode, seccomp, filesystem mount, network egress, DNS, ephemeral credential, approval, artifact promotion.
 - Cannibalization check: Topic 44 owns runtime isolation and network reachability. Topic 45 owns production authorization. Topic 40 owns dependency installation. Topic 43 owns MCP tool scopes. Avoid provider-specific sandbox claims except dated examples.
 - Required sources: S34, S35, S27, S36.
@@ -307,7 +307,7 @@ All public drafts must link to `/blog/vibe-coding-security-guide` in the first t
 - Target length: 1,400 words
 - Reader problem: A developer built most of an app in Cursor and needs a launch sequence that covers data handling, rules, dependencies, application controls, agent permissions, and independent verification.
 - Unique angle: Apply the prior Batch 3 controls to Cursor without implying Cursor generated every issue or that one setting secures the application. Date every product-specific fact and separate editor configuration from app security.
-- Direct-answer thesis: Before launching a Cursor-built app, review what data entered Cursor, protect and inspect project rules, verify every dependency, test authorization and tenant boundaries, remove production credentials from agent reach, and run independent negative tests against the deployed surface. Cursor privacy or agent settings do not verify the security of the code it helped create.
+- Direct-answer thesis: Before launching a Cursor-built app, review what data entered Cursor, protect, and inspect project rules, verify every dependency, test authorization and tenant boundaries, remove production credentials from agent reach, and run independent negative tests against the deployed surface. Cursor privacy or agent settings do not verify the security of the code it helped create.
 - Entities: Cursor Privacy Mode, codebase indexing, `.cursorignore`, `.cursor/rules`, `AGENTS.md`, agent command approval, dependency review, application authorization, launch evidence.
 - Cannibalization check: Topic 52 owns the Cursor-specific launch synthesis. Topics 41 and 46 own data and rules in depth. Topics 53 through 58 later own other coding tools. Avoid a generic tool comparison or unsupported claims about competing products.
 - Required sources: S22, S23, S40, S41, S59.

@@ -81,8 +81,8 @@ Use only the approved stable tags. The suggested tags below are intentionally na
 - Target length: 1,400 words
 - Reader problem: a prototype has gradually acquired real users, credentials, data, money, integrations, or operational reliance without a formal production transition.
 - Unique angle: production is a risk condition, not a hosting label. The transition starts when failure, misuse, or disclosure can materially affect someone, even if the team still calls the application a demo.
-- Direct-answer direction: treat a prototype as production once it handles real identities, sensitive data, payment or privileged actions, public traffic, contractual obligations, or business-critical availability. Pause expansion until ownership, access control, secrets, data handling, monitoring, recovery, and rollback have named evidence.
-- Entities to cover: NIST SSDF, OWASP ASVS 5.0.0, NIST CSF 2.0, data classification, environment separation, backup and restore, incident owner.
+- Direct-answer direction: treat a prototype as production once it handles real identities, sensitive data, payment, or privileged actions, public traffic, contractual obligations, or business-critical availability. Pause expansion until ownership, access control, secrets, data handling, monitoring, recovery, and rollback have named evidence.
+- Entities to cover: NIST SSDF, OWASP ASVS 5.0.0, NIST CSF 2.0, data classification, environment separation, backup, and restore, incident owner.
 - Cannibalization check: topic 72 is a broad pre-launch checklist; topic 37 focuses on backup and restore. This article owns the recognition point and the promotion gate from prototype to operated service.
 - Required source families: NIST SSDF, OWASP ASVS, NIST CSF 2.0.
 - Authority link context: use the guide to show which layers a prototype often leaves implicit.
@@ -219,8 +219,8 @@ Use only the approved stable tags. The suggested tags below are intentionally na
 - Exact primary query: `ai api security checklist`
 - Search intent: implementation guide for internet-facing APIs that invoke models or AI tools
 - Target length: 1,450 words
-- Reader problem: the endpoint has ordinary API risks plus model-cost abuse, prompt or tool manipulation, unsafe downstream calls, data leakage, and unbounded work.
-- Unique angle: secure two connected control planes. The API plane needs authentication, object and function authorization, schema validation, quotas, timeouts, inventory, and safe errors. The AI plane needs prompt isolation, output handling, tool allowlists, data controls, and explicit human approval for consequential actions.
+- Reader problem: the endpoint has ordinary API risks plus model-cost abuse, prompt, or tool manipulation, unsafe downstream calls, data leakage, and unbounded work.
+- Unique angle: secure two connected control planes. The API plane needs authentication, object, and function authorization, schema validation, quotas, timeouts, inventory, and safe errors. The AI plane needs prompt isolation, output handling, tool allowlists, data controls, and explicit human approval for consequential actions.
 - Direct-answer direction: authenticate callers, authorize every object and function, validate bounded inputs, enforce per-identity cost and rate limits, constrain model tools and downstream URLs, treat model output as untrusted, minimize retained data, log safe security events, and test abuse paths.
 - Entities to cover: OWASP API Security Top 10 2023, NCSC Guidelines for Secure AI System Development, OWASP ASVS 5.0.0, broken object authorization, unrestricted resource consumption, unsafe API consumption, tool permissions.
 - Cannibalization check: topics 65 and 66 are framework-specific Express and FastAPI guides; topic 22 owns generic rate limiting. This article owns the combined public API and AI-action boundary.
@@ -280,7 +280,7 @@ Use only the approved stable tags. The suggested tags below are intentionally na
 - Search intent: risk-based prioritization guide for a backlog of security findings
 - Target length: 1,400 words
 - Reader problem: the team sorts by scanner severity alone and misses exposure, exploit activity, asset importance, confidence, compensating controls, and fix risk.
-- Unique angle: prioritize action, not labels. Combine technical severity with applicability, exposure, exploitation evidence, business and safety impact, asset value, existing controls, and remediation feasibility. Keep unknowns visible.
+- Unique angle: prioritize action, not labels. Combine technical severity with applicability, exposure, exploitation evidence, business, and safety impact, asset value, existing controls, and remediation feasibility. Keep unknowns visible.
 - Direct-answer direction: first contain active exploitation and exposed credentials. Then rank confirmed applicable findings by reachable attack path, known exploitation, likely impact, affected asset, evidence confidence, and remediation cost or risk. Use CVSS, EPSS, KEV, and SSVC as complementary inputs, not interchangeable scores.
 - Entities to cover: CISA SSVC, CISA KEV, FIRST CVSS v4.0, FIRST EPSS, asset criticality, exploit status, reachability, mitigation, remediation, acceptance.
 - Cannibalization check: topic 86 owns immediate handling of one critical finding; topic 96 owns aggregate app-score interpretation. This article owns ordering a multi-finding backlog.
@@ -300,7 +300,7 @@ Use only the approved stable tags. The suggested tags below are intentionally na
 - Search intent: practical guide for distributing security results to clients, partners, or the public
 - Target length: 1,350 words
 - Reader problem: a report can expose targets, open findings, credentials, customer data, internal architecture, exploit steps, or personal information when copied to the wrong channel or audience.
-- Unique angle: create audience-specific artifacts from a stable source report. Minimize fields, redact and verify the rendered output, use recipient and expiry controls, and make revocation and correction possible. A label such as TLP guides sharing but does not encrypt or authorize access.
+- Unique angle: create audience-specific artifacts from a stable source report. Minimize fields, redact, and verify the rendered output, use recipient and expiry controls, and make revocation and correction possible. A label such as TLP guides sharing but does not encrypt or authorize access.
 - Direct-answer direction: classify the report, define recipients and purpose, remove secrets and unnecessary target details, separate executive summary from technical evidence, use access-controlled delivery, set expiry where supported, verify the final file and links, log approval, and revoke or supersede public artifacts when needed.
 - Entities to cover: FIRST TLP 2.0, NIST SP 800-61 Rev. 3, OWASP Vulnerability Disclosure guidance, redaction, least disclosure, revocable scorecard, immutable source snapshot, noindex.
 - Cannibalization check: topic 84 covers creating the client handoff report. This article owns distribution, audience minimization, access, revocation, and public-sharing boundaries.
