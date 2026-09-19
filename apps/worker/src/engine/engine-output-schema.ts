@@ -96,14 +96,11 @@ export const advisoryCvssSchema = z
       .max(256)
       // Same contract as the upstream _CVSS_VECTOR_RE, expressed without a
       // nested-quantifier regex: "CVSS:3.1/AV:N/AC:L/..." metric segments.
-      .refine(
-        (value) => {
-          const segments = value.split("/")
-          if (!/^CVSS:[34]\.\d$/.test(segments[0] ?? "")) return false
-          return segments.slice(1).every((segment) => /^[A-Z]{1,3}:[NLHARCUPM]$/.test(segment))
-        },
-        "advisory_cvss.vector must be a CVSS vector"
-      )
+      .refine((value) => {
+        const segments = value.split("/")
+        if (!/^CVSS:[34]\.\d$/.test(segments[0] ?? "")) return false
+        return segments.slice(1).every((segment) => /^[A-Z]{1,3}:[NLHARCUPM]$/.test(segment))
+      }, "advisory_cvss.vector must be a CVSS vector")
       .optional(),
     source: z.string().max(256).optional(),
     metric_reasoning: z.string().max(MAX_METRIC_REASONING_CHARS).optional(),
@@ -163,10 +160,7 @@ export const engineMetadataValueSchema = z.union([
   z.string().max(MAX_METADATA_VALUE_CHARS),
   z.number().finite(),
   z.boolean(),
-  z.record(
-    z.string().max(64),
-    z.string().max(MAX_METADATA_NESTED_VALUE_CHARS)
-  ),
+  z.record(z.string().max(64), z.string().max(MAX_METADATA_NESTED_VALUE_CHARS)),
 ])
 
 export const engineVulnerabilitySchema = z
@@ -222,10 +216,7 @@ export const engineVulnerabilitySchema = z
     update_history: z.array(findingRevisionSchema).max(MAX_FINDING_REVISIONS).optional(),
     updated_at: z.string().max(MAX_EVIDENCE_FIELD_CHARS).optional(),
     /** Engine-recorded per-finding ingestion warnings (upstream ≤10). */
-    evidence_warnings: z
-      .array(z.string().max(MAX_EVIDENCE_FIELD_CHARS))
-      .max(10)
-      .optional(),
+    evidence_warnings: z.array(z.string().max(MAX_EVIDENCE_FIELD_CHARS)).max(10).optional(),
     /** Upstream stamps "1.1" on evidence-schema findings. */
     evidence_contract_version: z.string().max(64).optional(),
     /**
@@ -273,10 +264,7 @@ const scopedCoverageEntrySchema = z
     recorded_by: boundedString,
     recorded_at: boundedString,
     updated_at: boundedString,
-    previous_outcomes: z
-      .array(z.string().max(64))
-      .max(MAX_COVERAGE_PREVIOUS_OUTCOMES)
-      .optional(),
+    previous_outcomes: z.array(z.string().max(64)).max(MAX_COVERAGE_PREVIOUS_OUTCOMES).optional(),
     source: boundedString,
     evidence_refs: z
       .array(z.string().min(1).max(MAX_HTTP_EXCHANGE_ID_CHARS))
@@ -325,8 +313,14 @@ export const engineCoverageDocumentSchema = z
       .optional(),
     // Hard DoS bounds here; the parser truncates at the contract limits and
     // records an issue rather than dropping the whole artifact on overflow.
-    entries: z.array(z.unknown()).max(MAX_SCOPED_COVERAGE_ENTRIES * 4).optional(),
-    gaps: z.array(z.unknown()).max(MAX_COVERAGE_GAPS * 4).optional(),
+    entries: z
+      .array(z.unknown())
+      .max(MAX_SCOPED_COVERAGE_ENTRIES * 4)
+      .optional(),
+    gaps: z
+      .array(z.unknown())
+      .max(MAX_COVERAGE_GAPS * 4)
+      .optional(),
     truncated: z
       .object({
         entries_dropped: z.number().int().min(0).optional(),
@@ -449,14 +443,14 @@ export const httpExchangeExportSchema = z
       .strip()
       .optional(),
     exchanges: z.array(httpExchangeEntrySchema).max(MAX_HTTP_EXCHANGE_ENTRIES),
-    missing_request_ids: z
-      .array(httpExchangeIdSchema)
-      .max(MAX_HTTP_EXCHANGE_ENTRIES)
-      .optional(),
+    missing_request_ids: z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_ENTRIES).optional(),
     truncated: z
       .object({
         exchange_limit: z.number().int().min(0).optional(),
-        omitted_request_ids: z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_ENTRIES).optional(),
+        omitted_request_ids: z
+          .array(httpExchangeIdSchema)
+          .max(MAX_HTTP_EXCHANGE_ENTRIES)
+          .optional(),
       })
       .strip()
       .optional(),

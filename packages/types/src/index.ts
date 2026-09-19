@@ -294,18 +294,8 @@ export const CreateScanSchema = z.object({
   // Review Changes comparison refs (branch names or full SHAs). The server
   // resolves them to immutable git object IDs through the authorized source
   // integration before the scan is admitted; abbreviated SHAs never persist.
-  baseRef: z
-    .string()
-    .min(1)
-    .max(255)
-    .refine(isValidGitRef, "Invalid Git ref")
-    .optional(),
-  headRef: z
-    .string()
-    .min(1)
-    .max(255)
-    .refine(isValidGitRef, "Invalid Git ref")
-    .optional(),
+  baseRef: z.string().min(1).max(255).refine(isValidGitRef, "Invalid Git ref").optional(),
+  headRef: z.string().min(1).max(255).refine(isValidGitRef, "Invalid Git ref").optional(),
 })
 
 /** Create-scan input with cross-field workflow rules applied. Kept as a

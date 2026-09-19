@@ -5,9 +5,9 @@ const updateScanStatusMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@lyrashield/db", async () => {
   // Keep the real stored-plan verifier (hash + contract) — mock only Prisma.
-  const planModule = await vi.importActual<
-    typeof import("@lyrashield/db/src/scan-execution-plan")
-  >("@lyrashield/db/src/scan-execution-plan")
+  const planModule = await vi.importActual<typeof import("@lyrashield/db/src/scan-execution-plan")>(
+    "@lyrashield/db/src/scan-execution-plan"
+  )
   return {
     getSystemPrisma: () => ({ scan: { findUnique: systemScanFindUnique } }),
     updateScanStatus: updateScanStatusMock,
@@ -84,9 +84,7 @@ describe("verifyScanJobAuthority", () => {
 
   it("rejects a payload that does not match the stored scan record", async () => {
     systemScanFindUnique.mockResolvedValue(storedScan())
-    const result = await verifyScanJobAuthority(
-      makeJob({ data: { goal: "DIFFERENT_GOAL" } })
-    )
+    const result = await verifyScanJobAuthority(makeJob({ data: { goal: "DIFFERENT_GOAL" } }))
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.result.errorCategory).toBe("INVALID_JOB")
   })
@@ -116,9 +114,7 @@ describe("verifyScanJobAuthority", () => {
     systemScanFindUnique.mockResolvedValue(
       storedScan({ mode: "QUICK", executionPlan: plan, executionPlanHash: hash })
     )
-    const result = await verifyScanJobAuthority(
-      makeJob({ data: { mode: "QUICK" } })
-    )
+    const result = await verifyScanJobAuthority(makeJob({ data: { mode: "QUICK" } }))
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.executionPlan).toEqual(plan)
   })
@@ -155,8 +151,7 @@ describe("verifyScanJobAuthority", () => {
     )
     const result = await verifyScanJobAuthority(makeJob({ data: { mode: "QUICK" } }))
     expect(result.ok).toBe(false)
-    if (!result.ok)
-      expect(result.result.errorCategory).toBe("SCAN_PLAN_VERSION_UNSUPPORTED")
+    if (!result.ok) expect(result.result.errorCategory).toBe("SCAN_PLAN_VERSION_UNSUPPORTED")
   })
 
   it("fails closed on an inconsistent scope/workflow contract", async () => {
@@ -202,9 +197,7 @@ describe("verifyScanJobAuthority", () => {
     systemScanFindUnique.mockResolvedValue(
       storedScan({ mode: "STANDARD", executionPlan: plan, executionPlanHash: hash })
     )
-    const result = await verifyScanJobAuthority(
-      makeJob({ data: { mode: "STANDARD" } })
-    )
+    const result = await verifyScanJobAuthority(makeJob({ data: { mode: "STANDARD" } }))
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.result.errorCategory).toBe("SCAN_PLAN_MISMATCH")
   })

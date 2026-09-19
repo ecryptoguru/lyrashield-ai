@@ -79,11 +79,7 @@ describe("prepareScanExecution Review Changes guard", () => {
     const result = await prepareScanExecution(params({ executionPlan: diffPlan() }))
 
     expect(result).toMatchObject({ ok: true })
-    expect(mocks.updateScanStatus).not.toHaveBeenCalledWith(
-      "scan-1",
-      "FAILED",
-      expect.anything()
-    )
+    expect(mocks.updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
   it("fails with a named preflight category when the plan lacks the merge base", async () => {
