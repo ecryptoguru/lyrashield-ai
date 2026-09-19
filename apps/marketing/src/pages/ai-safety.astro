@@ -6,7 +6,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/ai-safety", origin).toString()
 const title = "AI safety evaluation | LyraShield AI"
 const description =
-  "First-party, bounded prompt-injection guard observations using the OWASP Gen AI Red Teaming Guide and MLCommons AILuminate demo prompt set; clean-checkout reproduction remains unavailable."
+  "Historical prompt-injection guard observations using OWASP Gen AI and MLCommons AILuminate demo prompts; clean-checkout reproduction is unavailable."
 const reviewed = "2026-08-15"
 
 const owasp = evaluationResults.find((result) => result.suite === "owasp_genai_red_team")!
