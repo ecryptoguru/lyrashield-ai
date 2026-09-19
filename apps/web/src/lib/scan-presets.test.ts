@@ -13,6 +13,18 @@ describe("scan presets", () => {
     expect(SCAN_PRESETS.DEEP_REVIEW).toMatchObject({ goal: "FULL_PENTEST", mode: "DEEP" })
   })
 
+  it("does not describe the Quick repository preset as a changed-files review", () => {
+    // Quick scans the submitted repository snapshot. "Changed files" is the
+    // Review Changes workflow's vocabulary, not the Quick depth's.
+    for (const copy of [
+      SCAN_PRESETS.RELEASE_CHECK.label,
+      SCAN_PRESETS.RELEASE_CHECK.description,
+      SCAN_PRESETS.RELEASE_CHECK.hint,
+    ]) {
+      expect(copy.toLowerCase()).not.toContain("changed files")
+    }
+  })
+
   it("maps each review type to its user-facing duration range", () => {
     expect(getScanPresetEstimate("RELEASE_CHECK")).toEqual({ low: 5, high: 15 })
     expect(getScanPresetEstimate("CODE_REVIEW")).toEqual({ low: 8, high: 15 })
