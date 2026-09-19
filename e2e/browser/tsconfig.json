@@ -1,0 +1,11 @@
+{
+  "extends": "../../apps/web/tsconfig.json",
+  "compilerOptions": {
+    "typeRoots": [
+      "../../apps/web/node_modules/@types",
+      "../../node_modules/.pnpm/node_modules/@types"
+    ]
+  },
+  "include": ["./*.ts", "./*.tsx"],
+  "exclude": ["node_modules"]
+}
