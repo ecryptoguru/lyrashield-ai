@@ -80,6 +80,7 @@ export function SupportCaseDetail(props: {
   onElevationCodeChange: (value: string) => void
   onPatch: (action: "takeover" | "release" | "resolve" | "assign", status?: CaseStatus) => void
   onSendReply: () => void
+  onRetry?: () => void
 }): React.ReactNode {
   const {
     selectedId,
@@ -96,8 +97,10 @@ export function SupportCaseDetail(props: {
     onElevationCodeChange,
     onPatch,
     onSendReply,
+    onRetry,
   } = props
   const selected = detail?.case ?? null
+  const actionDisabled = busy !== null || selected?.id !== selectedId
   const takenOver = !!selected?.takenOverAt
 
   const detailMeta = selected
@@ -130,7 +133,14 @@ export function SupportCaseDetail(props: {
           <span className="text-muted-foreground text-sm">Loading case…</span>
         </div>
       ) : error ? (
-        <Card className="border-l-2 border-l-amber-500 p-4 text-sm">{error}</Card>
+        <Card className="border-l-2 border-l-amber-500 p-4 text-sm">
+          <p>{error}</p>
+          {onRetry ? (
+            <Button className="mt-2" size="sm" variant="secondary" onClick={onRetry}>
+              Retry loading case
+            </Button>
+          ) : null}
+        </Card>
       ) : selected ? (
         <div className="flex flex-col gap-4">
           <Card className="p-5">
@@ -211,7 +221,7 @@ export function SupportCaseDetail(props: {
               {!takenOver ? (
                 <Button
                   size="sm"
-                  disabled={busy !== null}
+                  disabled={actionDisabled}
                   onClick={() => onPatch("takeover")}
                   title="Assigns you and pauses Myra on the linked conversation"
                 >
@@ -221,7 +231,7 @@ export function SupportCaseDetail(props: {
                 <Button
                   size="sm"
                   variant="secondary"
-                  disabled={busy !== null || handoffSummary.trim().length < 10}
+                  disabled={actionDisabled || handoffSummary.trim().length < 10}
                   onClick={() => onPatch("release")}
                 >
                   Release to Myra
@@ -231,7 +241,7 @@ export function SupportCaseDetail(props: {
                 <Button
                   size="sm"
                   variant="secondary"
-                  disabled={busy !== null}
+                  disabled={actionDisabled}
                   onClick={() => onPatch("assign")}
                 >
                   Assign to me
@@ -242,7 +252,7 @@ export function SupportCaseDetail(props: {
                   <Button
                     size="sm"
                     variant="secondary"
-                    disabled={busy !== null}
+                    disabled={actionDisabled}
                     onClick={() => onPatch("resolve", "RESOLVED")}
                   >
                     Resolve
@@ -251,7 +261,7 @@ export function SupportCaseDetail(props: {
                     <Button
                       size="sm"
                       variant="ghost"
-                      disabled={busy !== null}
+                      disabled={actionDisabled}
                       onClick={() => onPatch("resolve", "PENDING_USER")}
                     >
                       Mark pending user
@@ -262,7 +272,7 @@ export function SupportCaseDetail(props: {
                 <Button
                   size="sm"
                   variant="secondary"
-                  disabled={busy !== null}
+                  disabled={actionDisabled}
                   onClick={() => onPatch("resolve", "OPEN")}
                 >
                   Reopen
@@ -320,7 +330,7 @@ export function SupportCaseDetail(props: {
               <div className="mt-2">
                 <Button
                   size="sm"
-                  disabled={busy !== null || !replyBody.trim()}
+                  disabled={actionDisabled || !replyBody.trim()}
                   onClick={onSendReply}
                 >
                   {busy === "reply" ? "Sending…" : "Send reply"}

@@ -104,4 +104,14 @@ describe("SupportCaseDetail", () => {
     expect(html).toContain("Reopen")
     expect(html).not.toContain(">Resolve</button>")
   })
+
+  it("disables every mutation when the displayed case differs from the selection", () => {
+    const html = renderToStaticMarkup(
+      <SupportCaseDetail {...baseProps} selectedId="case-2" handoffSummary="Reviewed handoff" />
+    )
+
+    const buttons = html.match(/<button\b[^>]*>/g) ?? []
+    expect(buttons.length).toBeGreaterThan(0)
+    expect(buttons.every((button) => button.includes('disabled=""'))).toBe(true)
+  })
 })

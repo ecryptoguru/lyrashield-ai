@@ -105,6 +105,20 @@ export function SupportInbox() {
   const [elevationCode, setElevationCode] = useState("")
   const [announce, setAnnounce] = useState("")
 
+  const selectedIdRef = useRef<string | null>(null)
+  const statusFilterRef = useRef<CaseStatus | "">("")
+  const selectionVersion = useRef(0)
+  const mounted = useRef(false)
+  const actionPending = useRef(false)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      selectionVersion.current += 1
+    }
+  }, [])
+
   // Every fetch carries its own AbortController; a newer invocation aborts the
   // previous one and the effect cleanups abort on unmount, so a slow stale
   // response can never overwrite fresher list or detail state.
@@ -113,46 +127,45 @@ export function SupportInbox() {
 
   // setState only inside promise callbacks — an effect may call these, but
   // never synchronously set state (react-hooks/set-state-in-effect).
-  const loadList = useCallback(
-    (cursor?: string) => {
-      listAbortRef.current?.abort()
-      const controller = new AbortController()
-      listAbortRef.current = controller
-      const params = new URLSearchParams()
-      if (statusFilter) params.set("status", statusFilter)
-      if (cursor) params.set("cursor", cursor)
-      const qs = params.toString()
-      return fetch(`/api/myra/operator/cases${qs ? `?${qs}` : ""}`, {
-        cache: "no-store",
-        signal: controller.signal,
+  const loadList = useCallback((cursor?: string) => {
+    listAbortRef.current?.abort()
+    const controller = new AbortController()
+    listAbortRef.current = controller
+    const params = new URLSearchParams()
+    const filter = statusFilterRef.current
+    if (filter) params.set("status", filter)
+    if (cursor) params.set("cursor", cursor)
+    const qs = params.toString()
+    return fetch(`/api/myra/operator/cases${qs ? `?${qs}` : ""}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) await readError(res)
+        const body = (await res.json()) as {
+          data?: CaseRow[] | { cases?: CaseRow[]; nextCursor?: string | null }
+        }
+        if (controller.signal.aborted) return
+        const data = body.data
+        const page = Array.isArray(data) ? data : (data?.cases ?? [])
+        setNextCursor(Array.isArray(data) ? null : (data?.nextCursor ?? null))
+        setRows((prev) => (cursor ? [...prev, ...page] : page))
+        setListError(null)
       })
-        .then(async (res) => {
-          if (!res.ok) await readError(res)
-          const body = (await res.json()) as {
-            data?: CaseRow[] | { cases?: CaseRow[]; nextCursor?: string | null }
-          }
-          if (controller.signal.aborted) return
-          const data = body.data
-          const page = Array.isArray(data) ? data : (data?.cases ?? [])
-          setNextCursor(Array.isArray(data) ? null : (data?.nextCursor ?? null))
-          setRows((prev) => (cursor ? [...prev, ...page] : page))
-          setListError(null)
-        })
-        .catch((e) => {
-          if (controller.signal.aborted) return
-          setListError(e instanceof Error ? e.message : "Could not load cases.")
-          if (!cursor) setRows([])
-        })
-        .finally(() => {
-          if (controller.signal.aborted) return
-          setLoadingList(false)
-          setLoadingMore(false)
-        })
-    },
-    [statusFilter]
-  )
+      .catch((e) => {
+        if (controller.signal.aborted) return
+        setListError(e instanceof Error ? e.message : "Could not load cases.")
+        if (!cursor) setRows([])
+      })
+      .finally(() => {
+        if (controller.signal.aborted) return
+        setLoadingList(false)
+        setLoadingMore(false)
+      })
+  }, [])
 
   const loadDetail = useCallback((id: string) => {
+    if (!mounted.current || selectedIdRef.current !== id) return
     detailAbortRef.current?.abort()
     const controller = new AbortController()
     detailAbortRef.current = controller
@@ -183,7 +196,7 @@ export function SupportInbox() {
   useEffect(() => {
     void loadList()
     return () => listAbortRef.current?.abort()
-  }, [loadList])
+  }, [loadList, statusFilter])
 
   useEffect(() => {
     if (selectedId) void loadDetail(selectedId)
@@ -191,6 +204,12 @@ export function SupportInbox() {
   }, [selectedId, loadDetail])
 
   const selectCase = useCallback((id: string | null) => {
+    if (selectedIdRef.current === id) return
+    selectedIdRef.current = id
+    selectionVersion.current += 1
+    detailAbortRef.current?.abort()
+    setDetailError(null)
+    setAnnounce("")
     setSelectedId(id)
     setReplyBody("")
     setHandoffSummary("")
@@ -206,13 +225,26 @@ export function SupportInbox() {
   }, [])
 
   const selectStatus = useCallback((status: CaseStatus | "") => {
+    if (statusFilterRef.current === status) return
+    statusFilterRef.current = status
+    listAbortRef.current?.abort()
+    setNextCursor(null)
     setStatusFilter(status)
     setLoadingList(true)
   }, [])
 
   const patch = useCallback(
     async (action: "takeover" | "release" | "resolve" | "assign", status?: CaseStatus) => {
-      if (!selectedId) return
+      if (
+        !selectedId ||
+        detail?.case.id !== selectedId ||
+        selectedIdRef.current !== selectedId ||
+        actionPending.current
+      )
+        return
+      const version = selectionVersion.current
+      const isCurrent = () => mounted.current && selectionVersion.current === version
+      actionPending.current = true
       setBusy(action)
       setActionError(null)
       try {
@@ -222,6 +254,7 @@ export function SupportInbox() {
         // Every case mutation consumes a fresh single-use elevation nonce —
         // mint it for the specific action before sending the request.
         const nonce = await requestElevationNonce(`myra.case.${action}`, elevationCode)
+        if (!isCurrent()) return
         const res = await fetch(`/api/myra/operator/cases/${selectedId}`, {
           method: "PATCH",
           headers: {
@@ -235,8 +268,10 @@ export function SupportInbox() {
           }),
         })
         if (!res.ok) await readError(res)
-        setElevationCode("")
-        await Promise.all([loadDetail(selectedId), loadList()])
+        if (!mounted.current) return
+        if (isCurrent()) setElevationCode("")
+        await Promise.all([isCurrent() ? loadDetail(selectedId) : undefined, loadList()])
+        if (!isCurrent()) return
         setAnnounce(
           action === "takeover"
             ? "You are handling this case. Myra is paused on the conversation."
@@ -247,16 +282,29 @@ export function SupportInbox() {
                 : `Case marked ${status?.toLowerCase().replace(/_/g, " ") ?? "resolved"}.`
         )
       } catch (e) {
-        setActionError(e instanceof Error ? e.message : "Could not update that case.")
+        if (isCurrent()) {
+          setActionError(e instanceof Error ? e.message : "Could not update that case.")
+        }
       } finally {
-        setBusy(null)
+        actionPending.current = false
+        if (mounted.current) setBusy(null)
       }
     },
-    [selectedId, loadDetail, loadList, handoffSummary, elevationCode]
+    [selectedId, detail, loadDetail, loadList, handoffSummary, elevationCode]
   )
 
   const sendReply = useCallback(async () => {
-    if (!selectedId || !replyBody.trim()) return
+    if (
+      !selectedId ||
+      detail?.case.id !== selectedId ||
+      selectedIdRef.current !== selectedId ||
+      !replyBody.trim() ||
+      actionPending.current
+    )
+      return
+    const version = selectionVersion.current
+    const isCurrent = () => mounted.current && selectionVersion.current === version
+    actionPending.current = true
     setBusy("reply")
     setActionError(null)
     try {
@@ -264,6 +312,7 @@ export function SupportInbox() {
         throw new Error("Enter the 6-digit authenticator code for this elevation.")
       }
       const nonce = await requestElevationNonce("myra.case.reply", elevationCode)
+      if (!isCurrent()) return
       const res = await fetch(`/api/myra/operator/cases/${selectedId}/replies`, {
         method: "POST",
         headers: {
@@ -273,16 +322,22 @@ export function SupportInbox() {
         body: JSON.stringify({ body: replyBody.trim() }),
       })
       if (!res.ok) await readError(res)
-      setReplyBody("")
-      setElevationCode("")
-      await Promise.all([loadDetail(selectedId), loadList()])
-      setAnnounce("Reply sent.")
+      if (!mounted.current) return
+      if (isCurrent()) {
+        setReplyBody("")
+        setElevationCode("")
+      }
+      await Promise.all([isCurrent() ? loadDetail(selectedId) : undefined, loadList()])
+      if (isCurrent()) setAnnounce("Reply sent.")
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Could not send that reply.")
+      if (isCurrent()) {
+        setActionError(e instanceof Error ? e.message : "Could not send that reply.")
+      }
     } finally {
-      setBusy(null)
+      actionPending.current = false
+      if (mounted.current) setBusy(null)
     }
-  }, [selectedId, replyBody, elevationCode, loadDetail, loadList])
+  }, [selectedId, detail, replyBody, elevationCode, loadDetail, loadList])
 
   return (
     <div className="grid gap-5 lg:grid-cols-[22rem_1fr]">
@@ -312,7 +367,20 @@ export function SupportInbox() {
             <span className="text-muted-foreground text-sm">Loading cases…</span>
           </div>
         ) : listError ? (
-          <Card className="border-l-2 border-l-amber-500 p-4 text-sm">{listError}</Card>
+          <Card className="border-l-2 border-l-amber-500 p-4 text-sm">
+            <p>{listError}</p>
+            <Button
+              className="mt-2"
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setLoadingList(true)
+                void loadList()
+              }}
+            >
+              Retry loading cases
+            </Button>
+          </Card>
         ) : rows.length === 0 ? (
           <Card className="text-muted-foreground p-4 text-sm">
             No cases
@@ -384,6 +452,11 @@ export function SupportInbox() {
         onElevationCodeChange={setElevationCode}
         onPatch={(action, status) => void patch(action, status)}
         onSendReply={() => void sendReply()}
+        onRetry={() => {
+          if (!selectedId) return
+          setLoadingDetail(true)
+          void loadDetail(selectedId)
+        }}
       />
       <p role="status" aria-live="polite" className="sr-only">
         {announce}
