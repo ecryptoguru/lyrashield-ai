@@ -633,7 +633,7 @@ fn row_to_summary(row: &HashMap<String, JsonValue>) -> Result<ScanSummary, Strin
         .get("finding_count")
         .and_then(|v| v.as_i64())
         .unwrap_or(0) as usize;
-    let mode: ScanMode = serde_json::from_str(&mode_str).unwrap_or(ScanMode::Standard);
+    let mode = ScanMode::from_stored(&mode_str);
     let status = match status_str.as_str() {
         "pending" => ScanStatus::Pending,
         "running" => ScanStatus::Running,
@@ -657,7 +657,7 @@ fn row_to_detail(row: &HashMap<String, JsonValue>) -> Result<ScanDetail, String>
     Ok(ScanDetail {
         scan_id: get_string(row, "scan_id")?,
         target: get_string(row, "target")?,
-        mode: serde_json::from_str(&get_string(row, "mode")?).unwrap_or(ScanMode::Standard),
+        mode: ScanMode::from_stored(&get_string(row, "mode")?),
         status: match get_string(row, "status")?.as_str() {
             "pending" => ScanStatus::Pending,
             "running" => ScanStatus::Running,
