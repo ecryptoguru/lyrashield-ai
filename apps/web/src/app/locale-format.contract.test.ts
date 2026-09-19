@@ -10,8 +10,10 @@ import { describe, expect, it } from "vitest"
  * use `Intl.DateTimeFormat` with an explicit locale and `timeZone: "UTC"`.
  */
 function* sources(dir: string): Generator<string> {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     if (statSync(full).isDirectory()) {
       if (entry === "node_modules" || entry.startsWith(".")) continue
       yield* sources(full)
@@ -27,6 +29,7 @@ describe("locale-stable date formatting", () => {
   it("has no bare toLocale*() calls in server components under app/", () => {
     const violations: string[] = []
     for (const file of sources(appDir)) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const text = readFileSync(file, "utf8")
       if (text.includes('"use client"')) continue
       for (const match of text.matchAll(/\.toLocale(?:Date|Time)?String\(\)/g)) {
@@ -39,6 +42,7 @@ describe("locale-stable date formatting", () => {
   it("pins an explicit timezone wherever a server component formats with toLocale*", () => {
     const violations: string[] = []
     for (const file of sources(appDir)) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const text = readFileSync(file, "utf8")
       if (text.includes('"use client"')) continue
       for (const match of text.matchAll(/\.toLocale(?:Date|Time)?String\(([^)]*)\)/g)) {

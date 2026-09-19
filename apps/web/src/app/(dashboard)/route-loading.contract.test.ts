@@ -8,8 +8,10 @@ import { describe, expect, it } from "vitest"
  * nearest ancestor boundary and shows no skeleton of its own.
  */
 function* pageDirs(dir: string): Generator<string> {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     if (statSync(full).isDirectory()) {
       yield* pageDirs(full)
     } else if (entry === "page.tsx") {
@@ -23,6 +25,7 @@ const dashboardDir = new URL("./", import.meta.url).pathname
 describe("dashboard route loading boundaries", () => {
   it("covers every page route with a loading.tsx", () => {
     const missing = [...pageDirs(dashboardDir)].filter(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       (dir) => !existsSync(join(dir, "loading.tsx"))
     )
     expect(missing).toEqual([])
