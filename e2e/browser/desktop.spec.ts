@@ -18,6 +18,7 @@ async function native(
     historyFailure?: boolean
     detailFailure?: boolean
     historyDelay?: number
+    holdFirstListener?: boolean
   } = {}
 ) {
   await page.addInitScript(
@@ -27,6 +28,8 @@ async function native(
         listeners: new Map<string, (event: { payload: unknown }) => void>(),
         failures: 0,
         listenCalls: 0,
+        resolvedListenCalls: 0,
+        releaseListener: null as (() => void) | null,
       }
       Object.assign(window, { desktopState: state })
       const detail = {
@@ -96,10 +99,15 @@ async function native(
         },
         async listen(event, handler) {
           state.listenCalls++
+          if (options.holdFirstListener && state.listenCalls === 1)
+            await new Promise<void>((resolve) => {
+              state.releaseListener = resolve
+            })
           if (options.delay) await new Promise((resolve) => setTimeout(resolve, options.delay))
           if (options.listenerFailure && event === "scan://finding" && state.failures++ === 0)
             throw Error("Listener unavailable")
           state.listeners.set(event, handler)
+          state.resolvedListenCalls++
           return () => {
             state.listeners.delete(event)
           }
@@ -205,7 +213,7 @@ for (const failure of ["listenerFailure", "replayFailure"] as const) {
 test("unmount during delayed registration cleans late listeners without replay", async ({
   page,
 }) => {
-  await native(page, { delay: 50 })
+  await native(page, { holdFirstListener: true })
   await page.goto("?desktop=progress")
   await expect
     .poll(() =>
@@ -216,14 +224,29 @@ test("unmount during delayed registration cleans late listeners without replay",
     )
     .toBeGreaterThan(0)
   await page.evaluate(() => window.dispatchEvent(new Event("test:unmount")))
-  await page.waitForTimeout(500)
-  expect(
-    await page.evaluate(
-      () =>
-        (window as unknown as { desktopState: { listeners: Map<string, unknown> } }).desktopState
-          .listeners.size
+  await page.evaluate(() =>
+    (
+      window as unknown as { desktopState: { releaseListener: () => void } }
+    ).desktopState.releaseListener()
+  )
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { desktopState: { resolvedListenCalls: number } }).desktopState
+            .resolvedListenCalls
+      )
     )
-  ).toBe(0)
+    .toBe(7)
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { desktopState: { listeners: Map<string, unknown> } }).desktopState
+            .listeners.size
+      )
+    )
+    .toBe(0)
   expect(
     await page.evaluate(() =>
       (
