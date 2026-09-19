@@ -1,0 +1,32 @@
+{
+  "id": "deterministic-quick",
+  "title": "Deterministic-only Quick run is labeled as such",
+  "note": "determinismMode=targeted_scanner marks a no-model run; the surface reports deterministicRun so readers can tell measured scanner output from engine-backed work.",
+  "evidence": {
+    "scan": {
+      "status": "COMPLETED",
+      "mode": "QUICK",
+      "determinismMode": "targeted_scanner",
+      "durationMs": 42000,
+      "llmRequestCount": 0
+    },
+    "receipts": [
+      { "scanner": "sast", "controlId": "vibe-01", "status": "COMPLETED" },
+      { "scanner": "iac", "controlId": "vibe-50", "status": "COMPLETED" }
+    ],
+    "findings": [{ "verificationStatus": "DETECTED", "severity": "MEDIUM" }],
+    "manifestChecksum": "1b2863d0f75e6c1c2893cbe1f9c1cc5807bc434a1b2863d0f75e6c1c2893cbe1f9c1cc58",
+    "ingestionWarnings": []
+  },
+  "expect": {
+    "facts.scanStatus": "COMPLETED",
+    "facts.deterministicRun": true,
+    "facts.llmRequests": 0,
+    "facts.findings.total": 1,
+    "facts.coverage.receiptsTotal": 2,
+    "facts.coverage.byStatus.COMPLETED": 2,
+    "facts.coverage.engineDeclaredReceipts": 0,
+    "estimates.assessedReceiptRatio.value": 1,
+    "estimates.verifiedFindingRatio.value": 0
+  }
+}

@@ -6,6 +6,7 @@ export {
   createListWorkspacesTool,
   createListTargetsTool,
   createGetScanStatusTool,
+  createGetScanQualityTool,
   createCheckDiffTool,
   createRunPrScanTool,
   createExplainFindingTool,

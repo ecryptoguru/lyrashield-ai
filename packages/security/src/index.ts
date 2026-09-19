@@ -42,6 +42,12 @@ export {
   MAX_SESSION_HEADERS,
   MAX_SESSION_HEADER_VALUE_BYTES,
   MAX_SESSION_HOSTS,
+  CONNECTOR_RELAY_PROFILES,
+  connectorRelayScope,
+  mintConnectorRelayGrant,
+  isConnectorRelayProvider,
+  type ConnectorRelayProvider,
+  type ConnectorRelayProfile,
   type RelayGrantScope,
   type RelayDenyReason,
   type RelaySessionBinding,
@@ -220,3 +226,10 @@ export {
   type ImportedFindingRecord,
   type SarifParseResult,
 } from "./sarif-import"
+export {
+  evaluateConnectorAdmission,
+  parseConnectorCanaryWorkspaceIds,
+  type ConnectorAdmissionDecision,
+  type ConnectorAdmissionMode,
+  type ConnectorAdmissionReason,
+} from "./connector-admission"

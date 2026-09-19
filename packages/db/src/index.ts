@@ -489,3 +489,27 @@ export {
   type OperationStatusView,
   type PrincipalIdentity,
 } from "./agent-operation-service"
+export {
+  CONNECTOR_PROVIDERS,
+  connectorPrincipal,
+  isConnectorProvider,
+  defaultConnectorAdmission,
+  resolveConnectorConnection,
+  listConnectorConnections,
+  checkConnectorAuthorization,
+  invokeConnectorTool,
+  upsertConnectorConnection,
+  setConnectorConnectionStatus,
+  ConnectorConnectionError,
+  type ConnectorAuthzResult,
+  type ConnectorCredentialShape,
+  type ConnectorDenial,
+  type ConnectorDenialCode,
+  type ConnectorInvocationParams,
+  type ConnectorInvocationResult,
+  type ConnectorInvocationSuccess,
+  type ConnectorProviderId,
+  type ConnectorToolSpec,
+  type UpsertConnectorConnectionParams,
+} from "./connector-service"
+export { getScanQualitySurface } from "./scan-quality-service"

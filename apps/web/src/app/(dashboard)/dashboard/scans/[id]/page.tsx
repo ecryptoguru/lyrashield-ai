@@ -1,6 +1,11 @@
 import type { Metadata } from "next"
 import { cache } from "react"
-import { getScanWithEvents, getScanResultManifestDetail, prisma } from "@lyrashield/db"
+import {
+  getScanQualitySurface,
+  getScanWithEvents,
+  getScanResultManifestDetail,
+  prisma,
+} from "@lyrashield/db"
 import { ScanExecutionPlanSchema } from "@lyrashield/types"
 import { defaultStandards, renderStandards } from "@lyrashield/security"
 import { notFound, redirect } from "next/navigation"
@@ -62,7 +67,8 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
   // the client table pages, the one-time manifest detail, and the scorecard
   // pair (gated on status only — findings.length refines the render below).
   const wantsScorecard = scan.status === "COMPLETED" && !!scan.targetId
-  const [findings, manifestDetail, scoreSnapshot, membership, planRow] = await Promise.all([
+  const [findings, manifestDetail, qualitySurface, scoreSnapshot, membership, planRow] =
+    await Promise.all([
     prisma.finding.findMany({
       where: { scanId: id, workspaceId, deletedAt: null },
       select: {
@@ -87,6 +93,9 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     // the tens-of-KB manifest JSON, which getScanWithEvents deliberately
     // excludes so the polling API does not ship it on every request).
     getScanResultManifestDetail(id, workspaceId),
+    // Measured quality surface — derived only from stored scan evidence
+    // (receipts, finding tiers, manifest); labeled heuristics stay separate.
+    getScanQualitySurface(id, workspaceId),
     scan.status === "COMPLETED" && scan.targetId
       ? prisma.scoreSnapshot.findFirst({
           where: {
@@ -196,6 +205,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
       threatModel: manifestDetail?.threatModel ?? null,
       attachments: manifestDetail?.attachments ?? null,
       ingestionWarnings: manifestDetail?.ingestionWarnings ?? [],
+      quality: qualitySurface as unknown as Record<string, unknown> | null,
       coverage: scan.coverageReceipts.map((receipt) => ({
         scanner: receipt.scanner,
         controlId: receipt.controlId,

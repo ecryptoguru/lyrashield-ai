@@ -1,0 +1,28 @@
+{
+  "id": "failed-no-evidence",
+  "title": "Failed scan with no stored evidence reports nulls, not zeros-as-coverage",
+  "note": "A failed run has no manifest, no receipts, no findings. Ratios are null (no basis) and manifestPresent is false — the surface must not imply coverage that does not exist.",
+  "evidence": {
+    "scan": {
+      "status": "FAILED",
+      "mode": "DEEP",
+      "determinismMode": "default",
+      "durationMs": 61000,
+      "llmRequestCount": 0
+    },
+    "receipts": [],
+    "findings": [],
+    "manifestChecksum": null,
+    "ingestionWarnings": []
+  },
+  "expect": {
+    "facts.scanStatus": "FAILED",
+    "facts.findings.total": 0,
+    "facts.coverage.receiptsTotal": 0,
+    "facts.evidence.manifestPresent": false,
+    "facts.evidence.manifestChecksum": null,
+    "facts.evidence.ingestionWarningCount": 0,
+    "estimates.assessedReceiptRatio.value": null,
+    "estimates.verifiedFindingRatio.value": null
+  }
+}
