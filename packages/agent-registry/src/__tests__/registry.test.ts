@@ -26,7 +26,7 @@ it("keeps OAuth config free of credential provenance overrides", () => {
   })
   expect(JSON.stringify(entry.value)).not.toContain("LYRASHIELD_API_URL")
   expect(JSON.stringify(entry.value)).not.toContain("LYRASHIELD_API_KEY")
-  expect(JSON.stringify(entry.value)).toContain("@lyrashield/mcp@0.2.8")
+  expect(JSON.stringify(entry.value)).toContain("@lyrashield/mcp@0.2.9")
 })
 
 function testOptions(agent: AgentEntry, transport: Transport): InstallOptions {
@@ -117,6 +117,23 @@ describe("agent registry", () => {
         expect(verification.evidence).toBe("CLIENT_RUNTIME")
         expect(verification.clientVersion).toBeTruthy()
         expect(verification.receipt).toBeTruthy()
+        expect(verification.platforms.length).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it("marks standalone workflows without an MCP transport or config", () => {
+    const preferred = listPreferredAgents()
+    expect(preferred).toHaveLength(26)
+    expect(preferred.filter((agent) => agent.integrationKind === "standalone-cli").map((agent) => agent.id).sort())
+      .toEqual(["aider", "picode"])
+    for (const agent of preferred) {
+      if (agent.integrationKind === "standalone-cli") {
+        expect(agent.transports).toEqual([])
+        expect(agent.preferredTransport).toBeNull()
+        expect(agent.format).toBeNull()
+      } else {
+        expect(agent.transports).toContain(agent.preferredTransport)
       }
     }
   })
@@ -202,7 +219,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.value).toMatchObject({
       type: "stdio",
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.8"],
+      args: ["-y", "@lyrashield/mcp@0.2.9"],
       env: {
         LYRASHIELD_API_KEY: TEST_API_KEY,
         LYRASHIELD_API_URL: TEST_BASE_URL,
@@ -210,19 +227,17 @@ describe("renderEntry returns correct structural patch", () => {
     })
   })
 
-  it("zed — root is `context_servers` and command uses `path`", () => {
+  it("zed — root is `context_servers` and command is flat", () => {
     const agent = getAgent("zed")!
     const opts = testOptions(agent, "stdio")
     const entry = renderEntry(agent, opts)
     expect(entry.rootKey).toBe("context_servers")
     expect(entry.value).toMatchObject({
-      command: {
-        path: "npx",
-        args: ["-y", "@lyrashield/mcp@0.2.8"],
-        env: {
-          LYRASHIELD_API_KEY: TEST_API_KEY,
-          LYRASHIELD_API_URL: TEST_BASE_URL,
-        },
+      command: "npx",
+      args: ["-y", "@lyrashield/mcp@0.2.9"],
+      env: {
+        LYRASHIELD_API_KEY: TEST_API_KEY,
+        LYRASHIELD_API_URL: TEST_BASE_URL,
       },
     })
   })
@@ -234,7 +249,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.rootKey).toBe("mcp_servers")
     expect(entry.value).toMatchObject({
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.8"],
+      args: ["-y", "@lyrashield/mcp@0.2.9"],
       env: {
         LYRASHIELD_API_KEY: TEST_API_KEY,
         LYRASHIELD_API_URL: TEST_BASE_URL,
@@ -259,7 +274,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.rootKey).toBe("mcp")
     expect(entry.value).toMatchObject({
       type: "local",
-      command: ["npx", "-y", "@lyrashield/mcp@0.2.8"],
+      command: ["npx", "-y", "@lyrashield/mcp@0.2.9"],
       environment: {
         LYRASHIELD_API_KEY: "{env:LYRASHIELD_API_KEY}",
         LYRASHIELD_API_URL: TEST_BASE_URL,
@@ -272,7 +287,7 @@ describe("renderEntry returns correct structural patch", () => {
     const stdioEntry = renderEntry(agent, testOptions(agent, "stdio"))
     expect(stdioEntry.value).toMatchObject({
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.8"],
+      args: ["-y", "@lyrashield/mcp@0.2.9"],
       env: { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY" },
     })
 
@@ -292,7 +307,7 @@ describe("renderEntry returns correct structural patch", () => {
       rootKey: "mcpServers",
       value: {
         command: "npx",
-        args: ["-y", "@lyrashield/mcp@0.2.8"],
+        args: ["-y", "@lyrashield/mcp@0.2.9"],
         env: { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY" },
       },
     })
@@ -341,7 +356,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(stdioEntry.rootKey).toBe("mcpServers")
     expect(stdioEntry.value).toMatchObject({
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.8"],
+      args: ["-y", "@lyrashield/mcp@0.2.9"],
       type: "local",
     })
     const remoteEntry = renderEntry(agent, testOptions(agent, "remote-http"))
@@ -358,7 +373,7 @@ describe("renderEntry returns correct structural patch", () => {
 describe("gotchas from §3.4 are represented", () => {
   const gotchaMarkers = [
     "VS Code uses `servers`, not `mcpServers`",
-    "Zed uses `context_servers`",
+    "Zed settings use flat command",
     "Codex reserves `env_vars` for an array",
     "single-brace `{env:VAR}`",
     "Gemini CLI expands `$VAR_NAME`",

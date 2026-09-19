@@ -49,7 +49,6 @@ function buildConfigSnippet(agent: AgentEntry, apiUrl: string): string | undefin
   // renderConfig only supports config-file agents (json/toml/yaml). jsonc agents
   // and guided-manual agents get a fallback handled by the caller.
   if (agent.installStrategy !== "config-file" || agent.format === "jsonc") return undefined
-  const supportsRemote = agent.transports.includes("remote-http")
   try {
     // Prefer the local stdio config (works for the most agents); the remote
     // variant is offered as a note for cloud IDEs.
@@ -58,7 +57,7 @@ function buildConfigSnippet(agent: AgentEntry, apiUrl: string): string | undefin
       apiUrl,
       secretMode: "shell",
     })
-    return rendered.content + (supportsRemote ? "" : "")
+    return rendered.content
   } catch {
     return undefined
   }
@@ -88,9 +87,22 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   if (!agent) return null
 
   const steps: WizardStep[] = []
+  if (agent.integrationKind === "standalone-cli") {
+    steps.push({
+      id: "install", kind: "install", title: "Use the standalone workflow",
+      summary: agent.manualInstructions ?? "Run LyraShield CLI checks beside this coding agent.",
+      command: "npx lyrashield --help", copyLabel: "Copy LyraShield CLI help command",
+    })
+    steps.push({
+      id: "verify", kind: "verify", title: "Verify the CLI or CI check",
+      summary: "Run a read-only check on an authorized target and retain its result. This client does not have native MCP integration.",
+      command: "lyrashield check-diff", copyLabel: "Copy check-diff command",
+    })
+    return { agentId: agent.id, displayName: agent.displayName, docsSlug: agent.docsSlug,
+      installStrategy: agent.installStrategy, steps }
+  }
   const configPath = primaryConfigPath(agent)
-  const supportsRemote = agent.transports.includes("remote-http")
-  const usesRemoteOAuth = supportsRemote && agent.remoteAuth === "oauth"
+  const usesRemoteOAuth = agent.preferredTransport === "remote-http" && agent.remoteAuth === "oauth"
 
   // 1) Install / detect
   if (agent.installStrategy === "vendor-cli" && agent.vendorCli) {
@@ -109,7 +121,9 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       id: "install",
       kind: "install",
       title: "Install",
-      summary: `Install the LyraShield integration into ${agent.displayName} with one command.`,
+      summary: agent.manualInstructions
+        ? `Review the manual activation steps for ${agent.displayName}.`
+        : `Prepare the LyraShield integration for ${agent.displayName}.`,
       command: `npx lyrashield install ${agent.id}`,
       copyLabel: `Copy install command for ${agent.displayName}`,
       note:
@@ -119,11 +133,14 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     })
   }
 
-  // 2) Config. Agent Plugins bundle their MCP configuration, so installation is enough.
+  // 2) Config and client activation.
   const localSnippet = buildConfigSnippet(agent, apiUrl)
   const remoteSnippet = buildRemoteSnippet(agent, apiUrl)
   if (agent.installStrategy === "agent-plugin") {
-    // No manual config step.
+    if (agent.manualInstructions) {
+      steps.push({ id: "config", kind: "config", title: "Activate in the client",
+        summary: agent.manualInstructions, note: agent.gotchas[0] })
+    }
   } else if (localSnippet) {
     steps.push({
       id: "config",
@@ -134,15 +151,15 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       snippetPath: configPath,
       copyLabel: `Copy ${agent.displayName} MCP config`,
       note: remoteSnippet
-        ? "For cloud IDEs that can't run a local process, use the remote HTTP config in the next note instead."
+        ? "Remote HTTP is an alternative; keep an existing local connection unless you choose to migrate."
         : undefined,
     })
     if (remoteSnippet) {
       steps.push({
         id: "config-remote",
         kind: "config",
-        title: "Remote config (cloud IDEs)",
-        summary: `For ${agent.displayName} in a cloud IDE (Lovable, Bolt, Replit, v0), use the remote endpoint instead.`,
+        title: "Remote HTTP alternative",
+        summary: `Use this only if your ${agent.displayName} version supports remote HTTP. Complete its own OAuth flow when offered.`,
         snippet: remoteSnippet,
         snippetPath: configPath,
         copyLabel: `Copy ${agent.displayName} remote MCP config`,
@@ -154,8 +171,8 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       id: "config",
       kind: "config",
       title: "Add LyraShield in the agent",
-      summary: `${agent.displayName} is configured through its own UI. Add a new MCP server and use the connection values below.`,
-      snippet: supportsRemote
+      summary: agent.manualInstructions ?? `${agent.displayName} uses its own MCP setup UI. Add the connection values below.`,
+      snippet: agent.preferredTransport === "remote-http"
         ? `URL: ${apiUrl}/api/mcp\nAuthentication: ${usesRemoteOAuth ? "OAuth" : `Bearer ${API_KEY_PLACEHOLDER}`}`
         : `Run: npx -y @lyrashield/mcp\nEnv: LYRASHIELD_API_KEY=${API_KEY_PLACEHOLDER}`,
       copyLabel: `Copy ${agent.displayName} connection values`,
@@ -210,7 +227,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     summary: "Confirm the setup end-to-end, then run your first scan.",
     command: "lyrashield doctor",
     copyLabel: "Copy doctor command",
-    note: "Then try `lyrashield scan` in your project.",
+    note: "Restart the client, confirm the tool list and rules, then call a read-only LyraShield tool in the client. Doctor only checks the local setup.",
   })
 
   return {

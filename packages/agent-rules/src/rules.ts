@@ -105,7 +105,8 @@ async function atomicWrite(filePath: string, content: string): Promise<void> {
 async function getRuleFilePaths(agent: AgentEntry, projectRoot: string) {
   const result: { format: RuleFormat; file: string; target: string }[] = []
   for (const rulesFile of agent.rulesFiles) {
-    const format = formatForRulesFile(rulesFile)
+    const format = formatForRulesFile(rulesFile) ??
+      (agent.id === "gemini-cli" && /^[A-Za-z0-9._-]+\.md$/i.test(rulesFile) ? "agents-md" : undefined)
     if (!format) continue
     const file = resolveRuleFilePath(rulesFile)
     const target = resolveWithinProject(projectRoot, file)

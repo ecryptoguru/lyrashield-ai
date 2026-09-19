@@ -1,16 +1,18 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { cp, mkdir, rename, rm, stat } from "node:fs/promises"
+import { cp, lstat, mkdir, realpath, rename, rm } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
 import { execFile } from "node:child_process"
 import { homedir } from "node:os"
 import path from "node:path"
 import process from "node:process"
-import type { AgentEntry, ConfigLocation } from "@lyrashield/agent-registry"
+import { deriveMcpUrl, type AgentEntry, type ConfigLocation, type Transport } from "@lyrashield/agent-registry"
 import { getPluginDir } from "@lyrashield/agent-plugin"
-import { credentialsFileExists } from "../credentials.js"
 import type { InstallAgentResult } from "./install.js"
 
 export interface InstallAgentPluginOptions {
   agent: AgentEntry
+  transport?: Transport
+  apiUrl?: string
   scope?: "project" | "global"
   cwd?: string
   dryRun?: boolean
@@ -87,11 +89,11 @@ function resolvePluginLocation(
  * segments deep, so an entry can never name `~`, `/`, `~/.config`, or the
  * project root itself.
  */
-function assertContainedPluginDest(
+async function assertContainedPluginDest(
   dest: string,
   loc: ConfigLocation,
   opts?: { scope?: string; cwd?: string }
-): string {
+): Promise<string> {
   const root =
     loc.scope === "global" ? path.resolve(homedir()) : path.resolve(opts?.cwd ?? process.cwd())
   const resolved = path.resolve(dest)
@@ -104,6 +106,25 @@ function assertContainedPluginDest(
   ) {
     throw new Error(`Refusing plugin path outside its scope root: ${dest}`)
   }
+  const realRoot = await realpath(root)
+  let ancestor = root
+  for (const segment of rel.split(path.sep)) {
+    ancestor = path.join(ancestor, segment)
+    const entry = await lstat(ancestor).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return undefined
+      throw error
+    })
+    if (entry?.isSymbolicLink()) {
+      throw new Error(`Refusing plugin path through symlink: ${ancestor}`)
+    }
+    if (entry) {
+      const actual = await realpath(ancestor)
+      const realRel = path.relative(realRoot, actual)
+      if (realRel.startsWith("..") || path.isAbsolute(realRel)) {
+        throw new Error(`Refusing plugin path outside its real scope root: ${dest}`)
+      }
+    }
+  }
   return resolved
 }
 
@@ -112,6 +133,11 @@ export async function installAgentPlugin(
 ): Promise<InstallAgentResult> {
   const { agent } = opts
   if (agent.id === "openai-codex-agent-plugin") return installCodexPlugin(opts.dryRun)
+
+  if (agent.id === "kiro-agent-plugin" && opts.transport === "remote-http") {
+    return { agent: agent.id, displayName: agent.displayName, outcome: "MANUAL_REQUIRED",
+      message: `Kiro remote OAuth alternative: add an mcpServers.lyrashield entry with URL ${deriveMcpUrl(opts.apiUrl ?? "https://app.lyrashieldai.com")} in .kiro/settings/mcp.json or ~/.kiro/settings/mcp.json. Complete Kiro's browser OAuth flow and verify a read call. Keep an existing stdio entry until the remote connection passes acceptance.` }
+  }
 
   if (agent.manualInstructions) {
     return {
@@ -133,22 +159,8 @@ export async function installAgentPlugin(
     }
   }
 
-  const needsLocalCredentials = agent.transports.includes("stdio")
-  if (
-    needsLocalCredentials &&
-    !(await credentialsFileExists()) &&
-    !process.env.LYRASHIELD_API_KEY
-  ) {
-    return {
-      agent: agent.id,
-      displayName: agent.displayName,
-      outcome: "MANUAL_REQUIRED",
-      message: "No credentials found. Run `lyrashield login` first.",
-    }
-  }
-
   const loc =
-    pluginLocations.find((l) => !opts.scope || l.scope === opts.scope) ?? pluginLocations[0]
+    pluginLocations.find((l) => !opts.scope || l.scope === opts.scope)
   if (!loc) {
     return {
       agent: agent.id,
@@ -160,7 +172,7 @@ export async function installAgentPlugin(
   const rawDest = resolvePluginLocation(loc, { scope: opts.scope, cwd: opts.cwd })
   let dest: string
   try {
-    dest = assertContainedPluginDest(rawDest, loc, opts)
+    dest = await assertContainedPluginDest(rawDest, loc, opts)
   } catch (error) {
     return {
       agent: agent.id,
@@ -172,16 +184,7 @@ export async function installAgentPlugin(
   }
   const source = getPluginDir()
 
-  // Containment: refuse if the resolved destination escapes the expected
-  // parent directory (e.g. via symlink traversal). We compare the resolved
-  // dest against its real path after ensuring the parent exists.
   const parentDir = path.dirname(dest)
-  try {
-    await mkdir(parentDir, { recursive: true })
-  } catch {
-    // ignore — the copy will fail with a clearer error
-  }
-
   if (opts.dryRun) {
     return {
       agent: agent.id,
@@ -192,13 +195,27 @@ export async function installAgentPlugin(
     }
   }
 
+  try {
+    await mkdir(parentDir, { recursive: true })
+    await assertContainedPluginDest(dest, loc, opts)
+  } catch (error) {
+    return { agent: agent.id, displayName: agent.displayName, outcome: "FAILED", path: dest,
+      message: `Plugin destination is unsafe or unavailable: ${(error as Error).message}` }
+  }
+
   // Confirmation gate: the `yes` option is threaded through from the CLI
   // --yes flag. Without it, a plugin install would silently overwrite an
   // existing install (including user customizations). Require explicit consent
   // only when the destination already exists; fresh installs proceed directly.
-  const destExists = await stat(dest)
-    .then(() => true)
-    .catch(() => false)
+  let destExists = false
+  try {
+    destExists = Boolean(await lstat(dest))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      return { agent: agent.id, displayName: agent.displayName, outcome: "FAILED", path: dest,
+        message: `Cannot inspect existing plugin: ${(error as Error).message}` }
+    }
+  }
   if (destExists && !opts.yes) {
     return {
       agent: agent.id,
@@ -210,31 +227,38 @@ export async function installAgentPlugin(
     }
   }
 
-  // Backup-and-rollback: rename the existing dest to a backup path before
-  // copying. On success the backup is deleted; on failure it is restored so
-  // the user never loses their existing install (including customizations)
-  // to a partial copy.
+  // Stage the new plugin before moving the existing installation.
+  const stagePath = `${dest}.lyrashield-stage-${randomUUID()}`
+  try {
+    await cp(source, stagePath, { recursive: true, preserveTimestamps: true, errorOnExist: true })
+  } catch (error) {
+    await rm(stagePath, { recursive: true, force: true }).catch(() => {})
+    return { agent: agent.id, displayName: agent.displayName, outcome: "FAILED", path: dest,
+      message: `Plugin copy failed; existing installation preserved: ${(error as Error).message}` }
+  }
+
   let backupPath: string | undefined
   try {
     if (destExists) {
-      const stamp = new Date().toISOString().replace(/[:.]/g, "-")
-      backupPath = `${dest}.lyrashield-backup-${stamp}`
+      backupPath = `${dest}.lyrashield-backup-${randomUUID()}`
       await rename(dest, backupPath)
     }
-  } catch {
-    // dest does not exist — no backup needed
+  } catch (error) {
+    await rm(stagePath, { recursive: true, force: true }).catch(() => {})
+    return { agent: agent.id, displayName: agent.displayName, outcome: "FAILED", path: dest,
+      message: `Plugin backup failed; existing installation preserved: ${(error as Error).message}` }
   }
 
   try {
-    await cp(source, dest, { recursive: true, preserveTimestamps: true })
+    await rename(stagePath, dest)
   } catch (error) {
-    // Copy failed — clean up the partial copy, then restore the backup.
-    await rm(dest, { recursive: true, force: true })
+    await rm(stagePath, { recursive: true, force: true }).catch(() => {})
+    let restorationError: string | undefined
     if (backupPath) {
       try {
         await rename(backupPath, dest)
-      } catch {
-        // Best-effort restore; the backup directory remains on disk.
+      } catch (restoreError) {
+        restorationError = (restoreError as Error).message
       }
     }
     return {
@@ -242,13 +266,15 @@ export async function installAgentPlugin(
       displayName: agent.displayName,
       outcome: "FAILED",
       path: dest,
-      message: `Plugin copy failed: ${(error as Error).message}`,
+      backupPath: restorationError ? backupPath : undefined,
+      message: `Plugin activation failed: ${(error as Error).message}${restorationError ? `; restore failed: ${restorationError}; previous files retained at ${backupPath}` : ""}`,
     }
   }
 
-  // Success — delete the backup.
+  // Keep the previous installation so local customizations remain recoverable.
   if (backupPath) {
-    await rm(backupPath, { recursive: true, force: true })
+    return { agent: agent.id, displayName: agent.displayName, outcome: "CONFIGURED", path: dest,
+      backupPath, message: `Plugin installed to ${dest}; previous installation retained at ${backupPath}` }
   }
 
   return {
@@ -301,7 +327,7 @@ export async function uninstallAgentPlugin(
   }
   const pluginLocations = agent.pluginLocations ?? []
   const loc =
-    pluginLocations.find((l) => !opts.scope || l.scope === opts.scope) ?? pluginLocations[0]
+    pluginLocations.find((l) => !opts.scope || l.scope === opts.scope)
 
   if (!loc) {
     return {
@@ -317,7 +343,7 @@ export async function uninstallAgentPlugin(
   try {
     // rm -r on a registry-resolved path: containment is verified
     // independently of the registry content itself.
-    dest = assertContainedPluginDest(rawDest, loc, opts)
+    dest = await assertContainedPluginDest(rawDest, loc, opts)
   } catch (error) {
     return {
       agent: agent.id,
@@ -328,8 +354,24 @@ export async function uninstallAgentPlugin(
     }
   }
 
+  let existing: Awaited<ReturnType<typeof lstat>> | undefined
   try {
-    await stat(dest)
+    existing = await lstat(dest)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      return { agent: agent.id, displayName: agent.displayName, outcome: "FAILED", path: dest,
+        message: `Cannot inspect plugin: ${(error as Error).message}` }
+    }
+  }
+  if (!existing) return {
+    agent: agent.id, displayName: agent.displayName, outcome: "ALREADY_CONFIGURED",
+    message: "Plugin was not present.",
+  }
+  if (opts.dryRun) return {
+    agent: agent.id, displayName: agent.displayName, outcome: "CONFIGURED", path: dest,
+    message: `Would remove ${dest}`,
+  }
+  try {
     await rm(dest, { recursive: true, force: true })
     return {
       agent: agent.id,
@@ -338,12 +380,13 @@ export async function uninstallAgentPlugin(
       path: dest,
       message: "Plugin removed.",
     }
-  } catch {
+  } catch (error) {
     return {
       agent: agent.id,
       displayName: agent.displayName,
-      outcome: "ALREADY_CONFIGURED",
-      message: "Plugin was not present.",
+      outcome: "FAILED",
+      path: dest,
+      message: `Plugin removal failed: ${(error as Error).message}`,
     }
   }
 }

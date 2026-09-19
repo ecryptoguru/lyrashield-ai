@@ -38,7 +38,9 @@ export const agentEntrySchema = z
     format: configFormatSchema.nullable(),
     rootKey: z.string().nullable(),
     locations: z.array(configLocationSchema),
-    transports: z.array(transportSchema).min(1),
+    transports: z.array(transportSchema),
+    integrationKind: z.enum(["mcp", "standalone-cli"]).optional(),
+    preferredTransport: transportSchema.nullable().optional(),
     remoteAuth: z.enum(["oauth", "api-key"]).optional(),
     credential: credentialStyleSchema,
     requiredEntryFields: z.record(z.string(), z.string()).optional(),
@@ -65,6 +67,15 @@ export const agentEntrySchema = z
     gotchas: z.array(z.string().min(1)),
   })
   .superRefine((entry, ctx) => {
+    if (entry.integrationKind === "standalone-cli" && (entry.transports.length || entry.preferredTransport)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "standalone workflows cannot advertise an MCP transport", path: ["transports"] })
+    }
+    if (entry.integrationKind !== "standalone-cli" && !entry.transports.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "MCP integrations require a transport", path: ["transports"] })
+    }
+    if (entry.preferredTransport && !entry.transports.includes(entry.preferredTransport)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "preferred transport must be supported", path: ["preferredTransport"] })
+    }
     if (entry.supportTier === "NATIVE" || entry.supportTier === "VERIFIED") {
       if (entry.verification.evidence !== "CLIENT_RUNTIME") {
         ctx.addIssue({
@@ -86,6 +97,9 @@ export const agentEntrySchema = z
           message: `${entry.supportTier} requires a retained runtime receipt`,
           path: ["verification", "receipt"],
         })
+      }
+      if (entry.verification.platforms.length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${entry.supportTier} requires tested platforms`, path: ["verification", "platforms"] })
       }
     }
 

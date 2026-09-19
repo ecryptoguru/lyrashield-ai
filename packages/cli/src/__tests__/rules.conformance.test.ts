@@ -1,6 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises"
+import { mkdtemp, readFile, rm, stat, mkdir, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { handleRules } from "../commands/rules.js"
@@ -67,5 +67,14 @@ describe("rules command conformance", () => {
     const code = await handleRules(["remove", "claude-code", "--project-root", tmp], output)
     expect(code).toBe(0)
     await expect(stat(path.join(tmp, "CLAUDE.md"))).rejects.toBeDefined()
+  })
+
+  it("uses Gemini's configured context filename", async () => {
+    await mkdir(path.join(tmp, ".gemini"))
+    await writeFile(path.join(tmp, ".gemini/settings.json"), '{"context":{"fileName":"PROJECT.md"}}')
+    const code = await handleRules(["add", "gemini-cli", "--project-root", tmp], mockOutput())
+    expect(code).toBe(0)
+    expect(await readFile(path.join(tmp, "PROJECT.md"), "utf-8")).toContain("lyrashield:begin")
+    await expect(stat(path.join(tmp, "GEMINI.md"))).rejects.toBeDefined()
   })
 })

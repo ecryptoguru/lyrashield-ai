@@ -1,7 +1,29 @@
+/* eslint-disable security/detect-non-literal-fs-filename */
 import minimist from "minimist"
 import type { AgentEntry } from "@lyrashield/agent-registry"
 import { addRules, checkRules, removeRules, type RuleOutcome } from "@lyrashield/agent-rules"
 import type { Output } from "../output.js"
+import { readFile } from "node:fs/promises"
+import { homedir } from "node:os"
+import path from "node:path"
+import { parse } from "jsonc-parser"
+
+async function configuredRulesAgent(agent: AgentEntry, projectRoot: string): Promise<AgentEntry> {
+  if (agent.id !== "gemini-cli") return agent
+  for (const settingsPath of [
+    path.join(projectRoot, ".gemini/settings.json"),
+    path.join(homedir(), ".gemini/settings.json"),
+  ]) {
+    const raw = await readFile(settingsPath, "utf8").catch(() => undefined)
+    if (!raw) continue
+    const names = (parse(raw) as { context?: { fileName?: string | string[] } })?.context?.fileName
+    const selected = (Array.isArray(names) ? names : [names]).find(
+      (name): name is string => typeof name === "string" && /^[A-Za-z0-9._-]+\.md$/i.test(name)
+    )
+    if (selected) return { ...agent, rulesFiles: [selected] }
+  }
+  return agent
+}
 
 async function loadRegistry(): Promise<{
   getAgent: (id: string) => AgentEntry | undefined
@@ -53,7 +75,7 @@ export async function handleRules(args: string[], output: Output): Promise<numbe
     let diverged = false
     const all: { agent: string; checks: Awaited<ReturnType<typeof checkRules>> }[] = []
     for (const agent of registry.listAgents()) {
-      const checks = await checkRules(agent, { projectRoot })
+      const checks = await checkRules(await configuredRulesAgent(agent, projectRoot), { projectRoot })
       if (checks.some((c) => c.state === "diverged")) diverged = true
       all.push({ agent: agent.id, checks })
     }
@@ -72,11 +94,12 @@ export async function handleRules(args: string[], output: Output): Promise<numbe
     return 2
   }
 
-  const agent = registry.getAgent(agentId)
-  if (!agent) {
+  const requestedAgent = registry.getAgent(agentId)
+  if (!requestedAgent) {
     output.error(`Unknown agent: ${agentId}`)
     return 2
   }
+  const agent = await configuredRulesAgent(requestedAgent, projectRoot)
 
   try {
     if (subcommand === "add") {
