@@ -1867,8 +1867,9 @@ enum AgentPrincipalType {
 model AgentOperation {
   id                   String               @id @default(cuid())
   workspaceId          String
-  /// Null for API-key and browser-session principals, which have no OAuth
-  /// connection. Principal identity is carried by principalType/principalId.
+  /// Null for API-key, browser-session, and external-connector principals,
+  /// which have no AgentConnection row. Principal identity is carried by
+  /// principalType/principalId.
   connectionId         String?
   operationName        String
   idempotencyKey       String

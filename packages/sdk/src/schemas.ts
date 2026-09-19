@@ -87,6 +87,35 @@ export const ScanListSchema = z.object({
   nextCursor: z.string().nullable(),
 })
 
+/**
+ * The truthful quality surface for a scan (lyrashield-scan-quality/1.0.0):
+ * `facts` are measured from stored evidence only, `estimates` are labeled
+ * heuristics with their basis, and `parity` states what each client surface
+ * reports for the same scan. Validated loosely — the server is authoritative.
+ */
+export const ScanQualitySurfaceResponseSchema = z
+  .object({
+    version: z.literal("lyrashield-scan-quality/1.0.0"),
+    facts: z
+      .object({
+        scanStatus: z.string(),
+        scanMode: z.string(),
+        findings: z.object({ total: z.number() }).passthrough(),
+        coverage: z.object({ receiptsTotal: z.number() }).passthrough(),
+        evidence: z
+          .object({
+            manifestPresent: z.boolean(),
+            manifestChecksum: z.string().nullable(),
+          })
+          .passthrough(),
+      })
+      .passthrough(),
+    estimates: z.record(z.string(), z.object({ kind: z.literal("heuristic") }).passthrough()),
+    parity: z.record(z.string(), z.record(z.string(), z.string())),
+    surfaceChecksum: z.string(),
+  })
+  .passthrough()
+
 export const FindingSchema = z
   .object({
     id: z.string(),

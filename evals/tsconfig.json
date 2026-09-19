@@ -14,6 +14,6 @@
     "types": ["node"],
     "typeRoots": ["../node_modules/.pnpm/node_modules/@types"]
   },
-  "include": ["myra"],
+  "include": ["myra", "scan-quality"],
   "exclude": ["node_modules"]
 }

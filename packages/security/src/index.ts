@@ -36,6 +36,12 @@ export {
   relayPathAllowed,
   normalizeRelayHost,
   normalizeRelayPath,
+  CONNECTOR_RELAY_PROFILES,
+  connectorRelayScope,
+  mintConnectorRelayGrant,
+  isConnectorRelayProvider,
+  type ConnectorRelayProvider,
+  type ConnectorRelayProfile,
   type RelayGrantScope,
   type RelayDenyReason,
 } from "./relay-grant"
@@ -212,3 +218,10 @@ export {
   type ImportedFindingRecord,
   type SarifParseResult,
 } from "./sarif-import"
+export {
+  evaluateConnectorAdmission,
+  parseConnectorCanaryWorkspaceIds,
+  type ConnectorAdmissionDecision,
+  type ConnectorAdmissionMode,
+  type ConnectorAdmissionReason,
+} from "./connector-admission"

@@ -65,6 +65,12 @@ export interface ScanData {
     attachments?: { count: number; totalBytes: number; manifestChecksum: string } | null
     /** Bounded ingestion issues recorded while reading engine evidence. */
     ingestionWarnings?: string[]
+    /**
+     * Measured quality surface for this scan (lyrashield-scan-quality/1.0.0):
+     * stored-evidence facts, labeled heuristics, and the per-surface parity
+     * table. Computed server-side from persisted rows only.
+     */
+    quality?: Record<string, unknown> | null
     coverage: Array<{
       scanner: string
       controlId: string

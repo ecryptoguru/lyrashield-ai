@@ -201,3 +201,85 @@ export function relayPathAllowed(scope: RelayGrantScope, path: string): boolean 
     return prefix === null || normalized.startsWith(prefix)
   })
 }
+
+// ── Outbound connector scopes ───────────────────────────────────────────────
+// Connector tools (packages/integrations/src/connectors) run through the same
+// scoped relay as live-target traffic. The grant is the read-only contract:
+// each provider pins its exact API host and GET/HEAD only, so a tool bug or
+// tampered request cannot smuggle a write method through the egress path.
+
+export type ConnectorRelayProvider = "github" | "slack"
+
+export interface ConnectorRelayProfile {
+  hosts: string[]
+  methods: string[]
+  maxRequests: number
+  maxBytes: number
+  ratePerMinute: number
+  perPathPerMinute: number
+}
+
+export const CONNECTOR_RELAY_PROFILES: Record<ConnectorRelayProvider, ConnectorRelayProfile> = {
+  github: {
+    hosts: ["api.github.com"],
+    methods: ["GET", "HEAD"],
+    maxRequests: 200,
+    maxBytes: 8 * 1024 * 1024,
+    ratePerMinute: 60,
+    perPathPerMinute: 60,
+  },
+  slack: {
+    hosts: ["slack.com"],
+    methods: ["GET"],
+    maxRequests: 100,
+    maxBytes: 4 * 1024 * 1024,
+    ratePerMinute: 30,
+    perPathPerMinute: 30,
+  },
+}
+
+export function isConnectorRelayProvider(value: string): value is ConnectorRelayProvider {
+  return value === "github" || value === "slack"
+}
+
+/**
+ * The relay scope for one scan's connector egress. `ttlMs` is bounded by the
+ * global grant TTL — a grant that outlives its scan is rejected at verify
+ * time anyway, so minting refuses rather than emitting a dead grant.
+ */
+export function connectorRelayScope(
+  scanId: string,
+  provider: ConnectorRelayProvider,
+  ttlMs: number,
+  now = Date.now()
+): RelayGrantScope {
+  const profile = CONNECTOR_RELAY_PROFILES[provider]
+  if (!profile) throw new Error(`Unknown connector provider: ${provider}`)
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0 || ttlMs > MAX_RELAY_GRANT_TTL_MS) {
+    throw new Error("Connector grant TTL is outside the allowed bounds")
+  }
+  return {
+    v: 1,
+    scanId,
+    hosts: [...profile.hosts],
+    methods: [...profile.methods],
+    blockedPaths: [],
+    exp: now + ttlMs,
+    maxRequests: profile.maxRequests,
+    maxBytes: profile.maxBytes,
+    ratePerMinute: profile.ratePerMinute,
+    perPathPerMinute: profile.perPathPerMinute,
+  }
+}
+
+/** Mint a signed connector-scoped grant. Worker-side; the token carries the scope. */
+export function mintConnectorRelayGrant(
+  scanId: string,
+  provider: ConnectorRelayProvider,
+  ttlMs: number,
+  secret: string,
+  now = Date.now()
+): { grant: string; scope: RelayGrantScope } {
+  const scope = connectorRelayScope(scanId, provider, ttlMs, now)
+  return { grant: mintRelayGrant(scope, secret), scope }
+}

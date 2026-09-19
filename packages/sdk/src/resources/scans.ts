@@ -1,7 +1,7 @@
 import type { LyraShieldClient } from "../client"
 import { NotModified } from "../errors"
 import { z } from "zod"
-import { IdSchema, ScanListSchema, ScanSchema } from "../schemas"
+import { IdSchema, ScanListSchema, ScanQualitySurfaceResponseSchema, ScanSchema } from "../schemas"
 
 export interface ScanQuery {
   workspaceId?: string
@@ -92,6 +92,28 @@ export function getScan(
   }
   return client.request("GET", path, {
     parse: (data) => ScanSchema.parse(data),
+  })
+}
+
+/**
+ * The scan's measured quality surface — stored-evidence facts, labeled
+ * heuristics, and the per-surface parity table. Read-only; computed
+ * server-side on demand.
+ */
+export function getScanQuality(
+  client: LyraShieldClient,
+  id: string,
+  workspaceId?: string
+): Promise<z.infer<typeof ScanQualitySurfaceResponseSchema>> {
+  const params = new URLSearchParams()
+  const ws = workspaceId ?? client.workspaceId
+  if (ws) params.set("workspaceId", ws)
+  const qs = params.toString()
+  const path = qs
+    ? `/scans/${encodeURIComponent(id)}/quality?${qs}`
+    : `/scans/${encodeURIComponent(id)}/quality`
+  return client.request("GET", path, {
+    parse: (data) => ScanQualitySurfaceResponseSchema.parse(data),
   })
 }
 

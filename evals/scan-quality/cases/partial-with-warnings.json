@@ -1,0 +1,43 @@
+{
+  "id": "partial-with-warnings",
+  "title": "Partially-ingested scan keeps warnings and blocked connector context visible",
+  "note": "A scan whose evidence ingestion recorded warnings and whose connector context was denied must report both — never a clean bill.",
+  "evidence": {
+    "scan": {
+      "status": "PARTIAL",
+      "mode": "STANDARD",
+      "determinismMode": "default",
+      "durationMs": 402000,
+      "llmRequestCount": 95
+    },
+    "receipts": [
+      { "scanner": "sast", "controlId": "vibe-01", "status": "COMPLETED" },
+      { "scanner": "url", "controlId": "vibe-40", "status": "FAILED", "reason": "relay exhausted" },
+      { "scanner": "connector", "controlId": "connector:slack.get_channel_history", "status": "BLOCKED", "reason": "CONNECTION_DISABLED" },
+      { "scanner": "engine", "controlId": "engine-scope:session-handling", "status": "NOT_APPLICABLE", "metadata": { "declaredBy": "engine_model" } }
+    ],
+    "findings": [
+      { "verificationStatus": "DETECTED", "severity": "HIGH" },
+      { "verificationStatus": "DETECTED", "severity": "HIGH" }
+    ],
+    "manifestChecksum": "f952706e6ced8105f8d12f530186939f33b0074b6ff17f4eb17a04afd81eeb84",
+    "ingestionWarnings": ["evidence export truncated at byte cap", "finding dup dropped"],
+    "attachments": null
+  },
+  "expect": {
+    "facts.scanStatus": "PARTIAL",
+    "facts.deterministicRun": false,
+    "facts.findings.total": 2,
+    "facts.findings.verifiedCount": 0,
+    "facts.coverage.receiptsTotal": 4,
+    "facts.coverage.byStatus.FAILED": 1,
+    "facts.coverage.byStatus.BLOCKED": 1,
+    "facts.coverage.byStatus.NOT_APPLICABLE": 1,
+    "facts.coverage.connectorReceipts": 1,
+    "facts.coverage.engineDeclaredReceipts": 1,
+    "facts.evidence.ingestionWarningCount": 2,
+    "facts.evidence.attachmentCount": null,
+    "estimates.assessedReceiptRatio.value": 0.3333333333333333,
+    "estimates.verifiedFindingRatio.value": 0
+  }
+}
