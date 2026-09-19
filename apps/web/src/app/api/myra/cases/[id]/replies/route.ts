@@ -36,7 +36,7 @@ async function post(
   if (!resolved) {
     return myraFail(request, "UNAUTHORIZED", "Authentication required", 401)
   }
-  if (!myraWritesEnabled(resolved.principal)) return myraNotFound(request)
+  if (!myraWritesEnabled(resolved.principal, "send_case_reply")) return myraNotFound(request)
   if (!myraPrincipalEnabled(resolved.principal)) return myraNotFound(request)
 
   const { id } = await params

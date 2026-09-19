@@ -412,11 +412,18 @@ const envSchema = z
     MYRA_GENERATION_ENABLED: z.enum(["0", "1"]).optional().default("0"),
     // Confirmed writes: proposal confirm, case replies, booking manage.
     MYRA_WRITES_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Public (anonymous) demo booking: admits only book_demo/manage_own_demo
+    // and the attendee must pass the existing demo-booking email
+    // verification — the flag opens the write gate, not identity.
+    MYRA_PUBLIC_BOOKING_ENABLED: z.enum(["0", "1"]).optional().default("0"),
     // Platform-operator support inbox routes.
     MYRA_OPERATOR_ENABLED: z.enum(["0", "1"]).optional().default("0"),
     // Calendar provider adapter for demo booking. "google" requires the
     // MYRA_GOOGLE_* credentials below; "mock" never touches a real calendar.
-    MYRA_CALENDAR_PROVIDER: z.enum(["mock", "google"]).optional().default("mock"),
+    MYRA_CALENDAR_PROVIDER: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.enum(["mock", "google"]).optional().default("mock")
+    ),
     // Model provider: "mock" (default, deterministic local composition) or
     // "azure" (Azure OpenAI/Foundry chat deployments). "azure" without
     // endpoint+key fails closed.
@@ -710,8 +717,11 @@ const envSchema = z
         })
       }
     }
-    if (val.MYRA_WRITES_ENABLED !== "1") return
-    if (!val.MYRA_ALLOWED_EMAILS) {
+    const writesOn = val.MYRA_WRITES_ENABLED === "1"
+    const publicBookingOn = val.MYRA_PUBLIC_BOOKING_ENABLED === "1"
+    if (!writesOn && !publicBookingOn) return
+    const bookingGateReason = writesOn ? "MYRA_WRITES_ENABLED=1" : "MYRA_PUBLIC_BOOKING_ENABLED=1"
+    if (writesOn && !val.MYRA_ALLOWED_EMAILS) {
       ctx.addIssue({
         code: "custom",
         path: ["MYRA_ALLOWED_EMAILS"],
@@ -722,8 +732,7 @@ const envSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["MYRA_CALENDAR_PROVIDER"],
-        message:
-          'MYRA_CALENDAR_PROVIDER must be "google" in production when MYRA_WRITES_ENABLED=1 — the mock calendar cannot take real bookings',
+        message: `MYRA_CALENDAR_PROVIDER must be "google" in production when ${bookingGateReason} — the mock calendar cannot take real bookings`,
       })
     }
     const requiredGoogleValues = [
@@ -735,7 +744,7 @@ const envSchema = z
         ctx.addIssue({
           code: "custom",
           path: [key],
-          message: `${key} is required in production when MYRA_WRITES_ENABLED=1`,
+          message: `${key} is required in production when ${bookingGateReason}`,
         })
       }
     }
@@ -743,8 +752,7 @@ const envSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["MYRA_GOOGLE_REFRESH_TOKEN"],
-        message:
-          "MYRA_GOOGLE_REFRESH_TOKEN or MYRA_GOOGLE_TOKEN_JSON is required in production when MYRA_WRITES_ENABLED=1",
+        message: `MYRA_GOOGLE_REFRESH_TOKEN or MYRA_GOOGLE_TOKEN_JSON is required in production when ${bookingGateReason}`,
       })
     }
   })

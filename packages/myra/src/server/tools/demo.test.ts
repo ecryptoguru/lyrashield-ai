@@ -1,6 +1,6 @@
 import "../test-env"
 import { describe, expect, it, vi } from "vitest"
-import { executeManageDemo, hashManageToken, runManageOwnDemo } from "./demo"
+import { executeManageDemo, hashManageToken, runBookDemo, runManageOwnDemo } from "./demo"
 import { MyraServiceError } from "../errors"
 
 const OWN_TOKEN = "own-manage-token-0123456789abcdef"
@@ -51,6 +51,45 @@ function expectNoForeignRead(findUnique: ReturnType<typeof vi.fn>) {
     expect(call[0].where).not.toHaveProperty("id", FOREIGN_BOOKING_ID)
   }
 }
+
+/** Next on-grid slot: a weekday 16:00 IST (10:30Z) at least 24h out. */
+function nextBookableSlot(): string {
+  const day = new Date(Date.now() + 3 * 86_400_000)
+  while (day.getUTCDay() === 0 || day.getUTCDay() === 6) {
+    day.setUTCDate(day.getUTCDate() + 1)
+  }
+  return `${day.toISOString().slice(0, 10)}T10:30:00.000Z`
+}
+
+describe("book_demo attendee verification", () => {
+  it("requires a verified email for an anonymous principal even when the write gate admits them", async () => {
+    // D1 ruled public booking is wanted but never anonymous: opening
+    // MYRA_PUBLIC_BOOKING_ENABLED admits the operation at the write gate, and
+    // verifyAttendee still runs here — an unverified address cannot confirm.
+    const db = {
+      myraIdentityVerification: { findFirst: vi.fn(async () => null) },
+    }
+    await expect(
+      runBookDemo(
+        {
+          principal: { kind: "anonymous", publicSessionId: "ps-1" },
+          surface: "MARKETING",
+          workspaceId: null,
+          role: null,
+          conversationId: null,
+          routeContext: null,
+          db: db as never,
+        },
+        {
+          slotStart: nextBookableSlot(),
+          timezone: "Asia/Kolkata",
+          name: "Public Visitor",
+          email: "visitor@example.com",
+        }
+      )
+    ).rejects.toMatchObject({ code: "VERIFICATION_REQUIRED" })
+  })
+})
 
 describe("manage_own_demo booking resolution", () => {
   it("runManageOwnDemo denies a foreign bookingId without reading the foreign row", async () => {

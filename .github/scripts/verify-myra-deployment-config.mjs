@@ -13,6 +13,7 @@ const fail = (message) => {
 }
 
 const writesEnabled = process.env.MYRA_WRITES_ENABLED === "1"
+const publicBookingEnabled = process.env.MYRA_PUBLIC_BOOKING_ENABLED === "1"
 const dashboardEnabled = process.env.MYRA_DASHBOARD_ENABLED === "1"
 const allowedEmails = (process.env.MYRA_ALLOWED_EMAILS ?? "").trim()
 const provider = (process.env.MYRA_CALENDAR_PROVIDER ?? "").trim()
@@ -30,9 +31,14 @@ if (allowedEmails) {
   }
 }
 
-if (provider !== "mock" && provider !== "google") {
+// An unset provider is valid while no booking path is enabled: no booking can
+// execute, so nothing needs a calendar adapter. Writes-on or public-booking-on
+// still requires "google" below.
+if (!provider && !writesEnabled && !publicBookingEnabled) {
+  console.log("calendar provider unset; writes are off")
+} else if (provider && provider !== "mock" && provider !== "google") {
   fail(
-    `MYRA_CALENDAR_PROVIDER must be "mock" or "google" — got "${provider || "(empty)"}". ` +
+    `MYRA_CALENDAR_PROVIDER must be "mock" or "google" — got "${provider}". ` +
       "The deploy no longer defaults it; set the repository variable explicitly."
   )
 }
@@ -47,21 +53,24 @@ for (const name of [
   }
 }
 
-if (writesEnabled) {
+const bookingEnabled = writesEnabled || publicBookingEnabled
+const bookingReason = writesEnabled ? "MYRA_WRITES_ENABLED=1" : "MYRA_PUBLIC_BOOKING_ENABLED=1"
+
+if (bookingEnabled) {
   if (provider !== "google") {
     fail(
-      'MYRA_WRITES_ENABLED=1 requires MYRA_CALENDAR_PROVIDER="google" — ' +
+      `${bookingReason} requires MYRA_CALENDAR_PROVIDER="google" — ` +
         "production bookings must not run on the mock calendar."
     )
   }
   for (const name of ["MYRA_GOOGLE_CLIENT_ID", "MYRA_GOOGLE_CLIENT_SECRET"]) {
     if (!process.env[name]) {
-      fail(`${name} is required when MYRA_WRITES_ENABLED=1 in production.`)
+      fail(`${name} is required when ${bookingReason} in production.`)
     }
   }
   if (!process.env.MYRA_GOOGLE_REFRESH_TOKEN && !process.env.MYRA_GOOGLE_TOKEN_JSON) {
     fail(
-      "MYRA_GOOGLE_REFRESH_TOKEN or MYRA_GOOGLE_TOKEN_JSON is required when MYRA_WRITES_ENABLED=1 in production."
+      `MYRA_GOOGLE_REFRESH_TOKEN or MYRA_GOOGLE_TOKEN_JSON is required when ${bookingReason} in production.`
     )
   }
 }

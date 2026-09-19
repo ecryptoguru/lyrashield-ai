@@ -65,7 +65,13 @@ async function post(
   request: Request,
   { params }: { params: Promise<{ token: string }> }
 ): Promise<Response> {
-  if (!myraPublicEnabled() || !myraWritesEnabled()) return myraNotFound(request)
+  // The manage token is the credential — this route never resolves a session,
+  // so the caller is an unauthenticated principal managing their own demo.
+  if (
+    !myraPublicEnabled() ||
+    !myraWritesEnabled({ kind: "anonymous", publicSessionId: "" }, "manage_own_demo")
+  )
+    return myraNotFound(request)
 
   const { token } = await params
   if (!token || token.length > TOKEN_MAX) {

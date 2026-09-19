@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
-import { env, isMyraAllowedEmail } from "@lyrashield/config"
+import { env, myraDashboardAllowed } from "@lyrashield/config"
 import { MyraPanel } from "@/components/myra/myra-panel"
 import { V2Sidebar } from "@/components/v2-sidebar"
 import { BottomNav } from "@/components/bottom-nav"
@@ -82,11 +82,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ? hasPermission(active.role as MemberRole, PERMISSIONS.billing.manage)
     : false
 
-  // Myra is default-off. API-key/OAuth-delegated sessions never mount it —
-  // the chat surface is for the interactive browser session only.
+  // Myra is default-off and admits only verified allowlisted accounts — the
+  // same rule myraPrincipalEnabled applies at the API layer. API-key/OAuth-
+  // delegated sessions never mount it: the chat surface is for the
+  // interactive browser session only.
   const myraDashboardEnabled =
     env.MYRA_DASHBOARD_ENABLED === "1" &&
-    isMyraAllowedEmail(session.userEmail, env.MYRA_ALLOWED_EMAILS) &&
+    myraDashboardAllowed({
+      email: session.userEmail,
+      emailVerified: session.emailVerified === true,
+      allowlist: env.MYRA_ALLOWED_EMAILS,
+    }) &&
     !session.apiKey &&
     !session.oauth
 

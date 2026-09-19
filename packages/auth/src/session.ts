@@ -24,6 +24,12 @@ export interface AuthSession {
   userImage: string | null
   sessionId: string
   /**
+   * The Better Auth user's emailVerified flag; only populated for browser
+   * cookie sessions (API-key and OAuth-delegated credentials carry no
+   * verified-email concept and leave it undefined).
+   */
+  emailVerified?: boolean
+  /**
    * Present when the request authenticated with a workspace API key
    * (`Authorization: Bearer lsk_...`) instead of a browser session. Key-based
    * auth is strictly narrower than a session: it only authorizes its own
@@ -134,6 +140,7 @@ export async function getSession(): Promise<AuthSession | null> {
       userName: session.user.name,
       userImage: session.user.image ?? null,
       sessionId: session.session.id,
+      emailVerified: session.user.emailVerified,
     }
   }
 
