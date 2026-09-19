@@ -1,3 +1,5 @@
+const router = { refresh() {}, push() {}, replace() {} }
+
 export function useRouter() {
-  return { refresh() {}, push() {}, replace() {} }
+  return router
 }

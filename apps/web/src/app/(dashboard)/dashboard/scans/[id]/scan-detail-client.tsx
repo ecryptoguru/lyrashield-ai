@@ -82,6 +82,9 @@ export function ScanDetailClient({
     errorMessage: scan.errorMessage,
   })
   const etagRef = useRef<string | undefined>(undefined)
+  const activeRequestRef = useRef<{ controller: AbortController; promise: Promise<void> } | null>(
+    null
+  )
   const prevStatusRef = useRef(initialScan.status)
   const scanRef = useRef(scan)
   useEffect(() => {
@@ -151,12 +154,12 @@ export function ScanDetailClient({
         // list; manual refresh clears the cursor below to force that path.
         const eventCursor = eventCursorRef.current
         const cursorParam = eventCursor ? `&eventsAfter=${encodeURIComponent(eventCursor)}` : ""
-        const { data, etag } = await apiGetConditional<ScanPollData>(
+        const { data, etag, status } = await apiGetConditional<ScanPollData>(
           `/api/scans/${scan.id}?workspaceId=${encodeURIComponent(scan.workspaceId)}${cursorParam}`,
           { signal, etag: etagRef.current, schema: scanPollDataSchema }
         )
         if (signal.aborted) return
-        etagRef.current = etag
+        etagRef.current = status === 304 ? (etag ?? etagRef.current) : etag
         setRefreshError(false)
         if (!data) return
 
@@ -239,11 +242,25 @@ export function ScanDetailClient({
     [router, scan.id, scan.workspaceId]
   )
 
+  const runRefresh = useCallback(
+    (manual = false) => {
+      if (manual) activeRequestRef.current?.controller.abort()
+      else if (activeRequestRef.current) return activeRequestRef.current.promise
+
+      const controller = new AbortController()
+      const promise = refresh(controller.signal).finally(() => {
+        if (activeRequestRef.current?.controller === controller) activeRequestRef.current = null
+      })
+      activeRequestRef.current = { controller, promise }
+      return promise
+    },
+    [refresh]
+  )
+
   useEffect(() => {
     if (!isActive) return
     // SSR safety: the polling loop touches `document`; never assume a DOM.
     if (typeof document === "undefined") return
-    const controller = new AbortController()
     let timeoutId: number | undefined
     let isAborted = false
     let inFlight = false
@@ -270,7 +287,7 @@ export function ScanDetailClient({
       if (isAborted || document.hidden || inFlight) return
       inFlight = true
       try {
-        await refresh(controller.signal)
+        await runRefresh()
       } finally {
         inFlight = false
         if (!isAborted && !document.hidden) {
@@ -298,11 +315,13 @@ export function ScanDetailClient({
 
     return () => {
       isAborted = true
-      controller.abort()
+      activeRequestRef.current?.controller.abort()
       document.removeEventListener("visibilitychange", onVisibility)
       if (timeoutId !== undefined) window.clearTimeout(timeoutId)
     }
-  }, [isActive, refresh, scan.startedAt])
+  }, [isActive, runRefresh, scan.startedAt])
+
+  useEffect(() => () => activeRequestRef.current?.controller.abort(), [])
 
   async function handleManualRefresh() {
     setRefreshing(true)
@@ -310,9 +329,8 @@ export function ScanDetailClient({
     // Force a full-window refetch: manual refresh is the user's "prove it"
     // action, so re-fetch every event instead of trusting the incremental tail.
     eventCursorRef.current = null
-    const controller = new AbortController()
     try {
-      await refresh(controller.signal)
+      await runRefresh(true)
     } finally {
       setRefreshing(false)
     }

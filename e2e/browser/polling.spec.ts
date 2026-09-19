@@ -144,6 +144,57 @@ test("list polling reuses its ETag after a successful response", async ({ page }
   expect(headers.slice(1).every((header) => header === '"scan-list-1"')).toBe(true)
 })
 
+test("manual detail refresh supersedes a slow scheduled poll", async ({ page }) => {
+  await page.clock.install()
+  let requests = 0
+  let releaseOld!: () => void
+  const oldHeld = new Promise<void>((resolve) => {
+    releaseOld = resolve
+  })
+  let oldHandled!: () => void
+  const oldFinished = new Promise<void>((resolve) => {
+    oldHandled = resolve
+  })
+  const headers: (string | null)[] = []
+  await page.route("**/api/scans/scan-a?**", async (route) => {
+    requests++
+    headers.push(route.request().headers()["if-none-match"] ?? null)
+    if (requests === 1) {
+      await oldHeld
+      try {
+        await route.fulfill({
+          headers: { ETag: '"old"' },
+          json: { success: true, data: { ...pollDetail, status: "RUNNING" } },
+        })
+      } finally {
+        oldHandled()
+      }
+    } else if (requests === 2) {
+      await route.fulfill({
+        headers: { ETag: '"new"' },
+        json: { success: true, data: { ...pollDetail, status: "VERIFYING" } },
+      })
+    } else {
+      await route.fulfill({ status: 304 })
+    }
+  })
+  await page.goto("polling.html?polling=detail")
+  await page.clock.runFor(5_000)
+  await expect.poll(() => requests).toBe(1)
+  await page.getByRole("button", { name: "Refresh now" }).click()
+  await expect.poll(() => requests).toBe(2)
+  await expect(page.getByRole("heading", { name: "Verifying evidence", exact: true })).toBeVisible()
+  releaseOld()
+  await oldFinished
+  await page.clock.runFor(1)
+  await expect(page.getByRole("heading", { name: "Verifying evidence", exact: true })).toBeVisible()
+  await visibility(page, true)
+  await visibility(page, false)
+  await page.clock.runFor(1)
+  await expect.poll(() => requests).toBeGreaterThanOrEqual(3)
+  expect(headers.slice(2).every((header) => header === '"new"')).toBe(true)
+})
+
 for (const width of [390, 768, 1440]) {
   test(`scan detail remains usable without overflow at ${width}px`, async ({ page }) => {
     const errors: string[] = []
