@@ -35,6 +35,7 @@ import { AiSecurityScoreCard } from "./ai-score-card"
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { track } from "@/lib/analytics"
 import { safeApiErrorMessage } from "@/components/api-error-card"
+import { RUN_SINGULAR } from "@/lib/terminology"
 import { scanRecoveryHref } from "../scans-client.utils"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
 import type { CleanResultScorecard, FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
@@ -178,6 +179,8 @@ export function ScanDetailClient({
           errorCategory: updated.errorCategory,
           errorMessage: updated.errorMessage,
           createdAt: asIsoString(updated.createdAt)!,
+          // The immutable plan is SSR-only; the poll never carries it.
+          executionPlan: scanRef.current.executionPlan,
           events: mergeEvents(
             scanRef.current.events,
             (updated.events ?? []).map((event) => ({
@@ -728,6 +731,94 @@ export function ScanDetailClient({
             </Card>
           )}
 
+          {scan.executionPlan && (
+            <Card className="mb-6 p-4" aria-labelledby="scan-plan-heading">
+              <h2 id="scan-plan-heading" className="font-semibold">
+                Scope and plan
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                The immutable plan recorded when this {RUN_SINGULAR.toLowerCase()} was created —
+                the run cannot widen it.
+              </p>
+              <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-muted-foreground text-xs">Workflow</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {scan.executionPlan.workflow === "REVIEW_CHANGES"
+                      ? "Review changes"
+                      : scan.executionPlan.workflow === "AUTHENTICATED_ASSESSMENT"
+                        ? "Authenticated assessment"
+                        : "Review target"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">Depth</dt>
+                  <dd className="mt-0.5 font-medium">{scan.executionPlan.depth}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">Effective scope</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {scan.executionPlan.scope === "DIFF"
+                      ? "Recorded diff"
+                      : scan.executionPlan.scope === "LIVE"
+                        ? "Live target"
+                        : "Snapshot"}
+                    {scan.executionPlan.baseRevision
+                      ? ` (${scan.executionPlan.baseRevision.slice(0, 7)}…${(scan.executionPlan.sourceRevision ?? "").slice(0, 7)})`
+                      : scan.executionPlan.sourceRevision
+                        ? ` @ ${scan.executionPlan.sourceRevision.slice(0, 7)}`
+                        : ""}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">Limits</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {[
+                      scan.executionPlan.maxDurationMinutes
+                        ? `Up to ${scan.executionPlan.maxDurationMinutes} minutes`
+                        : null,
+                      scan.executionPlan.maxRequests
+                        ? `${scan.executionPlan.maxRequests} requests`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "Bounded run"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">Supporting files</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {scan.executionPlan.attachmentCount > 0
+                      ? `${scan.executionPlan.attachmentCount} recorded input${
+                          scan.executionPlan.attachmentCount === 1 ? "" : "s"
+                        }`
+                      : "None"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">Authorization</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {scan.executionPlan.authorizationRequired
+                      ? "Delegated authorization recorded"
+                      : "Workspace membership"}
+                  </dd>
+                </div>
+              </dl>
+              {scan.executionPlan.capabilities.length > 0 && (
+                <details className="mt-3">
+                  <summary className="text-muted-foreground cursor-pointer text-xs font-medium">
+                    Applicable checks
+                  </summary>
+                  <ul className="text-muted-foreground mt-1 list-inside list-disc text-xs">
+                    {scan.executionPlan.capabilities.map((capability) => (
+                      <li key={capability}>{capability}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </Card>
+          )}
+
           {hasLimitedCoverage && (
             <section
               aria-labelledby="coverage-warning-heading"
@@ -831,6 +922,146 @@ export function ScanDetailClient({
                   </p>
                 </div>
               </dl>
+            </Card>
+          )}
+
+          {(scan.integrity.scopedCoverage ||
+            scan.integrity.threatModel ||
+            scan.integrity.attachments ||
+            (scan.integrity.ingestionWarnings?.length ?? 0) > 0) && (
+            <Card className="mb-6 p-4" aria-labelledby="declared-coverage-heading">
+              <h2 id="declared-coverage-heading" className="font-semibold">
+                Declared coverage and inputs
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Engine-declared evidence recorded in the sealed manifest. These are the
+                engine&apos;s own assertions — not independent verification.
+              </p>
+
+              {(() => {
+                const scoped = scan.integrity.scopedCoverage as
+                  | {
+                      entries?: Array<{ id?: string; subject?: string; outcome?: string }>
+                      gaps?: Array<{ kind?: string; subject?: string; detail?: string }>
+                      completeness?: { complete?: boolean; caveats?: string[] }
+                    }
+                  | null
+                  | undefined
+                const entries = Array.isArray(scoped?.entries) ? scoped.entries : []
+                const gaps = Array.isArray(scoped?.gaps) ? scoped.gaps : []
+                const caveats = Array.isArray(scoped?.completeness?.caveats)
+                  ? scoped.completeness.caveats
+                  : []
+                return (
+                  <>
+                    {(entries.length > 0 || gaps.length > 0 || caveats.length > 0) && (
+                      <details className="mt-3">
+                        <summary className="cursor-pointer text-sm font-medium">
+                          Requested vs achieved coverage
+                          {entries.length > 0
+                            ? ` — ${entries.length} declared item${entries.length === 1 ? "" : "s"}`
+                            : ""}
+                          {gaps.length > 0
+                            ? `, ${gaps.length} declared gap${gaps.length === 1 ? "" : "s"}`
+                            : ""}
+                        </summary>
+                        <div className="mt-2 space-y-2 text-sm">
+                          {entries.length > 0 && (
+                            <ul className="space-y-1">
+                              {entries.slice(0, 25).map((entry, index) => (
+                                <li
+                                  key={entry.id ?? index}
+                                  className="flex flex-wrap items-center gap-2"
+                                >
+                                  <Badge
+                                    variant={
+                                      entry.outcome === "needs_follow_up" ? "warning" : "muted"
+                                    }
+                                  >
+                                    {entry.outcome?.replaceAll("_", " ") ?? "declared"}
+                                  </Badge>
+                                  <span className="text-muted-foreground wrap-break-word">
+                                    {entry.subject ?? entry.id}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {gaps.length > 0 && (
+                            <ul className="space-y-1">
+                              {gaps.slice(0, 25).map((gap, index) => (
+                                <li key={index} className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="warning">gap</Badge>
+                                  <span className="text-muted-foreground wrap-break-word">
+                                    {gap.subject ? `${gap.subject}: ` : ""}
+                                    {gap.detail ?? gap.kind}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {caveats.slice(0, 10).map((caveat, index) => (
+                            <p key={index} className="text-xs text-amber-600">
+                              {caveat}
+                            </p>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </>
+                )
+              })()}
+
+              {scan.integrity.threatModel && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm font-medium">
+                    Threat-model assumptions — {scan.integrity.threatModel.modelCount} model
+                    {scan.integrity.threatModel.modelCount === 1 ? "" : "s"} declared
+                  </summary>
+                  <div className="mt-2 space-y-2 text-sm">
+                    {(scan.integrity.threatModel.entries ?? []).map((entry, index) => (
+                      <div key={index} className="rounded-md border p-2">
+                        <p className="text-xs font-medium">{entry.target}</p>
+                        <p className="text-muted-foreground mt-1 text-xs wrap-break-word">
+                          {entry.preview}
+                        </p>
+                      </div>
+                    ))}
+                    <p className="text-muted-foreground text-xs">
+                      Sealed artifact checksum:{" "}
+                      <code className="font-mono">
+                        {scan.integrity.threatModel.checksum.slice(0, 16)}…
+                      </code>
+                    </p>
+                  </div>
+                </details>
+              )}
+
+              {scan.integrity.attachments && (
+                <p className="text-muted-foreground mt-3 text-sm">
+                  {scan.integrity.attachments.count} supporting file
+                  {scan.integrity.attachments.count === 1 ? "" : "s"} staged read-only and verified
+                  against recorded checksums (manifest{" "}
+                  <code className="font-mono">
+                    {scan.integrity.attachments.manifestChecksum.slice(0, 12)}…
+                  </code>
+                  ).
+                </p>
+              )}
+
+              {(scan.integrity.ingestionWarnings?.length ?? 0) > 0 && (
+                <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
+                  <p className="text-sm font-medium text-amber-700">
+                    {scan.integrity.ingestionWarnings!.length} evidence ingestion issue
+                    {scan.integrity.ingestionWarnings!.length === 1 ? "" : "s"} recorded
+                  </p>
+                  <ul className="text-muted-foreground mt-1 list-inside list-disc text-xs">
+                    {scan.integrity.ingestionWarnings!.slice(0, 10).map((warning, index) => (
+                      <li key={index}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </Card>
           )}
 

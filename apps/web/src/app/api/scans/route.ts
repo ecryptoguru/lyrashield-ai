@@ -8,6 +8,8 @@ import {
   claimOrGetAgentOperation,
   completeAgentOperation,
   failAgentOperation,
+  resolveScanAttachments,
+  ScanAttachmentError,
   WorkspaceScanConcurrencyLimitError,
   type ScanListItem,
 } from "@lyrashield/db"
@@ -142,6 +144,26 @@ async function post(request: Request) {
     }
 
     assertOAuthDelegatedScope(session, data.targetId, data.mode)
+
+    // Resolve workspace-scoped attachment IDs before any billing/queue work.
+    // The stored rows — never client-supplied fields — prove ownership,
+    // freshness, content type, and checksum; unknown or cross-workspace IDs
+    // fail closed, and host paths are never accepted as attachment input.
+    const attachmentIds = data.attachmentIds ? [...new Set(data.attachmentIds)] : []
+    if (attachmentIds.length > 0) {
+      try {
+        await resolveScanAttachments(workspaceId, attachmentIds)
+      } catch (error) {
+        if (error instanceof ScanAttachmentError) {
+          return apiError(
+            error.code,
+            error.message,
+            error.code === "SCAN_ATTACHMENT_NOT_FOUND" ? 404 : 400
+          )
+        }
+        throw error
+      }
+    }
 
     // Resolve the URL profile first so the consent gates track what the scan
     // actually does: engine-backed tiers (STANDARD/DEEP) require a verified
@@ -491,11 +513,7 @@ async function post(request: Request) {
       createdById: session.userId,
       workflow: data.workflow,
       ...(planSource ? { source: planSource } : {}),
-      // Recorded verbatim into the immutable plan as input-evidence
-      // references. The artifact staging boundary enforces workspace scope,
-      // checksum and allowed content types before anything mounts them —
-      // this API never treats the list as proof of staged input.
-      ...(data.attachmentIds ? { attachmentIds: data.attachmentIds } : {}),
+      ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
     })
 
     submittedScanId = scan.id
@@ -550,37 +568,29 @@ async function post(request: Request) {
     // user as "Start scan" erroring — on a scan that was in fact created
     // and enqueued. `target` is the row already loaded and authorised above, and
     // findingCount is 0 by construction for a scan that has not run yet.
-    const result = {
-      ...serializeScanListItem({
-        id: scan.id,
-        status: scan.status,
-        goal: scan.goal,
-        mode: scan.mode,
-        triggerType: scan.triggerType,
-        startedAt: scan.startedAt,
-        endedAt: scan.endedAt,
-        durationMs: scan.durationMs,
-        summary: scan.summary,
-        errorCategory: scan.errorCategory,
-        errorMessage: scan.errorMessage,
-        createdAt: scan.createdAt,
-        findingCount: 0,
-        target: {
-          id: target.id,
-          name: target.name,
-          type: target.type,
-          url: target.url,
-          apiSpecUrl: target.apiSpecUrl,
-          repoFullName: target.repoFullName,
-        },
-      }),
-      // The server-owned immutable plan recorded at creation and its content
-      // digest — the provenance contract every client (SDK/CLI/MCP/Action/
-      // Desktop) reads on a recorded scan. GET /api/scans/[id] returns the
-      // same fields from the stored row.
-      executionPlan: scan.executionPlan ?? null,
-      executionPlanHash: scan.executionPlanHash ?? null,
-    }
+    const result = serializeScanListItem({
+      id: scan.id,
+      status: scan.status,
+      goal: scan.goal,
+      mode: scan.mode,
+      triggerType: scan.triggerType,
+      startedAt: scan.startedAt,
+      endedAt: scan.endedAt,
+      durationMs: scan.durationMs,
+      summary: scan.summary,
+      errorCategory: scan.errorCategory,
+      errorMessage: scan.errorMessage,
+      createdAt: scan.createdAt,
+      findingCount: 0,
+      target: {
+        id: target.id,
+        name: target.name,
+        type: target.type,
+        url: target.url,
+        apiSpecUrl: target.apiSpecUrl,
+        repoFullName: target.repoFullName,
+      },
+    })
     if (operationClaim?.status === "NEW") {
       await completeAgentOperation(operationClaim.operation.id, workspaceId, {
         resultReference: scan.id,

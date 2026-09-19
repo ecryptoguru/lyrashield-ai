@@ -210,6 +210,52 @@ describe("getShareableReport", () => {
     expect(JSON.stringify(report)).not.toContain("storageUri")
   })
 
+  it("never leaks execution-plan or attachment internals in the share payload", async () => {
+    mockPrisma.report.findFirst.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      scanId: "scan-1",
+      title: "Shared report",
+      type: "developer",
+      status: "generated",
+      format: "html",
+      shareTokenHash: "hash",
+      shareExpiresAt: null,
+      revokedAt: null,
+      createdAt: new Date(),
+      contentJson: null,
+    })
+    // Even if a future caller hands the projection a row carrying private
+    // internals, the public payload must stay allowlisted.
+    mockPrisma.scan.findFirst.mockResolvedValue({
+      id: "scan-1",
+      status: "COMPLETED",
+      summary: "Done",
+      executionPlan: {
+        workflow: "REVIEW_TARGET",
+        attachmentIds: ["att-private"],
+        limits: { maxBudgetUsd: 5 },
+        capabilities: ["engine"],
+      },
+      attachments: { manifestChecksum: "private-manifest-checksum" },
+    })
+
+    const report = await getShareableReport("report-1", "ws-1")
+
+    const serialized = JSON.stringify(report)
+    expect(serialized).not.toContain("executionPlan")
+    expect(serialized).not.toContain("att-private")
+    expect(serialized).not.toContain("maxBudgetUsd")
+    expect(serialized).not.toContain("private-manifest-checksum")
+    // The scan lookup is explicitly narrow — it may not widen to private
+    // columns just because they exist on the model.
+    expect(mockPrisma.scan.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: { id: true, status: true, summary: true },
+      })
+    )
+  })
+
   it("runs the public-share read sequence inside workspace RLS", async () => {
     mockPrisma.report.findFirst.mockResolvedValue({
       id: "report-1",

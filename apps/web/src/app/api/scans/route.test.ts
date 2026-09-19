@@ -22,6 +22,14 @@ vi.mock("@lyrashield/db", () => ({
   createScan: vi.fn(),
   listScans: vi.fn(),
   updateScanStatus: vi.fn(),
+  resolveScanAttachments: vi.fn().mockResolvedValue([]),
+  ScanAttachmentError: class ScanAttachmentError extends Error {
+    code: string
+    constructor(code: string, message: string) {
+      super(message)
+      this.code = code
+    }
+  },
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
@@ -85,6 +93,8 @@ import {
   createScan,
   listScans,
   updateScanStatus,
+  resolveScanAttachments,
+  ScanAttachmentError,
   WorkspaceScanConcurrencyLimitError,
 } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
@@ -1238,5 +1248,133 @@ describe("FREE-plan URL scan per-IP limit", () => {
     await POST(makeRequest(freeScanBody))
 
     expect(checkFreeUrlScanRateLimit).not.toHaveBeenCalled()
+  })
+
+  describe("scan attachments", () => {
+    const repoTarget = {
+      id: "repo-1",
+      type: "REPO",
+      installationId: "1234",
+      repoOwner: "acme",
+      repoName: "app",
+      repoFullName: "acme/app",
+      branch: "main",
+    }
+
+    it("passes validated attachmentIds into createScan", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(resolveScanAttachments).mockResolvedValue([{ id: "att-1" }] as never)
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-att",
+        status: "QUEUED",
+        goal: "TEST_APP",
+        mode: "STANDARD",
+        targetId: "repo-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-att",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          attachmentIds: ["att-1"],
+        })
+      )
+
+      expect(res.status).toBe(201)
+      expect(resolveScanAttachments).toHaveBeenCalledWith("ws-att", ["att-1"])
+      expect(createScan).toHaveBeenCalledWith(
+        expect.objectContaining({ attachmentIds: ["att-1"] })
+      )
+    })
+
+    it("rejects a cross-workspace or unknown attachment id", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(resolveScanAttachments).mockRejectedValue(
+        new ScanAttachmentError("SCAN_ATTACHMENT_NOT_FOUND", "not found") as never
+      )
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-att-x",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          attachmentIds: ["att-foreign"],
+        })
+      )
+
+      expect(res.status).toBe(404)
+      expect((await res.json()).error.code).toBe("SCAN_ATTACHMENT_NOT_FOUND")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects a deleted or stale attachment", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(resolveScanAttachments).mockRejectedValue(
+        new ScanAttachmentError("SCAN_ATTACHMENT_UNAVAILABLE", "deleted") as never
+      )
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-att-del",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          attachmentIds: ["att-deleted"],
+        })
+      )
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("SCAN_ATTACHMENT_UNAVAILABLE")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects more attachment IDs than the plan cap", async () => {
+      const ids = Array.from({ length: 21 }, (_, i) => `att-${i}`)
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-att-many",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          attachmentIds: ids,
+        })
+      )
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("deduplicates attachment IDs before recording them on the plan", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(resolveScanAttachments).mockResolvedValue([{ id: "att-1" }] as never)
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-att-dup",
+        status: "QUEUED",
+        goal: "TEST_APP",
+        mode: "STANDARD",
+        targetId: "repo-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-att-dup",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          attachmentIds: ["att-1", "att-1"],
+        })
+      )
+
+      expect(res.status).toBe(201)
+      expect(createScan).toHaveBeenCalledWith(
+        expect.objectContaining({ attachmentIds: ["att-1"] })
+      )
+    })
   })
 })
