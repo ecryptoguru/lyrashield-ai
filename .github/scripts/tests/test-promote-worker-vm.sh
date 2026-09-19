@@ -8,6 +8,8 @@ trap 'rm -rf "$tmp"' EXIT
 
 digest="sha256:$(printf 'a%.0s' {1..64})"
 target="ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@${digest}"
+old_digest="sha256:$(printf 'd%.0s' {1..64})"
+old_image="ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@${old_digest}"
 app_revision=$(printf 'b%.0s' {1..40})
 engine_revision=$(printf 'c%.0s' {1..40})
 
@@ -81,6 +83,7 @@ case "$command:$unit" in
     printf 1 > "$MOCK_TIMER_ACTIVE" ;;
   restart:lyrashield-worker.service)
     printf 1 > "$MOCK_SERVICE_ACTIVE"
+    printf 1 > "$MOCK_CONTAINER_PRESENT"
     if [ -n "${MOCK_REPLACEMENT_STOP:-}" ] && [ -s "$MOCK_ADMISSION_STOP" ]; then
       printf '%s' "$MOCK_REPLACEMENT_STOP" > "$MOCK_ADMISSION_STOP"
     fi ;;
@@ -98,6 +101,7 @@ printf '%s\n' "$*" >> "$MOCK_DOCKER_LOG"
 printf 'docker %s\n' "$*" >> "$MOCK_ORDER_LOG"
 case "$1:$2" in
   inspect:lyrashield-worker)
+    [ "$(cat "$MOCK_CONTAINER_PRESENT")" = 1 ] || exit 1
     case "$*" in
       *State.Health*)
         if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf 'healthy\n'; else printf 'starting\n'; fi ;;
@@ -183,10 +187,12 @@ run_case() {
   local service_active=${6:-1} existing_stop=${7:-} fail_image_check=${8:-0}
   local replacement_stop=${9:-}
   local free_bytes=${10:-9999999000}
+  local container_present=${11:-1}
   local case_dir="$tmp/$name"
   mkdir -p "$case_dir"
   write_mocks "$case_dir"
   printf '%s' "$service_active" > "$case_dir/service-active"
+  printf '%s' "$container_present" > "$case_dir/container-present"
   printf '%s' "$timer_active" > "$case_dir/timer-active"
   printf '%s' "$service_enabled" > "$case_dir/service-enabled"
   printf '%s' "$timer_enabled" > "$case_dir/timer-enabled"
@@ -194,7 +200,7 @@ run_case() {
   : > "$case_dir/docker.log"
   : > "$case_dir/systemctl.log"
   : > "$case_dir/order.log"
-  printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$target" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
+  printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$old_image" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
   printf 'GHCR_TOKEN=test-token\nREDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\n' > "$case_dir/worker.env"
 
   set +e
@@ -204,6 +210,7 @@ run_case() {
       MOCK_APP_REVISION="$app_revision" \
       MOCK_ENGINE_REVISION="$engine_revision" \
       MOCK_SERVICE_ACTIVE="$case_dir/service-active" \
+      MOCK_CONTAINER_PRESENT="$case_dir/container-present" \
       MOCK_TIMER_ACTIVE="$case_dir/timer-active" \
       MOCK_SERVICE_ENABLED="$case_dir/service-enabled" \
       MOCK_TIMER_ENABLED="$case_dir/timer-enabled" \
@@ -243,7 +250,16 @@ run_case() {
       grep -Fq 'Worker image pull requires' <<< "$output"
     fi
   fi
-  grep -Fq 'image prune --all --force' "$case_dir/docker.log"
+  if [ "$container_present" = 1 ]; then
+    grep -Fq 'image prune --all --force' "$case_dir/docker.log"
+  else
+    grep -Fxq "image inspect $old_image --format {{.Size}}" "$case_dir/docker.log"
+    grep -Fq 'image prune --force' "$case_dir/docker.log"
+    if grep -Fq 'image prune --all --force' "$case_dir/docker.log"; then
+      echo "missing-container recovery pruned its rollback image" >&2
+      exit 1
+    fi
+  fi
   if [ "$expected" = success ]; then
     # Exactly one restart and it happens after the admission-stop claim and
     # the empty-queue check: a scan admitted before promotion finishes against
@@ -271,6 +287,7 @@ run_case healthy 1 1 1 success
 run_case repairs-inactive-timer 0 1 1 success
 run_case repairs-disabled-units 1 0 0 success
 run_case repairs-inactive-service 1 1 1 success 0
+run_case recovers-missing-container 1 1 1 success 0 '' 0 '' 9999999000 0
 run_case preserves-existing-stop 1 1 1 success 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}'
 run_case preserves-newer-stop 1 1 1 success 1 '' 0 '{"operator":"on-call","reason":"new-incident"}'
 run_case resumes-owned-stop-on-rollback 1 1 1 failure 1 '' 1

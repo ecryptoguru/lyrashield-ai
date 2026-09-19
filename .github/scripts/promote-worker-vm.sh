@@ -314,11 +314,22 @@ assert_empty_queues
 # images before Docker needs space for both compressed and extracted target layers.
 promotion_step=cleaning-images
 docker_root=$(docker info --format '{{.DockerRootDir}}')
-current_image_id=$(docker inspect "$container" --format '{{.Image}}')
-current_image_size=$(docker image inspect "$current_image_id" --format '{{.Size}}')
+if current_image_id=$(docker inspect "$container" --format '{{.Image}}' 2>/dev/null); then
+  current_image_size=$(docker image inspect "$current_image_id" --format '{{.Size}}')
+  prune_all=1
+else
+  # A failed service restart can remove the container. Size and preserve the
+  # configured rollback image while bootstrapping its replacement.
+  current_image_size=$(docker image inspect "$old_image" --format '{{.Size}}')
+  prune_all=0
+fi
 required_free=$((current_image_size * 3 + 2147483648))
 free_before=$(df -P -B1 "$docker_root" | awk 'NR == 2 { print $4 }')
-docker image prune --all --force >/dev/null
+if [ "$prune_all" -eq 1 ]; then
+  docker image prune --all --force >/dev/null
+else
+  docker image prune --force >/dev/null
+fi
 free_after=$(df -P -B1 "$docker_root" | awk 'NR == 2 { print $4 }')
 reclaimed=$((free_after - free_before))
 echo "Worker image cleanup reclaimed ${reclaimed} bytes; ${free_after} bytes available"
