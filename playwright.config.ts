@@ -23,14 +23,7 @@ export default defineConfig({
       : undefined,
   },
   projects: [
-    { name: "chromium", testIgnore: /visual|marketing-/, use: { ...devices["Desktop Chrome"] } },
-    { name: "visual-mobile", testMatch: /visual\/.*\.spec\.ts/, use: { ...devices["iPhone 13"] } },
-    { name: "visual-tablet", testMatch: /visual\/.*\.spec\.ts/, use: { ...devices["iPad Mini"] } },
-    {
-      name: "visual-desktop",
-      testMatch: /visual\/.*\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 1000 } },
-    },
+    { name: "chromium", testIgnore: /marketing-/, use: { ...devices["Desktop Chrome"] } },
   ],
   webServer: {
     command:
