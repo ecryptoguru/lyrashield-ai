@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::process::{Child, Command};
 
@@ -153,7 +153,67 @@ fn validate_launch(config: &ScanConfig) -> Result<&'static str, String> {
     if matches!(config.target, ScanTarget::Url { .. }) {
         return Err("URL targets require the hosted, domain-verified scan relay — launch them from the web app. LyraShield Local has no deterministic URL transport and never substitutes a BYOK AI scan.".into());
     }
+    match config.workflow {
+        ScanWorkflow::ReviewTarget => {
+            if config.diff_base.is_some() || config.diff_head.is_some() {
+                return Err(
+                    "base/head refs apply only to a Review Changes scan — choose that workflow or clear them".into(),
+                );
+            }
+        }
+        ScanWorkflow::ReviewChanges => {
+            // A diff review only makes sense against a repository checkout —
+            // same contract as the hosted plan (REPO target, DIFF scope).
+            if !matches!(
+                config.target,
+                ScanTarget::Repo { .. } | ScanTarget::LocalPath { .. }
+            ) {
+                return Err("Review Changes requires a repository checkout target".into());
+            }
+            let base = config
+                .diff_base
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty());
+            let base = base.ok_or("Review Changes requires a base ref to compare against")?;
+            validate_diff_ref(base)?;
+            if let Some(head) = config
+                .diff_head
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+            {
+                validate_diff_ref(head)?;
+            }
+        }
+        ScanWorkflow::Unknown => {
+            return Err(
+                "unrecognized scan workflow — choose Review Target or Review Changes".into(),
+            )
+        }
+    }
     Ok(engine_mode)
+}
+
+/// Git ref-shaped validation for the diff comparison pins. Branch names and
+/// full SHAs are allowed; anything that could read as a flag or a range is
+/// not (argv is never shell-evaluated, but a `-…` token would still be parsed
+/// as an engine flag, and `a..b` would silently widen the comparison).
+fn validate_diff_ref(value: &str) -> Result<&str, String> {
+    let v = value.trim();
+    if v.is_empty() || v.len() > 255 {
+        return Err("diff ref must be 1–255 characters".into());
+    }
+    if v.starts_with('-') || v.contains("..") || v.contains("@{") {
+        return Err("invalid diff ref".into());
+    }
+    if !v
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-'))
+    {
+        return Err("invalid diff ref".into());
+    }
+    Ok(v)
 }
 
 // Only the owner touches the child. Cancellation never waits for a child mutex.
@@ -405,14 +465,39 @@ fn parse_finding_line(line: &str) -> Option<Finding> {
         line_number: Option<u32>,
         #[serde(default)]
         status: Option<String>,
+        /// Engine self-attestation — never promoted to `verified` locally; it
+        /// only raises `evidence_pending`.
         #[serde(default)]
         verified: Option<bool>,
+        #[serde(default)]
+        counterevidence: Option<String>,
+        #[serde(default)]
+        confidence_rationale: Option<String>,
+        #[serde(default)]
+        fix_verification: Option<serde_json::Value>,
+        #[serde(default)]
+        http_exchange_ids: Option<Vec<String>>,
         #[serde(default)]
         detected_at: Option<String>,
     }
     let raw: RawFinding = serde_json::from_str(trimmed).ok()?;
     let severity = raw.severity?;
     let title = raw.title?;
+    let http_exchange_ids = raw.http_exchange_ids.unwrap_or_default();
+    let fix_verification = raw.fix_verification.map(|v| {
+        if let Some(s) = v.as_str() {
+            s.to_string()
+        } else {
+            v.to_string()
+        }
+    });
+    // Engine-attested fields are recorded verbatim but stay pending: they are
+    // the filing agent's own claims, exported for review — never verification.
+    let evidence_pending = raw.verified.unwrap_or(false)
+        || fix_verification.is_some()
+        || raw.counterevidence.is_some()
+        || raw.confidence_rationale.is_some()
+        || !http_exchange_ids.is_empty();
     Some(Finding {
         id: raw.id.unwrap_or_else(|| format!("finding-{}", uuid_v4())),
         severity,
@@ -421,7 +506,15 @@ fn parse_finding_line(line: &str) -> Option<Finding> {
         file_path: raw.file_path,
         line_number: raw.line_number,
         status: raw.status.unwrap_or_else(|| "OPEN".to_string()),
-        verified: raw.verified.unwrap_or(false),
+        // Never persist the engine's `verified` claim — the only tier a local
+        // run can produce is DETECTED.
+        verified: false,
+        verification_state: VERIFICATION_STATE_DETECTED.to_string(),
+        evidence_pending,
+        counterevidence: raw.counterevidence,
+        confidence_rationale: raw.confidence_rationale,
+        fix_verification,
+        http_exchange_ids,
         detected_at: raw
             .detected_at
             .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
@@ -487,6 +580,28 @@ fn engine_target_kind(target: &ScanTarget) -> Option<&'static str> {
     }
 }
 
+/// Resolve a checked-out source path to absolute before launch. The engine
+/// runs in a controlled per-scan workdir so `strix_runs/<run>` is locatable;
+/// a relative target would silently scan the wrong directory without this.
+fn resolve_local_target_arg(target: &ScanTarget) -> String {
+    let raw = target.target_arg();
+    let checked_out = match target {
+        ScanTarget::LocalPath { .. } => true,
+        ScanTarget::Repo { .. } => is_checked_out_source(&raw),
+        ScanTarget::Url { .. } => false,
+    };
+    if !checked_out {
+        return raw;
+    }
+    let path = std::path::Path::new(raw.trim_start_matches('~'));
+    if path.is_absolute() {
+        return raw;
+    }
+    std::env::current_dir()
+        .map(|cwd| cwd.join(&raw).to_string_lossy().to_string())
+        .unwrap_or(raw)
+}
+
 /// Build the engine argv for a scan. Pure so target-kind mapping is testable.
 fn build_engine_args(
     config: &ScanConfig,
@@ -498,7 +613,7 @@ fn build_engine_args(
         "--run-name".into(),
         scan_id.to_string(),
         "--target".into(),
-        config.target.target_arg(),
+        resolve_local_target_arg(&config.target),
         "--scan-mode".into(),
         config.mode.engine_arg()?.into(),
         "--max-budget-usd".into(),
@@ -508,16 +623,51 @@ fn build_engine_args(
         args.push("--target-type".into());
         args.push(kind.into());
     }
+    // Scope pinning mirrors the worker contract: Review Changes pins the
+    // caller-selected comparison via --diff-base/--diff-head; every other
+    // local run is an explicit full snapshot — never the engine's ambient
+    // `auto` CI diff heuristic.
+    match config.workflow {
+        ScanWorkflow::ReviewChanges => {
+            let base = config
+                .diff_base
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .ok_or("Review Changes requires a base ref to compare against")?;
+            args.push("--scope-mode".into());
+            args.push("diff".into());
+            args.push("--diff-base".into());
+            args.push(validate_diff_ref(base)?.to_string());
+            if let Some(head) = config
+                .diff_head
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+            {
+                args.push("--diff-head".into());
+                args.push(validate_diff_ref(head)?.to_string());
+            }
+        }
+        _ => {
+            args.push("--scope-mode".into());
+            args.push("full".into());
+        }
+    }
     if let Some(instruction) = &config.instruction {
         if !instruction.is_empty() {
             args.push("--instruction".into());
             args.push(instruction.clone());
         }
     }
-    if let ScanTarget::Repo { branch, .. } = &config.target {
-        if let Some(b) = branch.as_ref().map(|b| b.trim()).filter(|b| !b.is_empty()) {
-            args.push("--repository-branch".into());
-            args.push(b.to_string());
+    // A configured branch is only a fetch hint; a Review Changes run's
+    // recorded refs own the checkout, so never also pin a branch there.
+    if config.workflow != ScanWorkflow::ReviewChanges {
+        if let ScanTarget::Repo { branch, .. } = &config.target {
+            if let Some(b) = branch.as_ref().map(|b| b.trim()).filter(|b| !b.is_empty()) {
+                args.push("--repository-branch".into());
+                args.push(b.to_string());
+            }
         }
     }
     Ok(args)
@@ -532,6 +682,9 @@ pub async fn create_scan_record(app: AppHandle, config: &ScanConfig) -> Result<(
         &config.scan_id,
         &config.target.target_arg(),
         &config.mode,
+        &config.workflow,
+        config.diff_base.as_deref(),
+        config.diff_head.as_deref(),
     )
     .await?;
     // initial event seq 0: Started will be appended on start, but we ensure record exists
@@ -642,7 +795,21 @@ async fn run_scan(
     // or a silently substituted tier.
     let args = build_engine_args(&config, &scan_id, max_budget_usd)?;
 
+    // Controlled per-scan workdir: the engine writes strix_runs/<run-name>/
+    // under its cwd, so a known dir makes the run contract (run.json) and the
+    // finding projection (vulnerabilities.json) locatable for evidence
+    // retention. Local target paths were absolutized in build_engine_args.
+    let run_workdir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("app_config_dir: {}", e))?
+        .join("runs")
+        .join(&scan_id);
+    std::fs::create_dir_all(&run_workdir)
+        .map_err(|e| format!("create scan workdir failed: {}", e))?;
+
     let mut cmd = Command::new(engine_cmd);
+    cmd.current_dir(&run_workdir);
     cmd.args(&args);
     cmd.stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -823,6 +990,13 @@ async fn run_scan(
 
     crate::scan::store::set_finding_count(&app, &scan_id, finding_count).await?;
 
+    // Evidence projection is best-effort: the run contract and richer
+    // vulnerability fields are engine attestations recorded for later export
+    // — never verification and never a reason to fail a completed scan.
+    if is_success {
+        project_engine_evidence(&app, &run_workdir, &scan_id, &findings).await;
+    }
+
     let terminal_event = if is_success {
         ScanEvent::Completed {
             scan_id: scan_id.clone(),
@@ -840,6 +1014,101 @@ async fn run_scan(
 
 async fn persist_finding_row(app: &AppHandle, scan_id: &str, f: &Finding) -> Result<(), String> {
     crate::scan::store::persist_finding(app, scan_id, f).await
+}
+
+/// Best-effort projection of the engine run contract. Reads
+/// `strix_runs/<scan_id>/run.json` (schema_version → scan.contract_version)
+/// and `vulnerabilities.json` (richer evidence fields merged onto persisted
+/// findings). Everything here is engine attestation: findings keep
+/// `verification_state = DETECTED` and anything attested is marked
+/// `evidence_pending` for export — this path can never promote or clear
+/// verification state.
+async fn project_engine_evidence(
+    app: &AppHandle,
+    run_workdir: &std::path::Path,
+    scan_id: &str,
+    findings: &[Finding],
+) {
+    let run_dir = run_workdir.join("strix_runs").join(scan_id);
+    let workdir = run_dir.clone();
+    let scan_id_owned = scan_id.to_string();
+    let parsed = tokio::task::spawn_blocking(move || -> Option<(String, serde_json::Value)> {
+        let run_json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(workdir.join("run.json")).ok()?).ok()?;
+        let schema_version = run_json
+            .get("schema_version")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())?;
+        let vulns: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(workdir.join("vulnerabilities.json")).unwrap_or_default(),
+        )
+        .unwrap_or(serde_json::Value::Null);
+        Some((schema_version, vulns))
+    })
+    .await;
+    let Ok(Some((schema_version, vulns))) = parsed else {
+        return;
+    };
+    let _ =
+        crate::scan::store::set_scan_contract_version(app, &scan_id_owned, &schema_version).await;
+    let Some(reports) = vulns.as_array() else {
+        return;
+    };
+    for report in reports {
+        let Some(report) = report.as_object() else {
+            continue;
+        };
+        let report_id = report.get("id").and_then(|v| v.as_str());
+        let title = report.get("title").and_then(|v| v.as_str());
+        // Match the persisted finding by engine id first, then by title —
+        // stdout-parsed ids may differ from vuln-NNNN ids.
+        let matched = findings.iter().find(|f| {
+            report_id.is_some_and(|id| f.id == id) || title.is_some_and(|t| f.title == t)
+        });
+        let Some(finding) = matched else { continue };
+        let string_field = |key: &str| -> Option<String> {
+            report
+                .get(key)
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .filter(|s| !s.is_empty())
+        };
+        let fix_verification = report.get("fix_verification").map(|v| {
+            if let Some(s) = v.as_str() {
+                s.to_string()
+            } else {
+                v.to_string()
+            }
+        });
+        let http_exchange_ids = report
+            .get("http_exchange_ids")
+            .and_then(|v| serde_json::to_string(v).ok())
+            .filter(|s| s != "null" && s != "[]");
+        let engine_claimed = report
+            .get("verified")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let update = crate::scan::store::FindingEvidenceUpdate {
+            counterevidence: string_field("counterevidence"),
+            confidence_rationale: string_field("confidence_rationale"),
+            fix_verification,
+            http_exchange_ids,
+        };
+        if update.counterevidence.is_some()
+            || update.confidence_rationale.is_some()
+            || update.fix_verification.is_some()
+            || update.http_exchange_ids.is_some()
+            || engine_claimed
+        {
+            let _ = crate::scan::store::update_finding_evidence(
+                app,
+                &scan_id_owned,
+                &finding.id,
+                &update,
+            )
+            .await;
+        }
+    }
 }
 
 pub async fn cancel_scan(app: AppHandle, scan_id: String) -> Result<(), String> {
@@ -1013,6 +1282,9 @@ mod tests {
             scan_id: "s".into(),
             target,
             mode,
+            workflow: ScanWorkflow::ReviewTarget,
+            diff_base: None,
+            diff_head: None,
             instruction: None,
             max_budget_usd: 3.2,
         }
@@ -1079,6 +1351,9 @@ mod tests {
             scan_id: "scan-kind".into(),
             target,
             mode: ScanMode::Standard,
+            workflow: ScanWorkflow::ReviewTarget,
+            diff_base: None,
+            diff_head: None,
             instruction: None,
             max_budget_usd: 3.2,
         };
@@ -1219,5 +1494,158 @@ mod tests {
         let (lines, exhausted) = bounded_lines(b"no-trailing-newline").await;
         assert!(!exhausted);
         assert_eq!(lines, vec!["no-trailing-newline"]);
+    }
+
+    // Task 10 — workflow scope pins and the DETECTED-only evidence projection.
+    // The shared fixture (packages/types/src/fixtures/scan-workflows.json) is
+    // the cross-language source of truth these assertions mirror.
+
+    fn workflow_fixture() -> serde_json::Value {
+        serde_json::from_str(include_str!(
+            "../../../../../packages/types/src/fixtures/scan-workflows.json"
+        ))
+        .expect("scan-workflows fixture parses")
+    }
+
+    #[test]
+    fn fixture_review_changes_case_pins_diff_scope_and_refs() {
+        // The fixture's recorded diff case (REPO target, base main, head
+        // feature/42) must produce --scope-mode diff + --diff-base/--diff-head.
+        let fixture = workflow_fixture();
+        let case = fixture["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"].as_str() == Some("repo review-changes diff"))
+            .expect("fixture case exists");
+        let request = &case["request"];
+        assert_eq!(request["workflow"], "REVIEW_CHANGES");
+        assert_eq!(case["expectedPlan"]["scope"], "DIFF");
+
+        let mut config = launch_config(
+            ScanMode::Quick,
+            ScanTarget::Repo {
+                path: "/repo".into(),
+                branch: Some("main".into()),
+            },
+        );
+        config.workflow = ScanWorkflow::ReviewChanges;
+        config.diff_base = request["baseRef"].as_str().map(|s| s.to_string());
+        config.diff_head = request["headRef"].as_str().map(|s| s.to_string());
+        let args = super::build_engine_args(&config, "scan-x", 3.2).unwrap();
+        assert_eq!(flag_value(&args, "--scope-mode").as_deref(), Some("diff"));
+        assert_eq!(flag_value(&args, "--diff-base").as_deref(), Some("main"));
+        assert_eq!(
+            flag_value(&args, "--diff-head").as_deref(),
+            Some("feature/42")
+        );
+        // A configured branch is only a fetch hint; recorded diff refs own
+        // the checkout for a Review Changes run.
+        assert!(flag_value(&args, "--repository-branch").is_none());
+    }
+
+    #[test]
+    fn review_target_forces_full_scope_and_never_carries_refs() {
+        let config = launch_config(ScanMode::Quick, ScanTarget::LocalPath { path: "/x".into() });
+        let args = super::build_engine_args(&config, "scan-x", 3.2).unwrap();
+        assert_eq!(flag_value(&args, "--scope-mode").as_deref(), Some("full"));
+        assert!(flag_value(&args, "--diff-base").is_none());
+        assert!(flag_value(&args, "--diff-head").is_none());
+
+        // Diff refs without the workflow are rejected before any spawn.
+        let mut bad = config.clone();
+        bad.diff_base = Some("main".into());
+        assert!(super::validate_launch(&bad).is_err());
+    }
+
+    #[test]
+    fn review_changes_requires_base_and_a_checkout_target() {
+        let mut config = launch_config(
+            ScanMode::Standard,
+            ScanTarget::Repo {
+                path: "/repo".into(),
+                branch: None,
+            },
+        );
+        config.workflow = ScanWorkflow::ReviewChanges;
+        assert!(
+            super::validate_launch(&config).is_err(),
+            "missing base ref must fail closed"
+        );
+        config.diff_base = Some("v1.0.0".into());
+        assert!(super::validate_launch(&config).is_ok());
+        // Refs that read as flags or range expressions are never argv values.
+        config.diff_base = Some("--scope-mode".into());
+        assert!(super::validate_launch(&config).is_err());
+        config.diff_base = Some("main..other".into());
+        assert!(super::validate_launch(&config).is_err());
+        // URL targets have no local transport regardless of workflow.
+        let mut url = launch_config(
+            ScanMode::Quick,
+            ScanTarget::Url {
+                url: "https://example.com".into(),
+            },
+        );
+        url.workflow = ScanWorkflow::ReviewChanges;
+        url.diff_base = Some("main".into());
+        assert!(super::validate_launch(&url).is_err());
+    }
+
+    #[test]
+    fn engine_attestation_never_becomes_local_verification() {
+        let finding = super::parse_finding_line(
+            r#"{"id":"vuln-1","severity":"high","title":"X","verified":true,"fix_verification":{"outcome":"pass"},"http_exchange_ids":["ex-1"],"confidence_rationale":"reachable"}"#,
+        )
+        .expect("finding parses");
+        // The engine's own `verified` claim is an attestation, not proof —
+        // the persisted legacy flag stays false and the tier stays DETECTED.
+        assert!(!finding.verified);
+        assert_eq!(finding.verification_state, "DETECTED");
+        assert!(finding.evidence_pending);
+        assert_eq!(finding.confidence_rationale.as_deref(), Some("reachable"));
+        assert!(finding.fix_verification.unwrap().contains("pass"));
+        assert_eq!(finding.http_exchange_ids, vec!["ex-1".to_string()]);
+
+        let plain = super::parse_finding_line(r#"{"id":"vuln-2","severity":"low","title":"Y"}"#)
+            .expect("finding parses");
+        assert!(!plain.evidence_pending);
+        assert_eq!(plain.verification_state, "DETECTED");
+    }
+
+    #[test]
+    fn workflow_tokens_match_the_shared_fixture() {
+        let fixture = workflow_fixture();
+        let workflows: Vec<&str> = fixture["workflows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            workflows,
+            [
+                "REVIEW_TARGET",
+                "REVIEW_CHANGES",
+                "AUTHENTICATED_ASSESSMENT"
+            ]
+        );
+        // The desktop's launchable set is a strict subset — AUTHENTICATED_
+        // ASSESSMENT is hosted-only and Unknown never round-trips a launch.
+        assert_eq!(ScanWorkflow::ReviewTarget.as_str(), "REVIEW_TARGET");
+        assert_eq!(ScanWorkflow::ReviewChanges.as_str(), "REVIEW_CHANGES");
+        assert!(ScanWorkflow::Unknown.as_str() != "AUTHENTICATED_ASSESSMENT");
+        assert_eq!(
+            ScanWorkflow::from_stored("AUTHENTICATED_ASSESSMENT"),
+            ScanWorkflow::Unknown
+        );
+        // Verification tiers stay distinct in the contract.
+        let tiers: Vec<&str> = fixture["verificationStatuses"]["trustTiers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t.as_str().unwrap())
+            .collect();
+        assert_eq!(tiers, ["DETECTED", "VALIDATED", "VERIFIED"]);
+        assert_eq!(VERIFICATION_STATE_DETECTED, "DETECTED");
     }
 }

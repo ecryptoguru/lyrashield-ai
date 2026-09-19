@@ -84,6 +84,17 @@ export type ScanTarget =
   | { type: "url"; url: string }
   | { type: "local_path"; path: string }
 
+// Recorded workflow — the same contract tokens as the API/SDK/CLI/MCP.
+// "unknown" only marks rows written before workflow tracking; new launches
+// always send REVIEW_TARGET or REVIEW_CHANGES. AUTHENTICATED_ASSESSMENT is
+// hosted-only and never offered here.
+export type ScanWorkflow = "REVIEW_TARGET" | "REVIEW_CHANGES" | "unknown"
+
+// Execution backend: "local" is the bundled BYOK engine; "cloud" is a
+// recorded scan submitted to the hosted API — only ever an explicit user
+// action, never a silent substitution.
+export type ScanBackend = "local" | "cloud"
+
 export interface Finding {
   id: string
   severity: string
@@ -92,16 +103,40 @@ export interface Finding {
   filePath: string | null
   lineNumber: number | null
   status: string
+  // Legacy flag — always false for local findings; verificationState is the
+  // authoritative tier.
   verified: boolean
+  // A local run can only ever produce "DETECTED" — a recorded observation,
+  // never VALIDATED or VERIFIED.
+  verificationState: string
+  // Engine attested evidence (verified claim, fix check, exchange refs) not
+  // yet exported — render "engine-attested; evidence export pending".
+  evidencePending: boolean
+  counterevidence: string | null
+  confidenceRationale: string | null
+  fixVerification: string | null
+  httpExchangeIds: string[]
   detectedAt: string
 }
 
-export type ScanStatus = "pending" | "running" | "completed" | "failed" | "cancelled"
+export type ScanStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  // Recorded cloud scan submitted — progress/evidence live server-side.
+  | "submitted"
 
 export interface ScanSummary {
   scanId: string
   target: string
   mode: ScanMode
+  workflow: ScanWorkflow
+  backend: ScanBackend
+  contractVersion: string | null
+  diffBase: string | null
+  diffHead: string | null
   status: ScanStatus
   startedAt: string
   completedAt: string | null
@@ -112,6 +147,11 @@ export interface ScanDetail {
   scanId: string
   target: string
   mode: ScanMode
+  workflow: ScanWorkflow
+  backend: ScanBackend
+  contractVersion: string | null
+  diffBase: string | null
+  diffHead: string | null
   status: ScanStatus
   startedAt: string
   completedAt: string | null
@@ -139,6 +179,13 @@ export interface UpdateProgress {
   downloadedBytes: number
   totalBytes: number | null
   finished: boolean
+}
+
+// A connected LyraShield Cloud target eligible for recorded scan submission.
+export interface CloudTarget {
+  id: string
+  label: string
+  targetType: string
 }
 
 export interface SyncConnection {

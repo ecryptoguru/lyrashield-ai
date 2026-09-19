@@ -270,6 +270,88 @@ async function resolveTargetId(
   return { targetId, repository: repo.repoFullName }
 }
 
+/**
+ * Shared scan-workflow input contract for the recorded-scan tools
+ * (`lyrashield_scan_target`, `lyrashield_run_pr_scan`). The fields mirror
+ * POST /api/scans verbatim: the server resolves refs to immutable git object
+ * IDs and owns the execution plan; the MCP layer only forwards workflow
+ * intent — it never builds plan fields, limits, or capabilities itself.
+ */
+const WORKFLOW_INPUT_PROPERTIES = {
+  workflow: {
+    type: "string",
+    description:
+      "Recorded workflow: REVIEW_TARGET (default snapshot/live review) or REVIEW_CHANGES (immutable diff review on a repository target, requires baseRef). AUTHENTICATED_ASSESSMENT is unavailable.",
+  },
+  baseRef: {
+    type: "string",
+    description:
+      "Review Changes comparison base — a branch name or full commit SHA the server resolves to an immutable git object ID.",
+  },
+  headRef: {
+    type: "string",
+    description:
+      "Review Changes comparison head — a branch name or full commit SHA. Defaults to the target's recorded branch.",
+  },
+  attachmentIds: {
+    type: "array",
+    items: { type: "string" },
+    description:
+      "Optional IDs of previously staged workspace input-evidence attachments recorded into the execution plan. Never host paths.",
+  },
+} as const
+
+const VALID_WORKFLOWS = new Set([
+  "REVIEW_TARGET",
+  "REVIEW_CHANGES",
+  "AUTHENTICATED_ASSESSMENT",
+])
+
+/**
+ * Validate and project the caller's workflow inputs onto the scan-create
+ * body. Throws on inconsistent input so the error is local and clear rather
+ * than a remote 400. AUTHENTICATED_ASSESSMENT is passed through untouched —
+ * the server answers it with the canonical SCAN_WORKFLOW_UNAVAILABLE so the
+ * denial is consistent across every client.
+ */
+function workflowInputFields(args: Record<string, unknown>): Record<string, unknown> {
+  const workflow = typeof args.workflow === "string" ? args.workflow : undefined
+  const baseRef = typeof args.baseRef === "string" ? args.baseRef : undefined
+  const headRef = typeof args.headRef === "string" ? args.headRef : undefined
+  const attachmentIds = args.attachmentIds
+
+  if (workflow !== undefined && !VALID_WORKFLOWS.has(workflow)) {
+    throw new Error(
+      `Invalid workflow. Choose: ${[...VALID_WORKFLOWS].join(", ")}`
+    )
+  }
+  if (headRef && !baseRef) {
+    throw new Error("headRef requires baseRef so the change set can be compared.")
+  }
+  if ((baseRef || headRef) && workflow !== "REVIEW_CHANGES") {
+    throw new Error("baseRef/headRef are only valid with workflow REVIEW_CHANGES.")
+  }
+  if (workflow === "REVIEW_CHANGES" && !baseRef) {
+    throw new Error("REVIEW_CHANGES requires a baseRef to compare against.")
+  }
+  if (attachmentIds !== undefined) {
+    if (
+      !Array.isArray(attachmentIds) ||
+      attachmentIds.length > 20 ||
+      attachmentIds.some((id) => typeof id !== "string" || !id.trim() || id.length > 128)
+    ) {
+      throw new Error("attachmentIds must be an array of at most 20 non-empty id strings.")
+    }
+  }
+
+  return {
+    ...(workflow ? { workflow } : {}),
+    ...(baseRef ? { baseRef } : {}),
+    ...(headRef ? { headRef } : {}),
+    ...(attachmentIds !== undefined ? { attachmentIds } : {}),
+  }
+}
+
 function makeToolResult(data: unknown): McpToolResult {
   const structuredContent =
     data && typeof data === "object" && !Array.isArray(data)
@@ -299,7 +381,7 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_scan_target",
     mutating: true,
     description:
-      "Trigger a security scan on a registered target. Provide targetId, or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target.",
+      "Trigger a security scan on a registered target. Provide targetId, or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target. Workflow REVIEW_CHANGES on a repository target requires baseRef and records an immutable diff-scope plan.",
     inputSchema: {
       type: "object",
       properties: {
@@ -323,8 +405,9 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
         mode: {
           type: "string",
           description:
-            "Scan mode: QUICK, STANDARD, DEEP, or CUSTOM. SAFE remains a compatibility alias for QUICK.",
+            "Scan depth: QUICK, STANDARD, DEEP, or CUSTOM. SAFE remains a compatibility alias for QUICK. Depth is always explicit — it is never inferred from the target shape.",
         },
+        ...WORKFLOW_INPUT_PROPERTIES,
       },
       required: ["workspaceId"],
     },
@@ -337,6 +420,7 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
           targetId: resolved.targetId,
           goal: (args.goal as string) ?? "TEST_APP",
           mode: (args.mode as string) ?? "STANDARD",
+          ...workflowInputFields(args),
         })
         const result: Record<string, unknown> = { action: "scan_triggered", scan: data }
         if (resolved.repository) result.repository = resolved.repository
@@ -640,7 +724,7 @@ export function createRunPrScanTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_run_pr_scan",
     mutating: true,
     description:
-      "Start a PR-focused security scan (goal CHECK_PR) on a registered target. Provide targetId, or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target.",
+      "Start a PR-focused security scan (goal CHECK_PR) on a registered target. Provide targetId, or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target. Pass baseRef/headRef for a recorded Review Changes diff run — distinct from the advisory lyrashield_check_diff pre-filter, which records nothing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -662,8 +746,9 @@ export function createRunPrScanTool(context: ToolHandlerContext): McpTool {
         mode: {
           type: "string",
           description:
-            "Scan mode: QUICK (default), STANDARD, DEEP, or CUSTOM. SAFE remains a compatibility alias for QUICK.",
+            "Scan depth: QUICK (default), STANDARD, DEEP, or CUSTOM. SAFE remains a compatibility alias for QUICK. Depth is always explicit — it is never inferred from the target shape.",
         },
+        ...WORKFLOW_INPUT_PROPERTIES,
       },
       required: ["workspaceId"],
     },
@@ -676,6 +761,7 @@ export function createRunPrScanTool(context: ToolHandlerContext): McpTool {
           targetId: resolved.targetId,
           goal: "CHECK_PR",
           mode: (args.mode as string) ?? "QUICK",
+          ...workflowInputFields(args),
         })
         const result: Record<string, unknown> = { action: "pr_scan_started", scan: data }
         if (resolved.repository) result.repository = resolved.repository

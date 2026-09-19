@@ -1,0 +1,108 @@
+{
+  "version": "scan-workflows/1.0.0",
+  "description": "Cross-client parity contract for POST /api/scans workflow inputs. SDK, CLI, MCP, GitHub Action, and Desktop submit the same fields; the server owns the execution plan. Mode/depth is always explicit — never inferred from target shape. Verification labels DETECTED (observed), VALIDATED (deterministic check), and VERIFIED (independent confirmation) are distinct trust tiers and are never interchangeable.",
+  "workflows": ["REVIEW_TARGET", "REVIEW_CHANGES", "AUTHENTICATED_ASSESSMENT"],
+  "verificationStatuses": {
+    "trustTiers": ["DETECTED", "VALIDATED", "VERIFIED"],
+    "nonConclusive": ["BLOCKED", "INCONCLUSIVE"],
+    "neverConflate": true
+  },
+  "cases": [
+    {
+      "name": "repo review-target snapshot",
+      "targetType": "REPO",
+      "request": { "mode": "STANDARD", "workflow": "REVIEW_TARGET" },
+      "expectedPlan": {
+        "workflow": "REVIEW_TARGET",
+        "targetType": "REPO",
+        "depth": "STANDARD",
+        "scope": "SNAPSHOT"
+      }
+    },
+    {
+      "name": "repo review-changes diff",
+      "targetType": "REPO",
+      "request": {
+        "mode": "QUICK",
+        "workflow": "REVIEW_CHANGES",
+        "baseRef": "main",
+        "headRef": "feature/42"
+      },
+      "expectedPlan": {
+        "workflow": "REVIEW_CHANGES",
+        "targetType": "REPO",
+        "depth": "QUICK",
+        "scope": "DIFF"
+      }
+    },
+    {
+      "name": "repo review-changes explicit head sha",
+      "targetType": "REPO",
+      "request": {
+        "mode": "QUICK",
+        "workflow": "REVIEW_CHANGES",
+        "baseRef": "release/1",
+        "headRef": "ffffffffffffffffffffffffffffffffffffffff"
+      },
+      "expectedPlan": {
+        "workflow": "REVIEW_CHANGES",
+        "targetType": "REPO",
+        "depth": "QUICK",
+        "scope": "DIFF"
+      }
+    },
+    {
+      "name": "web-app review-target live",
+      "targetType": "WEB_APP",
+      "request": { "mode": "STANDARD", "workflow": "REVIEW_TARGET" },
+      "expectedPlan": {
+        "workflow": "REVIEW_TARGET",
+        "targetType": "WEB_APP",
+        "depth": "STANDARD",
+        "scope": "LIVE"
+      }
+    },
+    {
+      "name": "api review-target live",
+      "targetType": "API",
+      "request": { "mode": "DEEP", "workflow": "REVIEW_TARGET" },
+      "expectedPlan": {
+        "workflow": "REVIEW_TARGET",
+        "targetType": "API",
+        "depth": "DEEP",
+        "scope": "LIVE"
+      }
+    },
+    {
+      "name": "web-app review-changes is rejected",
+      "targetType": "WEB_APP",
+      "request": {
+        "mode": "QUICK",
+        "workflow": "REVIEW_CHANGES",
+        "baseRef": "main"
+      },
+      "expectError": "SCAN_PLAN_INVALID"
+    },
+    {
+      "name": "api review-changes is rejected",
+      "targetType": "API",
+      "request": {
+        "mode": "QUICK",
+        "workflow": "REVIEW_CHANGES",
+        "baseRef": "main"
+      },
+      "expectError": "SCAN_PLAN_INVALID"
+    },
+    {
+      "name": "authenticated assessment is unavailable",
+      "targetType": "WEB_APP",
+      "request": { "mode": "DEEP", "workflow": "AUTHENTICATED_ASSESSMENT" },
+      "expectError": "SCAN_WORKFLOW_UNAVAILABLE"
+    }
+  ],
+  "advisoryVsRecorded": {
+    "advisory": ["lyrashield check-diff", "github-action local diff gate"],
+    "recorded": ["POST /api/scans", "lyrashield scan --base/--head", "lyrashield_run_pr_scan"],
+    "rule": "Advisory outputs are heuristic and never recorded as scan evidence; recorded scans persist a server-owned immutable execution plan."
+  }
+}
