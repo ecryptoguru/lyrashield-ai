@@ -125,8 +125,12 @@ describe("agent registry", () => {
   it("marks standalone workflows without an MCP transport or config", () => {
     const preferred = listPreferredAgents()
     expect(preferred).toHaveLength(26)
-    expect(preferred.filter((agent) => agent.integrationKind === "standalone-cli").map((agent) => agent.id).sort())
-      .toEqual(["aider", "picode"])
+    expect(
+      preferred
+        .filter((agent) => agent.integrationKind === "standalone-cli")
+        .map((agent) => agent.id)
+        .sort()
+    ).toEqual(["aider", "picode"])
     for (const agent of preferred) {
       if (agent.integrationKind === "standalone-cli") {
         expect(agent.transports).toEqual([])

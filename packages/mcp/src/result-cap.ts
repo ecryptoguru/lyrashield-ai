@@ -10,7 +10,8 @@ export function capToolResult(result: McpToolResult): McpToolResult {
   const originalBytes = size(result)
   if (originalBytes <= MCP_RESULT_MAX_BYTES) return result
 
-  const source = result.content.find((entry) => entry.type === "text")?.text ??
+  const source =
+    result.content.find((entry) => entry.type === "text")?.text ??
     JSON.stringify(result.structuredContent ?? result)
   const structured = result.structuredContent as Record<string, unknown> | undefined
   const continuation: Record<string, unknown> = {}
@@ -20,10 +21,18 @@ export function capToolResult(result: McpToolResult): McpToolResult {
       continuation[key] = value
     }
   }
-  for (const [field, key] of [["scan", "scanId"], ["operation", "operationId"]] as const) {
+  for (const [field, key] of [
+    ["scan", "scanId"],
+    ["operation", "operationId"],
+  ] as const) {
     const nested = structured?.[field]
-    if (nested && typeof nested === "object" && "id" in nested &&
-      typeof nested.id === "string" && Buffer.byteLength(nested.id, "utf8") < 1024) {
+    if (
+      nested &&
+      typeof nested === "object" &&
+      "id" in nested &&
+      typeof nested.id === "string" &&
+      Buffer.byteLength(nested.id, "utf8") < 1024
+    ) {
       continuation[key] = nested.id
     }
   }

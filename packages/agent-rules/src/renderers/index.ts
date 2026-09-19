@@ -73,8 +73,11 @@ export function renderRuleForAgent(
   rulesFile: string,
   policyVersion?: string
 ): RuleFile {
-  const format = formatForRulesFile(rulesFile) ??
-    (agent.id === "gemini-cli" && /^[A-Za-z0-9._-]+\.md$/i.test(rulesFile) ? "agents-md" : undefined)
+  const format =
+    formatForRulesFile(rulesFile) ??
+    (agent.id === "gemini-cli" && /^[A-Za-z0-9._-]+\.md$/i.test(rulesFile)
+      ? "agents-md"
+      : undefined)
   if (!format) {
     throw new Error(`No rule renderer for agent ${agent.id} file ${rulesFile}`)
   }

@@ -29,28 +29,28 @@ faq:
 
 ## Capability comparison
 
-| Capability                          | LyraShield AI                                  | Horizon3 NodeZero                                               |
-| ----------------------------------- | ---------------------------------------------- | --------------------------------------------------------------- |
-| Agentic / AI-driven pentest         | Yes (app-layer)                                | Yes (cross-environment)                                         |
-| Independent exploit validation      | Yes (verified state)                           | Yes (proven attack paths with impact)                           |
-| SCA (dependency scanning)           | Yes (engine)                                   | Not a primary focus                                             |
-| Secret scanning                     | Yes (engine + GitHub Action)                   | Detects exposed credentials/secret-related weaknesses           |
-| Evidence states (4-state lifecycle) | Yes                                            | Findings carry exploit proof; no explicit multi-state lifecycle |
-| Deterministic retest                | Yes                                            | Quick Verify re-test after fix                                  |
-| Coverage receipts                   | Yes (per-control)                              | No (attack-path + impact diagrams instead)                      |
-| Assurance reports (immutable)       | Yes                                            | Executive/auditor reporting; CTEM-aligned evidence              |
-| MCP server integration              | Yes (inside AI coding agents)                  | Yes (MCP server to accelerate remediation / find-fix-verify)    |
-| Permission-gated Fix PR requests        | Fix PR requests require permission and a server-generated patch | No (remediation guidance + verify)                              |
-| Production-safe execution           | App-layer scope                                | Yes (zero-downtime claim across production tests)               |
-| AI-generated-code focus             | Built for AI-built apps                        | Not specific to AI-generated code                               |
+| Capability                          | LyraShield AI                                                   | Horizon3 NodeZero                                               |
+| ----------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| Agentic / AI-driven pentest         | Yes (app-layer)                                                 | Yes (cross-environment)                                         |
+| Independent exploit validation      | Yes (verified state)                                            | Yes (proven attack paths with impact)                           |
+| SCA (dependency scanning)           | Yes (engine)                                                    | Not a primary focus                                             |
+| Secret scanning                     | Yes (engine + GitHub Action)                                    | Detects exposed credentials/secret-related weaknesses           |
+| Evidence states (4-state lifecycle) | Yes                                                             | Findings carry exploit proof; no explicit multi-state lifecycle |
+| Deterministic retest                | Yes                                                             | Quick Verify re-test after fix                                  |
+| Coverage receipts                   | Yes (per-control)                                               | No (attack-path + impact diagrams instead)                      |
+| Assurance reports (immutable)       | Yes                                                             | Executive/auditor reporting; CTEM-aligned evidence              |
+| MCP server integration              | Yes (inside AI coding agents)                                   | Yes (MCP server to accelerate remediation / find-fix-verify)    |
+| Permission-gated Fix PR requests    | Fix PR requests require permission and a server-generated patch | No (remediation guidance + verify)                              |
+| Production-safe execution           | App-layer scope                                                 | Yes (zero-downtime claim across production tests)               |
+| AI-generated-code focus             | Built for AI-built apps                                         | Not specific to AI-generated code                               |
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | Horizon3 NodeZero                                                                                                                                                                               |
-| ------------------ | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | SaaS; internal Docker/OVA + external cloud; AWS Marketplace + other clouds                                                                                                                      |
-| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote |
-| Compliance posture | Assurance-record orientation for release sign-off | Trusted by governments, Fortune 10, healthcare; FedRAMP High variant for federal                                                                                                                |
+| Aspect             | LyraShield AI                                     | Horizon3 NodeZero                                                                |
+| ------------------ | ------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | SaaS; internal Docker/OVA + external cloud; AWS Marketplace + other clouds       |
+| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote                                |
+| Compliance posture | Assurance-record orientation for release sign-off | Trusted by governments, Fortune 10, healthcare; FedRAMP High variant for federal |
 
 ## When to use which
 

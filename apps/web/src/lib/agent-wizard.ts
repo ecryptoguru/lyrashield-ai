@@ -89,17 +89,29 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   const steps: WizardStep[] = []
   if (agent.integrationKind === "standalone-cli") {
     steps.push({
-      id: "install", kind: "install", title: "Use the standalone workflow",
+      id: "install",
+      kind: "install",
+      title: "Use the standalone workflow",
       summary: agent.manualInstructions ?? "Run LyraShield CLI checks beside this coding agent.",
-      command: "npx lyrashield --help", copyLabel: "Copy LyraShield CLI help command",
+      command: "npx lyrashield --help",
+      copyLabel: "Copy LyraShield CLI help command",
     })
     steps.push({
-      id: "verify", kind: "verify", title: "Verify the CLI or CI check",
-      summary: "Run a read-only check on an authorized target and retain its result. This client does not have native MCP integration.",
-      command: "lyrashield check-diff", copyLabel: "Copy check-diff command",
+      id: "verify",
+      kind: "verify",
+      title: "Verify the CLI or CI check",
+      summary:
+        "Run a read-only check on an authorized target and retain its result. This client does not have native MCP integration.",
+      command: "lyrashield check-diff",
+      copyLabel: "Copy check-diff command",
     })
-    return { agentId: agent.id, displayName: agent.displayName, docsSlug: agent.docsSlug,
-      installStrategy: agent.installStrategy, steps }
+    return {
+      agentId: agent.id,
+      displayName: agent.displayName,
+      docsSlug: agent.docsSlug,
+      installStrategy: agent.installStrategy,
+      steps,
+    }
   }
   const configPath = primaryConfigPath(agent)
   const usesRemoteOAuth = agent.preferredTransport === "remote-http" && agent.remoteAuth === "oauth"
@@ -138,8 +150,13 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   const remoteSnippet = buildRemoteSnippet(agent, apiUrl)
   if (agent.installStrategy === "agent-plugin") {
     if (agent.manualInstructions) {
-      steps.push({ id: "config", kind: "config", title: "Activate in the client",
-        summary: agent.manualInstructions, note: agent.gotchas[0] })
+      steps.push({
+        id: "config",
+        kind: "config",
+        title: "Activate in the client",
+        summary: agent.manualInstructions,
+        note: agent.gotchas[0],
+      })
     }
   } else if (localSnippet) {
     steps.push({
@@ -171,10 +188,13 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       id: "config",
       kind: "config",
       title: "Add LyraShield in the agent",
-      summary: agent.manualInstructions ?? `${agent.displayName} uses its own MCP setup UI. Add the connection values below.`,
-      snippet: agent.preferredTransport === "remote-http"
-        ? `URL: ${apiUrl}/api/mcp\nAuthentication: ${usesRemoteOAuth ? "OAuth" : `Bearer ${API_KEY_PLACEHOLDER}`}`
-        : `Run: npx -y @lyrashield/mcp\nEnv: LYRASHIELD_API_KEY=${API_KEY_PLACEHOLDER}`,
+      summary:
+        agent.manualInstructions ??
+        `${agent.displayName} uses its own MCP setup UI. Add the connection values below.`,
+      snippet:
+        agent.preferredTransport === "remote-http"
+          ? `URL: ${apiUrl}/api/mcp\nAuthentication: ${usesRemoteOAuth ? "OAuth" : `Bearer ${API_KEY_PLACEHOLDER}`}`
+          : `Run: npx -y @lyrashield/mcp\nEnv: LYRASHIELD_API_KEY=${API_KEY_PLACEHOLDER}`,
       copyLabel: `Copy ${agent.displayName} connection values`,
       note: agent.gotchas[0],
     })

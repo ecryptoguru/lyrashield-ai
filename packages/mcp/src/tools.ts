@@ -226,7 +226,8 @@ async function findOrCreateRepoTarget(
     const existing = list.items?.find((t) => t.repoFullName === repo.repoFullName)
     if (existing) return existing.id
     cursor = list.nextCursor ?? undefined
-    if (cursor && seen.has(cursor)) throw new Error("Target lookup returned a repeated cursor; pass targetId")
+    if (cursor && seen.has(cursor))
+      throw new Error("Target lookup returned a repeated cursor; pass targetId")
     if (cursor) seen.add(cursor)
   } while (cursor)
 
@@ -898,59 +899,66 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
         const baseFetch = context.fetchFn ?? globalThis.fetch
         const boundedContext: ToolHandlerContext = {
           ...context,
-          fetchFn: (input, init) => baseFetch(input, {
-            ...init,
-            signal: init?.signal
-              ? AbortSignal.any([init.signal, timeout.signal]) : timeout.signal,
-          }),
+          fetchFn: (input, init) =>
+            baseFetch(input, {
+              ...init,
+              signal: init?.signal
+                ? AbortSignal.any([init.signal, timeout.signal])
+                : timeout.signal,
+            }),
         }
         let complete = true
         let pages = 0
         try {
-        do {
-          if (pages >= 20 || Date.now() >= deadline) {
-            complete = false
-            break
-          }
-          pages++
-          const findingParams = new URLSearchParams(wsParam)
-          findingParams.set("limit", "100")
-          findingParams.set("targetId", targetId)
-          if (cursor) findingParams.set("cursor", cursor)
-          let page: {
-            items?: Array<Record<string, unknown>>
-            nextCursor?: string | null
-          }
-          try {
-            page = (await apiCall(
-              boundedContext, "GET", `/api/findings?${findingParams.toString()}`
-            )) as typeof page
-          } catch (error) {
-            if (!timeout.signal.aborted) throw error
-            complete = false
-            break
-          }
-          if (Array.isArray(page.items)) {
-            for (const finding of page.items) {
-              if (![
-                  "OPEN",
-                  "FIX_READY",
-                  "PR_OPENED",
-                  "TICKET_CREATED",
-                  "FIXED_PENDING_RETEST",
-                ].includes(String(finding.status))) continue
-              const severity = String(finding.severity ?? "UNKNOWN")
-              bySeverity[severity] = (bySeverity[severity] ?? 0) + 1
-              findingCount++
+          do {
+            if (pages >= 20 || Date.now() >= deadline) {
+              complete = false
+              break
             }
-          }
-          cursor = page.nextCursor ?? undefined
-          if (cursor && seenCursors.has(cursor)) {
-            complete = false
-            break
-          }
-          if (cursor) seenCursors.add(cursor)
-        } while (cursor)
+            pages++
+            const findingParams = new URLSearchParams(wsParam)
+            findingParams.set("limit", "100")
+            findingParams.set("targetId", targetId)
+            if (cursor) findingParams.set("cursor", cursor)
+            let page: {
+              items?: Array<Record<string, unknown>>
+              nextCursor?: string | null
+            }
+            try {
+              page = (await apiCall(
+                boundedContext,
+                "GET",
+                `/api/findings?${findingParams.toString()}`
+              )) as typeof page
+            } catch (error) {
+              if (!timeout.signal.aborted) throw error
+              complete = false
+              break
+            }
+            if (Array.isArray(page.items)) {
+              for (const finding of page.items) {
+                if (
+                  ![
+                    "OPEN",
+                    "FIX_READY",
+                    "PR_OPENED",
+                    "TICKET_CREATED",
+                    "FIXED_PENDING_RETEST",
+                  ].includes(String(finding.status))
+                )
+                  continue
+                const severity = String(finding.severity ?? "UNKNOWN")
+                bySeverity[severity] = (bySeverity[severity] ?? 0) + 1
+                findingCount++
+              }
+            }
+            cursor = page.nextCursor ?? undefined
+            if (cursor && seenCursors.has(cursor)) {
+              complete = false
+              break
+            }
+            if (cursor) seenCursors.add(cursor)
+          } while (cursor)
         } finally {
           clearTimeout(timer)
         }
@@ -970,12 +978,21 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
           ``,
           !complete
             ? `**Open findings:** incomplete after ${pages} pages; resume with cursor ${cursor ?? "(none)"}.`
-            : sevLines ? `**Open findings by severity:**\n${sevLines}` : `**Open findings:** none`,
+            : sevLines
+              ? `**Open findings by severity:**\n${sevLines}`
+              : `**Open findings:** none`,
           ``,
           `_This is a target-scoped release-gate snapshot. Findings retain their recorded evidence states; scan detection alone is not independent verification or exploit validation._`,
         ].join("\n")
 
-        return makeToolResult({ markdown, verdict, bySeverity, findingCount, complete, nextCursor: complete ? null : cursor ?? null })
+        return makeToolResult({
+          markdown,
+          verdict,
+          bySeverity,
+          findingCount,
+          complete,
+          nextCursor: complete ? null : (cursor ?? null),
+        })
       } catch (err) {
         return makeErrorResult(err instanceof Error ? err.message : String(err))
       }

@@ -5,7 +5,12 @@ import { execFile } from "node:child_process"
 import { homedir } from "node:os"
 import path from "node:path"
 import process from "node:process"
-import { deriveMcpUrl, type AgentEntry, type ConfigLocation, type Transport } from "@lyrashield/agent-registry"
+import {
+  deriveMcpUrl,
+  type AgentEntry,
+  type ConfigLocation,
+  type Transport,
+} from "@lyrashield/agent-registry"
 import { getPluginDir } from "@lyrashield/agent-plugin"
 import type { InstallAgentResult } from "./install.js"
 
@@ -135,8 +140,12 @@ export async function installAgentPlugin(
   if (agent.id === "openai-codex-agent-plugin") return installCodexPlugin(opts.dryRun)
 
   if (agent.id === "kiro-agent-plugin" && opts.transport === "remote-http") {
-    return { agent: agent.id, displayName: agent.displayName, outcome: "MANUAL_REQUIRED",
-      message: `Kiro remote OAuth alternative: add an mcpServers.lyrashield entry with URL ${deriveMcpUrl(opts.apiUrl ?? "https://app.lyrashieldai.com")} in .kiro/settings/mcp.json or ~/.kiro/settings/mcp.json. Complete Kiro's browser OAuth flow and verify a read call. Keep an existing stdio entry until the remote connection passes acceptance.` }
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "MANUAL_REQUIRED",
+      message: `Kiro remote OAuth alternative: add an mcpServers.lyrashield entry with URL ${deriveMcpUrl(opts.apiUrl ?? "https://app.lyrashieldai.com")} in .kiro/settings/mcp.json or ~/.kiro/settings/mcp.json. Complete Kiro's browser OAuth flow and verify a read call. Keep an existing stdio entry until the remote connection passes acceptance.`,
+    }
   }
 
   if (agent.manualInstructions) {
@@ -159,8 +168,7 @@ export async function installAgentPlugin(
     }
   }
 
-  const loc =
-    pluginLocations.find((l) => !opts.scope || l.scope === opts.scope)
+  const loc = pluginLocations.find((l) => !opts.scope || l.scope === opts.scope)
   if (!loc) {
     return {
       agent: agent.id,
@@ -199,8 +207,13 @@ export async function installAgentPlugin(
     await mkdir(parentDir, { recursive: true })
     await assertContainedPluginDest(dest, loc, opts)
   } catch (error) {
-    return { agent: agent.id, displayName: agent.displayName, outcome: "FAILED", path: dest,
-      message: `Plugin destination is unsafe or unavailable: ${(error as Error).message}` }
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "FAILED",
+      path: dest,
+      message: `Plugin destination is unsafe or unavailable: ${(error as Error).message}`,
+    }
   }
 
   // Confirmation gate: the `yes` option is threaded through from the CLI
@@ -212,8 +225,13 @@ export async function installAgentPlugin(
     destExists = Boolean(await lstat(dest))
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      return { agent: agent.id, displayName: agent.displayName, outcome: "FAILED", path: dest,
-        message: `Cannot inspect existing plugin: ${(error as Error).message}` }
+      return {
+        agent: agent.id,
+        displayName: agent.displayName,
+        outcome: "FAILED",
+        path: dest,
+        message: `Cannot inspect existing plugin: ${(error as Error).message}`,
+      }
     }
   }
   if (destExists && !opts.yes) {
@@ -233,8 +251,13 @@ export async function installAgentPlugin(
     await cp(source, stagePath, { recursive: true, preserveTimestamps: true, errorOnExist: true })
   } catch (error) {
     await rm(stagePath, { recursive: true, force: true }).catch(() => {})
-    return { agent: agent.id, displayName: agent.displayName, outcome: "FAILED", path: dest,
-      message: `Plugin copy failed; existing installation preserved: ${(error as Error).message}` }
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "FAILED",
+      path: dest,
+      message: `Plugin copy failed; existing installation preserved: ${(error as Error).message}`,
+    }
   }
 
   let backupPath: string | undefined
@@ -245,8 +268,13 @@ export async function installAgentPlugin(
     }
   } catch (error) {
     await rm(stagePath, { recursive: true, force: true }).catch(() => {})
-    return { agent: agent.id, displayName: agent.displayName, outcome: "FAILED", path: dest,
-      message: `Plugin backup failed; existing installation preserved: ${(error as Error).message}` }
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "FAILED",
+      path: dest,
+      message: `Plugin backup failed; existing installation preserved: ${(error as Error).message}`,
+    }
   }
 
   try {
@@ -273,8 +301,14 @@ export async function installAgentPlugin(
 
   // Keep the previous installation so local customizations remain recoverable.
   if (backupPath) {
-    return { agent: agent.id, displayName: agent.displayName, outcome: "CONFIGURED", path: dest,
-      backupPath, message: `Plugin installed to ${dest}; previous installation retained at ${backupPath}` }
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "CONFIGURED",
+      path: dest,
+      backupPath,
+      message: `Plugin installed to ${dest}; previous installation retained at ${backupPath}`,
+    }
   }
 
   return {
@@ -326,8 +360,7 @@ export async function uninstallAgentPlugin(
     }
   }
   const pluginLocations = agent.pluginLocations ?? []
-  const loc =
-    pluginLocations.find((l) => !opts.scope || l.scope === opts.scope)
+  const loc = pluginLocations.find((l) => !opts.scope || l.scope === opts.scope)
 
   if (!loc) {
     return {
@@ -359,18 +392,30 @@ export async function uninstallAgentPlugin(
     existing = await lstat(dest)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      return { agent: agent.id, displayName: agent.displayName, outcome: "FAILED", path: dest,
-        message: `Cannot inspect plugin: ${(error as Error).message}` }
+      return {
+        agent: agent.id,
+        displayName: agent.displayName,
+        outcome: "FAILED",
+        path: dest,
+        message: `Cannot inspect plugin: ${(error as Error).message}`,
+      }
     }
   }
-  if (!existing) return {
-    agent: agent.id, displayName: agent.displayName, outcome: "ALREADY_CONFIGURED",
-    message: "Plugin was not present.",
-  }
-  if (opts.dryRun) return {
-    agent: agent.id, displayName: agent.displayName, outcome: "CONFIGURED", path: dest,
-    message: `Would remove ${dest}`,
-  }
+  if (!existing)
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "ALREADY_CONFIGURED",
+      message: "Plugin was not present.",
+    }
+  if (opts.dryRun)
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "CONFIGURED",
+      path: dest,
+      message: `Would remove ${dest}`,
+    }
   try {
     await rm(dest, { recursive: true, force: true })
     return {

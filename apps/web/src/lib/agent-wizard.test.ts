@@ -27,7 +27,9 @@ describe("agent wizard connection snippets", () => {
     for (const agentId of ["aider", "picode"]) {
       const wizard = buildAgentWizard(agentId, "https://app.lyrashieldai.com")
       expect(wizard?.steps.some((step) => step.title.includes("MCP"))).toBe(false)
-      expect(wizard?.steps.find((step) => step.id === "verify")?.command).toBe("lyrashield check-diff")
+      expect(wizard?.steps.find((step) => step.id === "verify")?.command).toBe(
+        "lyrashield check-diff"
+      )
     }
   })
 

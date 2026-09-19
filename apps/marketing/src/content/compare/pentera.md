@@ -18,38 +18,38 @@ faq:
 
 ## Core approach
 
-| Aspect            | LyraShield AI                                                                | Pentera                                                                                        |
-| ----------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Primary focus     | Release assurance for AI-built apps                                          | Automated security validation / exposure management across the enterprise                      |
-| Scanning approach | Agentic engine with coverage framework and evidence states; AI-pattern focus | AI-powered adversarial testing: deterministic + AI payloads that adapt to the live environment |
-| Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive         | Validated attack path → prioritized by proven business impact → remediation ticket → re-test   |
-| Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                  | No published control framework; CTEM lifecycle support; maps findings to controls              |
-| Environment focus | App-layer + AI-generated code; MCP/agent configs                             | Internal networks, external surface, cloud, web apps, identities (full kill chains)            |
-| Remediation model | Recorded fix proposals; Fix PR requests require permission and a server-generated patch      | Pentera Resolve: automated remediation workflows + revalidation                                |
+| Aspect            | LyraShield AI                                                                           | Pentera                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Primary focus     | Release assurance for AI-built apps                                                     | Automated security validation / exposure management across the enterprise                      |
+| Scanning approach | Agentic engine with coverage framework and evidence states; AI-pattern focus            | AI-powered adversarial testing: deterministic + AI payloads that adapt to the live environment |
+| Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive                    | Validated attack path → prioritized by proven business impact → remediation ticket → re-test   |
+| Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                             | No published control framework; CTEM lifecycle support; maps findings to controls              |
+| Environment focus | App-layer + AI-generated code; MCP/agent configs                                        | Internal networks, external surface, cloud, web apps, identities (full kill chains)            |
+| Remediation model | Recorded fix proposals; Fix PR requests require permission and a server-generated patch | Pentera Resolve: automated remediation workflows + revalidation                                |
 
 ## Capability comparison
 
-| Capability                          | LyraShield AI                                  | Pentera                                                                            |
-| ----------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Agentic / AI-driven pentest         | Yes (app-layer)                                | Yes (agentic AI coordinates attack paths across Core/Surface/Cloud)                |
-| Independent exploit validation      | Yes (verified state)                           | Yes (proven exploitability in live production)                                     |
-| SCA (dependency scanning)           | Yes (engine)                                   | Not a primary focus                                                                |
-| Secret scanning                     | Yes (engine + GitHub Action)                   | Not a primary focus (exposure validation focus)                                    |
-| Evidence states (4-state lifecycle) | Yes                                            | Findings carry exploit proof; no explicit multi-state lifecycle                    |
-| Deterministic retest                | Yes                                            | Re-test to confirm measurable exposure reduction                                   |
-| Coverage receipts                   | Yes (per-control)                              | No (validated attack-path aggregation instead)                                     |
-| Assurance reports (immutable)       | Yes                                            | Audit-ready proof of risk reduction; CTEM evidence                                 |
-| MCP server integration              | Yes (inside AI coding agents)                  | Not advertised as primary                                                          |
-| Permission-gated Fix PR requests        | Fix PR requests require permission and a server-generated patch | No (automated remediation routing + revalidation, not approval-gated PR execution) |
-| Live production testing             | App-layer scope                                | Yes (production with customer-controlled guardrails, throttling, emergency stop)   |
-| AI-generated-code focus             | Built for AI-built apps                        | Not specific to AI-generated code                                                  |
+| Capability                          | LyraShield AI                                                   | Pentera                                                                            |
+| ----------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Agentic / AI-driven pentest         | Yes (app-layer)                                                 | Yes (agentic AI coordinates attack paths across Core/Surface/Cloud)                |
+| Independent exploit validation      | Yes (verified state)                                            | Yes (proven exploitability in live production)                                     |
+| SCA (dependency scanning)           | Yes (engine)                                                    | Not a primary focus                                                                |
+| Secret scanning                     | Yes (engine + GitHub Action)                                    | Not a primary focus (exposure validation focus)                                    |
+| Evidence states (4-state lifecycle) | Yes                                                             | Findings carry exploit proof; no explicit multi-state lifecycle                    |
+| Deterministic retest                | Yes                                                             | Re-test to confirm measurable exposure reduction                                   |
+| Coverage receipts                   | Yes (per-control)                                               | No (validated attack-path aggregation instead)                                     |
+| Assurance reports (immutable)       | Yes                                                             | Audit-ready proof of risk reduction; CTEM evidence                                 |
+| MCP server integration              | Yes (inside AI coding agents)                                   | Not advertised as primary                                                          |
+| Permission-gated Fix PR requests    | Fix PR requests require permission and a server-generated patch | No (automated remediation routing + revalidation, not approval-gated PR execution) |
+| Live production testing             | App-layer scope                                                 | Yes (production with customer-controlled guardrails, throttling, emergency stop)   |
+| AI-generated-code focus             | Built for AI-built apps                                         | Not specific to AI-generated code                                                  |
 
 ## Deployment and pricing
 
 | Aspect             | LyraShield AI                                     | Pentera                                                                                                                            |
 | ------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Deployment         | Hosted + CLI + MCP + GitHub Action                | Platform (Core/Surface/Cloud/Resolve); enterprise deployment; live production                                                      |
-| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote |
+| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote                                                                                  |
 | Compliance posture | Assurance-record orientation for release sign-off | Maps validated findings to controls; ISO/IEC 42001 AI governance; Gartner representative vendor in Adversarial Exposure Validation |
 
 ## When to use which

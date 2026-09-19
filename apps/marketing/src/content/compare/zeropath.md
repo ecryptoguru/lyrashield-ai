@@ -18,39 +18,39 @@ faq:
 
 ## Core approach
 
-| Aspect                  | LyraShield AI                                                                                  | ZeroPath                                                                          |
-| ----------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Primary focus           | Evidence-backed release assurance for AI-built apps                                            | AI-native SAST plus SCA, secrets, IaC, and DAST validation in one platform        |
-| Scanning approach       | Agentic engine, coverage framework, evidence states                                            | LLMs combined with static analysis, taint tracking, and AI validation             |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                           | Found → AI-validated for exploitability → fix PR generated                        |
-| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                    | No published control framework; convention-deviation and auth-predicate analysis  |
+| Aspect                  | LyraShield AI                                                                        | ZeroPath                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| Primary focus           | Evidence-backed release assurance for AI-built apps                                  | AI-native SAST plus SCA, secrets, IaC, and DAST validation in one platform        |
+| Scanning approach       | Agentic engine, coverage framework, evidence states                                  | LLMs combined with static analysis, taint tracking, and AI validation             |
+| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                 | Found → AI-validated for exploitability → fix PR generated                        |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                          | No published control framework; convention-deviation and auth-predicate analysis  |
 | Fix model               | Recorded fix proposals; Fix PR requests need permission and a server-generated patch | Fix PRs opened for one-click merge with natural-language refinement               |
-| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                           | Agent installer with stop hooks; scans uncommitted diffs at end of AI agent turns |
+| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                 | Agent installer with stop hooks; scans uncommitted diffs at end of AI agent turns |
 
 ## Capability comparison
 
-| Capability                | LyraShield AI                                  | ZeroPath                                                                        |
-| ------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------- |
-| Static analysis (SAST)    | Via engine                                     | Yes (AI-native flagship; business logic and auth flaws)                         |
-| Custom rules              | Not a primary feature                          | Natural-language policy engine                                                  |
-| SCA (dependency scanning) | Yes                                            | Yes (reachability-aware, exploitability fusion)                                 |
-| Secret scanning           | Yes (engine + GitHub Action)                   | Yes (700+ detectors, rotation guidance PRs)                                     |
-| Agentic pentest           | Yes (core)                                     | Runtime validation of SAST findings against a live app (not open-ended pentest) |
-| Evidence states           | Yes (4 states)                                 | Exploitation-setup metadata per finding                                         |
-| Deterministic retest      | Yes                                            | Auto re-scan verification after fix                                             |
-| Coverage receipts         | Yes (per-control)                              | No                                                                              |
-| Assurance reports         | Yes (immutable snapshots)                      | Compliance and audit reports; GRC sync                                          |
-| Reviewed fix proposals      | Fix PR requests require permission and a server-generated patch | One-click merge fix PRs; no formal approval gate                                |
-| MCP server integration    | Yes (documented MCP client workflows)                               | Yes (open-source MCP server for Claude, Cursor, Windsurf)                       |
-| AI-BOM / AI inventory     | Not a primary feature                          | Yes (17 AI component kinds, CycloneDX AI-BOM)                                   |
-| Open-source CLI           | CLI is npm-published                           | Yes (zeropath-cli with SARIF output)                                            |
+| Capability                | LyraShield AI                                                   | ZeroPath                                                                        |
+| ------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Static analysis (SAST)    | Via engine                                                      | Yes (AI-native flagship; business logic and auth flaws)                         |
+| Custom rules              | Not a primary feature                                           | Natural-language policy engine                                                  |
+| SCA (dependency scanning) | Yes                                                             | Yes (reachability-aware, exploitability fusion)                                 |
+| Secret scanning           | Yes (engine + GitHub Action)                                    | Yes (700+ detectors, rotation guidance PRs)                                     |
+| Agentic pentest           | Yes (core)                                                      | Runtime validation of SAST findings against a live app (not open-ended pentest) |
+| Evidence states           | Yes (4 states)                                                  | Exploitation-setup metadata per finding                                         |
+| Deterministic retest      | Yes                                                             | Auto re-scan verification after fix                                             |
+| Coverage receipts         | Yes (per-control)                                               | No                                                                              |
+| Assurance reports         | Yes (immutable snapshots)                                       | Compliance and audit reports; GRC sync                                          |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch | One-click merge fix PRs; no formal approval gate                                |
+| MCP server integration    | Yes (documented MCP client workflows)                           | Yes (open-source MCP server for Claude, Cursor, Windsurf)                       |
+| AI-BOM / AI inventory     | Not a primary feature                                           | Yes (17 AI component kinds, CycloneDX AI-BOM)                                   |
+| Open-source CLI           | CLI is npm-published                                            | Yes (zeropath-cli with SARIF output)                                            |
 
 ## Deployment and pricing
 
 | Aspect     | LyraShield AI                                    | ZeroPath                                                                                                              |
 | ---------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS, on-prem (Enterprise), CLI, VS Code plugin, GitHub/GitLab/Bitbucket/Azure DevOps, MCP server, Claude Code plugin |
-| Pricing    | See [pricing](/pricing) for current plan details | Check the vendor's current pricing or sales quote |
+| Pricing    | See [pricing](/pricing) for current plan details | Check the vendor's current pricing or sales quote                                                                     |
 | Languages  | Language-agnostic                                | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin, and more)                                  |
 
 ## When to use which

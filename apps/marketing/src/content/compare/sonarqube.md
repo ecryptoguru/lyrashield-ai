@@ -27,33 +27,33 @@ faq:
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays separate from proof)                                         | Security hotspot review → confirmed or false positive; Quality Gates block merges |
 | Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                        | No published control framework; rule-based detection with severity levels         |
 | Code quality            | Not a primary focus                                                                                                                                | Yes — code smells, duplication, complexity, coverage metrics                      |
-| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                            | AI CodeFix (LLM-driven fix suggestions, not approval-bound)                       |
+| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                             | AI CodeFix (LLM-driven fix suggestions, not approval-bound)                       |
 | AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                               | AI Code Assurance (Enterprise/DC only); AI CodeFix (LLM-driven fix suggestions)   |
 | Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes, and limitations                                        | No release assurance record; Quality Gate status                                  |
 
 ## Capability comparison
 
-| Capability                   | LyraShield AI                                                                    | SonarQube                             |
-| ---------------------------- | -------------------------------------------------------------------------------- | ------------------------------------- |
-| Static analysis (SAST)       | Deterministic + AI-assisted (separate layers)                                    | Yes (rule-based + taint)              |
-| Code quality analysis        | No                                                                               | Yes (code smells, duplication)        |
-| SCA (dependency scanning)    | Via engine                                                                       | Yes (CVE, malicious package, license) |
-| Evidence states              | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                                    |
-| Deterministic retest         | Yes                                                                              | Quality Gates (re-scan)               |
-| Coverage receipts            | Yes (per-control)                                                                | Coverage metrics (line/branch)        |
-| Assurance reports            | Yes (immutable snapshots)                                                        | No                                    |
-| Reviewed fix proposals | Fix PR requests require permission and a server-generated patch                                   | No                                    |
-| MCP server integration       | Yes (documented MCP client workflows)                                                                 | No                                    |
-| IaC scanning                 | No                                                                               | Yes (Terraform, K8s, Docker, etc.)    |
-| Languages                    | Language-agnostic (deterministic + agentic coverage)                             | 40+ languages                         |
+| Capability                | LyraShield AI                                                                    | SonarQube                             |
+| ------------------------- | -------------------------------------------------------------------------------- | ------------------------------------- |
+| Static analysis (SAST)    | Deterministic + AI-assisted (separate layers)                                    | Yes (rule-based + taint)              |
+| Code quality analysis     | No                                                                               | Yes (code smells, duplication)        |
+| SCA (dependency scanning) | Via engine                                                                       | Yes (CVE, malicious package, license) |
+| Evidence states           | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                                    |
+| Deterministic retest      | Yes                                                                              | Quality Gates (re-scan)               |
+| Coverage receipts         | Yes (per-control)                                                                | Coverage metrics (line/branch)        |
+| Assurance reports         | Yes (immutable snapshots)                                                        | No                                    |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch                  | No                                    |
+| MCP server integration    | Yes (documented MCP client workflows)                                            | No                                    |
+| IaC scanning              | No                                                                               | Yes (Terraform, K8s, Docker, etc.)    |
+| Languages                 | Language-agnostic (deterministic + agentic coverage)                             | 40+ languages                         |
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                        | SonarQube                                                                                            |
-| ---------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                   | SonarQube Cloud (SaaS) or SonarQube Server (self-hosted) + SonarLint IDE                             |
-| Pricing    | See [pricing](/pricing) for current plan details     | Check the vendor's current pricing or sales quote |
-| Languages  | Language-agnostic (deterministic + agentic coverage) | 40+ languages                                                                                        |
+| Aspect     | LyraShield AI                                        | SonarQube                                                                |
+| ---------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| Deployment | Hosted + CLI + MCP + GitHub Action                   | SonarQube Cloud (SaaS) or SonarQube Server (self-hosted) + SonarLint IDE |
+| Pricing    | See [pricing](/pricing) for current plan details     | Check the vendor's current pricing or sales quote                        |
+| Languages  | Language-agnostic (deterministic + agentic coverage) | 40+ languages                                                            |
 
 ## When to use which
 

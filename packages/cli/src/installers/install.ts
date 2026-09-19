@@ -162,8 +162,12 @@ async function runVendorCli(
   opts: InstallAgentOptions
 ): Promise<InstallAgentResult> {
   if (agent.id === "amp" && opts.transport === "remote-http") {
-    return { agent: agent.id, displayName: agent.displayName, outcome: "MANUAL_REQUIRED",
-      message: `Amp remote OAuth alternative: amp mcp remote --personal add LyraShield ${deriveMcpUrl(opts.apiUrl)} --auth oauth. Verify tools and a read call in Amp before switching an existing stdio connection.` }
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "MANUAL_REQUIRED",
+      message: `Amp remote OAuth alternative: amp mcp remote --personal add LyraShield ${deriveMcpUrl(opts.apiUrl)} --auth oauth. Verify tools and a read call in Amp before switching an existing stdio connection.`,
+    }
   }
   if (!agent.vendorCli) {
     return {
@@ -234,8 +238,12 @@ export async function installAgent(opts: InstallAgentOptions): Promise<InstallAg
   const { agent, all, cwd } = opts
 
   if (agent.integrationKind === "standalone-cli") {
-    return { agent: agent.id, displayName: agent.displayName, outcome: "MANUAL_REQUIRED",
-      message: agent.manualInstructions ?? "Use the standalone LyraShield CLI or CI workflow." }
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "MANUAL_REQUIRED",
+      message: agent.manualInstructions ?? "Use the standalone LyraShield CLI or CI workflow.",
+    }
   }
   if (agent.id === "devin-cli") {
     const { readFile } = await import("node:fs/promises")
@@ -248,8 +256,14 @@ export async function installAgent(opts: InstallAgentOptions): Promise<InstallAg
     for (const legacyPath of legacyPaths) {
       const raw = await readFile(legacyPath, "utf8").catch(() => undefined)
       if (raw && (parse(raw) as { mcpServers?: Record<string, unknown> })?.mcpServers?.lyrashield) {
-        return { agent: agent.id, displayName: agent.displayName, outcome: "MANUAL_REQUIRED",
-          path: legacyPath, message: "Existing Devin CLI MCP entry found in legacy config. Start Devin CLI v3000.3+ to migrate it, then inspect the dedicated mcp_config file before installing another entry." }
+        return {
+          agent: agent.id,
+          displayName: agent.displayName,
+          outcome: "MANUAL_REQUIRED",
+          path: legacyPath,
+          message:
+            "Existing Devin CLI MCP entry found in legacy config. Start Devin CLI v3000.3+ to migrate it, then inspect the dedicated mcp_config file before installing another entry.",
+        }
       }
     }
   }
@@ -265,23 +279,37 @@ export async function installAgent(opts: InstallAgentOptions): Promise<InstallAg
   const baseDir = cwd ?? process.cwd()
   const requiresDetection = agent.installStrategy === "config-file" || opts.autoDetect
   const detected = requiresDetection
-    ? await detectAgent(agent, { scope: opts.scope, cwd: baseDir }) : true
+    ? await detectAgent(agent, { scope: opts.scope, cwd: baseDir })
+    : true
   if (!detected && !all) {
     return { agent: agent.id, displayName: agent.displayName, outcome: "NOT_DETECTED" }
   }
   if (opts.scope) {
-    const locations = agent.installStrategy === "agent-plugin"
-      ? agent.pluginLocations ?? [] : agent.locations
+    const locations =
+      agent.installStrategy === "agent-plugin" ? (agent.pluginLocations ?? []) : agent.locations
     if (locations.length && !locations.some((loc) => loc.scope === opts.scope)) {
-      return { agent: agent.id, displayName: agent.displayName, outcome: "FAILED",
-        message: `No ${opts.scope} installation location is supported by ${agent.displayName}.` }
+      return {
+        agent: agent.id,
+        displayName: agent.displayName,
+        outcome: "FAILED",
+        message: `No ${opts.scope} installation location is supported by ${agent.displayName}.`,
+      }
     }
   }
-  if (!opts.dryRun && agent.installStrategy === "config-file" && !opts.apiKey &&
+  if (
+    !opts.dryRun &&
+    agent.installStrategy === "config-file" &&
+    !opts.apiKey &&
     !(opts.transport === "stdio" && opts.useCredentialStore) &&
-    !(opts.transport === "remote-http" && agent.remoteAuth === "oauth")) {
-    return { agent: agent.id, displayName: agent.displayName, outcome: "MANUAL_REQUIRED",
-      message: "This connection needs a local OAuth login or API key. Run lyrashield login --oauth for stdio, or use a client-supported hosted OAuth connection." }
+    !(opts.transport === "remote-http" && agent.remoteAuth === "oauth")
+  ) {
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "MANUAL_REQUIRED",
+      message:
+        "This connection needs a local OAuth login or API key. Run lyrashield login --oauth for stdio, or use a client-supported hosted OAuth connection.",
+    }
   }
 
   if (agent.installStrategy === "agent-plugin") {
@@ -365,8 +393,13 @@ export async function uninstallAgent(
     if (opts.scope && loc.scope !== opts.scope) continue
     const resolved = resolveLocation(loc, { scope: opts.scope, cwd: opts.cwd ?? process.cwd() })
     if (opts.dryRun) {
-      return { agent: agent.id, displayName: agent.displayName, outcome: "CONFIGURED",
-        path: resolved, message: `Would remove LyraShield entry from ${resolved}` }
+      return {
+        agent: agent.id,
+        displayName: agent.displayName,
+        outcome: "CONFIGURED",
+        path: resolved,
+        message: `Would remove LyraShield entry from ${resolved}`,
+      }
     }
     const removed = await removeFile({
       filePath: resolved,

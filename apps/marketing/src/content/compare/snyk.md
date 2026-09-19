@@ -27,32 +27,32 @@ faq:
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays separate from proof)                                         | Open → fixed (re-test confirms scanner can no longer replicate)                             |
 | Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                        | No published control framework; uses vulnerability databases (CVEs, custom rules)           |
 | Coverage reporting      | Per-control coverage receipts: completed, limited, skipped, not-applicable                                                                         | Per-finding severity and fix suggestions; no coverage framework                             |
-| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                            | AI autofixes (85% accuracy claimed, not approval-bound)                                     |
+| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                             | AI autofixes (85% accuracy claimed, not approval-bound)                                     |
 | AI-generated code focus | Built specifically for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                  | DeepCode AI engine; LLM library tracking (OpenAI, HuggingFace, Anthropic, Google)           |
 | Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes, and limitations                                        | No release assurance record; vulnerability-based reporting                                  |
 
 ## Capability comparison
 
-| Capability                   | LyraShield AI                                                                    | Snyk                                    |
-| ---------------------------- | -------------------------------------------------------------------------------- | --------------------------------------- |
-| SAST (static analysis)       | Deterministic + AI-assisted (separate layers)                                    | DeepCode AI                             |
-| SCA (dependency scanning)    | Via engine                                                                       | Yes (vulnerability DB)                  |
-| Container scanning           | No                                                                               | Yes (Snyk Container)                    |
-| IaC scanning                 | No                                                                               | Yes (Snyk IaC)                          |
-| Secret scanning              | Yes (engine + GitHub Action)                                                     | Limited                                 |
-| Evidence states              | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                                      |
-| Deterministic retest         | Yes                                                                              | Re-test (scanner replication)           |
-| Coverage receipts            | Yes (per-control)                                                                | No                                      |
-| Assurance reports            | Yes (immutable snapshots)                                                        | No                                      |
-| Reviewed fix proposals | Fix PR requests require permission and a server-generated patch                                   | No (AI autofixes, 85% accuracy claimed) |
-| MCP server integration       | Yes (documented MCP client workflows)                                                                 | No                                      |
+| Capability                | LyraShield AI                                                                    | Snyk                                    |
+| ------------------------- | -------------------------------------------------------------------------------- | --------------------------------------- |
+| SAST (static analysis)    | Deterministic + AI-assisted (separate layers)                                    | DeepCode AI                             |
+| SCA (dependency scanning) | Via engine                                                                       | Yes (vulnerability DB)                  |
+| Container scanning        | No                                                                               | Yes (Snyk Container)                    |
+| IaC scanning              | No                                                                               | Yes (Snyk IaC)                          |
+| Secret scanning           | Yes (engine + GitHub Action)                                                     | Limited                                 |
+| Evidence states           | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                                      |
+| Deterministic retest      | Yes                                                                              | Re-test (scanner replication)           |
+| Coverage receipts         | Yes (per-control)                                                                | No                                      |
+| Assurance reports         | Yes (immutable snapshots)                                                        | No                                      |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch                  | No (AI autofixes, 85% accuracy claimed) |
+| MCP server integration    | Yes (documented MCP client workflows)                                            | No                                      |
 
 ## Deployment and pricing
 
 | Aspect     | LyraShield AI                                        | Snyk                                                                   |
 | ---------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
 | Deployment | Hosted + CLI + MCP + GitHub Action                   | SaaS, Private Cloud (AWS), CLI, IDE plugins, CI/CD                     |
-| Pricing    | See [pricing](/pricing) for current plan details     | Check the vendor's current pricing or sales quote |
+| Pricing    | See [pricing](/pricing) for current plan details     | Check the vendor's current pricing or sales quote                      |
 | Languages  | Language-agnostic (deterministic + agentic coverage) | 19+ languages (Java, JS, Python, Go, C/C++, PHP, Ruby, .NET, and more) |
 
 ## When to use which

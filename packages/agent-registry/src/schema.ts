@@ -67,14 +67,29 @@ export const agentEntrySchema = z
     gotchas: z.array(z.string().min(1)),
   })
   .superRefine((entry, ctx) => {
-    if (entry.integrationKind === "standalone-cli" && (entry.transports.length || entry.preferredTransport)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "standalone workflows cannot advertise an MCP transport", path: ["transports"] })
+    if (
+      entry.integrationKind === "standalone-cli" &&
+      (entry.transports.length || entry.preferredTransport)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "standalone workflows cannot advertise an MCP transport",
+        path: ["transports"],
+      })
     }
     if (entry.integrationKind !== "standalone-cli" && !entry.transports.length) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "MCP integrations require a transport", path: ["transports"] })
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "MCP integrations require a transport",
+        path: ["transports"],
+      })
     }
     if (entry.preferredTransport && !entry.transports.includes(entry.preferredTransport)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "preferred transport must be supported", path: ["preferredTransport"] })
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "preferred transport must be supported",
+        path: ["preferredTransport"],
+      })
     }
     if (entry.supportTier === "NATIVE" || entry.supportTier === "VERIFIED") {
       if (entry.verification.evidence !== "CLIENT_RUNTIME") {
@@ -99,7 +114,11 @@ export const agentEntrySchema = z
         })
       }
       if (entry.verification.platforms.length === 0) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${entry.supportTier} requires tested platforms`, path: ["verification", "platforms"] })
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${entry.supportTier} requires tested platforms`,
+          path: ["verification", "platforms"],
+        })
       }
     }
 

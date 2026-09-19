@@ -22,7 +22,7 @@ faq:
 
 | Aspect            | LyraShield AI                                                                                           | XBOW                                                                                          |
 | ----------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Primary focus     | Release assurance for AI-built apps; immutable assurance reports + reviewed fix proposals                 | Continuous, proof-driven autonomous pentesting across the attack surface                      |
+| Primary focus     | Release assurance for AI-built apps; immutable assurance reports + reviewed fix proposals               | Continuous, proof-driven autonomous pentesting across the attack surface                      |
 | Scanning approach | Agentic engine with coverage framework and evidence states; scans agent rules, MCP configs, AI patterns | AI agents that explore apps/APIs like an attacker, chain vulnerabilities into working attacks |
 | Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive                                    | Vulnerability → proven with a working exploit → complete case file with remediation           |
 | Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                             | No published control framework; governance via SOC 2, ISO 27001, PCI DSS, NIS 2 alignment     |
@@ -31,28 +31,28 @@ faq:
 
 ## Capability comparison
 
-| Capability                                                       | LyraShield AI                                                         | XBOW                                                            |
-| ---------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Agentic / AI-driven pentest                                      | Yes                                                                   | Yes (core capability)                                           |
-| Independent exploit validation                                   | Yes (verified state)                                                  | Yes (proof is the central deliverable)                          |
-| SCA (dependency scanning)                                        | Yes (engine)                                                          | Not a primary focus                                             |
-| Secret scanning                                                  | Yes (engine + GitHub Action)                                          | Not a primary focus                                             |
-| Evidence states (detected / verified / confirmed / inconclusive) | Yes (4 states)                                                        | Findings carry exploit proof; no explicit multi-state lifecycle |
-| Deterministic retest                                             | Yes                                                                   | Re-testing to confirm fixes hold                                |
-| Coverage receipts                                                | Yes (per-control)                                                     | No (per-finding case files instead)                             |
-| Assurance reports                                                | Yes (immutable snapshots)                                             | Board-/auditor-ready reporting per finding                      |
-| MCP server integration                                           | Yes (inside AI coding agents)                                         | No (platform-centric)                                           |
-| GitHub Action / SARIF output                                     | Yes                                                                   | Not advertised as primary                                       |
-| Permission-gated Fix PR requests                                     | Fix PR requests require permission and a server-generated patch | No (remediation guidance, not executed fixes)                   |
-| AI-generated-code focus                                          | Built for AI-built apps                                               | Not specific to AI-generated code                               |
+| Capability                                                       | LyraShield AI                                                   | XBOW                                                            |
+| ---------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| Agentic / AI-driven pentest                                      | Yes                                                             | Yes (core capability)                                           |
+| Independent exploit validation                                   | Yes (verified state)                                            | Yes (proof is the central deliverable)                          |
+| SCA (dependency scanning)                                        | Yes (engine)                                                    | Not a primary focus                                             |
+| Secret scanning                                                  | Yes (engine + GitHub Action)                                    | Not a primary focus                                             |
+| Evidence states (detected / verified / confirmed / inconclusive) | Yes (4 states)                                                  | Findings carry exploit proof; no explicit multi-state lifecycle |
+| Deterministic retest                                             | Yes                                                             | Re-testing to confirm fixes hold                                |
+| Coverage receipts                                                | Yes (per-control)                                               | No (per-finding case files instead)                             |
+| Assurance reports                                                | Yes (immutable snapshots)                                       | Board-/auditor-ready reporting per finding                      |
+| MCP server integration                                           | Yes (inside AI coding agents)                                   | No (platform-centric)                                           |
+| GitHub Action / SARIF output                                     | Yes                                                             | Not advertised as primary                                       |
+| Permission-gated Fix PR requests                                 | Fix PR requests require permission and a server-generated patch | No (remediation guidance, not executed fixes)                   |
+| AI-generated-code focus                                          | Built for AI-built apps                                         | Not specific to AI-generated code                               |
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | XBOW                                                                                                                                                                     |
-| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | Hosted SaaS (XBOW Console); available on AWS, Google, Oracle, Microsoft cloud marketplaces                                                                               |
-| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote |
-| Compliance posture | Assurance-record orientation for release sign-off | SOC 2, ISO 27001, PCI DSS, NIS 2 alignment; auditable scope and logging                                                                                                  |
+| Aspect             | LyraShield AI                                     | XBOW                                                                                       |
+| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | Hosted SaaS (XBOW Console); available on AWS, Google, Oracle, Microsoft cloud marketplaces |
+| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote                                          |
+| Compliance posture | Assurance-record orientation for release sign-off | SOC 2, ISO 27001, PCI DSS, NIS 2 alignment; auditable scope and logging                    |
 
 ## When to use which
 

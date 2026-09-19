@@ -969,9 +969,14 @@ export const AGENTS: readonly RegistryAgentEntry[] = [
   return {
     ...agent,
     integrationKind: agent.integrationKind ?? "mcp",
-    preferredTransport: agent.integrationKind === "standalone-cli" ? null : agent.preferredTransport ?? agent.transports[0]!,
-    remoteAuth: agent.installStrategy === "agent-plugin" && agent.transports.includes("remote-http")
-      ? agent.remoteAuth ?? "oauth" : agent.remoteAuth,
+    preferredTransport:
+      agent.integrationKind === "standalone-cli"
+        ? null
+        : (agent.preferredTransport ?? agent.transports[0]!),
+    remoteAuth:
+      agent.installStrategy === "agent-plugin" && agent.transports.includes("remote-http")
+        ? (agent.remoteAuth ?? "oauth")
+        : agent.remoteAuth,
     supportTier,
     verification: {
       evidence,

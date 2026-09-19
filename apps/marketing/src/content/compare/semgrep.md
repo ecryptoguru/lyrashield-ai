@@ -26,34 +26,34 @@ faq:
 | Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                         | Semantic pattern matching with data-flow and taint analysis                       |
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays separate from proof)                                         | Open → reviewing → fixed or ignored; AI auto-triage for false positives           |
 | Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                        | No published control framework; rule-based detection                              |
-| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                            | AI autofix suggestions (not approval-bound)                                       |
+| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                             | AI autofix suggestions (not approval-bound)                                       |
 | Custom rules            | Not a primary feature                                                                                                                              | Yes — write custom rules in Semgrep syntax (key differentiator)                   |
 | AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                               | Semgrep Multimodal (AI detection for business logic flaws); AI triage and autofix |
 | Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes, and limitations                                        | No release assurance record; finding-based dashboard                              |
 
 ## Capability comparison
 
-| Capability                   | LyraShield AI                                                                    | Semgrep                                 |
-| ---------------------------- | -------------------------------------------------------------------------------- | --------------------------------------- |
-| Static analysis (SAST)       | Deterministic + AI-assisted (separate layers)                                    | Pattern-based                           |
-| Custom rules                 | No                                                                               | Yes (key feature)                       |
-| SCA (dependency scanning)    | Via engine                                                                       | Yes (with reachability)                 |
-| Secret scanning              | Yes (engine + GitHub Action)                                                     | Yes (630+ credential types)             |
-| Evidence states              | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                                      |
-| Deterministic retest         | Yes                                                                              | Auto-mark fixed when no longer detected |
-| Coverage receipts            | Yes (per-control)                                                                | No                                      |
-| Assurance reports            | Yes (immutable snapshots)                                                        | No                                      |
-| Reviewed fix proposals | Fix PR requests require permission and a server-generated patch                                   | No                                      |
-| MCP server integration       | Yes (documented MCP client workflows)                                                                 | No                                      |
-| Open-source CLI              | CLI is npm-published                                                             | Yes (LGPL-2.1, Community Edition)       |
+| Capability                | LyraShield AI                                                                    | Semgrep                                 |
+| ------------------------- | -------------------------------------------------------------------------------- | --------------------------------------- |
+| Static analysis (SAST)    | Deterministic + AI-assisted (separate layers)                                    | Pattern-based                           |
+| Custom rules              | No                                                                               | Yes (key feature)                       |
+| SCA (dependency scanning) | Via engine                                                                       | Yes (with reachability)                 |
+| Secret scanning           | Yes (engine + GitHub Action)                                                     | Yes (630+ credential types)             |
+| Evidence states           | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                                      |
+| Deterministic retest      | Yes                                                                              | Auto-mark fixed when no longer detected |
+| Coverage receipts         | Yes (per-control)                                                                | No                                      |
+| Assurance reports         | Yes (immutable snapshots)                                                        | No                                      |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch                  | No                                      |
+| MCP server integration    | Yes (documented MCP client workflows)                                            | No                                      |
+| Open-source CLI           | CLI is npm-published                                                             | Yes (LGPL-2.1, Community Edition)       |
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                        | Semgrep                                                                                                                       |
-| ---------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action                   | AppSec Platform (SaaS), CLI (CE), IDE extensions, CI/CD integrations                                                          |
-| Pricing    | See [pricing](/pricing) for current plan details     | Check the vendor's current pricing or sales quote |
-| Languages  | Language-agnostic (deterministic + agentic coverage) | 30+ languages (GA, Beta, Experimental)                                                                                        |
+| Aspect     | LyraShield AI                                        | Semgrep                                                              |
+| ---------- | ---------------------------------------------------- | -------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action                   | AppSec Platform (SaaS), CLI (CE), IDE extensions, CI/CD integrations |
+| Pricing    | See [pricing](/pricing) for current plan details     | Check the vendor's current pricing or sales quote                    |
+| Languages  | Language-agnostic (deterministic + agentic coverage) | 30+ languages (GA, Beta, Experimental)                               |
 
 ## When to use which
 

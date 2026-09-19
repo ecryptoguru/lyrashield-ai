@@ -75,7 +75,9 @@ export async function handleRules(args: string[], output: Output): Promise<numbe
     let diverged = false
     const all: { agent: string; checks: Awaited<ReturnType<typeof checkRules>> }[] = []
     for (const agent of registry.listAgents()) {
-      const checks = await checkRules(await configuredRulesAgent(agent, projectRoot), { projectRoot })
+      const checks = await checkRules(await configuredRulesAgent(agent, projectRoot), {
+        projectRoot,
+      })
       if (checks.some((c) => c.state === "diverged")) diverged = true
       all.push({ agent: agent.id, checks })
     }

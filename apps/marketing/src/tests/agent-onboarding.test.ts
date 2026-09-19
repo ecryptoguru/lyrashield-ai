@@ -11,8 +11,15 @@ describe("agent onboarding contract", () => {
     expect(agentOnboarding.safety.join(" ")).toContain("Read-only")
     expect(agentOnboarding.safety.join(" ")).toContain("browser-confirmed connection grant")
     expect(agentOnboarding.clients).toHaveLength(26)
-    expect(agentOnboarding.clients.filter((client) => client.integrationKind === "standalone-cli")).toHaveLength(2)
-    expect(agentOnboarding.clients.every((client) => client.supportTier !== "VERIFIED" || client.clientVersion && client.platforms.length > 0)).toBe(true)
+    expect(
+      agentOnboarding.clients.filter((client) => client.integrationKind === "standalone-cli")
+    ).toHaveLength(2)
+    expect(
+      agentOnboarding.clients.every(
+        (client) =>
+          client.supportTier !== "VERIFIED" || (client.clientVersion && client.platforms.length > 0)
+      )
+    ).toBe(true)
     expect(renderAgentOnboardingMarkdown("https://lyrashieldai.com")).toContain(
       "https://lyrashieldai.com/docs/integrations/agent-plugins"
     )

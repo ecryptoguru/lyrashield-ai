@@ -20,41 +20,41 @@ faq:
 
 ## Core approach
 
-| Aspect                  | LyraShield AI                                                                   | Aikido                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Primary focus           | Evidence-backed release assurance for AI-built apps                             | Unified AppSec platform: code, cloud, runtime in one system                        |
-| Scanning approach       | Agentic engine with coverage framework and evidence states; AI-pattern focus    | Multi-engine (SAST, SCA, secrets, IaC, containers, CSPM, DAST) + AI pentest agents |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive            | Open → triaged (AutoT deprioritizes non-risk) → AutoFix PR or ticket               |
-| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                     | No published control framework; rule engine + context-based prioritization         |
-| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns            | AI Code Quality review + malware detection; not AI-code-specific assurance         |
+| Aspect                  | LyraShield AI                                                                  | Aikido                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Primary focus           | Evidence-backed release assurance for AI-built apps                            | Unified AppSec platform: code, cloud, runtime in one system                        |
+| Scanning approach       | Agentic engine with coverage framework and evidence states; AI-pattern focus   | Multi-engine (SAST, SCA, secrets, IaC, containers, CSPM, DAST) + AI pentest agents |
+| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive           | Open → triaged (AutoT deprioritizes non-risk) → AutoFix PR or ticket               |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                    | No published control framework; rule engine + context-based prioritization         |
+| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns           | AI Code Quality review + malware detection; not AI-code-specific assurance         |
 | Fix model               | Recorded fix proposals; Fix PR execution is not enabled in the current release | AutoFix generates reviewable PRs across code, deps, IaC, containers                |
 
 ## Capability comparison
 
-| Capability                          | LyraShield AI                                  | Aikido                                                 |
-| ----------------------------------- | ---------------------------------------------- | ------------------------------------------------------ |
-| Static analysis (SAST)              | Agentic                                        | Yes (pattern + context)                                |
-| SCA (dependency scanning)           | Yes (engine)                                   | Yes (with malware detection)                           |
-| Secret scanning                     | Yes (engine + GitHub Action)                   | Yes                                                    |
-| IaC / container scanning            | Not a primary focus                            | Yes                                                    |
-| Cloud posture (CSPM)                | Not a primary focus                            | Yes                                                    |
-| DAST / surface monitoring           | Via agentic pentest                            | Yes (surface monitoring)                               |
-| AI / agentic pentest                | Yes                                            | Yes (200+ agents; continuous autonomous pentesting)    |
-| Evidence states (4-state lifecycle) | Yes                                            | No (AutoT prioritization instead)                      |
-| Deterministic retest                | Yes                                            | Re-test after fix (continuous testing)                 |
-| Coverage receipts                   | Yes (per-control)                              | No                                                     |
-| Assurance reports (immutable)       | Yes                                            | Audit-grade pentest reports                            |
-| MCP server integration              | Yes (inside AI coding agents)                  | Not advertised                                         |
-| Permission-gated Fix PR requests        | Fix PR requests require permission and a server-generated patch | AutoFix PRs (reviewable, not permission-gated Fix PR requests) |
-| Runtime protection                  | Not in v1                                      | Yes (in-app firewall, bot/device protection)           |
+| Capability                          | LyraShield AI                                                   | Aikido                                                         |
+| ----------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------- |
+| Static analysis (SAST)              | Agentic                                                         | Yes (pattern + context)                                        |
+| SCA (dependency scanning)           | Yes (engine)                                                    | Yes (with malware detection)                                   |
+| Secret scanning                     | Yes (engine + GitHub Action)                                    | Yes                                                            |
+| IaC / container scanning            | Not a primary focus                                             | Yes                                                            |
+| Cloud posture (CSPM)                | Not a primary focus                                             | Yes                                                            |
+| DAST / surface monitoring           | Via agentic pentest                                             | Yes (surface monitoring)                                       |
+| AI / agentic pentest                | Yes                                                             | Yes (200+ agents; continuous autonomous pentesting)            |
+| Evidence states (4-state lifecycle) | Yes                                                             | No (AutoT prioritization instead)                              |
+| Deterministic retest                | Yes                                                             | Re-test after fix (continuous testing)                         |
+| Coverage receipts                   | Yes (per-control)                                               | No                                                             |
+| Assurance reports (immutable)       | Yes                                                             | Audit-grade pentest reports                                    |
+| MCP server integration              | Yes (inside AI coding agents)                                   | Not advertised                                                 |
+| Permission-gated Fix PR requests    | Fix PR requests require permission and a server-generated patch | AutoFix PRs (reviewable, not permission-gated Fix PR requests) |
+| Runtime protection                  | Not in v1                                                       | Yes (in-app firewall, bot/device protection)                   |
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | Aikido                                                                                                                                                                   |
-| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | SaaS + IDE + CI integrations; broker for internal apps; local code scanning option                                                                                       |
-| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote |
-| Compliance posture | Assurance-record orientation for release sign-off | SOC 2 Type II + ISO 27001:2022 attested                                                                                                                                  |
+| Aspect             | LyraShield AI                                     | Aikido                                                                             |
+| ------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | SaaS + IDE + CI integrations; broker for internal apps; local code scanning option |
+| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote                                  |
+| Compliance posture | Assurance-record orientation for release sign-off | SOC 2 Type II + ISO 27001:2022 attested                                            |
 
 ## When to use which
 

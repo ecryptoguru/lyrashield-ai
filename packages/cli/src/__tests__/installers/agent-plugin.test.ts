@@ -269,7 +269,9 @@ describe("installAgentPlugin", () => {
     await expect(access(path.join(dest, "user-custom.txt"))).rejects.toThrow()
 
     expect(result.backupPath).toContain("lyrashield-backup")
-    expect(await readFile(path.join(result.backupPath!, "user-custom.txt"), "utf-8")).toBe("user data")
+    expect(await readFile(path.join(result.backupPath!, "user-custom.txt"), "utf-8")).toBe(
+      "user data"
+    )
 
     await rm(tempDir, { recursive: true, force: true })
   })
@@ -281,7 +283,11 @@ describe("uninstallAgentPlugin", () => {
     const dest = path.join(tempDir, "plugins", "lyrashield")
     await mkdir(dest, { recursive: true })
     await writeFile(path.join(dest, "user-custom.txt"), "keep", "utf-8")
-    const result = await uninstallAgentPlugin({ agent: makeAgent(dest), cwd: tempDir, dryRun: true })
+    const result = await uninstallAgentPlugin({
+      agent: makeAgent(dest),
+      cwd: tempDir,
+      dryRun: true,
+    })
     expect(result.message).toContain("Would remove")
     expect(await readFile(path.join(dest, "user-custom.txt"), "utf-8")).toBe("keep")
     await rm(tempDir, { recursive: true, force: true })

@@ -42,8 +42,12 @@ export async function handleInstall(args: string[], output: Output): Promise<num
   }
 
   const selectedTransport = transport ?? agent.preferredTransport ?? agent.transports[0] ?? "stdio"
-  if (!parsed["dry-run"] && !creds.apiKey && selectedTransport === "stdio" &&
-    agent.installStrategy !== "agent-plugin") {
+  if (
+    !parsed["dry-run"] &&
+    !creds.apiKey &&
+    selectedTransport === "stdio" &&
+    agent.installStrategy !== "agent-plugin"
+  ) {
     output.error(
       "No LyraShield credential. Run: lyrashield login --oauth, or use an API key for CI."
     )

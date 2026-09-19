@@ -60,8 +60,10 @@ function buildClients(): AgentOnboardingClient[] {
     name: agent.displayName.replace(/\s*\(Agent Plugin\)$/, ""),
     href: `/docs/integrations/${agent.docsSlug}`,
     strategy: agent.installStrategy,
-    strategyLabel: agent.integrationKind === "standalone-cli"
-      ? "Standalone CLI and CI" : STRATEGY_LABEL[agent.installStrategy],
+    strategyLabel:
+      agent.integrationKind === "standalone-cli"
+        ? "Standalone CLI and CI"
+        : STRATEGY_LABEL[agent.installStrategy],
     integrationKind: agent.integrationKind ?? "mcp",
     supportTier: agent.supportTier ?? "COMPATIBLE",
     evidence: agent.verification?.evidence ?? "DOCUMENTATION",
@@ -126,7 +128,10 @@ export function renderAgentOnboardingMarkdown(origin: string): string {
       [
         `### ${group.label}`,
         "",
-        ...group.clients.map((client) => `- [${client.name}](${origin}${client.href}) — ${client.strategyLabel}; ${client.supportTier.toLowerCase()} (${client.evidence.toLowerCase().replaceAll("_", " ")} evidence)`),
+        ...group.clients.map(
+          (client) =>
+            `- [${client.name}](${origin}${client.href}) — ${client.strategyLabel}; ${client.supportTier.toLowerCase()} (${client.evidence.toLowerCase().replaceAll("_", " ")} evidence)`
+        ),
         "",
       ].join("\n")
     )

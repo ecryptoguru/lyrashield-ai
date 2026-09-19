@@ -18,40 +18,40 @@ faq:
 
 ## Core approach
 
-| Aspect            | LyraShield AI                                                                   | RunSybil                                                                                                                    |
-| ----------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Primary focus     | Release assurance for AI-built apps                                             | AI-native black-box offensive testing that automates hacker intuition                                                       |
-| Scanning approach | Agentic engine with coverage framework and evidence states; AI-pattern focus    | Hierarchy of reasoning agents: map surface → hypothesis-driven tests → oversee campaign; black-box first, white-box-capable |
-| Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive            | Hypothesis → confirmed/reproducible finding → prioritized → AI-ready remediation guidance                                   |
-| Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                     | No published control framework; CTEM Phase 4 (Validation) focus                                                             |
-| Access model      | App-layer + source/MCP/agent configs                                            | Black-box first (no source required); accepts white-box context                                                             |
+| Aspect            | LyraShield AI                                                                  | RunSybil                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| Primary focus     | Release assurance for AI-built apps                                            | AI-native black-box offensive testing that automates hacker intuition                                                       |
+| Scanning approach | Agentic engine with coverage framework and evidence states; AI-pattern focus   | Hierarchy of reasoning agents: map surface → hypothesis-driven tests → oversee campaign; black-box first, white-box-capable |
+| Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive           | Hypothesis → confirmed/reproducible finding → prioritized → AI-ready remediation guidance                                   |
+| Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                    | No published control framework; CTEM Phase 4 (Validation) focus                                                             |
+| Access model      | App-layer + source/MCP/agent configs                                           | Black-box first (no source required); accepts white-box context                                                             |
 | Fix model         | Recorded fix proposals; Fix PR execution is not enabled in the current release | AI-ready remediation guidance integrated with coding tools; PR-level feedback                                               |
 
 ## Capability comparison
 
-| Capability                            | LyraShield AI                                  | RunSybil                                                                  |
-| ------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- |
-| Agentic / AI-driven pentest           | Yes (app-layer)                                | Yes (hierarchical multi-agent)                                            |
-| Independent exploit validation        | Yes (verified state)                           | Yes (live exploitation; reproducible findings)                            |
-| Black-box (no source required)        | Source/MCP-aware (not black-box-first)         | Yes (core differentiator)                                                 |
-| SCA (dependency scanning)             | Yes (engine)                                   | Not a primary focus                                                       |
-| Secret scanning                       | Yes (engine + GitHub Action)                   | Not a primary focus                                                       |
-| Evidence states (4-state lifecycle)   | Yes                                            | Findings are confirmed/reproducible; no explicit multi-state lifecycle    |
-| Deterministic retest                  | Yes                                            | Continuous re-evaluation on every deployment                              |
-| Coverage receipts                     | Yes (per-control)                              | No                                                                        |
-| Assurance reports (immutable)         | Yes                                            | Pre-validated findings with reproducible evidence                         |
-| MCP server integration                | Yes (inside AI coding agents)                  | Not advertised as primary                                                 |
-| Permission-gated Fix PR requests          | Fix PR requests require permission and a server-generated patch | No (remediation guidance + PR feedback, not permission-gated Fix PR requests)     |
-| Multi-tenant / business-logic testing | App-layer                                      | Yes (cross-tenant access, privilege escalation, transaction manipulation) |
-| AI-generated-code focus               | Built for AI-built apps                        | Not specific to AI-generated code                                         |
+| Capability                            | LyraShield AI                                                   | RunSybil                                                                      |
+| ------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Agentic / AI-driven pentest           | Yes (app-layer)                                                 | Yes (hierarchical multi-agent)                                                |
+| Independent exploit validation        | Yes (verified state)                                            | Yes (live exploitation; reproducible findings)                                |
+| Black-box (no source required)        | Source/MCP-aware (not black-box-first)                          | Yes (core differentiator)                                                     |
+| SCA (dependency scanning)             | Yes (engine)                                                    | Not a primary focus                                                           |
+| Secret scanning                       | Yes (engine + GitHub Action)                                    | Not a primary focus                                                           |
+| Evidence states (4-state lifecycle)   | Yes                                                             | Findings are confirmed/reproducible; no explicit multi-state lifecycle        |
+| Deterministic retest                  | Yes                                                             | Continuous re-evaluation on every deployment                                  |
+| Coverage receipts                     | Yes (per-control)                                               | No                                                                            |
+| Assurance reports (immutable)         | Yes                                                             | Pre-validated findings with reproducible evidence                             |
+| MCP server integration                | Yes (inside AI coding agents)                                   | Not advertised as primary                                                     |
+| Permission-gated Fix PR requests      | Fix PR requests require permission and a server-generated patch | No (remediation guidance + PR feedback, not permission-gated Fix PR requests) |
+| Multi-tenant / business-logic testing | App-layer                                                       | Yes (cross-tenant access, privilege escalation, transaction manipulation)     |
+| AI-generated-code focus               | Built for AI-built apps                                         | Not specific to AI-generated code                                             |
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | RunSybil                                                                   |
-| ------------------ | ------------------------------------------------- | -------------------------------------------------------------------------- |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | Hosted; point at a target or run continuously; PR-level feedback           |
-| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote |
-| Compliance posture | Assurance-record orientation for release sign-off | Used for SOC 2 pentest requirements; CTEM Phase 4 validation               |
+| Aspect             | LyraShield AI                                     | RunSybil                                                         |
+| ------------------ | ------------------------------------------------- | ---------------------------------------------------------------- |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | Hosted; point at a target or run continuously; PR-level feedback |
+| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote                |
+| Compliance posture | Assurance-record orientation for release sign-off | Used for SOC 2 pentest requirements; CTEM Phase 4 validation     |
 
 ## When to use which
 

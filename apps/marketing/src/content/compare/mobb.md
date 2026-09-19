@@ -18,40 +18,40 @@ faq:
 
 ## Core approach
 
-| Aspect                  | LyraShield AI                                                                                  | Mobb                                                                                                |
-| ----------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Primary focus           | Evidence-backed release assurance for AI-built apps                                            | Fix SAST findings at scale; "platform for AI code trust"                                            |
-| Scanning approach       | Agentic engine, coverage framework, evidence states                                            | Ingests external SAST results, or self-scans via Opengrep (SAST)                                    |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                           | Ingested → auto-triaged (Fixable / Irrelevant / Remaining) → fix PR or commit                       |
-| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                    | No published control framework; auto-triage classification                                          |
+| Aspect                  | LyraShield AI                                                                        | Mobb                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Primary focus           | Evidence-backed release assurance for AI-built apps                                  | Fix SAST findings at scale; "platform for AI code trust"                                            |
+| Scanning approach       | Agentic engine, coverage framework, evidence states                                  | Ingests external SAST results, or self-scans via Opengrep (SAST)                                    |
+| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                 | Ingested → auto-triaged (Fixable / Irrelevant / Remaining) → fix PR or commit                       |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                          | No published control framework; auto-triage classification                                          |
 | Fix model               | Recorded fix proposals; Fix PR requests need permission and a server-generated patch | Deterministic rules plus GenAI validation; fixes re-scanned to confirm cleared; PR or direct commit |
-| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                           | Mobb Vibe Shield IDE/MCP layer; Mobb Tracy AI-code governance dashboards                            |
+| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                 | Mobb Vibe Shield IDE/MCP layer; Mobb Tracy AI-code governance dashboards                            |
 
 ## Capability comparison
 
-| Capability                | LyraShield AI                                  | Mobb                                                                               |
-| ------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Static analysis (SAST)    | Via engine                                     | Processes external SAST findings; or self-scans via Opengrep                       |
-| Custom rules              | Not a primary feature                          | No (works from scanner output)                                                     |
-| SCA (dependency scanning) | Yes (native)                                   | Not a core capability                                                              |
-| Secret scanning           | Yes (engine + GitHub Action)                   | Not a core capability                                                              |
-| Agentic pentest           | Yes (core)                                     | No                                                                                 |
-| Evidence states           | Yes (4 states)                                 | No explicit evidence-state model                                                   |
-| Deterministic retest      | Yes                                            | Re-scan to confirm finding cleared                                                 |
-| Coverage receipts         | Yes (per-control)                              | No                                                                                 |
-| Assurance reports         | Yes (immutable snapshots)                      | ROI dashboard metrics; no immutable evidence artifacts                             |
-| Reviewed fix proposals      | Fix PR requests require permission and a server-generated patch | Developer PR review is the gate; no policy/approval engine                         |
-| Multi-scanner input       | Engine + GitHub Action + SARIF                 | Yes (Checkmarx, Fortify, Snyk, CodeQL, SonarQube, Semgrep/Opengrep, Polaris)       |
-| MCP / IDE integration     | Yes (documented MCP client workflows)                               | Yes (Mobb Vibe Shield via MCP across Copilot, Cursor, Claude, JetBrains, and more) |
-| Fix languages             | Language-agnostic                              | Java, JavaScript/TypeScript, C#, Python                                            |
+| Capability                | LyraShield AI                                                   | Mobb                                                                               |
+| ------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Static analysis (SAST)    | Via engine                                                      | Processes external SAST findings; or self-scans via Opengrep                       |
+| Custom rules              | Not a primary feature                                           | No (works from scanner output)                                                     |
+| SCA (dependency scanning) | Yes (native)                                                    | Not a core capability                                                              |
+| Secret scanning           | Yes (engine + GitHub Action)                                    | Not a core capability                                                              |
+| Agentic pentest           | Yes (core)                                                      | No                                                                                 |
+| Evidence states           | Yes (4 states)                                                  | No explicit evidence-state model                                                   |
+| Deterministic retest      | Yes                                                             | Re-scan to confirm finding cleared                                                 |
+| Coverage receipts         | Yes (per-control)                                               | No                                                                                 |
+| Assurance reports         | Yes (immutable snapshots)                                       | ROI dashboard metrics; no immutable evidence artifacts                             |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch | Developer PR review is the gate; no policy/approval engine                         |
+| Multi-scanner input       | Engine + GitHub Action + SARIF                                  | Yes (Checkmarx, Fortify, Snyk, CodeQL, SonarQube, Semgrep/Opengrep, Polaris)       |
+| MCP / IDE integration     | Yes (documented MCP client workflows)                           | Yes (Mobb Vibe Shield via MCP across Copilot, Cursor, Claude, JetBrains, and more) |
+| Fix languages             | Language-agnostic                                               | Java, JavaScript/TypeScript, C#, Python                                            |
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                    | Mobb                                                                                                                       |
-| ---------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS (multi-tenant), single-tenant, on-prem (AWS); GitHub/GitLab/Azure DevOps/Bitbucket; CLI, API, IDE/MCP                 |
-| Pricing    | See [pricing](/pricing) for current plan details | Check the vendor's current pricing or sales quote |
-| Languages  | Language-agnostic                                | Fixes in Java, JavaScript/TypeScript, C#, Python (Opengrep scans 30+)                                                      |
+| Aspect     | LyraShield AI                                    | Mobb                                                                                                       |
+| ---------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS (multi-tenant), single-tenant, on-prem (AWS); GitHub/GitLab/Azure DevOps/Bitbucket; CLI, API, IDE/MCP |
+| Pricing    | See [pricing](/pricing) for current plan details | Check the vendor's current pricing or sales quote                                                          |
+| Languages  | Language-agnostic                                | Fixes in Java, JavaScript/TypeScript, C#, Python (Opengrep scans 30+)                                      |
 
 ## When to use which
 

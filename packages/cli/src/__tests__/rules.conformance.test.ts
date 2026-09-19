@@ -71,7 +71,10 @@ describe("rules command conformance", () => {
 
   it("uses Gemini's configured context filename", async () => {
     await mkdir(path.join(tmp, ".gemini"))
-    await writeFile(path.join(tmp, ".gemini/settings.json"), '{"context":{"fileName":"PROJECT.md"}}')
+    await writeFile(
+      path.join(tmp, ".gemini/settings.json"),
+      '{"context":{"fileName":"PROJECT.md"}}'
+    )
     const code = await handleRules(["add", "gemini-cli", "--project-root", tmp], mockOutput())
     expect(code).toBe(0)
     expect(await readFile(path.join(tmp, "PROJECT.md"), "utf-8")).toContain("lyrashield:begin")

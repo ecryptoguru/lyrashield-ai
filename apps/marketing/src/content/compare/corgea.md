@@ -18,40 +18,40 @@ faq:
 
 ## Core approach
 
-| Aspect                  | LyraShield AI                                                                                  | Corgea                                                                            |
-| ----------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Primary focus           | Evidence-backed release assurance for AI-built apps                                            | AI-native AppSec platform (SAST, SCA, secrets, IaC, containers) plus AI pentest   |
-| Scanning approach       | Agentic engine, coverage framework, evidence states                                            | LLMs combined with static analysis; business-logic detection ("BLAST")            |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                           | Found → reachability prioritized → fix PR opened; pentest auto-retest loop        |
-| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                    | No published control framework; endpoint-aware reachability                       |
+| Aspect                  | LyraShield AI                                                                        | Corgea                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| Primary focus           | Evidence-backed release assurance for AI-built apps                                  | AI-native AppSec platform (SAST, SCA, secrets, IaC, containers) plus AI pentest   |
+| Scanning approach       | Agentic engine, coverage framework, evidence states                                  | LLMs combined with static analysis; business-logic detection ("BLAST")            |
+| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                 | Found → reachability prioritized → fix PR opened; pentest auto-retest loop        |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                          | No published control framework; endpoint-aware reachability                       |
 | Fix model               | Recorded fix proposals; Fix PR requests need permission and a server-generated patch | Fix PRs opened into normal developer review; fixes statically validated before PR |
-| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                           | Security design reviews of PRD/architecture docs before code is written           |
+| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                 | Security design reviews of PRD/architecture docs before code is written           |
 
 ## Capability comparison
 
-| Capability                | LyraShield AI                                  | Corgea                                                                       |
-| ------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- |
-| Static analysis (SAST)    | Via engine                                     | Yes (BLAST — business logic, auth, injection)                                |
-| Custom rules              | Not a primary feature                          | Custom and blocking rules (Scale tier)                                       |
-| SCA (dependency scanning) | Yes                                            | Yes (reachability-aware, dead-package analysis)                              |
-| Secret scanning           | Yes (engine + GitHub Action)                   | Yes (detection; no shipped rotation feature)                                 |
-| Agentic pentest           | Yes (core)                                     | Yes (multi-agent, ~4–8 hr, exploitability validation, auditor-ready reports) |
-| Evidence states           | Yes (4 states)                                 | No explicit evidence-state model                                             |
-| Deterministic retest      | Yes                                            | Pentest continuous retesting loop                                            |
-| Coverage receipts         | Yes (per-control)                              | No                                                                           |
-| Assurance reports         | Yes (immutable snapshots)                      | Auditor-ready pentest reports (SOC 2 / ISO 27001)                            |
-| Reviewed fix proposals      | Fix PR requests require permission and a server-generated patch | Standard PR review; no formal approval gate                                  |
-| MCP server integration    | Yes (documented MCP client workflows)                               | Agent integrations for AI coding tools                                       |
-| Security design review    | Not a primary feature                          | Yes (pre-code PRD/architecture review)                                       |
-| IDE integration           | Via MCP                                        | VS Code, Cursor, Visual Studio, IntelliJ                                     |
+| Capability                | LyraShield AI                                                   | Corgea                                                                       |
+| ------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Static analysis (SAST)    | Via engine                                                      | Yes (BLAST — business logic, auth, injection)                                |
+| Custom rules              | Not a primary feature                                           | Custom and blocking rules (Scale tier)                                       |
+| SCA (dependency scanning) | Yes                                                             | Yes (reachability-aware, dead-package analysis)                              |
+| Secret scanning           | Yes (engine + GitHub Action)                                    | Yes (detection; no shipped rotation feature)                                 |
+| Agentic pentest           | Yes (core)                                                      | Yes (multi-agent, ~4–8 hr, exploitability validation, auditor-ready reports) |
+| Evidence states           | Yes (4 states)                                                  | No explicit evidence-state model                                             |
+| Deterministic retest      | Yes                                                             | Pentest continuous retesting loop                                            |
+| Coverage receipts         | Yes (per-control)                                               | No                                                                           |
+| Assurance reports         | Yes (immutable snapshots)                                       | Auditor-ready pentest reports (SOC 2 / ISO 27001)                            |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch | Standard PR review; no formal approval gate                                  |
+| MCP server integration    | Yes (documented MCP client workflows)                           | Agent integrations for AI coding tools                                       |
+| Security design review    | Not a primary feature                                           | Yes (pre-code PRD/architecture review)                                       |
+| IDE integration           | Via MCP                                                         | VS Code, Cursor, Visual Studio, IntelliJ                                     |
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                    | Corgea                                                                                                                                                        |
-| ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS, GitHub App, GitLab/Azure DevOps/Bitbucket/Harness, IDE plugins, CLI, GitHub Action                                                                      |
-| Pricing    | See [pricing](/pricing) for current plan details | Check the vendor's current pricing or sales quote |
-| Languages  | Language-agnostic                                | 20+ (JS, Ruby, C++, Python, C, PHP, Java, Go, C#, TypeScript, and more)                                                                                       |
+| Aspect     | LyraShield AI                                    | Corgea                                                                                   |
+| ---------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS, GitHub App, GitLab/Azure DevOps/Bitbucket/Harness, IDE plugins, CLI, GitHub Action |
+| Pricing    | See [pricing](/pricing) for current plan details | Check the vendor's current pricing or sales quote                                        |
+| Languages  | Language-agnostic                                | 20+ (JS, Ruby, C++, Python, C, PHP, Java, Go, C#, TypeScript, and more)                  |
 
 ## When to use which
 
