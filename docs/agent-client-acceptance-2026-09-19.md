@@ -1,0 +1,41 @@
+# Coding-client acceptance ledger — 2026-09-19
+
+This is a **read-only macOS host audit**, not certification. It covers the 26 preferred client workflows in `packages/agent-registry/src/index.ts` at product commit `137c337bc7feb65e0a70d5f31d122b39f527c375`. Host: macOS 27.0. No client was installed, restarted, logged in, reconfigured, or asked to run a paid scan. No write was attempted. A saved MCP entry or plugin is not proof that a client has listed or called its tools.
+
+`BLOCKED` means the required client-runtime step has no retained receipt. `Not found` means absent from `PATH`, `/Applications`, and `~/Applications` during this audit; it does not prove the software cannot be installed. `Config only` means a LyraShield string exists in an expected local configuration file, without a live client result. Every version and platform claim needs its own receipt. This macOS audit cannot establish Windows or Linux support.
+
+| Preferred workflow | Client/version on this macOS host; installability | Restart / discovery | Authentication | Tool list | Read call | Rules or skill loaded | Write lifecycle | Receipt and result |
+|---|---|---|---|---|---|---|---|---|
+| Claude Code | `claude` CLI not found. Claude Desktop 1.49585.0 is a different client. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | CLI absent; no Claude Code receipt. |
+| Cursor | Not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Client absent. |
+| OpenAI Codex | Codex CLI 0.155.0-alpha.9.2 and ChatGPT.app 26.915.31945 present; LyraShield plugin 0.1.27 installed and enabled. | MCP registration enabled; restart/discovery not observed. | `codex mcp list --json` reports `auth_status: o_auth`; no authenticated call observed. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | `codex plugin list --json` and `codex mcp list --json`, 2026-09-19. Registration and plugin inventory only. |
+| GitHub Copilot (Agent Plugin) | No supported editor/CLI host found. `gh` 2.95.0 does not establish Copilot client availability. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Client absent. |
+| Kiro (Agent Plugin) | Not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Client absent. |
+| VS Code | Not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Client absent. |
+| Cline | No supported editor host or Cline extension found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Extension/client absent. |
+| OpenCode | CLI and app 1.18.30 present; LyraShield config exists. | `opencode mcp list` sees LyraShield; restart not observed. | CLI reports `needs authentication`. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | `opencode --version` and `opencode mcp list`, 2026-09-19. Authentication blocks live discovery. |
+| Kilo Code | No supported editor host or Kilo extension found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Extension/client absent. |
+| Zed | Not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Client absent. |
+| Gemini CLI | `gemini` not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | CLI absent. |
+| Hermes | CLI 0.21.1 and app 0.0.1 present; LyraShield config exists. | `hermes mcp list` shows enabled entry; `hermes mcp test lyrashield` fails connection. | OAuth needs interactive browser authorization in this noninteractive session. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | `hermes --version`, `hermes mcp list`, and `hermes mcp test lyrashield`, 2026-09-19. Test exited 0 despite reporting connection failure; its text is authoritative. |
+| Antigravity | App 2.12.2 present; LyraShield config exists. `agy` CLI not found. | Config only; live discovery and restart BLOCKED. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | App bundle and expected MCP config existence checked 2026-09-19. No app interaction. |
+| GitHub Copilot CLI | `copilot` CLI not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | CLI absent. |
+| Devin CLI | `devin` CLI not found; LyraShield global MCP config exists. | Config only; live discovery BLOCKED. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Existing config cannot substitute for absent CLI. |
+| Roo Code | No supported editor host or Roo extension found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Extension/client absent. |
+| MiMo Code | Not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Client absent. |
+| Codebuff | `codebuff` not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Not applicable: adapter is intentionally read-only. | Adapter source exists; no real-client receipt. |
+| Oh-My-Pi | `omp` and `pi` not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Client absent. |
+| Amp | `amp` not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Client absent. |
+| Devin | Devin.app 3.10.31 present. | App discovery and restart BLOCKED. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | App bundle only; no logged-in session or hosted connection checked. |
+| JetBrains | No JetBrains IDE app found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Client absent. |
+| Pi | `pi` not found. | BLOCKED | Standalone CLI authentication BLOCKED. | Not applicable: standalone CLI workflow. | CLI/CI read BLOCKED. | Guidance load BLOCKED. | CLI/CI write lifecycle BLOCKED. | Standalone CLI; must not receive native-MCP certification. |
+| OpenClaw | `openclaw` not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Client absent. |
+| Goose | `goose` not found. | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Client absent. |
+| Aider | `aider` not found. | BLOCKED | Standalone CLI authentication BLOCKED. | Not applicable: standalone CLI workflow. | CLI/CI read BLOCKED. | Guidance load BLOCKED. | CLI/CI write lifecycle BLOCKED. | Standalone CLI; must not receive native-MCP certification. |
+
+## Evidence method and next gates
+
+- Inventory used `command -v`, `/Applications` and `~/Applications` bundle names and `CFBundleShortVersionString`; macOS version came from `sw_vers`. The expected Codex, OpenCode, Hermes, Antigravity, Devin CLI, and Claude Code configuration files were checked only for the case-insensitive word `lyrashield`; no configuration contents or credentials were retained.
+- Codex plugin and MCP inventories were parsed locally and emitted only names, versions, enablement and OAuth status. OpenCode and Hermes output was reduced to status lines with URLs and credential-like fields redacted. `hermes mcp test lyrashield` was a read-only connection probe, not a tool invocation.
+- For each installed client, the next acceptance run needs an actual restart or equivalent lifecycle check, the client’s tool listing, an authenticated read call, and evidence that its intended rules or skill loaded. Where a write path is advertised, retain sanitized receipts for an authorized synthetic action, identical retry, conflicting input, out-of-grant denial, permission loss, pause or revocation, forced expiry, and reconnect. Do not broaden grants or run paid scans for this checklist.
+- Missing clients require installation and any needed account or entitlement before runtime acceptance. Keep their registry evidence at documentation or package-conformance tier. Do not promote any workflow to `VERIFIED` or `NATIVE`, or make a universal verification claim, from this ledger.

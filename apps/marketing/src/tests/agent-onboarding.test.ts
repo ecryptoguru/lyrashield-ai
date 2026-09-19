@@ -3,13 +3,16 @@ import { describe, expect, it } from "vitest"
 import { agentOnboarding, renderAgentOnboardingMarkdown } from "../lib/agent-onboarding"
 
 describe("agent onboarding contract", () => {
-  it("keeps the OAuth-first, approval-gated workflow in one source of truth", () => {
+  it("labels supported workflows and delegated authorization accurately", () => {
     expect(agentOnboarding.commands).toEqual([
       "npx lyrashield login --oauth",
       "npx lyrashield init",
     ])
     expect(agentOnboarding.safety.join(" ")).toContain("Read-only")
-    expect(agentOnboarding.safety.join(" ")).toContain("explicit human approval")
+    expect(agentOnboarding.safety.join(" ")).toContain("browser-confirmed connection grant")
+    expect(agentOnboarding.clients).toHaveLength(26)
+    expect(agentOnboarding.clients.filter((client) => client.integrationKind === "standalone-cli")).toHaveLength(2)
+    expect(agentOnboarding.clients.every((client) => client.supportTier !== "VERIFIED" || client.clientVersion && client.platforms.length > 0)).toBe(true)
     expect(renderAgentOnboardingMarkdown("https://lyrashieldai.com")).toContain(
       "https://lyrashieldai.com/docs/integrations/agent-plugins"
     )

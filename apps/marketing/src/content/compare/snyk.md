@@ -4,18 +4,18 @@ description: "How LyraShield AI compares to Snyk for AI-built application securi
 competitor: "Snyk"
 heading: "LyraShield AI vs Snyk"
 disclaimer: "Factual comparison. This page compares publicly documented capabilities. Snyk is a mature vulnerability scanning platform. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence, and a fresh retest into one reviewable assurance record. Neither replaces the other."
-updatedDate: 2026-08-07
+updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace Snyk?"
-    a: "No. Snyk is a broad developer-first platform covering SAST, SCA, container, IaC, and secrets with IDE plugins and a mature vulnerability database; it is a Leader in Gartner AST. LyraShield in open beta is narrower: agentic pentest plus SCA and secrets focused on immutable release assurance with approval-gated fixes."
+    a: "No. Snyk is a broad developer-first platform covering SAST, SCA, container, IaC, and secrets with IDE plugins and a mature vulnerability database; it is a Leader in Gartner AST. LyraShield in open beta is narrower: agentic pentest plus SCA and secrets focused on immutable release assurance with reviewed fix proposals."
   - q: "Can I use Snyk and LyraShield together?"
     a: "Yes, many teams do. Use Snyk for continuous scanning throughout the SDLC and automated fix PRs, then run LyraShield for the release assurance run that validates exploitability, records evidence states, retests fixes, and produces an immutable report. Both ship SARIF and a GitHub Action, so results consolidate."
   - q: "When should I choose Snyk over LyraShield?"
-    a: "Choose Snyk when you need one platform for continuous scanning across code, dependencies, containers, and infrastructure, with broad language support and risk-based prioritization. Its free tier and paid Team from $25 per developer per month lower friction. Choose LyraShield when you need proof before a release decision for AI-built apps."
+    a: "Choose Snyk when you need one platform for continuous scanning across code, dependencies, containers, and infrastructure, with broad language support and risk-based prioritization. Check Snyk’s current pricing and limits with the vendor. Choose LyraShield when you need proof before a release decision for AI-built apps."
   - q: "What does LyraShield add over Snyk Code?"
-    a: "Snyk Code finds vulnerabilities in source and suggests AI autofixes. LyraShield adds a target, review, evidence, fix, retest, report loop: it attempts to exercise findings against the live target, records detected versus independently verified versus retest-confirmed states, requires approval before any fix merges, and produces an immutable assurance snapshot."
+    a: "Snyk Code finds vulnerabilities in source and suggests AI autofixes. LyraShield adds a target, review, evidence, fix, retest, report loop: it attempts to exercise findings against the live target, records detected versus independently verified versus retest-confirmed states, records fix proposals for review before the team merges a change, and produces an immutable assurance snapshot."
 ---
 
 ## Core approach
@@ -27,7 +27,7 @@ faq:
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays separate from proof)                                         | Open → fixed (re-test confirms scanner can no longer replicate)                             |
 | Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                        | No published control framework; uses vulnerability databases (CVEs, custom rules)           |
 | Coverage reporting      | Per-control coverage receipts: completed, limited, skipped, not-applicable                                                                         | Per-finding severity and fix suggestions; no coverage framework                             |
-| Fix handling            | Approval-gated fix proposals — PR execution stays blocked until a server-generated patch is bound to the exact approval                            | AI autofixes (85% accuracy claimed, not approval-bound)                                     |
+| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                            | AI autofixes (85% accuracy claimed, not approval-bound)                                     |
 | AI-generated code focus | Built specifically for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                  | DeepCode AI engine; LLM library tracking (OpenAI, HuggingFace, Anthropic, Google)           |
 | Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes, and limitations                                        | No release assurance record; vulnerability-based reporting                                  |
 
@@ -44,15 +44,15 @@ faq:
 | Deterministic retest         | Yes                                                                              | Re-test (scanner replication)           |
 | Coverage receipts            | Yes (per-control)                                                                | No                                      |
 | Assurance reports            | Yes (immutable snapshots)                                                        | No                                      |
-| Approval-gated fix proposals | Yes (server-generated patch bound to approval)                                   | No (AI autofixes, 85% accuracy claimed) |
-| MCP server integration       | Yes (23+ agents)                                                                 | No                                      |
+| Reviewed fix proposals | Fix PR requests require permission and a server-generated patch                                   | No (AI autofixes, 85% accuracy claimed) |
+| MCP server integration       | Yes (documented MCP client workflows)                                                                 | No                                      |
 
 ## Deployment and pricing
 
 | Aspect     | LyraShield AI                                        | Snyk                                                                   |
 | ---------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
 | Deployment | Hosted + CLI + MCP + GitHub Action                   | SaaS, Private Cloud (AWS), CLI, IDE plugins, CI/CD                     |
-| Pricing    | See [pricing](/pricing) for current plan details     | Free tier (test limits), Team $25/dev/month, Enterprise (custom)       |
+| Pricing    | See [pricing](/pricing) for current plan details     | Check the vendor's current pricing or sales quote |
 | Languages  | Language-agnostic (deterministic + agentic coverage) | 19+ languages (Java, JS, Python, Go, C/C++, PHP, Ruby, .NET, and more) |
 
 ## When to use which
@@ -61,7 +61,7 @@ faq:
 
 - You need release assurance — a reviewable record of what was tested and the evidence behind it — rather than a vulnerability list, before a ship decision
 - Your app is AI-built and you need coverage of AI-specific patterns (agent rules, MCP configs, prompt injection)
-- You need approval-gated fixes where PR execution stays blocked until a server-generated patch is bound to exact approval
+- You need recorded fix proposals and permission-gated Fix PR requests tied to a server-generated patch
 - You need immutable assurance reports with coverage receipts for compliance or client handoff
 - You want security checks inside your AI coding agent via MCP
 
@@ -80,6 +80,6 @@ LyraShield AI is live and open for registration — create an account and run yo
 
 ## Methodology and scope
 
-Every claim on this page is drawn from publicly documented capabilities at the date above. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for the assurance model behind the comparison, and treat anything not stated there as out of scope.
+This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for its assurance model, and verify vendor details before a purchasing decision.
 
 For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Snyk](/blog/snyk-vs-lyrashield).

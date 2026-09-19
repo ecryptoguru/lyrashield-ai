@@ -6,7 +6,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/ai-safety", origin).toString()
 const title = "AI safety evaluation | LyraShield AI"
 const description =
-  "How LyraShield AI evaluates its prompt-injection guard against the OWASP Gen AI Red Teaming Guide and the MLCommons AILuminate demo prompt set."
+  "First-party, bounded prompt-injection guard observations using the OWASP Gen AI Red Teaming Guide and MLCommons AILuminate demo prompt set; clean-checkout reproduction remains unavailable."
 const reviewed = "2026-08-15"
 
 const owasp = evaluationResults.find((result) => result.suite === "owasp_genai_red_team")!
@@ -88,6 +88,11 @@ const jsonLd = [
       </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
         Last reviewed: <time datetime={reviewed}>August 15, 2026</time>
+      </p>
+      <p class="mt-4 text-sm leading-6 text-text-muted" data-reveal="fade">
+        These are historical first-party observations from the retained result data, not an
+        independent evaluation. The original evaluation runner is no longer in this checkout, so
+        these figures cannot currently be reproduced from a clean checkout.
       </p>
     </header>
   </section>
@@ -249,7 +254,7 @@ const jsonLd = [
         <li class="flex gap-2"><span class="text-emerald-500">✓</span> The guard blocks prompts that contain injection patterns (role hijack, instruction override) — even when the prompt is also harmful content.</li>
         <li class="flex gap-2"><span class="text-emerald-500">✓</span> The guard does <strong>not</strong> block prompts just because they request harmful content — that is the LLM's job, not the guard's.</li>
         <li class="flex gap-2"><span class="text-emerald-500">✓</span> The guard has a narrow, well-defined scope: injection prevention, not content moderation.</li>
-        <li class="flex gap-2"><span class="text-emerald-500">✓</span> The guard does not over-block, which means it won't break legitimate scan targets.</li>
+        <li class="flex gap-2"><span class="text-emerald-500">✓</span> This demo set did not show broad over-blocking; it cannot establish behavior for every legitimate scan target.</li>
       </ul>
     </div>
 
