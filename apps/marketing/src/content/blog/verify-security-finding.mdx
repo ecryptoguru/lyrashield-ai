@@ -89,7 +89,7 @@ For suspected cross-tenant access:
 5. Verify denial and absence of sensitive response data.
 6. Confirm user B can still perform the intended action.
 
-For injection, a unit or integration test that proves attacker-controlled input reaches a dangerous sink may be enough. For a vulnerable dependency, confirm the affected version and relevant configuration, then assess whether the vulnerable feature is reachable without running public exploit code. For exposed secrets, rotate or revoke the credential before any optional validation.
+For injection, a unit or integration test that proves attacker-controlled input reaches a dangerous sink may be enough. For a vulnerable dependency, confirm the affected version and relevant configuration, then assess whether the vulnerable feature is reachable without running public exploit code. For exposed secrets, rotate, or revoke the credential before any optional validation.
 
 Record expected and actual results, target identity, time, tester, and limitations. Redact session values and personal data. OWASP's [Vulnerability Disclosure Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Vulnerability_Disclosure_Cheat_Sheet.html) supports giving recipients enough reproduction detail and evidence to understand a report without unnecessary harm.
 
@@ -121,7 +121,7 @@ Useful states include:
 - **Duplicate:** another finding covers the same root cause and affected scope.
 - **False positive:** evidence shows the asserted condition does not apply to the target, with rationale retained.
 
-Accepted risk is a treatment decision after the condition and context are understood. It is not a verification result. Likewise, remediation and retesting happen after initial verification. Keep those stages separate so the record shows what was detected, what was proven, what changed, and what a fresh retest observed.
+Accepted risk is a treatment decision after the condition and context are understood. It is not a verification result. Likewise, remediation, and retesting happen after initial verification. Keep those stages separate so the record shows what was detected, what was proven, what changed, and what a fresh retest observed.
 
 The LyraShield AI [methodology](/methodology) uses exact evidence states. Confidence remains triage metadata. Independently verified requires a separate verification receipt. A clean deterministic retest with complete applicable originating coverage can be retest-confirmed, but that is not the same as independent verification. Incomplete or engine-only absence remains inconclusive under the repository contract.
 

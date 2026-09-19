@@ -45,6 +45,7 @@ Grant the agent only the file, shell, and network operations needed for the curr
 Store LyraShield credentials through `npx lyrashield login`; do not paste an `lsk_` token into Pi prompts, skills, extension source, or repository files. If a credential may have entered model context or terminal history, rotate it and inspect access logs. When a community extension requests environment variables, confirm exactly which variables it inherits and whether child-process output can expose them.
 
 The supported local proof is deliberately separate from Pi. Run the CLI in the same repository and retain the target, revision, scan identity, and result. For pull requests, use the runner-local GitHub Action. This gives the project a repeatable check without claiming a native integration Pi does not provide.
+
 ## 4. Treat packages, extensions, and skills as code with version pinning
 
 Pi's extensibility via packages/extensions/skills is its USP, and a supply chain boundary. An extension that adds MCP support bridges tools into the LLM.
@@ -68,14 +69,14 @@ Target CI:
 - SARIF upload: Pi-generated PRs should emit SARIF from any scanner, not just pretty logs. The LyraShield GitHub Action, SCA + secrets + agentic pentest with SARIF, is intended for this slot, enabling `retest` after fix rather than trusting first-pass generation.
 - Record the Pi package, extension, skill, and tool inventory used for the change so reviewers can see what authority was available.
 
-| #   | Control                                      | File or command                         | If skipped                                      |
-| --- | -------------------------------------------- | --------------------------------------- | ----------------------------------------------- |
-| 1   | Pin and review packages and extensions       | Pi package config and resolved versions | Extension behavior can drift without review     |
-| 2   | Review skills, prompts, and custom tools      | Project guidance and extension source   | Untrusted instructions gain unnecessary agency  |
-| 3   | Keep credentials outside Pi context           | `npx lyrashield login`                   | Tokens can enter prompts, logs, or git history   |
-| 4   | Run a standalone scan after generated changes | `npx lyrashield scan`                    | Risky edits reach review without an early check  |
+| #   | Control                                       | File or command                         | If skipped                                       |
+| --- | --------------------------------------------- | --------------------------------------- | ------------------------------------------------ |
+| 1   | Pin and review packages and extensions        | Pi package config and resolved versions | Extension behavior can drift without review      |
+| 2   | Review skills, prompts, and custom tools      | Project guidance and extension source   | Untrusted instructions gain unnecessary agency   |
+| 3   | Keep credentials outside Pi context           | `npx lyrashield login`                  | Tokens can enter prompts, logs, or git history   |
+| 4   | Run a standalone scan after generated changes | `npx lyrashield scan`                   | Risky edits reach review without an early check  |
 | 5   | Keep write and shell actions approval gated   | Pi permissions and human review         | Generated instructions can mutate sensitive data |
-| 6   | Require the diff-aware SARIF gate             | `.github/workflows/*`                    | A skipped local check can reach the merge queue  |
+| 6   | Require the diff-aware SARIF gate             | `.github/workflows/*`                   | A skipped local check can reach the merge queue  |
 
 ## Why pair Pi Coding Agent with LyraShield
 
@@ -83,7 +84,7 @@ Pi configuration should be reviewed whenever it can read source, invoke tools, o
 
 Pi gives you a minimal, composable harness whose official extension points are packages, extensions, skills, prompt templates, and tools. That minimalism maps well to verification when each added capability is explicit and reviewed. LyraShield fits beside it as release assurance for AI-built apps through a standalone CLI and runner-local SARIF gate. LyraShield separates detection from proof: every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-Use `npx lyrashield scan` after Pi edits and follow the [PiCode integration guide](/docs/integrations/picode) for the supported standalone workflow. Pi owns generation and orchestration; LyraShield owns verification evidence that survives mode transitions. The platform is live in open beta, and scans, findings and evidence, approval-gated fix proposals, retests, and reports are implemented. Automatic server-generated Fix PR execution is not enabled.
+Use `npx lyrashield scan` after Pi edits and follow the [PiCode integration guide](/docs/integrations/picode) for the supported standalone workflow. Pi owns generation and orchestration; LyraShield owns verification evidence that survives mode transitions. The platform is live in open beta, and scans, findings, and evidence, approval-gated fix proposals, retests, and reports are implemented. Automatic server-generated Fix PR execution is not enabled.
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
 

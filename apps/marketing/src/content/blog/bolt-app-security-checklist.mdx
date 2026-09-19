@@ -30,7 +30,7 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) starts with a
 
 ## Identify the backend and deployed environment
 
-Open the database settings and record the provider, project or database identifier, authentication mode, tables, server functions, secrets, storage, and deployment URL. Do not infer the backend from generated source alone. A copied client library or stale environment variable can survive a migration attempt.
+Open the database settings and record the provider, project, or database identifier, authentication mode, tables, server functions, secrets, storage, and deployment URL. Do not infer the backend from generated source alone. A copied client library or stale environment variable can survive a migration attempt.
 
 Check whether version history includes database state. Bolt's current documentation says project version history does not restore the database when you restore source. That matters for rollback planning: a code rollback can run against the newer schema and data.
 
@@ -118,7 +118,7 @@ Test the actual published hostname, including a custom domain if one is used. Pr
 
 ## Design webhook failure and replay behavior
 
-Signature verification is only the first webhook decision. Providers retry when a handler times out or returns an error. A separate `alreadyProcessed()` read followed by `applyEvent()` has a race: two concurrent deliveries can both pass the read. Claim a unique provider event ID and apply database state in one transaction. Persist external work to a uniquely keyed outbox before acknowledging the event. If processing is slow, authenticate and persist it, return the provider's expected success response, then handle it through a bounded queue.
+Signature verification is only the first webhook decision. Providers retry when a handler times out or returns an error. A separate `alreadyProcessed()` read followed by `applyEvent()` has a race: two concurrent deliveries can both pass the read. Claim a unique provider event ID and apply database state in one transaction. Persist external work to a uniquely keyed outbox before acknowledging the event. If processing is slow, authenticate, and persist it, return the provider's expected success response, then handle it through a bounded queue.
 
 Decide what happens when the database is unavailable. Do not acknowledge an event that was neither applied nor durably recorded. Do not retry forever inside one request. Keep the raw body only as long as the verification and audit need requires, and avoid logging customer payloads by default.
 

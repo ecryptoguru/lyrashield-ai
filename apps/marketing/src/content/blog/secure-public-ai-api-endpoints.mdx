@@ -9,7 +9,7 @@ draft: false
 heroImage: access-boundary-03
 faq:
   - q: "Is an API key enough to secure an AI endpoint?"
-    a: "No. A key may identify a client or project, but the server still needs user or workload identity where relevant, object and function authorization, quotas, rotation, and abuse monitoring."
+    a: "No. A key may identify a client or project, but the server still needs user or workload identity where relevant, object, and function authorization, quotas, rotation, and abuse monitoring."
   - q: "How should an AI API secure streaming responses?"
     a: "Authorize before streaming, bound generation time and output size, stop work after disconnect where possible, avoid secrets in partial errors, and treat every streamed chunk as untrusted output at the client."
   - q: "Does rate limiting control model cost?"
@@ -102,7 +102,7 @@ Use an allowlist of tools for the exact route and role. Split read tools from mu
 
 Consequential actions such as deleting data, sending money, changing access, publishing content, or deploying code should use an explicit approval or business workflow outside free-form model judgment. Bind approval to the exact action, resource, environment, parameters, and expiry.
 
-For outbound fetches, prefer configured resource identifiers or named destinations. If users can supply URLs, parse them on the server, allow only required schemes, reject credentials, resolve and validate addresses, block private and special ranges, limit redirects, revalidate each hop, and pin the transport according to the threat model. Application checks do not replace network egress policy.
+For outbound fetches, prefer configured resource identifiers or named destinations. If users can supply URLs, parse them on the server, allow only required schemes, reject credentials, resolve, and validate addresses, block private and special ranges, limit redirects, revalidate each hop, and pin the transport according to the threat model. Application checks do not replace network egress policy.
 
 The [NCSC Guidelines for Secure AI System Development](https://www.ncsc.gov.uk/files/Guidelines-for-secure-AI-system-development.pdf) recommends protecting data, checking inputs, restricting actions, and designing fail-safes across AI development and operation. The exact implementation remains application-specific.
 
@@ -112,7 +112,7 @@ Model output can contain HTML, Markdown, URLs, code, SQL, shell text, false cita
 
 Never pass model text directly into `eval`, a shell, a database query, a template sink, or an unrestricted fetch. Structured output still needs schema validation because models can omit fields, exceed lengths, or produce values outside the business rule.
 
-For streaming, authorize and reserve budget first. Bound duration and bytes, stop upstream work after disconnect, and avoid exposing stack traces or provider payloads in partial frames. The client must insert chunks through safe sinks.
+For streaming, authorize, and reserve budget first. Bound duration and bytes, stop upstream work after disconnect, and avoid exposing stack traces or provider payloads in partial frames. The client must insert chunks through safe sinks.
 
 ## Minimize logs and retained prompts
 

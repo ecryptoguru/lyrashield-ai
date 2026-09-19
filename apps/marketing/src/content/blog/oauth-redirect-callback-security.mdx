@@ -92,7 +92,7 @@ const authorizationUrl = provider.authorizationUrl({
 })
 ```
 
-At the callback, locate and atomically consume the transaction. Compare state without leaking it to logs. Reject expired, missing, reused, or browser-mismatched records. If the client supports multiple authorization servers, validate the issuer response according to the provider's metadata and the mix-up defenses in RFC 9700.
+At the callback, locate, and atomically consume the transaction. Compare state without leaking it to logs. Reject expired, missing, reused, or browser-mismatched records. If the client supports multiple authorization servers, validate the issuer response according to the provider's metadata and the mix-up defenses in RFC 9700.
 
 State, PKCE, nonce, and issuer are not interchangeable labels. RFC 9700 requires public clients to use PKCE and recommends it for confidential clients. It says `S256` is the current challenge method that does not expose the verifier in the authorization request. For OpenID Connect, a transaction-specific nonce can bind the ID token. State commonly provides CSRF protection, although RFC 9700 permits reliance on PKCE for CSRF protection when the client has ensured provider support. Follow the precise protocol profile in use.
 

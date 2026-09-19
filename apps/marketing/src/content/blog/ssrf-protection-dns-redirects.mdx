@@ -67,7 +67,7 @@ An arbitrary URL importer needs a stricter transport design and may still be uns
 
 Resolve both A and AAAA records through an API that returns all candidate addresses. Node's DNS documentation distinguishes operating-system lookup behavior from direct DNS resolution APIs, so select the function deliberately and test it in the deployed runtime.
 
-Parse each returned address with a maintained IP library. Reject the complete policy set for the environment, including loopback, private, link-local, unspecified, multicast, carrier-grade or special-use space where relevant, and IPv4-mapped IPv6 representations.
+Parse each returned address with a maintained IP library. Reject the complete policy set for the environment, including loopback, private, link-local, unspecified, multicast, carrier-grade, or special-use space where relevant, and IPv4-mapped IPv6 representations.
 
 If any answer is disallowed, fail closed rather than choosing a convenient public answer. Otherwise an attacker can influence which address the HTTP client selects.
 

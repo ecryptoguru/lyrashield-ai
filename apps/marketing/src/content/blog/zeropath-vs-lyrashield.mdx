@@ -54,13 +54,13 @@ Use LyraShield AI when the specific need is a release decision for an AI-built a
 
 ZeroPath and LyraShield can run in sequence without conflict. ZeroPath provides the continuous, context-aware analysis that reduces triage noise throughout the sprint, and its threat model keeps prioritization grounded in the application's real architecture. LyraShield runs the assurance loop when the team approaches a release, proving exploitability and recording evidence for sign-off. Because both are designed for AI-generated code, the handoff between continuous analysis and release assurance is natural rather than forced.
 
-| Dimension | ZeroPath | LyraShield AI |
-|---|---|---|
-| Primary goal | Contextual LLM analysis and threat modeling | Release assurance with proof for AI-built apps |
-| Detection model | LLM SAST, business logic, threat models per app | Agentic pentest plus SCA plus secrets, evidence states |
-| Fix model | One-click patches | Approval-gated fix proposals, retest before close |
-| Agent integration | Repository and PR analysis | MCP inside AI coding agents plus GitHub Action |
-| Output | Findings, threat models, patches | Immutable assurance record, SARIF |
+| Dimension         | ZeroPath                                        | LyraShield AI                                          |
+| ----------------- | ----------------------------------------------- | ------------------------------------------------------ |
+| Primary goal      | Contextual LLM analysis and threat modeling     | Release assurance with proof for AI-built apps         |
+| Detection model   | LLM SAST, business logic, threat models per app | Agentic pentest plus SCA plus secrets, evidence states |
+| Fix model         | One-click patches                               | Approval-gated fix proposals, retest before close      |
+| Agent integration | Repository and PR analysis                      | MCP inside AI coding agents plus GitHub Action         |
+| Output            | Findings, threat models, patches                | Immutable assurance record, SARIF                      |
 
 For the detailed breakdown see the [ZeroPath comparison page](/compare/zeropath). If you are securing a Lovable-built app, the [Lovable app security checklist](/blog/lovable-app-security-checklist) is a useful companion.
 

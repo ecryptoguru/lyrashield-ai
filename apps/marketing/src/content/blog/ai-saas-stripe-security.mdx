@@ -164,7 +164,7 @@ Publishable keys are designed for the client. Secret and restricted keys stay on
 
 Keep sandbox and live objects separate. A test customer, price, webhook secret, or product ID must not be accepted in live processing. Review preview deployments carefully so they do not inherit production billing credentials.
 
-If a secret key appears in client code, logs, a prompt, or repository history, rotate or expire it. Review provider logs for the exposure window. Obfuscation and deletion do not invalidate a copied credential.
+If a secret key appears in client code, logs, a prompt, or repository history, rotate, or expire it. Review provider logs for the exposure window. Obfuscation and deletion do not invalidate a copied credential.
 
 The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) can inspect selected text files for common Stripe credential patterns without uploading them. It does not scan Git history, deployment settings, webhook destinations, Stripe objects, or access logs.
 

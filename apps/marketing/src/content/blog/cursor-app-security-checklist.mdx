@@ -36,7 +36,7 @@ Check that rules forbid risky behaviors: no direct production database writes, n
 
 Pin your stack guidance in rules: specify allowed package registries, minimum Node version, and lockfile update policy. Cursor docs describe rules loading at [Cursor rules](https://cursor.com/docs/context/rules). Make rules explicit about shell usage: deny destructive shell patterns like rm recursive and require confirmation for database migrations.
 
-Add a final rule: any change that touches auth, payments or file upload must add a test and be flagged in the pull request description. That creates an audit trail for verification.
+Add a final rule: any change that touches auth, payments, or file upload must add a test and be flagged in the pull request description. That creates an audit trail for verification.
 
 ## Lock down MCP config in .cursor/mcp.json
 
@@ -93,7 +93,7 @@ Log agent actions when possible. If Cursor generates a summary, paste it into th
 
 AI coding assistants often add packages to solve a task. That accelerates delivery but can introduce vulnerable or malicious dependencies.
 
-Run SCA on every pull request. OSV provides a broad vulnerability database at [OSV database](https://osv.dev). For Node projects, run npm audit or pnpm audit and require high severity advisories block merge. Record the baseline: if you must ship with a known advisory, document the exception, owner and mitigation date.
+Run SCA on every pull request. OSV provides a broad vulnerability database at [OSV database](https://osv.dev). For Node projects, run npm audit or pnpm audit and require high severity advisories block merge. Record the baseline: if you must ship with a known advisory, document the exception, owner, and mitigation date.
 
 For secrets, run gitleaks or similar and fail on new findings. Check .env.example for placeholder patterns only, never real values. Validate that no bearer tokens, private keys or lsk keys are committed. The docs on SARIF upload for secret scanning results are at [SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning).
 
@@ -129,7 +129,7 @@ LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.c
 
 MCP integration fits Cursor. Local stdio via npx -y @lyrashield/mcp@0.2.8 keeps tokens in env vars, and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
 
-Status note: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. MCP and the runner-local GitHub Action are available now; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution and live paid activation are not enabled.
+Status note: LyraShield is live in open beta with open registration. The scan pipeline, findings, and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. MCP and the runner-local GitHub Action are available now; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 Pairing gives you a consistent loop across editors while Cursor handles fast iteration locally.
 

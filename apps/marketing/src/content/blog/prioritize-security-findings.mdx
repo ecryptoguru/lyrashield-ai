@@ -13,10 +13,10 @@ faq:
   - q: "Can a low-severity issue become urgent?"
     a: "Yes. A lower-severity weakness on an internet-exposed authentication or payment path can deserve earlier action than a higher-severity issue in an isolated, unused component. Document the environmental evidence behind that decision."
   - q: "What should an accepted-risk record contain?"
-    a: "Record the finding, evidence, affected scope, rationale, compensating controls, owner, approver, expiry or review date, and triggers for reconsideration. Acceptance does not mean the weakness was fixed."
+    a: "Record the finding, evidence, affected scope, rationale, compensating controls, owner, approver, expiry, or review date, and triggers for reconsideration. Acceptance does not mean the weakness was fixed."
 ---
 
-Contain credible active exploitation and exposed credentials first. For the remaining applicable findings, rank work using reachability, known exploitation, technical and business impact, asset importance, evidence confidence, existing controls, and remediation risk. Keep severity, exploitation probability, and business priority as separate inputs. Do not add CVSS, EPSS, or other scores into a homemade risk number.
+Contain credible active exploitation and exposed credentials first. For the remaining applicable findings, rank work using reachability, known exploitation, technical, and business impact, asset importance, evidence confidence, existing controls, and remediation risk. Keep severity, exploitation probability, and business priority as separate inputs. Do not add CVSS, EPSS, or other scores into a homemade risk number.
 
 ## Decide what needs action now
 
@@ -92,7 +92,7 @@ Separate three choices:
 - **Remediate:** remove the underlying weakness.
 - **Accept:** knowingly retain the documented risk for a defined period.
 
-An accepted result needs an accountable approver, rationale, compensating controls, expiry or review date, and triggers such as internet exposure, exploit publication, asset changes, or control failure. Keep it open as accepted risk, not fixed.
+An accepted result needs an accountable approver, rationale, compensating controls, expiry, or review date, and triggers such as internet exposure, exploit publication, asset changes, or control failure. Keep it open as accepted risk, not fixed.
 
 Do not let easy fixes consume the queue simply because they improve a chart. A dependency bump with low impact may be worth bundling, but it should not delay a harder authorization defect on the revenue or identity path.
 

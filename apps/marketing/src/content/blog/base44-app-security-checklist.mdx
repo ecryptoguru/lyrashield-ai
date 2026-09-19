@@ -63,7 +63,7 @@ Use Base44's entity permissions to define which roles and ownership relationship
 
 The app-builder Security UI currently documents entity-level create, read, update, and delete rules. It does not expose a field-level rule editor in that workflow. Base44's separate developer backend documentation does support field-level security inside entity schemas, using per-field `read` and `write` rules that are deployed with the schema.
 
-Do not collapse those two surfaces into a blanket claim that Base44 either always has or never has field-level security. If you use the developer backend, review and deploy the field rules, then test the resulting reads and writes with distinct roles. If you work only through the builder UI, or cannot verify that the deployed schema includes those rules, split confidential data into a more restricted entity or expose a minimal result through an authorized backend function.
+Do not collapse those two surfaces into a blanket claim that Base44 either always has or never has field-level security. If you use the developer backend, review, and deploy the field rules, then test the resulting reads and writes with distinct roles. If you work only through the builder UI, or cannot verify that the deployed schema includes those rules, split confidential data into a more restricted entity or expose a minimal result through an authorized backend function.
 
 Split data by confidentiality:
 

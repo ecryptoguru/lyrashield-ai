@@ -216,7 +216,7 @@ export const GET: APIRoute = async (context) => {
     "Independently verified: a separate verification receipt supports the finding.",
     "Retest-confirmed: a server-owned deterministic retest found the relevant condition absent with complete applicable coverage.",
     "Inconclusive: the retained evidence cannot establish that the condition is gone.",
-    `Release assurance: a reviewable record combining scope, coverage, findings and their evidence states, fix proposals, and retest outcomes that supports a release decision — it is not a certification or a guarantee that an application has no vulnerabilities.`,
+    `Release assurance: a reviewable record combining scope, coverage, findings, and their evidence states, fix proposals, and retest outcomes that supports a release decision — it is not a certification or a guarantee that an application has no vulnerabilities.`,
     `Vibe Security 50: ${reviewControlCount} controls are routed to code or URL review where applicable and ${evidenceControlCount} require operational or human evidence outside the scan.`,
     "Operational Evidence Vault: a private, workspace-scoped, encrypted, and versioned place to submit, review, and accept evidence for the 7 evidence-required Vibe Security 50 controls. Accepted evidence is frozen into private assurance reports; public/shared reports do not expose AI-assurance data or raw storage URIs.",
     "",

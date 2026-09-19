@@ -19,7 +19,7 @@ faq:
     a: "Choose per endpoint. A costly generation or sensitive mutation may need to fail closed or enter a bounded queue. A low-risk read may use a conservative local fallback. Document and test the degraded behavior."
 ---
 
-**Direct answer:** Rate-limit an AI app according to the resource each endpoint can consume. Set separate request, concurrency, payload, token or cost, and queue limits. Count against a trustworthy principal when possible, distribute counters consistently, and define what happens when the limiter fails. Return 429 for client-specific excess with Retry-After when useful.
+**Direct answer:** Rate-limit an AI app according to the resource each endpoint can consume. Set separate request, concurrency, payload, token, or cost, and queue limits. Count against a trustworthy principal when possible, distribute counters consistently, and define what happens when the limiter fails. Return 429 for client-specific excess with Retry-After when useful.
 
 A single rule such as "100 requests per minute per IP" rarely matches an AI product. One request might read cached metadata. Another can upload a large file, reserve a worker for several minutes, or trigger paid model tokens. Rate is only one dimension of resource consumption.
 
@@ -71,7 +71,7 @@ Derive initial values from a measured capacity test and a realistic user journey
 
 After authentication, a server-verified user or service principal is usually stronger than an IP address. Expensive shared resources may also need a workspace or organization key so many accounts cannot bypass a common budget. Keep an IP or network signal as another dimension when it helps with anonymous abuse.
 
-Before authentication, use a combination appropriate to the privacy and abuse model: trusted client IP, short-lived browser session, proof-of-work or challenge result, and endpoint-specific identifiers. Do not collect a durable fingerprint merely because it is available. Document retention and privacy consequences.
+Before authentication, use a combination appropriate to the privacy and abuse model: trusted client IP, short-lived browser session, proof-of-work, or challenge result, and endpoint-specific identifiers. Do not collect a durable fingerprint merely because it is available. Document retention and privacy consequences.
 
 Cloudflare's current [rate-limiting guidance](https://developers.cloudflare.com/waf/rate-limiting-rules/best-practices/) supports different counting characteristics, including headers, tokens, cookies, and request fields, depending on plan and configuration. Those examples do not make a client-supplied header trustworthy. The origin or an authenticated gateway must establish the value.
 

@@ -140,7 +140,7 @@ Test approver removal and role changes too. A previously authorized reviewer sho
 
 ## Use short-lived elevation, not a standing role
 
-If the provider requires a privileged call, mint or assume a short-lived credential after the approval is consumed. Scope the session to the exact action and resource where the platform permits it. Do not place a reusable administrator token in the agent environment.
+If the provider requires a privileged call, mint, or assume a short-lived credential after the approval is consumed. Scope the session to the exact action and resource where the platform permits it. Do not place a reusable administrator token in the agent environment.
 
 GitHub [deployment environments](https://docs.github.com/en/actions/concepts/workflows-and-actions/deployment-environments) can restrict environment secrets and add deployment protection rules such as required reviewers, depending on repository and plan support. The environment gate protects the workflow only when jobs cannot obtain equivalent production credentials elsewhere.
 

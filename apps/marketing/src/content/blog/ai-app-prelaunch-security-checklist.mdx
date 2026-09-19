@@ -16,7 +16,7 @@ faq:
   - q: "How long should an AI app pre-launch security review take?"
     a: "There is no safe universal duration. A small static site has a different scope from a multi-tenant app with payments and coding agents. Estimate from the number of trust boundaries, roles, data stores, integrations, and untested controls, then record any deferred coverage."
   - q: "Is a clean vulnerability scan enough to launch?"
-    a: "No. A scan covers only its configured target, checks, credentials, and execution paths. Launch review also needs authorization tests, business-logic review, dependency and secret checks, deployment controls, monitoring, recovery evidence, and explicit limitations."
+    a: "No. A scan covers only its configured target, checks, credentials, and execution paths. Launch review also needs authorization tests, business-logic review, dependency, and secret checks, deployment controls, monitoring, recovery evidence, and explicit limitations."
   - q: "Which security findings should block launch?"
     a: "Block when the plausible impact, exposure, and lack of mitigation exceed the team's written release policy. Examples often include unauthorized cross-tenant access, exposed production credentials, or a reachable critical execution path, but the accountable owner must decide from verified evidence."
   - q: "How should an untestable control be handled?"
@@ -61,7 +61,7 @@ Review account creation, sign-in, password reset, email change, session rotation
 
 ## Inspect secrets, input paths, and outputs
 
-Search source, staged changes, generated build output, deployment configuration, logs, prompts, and repository history according to the tools available. Classify detected values before acting. If a real credential was exposed, rotate or revoke it before optional history cleanup.
+Search source, staged changes, generated build output, deployment configuration, logs, prompts, and repository history according to the tools available. Classify detected values before acting. If a real credential was exposed, rotate, or revoke it before optional history cleanup.
 
 Trace every public input to its server-side parser and sink. Cover JSON bodies, query parameters, headers, filenames, URLs, webhook payloads, imported files, and model-generated tool arguments. Enforce type, length, format, allowed values, and resource limits near the boundary.
 
@@ -107,7 +107,7 @@ The [evidence methodology](/methodology) shows how target, coverage, evidence st
 
 ## Build the release packet
 
-The release packet should contain the immutable target, test scope, control results, detected and unresolved findings, accepted risks, retest records, deployment and rollback evidence, monitoring and restore evidence, and every known limitation. Assign each open item an owner and review date.
+The release packet should contain the immutable target, test scope, control results, detected, and unresolved findings, accepted risks, retest records, deployment, and rollback evidence, monitoring, and restore evidence, and every known limitation. Assign each open item an owner and review date.
 
 Automated checks can reproduce many narrow assertions. They cannot decide whether the scope matches the product's real risk, whether a policy exception is acceptable, or whether a reviewer misunderstood the business logic. For the human design pass, use [threat modeling and human review for vibe-coded apps](/blog/human-review-threat-model-vibe-coding). For operational proof, continue with [security monitoring for AI-built apps](/blog/security-monitoring-ai-apps).
 

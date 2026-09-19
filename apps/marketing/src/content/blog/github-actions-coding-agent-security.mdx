@@ -15,7 +15,7 @@ faq:
   - q: "Is pull_request_target always unsafe?"
     a: "No. It can be appropriate for trusted metadata operations, but a privileged pull_request_target job must not check out or execute untrusted pull-request code. Use it only when the privileged context is necessary and keep its inputs narrow."
   - q: "Does OIDC remove every credential risk in GitHub Actions?"
-    a: "No. OIDC avoids storing a long-lived cloud credential, but the cloud trust policy still has to restrict repository, workflow, branch or environment, and audience claims. An overbroad trust rule can issue short-lived credentials to the wrong job."
+    a: "No. OIDC avoids storing a long-lived cloud credential, but the cloud trust policy still has to restrict repository, workflow, branch, or environment, and audience claims. An overbroad trust rule can issue short-lived credentials to the wrong job."
   - q: "Does a GitHub-hosted runner make untrusted code safe?"
     a: "It reduces persistence between jobs because hosted runners are generally ephemeral, but untrusted code can still read credentials, alter outputs, poison artifacts, or use permissions available during its own job. Privilege separation is still required."
 ---

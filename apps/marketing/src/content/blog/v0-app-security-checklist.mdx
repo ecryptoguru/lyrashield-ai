@@ -97,7 +97,7 @@ Also review indirect disclosure. A server variable is no longer secret if code r
 
 ## Separate v0 analysis from deployment evidence
 
-v0 documents security analysis for generated projects. Use its findings as a review input. Inspect the exact line, decide whether the behavior is reachable, apply or revise a proposed fix, and retest the behavior. A clean analysis means no covered pattern was reported for that analyzed state. It does not prove business-level authorization or the live Vercel configuration.
+v0 documents security analysis for generated projects. Use its findings as a review input. Inspect the exact line, decide whether the behavior is reachable, apply, or revise a proposed fix, and retest the behavior. A clean analysis means no covered pattern was reported for that analyzed state. It does not prove business-level authorization or the live Vercel configuration.
 
 Record the commit or project state reviewed, then confirm the deployment points to it. v0 can create Vercel deployments, but development, preview, and production environments can have different variables. Current v0 documentation says its in-app preview uses Development variables. A fix that depends on a Preview or Production variable may therefore behave differently after deployment.
 

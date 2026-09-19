@@ -123,7 +123,7 @@ Add OWASP mapping when present.
 Persist report id for PR gate.
 ```
 
-A good response contains finding id, severity, evidence state, CWE, file and line, evidence snippet, and suggested patch location. Prioritize independently verified findings while retaining detected and inconclusive items for triage. See [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) for definitions when triaging.
+A good response contains finding id, severity, evidence state, CWE, file, and line, evidence snippet, and suggested patch location. Prioritize independently verified findings while retaining detected and inconclusive items for triage. See [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) for definitions when triaging.
 
 This inline step also surfaces secrets that were templated into fixtures. Since v1 includes secrets scanning alongside SCA, one scan can reveal both hardcoded creds and vulnerable packages. Rotate any exposed secret before merging the fix PR.
 

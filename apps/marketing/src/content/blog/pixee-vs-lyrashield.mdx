@@ -54,13 +54,13 @@ Use LyraShield AI when the specific need is a release decision for an AI-built a
 
 Pixee and LyraShield serve different buyers and different moments. Pixee serves the AppSec team that has a scanner stack and a backlog and needs fixes that developers will actually merge. LyraShield serves the team that owns a release decision for an AI-built app and needs proof and an immutable record to support it. Because Pixee works on top of existing scanners and LyraShield emits SARIF, the two can coexist in the same pipeline without conflict, each doing the job it is built for.
 
-| Dimension | Pixee | LyraShield AI |
-|---|---|---|
-| Primary goal | Triage and auto-fix across scanner stack | Release assurance with proof for AI-built apps |
+| Dimension       | Pixee                                                      | LyraShield AI                                          |
+| --------------- | ---------------------------------------------------------- | ------------------------------------------------------ |
+| Primary goal    | Triage and auto-fix across scanner stack                   | Release assurance with proof for AI-built apps         |
 | Detection model | Triage of existing scanner output, exploitability analysis | Agentic pentest plus SCA plus secrets, evidence states |
-| Fix model | Context-aware fix PRs, 76 percent merge rate | Approval-gated fix proposals, retest before close |
-| Proactive side | Foresight reads designs before code | MCP inside AI coding agents plus GitHub Action |
-| Output | Merged fixes, reduced backlog | Immutable assurance record, SARIF |
+| Fix model       | Context-aware fix PRs, 76 percent merge rate               | Approval-gated fix proposals, retest before close      |
+| Proactive side  | Foresight reads designs before code                        | MCP inside AI coding agents plus GitHub Action         |
+| Output          | Merged fixes, reduced backlog                              | Immutable assurance record, SARIF                      |
 
 For the detailed breakdown see the [Pixee comparison page](/compare/pixee). If you are securing a Replit-built app, the [Replit app security checklist](/blog/replit-app-security-checklist) is a useful companion.
 

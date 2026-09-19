@@ -72,7 +72,7 @@ async function resizeApprovedImage(raw: unknown) {
 
 The agent chooses among product concepts, not shell syntax. The application resolves the workspace-owned image and constrains dimensions and formats. This is easier to authorize, log, and test than a generic process runner.
 
-Avoid giving the model a raw escape hatch for convenience. If one unusual operation genuinely needs human intervention, stop and present a bounded proposal rather than falling back to arbitrary execution.
+Avoid giving the model a raw escape hatch for convenience. If one unusual operation genuinely needs human intervention, stop, and present a bounded proposal rather than falling back to arbitrary execution.
 
 ## Execute a fixed program without a shell
 

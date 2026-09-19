@@ -22,7 +22,7 @@ faq:
     a: "No. Cloudflare documents that fail-open routes bypass the Worker during a limit failure. Use fail closed for Workers that enforce authentication, authorization, filtering, or another security-critical decision."
 ---
 
-**Direct answer:** Secure an AI-built Worker by inventorying every binding, route, secret, cache, and outbound destination as a capability. Bind only required resources, use Workers secrets instead of plaintext vars, authenticate and authorize each route, bound bodies and subrequests, follow redirects manually when credentials exist, prevent personalized cache mixing, choose fail closed for security-critical routes, and test the deployed Wrangler configuration.
+**Direct answer:** Secure an AI-built Worker by inventorying every binding, route, secret, cache, and outbound destination as a capability. Bind only required resources, use Workers secrets instead of plaintext vars, authenticate, and authorize each route, bound bodies and subrequests, follow redirects manually when credentials exist, prevent personalized cache mixing, choose fail closed for security-critical routes, and test the deployed Wrangler configuration.
 
 _Cloudflare Workers secrets, bindings, Request behavior, service bindings, routes, limits, and security-model guidance was reviewed against official documentation on July 17, 2026. Recheck compatibility dates and account limits before release._
 

@@ -77,15 +77,15 @@ This is a reasoning aid, not an exploit recipe. Use synthetic tenants and a disp
 
 Use one row per concrete failure path. Replace the example values with facts from your app; blank evidence means the control has not been demonstrated.
 
-| Field | Example for a workspace export |
-| --- | --- |
-| Flow and boundary | Browser to export API to worker to private storage |
-| Asset and actor | Workspace documents; signed-in non-member |
-| Threat | Changing a workspace ID exposes another tenant's export |
-| Control | Server checks current membership before queueing and download |
-| Negative test | Synthetic Account B requests Account A's export |
-| Evidence | Test result, commit, environment, and redacted audit reference |
-| Owner and decision | Named reviewer; block release until denial is demonstrated |
+| Field              | Example for a workspace export                                 |
+| ------------------ | -------------------------------------------------------------- |
+| Flow and boundary  | Browser to export API to worker to private storage             |
+| Asset and actor    | Workspace documents; signed-in non-member                      |
+| Threat             | Changing a workspace ID exposes another tenant's export        |
+| Control            | Server checks current membership before queueing and download  |
+| Negative test      | Synthetic Account B requests Account A's export                |
+| Evidence           | Test result, commit, environment, and redacted audit reference |
+| Owner and decision | Named reviewer; block release until denial is demonstrated     |
 
 Review the download as well as job creation. A protected export API can still produce a publicly readable file. The [secure report-sharing guide](/blog/share-security-report-safely) covers the resulting access boundary.
 

@@ -20,7 +20,7 @@ faq:
     a: "Snyk Code is a SAST engine that finds vulnerabilities in source code and suggests fixes. LyraShield pairs its own agentic pentest with SCA and secrets, then validates exploitability, produces evidence states, retests fixes, and writes an immutable assurance record for the release decision."
 ---
 
-Snyk is a developer-first security platform covering SAST, SCA, container and IaC scanning, secrets detection, and newer agentic security features, with a free tier and paid plans from 25 dollars per month. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with approval-gated fixes. Snyk excels at developer-first scanning across the SDLC; LyraShield closes the proof and release-decision gap.
+Snyk is a developer-first security platform covering SAST, SCA, container, and IaC scanning, secrets detection, and newer agentic security features, with a free tier and paid plans from 25 dollars per month. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with approval-gated fixes. Snyk excels at developer-first scanning across the SDLC; LyraShield closes the proof and release-decision gap.
 
 This comparison is part of our broader [vibe coding security guide](/blog/vibe-coding-security-guide), which covers the full release-assurance methodology for AI-built applications.
 
@@ -54,13 +54,13 @@ Use LyraShield AI when the specific need is a release decision for an AI-built a
 
 Running both is a common and sensible pattern. Snyk handles the continuous, developer-facing scanning that keeps findings visible throughout the sprint, and its breadth means container, IaC, and dependency risk are covered in one place. LyraShield runs the focused assurance loop when the team approaches a release, producing the evidence record that a reviewer or auditor signs off on. Because both emit SARIF, results consolidate into a single view rather than forcing context switching between tools.
 
-| Dimension | Snyk | LyraShield AI |
-|---|---|---|
-| Primary goal | Developer-first scanning across the SDLC | Release assurance with proof for AI-built apps |
-| Detection model | SAST, SCA, container, IaC, secrets, AI pentesting | Agentic pentest plus SCA plus secrets, evidence states |
-| Fix model | Fix advice and automated fix PRs | Approval-gated fix proposals, retest before close |
-| Agent integration | IDE, CLI, CI, agentic governance | MCP inside AI coding agents plus GitHub Action |
-| Output | Snyk dashboard, SARIF | Immutable assurance record, SARIF |
+| Dimension         | Snyk                                              | LyraShield AI                                          |
+| ----------------- | ------------------------------------------------- | ------------------------------------------------------ |
+| Primary goal      | Developer-first scanning across the SDLC          | Release assurance with proof for AI-built apps         |
+| Detection model   | SAST, SCA, container, IaC, secrets, AI pentesting | Agentic pentest plus SCA plus secrets, evidence states |
+| Fix model         | Fix advice and automated fix PRs                  | Approval-gated fix proposals, retest before close      |
+| Agent integration | IDE, CLI, CI, agentic governance                  | MCP inside AI coding agents plus GitHub Action         |
+| Output            | Snyk dashboard, SARIF                             | Immutable assurance record, SARIF                      |
 
 For the detailed breakdown see the [Snyk comparison page](/compare/snyk). The [Codex security workflow](/blog/codex-security-workflow) guide is useful if your team uses OpenAI coding agents.
 

@@ -54,13 +54,13 @@ Use LyraShield AI when the specific need is a release decision for an AI-built a
 
 Mobb and LyraShield fit naturally at different stages. Mobb runs continuously, triaging scanner findings and applying consistent fixes across repos, with Tracy providing the governance visibility that engineering leaders need. LyraShield runs at the release gate, producing the evidence record that supports a specific ship decision. Because Mobb integrates with existing scanners and LyraShield emits SARIF, the two can sit in the same pipeline, with Mobb handling remediation throughput and LyraShield handling release assurance.
 
-| Dimension | Mobb | LyraShield AI |
-|---|---|---|
-| Primary goal | Consistent, scalable remediation | Release assurance with proof for AI-built apps |
-| Detection model | Triage of scanner findings, predictable fixes | Agentic pentest plus SCA plus secrets, evidence states |
-| Fix model | Reviewable fixes with security context | Approval-gated fix proposals, retest before close |
-| Agent integration | VS Code, Copilot, Claude, Devin, Tracy | MCP inside AI coding agents plus GitHub Action |
-| Output | Fixed findings, AI code visibility | Immutable assurance record, SARIF |
+| Dimension         | Mobb                                          | LyraShield AI                                          |
+| ----------------- | --------------------------------------------- | ------------------------------------------------------ |
+| Primary goal      | Consistent, scalable remediation              | Release assurance with proof for AI-built apps         |
+| Detection model   | Triage of scanner findings, predictable fixes | Agentic pentest plus SCA plus secrets, evidence states |
+| Fix model         | Reviewable fixes with security context        | Approval-gated fix proposals, retest before close      |
+| Agent integration | VS Code, Copilot, Claude, Devin, Tracy        | MCP inside AI coding agents plus GitHub Action         |
+| Output            | Fixed findings, AI code visibility            | Immutable assurance record, SARIF                      |
 
 For the detailed breakdown see the [Mobb comparison page](/compare/mobb). If you are securing a v0-built app, the [v0 app security checklist](/blog/v0-app-security-checklist) is a useful companion.
 

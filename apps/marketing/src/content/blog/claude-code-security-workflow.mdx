@@ -11,14 +11,14 @@ faq:
   - q: Where does Claude Code store MCP server config?
     a: In .mcp.json with local project and user scopes. Project scope lives in your repo for team sharing while user scope stays in home for personal tools. Always use env var references for keys.
   - q: How should I handle plan mode versus default mode?
-    a: Use plan mode for read only exploration then switch to controlled execution with approval prompts. Require review before edits to auth, payment or infra code.
+    a: Use plan mode for read only exploration then switch to controlled execution with approval prompts. Require review before edits to auth, payment, or infra code.
   - q: What evidence should I keep for Claude Code releases?
     a: Keep SARIF from secret and dependency scans plus a log of MCP servers used and the pull request with permission settings. That supports later verification and audit.
   - q: How should I scope the LyraShield MCP server for a team?
     a: Claude Code stores MCP servers in .mcp.json at the project root for team scope or the user config for local scope. Use project scope for the LyraShield server so CI and local checks share one entry, and keep the lsk_ key in an env reference rather than a literal in the file.
 ---
 
-Claude Code reads your repo, edits many files, runs commands and calls MCP tools in one session, so you need scoped permissions and locked down config. This workflow shows how to harden .mcp.json across local, project and user scopes, limit tool permissions, gate secrets and dependencies and collect SARIF for every pull request. Pair it with LyraShield as release assurance for AI built apps. See our [vibe coding security guide](/blog/vibe-coding-security-guide) for baseline controls before applying Claude Code specific checks.
+Claude Code reads your repo, edits many files, runs commands and calls MCP tools in one session, so you need scoped permissions and locked down config. This workflow shows how to harden .mcp.json across local, project, and user scopes, limit tool permissions, gate secrets and dependencies and collect SARIF for every pull request. Pair it with LyraShield as release assurance for AI built apps. See our [vibe coding security guide](/blog/vibe-coding-security-guide) for baseline controls before applying Claude Code specific checks.
 
 ## Understand Claude Code risk surface
 
@@ -78,7 +78,7 @@ Use CLAUDE.md in repo root to state what the agent may and may not do. Version i
 
 Recommended policy blocks:
 
-- Edit scope: allow src, tests and docs. Protect env, secrets and infra unless security owner approves. Deny direct edits to production workflow files.
+- Edit scope: allow src, tests, and docs. Protect env, secrets, and infra unless security owner approves. Deny direct edits to production workflow files.
 - Command policy: allow read and limited test commands, require confirm for package installs and migrations, deny curl with secrets and git push to main.
 - Network policy: list allowed registries and APIs the agent may call during generation, and forbid arbitrary egress.
 
@@ -129,7 +129,7 @@ LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.c
 
 MCP integration fits Claude Code. Local stdio via npx -y @lyrashield/mcp@0.2.8 uses env var keys for project scope, and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key with user or project scope. GitHub Action is diff aware and produces SARIF for code scanning so results appear in your pull request.
 
-Build honesty note: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
+Build honesty note: LyraShield is live in open beta with open registration. The scan pipeline, findings, and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 This pairing keeps Claude Code speed while preserving a consistent verification narrative across editors.
 

@@ -56,13 +56,13 @@ Use LyraShield AI when the bottleneck is not detection but proof: you need to de
 
 There is genuine overlap in detection, and neither tool should be framed as a strict replacement for the other. A team that has invested in CodeQL query packs and Dependabot automation gets continuous value from GHAS every day. LyraShield earns its place at the release gate, where the question shifts from what patterns exist to whether the app is safe to ship. For organizations with compliance obligations that require evidence of verification, that separation of concerns is the practical reason to run both.
 
-| Dimension | GitHub Advanced Security | LyraShield AI |
-|---|---|---|
-| Primary goal | Continuous detection inside GitHub | Release assurance with proof for AI-built apps |
-| Detection model | CodeQL SAST plus AI detections, secret scanning, Dependabot SCA | Agentic pentest plus SCA plus secrets, evidence states |
-| Fix model | Copilot Autofix suggestions | Approval-gated fix proposals, retest before close |
-| Agent integration | Runs in GitHub workflows | MCP inside AI coding agents plus GitHub Action |
-| Output | GitHub security alerts, SARIF | Immutable assurance record, SARIF |
+| Dimension         | GitHub Advanced Security                                        | LyraShield AI                                          |
+| ----------------- | --------------------------------------------------------------- | ------------------------------------------------------ |
+| Primary goal      | Continuous detection inside GitHub                              | Release assurance with proof for AI-built apps         |
+| Detection model   | CodeQL SAST plus AI detections, secret scanning, Dependabot SCA | Agentic pentest plus SCA plus secrets, evidence states |
+| Fix model         | Copilot Autofix suggestions                                     | Approval-gated fix proposals, retest before close      |
+| Agent integration | Runs in GitHub workflows                                        | MCP inside AI coding agents plus GitHub Action         |
+| Output            | GitHub security alerts, SARIF                                   | Immutable assurance record, SARIF                      |
 
 For the full side-by-side see the [GitHub Advanced Security comparison page](/compare/github-advanced-security). If you are securing a Cursor-built app, the [Cursor app security checklist](/blog/cursor-app-security-checklist) pairs well with either tool.
 

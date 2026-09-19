@@ -21,7 +21,7 @@ faq:
     a: "No. Deletion does not invalidate copies in Git history, build artifacts, logs, or developer machines. Revoke or rotate the credential and review provider activity."
 ---
 
-**Direct answer:** Any value delivered to a browser can be recovered by the user. Keep only deliberately public identifiers in frontend code. Move privileged provider calls to a trusted server, store scoped credentials there, and authenticate each browser request. If a secret reached a bundle or repository, revoke or rotate it before cleaning up the code and history.
+**Direct answer:** Any value delivered to a browser can be recovered by the user. Keep only deliberately public identifiers in frontend code. Move privileged provider calls to a trusted server, store scoped credentials there, and authenticate each browser request. If a secret reached a bundle or repository, revoke, or rotate it before cleaning up the code and history.
 
 Environment variables feel private because they live in a file named `.env`. A frontend build changes that. Vite replaces `VITE_` variables in client code. Next.js inlines `NEXT_PUBLIC_` variables into JavaScript sent to the browser. Minification changes readability, not access.
 

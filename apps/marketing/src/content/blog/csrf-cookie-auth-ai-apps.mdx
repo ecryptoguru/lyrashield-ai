@@ -21,7 +21,7 @@ faq:
     a: "No. XSS can often act within the trusted origin and undermine CSRF controls. Prevent XSS separately and keep CSRF defenses for cross-site request intent."
 ---
 
-**Direct answer:** For cookie-authenticated state changes, use the framework's maintained CSRF protection or a verified synchronizer or signed double-submit token pattern. Reject missing or invalid tokens before the action. Add secure SameSite cookies, Origin or Referer checks where appropriate, and Fetch Metadata rules as layers. Keep safe HTTP methods free of state changes.
+**Direct answer:** For cookie-authenticated state changes, use the framework's maintained CSRF protection or a verified synchronizer or signed double-submit token pattern. Reject missing or invalid tokens before the action. Add secure SameSite cookies, Origin, or Referer checks where appropriate, and Fetch Metadata rules as layers. Keep safe HTTP methods free of state changes.
 
 A browser sends eligible cookies automatically. The server can see a valid session while knowing nothing about whether the user intended the request. A page on another origin may trigger that request even if it cannot read the response.
 
