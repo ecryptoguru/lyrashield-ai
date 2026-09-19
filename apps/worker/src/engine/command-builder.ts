@@ -78,6 +78,38 @@ function resolveTargetArg(target: TargetInfo): string {
   }
 }
 
+function isRemoteRepoRef(arg: string): boolean {
+  const value = arg.trim()
+  return (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("git@") ||
+    value.startsWith("git://") ||
+    value.endsWith(".git")
+  )
+}
+
+/**
+ * Map a worker-known target shape onto the engine's `--target-type` kind.
+ * Engine target inference is offline-only, so a non-suffixed HTTP(S) Git
+ * remote would otherwise classify as a web target. Returns null when no
+ * confident mapping exists — omission retains the engine's offline inference.
+ * The flag only classifies input; it never authorizes fetching the target.
+ */
+function resolveEngineTargetKind(target: TargetInfo, targetArg: string): string | null {
+  switch (target.type) {
+    case "REPO":
+      // A checked-out source tree is already local; remote refs clone via the
+      // engine's guarded repository path.
+      return isRemoteRepoRef(targetArg) ? "repository" : "local_code"
+    case "WEB_APP":
+    case "API":
+      return "web_application"
+    default:
+      return null
+  }
+}
+
 function resolveExecutable(): string {
   const enginePath = env.LYRASHIELD_ENGINE_PATH
   if (enginePath) return enginePath
@@ -113,6 +145,14 @@ export function buildEngineCommand(config: ScanConfig): EngineCommand {
     "--scan-mode",
     scanMode,
   ]
+
+  // Pin the declared kind so offline inference cannot misclassify a
+  // non-suffixed Git remote as a web target (and vice versa). The flag applies
+  // to every --target entry, including an API target's spec URL.
+  const engineTargetKind = resolveEngineTargetKind(config.target, targetArg)
+  if (engineTargetKind) {
+    args.push("--target-type", engineTargetKind)
+  }
 
   // API targets: the OpenAPI document is a second engine target — the engine
   // authorizes the spec's declared base URLs as in-scope on its own side.
