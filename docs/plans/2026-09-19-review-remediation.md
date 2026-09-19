@@ -147,7 +147,10 @@ the test server performed a fresh production-mode web build. The browser
 checks cover 390/768/1440 px where relevant, keyboard paths, stale response
 ordering, listener cleanup, and no horizontal overflow. The public Myra
 browser checks mock Turnstile/calendar/email; they do not claim live provider
-delivery. Generated plugin skill files can be touched by package build/tests;
+delivery. The authenticated run logged a Next.js `The destination stream
+closed early` error on an aborted scan-detail RSC request while its browser
+tests still passed; classify that log against a baseline before treating it
+as a release regression. Generated plugin skill files can be touched by package build/tests;
 restore only those generated deltas after verifying their origin.
 
 ### Next agent: release and runtime acceptance
