@@ -8,14 +8,17 @@ trap 'rm -rf "$tmp"' EXIT
 
 digest="sha256:$(printf 'a%.0s' {1..64})"
 target="ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@${digest}"
+old_digest="sha256:$(printf 'd%.0s' {1..64})"
+old_image="ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@${old_digest}"
 app_revision=$(printf 'b%.0s' {1..40})
 engine_revision=$(printf 'c%.0s' {1..40})
 
 write_mocks() {
   local case_dir=$1
-  mkdir -p "$case_dir/bin" "$case_dir/image-assets" "$case_dir/host/libexec" "$case_dir/host/systemd" "$case_dir/promotion"
+  mkdir -p "$case_dir/bin" "$case_dir/image-assets" "$case_dir/host/libexec" "$case_dir/host/systemd" "$case_dir/host/assets" "$case_dir/promotion"
   for asset in \
     run-worker.sh \
+    worker-env.sh \
     refresh-secrets.sh \
     refresh-egress.sh \
     capture-stop-provenance.sh \
@@ -50,6 +53,7 @@ write_mocks() {
 #!/bin/sh
 set -eu
 printf '%s\n' "$*" >> "$MOCK_SYSTEMCTL_LOG"
+printf 'systemctl %s\n' "$*" >> "$MOCK_ORDER_LOG"
 command=$1
 shift
 [ "${1:-}" != "--quiet" ] || shift
@@ -79,9 +83,11 @@ case "$command:$unit" in
     printf 1 > "$MOCK_TIMER_ACTIVE" ;;
   restart:lyrashield-worker.service)
     printf 1 > "$MOCK_SERVICE_ACTIVE"
+    printf 1 > "$MOCK_CONTAINER_PRESENT"
     if [ -n "${MOCK_REPLACEMENT_STOP:-}" ] && [ -s "$MOCK_ADMISSION_STOP" ]; then
       printf '%s' "$MOCK_REPLACEMENT_STOP" > "$MOCK_ADMISSION_STOP"
     fi ;;
+  restart:lyrashield-worker-secrets.service) : ;;
   reset-failed:lyrashield-worker.service) ;;
   daemon-reload:) ;;
   *) echo "unexpected systemctl call: $command $unit" >&2; exit 1 ;;
@@ -92,10 +98,13 @@ MOCK
 #!/bin/sh
 set -eu
 printf '%s\n' "$*" >> "$MOCK_DOCKER_LOG"
+printf 'docker %s\n' "$*" >> "$MOCK_ORDER_LOG"
 case "$1:$2" in
   inspect:lyrashield-worker)
+    [ "$(cat "$MOCK_CONTAINER_PRESENT")" = 1 ] || exit 1
     case "$*" in
-      *State.Health*) printf 'healthy\n' ;;
+      *State.Health*)
+        if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf 'healthy\n'; else printf 'starting\n'; fi ;;
       *'{{.Image}}'*) printf '%s\n' 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' ;;
       *Config.Image*)
         if [ "${MOCK_FAIL_IMAGE_CHECK:-0}" = 1 ]; then
@@ -105,7 +114,7 @@ case "$1:$2" in
         fi ;;
       *) exit 1 ;;
     esac ;;
-  exec:-w)
+  run:*)
     case "$*" in
       *'redis.call("GET"'*)
         for argument in "$@"; do expected_stop=$argument; done
@@ -126,8 +135,15 @@ case "$1:$2" in
       *getSystemPrisma*) printf '%s\n' '{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}' ;;
       *) : ;;
     esac ;;
+  exec:-w)
+    echo "promotion must not evaluate inside the live worker: $*" >&2
+    exit 1 ;;
   exec:lyrashield-worker)
     case "$*" in
+      *printenv\ REDIS_URL*)
+        if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf '%s\n' 'rediss://current@redis.test:6379'; else printf '%s\n' 'rediss://retired@retired-redis.test:6379'; fi ;;
+      *printenv\ DATABASE_URL*)
+        if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf '%s\n' 'postgresql://current@database.test:5432/lyrashield'; else printf '%s\n' 'postgresql://retired@retired-database.test:5432/lyrashield'; fi ;;
       *LYRASHIELD_PRODUCT_REVISION*) printf '%s\n' "$MOCK_APP_REVISION" ;;
       *LYRASHIELD_ENGINE_REVISION*) printf '%s\n' "$MOCK_ENGINE_REVISION" ;;
       *LYRASHIELD_WORKER_IMAGE_DIGEST*) printf '%s\n' "${MOCK_TARGET##*@}" ;;
@@ -171,18 +187,21 @@ run_case() {
   local service_active=${6:-1} existing_stop=${7:-} fail_image_check=${8:-0}
   local replacement_stop=${9:-}
   local free_bytes=${10:-9999999000}
+  local container_present=${11:-1}
   local case_dir="$tmp/$name"
   mkdir -p "$case_dir"
   write_mocks "$case_dir"
   printf '%s' "$service_active" > "$case_dir/service-active"
+  printf '%s' "$container_present" > "$case_dir/container-present"
   printf '%s' "$timer_active" > "$case_dir/timer-active"
   printf '%s' "$service_enabled" > "$case_dir/service-enabled"
   printf '%s' "$timer_enabled" > "$case_dir/timer-enabled"
   printf '%s' "$existing_stop" > "$case_dir/admission-stop"
   : > "$case_dir/docker.log"
   : > "$case_dir/systemctl.log"
-  printf 'LYRASHIELD_WORKER_IMAGE=%s\nGHCR_USERNAME=test-user\n' "$target" > "$case_dir/runtime.conf"
-  printf 'GHCR_TOKEN=test-token\n' > "$case_dir/worker.env"
+  : > "$case_dir/order.log"
+  printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$old_image" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
+  printf 'GHCR_TOKEN=test-token\nREDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\n' > "$case_dir/worker.env"
 
   set +e
   output=$(
@@ -191,12 +210,14 @@ run_case() {
       MOCK_APP_REVISION="$app_revision" \
       MOCK_ENGINE_REVISION="$engine_revision" \
       MOCK_SERVICE_ACTIVE="$case_dir/service-active" \
+      MOCK_CONTAINER_PRESENT="$case_dir/container-present" \
       MOCK_TIMER_ACTIVE="$case_dir/timer-active" \
       MOCK_SERVICE_ENABLED="$case_dir/service-enabled" \
       MOCK_TIMER_ENABLED="$case_dir/timer-enabled" \
       MOCK_ADMISSION_STOP="$case_dir/admission-stop" \
       MOCK_DOCKER_LOG="$case_dir/docker.log" \
       MOCK_SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+      MOCK_ORDER_LOG="$case_dir/order.log" \
       MOCK_IMAGE_ASSETS="$case_dir/image-assets" \
       MOCK_FREE_BYTES="$free_bytes" \
       MOCK_FAIL_IMAGE_CHECK="$fail_image_check" \
@@ -205,6 +226,8 @@ run_case() {
       LYRASHIELD_WORKER_ENV_FILE="$case_dir/worker.env" \
       LYRASHIELD_WORKER_PROMOTION_STATE_DIR="$case_dir/promotion" \
       LYRASHIELD_WORKER_HOST_LIBEXEC_DIR="$case_dir/host/libexec" \
+      LYRASHIELD_WORKER_HOST_ASSETS_DIR="$case_dir/host/assets" \
+      LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
       LYRASHIELD_WORKER_SYSTEMD_DIR="$case_dir/host/systemd" \
       sh "$script" "$target" "$app_revision" "$engine_revision" 2>&1
   )
@@ -227,9 +250,27 @@ run_case() {
       grep -Fq 'Worker image pull requires' <<< "$output"
     fi
   fi
-  grep -Fq 'image prune --all --force' "$case_dir/docker.log"
+  if [ "$container_present" = 1 ]; then
+    grep -Fq 'image prune --all --force' "$case_dir/docker.log"
+  else
+    grep -Fxq "image inspect $old_image --format {{.Size}}" "$case_dir/docker.log"
+    grep -Fq 'image prune --force' "$case_dir/docker.log"
+    if grep -Fq 'image prune --all --force' "$case_dir/docker.log"; then
+      echo "missing-container recovery pruned its rollback image" >&2
+      exit 1
+    fi
+  fi
   if [ "$expected" = success ]; then
-    [ "$(grep -Fxc 'restart lyrashield-worker.service' "$case_dir/systemctl.log")" -eq 2 ]
+    # Exactly one restart and it happens after the admission-stop claim and
+    # the empty-queue check: a scan admitted before promotion finishes against
+    # the old worker before the container is replaced.
+    [ "$(grep -Fxc 'restart lyrashield-worker.service' "$case_dir/systemctl.log")" -eq 1 ]
+    restart_line=$(grep -Fn 'systemctl restart lyrashield-worker.service' "$case_dir/order.log" | cut -d: -f1)
+    claim_line=$(grep -Fn 'redis.call("EXISTS"' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
+    queue_line=$(grep -Fn 'getSystemPrisma' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
+    [ -n "$restart_line" ] && [ -n "$claim_line" ] && [ -n "$queue_line" ]
+    [ "$restart_line" -gt "$claim_line" ] && [ "$restart_line" -gt "$queue_line" ]
+    [ -f "$case_dir/host/assets/worker-env.sh" ]
   fi
   if [ -n "$replacement_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
@@ -246,6 +287,7 @@ run_case healthy 1 1 1 success
 run_case repairs-inactive-timer 0 1 1 success
 run_case repairs-disabled-units 1 0 0 success
 run_case repairs-inactive-service 1 1 1 success 0
+run_case recovers-missing-container 1 1 1 success 0 '' 0 '' 9999999000 0
 run_case preserves-existing-stop 1 1 1 success 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}'
 run_case preserves-newer-stop 1 1 1 success 1 '' 0 '{"operator":"on-call","reason":"new-incident"}'
 run_case resumes-owned-stop-on-rollback 1 1 1 failure 1 '' 1

@@ -40,6 +40,12 @@ const workerRunner = readFileSync(
 )
 // The path is anchored to this test module rather than derived from external input.
 // eslint-disable-next-line security/detect-non-literal-fs-filename
+const workerEnv = readFileSync(
+  fileURLToPath(new URL("../../../ops/worker/worker-env.sh", import.meta.url)),
+  "utf8"
+)
+// The path is anchored to this test module rather than derived from external input.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
 const workerPromoter = readFileSync(
   fileURLToPath(new URL("../../../.github/scripts/promote-worker-vm.sh", import.meta.url)),
   "utf8"
@@ -195,7 +201,7 @@ describe("worker Docker runtime", () => {
     expect(ciWorkflow).toContain(
       'PLATFORM_ADMIN_EMAILS: "ecryptoguru@gmail.com,ankit@lyrashieldai.com"'
     )
-    expect(workerRunner).toContain(
+    expect(workerEnv).toContain(
       "--env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com"
     )
     expect(deployWorkflow).toContain("@${{ steps.build-worker.outputs.digest }}")
@@ -291,13 +297,17 @@ describe("worker Docker runtime", () => {
   })
 
   it("injects immutable image-derived provenance into the worker runtime", () => {
-    expect(workerRunner).toContain('{{index .Config.Labels "org.opencontainers.image.revision"}}')
-    expect(workerRunner).toContain('{{index .Config.Labels "io.lyrashield.engine.revision"}}')
-    expect(workerRunner).toContain("--env LYRASHIELD_PRODUCT_REVISION=")
-    expect(workerRunner).toContain("--env LYRASHIELD_WORKER_IMAGE_DIGEST=")
-    expect(workerRunner).toContain("--env LYRASHIELD_ENGINE_REVISION=")
+    // The launcher sources ops/worker/worker-env.sh for the shared worker
+    // environment; the provenance labels and --env values live there now.
+    expect(workerRunner).toContain("worker-env.sh")
+    expect(workerRunner).toContain("lyrashield_worker_env_args")
+    expect(workerEnv).toContain('{{index .Config.Labels "org.opencontainers.image.revision"}}')
+    expect(workerEnv).toContain('{{index .Config.Labels "io.lyrashield.engine.revision"}}')
+    expect(workerEnv).toContain("--env LYRASHIELD_PRODUCT_REVISION=")
+    expect(workerEnv).toContain("--env LYRASHIELD_WORKER_IMAGE_DIGEST=")
+    expect(workerEnv).toContain("--env LYRASHIELD_ENGINE_REVISION=")
     // No mutable tag or manually typed revision may supply provenance.
-    expect(workerRunner).toContain("${LYRASHIELD_WORKER_IMAGE##*@}")
+    expect(workerEnv).toContain("${LYRASHIELD_WORKER_IMAGE##*@}")
     expect(workerRunner).toContain('if ! docker image inspect "$image" >/dev/null 2>&1; then')
     expect(workerRunner).toContain('docker pull "$image" >/dev/null')
   })
@@ -366,8 +376,9 @@ describe("worker Docker runtime", () => {
       "--tmpfs /lyrashield-retests:rw,nosuid,nodev,noexec,size=1g,mode=1777"
     )
     expect(workerRunner).toContain("worker_shared_root=/var/lib/lyrashield/worker")
-    expect(workerRunner).toContain('--env LYRASHIELD_ENGINE_WORK_ROOT="$worker_shared_root"')
-    expect(workerRunner).toContain('--env TMPDIR="$worker_shared_root/tmp"')
+    expect(workerRunner).toContain('"$worker_shared_root"')
+    expect(workerEnv).toContain("--env LYRASHIELD_ENGINE_WORK_ROOT=$lwe_shared_root")
+    expect(workerEnv).toContain("--env TMPDIR=$lwe_shared_root/tmp")
     expect(
       workerRunner.match(/type=bind,src="\$worker_shared_root",dst="\$worker_shared_root"/g) ?? []
     ).toHaveLength(2)
