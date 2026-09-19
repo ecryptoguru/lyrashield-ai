@@ -88,8 +88,7 @@ export async function verifyScanAdmission(params: {
         errorMessage: "Stored execution plan does not match the scan profile.",
       }
     } else if (
-      executionPlan.capabilities.includes("engine") !==
-      (engineBacked && !deterministicRetest)
+      executionPlan.capabilities.includes("engine") !== (engineBacked && !deterministicRetest)
     ) {
       admissionError = {
         errorCategory: "SCAN_PLAN_MISMATCH",
@@ -104,10 +103,7 @@ export async function verifyScanAdmission(params: {
         errorMessage:
           "Stored execution plan exceeds the limits currently allowed for this profile.",
       }
-    } else if (
-      executionPlan.workflow === "AUTHENTICATED_ASSESSMENT" &&
-      destructiveTestsAllowed
-    ) {
+    } else if (executionPlan.workflow === "AUTHENTICATED_ASSESSMENT" && destructiveTestsAllowed) {
       admissionError = {
         errorCategory: "SCAN_PLAN_DENIED",
         errorMessage:

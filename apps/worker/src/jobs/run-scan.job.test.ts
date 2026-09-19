@@ -38,55 +38,55 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
 
 vi.mock("@lyrashield/db", async () => {
   // Keep the real stored-plan verifier — the fixtures exercise it directly.
-  const planModule = await vi.importActual<
-    typeof import("@lyrashield/db/src/scan-execution-plan")
-  >("@lyrashield/db/src/scan-execution-plan")
+  const planModule = await vi.importActual<typeof import("@lyrashield/db/src/scan-execution-plan")>(
+    "@lyrashield/db/src/scan-execution-plan"
+  )
   return {
-  verifyStoredScanExecutionPlan: planModule.verifyStoredScanExecutionPlan,
-  prisma: {
-    auditLog: { create: vi.fn().mockResolvedValue({}) },
-    workspaceMember: { findFirst: vi.fn().mockResolvedValue({ role: "OWNER" }) },
-    target: {
-      findFirst: vi.fn(),
+    verifyStoredScanExecutionPlan: planModule.verifyStoredScanExecutionPlan,
+    prisma: {
+      auditLog: { create: vi.fn().mockResolvedValue({}) },
+      workspaceMember: { findFirst: vi.fn().mockResolvedValue({ role: "OWNER" }) },
+      target: {
+        findFirst: vi.fn(),
+      },
+      targetDomainVerification: {
+        findFirst: vi.fn(),
+      },
+      policy: {
+        findFirst: vi.fn(),
+      },
+      scan: {
+        findUnique: vi.fn(),
+        update: vi.fn(),
+        updateMany: vi.fn(),
+      },
+      billingAccount: {
+        findUnique: vi.fn().mockResolvedValue({
+          currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
+          currentPlan: "STARTER",
+          spendLimitCents: 0,
+        }),
+      },
     },
-    targetDomainVerification: {
-      findFirst: vi.fn(),
-    },
-    policy: {
-      findFirst: vi.fn(),
-    },
-    scan: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-      updateMany: vi.fn(),
-    },
-    billingAccount: {
-      findUnique: vi.fn().mockResolvedValue({
-        currentPeriodStart: new Date("2026-08-01T00:00:00.000Z"),
-        currentPlan: "STARTER",
-        spendLimitCents: 0,
-      }),
-    },
-  },
-  getSystemPrisma: vi.fn(() => ({
-    scan: {
-      findUnique: systemScanFindUnique,
-    },
-  })),
-  updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
-  completeScanWithScore: vi.fn().mockResolvedValue({}),
-  createAiSecurityScoreSnapshot: vi.fn().mockResolvedValue({}),
-  qualifyReferralForWorkspace: vi.fn().mockResolvedValue(null),
-  evaluateGateForTarget: vi.fn().mockResolvedValue(undefined),
-  addScanEvent: vi.fn().mockResolvedValue(undefined),
-  withScanFinalizationClaim: vi.fn(
-    async (_scanId: string, _workspaceId: string, finalize: () => Promise<unknown>) => ({
-      status: "finalized",
-      value: await finalize(),
-    })
-  ),
-  runWithWorkspaceContext: <T>(_wsId: string | null, fn: () => T): T => fn(),
-  runWithAccountContext: <T>(_accountId: string | null, fn: () => T): T => fn(),
+    getSystemPrisma: vi.fn(() => ({
+      scan: {
+        findUnique: systemScanFindUnique,
+      },
+    })),
+    updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
+    completeScanWithScore: vi.fn().mockResolvedValue({}),
+    createAiSecurityScoreSnapshot: vi.fn().mockResolvedValue({}),
+    qualifyReferralForWorkspace: vi.fn().mockResolvedValue(null),
+    evaluateGateForTarget: vi.fn().mockResolvedValue(undefined),
+    addScanEvent: vi.fn().mockResolvedValue(undefined),
+    withScanFinalizationClaim: vi.fn(
+      async (_scanId: string, _workspaceId: string, finalize: () => Promise<unknown>) => ({
+        status: "finalized",
+        value: await finalize(),
+      })
+    ),
+    runWithWorkspaceContext: <T>(_wsId: string | null, fn: () => T): T => fn(),
+    runWithAccountContext: <T>(_accountId: string | null, fn: () => T): T => fn(),
   }
 })
 
