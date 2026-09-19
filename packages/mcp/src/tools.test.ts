@@ -164,6 +164,28 @@ describe("createGetFindingsTool", () => {
       expect.anything()
     )
   })
+  it("forwards cursor and supported filters with a default page size", async () => {
+    mockFetch.mockResolvedValueOnce(makeApiResponse({ items: [], nextCursor: null }))
+    const tool = createGetFindingsTool(context)
+    await tool.handler({ workspaceId: "ws-1", scanId: "scan-1", cursor: "page-2",
+      status: "OPEN", verified: false })
+    const url = String(mockFetch.mock.calls[0]![0])
+    expect(url).toContain("limit=50")
+    expect(url).toContain("cursor=page-2")
+    expect(url).toContain("scanId=scan-1")
+    expect(url).toContain("status=OPEN")
+    expect(url).toContain("verified=false")
+    expect(tool.inputSchema.properties.limit).toMatchObject({ type: "integer", minimum: 1, maximum: 100 })
+  })
+  it("rejects invalid page sizes before calling the API", async () => {
+    const tool = createGetFindingsTool(context)
+    for (const limit of [0, 1.5, 101, "10"]) {
+      const result = await tool.handler({ workspaceId: "ws-1", limit })
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toContain("limit must be an integer")
+    }
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
 })
 
 describe("createGetLaunchReadinessTool", () => {
@@ -276,6 +298,18 @@ describe("createPrSecurityRecapTool", () => {
     expect(firstFindingsUrl).toContain("limit=100")
     expect(firstFindingsUrl).not.toContain("cursor=")
     expect(secondFindingsUrl).toContain("cursor=f-1")
+  })
+  it("marks a repeated cursor as incomplete without reporting no findings", async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeApiResponse({ state: "INSUFFICIENT_EVIDENCE" }))
+      .mockResolvedValueOnce(makeApiResponse({ items: [], nextCursor: "again" }))
+      .mockResolvedValueOnce(makeApiResponse({ items: [], nextCursor: "again" }))
+    const result = await createPrSecurityRecapTool(context).handler({ workspaceId: "ws-1", targetId: "t-1" })
+    const data = JSON.parse(result.content[0]!.text)
+    expect(data.complete).toBe(false)
+    expect(data.nextCursor).toBe("again")
+    expect(data.markdown).toContain("incomplete")
+    expect(data.markdown).not.toContain("**Open findings:** none")
   })
 })
 

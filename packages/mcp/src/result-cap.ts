@@ -1,49 +1,50 @@
 import type { McpToolResult } from "./tools"
 
-/** Documented result ceiling: 256 KiB serialized per tool call. */
+/** Maximum UTF-8 size of the complete serialized tool result. */
 export const MCP_RESULT_MAX_BYTES = 256 * 1024
 export const MCP_TRUNCATION_MARKER = "[… truncated — result exceeded the 256 KiB tool-result cap]"
 
-function byteLength(text: string): number {
-  return Buffer.byteLength(text, "utf8")
-}
+const size = (value: unknown) => Buffer.byteLength(JSON.stringify(value), "utf8")
 
-/**
- * Bounds the wire size of a tool result: each text content entry and the
- * serialized structuredContent are capped at 256 KiB. Truncated payloads carry
- * an explicit marker/flag so clients never mistake a partial result for a
- * complete one.
- */
 export function capToolResult(result: McpToolResult): McpToolResult {
-  let content = result.content
-  if (content) {
-    let changed = false
-    const next = content.map((entry) => {
-      if (entry.type === "text" && byteLength(entry.text) > MCP_RESULT_MAX_BYTES) {
-        changed = true
-        const budget = MCP_RESULT_MAX_BYTES - byteLength(MCP_TRUNCATION_MARKER) - 1
-        let text = entry.text
-        while (byteLength(text) > budget) text = text.slice(0, Math.floor(text.length * 0.9))
-        return { ...entry, text: `${text}\n${MCP_TRUNCATION_MARKER}` }
-      }
-      return entry
-    })
-    if (changed) content = next
-  }
+  const originalBytes = size(result)
+  if (originalBytes <= MCP_RESULT_MAX_BYTES) return result
 
-  let structuredContent = result.structuredContent
-  if (structuredContent !== undefined) {
-    const serialized = JSON.stringify(structuredContent)
-    if (byteLength(serialized) > MCP_RESULT_MAX_BYTES) {
-      structuredContent = {
-        truncated: true,
-        truncatedAt: MCP_RESULT_MAX_BYTES,
-        marker: MCP_TRUNCATION_MARKER,
-        preview: serialized.slice(0, MCP_RESULT_MAX_BYTES),
-      }
+  const source = result.content.find((entry) => entry.type === "text")?.text ??
+    JSON.stringify(result.structuredContent ?? result)
+  const structured = result.structuredContent as Record<string, unknown> | undefined
+  const continuation: Record<string, unknown> = {}
+  for (const key of ["id", "scanId", "operationId", "workspaceId", "nextCursor", "cursor"]) {
+    const value = structured?.[key]
+    if (typeof value === "string" && Buffer.byteLength(value, "utf8") < 1024) {
+      continuation[key] = value
     }
   }
-
-  if (content === result.content && structuredContent === result.structuredContent) return result
-  return { ...result, content, structuredContent }
+  for (const [field, key] of [["scan", "scanId"], ["operation", "operationId"]] as const) {
+    const nested = structured?.[field]
+    if (nested && typeof nested === "object" && "id" in nested &&
+      typeof nested.id === "string" && Buffer.byteLength(nested.id, "utf8") < 1024) {
+      continuation[key] = nested.id
+    }
+  }
+  const metadata = {
+    truncated: true,
+    complete: false,
+    originalBytes,
+    marker: MCP_TRUNCATION_MARKER,
+    ...continuation,
+  }
+  const make = (length: number): McpToolResult => ({
+    content: [{ type: "text", text: `${source.slice(0, length)}\n${MCP_TRUNCATION_MARKER}` }],
+    structuredContent: metadata,
+    ...(result.isError ? { isError: true } : {}),
+  })
+  let low = 0
+  let high = source.length
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    if (size(make(mid)) <= MCP_RESULT_MAX_BYTES) low = mid
+    else high = mid - 1
+  }
+  return make(low)
 }

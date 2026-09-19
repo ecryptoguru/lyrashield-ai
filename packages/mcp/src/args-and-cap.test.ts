@@ -99,9 +99,20 @@ describe("MCP result cap (v17)", () => {
     const sc = res.structuredContent as Record<string, unknown> | undefined
     expect(sc?.truncated).toBe(true)
     expect(sc?.marker).toBe(MCP_TRUNCATION_MARKER)
-    expect(JSON.stringify(sc).length).toBeLessThanOrEqual(MCP_RESULT_MAX_BYTES + 1024)
-    expect(res.content[0]!.text.length).toBeLessThanOrEqual(
-      Buffer.byteLength(MCP_TRUNCATION_MARKER) + MCP_RESULT_MAX_BYTES
-    )
+    expect(sc?.complete).toBe(false)
+    expect(Buffer.byteLength(JSON.stringify(res), "utf8")).toBeLessThanOrEqual(MCP_RESULT_MAX_BYTES)
+  })
+
+  it("bounds Unicode, escaping, and error results as a complete JSON object", async () => {
+    const { capToolResult } = await import("./result-cap")
+    const result = capToolResult({
+      content: [{ type: "text", text: "🛡️\\\"".repeat(150_000) },
+        { type: "text", text: "extra".repeat(100_000) }],
+      structuredContent: { nextCursor: "page-2", scanId: "scan-1", data: "🛡️".repeat(150_000) },
+      isError: true,
+    })
+    expect(Buffer.byteLength(JSON.stringify(result), "utf8")).toBeLessThanOrEqual(MCP_RESULT_MAX_BYTES)
+    expect(result.structuredContent).toMatchObject({ complete: false, nextCursor: "page-2", scanId: "scan-1" })
+    expect(result.isError).toBe(true)
   })
 })
