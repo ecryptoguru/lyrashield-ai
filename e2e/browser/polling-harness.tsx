@@ -59,6 +59,7 @@ const scan: ScanData = {
   ...item,
   workspaceId: "ws-a",
   events: [],
+  executionPlan: null,
   integrity: { manifestChecksum: null, coverage: [] },
   aiSecurity: null,
 }
