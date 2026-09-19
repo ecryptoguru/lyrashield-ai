@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest"
-import {
-  evaluateAuthAssessmentAdmission,
-  parseAuthAssessmentAllowlist,
-} from "./auth-assessment"
+import { evaluateAuthAssessmentAdmission, parseAuthAssessmentAllowlist } from "./auth-assessment"
 
 describe("parseAuthAssessmentAllowlist", () => {
   it("returns an empty list for a blank value", () => {

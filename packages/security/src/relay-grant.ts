@@ -67,9 +67,7 @@ function canonicalJson(scope: RelayGrantScope): string {
     maxBytes: scope.maxBytes,
     ratePerMinute: scope.ratePerMinute,
     perPathPerMinute: scope.perPathPerMinute,
-    ...(scope.maxResponseBytes !== undefined
-      ? { maxResponseBytes: scope.maxResponseBytes }
-      : {}),
+    ...(scope.maxResponseBytes !== undefined ? { maxResponseBytes: scope.maxResponseBytes } : {}),
   }
   return JSON.stringify(ordered)
 }
@@ -248,10 +246,7 @@ export const MAX_SESSION_HEADER_VALUE_BYTES = 8 * 1024
 export const MAX_SESSION_HOSTS = 8
 
 export type RelaySessionDenyReason =
-  | "session_malformed"
-  | "session_header_not_allowed"
-  | "session_out_of_scope"
-  | "session_expired"
+  "session_malformed" | "session_header_not_allowed" | "session_out_of_scope" | "session_expired"
 
 /**
  * Validate a session binding against an already-verified grant scope. The
@@ -262,11 +257,7 @@ export function validateRelaySessionBinding(
   scope: RelayGrantScope,
   session: unknown
 ): { ok: true; session: RelaySessionBinding } | { ok: false; reason: RelaySessionDenyReason } {
-  if (
-    !session ||
-    typeof session !== "object" ||
-    Array.isArray(session)
-  ) {
+  if (!session || typeof session !== "object" || Array.isArray(session)) {
     return { ok: false, reason: "session_malformed" }
   }
   const candidate = session as Record<string, unknown>
@@ -335,9 +326,7 @@ export function validateRelaySessionBinding(
 export function relaySessionHostAllowed(session: RelaySessionBinding, host: string): boolean {
   const normalized = normalizeRelayHost(host)
   if (!normalized) return false
-  return session.hosts.some(
-    (scoped) => normalized === scoped || normalized.endsWith(`.${scoped}`)
-  )
+  return session.hosts.some((scoped) => normalized === scoped || normalized.endsWith(`.${scoped}`))
 }
 
 // ── Outbound connector scopes ───────────────────────────────────────────────

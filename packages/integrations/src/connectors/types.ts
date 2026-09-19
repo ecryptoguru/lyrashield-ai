@@ -18,8 +18,7 @@ export const CONNECTOR_PROVIDERS = ["github", "slack"] as const
 export type ConnectorProvider = (typeof CONNECTOR_PROVIDERS)[number]
 
 export type ConnectorCredential =
-  | { kind: "github_installation"; installationId: number }
-  | { kind: "slack_bot"; botToken: string }
+  { kind: "github_installation"; installationId: number } | { kind: "slack_bot"; botToken: string }
 
 export interface ConnectorInvocationContext {
   workspaceId: string

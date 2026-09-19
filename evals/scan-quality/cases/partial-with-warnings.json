@@ -13,8 +13,18 @@
     "receipts": [
       { "scanner": "sast", "controlId": "vibe-01", "status": "COMPLETED" },
       { "scanner": "url", "controlId": "vibe-40", "status": "FAILED", "reason": "relay exhausted" },
-      { "scanner": "connector", "controlId": "connector:slack.get_channel_history", "status": "BLOCKED", "reason": "CONNECTION_DISABLED" },
-      { "scanner": "engine", "controlId": "engine-scope:session-handling", "status": "NOT_APPLICABLE", "metadata": { "declaredBy": "engine_model" } }
+      {
+        "scanner": "connector",
+        "controlId": "connector:slack.get_channel_history",
+        "status": "BLOCKED",
+        "reason": "CONNECTION_DISABLED"
+      },
+      {
+        "scanner": "engine",
+        "controlId": "engine-scope:session-handling",
+        "status": "NOT_APPLICABLE",
+        "metadata": { "declaredBy": "engine_model" }
+      }
     ],
     "findings": [
       { "verificationStatus": "DETECTED", "severity": "HIGH" },

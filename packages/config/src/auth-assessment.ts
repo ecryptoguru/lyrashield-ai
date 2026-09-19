@@ -30,9 +30,7 @@ export interface AuthAssessmentAllowlistEntry {
  * scope, so a bad value fails closed rather than degrading to "empty".
  * Entries are `workspaceId` or `workspaceId:targetId`.
  */
-export function parseAuthAssessmentAllowlist(
-  raw: string
-): AuthAssessmentAllowlistEntry[] | null {
+export function parseAuthAssessmentAllowlist(raw: string): AuthAssessmentAllowlistEntry[] | null {
   if (!raw.trim()) return []
   const entries: AuthAssessmentAllowlistEntry[] = []
   for (const token of raw.split(",")) {
@@ -48,10 +46,7 @@ export function parseAuthAssessmentAllowlist(
 }
 
 export type AuthAssessmentAdmissionReason =
-  | "flag_off"
-  | "invalid_allowlist"
-  | "not_allowlisted"
-  | "allowlisted"
+  "flag_off" | "invalid_allowlist" | "not_allowlisted" | "allowlisted"
 
 export interface AuthAssessmentAdmissionDecision {
   allowed: boolean

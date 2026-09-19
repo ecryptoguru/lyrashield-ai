@@ -20,7 +20,9 @@ export function getConnectorTool(name: string): ConnectorTool | undefined {
 }
 
 export function listConnectorTools(provider?: ConnectorProvider): ConnectorTool[] {
-  return provider ? CONNECTOR_TOOLS.filter((tool) => tool.provider === provider) : [...CONNECTOR_TOOLS]
+  return provider
+    ? CONNECTOR_TOOLS.filter((tool) => tool.provider === provider)
+    : [...CONNECTOR_TOOLS]
 }
 
 /**
@@ -33,7 +35,11 @@ export function connectorToolResource(
   tool: ConnectorTool,
   input: Record<string, unknown>
 ): string | undefined {
-  if (tool.provider === "github" && typeof input.owner === "string" && typeof input.repo === "string") {
+  if (
+    tool.provider === "github" &&
+    typeof input.owner === "string" &&
+    typeof input.repo === "string"
+  ) {
     return `repo:${input.owner}/${input.repo}`
   }
   if (tool.provider === "slack" && typeof input.channel === "string") {

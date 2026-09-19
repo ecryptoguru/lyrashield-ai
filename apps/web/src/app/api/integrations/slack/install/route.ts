@@ -116,7 +116,10 @@ export async function GET(request: NextRequest) {
     })
 
     const grantedScopes = exchange.scope
-      ? exchange.scope.split(",").map((s) => s.trim()).filter(Boolean)
+      ? exchange.scope
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
       : [...SLACK_CONNECT_SCOPES]
 
     const integration = await upsertConnectorConnection({

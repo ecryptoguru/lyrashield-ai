@@ -149,8 +149,7 @@ describe("scan-workflows parity fixture", () => {
     }
     // Missing on the beta workflow → rejected.
     expect(
-      CreateScanInputSchema.safeParse({ ...base, workflow: "AUTHENTICATED_ASSESSMENT" })
-        .success
+      CreateScanInputSchema.safeParse({ ...base, workflow: "AUTHENTICATED_ASSESSMENT" }).success
     ).toBe(false)
     // Present on any other workflow → rejected; the reference can never leak
     // into a plan that does not verify it.

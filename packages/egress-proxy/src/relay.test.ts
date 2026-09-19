@@ -618,11 +618,7 @@ describe("scoped relay", () => {
       })
     ).toEqual({ ok: false, reason: "session_header_not_allowed" })
     // Registration failed closed — no state was admitted for the scan.
-    const res = await rawForward(
-      proxy.port,
-      `http://${UPSTREAM_HOST}:${upstreamPort}/echo`,
-      token
-    )
+    const res = await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/echo`, token)
     expect(res.raw).toContain("unregistered_grant")
   })
 

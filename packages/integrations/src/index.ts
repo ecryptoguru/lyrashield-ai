@@ -45,10 +45,7 @@ export {
   listConnectorTools,
   connectorToolResource,
 } from "./connectors/registry"
-export {
-  githubConnectorTools,
-  GitHubConnectorError,
-} from "./connectors/github"
+export { githubConnectorTools, GitHubConnectorError } from "./connectors/github"
 export {
   slackConnectorTools,
   slackApi,

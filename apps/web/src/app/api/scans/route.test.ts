@@ -846,9 +846,7 @@ describe("POST /api/scans", () => {
           authorizationRef: "authz_1",
         })
       )
-      expect(enqueueScanJob).toHaveBeenCalledWith(
-        expect.objectContaining({ scanId: "scan-beta" })
-      )
+      expect(enqueueScanJob).toHaveBeenCalledWith(expect.objectContaining({ scanId: "scan-beta" }))
     })
 
     it("rejects REVIEW_CHANGES on a non-repository target", async () => {

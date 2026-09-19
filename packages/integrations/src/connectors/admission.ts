@@ -5,10 +5,7 @@
  * allowlist, and a malformed allowlist fails closed.
  */
 import { env } from "@lyrashield/config"
-import {
-  evaluateConnectorAdmission,
-  type ConnectorAdmissionDecision,
-} from "@lyrashield/security"
+import { evaluateConnectorAdmission, type ConnectorAdmissionDecision } from "@lyrashield/security"
 
 export function getConnectorAdmission(workspaceId: string): ConnectorAdmissionDecision {
   return evaluateConnectorAdmission({

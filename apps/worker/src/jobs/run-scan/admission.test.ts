@@ -339,9 +339,7 @@ describe("verifyScanAdmission", () => {
       // authAssessmentPermitted defaults to false — flag off or workspace
       // dropped from the allowlist between queue and run fails closed.
       await expect(
-        verifyScanAdmission(
-          params({ executionPlan: betaPlan, targetType: "API" })
-        )
+        verifyScanAdmission(params({ executionPlan: betaPlan, targetType: "API" }))
       ).resolves.toMatchObject({
         ok: false,
         result: { errorCategory: "SCAN_WORKFLOW_UNAVAILABLE" },

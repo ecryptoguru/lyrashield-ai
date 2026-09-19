@@ -142,10 +142,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // The authenticated staging beta is a hard 15-minute wall-clock cap —
       // the recorded plan ceiling narrows the runtime budget, never widens it.
       if (executionPlan?.workflow === "AUTHENTICATED_ASSESSMENT") {
-        scanRuntimeBudgetMs = Math.min(
-          scanRuntimeBudgetMs,
-          executionPlan.limits.maxDurationMs
-        )
+        scanRuntimeBudgetMs = Math.min(scanRuntimeBudgetMs, executionPlan.limits.maxDurationMs)
       }
 
       const hasGlobalScanTimeout = (): boolean => {

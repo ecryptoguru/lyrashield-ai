@@ -111,11 +111,7 @@ export async function resolveAuthenticatedAssessmentAuthorization(input: {
     }
 
     const verification = plan.domainVerification
-    if (
-      !verification ||
-      verification.status !== "VERIFIED" ||
-      verification.expiresAt <= now
-    ) {
+    if (!verification || verification.status !== "VERIFIED" || verification.expiresAt <= now) {
       throw new LiveAiSafetyError("DOMAIN_VERIFICATION_REQUIRED")
     }
     if (!plan.incidentContact) {

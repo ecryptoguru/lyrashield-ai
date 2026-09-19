@@ -921,8 +921,8 @@ export function ScanDetailClient({
                   </h2>
                   <p className="text-muted-foreground mt-1 text-sm">
                     Measured facts computed from this scan&apos;s stored evidence. Ratios are
-                    heuristics, not accuracy claims — model-declared coverage is counted
-                    separately and never treated as a measured outcome.
+                    heuristics, not accuracy claims — model-declared coverage is counted separately
+                    and never treated as a measured outcome.
                   </p>
                 </div>
                 <dl className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -934,15 +934,16 @@ export function ScanDetailClient({
                     </dd>
                     <p className="text-muted-foreground mt-1 text-xs">
                       {findings?.nonConclusiveCount ?? 0} non-conclusive (blocked/inconclusive/
-                      unlabeled). Verified means independently confirmed; validated is
-                      deterministic checking only.
+                      unlabeled). Verified means independently confirmed; validated is deterministic
+                      checking only.
                     </p>
                   </div>
                   <div className="rounded-md border p-3">
                     <dt className="text-muted-foreground text-xs">Coverage receipts (measured)</dt>
                     <dd className="mt-1 text-sm font-medium">
-                      {coverage?.receiptsTotal ?? 0} recorded · {coverage?.engineDeclaredReceipts ?? 0}{" "}
-                      engine-declared · {coverage?.connectorReceipts ?? 0} connector
+                      {coverage?.receiptsTotal ?? 0} recorded ·{" "}
+                      {coverage?.engineDeclaredReceipts ?? 0} engine-declared ·{" "}
+                      {coverage?.connectorReceipts ?? 0} connector
                     </dd>
                     <p className="text-muted-foreground mt-1 text-xs">
                       Engine-declared entries are the engine&apos;s own assertions, not measured

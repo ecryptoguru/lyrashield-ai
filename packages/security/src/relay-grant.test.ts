@@ -138,9 +138,9 @@ describe("relay grant", () => {
   it.each([0, -1, 1.5, "1048576", 64 * 1024 * 1024 + 1])(
     "rejects malformed maxResponseBytes %j",
     (maxResponseBytes) => {
-      const payload = Buffer.from(
-        JSON.stringify({ ...baseScope, maxResponseBytes })
-      ).toString("base64url")
+      const payload = Buffer.from(JSON.stringify({ ...baseScope, maxResponseBytes })).toString(
+        "base64url"
+      )
       const signature = createHmac("sha256", SECRET).update(payload).digest("base64url")
       expect(verifyRelayGrant(`lrg1.${payload}.${signature}`, SECRET)).toEqual({
         ok: false,
@@ -251,10 +251,7 @@ describe("connector relay scope", () => {
       expect(verified.scope).toEqual(scope)
     }
     // Expiry is enforced on connector grants like any other grant.
-    const expired = mintRelayGrant(
-      { ...scope, exp: Date.now() - 1 },
-      SECRET
-    )
+    const expired = mintRelayGrant({ ...scope, exp: Date.now() - 1 }, SECRET)
     expect(verifyRelayGrant(expired, SECRET)).toEqual({ ok: false, reason: "expired" })
   })
 

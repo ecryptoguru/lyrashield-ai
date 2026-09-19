@@ -121,7 +121,9 @@ describe("connector authorization matrix", () => {
     expect(completeAgentOperation).toHaveBeenCalledWith(
       "op-1",
       WORKSPACE,
-      expect.objectContaining({ result: expect.objectContaining({ output: { fullName: "acme/app" } }) })
+      expect.objectContaining({
+        result: expect.objectContaining({ output: { fullName: "acme/app" } }),
+      })
     )
     // Principal is bound to the connection row id.
     expect(claimOrGetAgentOperation).toHaveBeenCalledWith(

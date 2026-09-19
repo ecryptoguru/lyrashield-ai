@@ -231,10 +231,7 @@ function canonicalJson(value: unknown): string {
  * module stays importable from client bundles without node:crypto).
  */
 async function sha256Hex(input: string): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(input)
-  )
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(input))
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("")
 }
 
@@ -328,8 +325,7 @@ export async function buildScanQualitySurface(
       },
       verifiedFindingRatio: {
         kind: "heuristic",
-        value:
-          input.findings.length === 0 ? null : verifiedCount / input.findings.length,
+        value: input.findings.length === 0 ? null : verifiedCount / input.findings.length,
         basis:
           "VERIFIED findings ÷ total findings; VALIDATED is deterministic checking, not independent verification",
       },
