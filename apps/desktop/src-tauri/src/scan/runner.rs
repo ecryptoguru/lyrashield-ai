@@ -1,6 +1,6 @@
 use crate::scan::types::*;
 use serde::Deserialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -98,7 +98,40 @@ async fn next_bounded_line<R: AsyncRead + Unpin>(
     }
 }
 
-static CHILDREN: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<Child>>>>> = OnceLock::new();
+#[derive(Clone)]
+struct ScanControl {
+    cancel: tokio::sync::watch::Sender<bool>,
+    finished: tokio::sync::watch::Receiver<Option<Result<(), String>>>,
+}
+impl ScanControl {
+    async fn request_cancel(mut self) -> Result<(), String> {
+        // Repeated requests share the owner's result; only that owner persists.
+        self.cancel.send_replace(true);
+        loop {
+            if let Some(result) = self.finished.borrow().clone() {
+                return result;
+            }
+            self.finished
+                .changed()
+                .await
+                .map_err(|_| "scan owner stopped before confirming persistence".to_string())?;
+        }
+    }
+}
+
+fn cancelled_event(
+    scan_id: &str,
+    cancel: &tokio::sync::watch::Receiver<bool>,
+) -> Option<ScanEvent> {
+    (*cancel.borrow()).then(|| ScanEvent::Cancelled {
+        scan_id: scan_id.to_owned(),
+    })
+}
+
+static CONTROLS: OnceLock<Mutex<HashMap<String, ScanControl>>> = OnceLock::new();
+fn controls() -> &'static Mutex<HashMap<String, ScanControl>> {
+    CONTROLS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 pub fn validate_max_budget_usd(value: f64) -> Result<f64, String> {
     if !value.is_finite() || !(0.01..=100.0).contains(&value) {
@@ -107,17 +140,28 @@ pub fn validate_max_budget_usd(value: f64) -> Result<f64, String> {
     Ok(value)
 }
 
-fn children() -> &'static Mutex<HashMap<String, Arc<tokio::sync::Mutex<Child>>>> {
-    CHILDREN.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-static CANCELLED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
-fn cancelled() -> &'static Mutex<HashSet<String>> {
-    CANCELLED.get_or_init(|| Mutex::new(HashSet::new()))
-}
-
-fn take_cancelled(scan_id: &str) -> bool {
-    cancelled().lock().unwrap().remove(scan_id)
+// Only the owner touches the child. Cancellation never waits for a child mutex.
+async fn wait_for_child(
+    child: &mut Child,
+    cancel: &mut tokio::sync::watch::Receiver<bool>,
+    kill: &mut tokio::sync::mpsc::Receiver<String>,
+) -> Result<std::process::ExitStatus, String> {
+    if !*cancel.borrow() {
+        tokio::select! {
+            biased;
+            status = child.wait() => return status.map_err(|e| format!("engine wait failed: {}", e)),
+            _ = cancel.changed() => {},
+            _ = kill.recv() => {},
+        }
+    }
+    child
+        .kill()
+        .await
+        .map_err(|e| format!("engine termination failed: {}", e))?;
+    child
+        .wait()
+        .await
+        .map_err(|e| format!("engine wait failed: {}", e))
 }
 
 const REDACTED: &str = "[REDACTED]";
@@ -417,22 +461,64 @@ pub async fn start_scan(app: AppHandle, config: ScanConfig) -> Result<String, St
         .await
         .map_err(|e| format!("create_scan failed: {}", e))?;
 
+    let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+    let (finished_tx, finished_rx) = tokio::sync::watch::channel(None);
+    // Register before returning the identity or scheduling execution.
+    controls().lock().unwrap().insert(
+        scan_id.clone(),
+        ScanControl {
+            cancel: cancel_tx,
+            finished: finished_rx,
+        },
+    );
     tauri::async_runtime::spawn(async move {
         let runner_scan_id = config.scan_id.clone();
-        if let Err(error) = run_scan(app.clone(), config).await {
-            if !take_cancelled(&runner_scan_id) {
-                let _ = persist_terminal_failure(&app, &runner_scan_id, &error).await;
+        let outcome = run_scan(app.clone(), config, cancel_rx).await;
+        let (event, exit_code) = outcome.unwrap_or_else(|error| {
+            (
+                ScanEvent::Failed {
+                    scan_id: runner_scan_id.clone(),
+                    error,
+                },
+                Some(CrashCode::EngineCrash as i32),
+            )
+        });
+        let result =
+            crate::scan::store::persist_terminal(&app, &runner_scan_id, &event, exit_code).await;
+        match &result {
+            Ok(()) => {
+                let name = match event {
+                    ScanEvent::Completed { .. } => "scan://completed",
+                    ScanEvent::Cancelled { .. } => "scan://cancelled",
+                    _ => "scan://failed",
+                };
+                let _ = app.emit(name, &event);
+            }
+            Err(error) => {
+                // A failed write is not a durable terminal state.
+                let _ = app.emit(
+                    "scan://error",
+                    serde_json::json!({
+                        "type": "error", "scan_id": runner_scan_id, "error": error,
+                    }),
+                );
             }
         }
+        finished_tx.send_replace(Some(result));
+        controls().lock().unwrap().remove(&runner_scan_id);
     });
 
     Ok(scan_id)
 }
 
-async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
+async fn run_scan(
+    app: AppHandle,
+    config: ScanConfig,
+    mut cancel: tokio::sync::watch::Receiver<bool>,
+) -> Result<(ScanEvent, Option<i32>), String> {
     let scan_id = config.scan_id.clone();
-    if take_cancelled(&scan_id) {
-        return Ok(());
+    if let Some(event) = cancelled_event(&scan_id, &cancel) {
+        return Ok((event, Some(CrashCode::Cancelled as i32)));
     }
 
     // Resolve BYOK env for child only
@@ -442,8 +528,8 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
     crate::scan::store::mark_running(&app, &scan_id)
         .await
         .map_err(|e| format!("mark_running persistence failed: {}", e))?;
-    if take_cancelled(&scan_id) {
-        return Ok(());
+    if let Some(event) = cancelled_event(&scan_id, &cancel) {
+        return Ok((event, Some(CrashCode::Cancelled as i32)));
     }
 
     let seq: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
@@ -456,8 +542,8 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
         .await
         .map_err(|e| format!("persist started failed: {}", e))?;
     let _ = app.emit("scan://started", &started);
-    if take_cancelled(&scan_id) {
-        return Ok(());
+    if let Some(event) = cancelled_event(&scan_id, &cancel) {
+        return Ok((event, Some(CrashCode::Cancelled as i32)));
     }
 
     // Spawn engine with BYOK env only in child
@@ -490,7 +576,9 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
 
     let mut cmd = Command::new(engine_cmd);
     cmd.args(&args);
-    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
     cmd.env_clear();
     cmd.envs(crate::runtime::inherited_runtime_env());
     for (k, v) in &byok_env {
@@ -508,23 +596,6 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
     let stdout = child.stdout.take().ok_or("failed to capture stdout")?;
     let stderr = child.stderr.take().ok_or("failed to capture stderr")?;
 
-    // Register child handle keyed by scan id
-    let child_arc = Arc::new(tokio::sync::Mutex::new(child));
-    {
-        let mut map = children().lock().unwrap();
-        map.insert(scan_id.clone(), child_arc.clone());
-    }
-    if take_cancelled(&scan_id) {
-        let _ = child_arc.lock().await.kill().await;
-        let mut map = children().lock().unwrap();
-        map.remove(&scan_id);
-        return Ok(());
-    }
-
-    // Kill-signal channel: a stream task that trips an output budget cannot
-    // kill the child itself — `wait()` already holds the child mutex, so a
-    // competing `kill()` would deadlock. The main flow owns the guard and
-    // kills the engine on signal instead.
     let (kill_tx, mut kill_rx) = tokio::sync::mpsc::channel::<String>(2);
 
     let app_clone = app.clone();
@@ -566,6 +637,7 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
             let persisted =
                 crate::scan::store::append_event(&app_clone, &scan_id_clone, cur, &progress).await;
             if let Err(error) = persisted {
+                let _ = stdout_kill.try_send(error.clone());
                 persistence_error.get_or_insert(error);
             } else {
                 let _ = app_clone.emit("scan://progress", &progress);
@@ -580,12 +652,14 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
                     crate::scan::store::append_event(&app_clone, &scan_id_clone, fseq, &finding_evt)
                         .await
                 {
+                    let _ = stdout_kill.try_send(error.clone());
                     persistence_error.get_or_insert(error);
                 } else {
                     let _ = app_clone.emit("scan://finding", &finding_evt);
                 }
                 if let Err(error) = persist_finding_row(&app_clone, &scan_id_clone, &finding).await
                 {
+                    let _ = stdout_kill.try_send(error.clone());
                     persistence_error.get_or_insert(error);
                 }
                 findings.push(finding);
@@ -641,7 +715,12 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
                 line,
                 stream: "stderr".into(),
             };
-            crate::scan::store::append_event(&app_clone2, &scan_id_clone2, cur, &progress).await?;
+            if let Err(error) =
+                crate::scan::store::append_event(&app_clone2, &scan_id_clone2, cur, &progress).await
+            {
+                let _ = stderr_kill.try_send(error.clone());
+                return Err(error);
+            }
             let _ = app_clone2.emit("scan://progress", &progress);
         }
         if state.exhausted {
@@ -655,39 +734,19 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
         Ok::<(), String>(())
     });
 
-    // Wait for child with registered handle — the guard is held across the
-    // select, so a stream-task kill signal can kill the engine without
-    // competing for the lock.
-    let exit_status = {
-        let mut guard = child_arc.lock().await;
-        tokio::select! {
-            status = guard.wait() => {
-                status.map_err(|e| format!("engine wait failed: {}", e))?
-            }
-            _ = kill_rx.recv() => {
-                let _ = guard.kill().await;
-                guard
-                    .wait()
-                    .await
-                    .map_err(|e| format!("engine wait failed: {}", e))?
-            }
-        }
-    };
-    // Remove from registry
-    {
-        let mut map = children().lock().unwrap();
-        map.remove(&scan_id);
+    let exit_status = wait_for_child(&mut child, &mut cancel, &mut kill_rx).await;
+    if exit_status.is_err() {
+        stdout_task.abort();
+        stderr_task.abort();
     }
-
-    let findings = stdout_task
-        .await
-        .map_err(|error| format!("stdout task failed: {}", error))??;
-    stderr_task
-        .await
-        .map_err(|error| format!("stderr task failed: {}", error))??;
-
-    if take_cancelled(&scan_id) {
-        return Ok(());
+    // Drain both writers before the sole terminal transaction, including error paths.
+    let stdout_result = stdout_task.await;
+    let stderr_result = stderr_task.await;
+    let exit_status = exit_status?;
+    let findings = stdout_result.map_err(|error| format!("stdout task failed: {}", error))??;
+    stderr_result.map_err(|error| format!("stderr task failed: {}", error))??;
+    if let Some(event) = cancelled_event(&scan_id, &cancel) {
+        return Ok((event, Some(CrashCode::Cancelled as i32)));
     }
 
     let exit_code = exit_status.code().unwrap_or(-1);
@@ -708,142 +767,25 @@ async fn run_scan(app: AppHandle, config: ScanConfig) -> Result<(), String> {
             error: format!("Engine exited with code {}", exit_code),
         }
     };
-    let tseq = seq.fetch_add(1, Ordering::SeqCst);
-    // Persistence failure prevents success — if append fails, we mark Failed durably
-    let persist_ok = crate::scan::store::append_event(&app, &scan_id, tseq, &terminal_event)
-        .await
-        .is_ok();
-    if !persist_ok {
-        let _ = crate::scan::store::set_terminal(
-            &app,
-            &scan_id,
-            ScanStatus::Failed,
-            Some(CrashCode::PersistenceFailed as i32),
-            Some("event persistence failed".into()),
-        )
-        .await;
-        let _ = app.emit(
-            "scan://failed",
-            ScanEvent::Failed {
-                scan_id: scan_id.clone(),
-                error: "persistence failed".into(),
-            },
-        );
-        return Err("persistence failed — scan not marked completed".into());
-    }
-    let status = if is_success {
-        ScanStatus::Completed
-    } else {
-        ScanStatus::Failed
-    };
-    let set_ok = crate::scan::store::set_terminal(
-        &app,
-        &scan_id,
-        status.clone(),
-        Some(exit_code),
-        if is_success {
-            None
-        } else {
-            Some(format!("Engine exited {}", exit_code))
-        },
-    )
-    .await
-    .is_ok();
-    if !set_ok {
-        return Err("terminal persistence failed".into());
-    }
-    let _ = app.emit(
-        if is_success {
-            "scan://completed"
-        } else {
-            "scan://failed"
-        },
-        &terminal_event,
-    );
-
-    // Final reporting — persistence already validated
-    Ok(())
+    Ok((terminal_event, Some(exit_code)))
 }
 
 async fn persist_finding_row(app: &AppHandle, scan_id: &str, f: &Finding) -> Result<(), String> {
     crate::scan::store::persist_finding(app, scan_id, f).await
 }
 
-async fn persist_terminal_failure(app: &AppHandle, scan_id: &str, err: &str) -> Result<(), String> {
-    let existing = crate::scan::store::get_events(app, scan_id, 0).await?;
-    let s = existing.last().map(|event| event.seq + 1).unwrap_or(0);
-    let ev = ScanEvent::Failed {
-        scan_id: scan_id.to_string(),
-        error: err.to_string(),
-    };
-    let _ = crate::scan::store::append_event(app, scan_id, s, &ev).await;
-    let _ = crate::scan::store::set_terminal(
-        app,
-        scan_id,
-        ScanStatus::Failed,
-        Some(CrashCode::EngineCrash as i32),
-        Some(err.to_string()),
-    )
-    .await;
-    let _ = app.emit("scan://failed", ev);
-    Ok(())
-}
-
 pub async fn cancel_scan(app: AppHandle, scan_id: String) -> Result<(), String> {
-    cancelled().lock().unwrap().insert(scan_id.clone());
-    let child_opt = {
-        let map = children().lock().unwrap();
-        map.get(&scan_id).cloned()
-    };
-    if let Some(child_arc) = child_opt {
-        let mut child = child_arc.lock().await;
-        let _ = child.kill().await;
-        // Persist cancelled terminal durably
-        let seq = 9999; // will be replaced by next seq? For cancel we fetch current max seq +1
-                        // Fetch current max seq via get_events to ensure monotonic
-        let existing = crate::scan::store::get_events(&app, &scan_id, 0)
-            .await
-            .unwrap_or_default();
-        let next_seq = existing.last().map(|e| e.seq + 1).unwrap_or(seq);
-        let ev = ScanEvent::Cancelled {
-            scan_id: scan_id.clone(),
-        };
-        crate::scan::store::append_event(&app, &scan_id, next_seq, &ev)
-            .await
-            .map_err(|e| format!("persist cancel failed: {}", e))?;
-        crate::scan::store::set_terminal(
-            &app,
-            &scan_id,
-            ScanStatus::Cancelled,
-            Some(CrashCode::Cancelled as i32),
-            Some("cancelled".into()),
-        )
-        .await
-        .map_err(|e| format!("set_terminal cancel failed: {}", e))?;
-        let _ = app.emit("scan://cancelled", ev);
-        let mut map = children().lock().unwrap();
-        map.remove(&scan_id);
-        Ok(())
-    } else {
-        // No running child, but ensure durable cancelled state if pending/running
-        let ev = ScanEvent::Cancelled {
-            scan_id: scan_id.clone(),
-        };
-        let existing = crate::scan::store::get_events(&app, &scan_id, 0)
-            .await
-            .unwrap_or_default();
-        let next_seq = existing.last().map(|e| e.seq + 1).unwrap_or(0);
-        let _ = crate::scan::store::append_event(&app, &scan_id, next_seq, &ev).await;
-        let _ = crate::scan::store::set_terminal(
-            &app,
-            &scan_id,
-            ScanStatus::Cancelled,
-            Some(CrashCode::Cancelled as i32),
-            Some("cancelled".into()),
-        )
-        .await;
-        let _ = app.emit("scan://cancelled", ev);
-        Ok(())
+    let control = controls().lock().unwrap().get(&scan_id).cloned();
+    if let Some(control) = control {
+        return control.request_cancel().await;
+    }
+    let detail = crate::scan::store::get_scan_detail(&app, &scan_id).await?;
+    match detail.status {
+        ScanStatus::Completed | ScanStatus::Failed | ScanStatus::Cancelled => Ok(()),
+        _ => Err(
+            "No active scan owner; terminal state could not be confirmed. Reopen scan history."
+                .into(),
+        ),
     }
 }
 
@@ -858,6 +800,100 @@ fn uuid_v4() -> String {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn cancellation_before_spawn_is_retained() {
+        let (cancel, receiver) = tokio::sync::watch::channel(false);
+        cancel.send_replace(true);
+        for _ in 0..3 {
+            assert!(matches!(
+                super::cancelled_event("before-spawn", &receiver),
+                Some(super::ScanEvent::Cancelled { .. })
+            ));
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn cancellation_during_wait_is_prompt_idempotent_and_waits_for_persistence() {
+        let mut child = tokio::process::Command::new("sleep")
+            .arg("10")
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let (cancel, mut receiver) = tokio::sync::watch::channel(false);
+        let (finished, completion) = tokio::sync::watch::channel(None);
+        let control = super::ScanControl {
+            cancel,
+            finished: completion,
+        };
+        let (_kill, mut kill_rx) = tokio::sync::mpsc::channel(2);
+        let owner = tokio::spawn(async move {
+            let status = super::wait_for_child(&mut child, &mut receiver, &mut kill_rx)
+                .await
+                .unwrap();
+            assert!(!status.success());
+        });
+        tokio::task::yield_now().await;
+        let started = std::time::Instant::now();
+        let first = tokio::spawn(control.clone().request_cancel());
+        let second = tokio::spawn(control.clone().request_cancel());
+        tokio::time::timeout(std::time::Duration::from_secs(2), owner)
+            .await
+            .unwrap()
+            .unwrap();
+        eprintln!("harmless child stopped in {:?}", started.elapsed());
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        assert!(
+            !first.is_finished(),
+            "cancel must await durable terminal confirmation"
+        );
+        assert!(!second.is_finished());
+        finished.send_replace(Some(Ok(())));
+        first.await.unwrap().unwrap();
+        second.await.unwrap().unwrap();
+        control.request_cancel().await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn preexisting_cancel_and_output_failure_both_stop_child() {
+        for cancel_first in [true, false] {
+            let (cancel, mut receiver) = tokio::sync::watch::channel(cancel_first);
+            let (kill, mut kill_rx) = tokio::sync::mpsc::channel(2);
+            let mut child = tokio::process::Command::new("sleep")
+                .arg("10")
+                .kill_on_drop(true)
+                .spawn()
+                .unwrap();
+            if !cancel_first {
+                kill.send("output persistence failed".into()).await.unwrap();
+            }
+            let status = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                super::wait_for_child(&mut child, &mut receiver, &mut kill_rx),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert!(!status.success());
+            drop(cancel);
+        }
+    }
+
+    #[tokio::test]
+    async fn cancel_surfaces_persistence_failure_to_every_waiter() {
+        let (cancel, _receiver) = tokio::sync::watch::channel(false);
+        let (finished, completion) = tokio::sync::watch::channel(None);
+        let control = super::ScanControl {
+            cancel,
+            finished: completion,
+        };
+        let waiter = tokio::spawn(control.clone().request_cancel());
+        finished.send_replace(Some(Err("disk full".into())));
+        assert_eq!(waiter.await.unwrap().unwrap_err(), "disk full");
+        assert_eq!(control.request_cancel().await.unwrap_err(), "disk full");
+    }
+
     use super::*;
 
     #[test]

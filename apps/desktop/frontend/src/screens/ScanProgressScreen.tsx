@@ -1,61 +1,99 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import type { Finding, ScanEvent } from "../lib/types"
-import { cancelScan, exportSarif, getScanEvents, onScanEvent } from "../lib/tauri"
+import { useEffect, useRef, useState } from "react"
+import type { Finding, ScanEvent, ScanStatus } from "../lib/types"
+import { cancelScan, exportSarif, getScanEvents, getScanDetail, onScanEvent } from "../lib/tauri"
 
 interface Props {
   scanId: string
   onBack: () => void
 }
 
-export function ScanProgressScreen({ scanId, onBack }: Props) {
+export function ScanProgressScreen(props: Props) {
+  return <ScanProgress key={props.scanId} {...props} />
+}
+
+function ScanProgress({ scanId, onBack }: Props) {
   const [progressLines, setProgressLines] = useState<string[]>([])
   const [findings, setFindings] = useState<Finding[]>([])
-  const [status, setStatus] = useState<"running" | "completed" | "failed" | "cancelled">("running")
+  const [status, setStatus] = useState<ScanStatus>("pending")
+  const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const seenFindings = useRef(new Set<string>())
+  const [retry, setRetry] = useState(0)
+  const current = useRef<symbol | null>(null)
 
-  const applyEvent = useCallback(
-    (event: ScanEvent) => {
-      if (event.scanId !== scanId) return
+  useEffect(() => {
+    const identity = Symbol(scanId)
+    current.current = identity
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    const seenFindings = new Set<string>()
+    const buffered: ScanEvent[] = []
+    let ready = false
+    function applyEvent(event: ScanEvent) {
+      if (disposed || event.scanId !== scanId) return
       switch (event.type) {
         case "progress":
-          setProgressLines((prev) => [...prev.slice(-200), event.line])
+          setProgressLines((prev) => [...prev.slice(-199), event.line])
           break
         case "finding":
-          if (!seenFindings.current.has(event.finding.id)) {
-            seenFindings.current.add(event.finding.id)
+          if (!seenFindings.has(event.finding.id)) {
+            seenFindings.add(event.finding.id)
             setFindings((prev) => [...prev, event.finding])
           }
           break
+        case "started":
+          setStatus((prev) => (prev === "pending" ? "running" : prev))
+          break
         case "completed":
-          setStatus("completed")
-          break
-        case "failed":
-          setStatus("failed")
-          setError(event.error)
-          break
         case "cancelled":
-          setStatus("cancelled")
+        case "failed":
+          setStatus(event.type)
+          setCancelling(false)
+          if (event.type === "failed") setError(event.error)
+          break
+        case "error":
+          setError(event.error)
+          setCancelling(false)
           break
       }
-    },
-    [scanId]
-  )
-
-  // Subscribe before replay so a fast local scan cannot finish in the replay/listener gap.
-  useEffect(() => {
-    const unlisten = onScanEvent(applyEvent)
-    void getScanEvents(scanId, 0)
-      .then((events) => events.forEach((event) => applyEvent(event.event)))
-      .catch(() => {})
-    return () => {
-      unlisten.then((u) => u())
     }
-  }, [scanId, applyEvent])
+    async function subscribe() {
+      try {
+        unlisten = await onScanEvent((event) => {
+          if (disposed || event.scanId !== scanId) return
+          if (ready) applyEvent(event)
+          else buffered.push(event)
+        })
+        if (disposed) {
+          unlisten()
+          return
+        }
+        const events = await getScanEvents(scanId, 0)
+        if (disposed) return
+        events.forEach(({ event }) => applyEvent(event))
+        const detail = await getScanDetail(scanId)
+        if (disposed) return
+        detail.findings.forEach((finding) => applyEvent({ type: "finding", scanId, finding }))
+        setStatus(detail.status)
+        buffered.forEach(applyEvent)
+        ready = true
+      } catch (e) {
+        unlisten?.()
+        if (!disposed) setError(String(e))
+      }
+    }
+    void subscribe()
+    return () => {
+      disposed = true
+      current.current = null
+      unlisten?.()
+    }
+  }, [scanId, retry])
 
   async function handleExportSarif() {
+    const identity = current.current
     try {
       const sarif = await exportSarif(findings, scanId)
+      if (current.current !== identity) return
       const blob = new Blob([sarif], { type: "application/json" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
@@ -64,27 +102,39 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
-      setError(String(e))
+      if (current.current === identity) setError(String(e))
     }
   }
 
   async function handleCancel() {
+    const identity = current.current
+    setCancelling(true)
+    setError(null)
     try {
       await cancelScan(scanId)
-      setStatus("cancelled")
+      const detail = await getScanDetail(scanId)
+      if (current.current !== identity) return
+      setStatus(detail.status)
+      setCancelling(false)
+      if (detail.status === "pending" || detail.status === "running") {
+        setError("Cancellation has not been durably confirmed. Retry to refresh the scan.")
+      }
     } catch (e) {
+      if (current.current !== identity) return
       setError(String(e))
+      setCancelling(false)
     }
   }
+  const active = status === "running" || status === "pending"
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      <div className="flex items-center justify-between border-b border-border p-4">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-4">
           <button onClick={onBack} className="text-sm text-muted-foreground hover:text-foreground">
             ← Back
           </button>
-          <h1 className="text-lg font-semibold text-foreground">Scan {scanId}</h1>
+          <h1 className="break-all text-lg font-semibold text-foreground">Scan {scanId}</h1>
           <span
             className={`rounded px-2 py-0.5 text-xs ${
               status === "running"
@@ -96,19 +146,20 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
                     : "bg-destructive/20 text-destructive"
             }`}
           >
-            {status}
+            {cancelling ? "Cancelling…" : status}
           </span>
         </div>
         <div className="flex gap-2">
-          {status === "running" && (
+          {active && (
             <button
               onClick={handleCancel}
+              disabled={cancelling}
               className="rounded-md border border-destructive px-3 py-1 text-sm text-destructive hover:bg-destructive/10"
             >
               Cancel
             </button>
           )}
-          {findings.length > 0 && status !== "running" && (
+          {findings.length > 0 && !active && (
             <button
               onClick={handleExportSarif}
               className="rounded-md border border-border px-3 py-1 text-sm hover:bg-accent"
@@ -119,8 +170,8 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        <div className="w-1/2 overflow-y-auto border-r border-border p-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto sm:flex-row">
+        <div className="min-w-0 sm:w-1/2 overflow-y-auto border-r border-border p-4">
           <h2 className="mb-3 text-sm font-medium text-foreground">Findings ({findings.length})</h2>
           {findings.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -155,11 +206,28 @@ export function ScanProgressScreen({ scanId, onBack }: Props) {
               ))}
             </div>
           )}
-          {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
+          {error && (
+            <div role="alert" className="mt-4 text-sm text-destructive">
+              <p>{error}</p>
+              <button
+                className="mt-2 underline"
+                onClick={() => {
+                  setProgressLines([])
+                  setFindings([])
+                  setStatus("pending")
+                  setCancelling(false)
+                  setError(null)
+                  setRetry((value) => value + 1)
+                }}
+              >
+                Retry scan updates
+              </button>
+            </div>
+          )}
         </div>
-        <div className="w-1/2 overflow-y-auto bg-muted/30 p-4">
+        <div className="min-w-0 sm:w-1/2 overflow-y-auto bg-muted/30 p-4">
           <h2 className="mb-3 text-sm font-medium text-foreground">Engine output</h2>
-          <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
+          <pre className="whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
             {progressLines.join("\n")}
           </pre>
         </div>

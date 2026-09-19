@@ -6,6 +6,7 @@ import { LicenseStatusScreen } from "./screens/LicenseStatusScreen"
 import { ScanScreen } from "./screens/ScanScreen"
 import { ScanProgressScreen } from "./screens/ScanProgressScreen"
 import { SetupScreen } from "./screens/SetupScreen"
+import { ScanHistory } from "./components/ScanHistory"
 import { SyncScreen } from "./screens/SyncScreen"
 
 type AppRoute = "activation" | "setup" | "main" | "scan" | "scan_progress" | "sync" | "loading"
@@ -14,19 +15,6 @@ export default function App() {
   const [route, setRoute] = useState<AppRoute>("loading")
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
   const [activeScanId, setActiveScanId] = useState<string | null>(null)
-  const [lastFindings] = useState<
-    {
-      id: string
-      severity: string
-      title: string
-      description: string | null
-      filePath: string | null
-      lineNumber: number | null
-      status: string
-      verified: boolean
-      detectedAt: string
-    }[]
-  >([])
 
   useEffect(() => {
     async function checkLicense() {
@@ -78,6 +66,7 @@ export default function App() {
   if (route === "scan") {
     return (
       <ScanScreen
+        onBack={() => setRoute("main")}
         onScanStarted={(scanId) => {
           setActiveScanId(scanId)
           setRoute("scan_progress")
@@ -87,11 +76,17 @@ export default function App() {
   }
 
   if (route === "scan_progress" && activeScanId) {
-    return <ScanProgressScreen scanId={activeScanId} onBack={() => setRoute("main")} />
+    return (
+      <ScanProgressScreen
+        key={activeScanId}
+        scanId={activeScanId}
+        onBack={() => setRoute("main")}
+      />
+    )
   }
 
   if (route === "sync") {
-    return <SyncScreen findings={lastFindings} />
+    return <SyncScreen onBack={() => setRoute("main")} />
   }
 
   // main
@@ -119,6 +114,12 @@ export default function App() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-8">
+        <ScanHistory
+          onOpen={(scanId) => {
+            setActiveScanId(scanId)
+            setRoute("scan_progress")
+          }}
+        />
         <LicenseStatusScreen
           status={licenseStatus}
           onLogout={async () => {

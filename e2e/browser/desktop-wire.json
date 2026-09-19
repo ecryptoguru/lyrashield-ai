@@ -1,0 +1,103 @@
+{
+  "summary": {
+    "scan_id": "scan-a",
+    "target": "/local/project",
+    "mode": "standard",
+    "status": "completed",
+    "started_at": "2026-09-19",
+    "completed_at": "2026-09-19",
+    "finding_count": 2
+  },
+  "detail": {
+    "scan_id": "scan-a",
+    "target": "/local/project",
+    "mode": "standard",
+    "status": "completed",
+    "started_at": "2026-09-19",
+    "completed_at": "2026-09-19",
+    "finding_count": 2,
+    "findings": [
+      {
+        "id": "f0",
+        "title": "Alpha",
+        "severity": "HIGH",
+        "description": null,
+        "file_path": "src/example.ts",
+        "line_number": 7,
+        "status": "DETECTED",
+        "verified": false,
+        "detected_at": "2026-09-19"
+      },
+      {
+        "id": "f1",
+        "title": "Beta",
+        "severity": "HIGH",
+        "description": null,
+        "file_path": "src/example.ts",
+        "line_number": 7,
+        "status": "DETECTED",
+        "verified": false,
+        "detected_at": "2026-09-19"
+      }
+    ]
+  },
+  "events": [
+    {
+      "type": "started",
+      "scan_id": "scan-a"
+    },
+    {
+      "type": "progress",
+      "scan_id": "scan-a",
+      "line": "Scanning local files",
+      "stream": "stdout"
+    },
+    {
+      "type": "finding",
+      "scan_id": "scan-a",
+      "finding": {
+        "id": "f0",
+        "title": "Alpha",
+        "severity": "HIGH",
+        "description": null,
+        "file_path": "src/example.ts",
+        "line_number": 7,
+        "status": "DETECTED",
+        "verified": false,
+        "detected_at": "2026-09-19"
+      }
+    },
+    {
+      "type": "completed",
+      "scan_id": "scan-a",
+      "exit_code": 0,
+      "finding_count": 2
+    },
+    {
+      "type": "failed",
+      "scan_id": "scan-a",
+      "error": "Engine failure"
+    },
+    {
+      "type": "cancelled",
+      "scan_id": "scan-a"
+    }
+  ],
+  "syncResults": [
+    {
+      "status": "success",
+      "synced_count": 1,
+      "new_seq": 1,
+      "new_cursor": "1"
+    },
+    {
+      "status": "cursor_rewind",
+      "server_seq": 2,
+      "message": "Retry sync"
+    },
+    {
+      "status": "entitlement_missing",
+      "message": "Sync addon required"
+    }
+  ]
+}

@@ -16,6 +16,8 @@ const server = await createServer({
   root: fileURLToPath(new URL("../../", import.meta.url)),
   resolve: {
     alias: {
+      "@tauri-apps/api/core": fileURLToPath(new URL("./desktop-native.ts", import.meta.url)),
+      "@tauri-apps/api/event": fileURLToPath(new URL("./desktop-native.ts", import.meta.url)),
       "@/": fileURLToPath(new URL("../../apps/web/src/", import.meta.url)),
       "@lyrashield/ui": fileURLToPath(new URL("../../packages/ui/src/index.ts", import.meta.url)),
       "react-dom/client": webRequire.resolve("react-dom/client"),
