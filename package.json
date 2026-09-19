@@ -31,13 +31,13 @@
     "admin:provision": "pnpm --filter @lyrashield/db exec tsx scripts/provision-platform-admins.ts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^16.3.3",
+    "eslint-config-next": "^16.3.5",
     "eslint-plugin-security": "^4.0.1",
     "markdownlint-cli2": "0.23.2",
-    "prettier": "^3.9.6",
-    "turbo": "^2.10.11",
+    "prettier": "^3.9.7",
+    "turbo": "^2.10.13",
     "vitest": "^4.1.11"
   },
   "packageManager": "pnpm@12.2.0",
