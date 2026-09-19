@@ -28,6 +28,13 @@ export const SCAN_PRESETS = {
     goal: "FULL_PENTEST",
     mode: "DEEP",
   },
+  REVIEW_CHANGES: {
+    label: "Review changes",
+    description: "Bounded review of an exact code diff between two revisions.",
+    hint: "Analyzes only the recorded change set between an immutable base and head. Requires a base ref; the head defaults to the target branch.",
+    goal: "CHECK_PR",
+    mode: "QUICK",
+  },
   WEEKLY_MONITOR: {
     label: "Weekly monitor",
     description: "A bounded recurring check for new risk.",
@@ -40,11 +47,42 @@ export const SCAN_PRESETS = {
 type ScanPresetId = keyof typeof SCAN_PRESETS
 
 const SCAN_PRESET_ORDER: ScanPresetId[] = [
-  "RELEASE_CHECK",
   "CODE_REVIEW",
+  "RELEASE_CHECK",
+  "REVIEW_CHANGES",
   "DEEP_REVIEW",
   "WEEKLY_MONITOR",
 ]
+
+/** The default review for a repository target is the Standard-depth code
+ * review — not the cheapest option — so a first scan has real coverage. */
+const REPO_DEFAULT_PRESET: ScanPresetId = "CODE_REVIEW"
+
+/** Deterministic scanner families applicable to a repository target. */
+const REPO_APPLICABLE_CHECKS = [
+  "Engine code review",
+  "Secrets",
+  "Dependency advisories",
+  "Risky patterns (SAST)",
+  "IaC configs",
+  "Agent config",
+  "AI app security",
+  "ML supply chain",
+] as const
+
+const REPO_LIMITS: Record<string, string> = {
+  QUICK: "Up to 15 minutes of engine time",
+  STANDARD: "Up to 15 minutes of engine time",
+  DEEP: "Up to 45 minutes of engine time",
+}
+
+const URL_LIMITS: Record<string, string> = {
+  SAFE: "Bounded deterministic checks only",
+  STANDARD: "Up to 15 minutes of engine time",
+  DEEP: "Up to 45 minutes of engine time",
+}
+
+export type ScanWorkflowId = "REVIEW_TARGET" | "REVIEW_CHANGES" | "AUTHENTICATED_ASSESSMENT"
 
 export type ManualScanOption = {
   id: string
@@ -58,11 +96,25 @@ export type ManualScanOption = {
   disabledReason?: string
   /** Whether the engine runs for this option (deterministic tier = false). */
   usesAi?: boolean
+  /** Workflow recorded on the immutable execution plan. */
+  workflow: ScanWorkflowId
+  /** Review Changes requires a base ref (and optionally a head ref) resolved
+   * to immutable revisions server-side before the scan is admitted. */
+  requiresRevisionInputs?: boolean
+  /** The default pick for the target type. */
+  isDefault?: boolean
+  /** Truthful creation-time summary — what the scan will actually do. */
+  scopeSummary: string
+  limitsSummary: string
+  applicableChecks: readonly string[]
+  /** Authorization the scan needs beyond workspace membership. */
+  authorizationHint?: string
 }
 
 function repoOptions(): ManualScanOption[] {
   return SCAN_PRESET_ORDER.filter((id) => id !== "WEEKLY_MONITOR").map((id) => {
     const preset = SCAN_PRESETS[id]
+    const isReviewChanges = id === "REVIEW_CHANGES"
     return {
       id,
       label: preset.label,
@@ -73,6 +125,20 @@ function repoOptions(): ManualScanOption[] {
       estimate: estimateRunMinutes(preset.mode),
       available: true,
       usesAi: true,
+      workflow: isReviewChanges ? "REVIEW_CHANGES" : "REVIEW_TARGET",
+      ...(isReviewChanges ? { requiresRevisionInputs: true } : {}),
+      ...(id === REPO_DEFAULT_PRESET ? { isDefault: true } : {}),
+      scopeSummary: isReviewChanges
+        ? "Only the recorded diff between the resolved base and head revisions."
+        : "The full repository snapshot at the pinned revision.",
+      limitsSummary: REPO_LIMITS[preset.mode] ?? "Bounded run",
+      applicableChecks: REPO_APPLICABLE_CHECKS,
+      ...(isReviewChanges
+        ? {
+            authorizationHint:
+              "Refs are resolved through the connected GitHub App; both sides pin to immutable commits.",
+          }
+        : {}),
     }
   })
 }
@@ -108,6 +174,7 @@ function urlOptions(targetType: UrlTargetType, hasApiSpec: boolean): ManualScanO
   for (const mode of modes) {
     const availability = getUrlModeAvailability(targetType, mode, hasApiSpec)
     const profile = getUrlScanProfile(targetType, mode)
+    const engineBacked = mode !== "SAFE"
     options.push({
       id: profile.id,
       label: profile.label,
@@ -118,7 +185,21 @@ function urlOptions(targetType: UrlTargetType, hasApiSpec: boolean): ManualScanO
       estimate: URL_ESTIMATES[profile.id] ?? { low: 1, high: 2 },
       available: availability.available,
       disabledReason: availability.available ? undefined : availability.reason,
-      usesAi: mode !== "SAFE",
+      usesAi: engineBacked,
+      workflow: "REVIEW_TARGET",
+      scopeSummary: engineBacked
+        ? "The live target origin through the scan-scoped relay."
+        : "The public surface of the target URL — no engine run.",
+      limitsSummary: URL_LIMITS[mode] ?? "Bounded run",
+      applicableChecks: engineBacked
+        ? ["Engine review", "Public surface checks"]
+        : ["Public surface checks"],
+      ...(engineBacked
+        ? {
+            authorizationHint:
+              "Requires a verified domain on a paid plan before the engine sends its first request.",
+          }
+        : {}),
     })
   }
 
@@ -142,6 +223,16 @@ export function getManualScanOptions(target: {
   }
 
   return repoOptions()
+}
+
+/** The preset id to preselect for a target: its marked default, else the
+ * first available option. */
+export function getDefaultScanOptionId(options: ManualScanOption[]): string {
+  return (
+    options.find((option) => option.isDefault && option.available)?.id ??
+    options.find((option) => option.available)?.id ??
+    ""
+  )
 }
 
 export function getScanPreset(id: string) {

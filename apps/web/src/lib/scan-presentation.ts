@@ -116,7 +116,12 @@ export function getScanPresentation(
         assuranceAvailable: false,
         showFailureDetails: true,
       }
-    case "FAILED":
+    case "FAILED": {
+      // Named failure causes get their own truthful label — a missing source,
+      // revoked authorization, or unsupported input is a different outcome than
+      // a generic crash, and none of them produce assurance.
+      const failure = failedScanPresentation(context.errorCategory ?? null)
+      if (failure) return failure
       return {
         label: "Failed",
         headline: "Scan failed",
@@ -126,6 +131,7 @@ export function getScanPresentation(
         assuranceAvailable: false,
         showFailureDetails: true,
       }
+    }
     case "STOPPED_BUDGET":
       if (isAgentMinutesExhaustedError(context.errorCategory, context.errorMessage)) {
         return {
@@ -214,5 +220,101 @@ export function getScanPresentation(
         assuranceAvailable: false,
         showFailureDetails: false,
       }
+  }
+}
+
+/**
+ * Explicit FAILED-state causes. Each maps an errorCategory recorded by the
+ * worker to a truthful headline — the scan detail must distinguish missing
+ * source, revoked authorization, unsupported checks, rejected input, and
+ * evidence export failure instead of flattening everything into "failed".
+ * Every entry keeps `assuranceAvailable: false`: an incomplete scan never
+ * reads as a clean score.
+ */
+function failedScanPresentation(errorCategory: string | null): ScanPresentation | null {
+  switch (errorCategory) {
+    case "NO_ANALYZABLE_CHANGES":
+      return {
+        label: "No analyzable changes",
+        headline: "No analyzable changes in this diff",
+        description:
+          "The recorded revisions produced no files the engine could analyze. No assurance result was produced.",
+        badgeVariant: "muted",
+        assuranceAvailable: false,
+        showFailureDetails: true,
+      }
+    case "SCAN_SOURCE_UNAVAILABLE":
+    case "SCAN_NO_MERGE_BASE":
+    case "SCAN_REF_UNRESOLVED":
+    case "SCAN_CLONE_FAILED":
+      return {
+        label: "Source unavailable",
+        headline: "Source could not be fetched",
+        description:
+          "The recorded source was missing or could not be checked out. No assurance result was produced.",
+        badgeVariant: "danger",
+        assuranceAvailable: false,
+        showFailureDetails: true,
+      }
+    case "RELAY_SCOPE_UNAVAILABLE":
+    case "AUTHORIZATION_REVOKED":
+    case "CONNECTION_REVOKED":
+    case "RELAY_GRANT_DENIED":
+      return {
+        label: "Authorization unavailable",
+        headline: "Scan authorization was revoked or unavailable",
+        description:
+          "The delegated scope for this scan was revoked or could not be issued. No assurance result was produced.",
+        badgeVariant: "danger",
+        assuranceAvailable: false,
+        showFailureDetails: true,
+      }
+    case "EVIDENCE_STORAGE_CONFIGURATION":
+    case "EVIDENCE_EXPORT_FAILED":
+      return {
+        label: "Evidence export failed",
+        headline: "Evidence could not be exported",
+        description:
+          "The scan's evidence artifacts could not be stored or exported. No assurance result was produced.",
+        badgeVariant: "danger",
+        assuranceAvailable: false,
+        showFailureDetails: true,
+      }
+    case "SCAN_ATTACHMENT_UNAVAILABLE":
+    case "SCAN_ATTACHMENT_CHECKSUM_MISMATCH":
+    case "SCAN_ATTACHMENT_STAGING":
+      return {
+        label: "Supporting file unavailable",
+        headline: "A supporting file could not be verified",
+        description:
+          "An attachment recorded on the scan's plan was missing, deleted, or failed checksum verification. The scan did not run against different inputs. No assurance result was produced.",
+        badgeVariant: "danger",
+        assuranceAvailable: false,
+        showFailureDetails: true,
+      }
+    case "PROMPT_INJECTION":
+    case "INSTRUCTION_UNSAFE":
+      return {
+        label: "Unsupported input",
+        headline: "Scan input was rejected",
+        description:
+          "The scan's instruction text failed the input safety check. No assurance result was produced.",
+        badgeVariant: "danger",
+        assuranceAvailable: false,
+        showFailureDetails: true,
+      }
+    case "UNSUPPORTED_CHECKS":
+    case "SCANNER_UNSUPPORTED":
+      return {
+        label: "Unsupported checks",
+        headline: "Requested checks are not supported",
+        description:
+          "One or more checks this scan requested are not supported for the target. No assurance result was produced.",
+        badgeVariant: "danger",
+        assuranceAvailable: false,
+        showFailureDetails: true,
+      }
+    default:
+      return null
   }
 }

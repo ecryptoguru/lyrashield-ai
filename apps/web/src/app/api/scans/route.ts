@@ -8,6 +8,8 @@ import {
   claimOrGetAgentOperation,
   completeAgentOperation,
   failAgentOperation,
+  resolveScanAttachments,
+  ScanAttachmentError,
   WorkspaceScanConcurrencyLimitError,
   type ScanListItem,
 } from "@lyrashield/db"
@@ -142,6 +144,26 @@ async function post(request: Request) {
     }
 
     assertOAuthDelegatedScope(session, data.targetId, data.mode)
+
+    // Resolve workspace-scoped attachment IDs before any billing/queue work.
+    // The stored rows — never client-supplied fields — prove ownership,
+    // freshness, content type, and checksum; unknown or cross-workspace IDs
+    // fail closed, and host paths are never accepted as attachment input.
+    const attachmentIds = data.attachmentIds ? [...new Set(data.attachmentIds)] : []
+    if (attachmentIds.length > 0) {
+      try {
+        await resolveScanAttachments(workspaceId, attachmentIds)
+      } catch (error) {
+        if (error instanceof ScanAttachmentError) {
+          return apiError(
+            error.code,
+            error.message,
+            error.code === "SCAN_ATTACHMENT_NOT_FOUND" ? 404 : 400
+          )
+        }
+        throw error
+      }
+    }
 
     // Resolve the URL profile first so the consent gates track what the scan
     // actually does: engine-backed tiers (STANDARD/DEEP) require a verified
@@ -492,10 +514,9 @@ async function post(request: Request) {
       workflow: data.workflow,
       ...(planSource ? { source: planSource } : {}),
       // Recorded verbatim into the immutable plan as input-evidence
-      // references. The artifact staging boundary enforces workspace scope,
-      // checksum and allowed content types before anything mounts them —
-      // this API never treats the list as proof of staged input.
-      ...(data.attachmentIds ? { attachmentIds: data.attachmentIds } : {}),
+      // references — the deduped, scope/checksum-validated list resolved
+      // above. This API never treats the list as proof of staged input.
+      ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
     })
 
     submittedScanId = scan.id

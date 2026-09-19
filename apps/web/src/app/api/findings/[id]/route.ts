@@ -7,6 +7,7 @@ import {
   acceptRisk,
 } from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
+import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -44,6 +45,64 @@ const PatchFindingSchema = z
     }
   })
 
+/**
+ * Allowlisted projection of a finding's `claim_context` evidence artifact.
+ * Every field is engine-declared — confidence, counterevidence, advisory
+ * severity, and the engine's own verification claim are evidence about what
+ * the engine asserted, never the app's verification state. Reads stay inside
+ * the workspace boundary (Evidence rows join through Finding.workspaceId) and
+ * the decrypted payload is re-projected field-by-field so nothing unvetted
+ * (storage URIs, raw blob keys) reaches the response.
+ */
+async function loadEvidenceInsights(findingId: string, workspaceId: string) {
+  const row = await prisma.evidence.findFirst({
+    where: { findingId, type: "claim_context", finding: { workspaceId } },
+    select: { storageUri: true },
+  })
+  if (!row?.storageUri) return null
+  let artifact
+  try {
+    artifact = await readEncryptedArtifact(row.storageUri, workspaceId)
+  } catch {
+    return null
+  }
+  let parsed: Record<string, unknown>
+  try {
+    const value = JSON.parse(artifact.content.toString("utf8"))
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null
+    parsed = value as Record<string, unknown>
+  } catch {
+    return null
+  }
+  const strings = (key: string) =>
+    Array.isArray(parsed[key])
+      ? parsed[key].filter((v): v is string => typeof v === "string").slice(0, 25)
+      : undefined
+  const insights = {
+    counterevidence: strings("counterevidence"),
+    evidenceWarnings: strings("evidenceWarnings"),
+    severityChangeConditions: strings("severityChangeConditions"),
+    assumptions: strings("assumptions"),
+    confidenceRationale:
+      typeof parsed.confidenceRationale === "string" ? parsed.confidenceRationale : undefined,
+    contextualCvssReasoning:
+      typeof parsed.contextualCvssReasoning === "string"
+        ? parsed.contextualCvssReasoning
+        : undefined,
+    advisoryCvss:
+      typeof parsed.advisoryCvss === "number" && Number.isFinite(parsed.advisoryCvss)
+        ? parsed.advisoryCvss
+        : undefined,
+    engineVerificationState:
+      typeof parsed.engineVerificationState === "string"
+        ? parsed.engineVerificationState
+        : undefined,
+    engineConfidence:
+      typeof parsed.engineConfidence === "string" ? parsed.engineConfidence : undefined,
+  }
+  return Object.values(insights).some((v) => v !== undefined) ? insights : null
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
@@ -78,7 +137,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       redactionStatus,
     }))
 
-    return apiSuccess({ ...finding, evidence: safeEvidence, plainLanguage })
+    // Engine-declared insights are allowlist-projected from the encrypted
+    // claim_context artifact — private to the workspace, never part of public
+    // shares or exports.
+    const evidenceInsights = await loadEvidenceInsights(finding.id, workspaceId)
+
+    return apiSuccess({ ...finding, evidence: safeEvidence, evidenceInsights, plainLanguage })
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

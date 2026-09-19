@@ -448,26 +448,92 @@ export async function getScanWithEvents(
 
 /**
  * One-time manifest detail for the server-rendered scan page: checksum plus the
- * urlExecution slice extracted from the manifest JSON. Kept separate from
- * getScanWithEvents so the polling path never fetches the tens-of-KB blob.
+ * bounded, allowlisted slices the detail view renders — urlExecution, declared
+ * scoped coverage, the threat-model reference, attachment staging, and
+ * recorded ingestion warnings. Kept separate from getScanWithEvents so the
+ * polling path never fetches the tens-of-KB blob.
  */
+export interface ScanResultManifestDetail {
+  checksum: string
+  urlExecution: Record<string, unknown> | null
+  scopedCoverage: Record<string, unknown> | null
+  threatModel: {
+    checksum: string
+    byteLength: number
+    modelCount: number
+    schemaVersion?: string
+    entries?: { target: string; preview: string }[]
+  } | null
+  attachments: { count: number; totalBytes: number; manifestChecksum: string } | null
+  ingestionWarnings: string[]
+}
+
+function readManifestSlice(manifest: unknown, key: string): Record<string, unknown> | null {
+  const value = (manifest as Record<string, unknown> | null)?.[key]
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
 export async function getScanResultManifestDetail(
   scanId: string,
   workspaceId: string
-): Promise<{ checksum: string; urlExecution: Record<string, unknown> | null } | null> {
+): Promise<ScanResultManifestDetail | null> {
   return withWorkspaceRLS(workspaceId, async (tx) => {
     const manifest = await tx.scanResultManifest.findUnique({
       where: { scanId },
       select: { checksum: true, manifest: true },
     })
     if (!manifest) return null
-    const urlExecution = (manifest.manifest as { urlExecution?: unknown } | null)?.urlExecution
+    const threatModelSlice = readManifestSlice(manifest.manifest, "threatModel")
+    const attachmentsSlice = readManifestSlice(manifest.manifest, "attachments")
+    const warningsSlice = (manifest.manifest as Record<string, unknown> | null)?.ingestionWarnings
+    const entriesSlice = threatModelSlice?.entries
     return {
       checksum: manifest.checksum,
-      urlExecution:
-        urlExecution && typeof urlExecution === "object" && !Array.isArray(urlExecution)
-          ? (urlExecution as Record<string, unknown>)
+      urlExecution: readManifestSlice(manifest.manifest, "urlExecution"),
+      scopedCoverage: readManifestSlice(manifest.manifest, "scopedCoverage"),
+      threatModel:
+        threatModelSlice &&
+        typeof threatModelSlice.checksum === "string" &&
+        typeof threatModelSlice.byteLength === "number" &&
+        typeof threatModelSlice.modelCount === "number"
+          ? {
+              checksum: threatModelSlice.checksum,
+              byteLength: threatModelSlice.byteLength,
+              modelCount: threatModelSlice.modelCount,
+              ...(typeof threatModelSlice.schemaVersion === "string"
+                ? { schemaVersion: threatModelSlice.schemaVersion }
+                : {}),
+              ...(Array.isArray(entriesSlice)
+                ? {
+                    entries: entriesSlice
+                      .filter(
+                        (e): e is { target: string; preview: string } =>
+                          typeof e === "object" &&
+                          e !== null &&
+                          typeof (e as { target?: unknown }).target === "string" &&
+                          typeof (e as { preview?: unknown }).preview === "string"
+                      )
+                      .slice(0, 10),
+                  }
+                : {}),
+            }
           : null,
+      attachments:
+        attachmentsSlice &&
+        typeof attachmentsSlice.count === "number" &&
+        typeof attachmentsSlice.totalBytes === "number" &&
+        typeof attachmentsSlice.manifestChecksum === "string"
+          ? {
+              count: attachmentsSlice.count,
+              totalBytes: attachmentsSlice.totalBytes,
+              manifestChecksum: attachmentsSlice.manifestChecksum,
+            }
+          : null,
+      ingestionWarnings: Array.isArray(warningsSlice)
+        ? warningsSlice.filter((w): w is string => typeof w === "string").slice(0, 50)
+        : [],
     }
   })
 }

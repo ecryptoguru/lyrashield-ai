@@ -152,6 +152,23 @@ export const scanCancelSchema = z
   })
   .passthrough()
 
+export const scanAttachmentItemSchema = z
+  .object({
+    id: z.string(),
+    filename: z.string(),
+    mediaType: z.string(),
+    byteLength: z.number().int().nonnegative(),
+    checksum: z.string(),
+    createdAt: z.string().or(z.date()),
+  })
+  .passthrough()
+
+export const scanAttachmentListSchema = z.object({
+  items: z.array(scanAttachmentItemSchema),
+})
+
+export type ScanAttachmentItem = z.infer<typeof scanAttachmentItemSchema>
+
 export const scanEligibilitySchema = z.object({
   allowed: z.boolean(),
   code: z.string().nullable(),
