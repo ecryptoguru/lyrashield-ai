@@ -65,6 +65,20 @@ describe("pruneMyraRetention rescheduled-original reconcile", () => {
     expect(counts.rescheduledOriginals).toBe(1)
   })
 
+  it("bounds the replacements scan so the sweep does not grow with booking history", async () => {
+    const adapter = fakeAdapter()
+    const db = fakeDb({ replacements: [] })
+
+    await pruneMyraRetention(db as never, adapter)
+
+    expect(db.demoBooking.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { status: "CONFIRMED", rescheduledFromId: { not: null } },
+        take: 100,
+      })
+    )
+  })
+
   it("leaves originals alone while no confirmed replacement exists", async () => {
     const adapter = fakeAdapter()
     const db = fakeDb({ replacements: [] })

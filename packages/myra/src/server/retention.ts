@@ -75,9 +75,14 @@ interface ProviderCancellation {
 async function reconcileRescheduledOriginals(
   db: MyraDb
 ): Promise<{ count: number; cancellations: ProviderCancellation[] }> {
+  // Bounded pass — the replacements scan grows with booking history, so cap
+  // the work per sweep like findPendingProviderCancellations does. Superseded
+  // originals beyond the bound are retried on the next pass because they stay
+  // CONFIRMED/HELD until reconciled.
   const replacements = await db.demoBooking.findMany({
     where: { status: "CONFIRMED", rescheduledFromId: { not: null } },
     select: { rescheduledFromId: true },
+    take: 100,
   })
   const originalIds = [
     ...new Set(
