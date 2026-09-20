@@ -1127,7 +1127,12 @@ fn has_bound_threat_model(run_dir: &std::path::Path, run: &serde_json::Value) ->
     };
     document["schema_version"].as_str() == Some("lyrashield-threat-model/1.0")
         && document["run_id"] == run["run_id"]
-        && document["models"].is_array()
+        && document.get("error").is_none()
+        && document["models"].as_array().is_some_and(|models| {
+            models
+                .iter()
+                .any(|model| model["target"].is_string() && model["content"].is_string())
+        })
 }
 
 async fn project_engine_evidence(
@@ -1755,7 +1760,7 @@ mod tests {
             "../../../../../apps/worker/src/engine/fixtures/run-json-1.1/threat_model.json"
         );
         std::fs::write(run_dir.path().join("threat_model.json"), bytes).unwrap();
-        let run = serde_json::json!({
+        let mut run = serde_json::json!({
             "run_id": "fixture-run-1-1",
             "result_manifest": {"artifacts": {"threat_model.json": {
                 "path": "threat_model.json",
@@ -1764,6 +1769,16 @@ mod tests {
             }}}
         });
         assert!(super::has_bound_threat_model(run_dir.path(), &run));
+        let mut errored: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        errored["models"] = serde_json::json!([]);
+        errored["error"] = serde_json::json!("threat model mirror unreadable");
+        let errored_bytes = serde_json::to_vec(&errored).unwrap();
+        std::fs::write(run_dir.path().join("threat_model.json"), &errored_bytes).unwrap();
+        run["result_manifest"]["artifacts"]["threat_model.json"]["bytes"] =
+            serde_json::json!(errored_bytes.len());
+        run["result_manifest"]["artifacts"]["threat_model.json"]["sha256"] =
+            serde_json::json!(format!("{:x}", sha2::Sha256::digest(&errored_bytes)));
+        assert!(!super::has_bound_threat_model(run_dir.path(), &run));
         std::fs::write(run_dir.path().join("threat_model.json"), b"changed").unwrap();
         assert!(!super::has_bound_threat_model(run_dir.path(), &run));
     }

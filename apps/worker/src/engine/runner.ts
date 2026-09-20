@@ -1049,12 +1049,14 @@ export async function readEngineOutput(outputDir: string): Promise<{
   // The singular owned artifact only exists under run.json 1.1. An absent or
   // older receipt cannot bind its bytes; legacy plural evidence is separate.
   let verifiedThreatModelRaw = runJsonRaw || threatModelRaw === undefined ? threatModelRaw : null
+  let allowLegacyPlural = runJsonRaw === undefined
   if (runJsonRaw) {
     try {
       const run = JSON.parse(runJsonRaw) as {
         schema_version?: unknown
         result_manifest?: { schema_version?: unknown; artifacts?: Record<string, unknown> }
       }
+      allowLegacyPlural = run.schema_version === "1.0" && run.result_manifest === undefined
       if (run.schema_version !== "1.1" && threatModelRaw !== undefined) {
         verifiedThreatModelRaw = null
       } else if (run.schema_version === "1.1" || run.result_manifest !== undefined) {
@@ -1087,7 +1089,7 @@ export async function readEngineOutput(outputDir: string): Promise<{
     // The owned engine exports singular threat_model.json. A plural artifact
     // is read only as an explicit pre-contract compatibility fallback.
     threatModelsRaw:
-      verifiedThreatModelRaw === undefined
+      allowLegacyPlural && verifiedThreatModelRaw === undefined
         ? await readOptionalArtifact("threat_models.json", MAX_ENGINE_THREAT_MODEL_BYTES)
         : verifiedThreatModelRaw,
     httpExchangesRaw: await readOptionalArtifact(

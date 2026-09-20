@@ -176,6 +176,32 @@ it("rejects an unbound canonical threat model without a 1.1 run receipt", async 
   expect(output.artifacts.threatModelsRaw).toBeNull()
 })
 
+it("does not import a plural-only legacy artifact into a 1.1 run", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-plural-only-"))
+  cleanupPaths.push(outputDir)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "run.json"), JSON.stringify({ schema_version: "1.1" }))
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(
+    join(outputDir, "threat_models.json"),
+    JSON.stringify({ stale: { target: "other-run", content: "unbound" } })
+  )
+  const output = await readEngineOutput(outputDir)
+  expect(output.artifacts.threatModelsRaw).toBeUndefined()
+})
+
+it("retains the plural adapter for a pre-1.1 run", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-legacy-plural-"))
+  cleanupPaths.push(outputDir)
+  const legacy = JSON.stringify({ old: { target: "legacy", content: "context" } })
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "run.json"), JSON.stringify({ schema_version: "1.0" }))
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_models.json"), legacy)
+  const output = await readEngineOutput(outputDir)
+  expect(output.artifacts.threatModelsRaw).toBe(legacy)
+})
+
 it("rejects a threat model that is missing or differs from the run manifest", async () => {
   const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-manifest-evidence-"))
   cleanupPaths.push(outputDir)
@@ -198,6 +224,12 @@ it("rejects a threat model that is missing or differs from the run manifest", as
   await writeFile(
     join(outputDir, "run.json"),
     JSON.stringify({ schema_version: "1.1", run_id: "scan-1", result_manifest: manifest })
+  )
+  // A stale pre-contract sibling must never fill a missing 1.1 artifact.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(
+    join(outputDir, "threat_models.json"),
+    JSON.stringify({ stale: { target: "other-run", content: "unbound" } })
   )
 
   const missing = await readEngineOutput(outputDir)
