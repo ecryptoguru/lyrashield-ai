@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { resolveScanProfile } from "./scan-profile"
+import { resolveScanProfile, scanDepthContract } from "./scan-profile"
 
 describe("resolveScanProfile", () => {
   it("normalizes legacy repository Safe to the requested Quick profile", () => {
@@ -82,5 +83,40 @@ describe("resolveScanProfile", () => {
     expect(() => resolveScanProfile({ targetType: "API", mode: "EXPENSIVE" })).toThrow(
       "URL_MODE_UNSUPPORTED"
     )
+  })
+})
+
+describe("scanDepthContract", () => {
+  it("stays identical to the checked-in cross-language fixture", () => {
+    // The desktop Rust tests and frontend consume this file. It must equal the
+    // builder output exactly — regenerate it from scanDepthContract() whenever
+    // profile data changes instead of editing it by hand.
+    const fixture = JSON.parse(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      readFileSync(new URL("./fixtures/scan-depths.json", import.meta.url), "utf8")
+    )
+    expect(fixture).toEqual(scanDepthContract())
+  })
+
+  it("maps every stored-mode alias to a canonical engine argument and never to url", () => {
+    const contract = scanDepthContract()
+    expect(Object.keys(contract.storedModeEngineArgs)).toEqual(
+      expect.arrayContaining(["safe", "quick", "standard", "deep", "custom"])
+    )
+    expect(contract.storedModeEngineArgs["safe"]).toBe("quick")
+    expect(contract.storedModeEngineArgs["custom"]).toBe("deep")
+    expect(contract.storedModeEngineArgs).not.toHaveProperty("url")
+    expect(Object.values(contract.storedModeEngineArgs)).not.toContain("url")
+    expect(contract.publicDepths).toEqual(["QUICK", "STANDARD", "DEEP"])
+  })
+
+  it("keeps queue/setup reserves separate from execution ceilings", () => {
+    for (const depth of scanDepthContract().depths) {
+      expect(depth.executionLimits.maxEngineMinutes).toBeLessThan(
+        depth.executionLimits.maxDurationMinutes
+      )
+      expect(depth.queueReserve.scannerReserveMinutes).toBeGreaterThan(0)
+      expect(depth).not.toHaveProperty("maxBudgetUsd")
+    }
   })
 })

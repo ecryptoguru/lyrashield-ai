@@ -10,7 +10,7 @@ export const SCAN_PRESETS = {
   RELEASE_CHECK: {
     label: "Release check",
     description: "Fast, bounded review before you ship.",
-    hint: "Quick pass over changed files, public surfaces and configs. Best for pre-release confidence.",
+    hint: "Quick pass over the repository snapshot, its public surfaces and configs. Best for pre-release confidence.",
     goal: "LAUNCH_REVIEW",
     mode: "QUICK",
   },
