@@ -14,28 +14,28 @@ const evidenceControls = [...VIBE_SECURITY_CONTROLS]
 
 const title = "Operational Evidence Vault | LyraShield AI"
 const description =
-  "Collect, review, and version encrypted proof for the seven Vibe Security 50 controls that cannot be established by a repository or URL scan."
+  "Collect, review and version encrypted proof for the seven Vibe Security 50 controls that cannot be established by a repository or URL scan."
 
 const faq = [
   {
     q: "Why can't these controls be scanned?",
-    a: "Seven controls describe operational practice, not code: audit trails, monitoring, backup tests, sandboxing, test independence, multi-agent trust, and accountable review. A scanner can ask for evidence of these, but it cannot safely observe or prove them on its own.",
+    a: "Seven controls describe operational practice, not code: audit trails, monitoring, backup tests, sandboxing, test independence, multi-agent trust and accountable review. A scanner can ask for evidence of these, but it cannot safely observe or prove them on its own.",
   },
   {
     q: "What does the Operational Evidence Vault do?",
-    a: "It creates an append-only, workspace-scoped record for each evidence-required control. You submit an attestation and any supporting files; a reviewer accepts, rejects, or requests a revision; and every change creates a new immutable version rather than overwriting the last.",
+    a: "It creates an append-only, workspace-scoped record for each evidence-required control. You submit an attestation and any supporting files; a reviewer accepts, rejects or requests a revision; and every change creates a new immutable version rather than overwriting the last.",
   },
   {
     q: "Are artifact files stored securely?",
-    a: "Artifacts are encrypted before storage and never returned with a raw storage URI. The dashboard and API expose only sanitized metadata — filename, media type, and byte length — inside the workspace RLS boundary.",
+    a: "Artifacts are encrypted before storage and never returned with a raw storage URI. The dashboard and API expose only sanitized metadata — filename, media type and byte length — inside the workspace RLS boundary.",
   },
   {
     q: "Does accepted evidence mean the app is secure?",
-    a: "No. Accepted evidence means the submitted proof was reviewed and found adequate for that control. It is one input into an assurance report, not a guarantee that the app is secure, a formal attestation, or proof against every possible threat.",
+    a: "No. Accepted evidence means the submitted proof was reviewed and found adequate for that control. It is one input into an assurance report, not a guarantee that the app is secure, a formal attestation or proof against every possible threat.",
   },
   {
-    q: "Does this make LyraShield SOC 2 compliant, certified, or adversarially robust?",
-    a: "No. LyraShield does not claim SOC 2 compliance, certification, security guarantees, AI safety testing (without a named framework), or adversarial robustness. Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate. The evidence vault supports release assurance; it does not produce those claims.",
+    q: "Does this make LyraShield SOC 2 compliant, certified or adversarially robust?",
+    a: "No. LyraShield does not claim SOC 2 compliance, certification, security guarantees, AI safety testing (without a named framework) or adversarial robustness. Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate. The evidence vault supports release assurance; it does not produce those claims.",
   },
 ]
 
@@ -78,7 +78,7 @@ const jsonLd = [
     "@type": "HowTo",
     name: "How evidence becomes assurance in the Operational Evidence Vault",
     description:
-      "Submit an attestation and encrypted artifacts, a reviewer accepts or requests a revision, every action creates a new version, and accepted evidence is frozen into the private assurance report.",
+      "Submit an attestation and encrypted artifacts, a reviewer accepts or requests a revision, every action creates a new version and accepted evidence is frozen into the private assurance report.",
     step: [
       {
         "@type": "HowToStep",
@@ -91,7 +91,7 @@ const jsonLd = [
         "@type": "HowToStep",
         position: 2,
         name: "Review",
-        text: "A reviewer accepts, rejects, or requests a revision.",
+        text: "A reviewer accepts, rejects or requests a revision.",
         url: `${canonical}#workflow-heading`,
       },
       {
@@ -130,7 +130,7 @@ const jsonLd = [
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
         Some security controls cannot be proven by a repository or URL scan. The
-        Operational Evidence Vault collects, reviews, and versions the proof for
+        Operational Evidence Vault collects, reviews and versions the proof for
         the seven evidence-required Vibe Security 50 controls.
       </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
@@ -177,7 +177,7 @@ const jsonLd = [
           <span class="font-mono text-xs text-accent">02</span>
           <h3 class="mt-2 font-semibold text-text">Review</h3>
           <p class="mt-2 text-sm leading-6 text-text-muted">
-            A reviewer accepts, rejects, or requests a revision.
+            A reviewer accepts, rejects or requests a revision.
           </p>
         </li>
         <li class="rounded-lg border border-border bg-bg-raised p-5" data-reveal>

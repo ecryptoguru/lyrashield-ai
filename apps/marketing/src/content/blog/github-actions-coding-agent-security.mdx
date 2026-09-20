@@ -1,6 +1,6 @@
 ---
 title: "Secure GitHub Actions Used by Coding Agents"
-description: "Harden coding-agent workflows with untrusted-input separation, minimal token permissions, pinned actions, constrained OIDC, and approval gates."
+description: "Harden coding-agent workflows with untrusted-input separation, minimal token permissions, pinned actions, constrained OIDC and approval gates."
 pubDate: 2026-07-17
 updatedDate: 2026-08-07
 author: lyrashield-team
@@ -15,16 +15,16 @@ faq:
   - q: "Is pull_request_target always unsafe?"
     a: "No. It can be appropriate for trusted metadata operations, but a privileged pull_request_target job must not check out or execute untrusted pull-request code. Use it only when the privileged context is necessary and keep its inputs narrow."
   - q: "Does OIDC remove every credential risk in GitHub Actions?"
-    a: "No. OIDC avoids storing a long-lived cloud credential, but the cloud trust policy still has to restrict repository, workflow, branch, or environment, and audience claims. An overbroad trust rule can issue short-lived credentials to the wrong job."
+    a: "No. OIDC avoids storing a long-lived cloud credential, but the cloud trust policy still has to restrict repository, workflow, branch or environment and audience claims. An overbroad trust rule can issue short-lived credentials to the wrong job."
   - q: "Does a GitHub-hosted runner make untrusted code safe?"
-    a: "It reduces persistence between jobs because hosted runners are generally ephemeral, but untrusted code can still read credentials, alter outputs, poison artifacts, or use permissions available during its own job. Privilege separation is still required."
+    a: "It reduces persistence between jobs because hosted runners are generally ephemeral, but untrusted code can still read credentials, alter outputs, poison artifacts or use permissions available during its own job. Privilege separation is still required."
 ---
 
-**Direct answer:** Give coding-agent workflows read-only permissions by default. Never let a privileged trigger check out or execute untrusted pull-request code. Pin third-party actions to reviewed full commit SHAs, constrain OIDC trust by repository and workflow context, isolate runners and artifacts, and require review before workflow edits, deployments, or any job that gains write access.
+**Direct answer:** Give coding-agent workflows read-only permissions by default. Never let a privileged trigger check out or execute untrusted pull-request code. Pin third-party actions to reviewed full commit SHAs, constrain OIDC trust by repository and workflow context, isolate runners and artifacts and require review before workflow edits, deployments or any job that gains write access.
 
-A coding agent can write a useful workflow in seconds. It cannot decide how much authority that workflow should inherit. The event, token, runner, cache, artifacts, environment, and cloud identity are all security boundaries, even when the generated YAML looks ordinary.
+A coding agent can write a useful workflow in seconds. It cannot decide how much authority that workflow should inherit. The event, token, runner, cache, artifacts, environment and cloud identity are all security boundaries, even when the generated YAML looks ordinary.
 
-Generated workflows often copy the shortest vendor example that runs the requested test. The prompt rarely includes repository trust settings, fork behavior, cloud-role conditions, or the contents of a persistent runner. Reviewers have to supply that missing context and test the effective permissions.
+Generated workflows often copy the shortest vendor example that runs the requested test. The prompt rarely includes repository trust settings, fork behavior, cloud-role conditions or the contents of a persistent runner. Reviewers have to supply that missing context and test the effective permissions.
 
 This is one part of the [full security model for AI-built applications](/blog/vibe-coding-security-guide). A safe pipeline can still deliver an application with broken authorization. Conversely, good application code can be undermined by a workflow that lets untrusted input reach repository or deployment credentials.
 
@@ -33,10 +33,10 @@ This is one part of the [full security model for AI-built applications](/blog/vi
 Read the workflow as a privileged program, not as configuration. For every job, write down:
 
 - which event can start it and who controls that event;
-- whether pull-request code, issue text, branch names, artifacts, or caches are inputs;
+- whether pull-request code, issue text, branch names, artifacts or caches are inputs;
 - the effective `GITHUB_TOKEN` permissions;
-- every repository, environment, package, and cloud credential it can reach;
-- whether the runner is shared, persistent, or connected to an internal network;
+- every repository, environment, package and cloud credential it can reach;
+- whether the runner is shared, persistent or connected to an internal network;
 - what a later privileged job trusts from an earlier unprivileged job.
 
 Coding agents often edit `.github/workflows` alongside application code. Protect that directory with a designated reviewer. Review action pins and permission changes separately from the feature diff. A one-line change from `contents: read` to `contents: write` deserves more attention than its size suggests.
@@ -63,7 +63,7 @@ jobs:
 
 `pull_request_target` runs in the context of the base repository. GitHub warns that combining privileged triggers such as `pull_request_target` or `workflow_run` with checkout or execution of untrusted pull-request content can compromise the repository. The pull request controls the package scripts in this example. A generated test command that looks harmless does not make those scripts trusted.
 
-The same problem can cross job boundaries. An unprivileged job may upload an executable artifact, a cache entry, a test report with active content, or a filename that a privileged job later interprets. Treat every value produced by untrusted code as untrusted data, even when the producing workflow completed successfully and the artifact came from the expected repository.
+The same problem can cross job boundaries. An unprivileged job may upload an executable artifact, a cache entry, a test report with active content or a filename that a privileged job later interprets. Treat every value produced by untrusted code as untrusted data, even when the producing workflow completed successfully and the artifact came from the expected repository.
 
 ## Separate review from privileged action
 
@@ -88,7 +88,7 @@ jobs:
       - run: npm test
 ```
 
-Replace the illustrative SHA with a full commit SHA that you verified in the action's official repository. GitHub describes a full-length commit SHA as the immutable way to reference an action. Pinning reduces reference-mutation risk. It does not prove that the pinned code is safe, that its dependencies are sound, or that the maintainer account was uncompromised when the commit was created.
+Replace the illustrative SHA with a full commit SHA that you verified in the action's official repository. GitHub describes a full-length commit SHA as the immutable way to reference an action. Pinning reduces reference-mutation risk. It does not prove that the pinned code is safe, that its dependencies are sound or that the maintainer account was uncompromised when the commit was created.
 
 Set `permissions` at the workflow level and narrow them again for jobs that need something different. Do not rely on a repository default that another administrator can change. If one job must write a check result, grant only the specific permission to that job. Keep the job that executes pull-request code read-only.
 
@@ -98,17 +98,17 @@ Deployment should consume reviewed source or a reproducibly identified artifact,
 
 OpenID Connect lets a workflow request a short-lived cloud credential instead of storing a long-lived key in GitHub. That is useful, but it moves the authorization decision into the cloud trust policy.
 
-Restrict the accepted issuer and audience. Match the expected organization, repository, workflow file, branch, tag, or protected environment using the claims supported by the provider. A trust policy that accepts any repository in an organization, or any branch in one repository, may grant deployment authority to a workflow the approver never reviewed.
+Restrict the accepted issuer and audience. Match the expected organization, repository, workflow file, branch, tag or protected environment using the claims supported by the provider. A trust policy that accepts any repository in an organization or any branch in one repository, may grant deployment authority to a workflow the approver never reviewed.
 
 Grant `id-token: write` only to the job that exchanges the token. That permission lets the job request an OIDC token; it does not itself grant cloud access. The cloud role should also have the smallest resource and action scope needed. Record the resulting cloud identity and approved commit in deployment logs without recording the token.
 
-## Isolate runners, caches, and artifacts
+## Isolate runners, caches and artifacts
 
-Do not run untrusted pull requests on a persistent self-hosted runner that has production network access or reusable credentials. A cleanup script after the job is weaker than disposal of the environment. If self-hosting is unavoidable, use an ephemeral runner image, isolate its network, deny access to metadata services, and destroy it after one job.
+Do not run untrusted pull requests on a persistent self-hosted runner that has production network access or reusable credentials. A cleanup script after the job is weaker than disposal of the environment. If self-hosting is unavoidable, use an ephemeral runner image, isolate its network, deny access to metadata services and destroy it after one job.
 
-GitHub-hosted runners reduce persistent-host concerns, but the active job still has its assigned token, network, and artifacts. Keep privileged credentials out of that job.
+GitHub-hosted runners reduce persistent-host concerns, but the active job still has its assigned token, network and artifacts. Keep privileged credentials out of that job.
 
-Cache keys should include trusted dependency and platform inputs. Never let a privileged job restore a cache created by untrusted code unless the contents are treated as hostile. For artifacts, verify the producing workflow, repository, commit, expected name, size, and digest. Parsing an artifact is still processing attacker-controlled input.
+Cache keys should include trusted dependency and platform inputs. Never let a privileged job restore a cache created by untrusted code unless the contents are treated as hostile. For artifacts, verify the producing workflow, repository, commit, expected name, size and digest. Parsing an artifact is still processing attacker-controlled input.
 
 ## Verify the boundary safely
 
@@ -121,11 +121,11 @@ Use an owned test repository with fake credentials and a non-production cloud ro
 5. Change a workflow file and confirm the required reviewer blocks it.
 6. Verify that artifacts are bound to the expected commit and that logs contain no credential values.
 
-The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record whether agent, dependency, secret, testing, and operational controls have owners before release. It does not read repository settings, resolve action pins, inspect token permissions, run a workflow, or test a cloud trust policy.
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record whether agent, dependency, secret, testing and operational controls have owners before release. It does not read repository settings, resolve action pins, inspect token permissions, run a workflow or test a cloud trust policy.
 
 ## What automation can and cannot establish
 
-Static checks can flag mutable action tags, broad token permissions, dangerous trigger and checkout combinations, or unreviewed workflow changes. A repository rule can require those checks before merge. None of that proves the generated application is secure, and a green job does not prove that every privileged path was modeled.
+Static checks can flag mutable action tags, broad token permissions, dangerous trigger and checkout combinations or unreviewed workflow changes. A repository rule can require those checks before merge. None of that proves the generated application is secure and a green job does not prove that every privileged path was modeled.
 
 The LyraShield AI repository contains a review-stage GitHub Actions workflow for secret and dependency checks plus SARIF output. It is repository code, not a generally available hosted service or production proof. Its current `DEEP` input has SAFE-equivalent coverage and must not be described as a deeper scan. The [evidence methodology](/methodology) explains why coverage and limitations stay attached to a result.
 

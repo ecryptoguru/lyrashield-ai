@@ -601,7 +601,7 @@
   },
   {
     "index": 61,
-    "title": "Supabase Security: RLS, Service Keys, and OAuth Tokens",
+    "title": "Supabase Security: RLS, Service Keys and OAuth Tokens",
     "slug": "supabase-security-guide",
     "query": "supabase security checklist - guide",
     "cluster": "Stack",
@@ -611,7 +611,7 @@
   },
   {
     "index": 62,
-    "title": "Firebase Security Rules: Firestore, Storage, and Admin SDK",
+    "title": "Firebase Security Rules: Firestore, Storage and Admin SDK",
     "slug": "firebase-security-guide",
     "query": "firebase security rules checklist - guide",
     "cluster": "Stack",

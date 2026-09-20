@@ -27,9 +27,9 @@ JetBrains with AI Assistant changes many files, propagating [OWASP Top 10](https
 
 Run `npx lyrashield login --oauth` and keep credentials in the user-only LyraShield credential store. Never commit a key to source control or chat logs. The runner-local GitHub Action does not require that hosted credential.
 
-You need Node 24 or newer for the LyraShield package, a current JetBrains build with MCP support, and a testable target such as a repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp@0.2.8 and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
+You need Node 24 or newer for the LyraShield package, a current JetBrains build with MCP support and a testable target such as a repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp@0.2.8 and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
 
-Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks, and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix proposals are proposals requiring review, not hands off merges, after Sprints 0 to 2 shipped MCP contract.
+Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix proposals are proposals requiring review, not hands off merges, after Sprints 0 to 2 shipped MCP contract.
 
 ## 2. Configure MCP server in jetbrains config file
 
@@ -46,7 +46,7 @@ jetbrains reads MCP from Settings to AI Assistant to MCP to Add As JSON. Top lev
 }
 ```
 
-JetBrains' current MCP page documents `command`, `args`, and remote `url`; it does not document environment interpolation or remote header fields. The local credential-store path avoids inventing either behavior. See the [JetBrains integration guide](/docs/integrations/jetbrains).
+JetBrains' current MCP page documents `command`, `args` and remote `url`; it does not document environment interpolation or remote header fields. The local credential-store path avoids inventing either behavior. See the [JetBrains integration guide](/docs/integrations/jetbrains).
 
 ## 3. Verify the connection inside jetbrains
 
@@ -60,7 +60,7 @@ Verification prevents silent failure where agent assumes scan succeeded but serv
 
 With MCP connected, prompt agent to scan current target before committing. Example prompt is scan target http://localhost:3000 for injection and secrets using LyraShield and return findings with evidence states only with file paths and CWE.
 
-Agent calls MCP tool and returns file, line, evidence snippet or reproduction notes, and remediation pointers that reference [OWASP Top 10](https://owasp.org/www-project-top-ten/). For injection it shows untrusted input flowing into query without validation. For secrets it shows detected key pattern in source. For supply chain it maps lock entries against [OSV database](https://osv.dev/).
+Agent calls MCP tool and returns file, line, evidence snippet or reproduction notes and remediation pointers that reference [OWASP Top 10](https://owasp.org/www-project-top-ten/). For injection it shows untrusted input flowing into query without validation. For secrets it shows detected key pattern in source. For supply chain it maps lock entries against [OSV database](https://osv.dev/).
 
 LyraShield preserves each finding's evidence state and supports a server-owned retest after the developer applies a fix. The MCP workflow can generate and record a fix proposal, but it does not create a branch or pull request. Poll the retest to a terminal state and include its outcome and scan reference in the PR. See [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for verifiable remediation and [CWE Top 25](https://cwe.mitre.org/top25/) for classification.
 
@@ -96,11 +96,11 @@ jobs:
           fail_on_severity: HIGH
 ```
 
-The runner-local Action needs no LyraShield API key. It emits and uploads SARIF but does not comment, open a branch, or create a recorded hosted finding. Use [JetBrains integration guide](/docs/integrations/jetbrains) for authenticated MCP setup and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for build-integrity context.
+The runner-local Action needs no LyraShield API key. It emits and uploads SARIF but does not comment, open a branch or create a recorded hosted finding. Use [JetBrains integration guide](/docs/integrations/jetbrains) for authenticated MCP setup and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for build-integrity context.
 
 ## 6. Add agent rules for continuous guardrails
 
-jetbrains supports project rules that agent reads each task, baking security into definition of done without relying on memory. Add rule forcing LyraShield scan before marking feature complete, covering user input, auth, file upload, secrets, or external fetch, and include retest.
+jetbrains supports project rules that agent reads each task, baking security into definition of done without relying on memory. Add rule forcing LyraShield scan before marking feature complete, covering user input, auth, file upload, secrets or external fetch and include retest.
 
 Location varies. Cursor uses .cursor/rules/security.mdc with globs, Claude Code uses CLAUDE.md, Windsurf uses .windsurf/rules/security.md, VS Code uses .github/copilot-instructions.md, JetBrains uses .jetbrains/ai-assistant/rules/security.md. Choose location traveling with repo so new clones get same expectation.
 
@@ -122,10 +122,10 @@ Test rule by scaffolding endpoint accepting query param and confirming scan trig
 
 Jetbrains speeds AI development but can repeat patterns [OWASP Top 10](https://owasp.org/www-project-top-ten/) warns about such as trusting generated SQL or leaving debug endpoints enabled. LyraShield adds verification without changing UX, exposing scan and findings as native tools agent knows how to call.
 
-The current product ships MCP, bounded scans, findings, and evidence, approval-gated fix proposals, retests, reports, SCA, secrets, and the runner-local SARIF gate. The local Action is advisory and does not create hosted evidence states; use a recorded scan and retest when assurance evidence is required. Advisory dependency matches use [OSV](https://osv.dev/) data and still require resolved-version review.
+The current product ships MCP, bounded scans, findings and evidence, approval-gated fix proposals, retests, reports, SCA, secrets and the runner-local SARIF gate. The local Action is advisory and does not create hosted evidence states; use a recorded scan and retest when assurance evidence is required. Advisory dependency matches use [OSV](https://osv.dev/) data and still require resolved-version review.
 
 Local feedback plus CI gate creates defense in depth matching how AI apps evolve, many small edits per hour. For policy framing revisit [vibe coding security guide](/blog/vibe-coding-security-guide) and [NIST SSDF](https://csrc.nist.gov/projects/ssdf). External refs such as [CWE Top 25](https://cwe.mitre.org/top25/) and [OSV database](https://osv.dev/) provide standardized ids for prioritization, making triage consistent.
 
-Close loop by tracking findings as tasks, rerunning scans after fixes to confirm resolution, and ensuring SARIF appears in GitHub code scanning with file and line mapping. Run [AI app security checklist](/tools/ai-app-security-checklist) before launch to cover injection, auth, secrets, headers, and supply chain in one pass.
+Close loop by tracking findings as tasks, rerunning scans after fixes to confirm resolution and ensuring SARIF appears in GitHub code scanning with file and line mapping. Run [AI app security checklist](/tools/ai-app-security-checklist) before launch to cover injection, auth, secrets, headers and supply chain in one pass.
 
-When ready to centralize results across jetbrains sessions and pull requests with dashboards and retention, [create an account at LyraShield AI](https://lyrashieldai.com) for early access to team policies. LyraShield is designed to grow with your jetbrains workflow, bringing findings with evidence states, proposals requiring review, and retest evidence into existing loop without claiming hands off merges.
+When ready to centralize results across jetbrains sessions and pull requests with dashboards and retention, [create an account at LyraShield AI](https://lyrashieldai.com) for early access to team policies. LyraShield is designed to grow with your jetbrains workflow, bringing findings with evidence states, proposals requiring review and retest evidence into existing loop without claiming hands off merges.

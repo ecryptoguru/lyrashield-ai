@@ -1,6 +1,6 @@
 ---
 title: "Security Headers Every AI-Built App Needs"
-description: "Build browser security headers from application behavior, stage CSP safely, and verify policies by route instead of chasing a score."
+description: "Build browser security headers from application behavior, stage CSP safely and verify policies by route instead of chasing a score."
 pubDate: 2026-07-17
 updatedDate: 2026-08-07
 author: lyrashield-team
@@ -12,18 +12,18 @@ draft: false
 heroImage: web-execution-02
 faq:
   - q: "Can Content Security Policy be set in a meta element?"
-    a: "An enforcing CSP can be delivered through an early meta element, but report-only policy, report-uri, frame-ancestors, and sandbox are not supported there. Prefer an HTTP response header when the server controls the response."
+    a: "An enforcing CSP can be delivered through an early meta element, but report-only policy, report-uri, frame-ancestors and sandbox are not supported there. Prefer an HTTP response header when the server controls the response."
   - q: "Why should HSTS be rolled out carefully?"
-    a: "Browsers cache HSTS for the declared lifetime, and includeSubDomains expands its scope. Confirm HTTPS works on every covered host before increasing max-age or requesting preload."
+    a: "Browsers cache HSTS for the declared lifetime and includeSubDomains expands its scope. Confirm HTTPS works on every covered host before increasing max-age or requesting preload."
   - q: "Does a high security-header score prove an app is secure?"
-    a: "No. Headers influence browser behavior. They do not prove authorization, input validation, output sanitization, session invalidation, dependency safety, or protection of non-browser clients."
+    a: "No. Headers influence browser behavior. They do not prove authorization, input validation, output sanitization, session invalidation, dependency safety or protection of non-browser clients."
 ---
 
-**Direct answer:** Start with route-specific browser policy, not a copied header bundle. Enforce HTTPS, disable MIME sniffing, limit referrer detail, prevent unwanted framing, and develop a Content Security Policy from the resources the app actually loads. Observe CSP in report-only mode before enforcement, then verify every document and error route in production.
+**Direct answer:** Start with route-specific browser policy, not a copied header bundle. Enforce HTTPS, disable MIME sniffing, limit referrer detail, prevent unwanted framing and develop a Content Security Policy from the resources the app actually loads. Observe CSP in report-only mode before enforcement, then verify every document and error route in production.
 
-Security headers are instructions to a browser. Their value depends on the page, loaded resources, authentication model, and deployment. A header name with an ineffective value can satisfy a shallow scanner while leaving the intended risk unchanged.
+Security headers are instructions to a browser. Their value depends on the page, loaded resources, authentication model and deployment. A header name with an ineffective value can satisfy a shallow scanner while leaving the intended risk unchanged.
 
-The [vibe coding security guide](/blog/vibe-coding-security-guide) treats headers as defense in depth. They do not replace output encoding, sanitization, authorization, or secure cookies.
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats headers as defense in depth. They do not replace output encoding, sanitization, authorization or secure cookies.
 
 ## Start from a response that only looks protected
 
@@ -40,9 +40,9 @@ The [OWASP Secure Headers Project](https://owasp.github.io/www-project-secure-he
 
 ## Why copied policies fail
 
-Generated middleware tends to paste a generic policy. Modern applications load analytics, payment frames, fonts, images, API calls, workers, and development tooling from different origins. When the policy breaks a feature, the quickest generated fix is often `*`, `'unsafe-inline'`, or an ever-growing host list.
+Generated middleware tends to paste a generic policy. Modern applications load analytics, payment frames, fonts, images, API calls, workers and development tooling from different origins. When the policy breaks a feature, the quickest generated fix is often `*`, `'unsafe-inline'` or an ever-growing host list.
 
-The opposite failure is an aspirational strict policy that was never exercised. It may block production login, error reporting, or a payment route. Teams disable it during an incident and never restore it.
+The opposite failure is an aspirational strict policy that was never exercised. It may block production login, error reporting or a payment route. Teams disable it during an incident and never restore it.
 
 Build policy from an inventory of real resource types and routes. Keep development allowances out of production. Generated script nonces must be unpredictable per response and attached only to approved script elements. A static nonce copied into every page is not a nonce.
 
@@ -57,7 +57,7 @@ X-Content-Type-Options: nosniff
 Referrer-Policy: strict-origin-when-cross-origin
 ```
 
-This is an illustration, not a ready-to-paste policy. An application that must be framed by a trusted partner cannot use `frame-ancestors 'none'`. A static site without inline scripts may not need nonces. Images, styles, connections, workers, and forms need directives matching their actual destinations.
+This is an illustration, not a ready-to-paste policy. An application that must be framed by a trusted partner cannot use `frame-ancestors 'none'`. A static site without inline scripts may not need nonces. Images, styles, connections, workers and forms need directives matching their actual destinations.
 
 `X-Content-Type-Options: nosniff` tells browsers not to reinterpret certain responses as a different MIME type. Still send correct `Content-Type` values. `Referrer-Policy` controls how much referring URL information is sent; avoid putting secrets in URLs regardless of that policy.
 
@@ -69,17 +69,17 @@ Use CSP `frame-ancestors` to control which origins can embed the document. The c
 
 ## Stage CSP with real route coverage
 
-Send `Content-Security-Policy-Report-Only` with the candidate policy. The CSP Working Draft defines report-only as monitoring rather than enforcement, which supports iterative deployment. Reports can contain page URLs and blocked resource information, so minimize collected fields, avoid sensitive URL data, and set retention deliberately.
+Send `Content-Security-Policy-Report-Only` with the candidate policy. The CSP Working Draft defines report-only as monitoring rather than enforcement, which supports iterative deployment. Reports can contain page URLs and blocked resource information, so minimize collected fields, avoid sensitive URL data and set retention deliberately.
 
-Exercise the homepage, authentication, account pages, payment flows, error pages, previews, and any user-generated content. Separate extensions, injected corporate scripts, and browser tooling noise from resources the application actually requires.
+Exercise the homepage, authentication, account pages, payment flows, error pages, previews and any user-generated content. Separate extensions, injected corporate scripts and browser tooling noise from resources the application actually requires.
 
-Do not treat every report as an attack. A violation can come from a stale cached page, a blocked browser extension, a deployment mismatch, or real injected content. Group reports by policy version and route, sample noisy sources, and preserve enough context to reproduce the app behavior without collecting full URLs that may contain sensitive parameters.
+Do not treat every report as an attack. A violation can come from a stale cached page, a blocked browser extension, a deployment mismatch or real injected content. Group reports by policy version and route, sample noisy sources and preserve enough context to reproduce the app behavior without collecting full URLs that may contain sensitive parameters.
 
-Move directives into enforcement in controlled steps. Keep reporting during rollout where useful. Test the actual response at the CDN edge because proxies, redirects, and error handlers may replace or omit origin headers.
+Move directives into enforcement in controlled steps. Keep reporting during rollout where useful. Test the actual response at the CDN edge because proxies, redirects and error handlers may replace or omit origin headers.
 
 If HTML varies by nonce, ensure shared caching does not pair one document with another response's policy. Generate the nonce once per response and use the same value in the header and approved elements. Do not expose it through client state for later arbitrary script creation.
 
-A meta element has limited CSP support. The Working Draft says report-only policy, `report-uri`, `frame-ancestors`, and `sandbox` are not supported through that delivery form. A meta policy also applies only after the browser encounters it. Prefer the HTTP response header when possible.
+A meta element has limited CSP support. The Working Draft says report-only policy, `report-uri`, `frame-ancestors` and `sandbox` are not supported through that delivery form. A meta policy also applies only after the browser encounters it. Prefer the HTTP response header when possible.
 
 ## Roll out HSTS without trapping subdomains
 
@@ -87,11 +87,11 @@ A meta element has limited CSP support. The Working Draft says report-only polic
 
 Start with a short `max-age` after confirming the canonical host serves valid HTTPS and redirects correctly. Increase it only after monitoring. Add `includeSubDomains` only when every current and delegated subdomain can support HTTPS. Preload is a separate, higher-commitment operational decision with browser-list requirements and removal delays.
 
-HSTS affects browsers that have learned or preloaded the policy. It does not configure TLS versions, certificates, or mobile networking libraries. Server TLS remains a separate control.
+HSTS affects browsers that have learned or preloaded the policy. It does not configure TLS versions, certificates or mobile networking libraries. Server TLS remains a separate control.
 
-Review subdomain ownership before `includeSubDomains`. Old marketing hosts, customer-controlled subdomains, mail interfaces, and vendor callbacks may have different TLS operations. Inventory them and fix or retire insecure hosts first. A long HSTS lifetime is hard to reverse for browsers that already cached it.
+Review subdomain ownership before `includeSubDomains`. Old marketing hosts, customer-controlled subdomains, mail interfaces and vendor callbacks may have different TLS operations. Inventory them and fix or retire insecure hosts first. A long HSTS lifetime is hard to reverse for browsers that already cached it.
 
-## Keep CORS, CSP, and sanitization separate
+## Keep CORS, CSP and sanitization separate
 
 CORS decides which browser origins may read selected cross-origin responses. CSP constrains resources and embedding for a document. Neither one sanitizes HTML or validates authorization.
 
@@ -99,17 +99,17 @@ The [CORS guide](/blog/cors-vibe-coded-apps) covers API response sharing. An XSS
 
 ## Verify the response, not just configuration
 
-Build a production-shaped local deployment or authorized staging site. Request representative HTML, JSON, redirects, 404s, and 500s. Inspect the final response after CDN and middleware processing. Confirm there are not multiple conflicting CSP or HSTS headers.
+Build a production-shaped local deployment or authorized staging site. Request representative HTML, JSON, redirects, 404s and 500s. Inspect the final response after CDN and middleware processing. Confirm there are not multiple conflicting CSP or HSTS headers.
 
 Open core user flows with browser developer tools and no extensions. Review CSP violations and network failures. Test framing from a controlled second origin. Confirm HSTS scope on disposable test hosts before expanding production duration.
 
-The browser-local [security headers checker](/tools/security-headers-checker) reviews pasted response headers without uploading them. It can flag missing or risky directives. It cannot crawl every route, execute the CSP, inspect server TLS, or prove the app's code is safe.
+The browser-local [security headers checker](/tools/security-headers-checker) reviews pasted response headers without uploading them. It can flag missing or risky directives. It cannot crawl every route, execute the CSP, inspect server TLS or prove the app's code is safe.
 
 ## What a header result proves
 
 An automated check can describe the exact headers in one response and identify policy syntax worth review. Browser tests can show that selected flows work under enforcement.
 
-Neither result proves every route returns the same policy or every allowed origin is trustworthy. Record the URL class, status, deployed build, header value, and tested workflow. Treat a clean score as configuration evidence for that response, not a security verdict.
+Neither result proves every route returns the same policy or every allowed origin is trustworthy. Record the URL class, status, deployed build, header value and tested workflow. Treat a clean score as configuration evidence for that response, not a security verdict.
 
 ## Sources
 

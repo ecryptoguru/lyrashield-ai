@@ -1,35 +1,35 @@
 ---
 title: "LyraShield vs SonarQube — release assurance compared"
-description: "How LyraShield AI compares to SonarQube for AI-built application security. Evidence states, coverage framework, and quality gate differences."
+description: "How LyraShield AI compares to SonarQube for AI-built application security. Evidence states, coverage framework and quality gate differences."
 competitor: "SonarQube"
 heading: "LyraShield AI vs SonarQube"
-disclaimer: "Factual comparison. SonarQube by SonarSource provides static analysis, code quality, and security hotspot review. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence, and a fresh retest into one reviewable assurance record. Neither replaces the other."
+disclaimer: "Factual comparison. SonarQube by SonarSource provides static analysis, code quality and security hotspot review. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence and a fresh retest into one reviewable assurance record. Neither replaces the other."
 updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace SonarQube?"
-    a: "No. SonarQube is the long-standing code quality and security standard with 40+ languages, code smells, duplication, complexity metrics, taint analysis, IaC scanning, and Quality Gates that block merges. LyraShield in open beta does not focus on code quality; it focuses on release assurance with evidence states and immutable reports."
+    a: "No. SonarQube is the long-standing code quality and security standard with 40+ languages, code smells, duplication, complexity metrics, taint analysis, IaC scanning and Quality Gates that block merges. LyraShield in open beta does not focus on code quality; it focuses on release assurance with evidence states and immutable reports."
   - q: "Can I use SonarQube and LyraShield together?"
-    a: "Yes. Run SonarQube Cloud or Server for continuous quality and security hotspots with SonarLint in the IDE, and add LyraShield for the release gate that proves exploitability and records what was fixed and retested. LyraShield emits SARIF, so its results can sit alongside SonarQube's issues without replacing Quality Gates."
+    a: "Yes. Run SonarQube Cloud or Server for continuous quality and security hotspots with SonarLint in the IDE and add LyraShield for the release gate that proves exploitability and records what was fixed and retested. LyraShield emits SARIF, so its results can sit alongside SonarQube's issues without replacing Quality Gates."
   - q: "When should I choose SonarQube over LyraShield?"
-    a: "Choose SonarQube when your priority is enforceable quality plus security in one platform, especially for self-hosted requirements, IaC checks, and coverage metrics. Check SonarQube’s current Cloud and Server pricing with the vendor. Use LyraShield when you need reviewed fix proposals and an immutable assurance record for AI-built apps."
+    a: "Choose SonarQube when your priority is enforceable quality plus security in one platform, especially for self-hosted requirements, IaC checks and coverage metrics. Check SonarQube’s current Cloud and Server pricing with the vendor. Use LyraShield when you need reviewed fix proposals and an immutable assurance record for AI-built apps."
   - q: "Does LyraShield have Quality Gates like SonarQube?"
-    a: "Not in SonarQube's sense. SonarQube Quality Gates block merges on configured metrics. LyraShield records evidence and fix proposals for a release review. A Fix PR request requires permission and a server-generated patch; the repository's own merge controls still apply, and a fresh retest records whether the issue persists."
+    a: "Not in SonarQube's sense. SonarQube Quality Gates block merges on configured metrics. LyraShield records evidence and fix proposals for a release review. A Fix PR request requires permission and a server-generated patch; the repository's own merge controls still apply and a fresh retest records whether the issue persists."
 ---
 
 ## Core approach
 
-| Aspect                  | LyraShield AI                                                                                                                                      | SonarQube                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Primary focus           | Release assurance for AI-built apps: one record of what was tested, the evidence behind each result, and what a retest established before shipping | Static analysis, code quality, security hotspots, taint analysis                  |
-| Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                         | Deterministic static analysis with rule-based detection and taint analysis        |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays separate from proof)                                         | Security hotspot review → confirmed or false positive; Quality Gates block merges |
-| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                        | No published control framework; rule-based detection with severity levels         |
-| Code quality            | Not a primary focus                                                                                                                                | Yes — code smells, duplication, complexity, coverage metrics                      |
-| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                             | AI CodeFix (LLM-driven fix suggestions, not approval-bound)                       |
-| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                               | AI Code Assurance (Enterprise/DC only); AI CodeFix (LLM-driven fix suggestions)   |
-| Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes, and limitations                                        | No release assurance record; Quality Gate status                                  |
+| Aspect                  | LyraShield AI                                                                                                                                     | SonarQube                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Primary focus           | Release assurance for AI-built apps: one record of what was tested, the evidence behind each result and what a retest established before shipping | Static analysis, code quality, security hotspots, taint analysis                  |
+| Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                        | Deterministic static analysis with rule-based detection and taint analysis        |
+| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays separate from proof)                                        | Security hotspot review → confirmed or false positive; Quality Gates block merges |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                       | No published control framework; rule-based detection with severity levels         |
+| Code quality            | Not a primary focus                                                                                                                               | Yes — code smells, duplication, complexity, coverage metrics                      |
+| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                            | AI CodeFix (LLM-driven fix suggestions, not approval-bound)                       |
+| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                              | AI Code Assurance (Enterprise/DC only); AI CodeFix (LLM-driven fix suggestions)   |
+| Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes and limitations                                        | No release assurance record; Quality Gate status                                  |
 
 ## Capability comparison
 
@@ -78,6 +78,6 @@ LyraShield AI is live and open for registration — create an account and run yo
 
 ## Methodology and scope
 
-This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for its assurance model, and verify vendor details before a purchasing decision.
+This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
 
 For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs SonarQube](/blog/sonarqube-vs-lyrashield).

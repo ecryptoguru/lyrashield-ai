@@ -34,7 +34,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 2,
         name: "Add the mcpServers entry",
-        text: 'Add the mcpServers key with command "npx", pinned args, and a $LYRASHIELD_API_KEY environment reference.',
+        text: 'Add the mcpServers key with command "npx", pinned args and a $LYRASHIELD_API_KEY environment reference.',
       },
       {
         "@type": "HowToStep",
@@ -67,12 +67,12 @@ const jsonLd: unknown[] = [
   <h2>Install with the CLI (fastest)</h2>
   <p>
     Run <code>npx lyrashield install codebuff</code> from your project root. It detects Codebuff,
-    writes the correct config automatically, and never inlines your API key into a file you might
-    commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    writes the correct config automatically and never inlines your API key into a file you might
+    commit. Add <code>--dry-run</code> first to preview the change with no write or run{" "}
     <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
   </p>
   <pre><code>npx lyrashield install codebuff</code></pre>
-  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+  <p>Prefer to see exactly what gets written or set it up without Node.js? Configure it by hand below.</p>
 
   <h2>Local stdio setup</h2>
   <p>
@@ -83,7 +83,7 @@ const jsonLd: unknown[] = [
 
   <h2>Remote HTTP setup</h2>
   <p>
-    Codebuff also documents HTTP servers with <code>type: "http"</code>, <code>url</code>, and
+    Codebuff also documents HTTP servers with <code>type: "http"</code>, <code>url</code> and
     optional headers. Use its <code>$VAR_NAME</code> syntax instead of storing a token literally.
   </p>
   <AgentSnippet agentId="codebuff" transport="remote-http" />

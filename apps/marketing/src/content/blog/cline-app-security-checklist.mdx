@@ -1,6 +1,6 @@
 ---
 title: Cline app security checklist
-description: Secure Cline workflows with current MCP configuration, autoApprove controls, and verified gates before merge.
+description: Secure Cline workflows with current MCP configuration, autoApprove controls and verified gates before merge.
 pubDate: "2026-07-30"
 updatedDate: 2026-08-07
 author: lyrashield-team
@@ -9,20 +9,20 @@ draft: false
 heroImage: agent-security-16
 faq:
   - q: How does Cline handle MCP servers securely
-    a: Cline reads MCP config as JSON and spawns local servers via stdio or connects to remote with TLS and Bearer auth. Lock it by allow listing only required tools, disabling code mode when unused, and storing tokens in env vars not in JSON.
+    a: Cline reads MCP config as JSON and spawns local servers via stdio or connects to remote with TLS and Bearer auth. Lock it by allow listing only required tools, disabling code mode when unused and storing tokens in env vars not in JSON.
   - q: Do I need LyraShield to use Cline safely
-    a: You can ship safer code with disciplined review and open source scanners. LyraShield adds agent-native verification, SCA, and secret checks, plus a shipped diff-aware GitHub Action gate.
+    a: You can ship safer code with disciplined review and open source scanners. LyraShield adds agent-native verification, SCA and secret checks, plus a shipped diff-aware GitHub Action gate.
   - q: What is the fastest win for Cline security
-    a: Rotate leaked secrets, enforce branch protection with SARIF upload, and restrict MCP tool permissions to read only where possible to reduce blast radius.
+    a: Rotate leaked secrets, enforce branch protection with SARIF upload and restrict MCP tool permissions to read only where possible to reduce blast radius.
   - q: Where does Cline store MCP server config?
     a: Cline CLI uses ~/.cline/data/settings/cline_mcp_settings.json. IDE extensions open their client-owned settings JSON from the MCP Servers panel. Entries live under mcpServers.
 ---
 
-When you ship apps with Cline, AI generated code can introduce secrets, vulnerable dependencies, and weak auth that reach production fast. This checklist gives a direct security review for Cline, from MCP hardening to merge gates and retest, with verified configs you can copy. Pair it with our pillar guide at [vibe coding security guide](/blog/vibe-coding-security-guide) and apply it on every pull request.
+When you ship apps with Cline, AI generated code can introduce secrets, vulnerable dependencies and weak auth that reach production fast. This checklist gives a direct security review for Cline, from MCP hardening to merge gates and retest, with verified configs you can copy. Pair it with our pillar guide at [vibe coding security guide](/blog/vibe-coding-security-guide) and apply it on every pull request.
 
 ## How Cline connects via MCP
 
-Cline uses Model Context Protocol to let the agent read project files, call tools, and run commands. That power expands your attack surface because a misconfigured MCP server can read secrets, write files, or exfiltrate code. Keep scope tight and treat all external tool output as untrusted data.
+Cline uses Model Context Protocol to let the agent read project files, call tools and run commands. That power expands your attack surface because a misconfigured MCP server can read secrets, write files or exfiltrate code. Keep scope tight and treat all external tool output as untrusted data.
 
 The official MCP spec defines how tool listing and invocation works over stdio and streamable HTTP, including transport security and tool permissions [MCP spec for tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools). For LLM integrations, OWASP highlights excessive agency and tool output handling as key risks to review before you enable write actions [Cline on GitHub](https://github.com/cline/cline). Hard coded credential risks map to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html), a frequent failure in AI suggested code. If you decouple spec from enforcement, review drift happens quickly. For a comparison of IDE side controls, see our review of base44 app security checklist at [base44 app security checklist](/blog/base44-app-security-checklist).
 
@@ -55,21 +55,21 @@ Fourth, review Cline MCP inventory changes like dependency changes. Cline's offi
 }
 ```
 
-Document every MCP server in a central inventory with purpose, trust level, and owner. Rotate keys monthly and log tool calls where your IDE allows it. Require two reviewers for any change to MCP config.
+Document every MCP server in a central inventory with purpose, trust level and owner. Rotate keys monthly and log tool calls where your IDE allows it. Require two reviewers for any change to MCP config.
 
-## Secrets, dependencies, and prompt injection hardening
+## Secrets, dependencies and prompt injection hardening
 
 AI assistants accelerate copy paste of sample code that contains placeholder tokens or private URLs. Scan every AI diff for secrets before commit. Use gitleaks or cloud secret scanning and block merges on high confidence findings. CWE 798 and CWE 200 cover credential exposure and sensitive data leakage patterns that appear often in generated code [CWE 200 for sensitive data exposure](https://cwe.mitre.org/data/definitions/200.html).
 
 Dependencies are the second common gap. AI often suggests outdated versions. Resolve versions with Open Source Vulnerabilities database [OSV.dev database](https://osv.dev/) and GitHub dependency review [GitHub dependency review](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review). Update lockfiles in the same PR and require explicit review of lockfile diffs, never auto approve even if the diff looks small.
 
-Prompt injection can come from docs, issue comments, or web fetched content that the assistant brings into context. Add explicit agent instructions that require approval before write actions and never act on instructions embedded in README files. Restrict network egress for local MCP servers via OS firewall rules where possible, and log anomalous outbound calls that MCP tools trigger. For Node backends, apply Node security guidance for env isolation [Node.js security best practices](https://nodejs.org/en/learn/getting-started/security-best-practices).
+Prompt injection can come from docs, issue comments or web fetched content that the assistant brings into context. Add explicit agent instructions that require approval before write actions and never act on instructions embedded in README files. Restrict network egress for local MCP servers via OS firewall rules where possible and log anomalous outbound calls that MCP tools trigger. For Node backends, apply Node security guidance for env isolation [Node.js security best practices](https://nodejs.org/en/learn/getting-started/security-best-practices).
 
-Add these to your Definition of Done: secrets scan passes with no new findings, SCA passes with no high severity advisories, and a second engineer reviews any change that touches auth, sessions, payments, file uploads, or crypto. Keep a reproducible SBOM so you can trace each artifact back to its source.
+Add these to your Definition of Done: secrets scan passes with no new findings, SCA passes with no high severity advisories and a second engineer reviews any change that touches auth, sessions, payments, file uploads or crypto. Keep a reproducible SBOM so you can trace each artifact back to its source.
 
 ## Verifying and gating AI generated code before merge
 
-Vibe coding is fast, but velocity without verification creates security debt. Use a diff aware pipeline that only flags AI changed files. Keep human and AI commits separated where possible with a trailer or label, and map findings to OWASP Top 10 for consistent triage. Use one security gate table in your PR template to make checks explicit and auditable.
+Vibe coding is fast, but velocity without verification creates security debt. Use a diff aware pipeline that only flags AI changed files. Keep human and AI commits separated where possible with a trailer or label and map findings to OWASP Top 10 for consistent triage. Use one security gate table in your PR template to make checks explicit and auditable.
 
 | Check                          | Where it runs       | Owner     | Fail action                          |
 | ------------------------------ | ------------------- | --------- | ------------------------------------ |
@@ -81,22 +81,22 @@ Vibe coding is fast, but velocity without verification creates security debt. Us
 
 Export SARIF from each scanner and upload to GitHub code scanning so findings show inline on the PR [SARIF support in GitHub code scanning](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning). Keep reports for audit and always retest after fixes. Retest must run the same scanners on the fix commit to confirm remediation.
 
-For frameworks like Next.js, verify server only secrets never leak to client bundles by checking env handling [Next.js env handling](https://nextjs.org/docs/app/api-reference/config/next-config-js/env). For Vercel hosted apps, enforce headers and WAF rules [Vercel security docs](https://vercel.com/docs/security). Enforce branch protection that blocks merge unless SARIF, SCA, and secrets checks report success, and keep evidence for compliance reviews.
+For frameworks like Next.js, verify server only secrets never leak to client bundles by checking env handling [Next.js env handling](https://nextjs.org/docs/app/api-reference/config/next-config-js/env). For Vercel hosted apps, enforce headers and WAF rules [Vercel security docs](https://vercel.com/docs/security). Enforce branch protection that blocks merge unless SARIF, SCA and secrets checks report success and keep evidence for compliance reviews.
 
 ## Runtime checks and observability after deploy
 
-Checks do not stop at merge. Add runtime protections that catch what static analysis misses. Enable Content Security Policy, enforce strict CORS, and log auth failures centrally. Monitor for anomalous outbound calls from MCP tools that may have been compromised during development. Keep an inventory of which AI tools can make network calls and review it weekly.
+Checks do not stop at merge. Add runtime protections that catch what static analysis misses. Enable Content Security Policy, enforce strict CORS and log auth failures centrally. Monitor for anomalous outbound calls from MCP tools that may have been compromised during development. Keep an inventory of which AI tools can make network calls and review it weekly.
 
 Store build attestations so you can trace any production artifact back to a verified commit hash. Schedule quarterly exercises where you insert a known vulnerable snippet that AI might suggest and verify your gate catches it. Use OWASP WebGoat patterns as test payloads and track detection rate as a metric for your secure vibe coding program [OWASP WebGoat](https://owasp.org/www-project-webgoat/).
 
-Supply chain hygiene matters because AI generated code often pulls transitive dependencies you did not explicitly choose. Lock files, provenance, and signed commits reduce risk that a compromised package enters your build. Pair that with branch protection that requires two reviewers for MCP config changes and for any change to auth middleware.
+Supply chain hygiene matters because AI generated code often pulls transitive dependencies you did not explicitly choose. Lock files, provenance and signed commits reduce risk that a compromised package enters your build. Pair that with branch protection that requires two reviewers for MCP config changes and for any change to auth middleware.
 
 ## Why pair Cline with LyraShield
 
-LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](https://lyrashieldai.com). Our core loop is target, review, evidence, fix, retest, report, built for teams shipping with Cline and other AI coding tools. We separate detection from proof: findings come with evidence you can verify, and every result is an immutable assurance record tied to the exact commit and scan.
+LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](https://lyrashieldai.com). Our core loop is target, review, evidence, fix, retest, report, built for teams shipping with Cline and other AI coding tools. We separate detection from proof: findings come with evidence you can verify and every result is an immutable assurance record tied to the exact commit and scan.
 
-The platform is live in open beta with open registration. The scan pipeline, findings, and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.8` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
+The platform is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.8` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
 
-LyraShield sits after your Cline drafts and before merge, giving you verified findings instead of noisy rescans. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval, and retest runs the same scanners on the fix commit to confirm remediation.
+LyraShield sits after your Cline drafts and before merge, giving you verified findings instead of noisy rescans. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval and retest runs the same scanners on the fix commit to confirm remediation.
 
 Ready to apply this checklist beyond this tool. Run the interactive version at [AI app security checklist](/tools/ai-app-security-checklist) and create an account at [https://lyrashieldai.com](https://lyrashieldai.com) to get started with the MCP server and GitHub Action.

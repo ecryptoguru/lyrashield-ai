@@ -55,7 +55,7 @@ const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px
 
   <div id="ai-app-paste-panel" role="tabpanel" aria-labelledby="ai-app-paste-tab" class="ai-app-panel hidden">
     <label class={labelClass} for="ai-app-paste">Paste code to scan</label>
-    <textarea id="ai-app-paste" rows={10} class={fieldClass} placeholder="// paste TypeScript, JavaScript, Python, JSON, TOML, or YAML"></textarea>
+    <textarea id="ai-app-paste" rows={10} class={fieldClass} placeholder="// paste TypeScript, JavaScript, Python, JSON, TOML or YAML"></textarea>
     <p class={mutedText}>Pasted code is analyzed in your browser and is not uploaded.</p>
   </div>
 
@@ -207,7 +207,7 @@ const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px
       } else if (control.state === "NOT_ASSESSED") {
         const note = document.createElement("p")
         note.className = "mt-2 text-sm text-text-muted"
-        note.textContent = "Not assessed in the free local scan. The paid repository scan adds this control, dependency CVE checks, optional AI-assisted triage, and a versioned score."
+        note.textContent = "Not assessed in the free local scan. The paid repository scan adds this control, dependency CVE checks, optional AI-assisted triage and a versioned score."
         section.appendChild(note)
       }
 
@@ -217,7 +217,7 @@ const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px
     const note = document.createElement("p")
     note.className = "mt-4 text-sm text-text-muted"
     note.innerHTML =
-      "This is a local static check, not a security guarantee. AI-03, full-repository context, optional LLM triage, persistent evidence, retest, reporting, and the numeric score require a <a href=\"https://app.lyrashieldai.com/sign-up?source=ai-app-security-scanner\" class=\"font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent\">paid repository scan</a>."
+      "This is a local static check, not a security guarantee. AI-03, full-repository context, optional LLM triage, persistent evidence, retest, reporting and the numeric score require a <a href=\"https://app.lyrashieldai.com/sign-up?source=ai-app-security-scanner\" class=\"font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent\">paid repository scan</a>."
     wrap.appendChild(note)
 
     resultOutput.replaceChildren(wrap)

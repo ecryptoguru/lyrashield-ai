@@ -1,6 +1,6 @@
 # LyraShield AI MCP Server — Setup
 
-Run bounded security scans, review findings with their evidence states, and drive the fix → verify loop from Zed's agent panel.
+Run bounded security scans, review findings with their evidence states and drive the fix → verify loop from Zed's agent panel.
 
 ## 1. Connect with OAuth (recommended)
 
@@ -19,8 +19,8 @@ Open [LyraShield AI](https://app.lyrashieldai.com) and go to **Settings → API 
 
 Create a key with the scopes you need:
 
-- **Read-only** for listing workspaces, targets, scans, findings, and launch readiness.
-- **Read & write** to start scans, record fix proposals, queue retests, and generate reports.
+- **Read-only** for listing workspaces, targets, scans, findings and launch readiness.
+- **Read & write** to start scans, record fix proposals, queue retests and generate reports.
 
 Your key starts with `lsk_…`.
 
@@ -61,7 +61,7 @@ See the full tool list and behavior in the [`@lyrashield/mcp` README](https://ww
 
 ## Troubleshooting
 
-**Authentication errors from the tools** — run `lyrashield login --oauth` again, restart Zed, and
+**Authentication errors from the tools** — run `lyrashield login --oauth` again, restart Zed and
 confirm the selected workspace. If using the fallback, check that `api_key` has the required scope.
 
 **Server fails to start** — confirm Zed can reach `https://registry.npmjs.org` to download the package.

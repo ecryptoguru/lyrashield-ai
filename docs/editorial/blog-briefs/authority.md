@@ -20,9 +20,9 @@ Owner: LyraShield Team
 
 ## Reader and problem
 
-The primary reader has used an AI coding assistant or an app builder to get a working product quickly. They can judge whether the happy path works, but they do not yet have a defensible answer to a harder question: what was tested before release, what evidence exists, and what remains unknown?
+The primary reader has used an AI coding assistant or an app builder to get a working product quickly. They can judge whether the happy path works, but they do not yet have a defensible answer to a harder question: what was tested before release, what evidence exists and what remains unknown?
 
-The guide should help a solo founder, startup engineering lead, agency developer, or hands-on product builder turn a functional prototype into a release decision. A security engineer should find the terminology and limitations accurate, even though the article is written for a broader technical audience.
+The guide should help a solo founder, startup engineering lead, agency developer or hands-on product builder turn a functional prototype into a release decision. A security engineer should find the terminology and limitations accurate, even though the article is written for a broader technical audience.
 
 ## Unique angle and intent separation
 
@@ -33,55 +33,55 @@ This article is the map for the full 100-article library. It explains six layers
 - `/scan` is the detailed passive Lite Check route. The guide describes its public-surface boundary and does not present it as a full authenticated or repository assessment.
 - Supporting blog articles answer one specific implementation or decision query. The guide gives each topic a short orientation and links to the deeper article once that article is public.
 
-The guide should not become an undifferentiated checklist. Its useful contribution is the reasoning chain from target and scope to evidence, fix proposal, retest, and release report.
+The guide should not become an undifferentiated checklist. Its useful contribution is the reasoning chain from target and scope to evidence, fix proposal, retest and release report.
 
 ## Direct answer
 
-Open with a 40 to 80 word answer that defines vibe coding security as the work of setting explicit trust boundaries, checking the generated application across six layers, retaining evidence, and retesting fixes before release. State plainly that a clean automated scan is useful evidence, not proof that an application is secure.
+Open with a 40 to 80 word answer that defines vibe coding security as the work of setting explicit trust boundaries, checking the generated application across six layers, retaining evidence and retesting fixes before release. State plainly that a clean automated scan is useful evidence, not proof that an application is secure.
 
 ## Six security layers
 
 ### 1. Authorization and data boundaries
 
-Cover authentication versus authorization, object ownership, tenant scoping, admin routes, row-level security, and a safe two-account test. Use broken access control and missing authorization as the standards anchor.
+Cover authentication versus authorization, object ownership, tenant scoping, admin routes, row-level security and a safe two-account test. Use broken access control and missing authorization as the standards anchor.
 
-### 2. Identity, secrets, and session handling
+### 2. Identity, secrets and session handling
 
-Cover server-held secrets, password storage, token verification, password recovery, OAuth callback constraints, and secure session cookies. Explain why hiding a control in the browser is not access control.
+Cover server-held secrets, password storage, token verification, password recovery, OAuth callback constraints and secure session cookies. Explain why hiding a control in the browser is not access control.
 
-### 3. Inputs, outputs, and server-side execution
+### 3. Inputs, outputs and server-side execution
 
-Cover allowlisted validation, context-appropriate encoding, parameterized queries, SSRF defenses that re-check redirects and resolved addresses, upload isolation, and command or path handling. Keep examples inert and local.
+Cover allowlisted validation, context-appropriate encoding, parameterized queries, SSRF defenses that re-check redirects and resolved addresses, upload isolation and command or path handling. Keep examples inert and local.
 
-### 4. Dependencies, builds, and deployment
+### 4. Dependencies, builds and deployment
 
-Cover lockfiles, dependency provenance, vulnerability matching, install scripts, CI permissions, public-by-default storage, build artifacts, and production configuration. Explain why a package-name match alone does not establish that the vulnerable code path is reachable.
+Cover lockfiles, dependency provenance, vulnerability matching, install scripts, CI permissions, public-by-default storage, build artifacts and production configuration. Explain why a package-name match alone does not establish that the vulnerable code path is reachable.
 
 ### 5. Coding agents and tool permissions
 
-Treat repository files, web pages, issue text, and tool output as untrusted inputs when an agent reads them. Cover prompt injection, least-privilege tools, sandboxing, egress limits, approval for consequential actions, and separation from production credentials.
+Treat repository files, web pages, issue text and tool output as untrusted inputs when an agent reads them. Cover prompt injection, least-privilege tools, sandboxing, egress limits, approval for consequential actions and separation from production credentials.
 
-### 6. Verification, retesting, and operations
+### 6. Verification, retesting and operations
 
-Cover threat modeling, independent evidence, scanner limitations, a fresh server-owned retest, launch gates, monitoring, recovery proof, incident ownership, and an assurance report. Keep detected, independently verified, retest-confirmed, and inconclusive outcomes distinct.
+Cover threat modeling, independent evidence, scanner limitations, a fresh server-owned retest, launch gates, monitoring, recovery proof, incident ownership and an assurance report. Keep detected, independently verified, retest-confirmed and inconclusive outcomes distinct.
 
 ## Evidence loop
 
 Use the exact sequence `Target -> Scan -> Evidence State -> Fix Proposal -> Retest -> Assurance Report` in prose or code styling. Explain each state in one short section:
 
 1. Target records authorization and scope.
-2. Scan records which checks ran, subjects covered, and limitations.
+2. Scan records which checks ran, subjects covered and limitations.
 3. Evidence State distinguishes detection from independent verification and inconclusive results.
 4. Fix Proposal is reviewable and approval-bound. Do not imply automatic pull-request execution.
 5. Retest is a fresh check against the changed system.
-6. Assurance Report combines evidence, coverage, limitations, and the release decision.
+6. Assurance Report combines evidence, coverage, limitations and the release decision.
 
 ## Required factual anchors
 
 - OWASP Top 10:2025 is an awareness document. Use its risk categories without treating it as a complete test plan.
 - OWASP ASVS 5.0.0 provides testable web application security requirements.
 - MITRE CWE separates missing authorization from authentication and warns that broad input-validation labels can obscure the actual weakness.
-- NIST SSDF 1.1 organizes secure development practices across preparing the organization, protecting software, producing well-secured software, and responding to vulnerabilities.
+- NIST SSDF 1.1 organizes secure development practices across preparing the organization, protecting software, producing well-secured software and responding to vulnerabilities.
 - NCSC guidance treats security as continuous and explicitly says its principles do not guarantee a secure product.
 - OAuth Security BCP requires exact redirect URI matching in the stated cases and applies PKCE guidance to web applications as well as native clients.
 - OWASP GenAI guidance treats prompt injection as a system-design problem and recommends least privilege plus human approval for high-risk actions.
@@ -123,7 +123,7 @@ Include four visible FAQs because they answer distinct high-intent questions:
 3. Can an automated scanner prove that an app is secure?
 4. When should a security review happen?
 
-Answers must remain concise, match the article body, and appear in FAQ schema only if the renderer emits the same visible questions and answers.
+Answers must remain concise, match the article body and appear in FAQ schema only if the renderer emits the same visible questions and answers.
 
 ## Image concept
 
@@ -131,11 +131,11 @@ Answers must remain concise, match the article body, and appear in FAQ schema on
 - Concept: a controlled evidence path joins six distinct security layers before one release gate
 - Alt text: Six layered security paths joining at a translucent evidence gate
 - Crop requirement: keep the convergence point and all six incoming paths inside the central 60 percent safe area
-- Restrictions: text-free, no people, no logos, no fake interface, no shield cliché, and no visual claim that the gate guarantees safety
+- Restrictions: text-free, no people, no logos, no fake interface, no shield cliché and no visual claim that the gate guarantees safety
 
 ## Cannibalization review
 
-Pass when the authority guide stays at the system and release-decision level, while supporting articles own implementation queries. In particular, do not let the guide become the best answer for the exact queries `supabase rls security`, `idor vulnerability test`, `security headers checker`, `coding agent prompt injection`, or `verify vulnerability finding`. Give each a useful paragraph, then point to its dedicated article when available.
+Pass when the authority guide stays at the system and release-decision level, while supporting articles own implementation queries. In particular, do not let the guide become the best answer for the exact queries `supabase rls security`, `idor vulnerability test`, `security headers checker`, `coding agent prompt injection` or `verify vulnerability finding`. Give each a useful paragraph, then point to its dedicated article when available.
 
 ## Acceptance checklist
 
@@ -144,8 +144,8 @@ Pass when the authority guide stays at the system and release-decision level, wh
 - Every material technical claim maps to `docs/editorial/blog-research/authority.md`.
 - Product language keeps coverage and evidence boundaries literal.
 - The 43 and 7 control split matches the executable registry and coverage contract.
-- Examples are safe, local, and non-exploitative.
-- Final prose passes the Humanizer draft, audit, and rewrite loop.
+- Examples are safe, local and non-exploitative.
+- Final prose passes the Humanizer draft, audit and rewrite loop.
 - Final prose contains no em dash or en dash characters.
-- The article has one H1, stable H2 and H3 anchors, one main landmark, a self-canonical URL, Organization authorship, and the approved image.
-- All links resolve in the release candidate, or remain non-clickable future references.
+- The article has one H1, stable H2 and H3 anchors, one main landmark, a self-canonical URL, Organization authorship and the approved image.
+- All links resolve in the release candidate or remain non-clickable future references.

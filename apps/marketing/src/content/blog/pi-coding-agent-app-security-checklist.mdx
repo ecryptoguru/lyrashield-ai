@@ -1,6 +1,6 @@
 ---
 title: Pi Coding Agent App Security Checklist
-description: "Harden Pi Coding Agent extensions, skills, tool permissions, secrets, and diff-aware CI for AI-built apps."
+description: "Harden Pi Coding Agent extensions, skills, tool permissions, secrets and diff-aware CI for AI-built apps."
 pubDate: "2026-07-30"
 updatedDate: 2026-08-07
 author: lyrashield-team
@@ -13,46 +13,46 @@ faq:
   - q: "How do I use LyraShield beside Pi today?"
     a: "Run npx lyrashield login and doctor once, then run npx lyrashield scan after Pi changes. Add the LyraShield GitHub Action for a shared pull-request gate."
   - q: "What Pi surfaces require security review?"
-    a: "Review installed packages, extensions, skills, prompt files, custom tools, and the command permissions granted to the agent. Pin dependencies and keep credentials outside the working tree."
+    a: "Review installed packages, extensions, skills, prompt files, custom tools and the command permissions granted to the agent. Pin dependencies and keep credentials outside the working tree."
   - q: "Will lyrashield init write a Pi MCP file?"
     a: "No. Pi is a guided standalone client in the registry. The command explains the supported CLI and CI workflow instead of inventing .mcp.json or .pi/mcp.json."
 ---
 
-Pi Coding Agent from pi.dev is a minimal, extensible agent harness built around packages, extensions, skills, prompt templates, and tools. Pi core deliberately does not ship native MCP support. That boundary matters: community adapters may add MCP behavior, but their file paths, precedence, environment expansion, and permission semantics are properties of those adapters rather than Pi's official contract. This checklist uses Pi's documented core surfaces and runs LyraShield through its standalone CLI and GitHub Action.
+Pi Coding Agent from pi.dev is a minimal, extensible agent harness built around packages, extensions, skills, prompt templates and tools. Pi core deliberately does not ship native MCP support. That boundary matters: community adapters may add MCP behavior, but their file paths, precedence, environment expansion and permission semantics are properties of those adapters rather than Pi's official contract. This checklist uses Pi's documented core surfaces and runs LyraShield through its standalone CLI and GitHub Action.
 
 Start with the [vibe coding security guide](/blog/vibe-coding-security-guide) for the shared baseline. Keep the acceptance claim precise: a successful LyraShield CLI scan proves that the CLI authenticated and assessed the selected target; it does not prove that Pi loaded or invoked an MCP tool.
 
-Use the companion [LyraShield workflow alongside Pi](/blog/pi-coding-agent-mcp-security-workflow) when you want the exact login, doctor, scan, and CI sequence.
+Use the companion [LyraShield workflow alongside Pi](/blog/pi-coding-agent-mcp-security-workflow) when you want the exact login, doctor, scan and CI sequence.
 
-## 1. Inventory Pi packages, extensions, skills, and tools
+## 1. Inventory Pi packages, extensions, skills and tools
 
-List the packages and extensions Pi loads, the skills available to the model, the prompt files added to the session, and every tool with file, shell, or network access. Review the exact resolved package versions and source before enabling them. A community extension can introduce an MCP client, but adopting it also adopts that extension's parser, transport, credential handling, and approval behavior. Record that as a separate integration rather than describing it as Pi core.
+List the packages and extensions Pi loads, the skills available to the model, the prompt files added to the session and every tool with file, shell or network access. Review the exact resolved package versions and source before enabling them. A community extension can introduce an MCP client, but adopting it also adopts that extension's parser, transport, credential handling and approval behavior. Record that as a separate integration rather than describing it as Pi core.
 
-Treat skills and prompt templates as executable policy because they shape which instructions reach the model. Treat custom tools as privileged code because they can cross process, filesystem, and network boundaries. Remove unused extensions, pin the ones you retain, and test upgrades on a branch. Review any extension that reads configuration from other coding agents: implicit discovery can import broader permissions than the Pi project intended.
+Treat skills and prompt templates as executable policy because they shape which instructions reach the model. Treat custom tools as privileged code because they can cross process, filesystem and network boundaries. Remove unused extensions, pin the ones you retain and test upgrades on a branch. Review any extension that reads configuration from other coding agents: implicit discovery can import broader permissions than the Pi project intended.
 
 ## 2. Run LyraShield through the supported standalone path
 
 Authenticate from the project root with `npx lyrashield login`, then run `npx lyrashield doctor` to verify API connectivity and local credentials. After Pi edits files, run `npx lyrashield scan` before committing. The CLI uses `~/.lyrashield/credentials.json`; it does not require Pi to load a server or write an integration file.
 
-`npx lyrashield init` recognizes Pi as a guided standalone client. It must not create `.mcp.json`, `.pi/mcp.json`, or another adapter-specific file. Those paths appear in third-party projects and can change independently of Pi. If your team chooses a community MCP extension later, review its official source and documentation, test it in an isolated profile, and record the extension name and version in acceptance evidence.
+`npx lyrashield init` recognizes Pi as a guided standalone client. It must not create `.mcp.json`, `.pi/mcp.json` or another adapter-specific file. Those paths appear in third-party projects and can change independently of Pi. If your team chooses a community MCP extension later, review its official source and documentation, test it in an isolated profile and record the extension name and version in acceptance evidence.
 
-Keep the working loop simple: Pi changes code, the LyraShield CLI scans the authorized target, a developer reviews findings with their recorded evidence states, and CI repeats the selected diff gate. Independent verification still requires its own receipt. A detected or inconclusive result does not become verified because Pi or a community adapter displayed it.
+Keep the working loop simple: Pi changes code, the LyraShield CLI scans the authorized target, a developer reviews findings with their recorded evidence states and CI repeats the selected diff gate. Independent verification still requires its own receipt. A detected or inconclusive result does not become verified because Pi or a community adapter displayed it.
 
 ## 3. Scope Pi authority and credentials
 
-Grant the agent only the file, shell, and network operations needed for the current task. Keep production secrets, customer records, private keys, and unrestricted database exports outside the prompt and working tree. Use synthetic fixtures when generated code needs realistic examples. Review command execution before allowing package installation, database mutation, deployment, or credential access.
+Grant the agent only the file, shell and network operations needed for the current task. Keep production secrets, customer records, private keys and unrestricted database exports outside the prompt and working tree. Use synthetic fixtures when generated code needs realistic examples. Review command execution before allowing package installation, database mutation, deployment or credential access.
 
-Store LyraShield credentials through `npx lyrashield login`; do not paste an `lsk_` token into Pi prompts, skills, extension source, or repository files. If a credential may have entered model context or terminal history, rotate it and inspect access logs. When a community extension requests environment variables, confirm exactly which variables it inherits and whether child-process output can expose them.
+Store LyraShield credentials through `npx lyrashield login`; do not paste an `lsk_` token into Pi prompts, skills, extension source or repository files. If a credential may have entered model context or terminal history, rotate it and inspect access logs. When a community extension requests environment variables, confirm exactly which variables it inherits and whether child-process output can expose them.
 
-The supported local proof is deliberately separate from Pi. Run the CLI in the same repository and retain the target, revision, scan identity, and result. For pull requests, use the runner-local GitHub Action. This gives the project a repeatable check without claiming a native integration Pi does not provide.
+The supported local proof is deliberately separate from Pi. Run the CLI in the same repository and retain the target, revision, scan identity and result. For pull requests, use the runner-local GitHub Action. This gives the project a repeatable check without claiming a native integration Pi does not provide.
 
-## 4. Treat packages, extensions, and skills as code with version pinning
+## 4. Treat packages, extensions and skills as code with version pinning
 
-Pi's extensibility via packages/extensions/skills is its USP, and a supply chain boundary. An extension that adds MCP support bridges tools into the LLM.
+Pi's extensibility via packages/extensions/skills is its USP and a supply chain boundary. An extension that adds MCP support bridges tools into the LLM.
 
 Checklist:
 
-- Pin extension versions and review their source, permissions, configuration paths, and upgrade notes.
+- Pin extension versions and review their source, permissions, configuration paths and upgrade notes.
 - Review any extension that registers filesystem MCP at `/`. Standard Pi filesystem example `npx -y @modelcontextprotocol/server-filesystem /workspace` scoped to `/workspace` is appropriate; `/` is not.
 - Version skills that drive context engineering. Skills shape what context enters the model window, a skill that injects untrusted URLs expands prompt-injection surface.
 
@@ -67,27 +67,27 @@ Target CI:
 - Mode-based CODEOWNERS: changes to `src/auth/**` require human review regardless of Pi mode that generated them.
 - Diff-aware lockfile review: if Pi adds a dependency, require SCA and secrets scan on diff, not full scan.
 - SARIF upload: Pi-generated PRs should emit SARIF from any scanner, not just pretty logs. The LyraShield GitHub Action, SCA + secrets + agentic pentest with SARIF, is intended for this slot, enabling `retest` after fix rather than trusting first-pass generation.
-- Record the Pi package, extension, skill, and tool inventory used for the change so reviewers can see what authority was available.
+- Record the Pi package, extension, skill and tool inventory used for the change so reviewers can see what authority was available.
 
 | #   | Control                                       | File or command                         | If skipped                                       |
 | --- | --------------------------------------------- | --------------------------------------- | ------------------------------------------------ |
 | 1   | Pin and review packages and extensions        | Pi package config and resolved versions | Extension behavior can drift without review      |
-| 2   | Review skills, prompts, and custom tools      | Project guidance and extension source   | Untrusted instructions gain unnecessary agency   |
-| 3   | Keep credentials outside Pi context           | `npx lyrashield login`                  | Tokens can enter prompts, logs, or git history   |
+| 2   | Review skills, prompts and custom tools       | Project guidance and extension source   | Untrusted instructions gain unnecessary agency   |
+| 3   | Keep credentials outside Pi context           | `npx lyrashield login`                  | Tokens can enter prompts, logs or git history    |
 | 4   | Run a standalone scan after generated changes | `npx lyrashield scan`                   | Risky edits reach review without an early check  |
 | 5   | Keep write and shell actions approval gated   | Pi permissions and human review         | Generated instructions can mutate sensitive data |
 | 6   | Require the diff-aware SARIF gate             | `.github/workflows/*`                   | A skipped local check can reach the merge queue  |
 
 ## Why pair Pi Coding Agent with LyraShield
 
-Pi configuration should be reviewed whenever it can read source, invoke tools, or resolve credentials. The [OWASP Top 10](https://owasp.org/www-project-top-ten/) provides a baseline for authorization and injection checks, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) covers hardcoded credential exposure, and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) defines MCP transport and tool contracts. These sources do not prove a Pi setup is safe. They help a reviewer confirm enabled tools, secret references, and the exact configuration revision retained with the release evidence. Repeat the review after changing an extension, skill, MCP server, or approval boundary.
+Pi configuration should be reviewed whenever it can read source, invoke tools or resolve credentials. The [OWASP Top 10](https://owasp.org/www-project-top-ten/) provides a baseline for authorization and injection checks, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) covers hardcoded credential exposure and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) defines MCP transport and tool contracts. These sources do not prove a Pi setup is safe. They help a reviewer confirm enabled tools, secret references and the exact configuration revision retained with the release evidence. Repeat the review after changing an extension, skill, MCP server or approval boundary.
 
-Pi gives you a minimal, composable harness whose official extension points are packages, extensions, skills, prompt templates, and tools. That minimalism maps well to verification when each added capability is explicit and reviewed. LyraShield fits beside it as release assurance for AI-built apps through a standalone CLI and runner-local SARIF gate. LyraShield separates detection from proof: recorded scans contribute to an assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
+Pi gives you a minimal, composable harness whose official extension points are packages, extensions, skills, prompt templates and tools. That minimalism maps well to verification when each added capability is explicit and reviewed. LyraShield fits beside it as release assurance for AI-built apps through a standalone CLI and runner-local SARIF gate. LyraShield separates detection from proof: recorded scans contribute to an assurance record and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-Use `npx lyrashield scan` after Pi edits and follow the [PiCode integration guide](/docs/integrations/picode) for the supported standalone workflow. Pi owns generation and orchestration; LyraShield owns verification evidence that survives mode transitions. The platform is live in open beta, and scans, findings, and evidence, approval-gated fix proposals, retests, and reports are implemented. Automatic server-generated Fix PR execution is not enabled.
+Use `npx lyrashield scan` after Pi edits and follow the [PiCode integration guide](/docs/integrations/picode) for the supported standalone workflow. Pi owns generation and orchestration; LyraShield owns verification evidence that survives mode transitions. The platform is live in open beta and scans, findings and evidence, approval-gated fix proposals, retests and reports are implemented. Automatic server-generated Fix PR execution is not enabled.
 
-Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
+Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets and dependencies one more time.
 
 ## CTA
 
-Create an account at [lyrashieldai.com](https://lyrashieldai.com) for Pi integration snippets, extension pinning guide, and access to diff-aware verification.
+Create an account at [lyrashieldai.com](https://lyrashieldai.com) for Pi integration snippets, extension pinning guide and access to diff-aware verification.

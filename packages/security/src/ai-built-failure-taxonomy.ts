@@ -1,6 +1,6 @@
 /**
  * The LyraShield AI-Built Failure Taxonomy — a named, versioned reference for
- * how AI-generated, AI-driven, AI-native, AI-first, and vibe-coded applications
+ * how AI-generated, AI-driven, AI-native, AI-first and vibe-coded applications
  * characteristically fail at the point they ship.
  *
  * This is the specialization moat in concrete form: the condition these apps
@@ -60,7 +60,7 @@ export const AI_BUILT_FAILURE_TAXONOMY: readonly AiBuiltFailureClass[] = [
     description:
       "A privileged service key (database service role, server API key, admin token) is inlined into client-side JavaScript or shipped to the browser, where anyone can read it.",
     whyAiBuilt:
-      "A generator optimising for a working demo reaches for the key that works, and nothing reviews the boundary between server-only and client-shipped code.",
+      "A generator optimising for a working demo reaches for the key that works and nothing reviews the boundary between server-only and client-shipped code.",
     coveredBy: ["secrets", "url", "iac"],
     controlIds: ["vibe-03"],
     severity: "CRITICAL",
@@ -91,7 +91,7 @@ export const AI_BUILT_FAILURE_TAXONOMY: readonly AiBuiltFailureClass[] = [
     id: "AIB-04",
     title: "Over-broad API and tool scopes",
     description:
-      "A token, service account, or agent tool is granted far wider scope than its task needs — read-write where read-only would do, all repos where one would do.",
+      "A token, service account or agent tool is granted far wider scope than its task needs — read-write where read-only would do, all repos where one would do.",
     whyAiBuilt:
       "The fastest way to make an integration work is the broadest grant; least-privilege scoping is a separate pass that does not happen.",
     coveredBy: ["agent_config", "ai_app_security", "iac"],
@@ -102,7 +102,7 @@ export const AI_BUILT_FAILURE_TAXONOMY: readonly AiBuiltFailureClass[] = [
     id: "AIB-05",
     title: "Secrets inside agent tool definitions",
     description:
-      "A credential, connection string, or token is embedded in an agent tool definition, system prompt, or tool schema, where it is disclosed to the model and anyone who can read the tool surface.",
+      "A credential, connection string or token is embedded in an agent tool definition, system prompt or tool schema, where it is disclosed to the model and anyone who can read the tool surface.",
     whyAiBuilt:
       "Wiring a tool to a live service is easiest by pasting the credential where the tool is declared; the tool definition is not treated as a secret boundary.",
     coveredBy: ["agent_config", "secrets", "webmcp"],
@@ -113,7 +113,7 @@ export const AI_BUILT_FAILURE_TAXONOMY: readonly AiBuiltFailureClass[] = [
     id: "AIB-06",
     title: "Unvalidated model output flows into queries or commands",
     description:
-      "Text a model produced is concatenated into a SQL query, shell command, or other interpreter without validation or parameterisation.",
+      "Text a model produced is concatenated into a SQL query, shell command or other interpreter without validation or parameterisation.",
     whyAiBuilt:
       "The model's output looks like the answer, so it is piped straight into the next step; the injection boundary between model output and code is invisible.",
     coveredBy: ["engine", "sast"],
@@ -126,7 +126,7 @@ export const AI_BUILT_FAILURE_TAXONOMY: readonly AiBuiltFailureClass[] = [
     description:
       "A generated stub — a tautological check, a hard-coded success, a TODO that returns true — ships in a security-relevant path and silently always passes.",
     whyAiBuilt:
-      "The model fills the shape of the function before the substance exists, and a green-looking result is indistinguishable from a real one without review.",
+      "The model fills the shape of the function before the substance exists and a green-looking result is indistinguishable from a real one without review.",
     coveredBy: ["engine", "sast"],
     controlIds: ["vibe-49"],
     severity: "MEDIUM",
@@ -137,7 +137,7 @@ export const AI_BUILT_FAILURE_TAXONOMY: readonly AiBuiltFailureClass[] = [
     description:
       "A package is added for a one-line task, sometimes hallucinated or typosquatted, carrying known vulnerabilities or an unsafe install script.",
     whyAiBuilt:
-      "The model names a plausible package for the task; whether that package exists, is maintained, or is the real one is not checked.",
+      "The model names a plausible package for the task; whether that package exists, is maintained or is the real one is not checked.",
     coveredBy: ["sca", "iac"],
     controlIds: ["vibe-37", "vibe-39", "vibe-38"],
     severity: "MEDIUM",

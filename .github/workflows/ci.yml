@@ -334,6 +334,51 @@ jobs:
         continue-on-error: true
         run: pnpm lint:md
 
+      # Advisory only — rendered copy must never put a comma immediately
+      # before "and" or "or". Raw hits are advisory because comments and
+      # fenced code blocks can legitimately match the pattern. The path set
+      # covers the site copy sources: marketing pages/components, served
+      # public assets, docs/ and the shared registries that render into the
+      # site (WebMCP/AI-security controls, the agent registry, Myra copy,
+      # pricing strings and the OpenAPI description source).
+      - name: Serial-comma copy scan (advisory)
+        continue-on-error: true
+        shell: bash
+        run: |
+          hits=$(grep -rnE ', +(and|or)\b' \
+            apps/marketing/src apps/marketing/public docs \
+            packages/security/src packages/agent-registry/src \
+            packages/myra/src packages/pricing/src \
+            packages/agent-rules/src packages/mcp/src \
+            packages/types/src/openapi || true)
+          {
+            echo '### Serial-comma copy scan (advisory)'
+            echo
+            echo 'Rendered copy must not put a comma immediately before "and" or "or".'
+            echo 'Raw hits are advisory: comments and fenced code can legitimately match.'
+            echo
+            echo 'Scanned: `apps/marketing/src`, `apps/marketing/public`, `docs`,'
+            echo '`packages/security/src`, `packages/agent-registry/src`, `packages/myra/src`,'
+            echo '`packages/pricing/src`, `packages/agent-rules/src`, `packages/mcp/src`'
+            echo 'and `packages/types/src/openapi`.'
+            echo
+            if [ -n "$hits" ]; then
+              echo '```'
+              printf '%s\n' "$hits"
+              echo '```'
+            else
+              echo 'No raw hits in the rendered-copy sources.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$hits" ]; then
+            echo "clean: no raw serial-comma candidates"
+            exit 0
+          fi
+          printf '%s\n' "$hits" | head -20
+          total=$(printf '%s\n' "$hits" | wc -l)
+          echo "::notice::$total raw serial-comma candidate(s) — inspect the step summary (advisory)"
+          exit 1
+
       - name: Typecheck
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm typecheck

@@ -1,10 +1,10 @@
 {
-  "demoPolicy": "Use a sanitized reviewer workspace with no production data, secrets, customer content, or live write targets.",
+  "demoPolicy": "Use a sanitized reviewer workspace with no production data, secrets, customer content or live write targets.",
   "positiveWorkflows": [
-    "Connect through OAuth, select exactly one workspace, and complete a read-only MCP review.",
+    "Connect through OAuth, select exactly one workspace and complete a read-only MCP review.",
     "List recent scans and open evidence without exposing credentials to the agent.",
     "Request a browser-confirmed write-capable connection grant for synthetic targets and workflows.",
-    "Execute an authorized synthetic action, retry with the same idempotency key, and poll its terminal result.",
+    "Execute an authorized synthetic action, retry with the same idempotency key and poll its terminal result.",
     "Try a conflicting retry and an out-of-grant action; confirm both fail closed.",
     "Disconnect/revoke the connection and confirm subsequent MCP requests receive an OAuth challenge."
   ],

@@ -59,7 +59,7 @@ const jsonLd: unknown[] = [
   <p>
     The LyraShield GitHub Action is a lightweight, diff-scoped security gate that runs entirely in
     your own runner with your own <code>GITHUB_TOKEN</code>. It does not call the hosted LyraShield
-    engine, does not require a LyraShield account or API key, and requests no elevated permissions
+    engine, does not require a LyraShield account or API key and requests no elevated permissions
     of its own — the calling workflow controls the token scope.
   </p>
 
@@ -70,9 +70,9 @@ const jsonLd: unknown[] = [
       rel="noopener noreferrer">gitleaks</a
     >, plus a set of high-signal risky-pattern checks on the lines added in the diff — hardcoded
     secrets, SQL-injection-shaped string concatenation, security controls disabled in code (CORS,
-    CSRF, XSS protections), and <code>eval</code>/<code>exec</code> usage. This is a fast,
+    CSRF, XSS protections) and <code>eval</code>/<code>exec</code> usage. This is a fast,
     zero-setup pre-merge gate, not the full agentic scan. For the exploit-validated, verified-finding
-    workflow, connect the target in the LyraShield app, or use the <a
+    workflow, connect the target in the LyraShield app or use the <a
       href="/docs/integrations/remote-mcp">MCP server</a
     > or <a href="/docs/integrations/rest-api">REST API</a>.
   </div>
@@ -130,7 +130,7 @@ jobs:
         <td><code>HIGH</code></td>
         <td>
           Fail the check when a finding at or above this severity is present:{" "}
-          <code>CRITICAL</code>, <code>HIGH</code>, <code>MEDIUM</code>, <code>LOW</code>, or{" "}
+          <code>CRITICAL</code>, <code>HIGH</code>, <code>MEDIUM</code>, <code>LOW</code> or{" "}
           <code>INFO</code>.
         </td>
       </tr>
@@ -159,12 +159,12 @@ jobs:
   <div class="callout callout--warn">
     <strong>Requirements:</strong> a GitHub Actions runner with network access to fetch the pinned
     third-party actions (gitleaks, upload-artifact, codeql-action). No Node.js installation, LyraShield
-    account, or API key is required for this workflow.
+    account or API key is required for this workflow.
   </div>
 
   <h2>Cloud editor complement</h2>
   <p>
-    For teams using cloud editors like Lovable, Bolt.new, Replit, or v0, the GitHub Action provides
+    For teams using cloud editors like Lovable, Bolt.new, Replit or v0, the GitHub Action provides
     automated CI checks on the synced repository. The action runs independently of the editor's MCP
     connection and works even if the editor does not support custom remote MCP — see the <a
       href="/docs/integrations/remote-mcp">remote MCP page</a

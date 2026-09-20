@@ -85,13 +85,13 @@ Look for a consistent edge across several `y` values before picking the crop
 content than fits in one screenshot, so each is built from **two captures of
 the same page at different scroll positions**, joined into one file:
 
-1. Capture the page at the top of scroll, and again scrolled down to where
+1. Capture the page at the top of scroll and again scrolled down to where
    the first capture left off — with some overlap so you can find a shared
    landmark.
 2. The app sidebar is fixed/sticky — it does **not** scroll with the page. So
    the second (scrolled-down) capture shows the ENTIRE sidebar a second time,
    identical to the first capture's. Naively concatenating the two images
-   duplicates the logo, nav, and account footer mid-image. Before joining,
+   duplicates the logo, nav and account footer mid-image. Before joining,
    flat-fill the second capture's sidebar column with the sidebar's own
    background colour — measure the sidebar/content x-boundary directly on
    that capture rather than assuming a prior value still holds.
@@ -109,7 +109,7 @@ the same page at different scroll positions**, joined into one file:
 
 The flat-fill used here is erasing a **duplicate, contentless UI region**
 (the second sidebar), not redacting live information — it is a different
-technique from, and not an exception to, the "never redact with a flat fill"
+technique from and not an exception to, the "never redact with a flat fill"
 rule below, which is about hiding content that is otherwise still present in
 the file.
 
@@ -119,18 +119,18 @@ Anything below is destroyed in the image itself — pixelated down and then
 blurred, so the original glyphs are gone from the bytes we ship:
 
 - Account identity: real names, email addresses, avatars.
-- Repository coordinates: `owner/repo` strings, and target display names that
+- Repository coordinates: `owner/repo` strings and target display names that
   match a private repo.
 - Source file paths and line numbers.
-- Finding titles, endpoint names, mutation names, and any other text describing
+- Finding titles, endpoint names, mutation names and any other text describing
   how to exploit a specific unfixed issue.
 
 What deliberately stays visible: severity pills, evidence states, CWE and CVSS
-references, run types, timestamps, counts, and every piece of product chrome.
+references, run types, timestamps, counts and every piece of product chrome.
 That is the shape worth showing; the specifics are what we owe discretion.
 
-**Never redact with CSS, an overlay box, or a flat fill.** A `filter: blur()` is
-undone by disabling a stylesheet, and a solid box over selectable text still
+**Never redact with CSS, an overlay box or a flat fill.** A `filter: blur()` is
+undone by disabling a stylesheet and a solid box over selectable text still
 ships the text. These files are directly reachable at `/product/*.webp`.
 
 ## Method
@@ -147,10 +147,10 @@ quality 82 — 1600px wide for the hero, 1400px for in-page shots.
    size. Half-blurred sentences are worse than none — they read as careless.
 3. Keep `width`/`height` accurate on the `<img>`; these pages are tuned for zero
    layout shift.
-4. Write a caption that says what the frame proves, and disclose what was blurred.
+4. Write a caption that says what the frame proves and disclose what was blurred.
 
 ## Guardrail
 
-Captions must not imply a capture shows more than it does, and must not present
+Captions must not imply a capture shows more than it does and must not present
 demo data as production metrics. If a frame shows an unfixed issue in one of our
 own products, blur the specifics — a marketing page is not a disclosure channel.

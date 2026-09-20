@@ -1,6 +1,6 @@
 # Customer-declared AI system threat model
 
-Use this template to prepare the facts entered in the private target workspace. It is an inventory and review aid, not a verification, certification, or security guarantee.
+Use this template to prepare the facts entered in the private target workspace. It is an inventory and review aid, not a verification, certification or security guarantee.
 
 ## Scope and owner
 
@@ -19,11 +19,11 @@ Use this template to prepare the facts entered in the private target workspace. 
 
 ## Trust boundaries
 
-For each boundary, state what crosses it, who controls each side, and the authentication/authorization decision.
+For each boundary, state what crosses it, who controls each side and the authentication/authorization decision.
 
 ## Threat scenarios
 
-For each scenario record a title, severity, description, mitigation, test plan, owner, and review date. High and critical scenarios require all three of mitigation, test plan, and owner before an immutable version can be created.
+For each scenario record a title, severity, description, mitigation, test plan, owner and review date. High and critical scenarios require all three of mitigation, test plan and owner before an immutable version can be created.
 
 ## Review record
 

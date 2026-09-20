@@ -105,7 +105,7 @@ pass → 0.
 - 2026-09-18 (session 4) — Wave 3 implemented and verified; **the baseline is empty**.
   - **OG cards**: `scripts/generate-og-cards.mjs` renders 15 section cards at exactly 1200x630 in
     Chromium using the DESIGN.md tokens and the bundled fonts; `src/lib/og-images.ts` maps every
-    built route to a card, and `Base.astro` uses the map when a page passes no `ogImage`.
+    built route to a card and `Base.astro` uses the map when a page passes no `ogImage`.
     `/og/og-default.png` remains only for routes outside the sitemap.
   - **Titles**: blog suffix `" | LyraShield AI Blog"` → `" | LyraShield AI"` (161 posts), then the
     26 posts still over 65 rendered characters rewritten; 10 docs titles trimmed to ≤ 62; the tag-hub
@@ -115,7 +115,7 @@ pass → 0.
     first pass and caught by the gate.
   - **`/research`**: title/description/lede now describe what the page is (planned research, sample
     protection, how to cite) and state plainly that no results are reported yet.
-  - **FAQ dedupe**: the repeated question in `claude-code-security-workflow.mdx` is now distinct, and
+  - **FAQ dedupe**: the repeated question in `claude-code-security-workflow.mdx` is now distinct and
     `blog-validation-lib.mjs` rejects duplicate FAQ questions (with a unit test) because a repeat
     emits two FAQPage entries with one name.
   - Baseline 177 → 0. Verify: 217 vitest tests, typecheck, lint, `build`, all six validators,
@@ -125,7 +125,7 @@ pass → 0.
   - **Internal linking**: `BlogCta.astro` gains a "Next steps" nav (Pricing, For coding agents,
     Methodology, Free Lite Check), so all 161 posts now link to the money pages that previously
     received **zero** links from the library. `/demo` joins the footer Product column and the desktop
-    Resources menu (not the mobile menu — its height budget is asserted by `theme.e2e.ts`), and the
+    Resources menu (not the mobile menu — its height budget is asserted by `theme.e2e.ts`) and the
     `/blog` hub now links its editorial policy.
   - **Thin pages**, bounded to facts already published elsewhere: `/support` gains a "Where to look
     first" list linking the troubleshooting, REST API, approvals and methodology pages;
@@ -137,18 +137,18 @@ pass → 0.
     0/0/0), `crawl-built-blog` (161 / 6 / 235), `test:browser` 41 passed.
 
 - 2026-09-18 (session 6) — Hardening pass: three more gate rules, one real gap fixed, one script
-  bug fixed, and the whole surface re-verified.
+  bug fixed and the whole surface re-verified.
   - **Gate grew three rules**: `img-alt-missing` (every `<img>` needs an explicit `alt`, decorative
-    ones included), `html-lang-missing`, and `sitemap-lastmod-missing`. All three pass on the
-    current build, and each is exercised by a unit test.
+    ones included), `html-lang-missing` and `sitemap-lastmod-missing`. All three pass on the
+    current build and each is exercised by a unit test.
   - **`/demo` had no `lastmod`** — it was the only sitemap URL missing one, because it was never
-    registered in `astro.config.mjs`'s static-page list. Fixed, and the new rule now catches the same
+    registered in `astro.config.mjs`'s static-page list. Fixed and the new rule now catches the same
     drift for any future page. All 241 URLs carry a real git date.
   - **`scripts/indexnow.mjs` bug**: it filtered sitemap URLs by the _origin it fetched_, so a local
     dry run always reported "no same-host URLs" and submitted nothing — and a sitemap served from a
     different host than the key file would have silently no-op'd in production too. The submitted
     host and `keyLocation` now come from the sitemap, child sitemaps are fetched through the origin
-    under test, and the key file is verified before anything is claimed. Dry run against the local
+    under test and the key file is verified before anything is claimed. Dry run against the local
     preview: `241 URL(s) on lyrashieldai.com would be submitted.`
   - **Footer** links the public GitHub repository with `rel="me"` — a real URL, already cited in
     `llms.txt`. `Organization.sameAs` stays empty: there is still no verified _product_ profile.
@@ -170,7 +170,7 @@ pass → 0.
     motion 18 passed, ops passed. The 3 failures are `packages/config/src/env-runtime.test.ts`, which
     passes 11/11 with the local `.env` absent: this machine's `.env` sets `MYRA_WRITES_ENABLED=1`
     without the Google calendar credentials production validation then demands. Not related to this
-    branch, and CI has no `.env`. Four earlier file-load failures were a missing `@lyrashield/mcp`
+    branch and CI has no `.env`. Four earlier file-load failures were a missing `@lyrashield/mcp`
     build in this fresh worktree, fixed by `pnpm --filter @lyrashield/mcp build`.
   - **Environment note for the next session**: a fresh worktree needs `.env` (root), `apps/web/.env`,
     `pnpm --filter @lyrashield/db exec prisma generate`, `pnpm --filter @lyrashield/sdk build` and
@@ -185,7 +185,7 @@ pass → 0.
     a scanner.
   - **First fix — remove the literal, not the control.** `indexnow.mjs` now resolves the key from the
     single file the protocol serves (exactly one `public/<32 hex>.txt` whose content is its own
-    filename stem, or it fails loudly). One source of truth, no secret-shaped literal in source, and
+    filename stem or it fails loudly). One source of truth, no secret-shaped literal in source and
     the unit test asserts the literal is gone. Re-running the scan still failed, because gitleaks
     walks the PR's whole commit range and the original commit is inside it.
   - **Second fix — escalated, then applied on approval.** The remaining finding needed either a
@@ -198,7 +198,7 @@ pass → 0.
     `test:browser`, so the new SEO gate now executes on every marketing change), both secret-scan
     jobs, worker contract, changed-path detection and the LyraShield GitHub Action.
 
-- 2026-09-18 (session 8) — Review findings fixed, the concurrent-session conflict resolved, and the
+- 2026-09-18 (session 8) — Review findings fixed, the concurrent-session conflict resolved and the
   contact address moved to `admin@`.
   - **All nine CodeRabbit findings on #702 fixed** (`ce037464`). One was a real bug in the gate:
     `sitemapEntries()` was being fed the sitemap _index_, which carries `<sitemap>` blocks rather
@@ -208,7 +208,7 @@ pass → 0.
     yields `sitemap-lastmod-missing: /demo` and exit 1. Also fixed: an unreachable `robots.txt`
     skipped the whole agent check (`robots-missing` now reports it), IndexNow reported every
     response as accepted (only 200/202 are), `Base.astro` hardcoded both contact emails while the
-    pages honour env overrides, and four copy findings (approvals scope, amp "Agent Skill",
+    pages honour env overrides and four copy findings (approvals scope, amp "Agent Skill",
     research "plans to publish", vibe-security-50 "operational or human evidence") plus the README's
     inaccurate Lighthouse "requires" wording.
   - **Concurrent-session conflict caught and instrumented** (`05dce911`). While working, another

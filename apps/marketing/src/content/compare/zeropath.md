@@ -1,27 +1,27 @@
 ---
 title: "LyraShield vs ZeroPath — release assurance compared"
-description: "How LyraShield AI compares to ZeroPath for AI-native SAST and auto-fix. Evidence states, deterministic retest, coverage framework, and deployment model."
+description: "How LyraShield AI compares to ZeroPath for AI-native SAST and auto-fix. Evidence states, deterministic retest, coverage framework and deployment model."
 competitor: "ZeroPath"
 heading: "LyraShield AI vs ZeroPath"
-disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native application security platform that unifies SAST, SCA, secrets, IaC, and DAST-style runtime validation into a single reasoning engine, and generates fix PRs. LyraShield AI is release assurance for AI-built apps — it separates detection from proof, produces immutable evidence reports, and gates fixes behind approvals. Neither replaces the other."
+disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native application security platform that unifies SAST, SCA, secrets, IaC and DAST-style runtime validation into a single reasoning engine and generates fix PRs. LyraShield AI is release assurance for AI-built apps — it separates detection from proof, produces immutable evidence reports and gates fixes behind approvals. Neither replaces the other."
 updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace ZeroPath?"
-    a: "No. ZeroPath is a unified AI-native SAST plus SCA, secrets, IaC, and DAST-style runtime validation with taint tracking, natural-language policy, CycloneDX AI-BOM across 17 component kinds, and an open-source MCP server and CLI. LyraShield in open beta focuses on agentic pentest as core with SCA, secrets, evidence states, and reviewed fix proposals."
+    a: "No. ZeroPath is a unified AI-native SAST plus SCA, secrets, IaC and DAST-style runtime validation with taint tracking, natural-language policy, CycloneDX AI-BOM across 17 component kinds and an open-source MCP server and CLI. LyraShield in open beta focuses on agentic pentest as core with SCA, secrets, evidence states and reviewed fix proposals."
   - q: "Can I use ZeroPath and LyraShield together?"
     a: "Yes. ZeroPath can serve as your broad AI-native scanner replacing multiple detectors, with an open-source CLI and SARIF; confirm current commercial terms with the vendor. Add LyraShield for the release assurance loop that records fix proposals for review before the team merges a change and produces an immutable snapshot. Both support MCP, so they can run inside AI coding agents."
   - q: "When should I choose ZeroPath over LyraShield?"
-    a: "Choose ZeroPath when you need business-logic and authorization flaw detection, AI-component inventory, one-click fix PRs with natural-language refinement, and broad language coverage with 700+ secret detectors. Its strength is consolidating SAST, SCA, secrets, and runtime validation. Choose LyraShield when release proof and approval gates are the priority."
+    a: "Choose ZeroPath when you need business-logic and authorization flaw detection, AI-component inventory, one-click fix PRs with natural-language refinement and broad language coverage with 700+ secret detectors. Its strength is consolidating SAST, SCA, secrets and runtime validation. Choose LyraShield when release proof and approval gates are the priority."
 ---
 
 ## Core approach
 
 | Aspect                  | LyraShield AI                                                                        | ZeroPath                                                                          |
 | ----------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| Primary focus           | Evidence-backed release assurance for AI-built apps                                  | AI-native SAST plus SCA, secrets, IaC, and DAST validation in one platform        |
-| Scanning approach       | Agentic engine, coverage framework, evidence states                                  | LLMs combined with static analysis, taint tracking, and AI validation             |
+| Primary focus           | Evidence-backed release assurance for AI-built apps                                  | AI-native SAST plus SCA, secrets, IaC and DAST validation in one platform         |
+| Scanning approach       | Agentic engine, coverage framework, evidence states                                  | LLMs combined with static analysis, taint tracking and AI validation              |
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                 | Found → AI-validated for exploitability → fix PR generated                        |
 | Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                          | No published control framework; convention-deviation and auth-predicate analysis  |
 | Fix model               | Recorded fix proposals; Fix PR requests need permission and a server-generated patch | Fix PRs opened for one-click merge with natural-language refinement               |
@@ -51,7 +51,7 @@ faq:
 | ---------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS, on-prem (Enterprise), CLI, VS Code plugin, GitHub/GitLab/Bitbucket/Azure DevOps, MCP server, Claude Code plugin |
 | Pricing    | See [pricing](/pricing) for current plan details | Check the vendor's current pricing or sales quote                                                                     |
-| Languages  | Language-agnostic                                | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin, and more)                                  |
+| Languages  | Language-agnostic                                | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin and more)                                   |
 
 ## When to use which
 
@@ -65,7 +65,7 @@ faq:
 
 ### Use ZeroPath when
 
-- You want a unified AI-native SAST, SCA, secrets, and IaC platform that replaces multiple scanners
+- You want a unified AI-native SAST, SCA, secrets and IaC platform that replaces multiple scanners
 - You need deep business-logic and authorization-flaw detection with AI validation
 - You want AI-BOM and AI-component inventory for AI-era supply-chain visibility
 - You want fix PRs delivered with natural-language refinement and one-click merge
@@ -79,6 +79,6 @@ Read the methodology or try the free browser-local tools at [lyrashieldai.com](h
 
 ## Methodology and scope
 
-This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for its assurance model, and verify vendor details before a purchasing decision.
+This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
 
 For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs ZeroPath](/blog/zeropath-vs-lyrashield).

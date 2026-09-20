@@ -18,7 +18,7 @@ metadata:
 # LyraShield AI review skill
 
 Use the LyraShield MCP connection to inspect release-assurance evidence, summarize current
-issues, and explain connection requirements. Prefer read-only tools. Do not claim that a result is a
+issues and explain connection requirements. Prefer read-only tools. Do not claim that a result is a
 security guarantee or that all Vibe Security 50 controls were verified.
 
 The skill is a community ClawHub listing. It is not an official OpenClaw channel. Link to
