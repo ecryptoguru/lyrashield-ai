@@ -321,13 +321,19 @@ else
   # A failed service restart can remove the container. Size and preserve the
   # configured rollback image while bootstrapping its replacement. When that
   # image is absent locally too, there is nothing to measure — fall back to
-  # the proposed 8 GiB image-size floor so the disk check still carries a
-  # real budget (required_free becomes 26 GiB). The floor is a policy value,
-  # not a measurement: confirm the production VM disk can absorb it before
-  # relying on this path.
+  # the image-size floor so the disk check still carries a real budget
+  # (required_free = 3 x floor + 2 GiB; 26 GiB at the 8 GiB default). The
+  # floor is a policy value, not a measurement: override it through
+  # LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES to match the production VM disk.
   if ! current_image_size=$(docker image inspect "$old_image" --format '{{.Size}}' 2>/dev/null); then
-    echo "No local rollback image found; sizing the disk preflight from the 8 GiB floor" >&2
-    current_image_size=8589934592
+    if [ -n "${LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES:-}" ]; then
+      case "$LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES" in
+        ''|*[!0-9]*|0) echo "LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES must be a positive integer" >&2; exit 1 ;;
+      esac
+    fi
+    image_floor_bytes=${LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES:-8589934592}
+    echo "No local rollback image found; sizing the disk preflight from the ${image_floor_bytes}-byte floor" >&2
+    current_image_size=$image_floor_bytes
   fi
   prune_all=0
 fi
