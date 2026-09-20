@@ -323,15 +323,15 @@ else
   # image is absent locally too, there is nothing to measure — fall back to
   # the image-size floor so the disk check still carries a real budget
   # (required_free = 3 x floor + 2 GiB; 26 GiB at the 8 GiB default). The
-  # floor is a policy value, not a measurement: override it through
-  # LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES to match the production VM disk.
+  # floor is a policy value, not a measurement: tune it per VM via the
+  # LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES env var or the same key in the
+  # runtime config (env wins) to match the disk that actually exists.
   if ! current_image_size=$(docker image inspect "$old_image" --format '{{.Size}}' 2>/dev/null); then
-    if [ -n "${LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES:-}" ]; then
-      case "$LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES" in
-        ''|*[!0-9]*|0) echo "LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES must be a positive integer" >&2; exit 1 ;;
-      esac
-    fi
-    image_floor_bytes=${LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES:-8589934592}
+    image_floor_bytes=${LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES:-$(sed -n 's/^LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES=//p' "$config" | head -n 1)}
+    image_floor_bytes=${image_floor_bytes:-8589934592}
+    case "$image_floor_bytes" in
+      *[!0-9]*|0) echo "LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES must be a positive integer" >&2; exit 1 ;;
+    esac
     echo "No local rollback image found; sizing the disk preflight from the ${image_floor_bytes}-byte floor" >&2
     current_image_size=$image_floor_bytes
   fi
