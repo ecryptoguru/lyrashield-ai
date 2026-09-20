@@ -63,6 +63,7 @@ vi.mock("./lifecycle-utils", () => ({
   resolveEngineRuntimeBudgetMs: mocks.resolveEngineRuntimeBudgetMs,
 }))
 
+import { buildScanExecutionPlan } from "@lyrashield/types"
 import { executeScanTarget } from "./execution"
 
 const relayConfig = { url: "https://relay.internal", token: "t" } as never
@@ -230,5 +231,45 @@ describe("executeScanTarget relay lifecycle", () => {
       result: { errorCategory: "RELAY_SCOPE_UNAVAILABLE" },
     })
     expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+
+  it("forwards the stored execution plan into the engine command config", async () => {
+    const plan = buildScanExecutionPlan({
+      workflow: "REVIEW_CHANGES",
+      targetType: "REPO",
+      mode: "DEEP",
+      source: {
+        revision: "a".repeat(40),
+        baseRevision: "b".repeat(40),
+        mergeBaseRevision: "c".repeat(40),
+      },
+    })
+    const repoTarget = {
+      ...target,
+      type: "REPO",
+      url: null,
+      repoFullName: "acme/app",
+      repoProvider: "github",
+    } as never
+
+    const result = await executeScanTarget(
+      params({
+        target: repoTarget,
+        urlEngineBacked: false,
+        scanProfile: null,
+        executionPlan: plan,
+      })
+    )
+
+    expect(result).toMatchObject({ ok: true })
+    expect(mocks.runEngine).toHaveBeenCalledWith(
+      expect.objectContaining({ executionPlan: plan }),
+      "scan-1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything()
+    )
+    // No relay grant is minted for a repository Review Changes run.
+    expect(mocks.mintScanRelayGrant).not.toHaveBeenCalled()
   })
 })

@@ -720,6 +720,108 @@ describe("POST /api/scans", () => {
       expect(createScan).not.toHaveBeenCalled()
     })
 
+    it("denies REVIEW_CHANGES when the refs share no merge base", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(getBranchRefSha)
+        .mockResolvedValueOnce("a".repeat(40))
+        .mockResolvedValueOnce("b".repeat(40))
+      vi.mocked(getMergeBaseSha).mockResolvedValue(null)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-rc-nomb",
+          targetId: "repo-1",
+          goal: "CHECK_PR",
+          mode: "QUICK",
+          workflow: "REVIEW_CHANGES",
+          baseRef: "release/1",
+        })
+      )
+
+      expect(res.status).toBe(409)
+      expect((await res.json()).error.code).toBe("SCAN_NO_MERGE_BASE")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("resolves an explicit headRef instead of the target branch", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(getBranchRefSha)
+        .mockResolvedValueOnce("e".repeat(40)) // headRef "feature/42"
+        .mockResolvedValueOnce("b".repeat(40)) // baseRef
+      vi.mocked(getMergeBaseSha).mockResolvedValue("c".repeat(40))
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-rc-head",
+        status: "QUEUED",
+        goal: "CHECK_PR",
+        mode: "QUICK",
+        targetId: "repo-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-rc-head",
+          targetId: "repo-1",
+          goal: "CHECK_PR",
+          mode: "QUICK",
+          workflow: "REVIEW_CHANGES",
+          baseRef: "release/1",
+          headRef: "feature/42",
+        })
+      )
+
+      expect(res.status).toBe(201)
+      expect(getBranchRefSha).toHaveBeenNthCalledWith(1, 1234, "acme", "app", "feature/42")
+      expect(getBranchRefSha).toHaveBeenNthCalledWith(2, 1234, "acme", "app", "release/1")
+      expect(createScan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workflow: "REVIEW_CHANGES",
+          source: {
+            revision: "e".repeat(40),
+            baseRevision: "b".repeat(40),
+            mergeBaseRevision: "c".repeat(40),
+          },
+        })
+      )
+    })
+
+    it("passes a full-SHA headRef through without a ref lookup", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      const headSha = "f".repeat(40)
+      vi.mocked(getBranchRefSha).mockResolvedValue("b".repeat(40)) // baseRef only
+      vi.mocked(getMergeBaseSha).mockResolvedValue("c".repeat(40))
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-rc-sha",
+        status: "QUEUED",
+        goal: "CHECK_PR",
+        mode: "QUICK",
+        targetId: "repo-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-rc-sha",
+          targetId: "repo-1",
+          goal: "CHECK_PR",
+          mode: "QUICK",
+          workflow: "REVIEW_CHANGES",
+          baseRef: "release/1",
+          headRef: headSha,
+        })
+      )
+
+      expect(res.status).toBe(201)
+      // A full object ID is already immutable — no branch-ref resolution call.
+      expect(getBranchRefSha).toHaveBeenCalledTimes(1)
+      expect(getMergeBaseSha).toHaveBeenCalledWith(1234, "acme", "app", "b".repeat(40), headSha)
+      expect(createScan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: expect.objectContaining({ revision: headSha }),
+        })
+      )
+    })
+
     it("pins the head revision for a plain repo scan when resolvable", async () => {
       vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
       vi.mocked(getBranchRefSha).mockResolvedValue("d".repeat(40))

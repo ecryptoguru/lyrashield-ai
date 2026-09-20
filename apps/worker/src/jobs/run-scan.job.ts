@@ -102,7 +102,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
       if (resumedFinalization) return resumedFinalization
 
-      const preparation = await prepareScanExecution({ scanId, targetId, goal, mode })
+      const preparation = await prepareScanExecution({
+        scanId,
+        targetId,
+        goal,
+        mode,
+        executionPlan,
+      })
       if (!preparation.ok) return preparation.result
       const { target } = preparation
       urlProfile = preparation.urlProfile
@@ -241,6 +247,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         engineBacked,
         urlEngineBacked,
         scanProfile,
+        executionPlan,
       })
       if (!execution.ok) return execution.result
       engineResult = execution.engineResult

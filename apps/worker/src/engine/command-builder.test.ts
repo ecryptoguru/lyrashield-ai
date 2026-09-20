@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import { buildScanExecutionPlan, type ScanExecutionPlan } from "@lyrashield/types"
 import { buildEngineCommand, resolveScanBudgetUsd, type TargetInfo } from "./command-builder"
 
 vi.mock("@lyrashield/config", () => ({
@@ -275,6 +276,148 @@ describe("command-builder", () => {
           target: WEB_TARGET,
         })
       ).toThrow("URL_MODE_UNSUPPORTED")
+    })
+
+    describe("stored execution-plan scope", () => {
+      const HEAD = "a".repeat(40)
+      const BASE = "b".repeat(40)
+      const MERGE_BASE = "c".repeat(40)
+
+      const diffPlan = () =>
+        buildScanExecutionPlan({
+          workflow: "REVIEW_CHANGES",
+          targetType: "REPO",
+          mode: "STANDARD",
+          source: { revision: HEAD, baseRevision: BASE, mergeBaseRevision: MERGE_BASE },
+        })
+
+      it("emits the recorded immutable diff pins only for a DIFF-scope plan", () => {
+        const cmd = buildEngineCommand({
+          scanId: "scan-rc",
+          goal: "CHECK_PR",
+          mode: "STANDARD",
+          target: REPO_TARGET,
+          executionPlan: diffPlan(),
+        })
+
+        const scopeIdx = cmd.args.indexOf("--scope-mode")
+        expect(cmd.args[scopeIdx + 1]).toBe("diff")
+        // --diff-base carries the recorded effective merge base so the
+        // analyzed range is exactly the admission-authorized comparison.
+        expect(cmd.args[cmd.args.indexOf("--diff-base") + 1]).toBe(MERGE_BASE)
+        expect(cmd.args[cmd.args.indexOf("--diff-head") + 1]).toBe(HEAD)
+        expect(cmd.args[cmd.args.indexOf("--repository-revision") + 1]).toBe(HEAD)
+      })
+
+      it("omits --repository-branch for a diff run — recorded revisions own the checkout", () => {
+        const cmd = buildEngineCommand({
+          scanId: "scan-rc-branch",
+          goal: "CHECK_PR",
+          mode: "STANDARD",
+          target: { ...REPO_TARGET, branch: "main" },
+          executionPlan: diffPlan(),
+        })
+
+        expect(cmd.args).not.toContain("--repository-branch")
+        expect(cmd.args).toContain("--diff-head")
+      })
+
+      it("pins a remote repository clone to the recorded head revision", () => {
+        const cmd = buildEngineCommand({
+          scanId: "scan-rc-remote",
+          goal: "CHECK_PR",
+          mode: "STANDARD",
+          target: { ...REPO_TARGET, repoUrl: "https://gitlab.com/org/repo.git" },
+          executionPlan: diffPlan(),
+        })
+
+        expect(cmd.args[cmd.args.indexOf("--repository-revision") + 1]).toBe(HEAD)
+      })
+
+      it("skips --repository-revision for a local checkout but still asserts the head", () => {
+        const cmd = buildEngineCommand({
+          scanId: "scan-rc-local",
+          goal: "CHECK_PR",
+          mode: "STANDARD",
+          target: { ...REPO_TARGET, repoUrl: "/var/lib/lyrashield/checkouts/org-repo" },
+          executionPlan: diffPlan(),
+        })
+
+        expect(cmd.args).not.toContain("--repository-revision")
+        expect(cmd.args[cmd.args.indexOf("--diff-head") + 1]).toBe(HEAD)
+      })
+
+      it("emits --scope-mode full for a snapshot plan and no diff arguments", () => {
+        const cmd = buildEngineCommand({
+          scanId: "scan-snap",
+          goal: "VULNERABILITY_SCAN",
+          mode: "SAFE",
+          target: REPO_TARGET,
+          executionPlan: buildScanExecutionPlan({ targetType: "REPO", mode: "SAFE" }),
+        })
+
+        expect(cmd.args[cmd.args.indexOf("--scope-mode") + 1]).toBe("full")
+        expect(cmd.args).not.toContain("--diff-base")
+        expect(cmd.args).not.toContain("--diff-head")
+        expect(cmd.args).not.toContain("--repository-revision")
+      })
+
+      it("emits --scope-mode full for a legacy run without a stored plan", () => {
+        const cmd = buildEngineCommand({
+          scanId: "scan-legacy",
+          goal: "VULNERABILITY_SCAN",
+          mode: "SAFE",
+          target: REPO_TARGET,
+          executionPlan: null,
+        })
+
+        expect(cmd.args[cmd.args.indexOf("--scope-mode") + 1]).toBe("full")
+        expect(cmd.args).not.toContain("--diff-head")
+      })
+
+      it("emits --scope-mode full for engine-backed URL targets", () => {
+        const cmd = buildEngineCommand({
+          scanId: "scan-url",
+          goal: "VULNERABILITY_SCAN",
+          mode: "STANDARD",
+          target: WEB_TARGET,
+        })
+
+        expect(cmd.args[cmd.args.indexOf("--scope-mode") + 1]).toBe("full")
+        expect(cmd.args).not.toContain("--diff-base")
+        expect(cmd.args).not.toContain("--repository-revision")
+      })
+
+      it("fails closed when a DIFF plan is missing immutable source revisions", () => {
+        const malformed = {
+          ...diffPlan(),
+          source: { revision: HEAD, baseRevision: BASE },
+        } as ScanExecutionPlan
+
+        expect(() =>
+          buildEngineCommand({
+            scanId: "scan-rc-bad",
+            goal: "CHECK_PR",
+            mode: "STANDARD",
+            target: REPO_TARGET,
+            executionPlan: malformed,
+          })
+        ).toThrow("SCAN_PLAN_INVALID")
+      })
+
+      it("fails closed when a DIFF plan arrives on a non-repository target", () => {
+        const mismatched = { ...diffPlan(), targetType: "WEB_APP" } as ScanExecutionPlan
+
+        expect(() =>
+          buildEngineCommand({
+            scanId: "scan-rc-web",
+            goal: "CHECK_PR",
+            mode: "STANDARD",
+            target: WEB_TARGET,
+            executionPlan: mismatched,
+          })
+        ).toThrow("SCAN_PLAN_INVALID")
+      })
     })
   })
 

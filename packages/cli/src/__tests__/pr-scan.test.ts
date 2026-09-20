@@ -24,4 +24,13 @@ describe("handlePrScan", () => {
 
     expect(mocks.handleScan).toHaveBeenCalledWith(expectedArgs, output)
   })
+
+  it("forwards --base/--head so the scan is recorded as a Review Changes run", async () => {
+    await handlePrScan(["--base", "main", "--head", "feature/42"], output)
+
+    expect(mocks.handleScan).toHaveBeenCalledWith(
+      ["--goal", "CHECK_PR", "--mode", "QUICK", "--base", "main", "--head", "feature/42"],
+      output
+    )
+  })
 })
