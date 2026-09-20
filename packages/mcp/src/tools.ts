@@ -215,7 +215,10 @@ async function findOrCreateRepoTarget(
   repo: ParsedRepo
 ): Promise<string> {
   let cursor: string | undefined
+  const seen = new Set<string>()
+  let pages = 0
   do {
+    if (++pages > 20) throw new Error("Target lookup incomplete after 20 pages; pass targetId")
     const params = new URLSearchParams({ workspaceId })
     if (cursor) params.set("cursor", cursor)
     const list = (await apiCall(context, "GET", `/api/targets?${params.toString()}`)) as {
@@ -229,6 +232,9 @@ async function findOrCreateRepoTarget(
     const existing = list.items?.find((t) => t.repoFullName === repo.repoFullName)
     if (existing) return existing.id
     cursor = list.nextCursor ?? undefined
+    if (cursor && seen.has(cursor))
+      throw new Error("Target lookup returned a repeated cursor; pass targetId")
+    if (cursor) seen.add(cursor)
   } while (cursor)
 
   const created = (await apiCall(context, "POST", "/api/targets", {
@@ -437,26 +443,38 @@ export function createGetFindingsTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_get_findings",
     mutating: false,
     description:
-      "Retrieve security findings for a workspace, optionally filtered by severity or target.",
+      "Retrieve a page of security findings. Follow nextCursor with cursor until it is absent.",
     inputSchema: {
       type: "object",
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: { type: "string", description: "Optional target ID filter" },
+        scanId: { type: "string", description: "Optional scan ID filter" },
+        cursor: { type: "string", description: "Cursor returned as nextCursor by the prior page" },
+        status: { type: "string", description: "Optional finding status filter" },
+        verified: { type: "boolean", description: "Optional verification status filter" },
         severity: {
           type: "string",
           description: "Optional severity filter: CRITICAL, HIGH, MEDIUM, LOW, INFO",
         },
-        limit: { type: "number", description: "Max results (default 50, max 100)" },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Page size (default 50)" },
       },
       required: ["workspaceId"],
     },
     handler: async (args) => {
       try {
+        const limit = args.limit ?? 50
+        if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+          return makeErrorResult("limit must be an integer from 1 to 100")
+        }
         const params = new URLSearchParams({ workspaceId: args.workspaceId as string })
         if (args.targetId) params.set("targetId", args.targetId as string)
+        if (args.scanId) params.set("scanId", args.scanId as string)
+        if (args.cursor) params.set("cursor", args.cursor as string)
+        if (args.status) params.set("status", args.status as string)
+        if (typeof args.verified === "boolean") params.set("verified", String(args.verified))
         if (args.severity) params.set("severity", args.severity as string)
-        if (args.limit) params.set("limit", String(args.limit))
+        params.set("limit", String(limit))
 
         const data = await apiCall(context, "GET", `/api/findings?${params.toString()}`)
         return makeToolResult(data)
@@ -576,19 +594,27 @@ export function createListTargetsTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_list_targets",
     mutating: false,
     description:
-      "List the registered targets (repos / apps / APIs) in a workspace. Use this to find the targetId to scan.",
+      "List a page of registered targets (repos / apps / APIs). Follow nextCursor with cursor to reach later pages.",
     inputSchema: {
       type: "object",
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         projectId: { type: "string", description: "Optional project ID filter" },
+        cursor: { type: "string", description: "Cursor returned as nextCursor by the prior page" },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Page size (default 50)" },
       },
       required: ["workspaceId"],
     },
     handler: async (args) => {
       try {
+        const limit = args.limit ?? 50
+        if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+          return makeErrorResult("limit must be an integer from 1 to 100")
+        }
         const params = new URLSearchParams({ workspaceId: args.workspaceId as string })
         if (args.projectId) params.set("projectId", args.projectId as string)
+        if (args.cursor) params.set("cursor", args.cursor as string)
+        params.set("limit", String(limit))
         return makeToolResult(await apiCall(context, "GET", `/api/targets?${params.toString()}`))
       } catch (err) {
         return makeErrorResult(err instanceof Error ? err.message : String(err))
@@ -979,44 +1005,81 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
           `/api/gate/${encodeURIComponent(targetId)}?${gateParams.toString()}`
         )
 
-        const items: Array<Record<string, unknown>> = []
+        const bySeverity: Record<string, number> = {}
+        let findingCount = 0
         let cursor: string | undefined
-        do {
-          const findingParams = new URLSearchParams(wsParam)
-          findingParams.set("limit", "100")
-          findingParams.set("targetId", targetId)
-          if (cursor) findingParams.set("cursor", cursor)
-          const page = (await apiCall(
-            context,
-            "GET",
-            `/api/findings?${findingParams.toString()}`
-          )) as {
-            items?: Array<Record<string, unknown>>
-            nextCursor?: string | null
-          }
-          if (Array.isArray(page.items)) {
-            items.push(
-              ...page.items.filter((finding) =>
-                [
-                  "OPEN",
-                  "FIX_READY",
-                  "PR_OPENED",
-                  "TICKET_CREATED",
-                  "FIXED_PENDING_RETEST",
-                ].includes(String(finding.status))
-              )
-            )
-          }
-          cursor = page.nextCursor ?? undefined
-        } while (cursor)
+        const seenCursors = new Set<string>()
+        const deadline = Date.now() + 20_000
+        const timeout = new AbortController()
+        const timer = setTimeout(() => timeout.abort(), 20_000)
+        const baseFetch = context.fetchFn ?? globalThis.fetch
+        const boundedContext: ToolHandlerContext = {
+          ...context,
+          fetchFn: (input, init) =>
+            baseFetch(input, {
+              ...init,
+              signal: init?.signal
+                ? AbortSignal.any([init.signal, timeout.signal])
+                : timeout.signal,
+            }),
+        }
+        let complete = true
+        let pages = 0
+        try {
+          do {
+            if (pages >= 20 || Date.now() >= deadline) {
+              complete = false
+              break
+            }
+            pages++
+            const findingParams = new URLSearchParams(wsParam)
+            findingParams.set("limit", "100")
+            findingParams.set("targetId", targetId)
+            if (cursor) findingParams.set("cursor", cursor)
+            let page: {
+              items?: Array<Record<string, unknown>>
+              nextCursor?: string | null
+            }
+            try {
+              page = (await apiCall(
+                boundedContext,
+                "GET",
+                `/api/findings?${findingParams.toString()}`
+              )) as typeof page
+            } catch (error) {
+              if (!timeout.signal.aborted) throw error
+              complete = false
+              break
+            }
+            if (Array.isArray(page.items)) {
+              for (const finding of page.items) {
+                if (
+                  ![
+                    "OPEN",
+                    "FIX_READY",
+                    "PR_OPENED",
+                    "TICKET_CREATED",
+                    "FIXED_PENDING_RETEST",
+                  ].includes(String(finding.status))
+                )
+                  continue
+                const severity = String(finding.severity ?? "UNKNOWN")
+                bySeverity[severity] = (bySeverity[severity] ?? 0) + 1
+                findingCount++
+              }
+            }
+            cursor = page.nextCursor ?? undefined
+            if (cursor && seenCursors.has(cursor)) {
+              complete = false
+              break
+            }
+            if (cursor) seenCursors.add(cursor)
+          } while (cursor)
+        } finally {
+          clearTimeout(timer)
+        }
 
         const readinessObj = (readiness ?? {}) as Record<string, unknown>
-
-        const bySeverity: Record<string, number> = {}
-        for (const f of items) {
-          const sev = String(f.severity ?? "UNKNOWN")
-          bySeverity[sev] = (bySeverity[sev] ?? 0) + 1
-        }
         const verdict = String(readinessObj.state ?? "INSUFFICIENT_EVIDENCE")
         const order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
         const sevLines = order
@@ -1029,12 +1092,23 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
           ``,
           `**Launch readiness:** ${verdict}`,
           ``,
-          sevLines ? `**Open findings by severity:**\n${sevLines}` : `**Open findings:** none`,
+          !complete
+            ? `**Open findings:** incomplete after ${pages} pages; resume with cursor ${cursor ?? "(none)"}.`
+            : sevLines
+              ? `**Open findings by severity:**\n${sevLines}`
+              : `**Open findings:** none`,
           ``,
           `_This is a target-scoped release-gate snapshot. Findings retain their recorded evidence states; scan detection alone is not independent verification or exploit validation._`,
         ].join("\n")
 
-        return makeToolResult({ markdown, verdict, bySeverity, findingCount: items.length })
+        return makeToolResult({
+          markdown,
+          verdict,
+          bySeverity,
+          findingCount,
+          complete,
+          nextCursor: complete ? null : (cursor ?? null),
+        })
       } catch (err) {
         return makeErrorResult(err instanceof Error ? err.message : String(err))
       }

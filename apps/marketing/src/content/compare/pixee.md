@@ -1,15 +1,15 @@
 ---
 title: "LyraShield vs Pixee — release assurance compared"
-description: "How LyraShield AI compares to Pixee for remediation-first security layers. Approach, evidence states, approval-gated fixes, and coverage framework differences."
+description: "How LyraShield AI compares to Pixee for remediation-first security. Approach, evidence states, reviewed fix proposals, and coverage differences."
 competitor: "Pixee"
 heading: "LyraShield AI vs Pixee"
 disclaimer: "Factual comparison. Pixee is an agentic AppSec platform that triages and fixes vulnerabilities found by your existing SAST, SCA, and DAST tools — it is not itself a scanner. LyraShield AI is release assurance for AI-built apps with its own agentic pentest, SCA, and secrets scanning, producing immutable evidence reports and gating fixes behind approvals. The two occupy different positions in the pipeline; neither replaces the other."
-updatedDate: 2026-08-07
+updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace Pixee?"
-    a: "No, they occupy different positions. Pixee is not a scanner; it ingests findings from 10+ tools like CodeQL, Semgrep, Checkmarx, and Snyk via SARIF and triages exploitability to generate validated fix PRs. LyraShield in open beta is a detector plus assurer: agentic pentest plus SCA and secrets with immutable reports and approval-gated fixes."
+    a: "No, they occupy different positions. Pixee is not a scanner; it ingests findings from 10+ tools like CodeQL, Semgrep, Checkmarx, and Snyk via SARIF and triages exploitability to generate validated fix PRs. LyraShield in open beta is a detector plus assurer: agentic pentest plus SCA and secrets with immutable reports and reviewed fix proposals."
   - q: "Can I use Pixee and LyraShield together?"
     a: "Yes, and it is logical. Run LyraShield or other scanners to produce SARIF, then let Pixee triage backlog and generate constrained fixes validated by an independent evaluator plus your CI gate. Pixee pricing is outcome-based and not public, with self-hosted and air-gapped plus BYOM options. LyraShield is live with open registration in open beta."
   - q: "When should I choose Pixee over LyraShield?"
@@ -18,38 +18,38 @@ faq:
 
 ## Core approach
 
-| Aspect                  | LyraShield AI                                                                                  | Pixee                                                                           |
-| ----------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Primary focus           | Evidence-backed release assurance for AI-built apps                                            | Triage and auto-fix of findings from your existing scanner stack                |
-| Scanning approach       | Agentic engine, coverage framework, evidence states                                            | Not a scanner; ingests SAST/SCA/DAST results via SARIF and native integrations  |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                           | Ingested → exploitability triaged → fix PR generated → re-scan confirmed        |
-| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                    | No published control framework; exploitability triage                           |
-| Fix model               | Approval-gated; PR execution blocked until a server-generated patch is bound to exact approval | Constrained generation + independent fix-evaluation agent + customer CI/CD gate |
-| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                           | Foresight design-time review of specs before code is written                    |
+| Aspect                  | LyraShield AI                                                                        | Pixee                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Primary focus           | Evidence-backed release assurance for AI-built apps                                  | Triage and auto-fix of findings from your existing scanner stack                |
+| Scanning approach       | Agentic engine, coverage framework, evidence states                                  | Not a scanner; ingests SAST/SCA/DAST results via SARIF and native integrations  |
+| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                 | Ingested → exploitability triaged → fix PR generated → re-scan confirmed        |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                          | No published control framework; exploitability triage                           |
+| Fix model               | Recorded fix proposals; Fix PR requests need permission and a server-generated patch | Constrained generation + independent fix-evaluation agent + customer CI/CD gate |
+| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                 | Foresight design-time review of specs before code is written                    |
 
 ## Capability comparison
 
-| Capability                | LyraShield AI                                  | Pixee                                                                                                                  |
-| ------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Static analysis (SAST)    | Via engine                                     | No (processes external SAST findings)                                                                                  |
-| Custom rules              | Not a primary feature                          | No (fixes from ingested findings)                                                                                      |
-| SCA (dependency scanning) | Yes (native)                                   | Triages and fixes external SCA findings (root-level dep resolution)                                                    |
-| Secret scanning           | Yes (engine + GitHub Action)                   | Fixes exposed secrets found by other tools (no native detection)                                                       |
-| Agentic pentest           | Yes (core)                                     | No                                                                                                                     |
-| Evidence states           | Yes (4 states)                                 | No explicit evidence-state model                                                                                       |
-| Deterministic retest      | Yes                                            | SAST re-scan after fix                                                                                                 |
-| Coverage receipts         | Yes (per-control)                              | No                                                                                                                     |
-| Assurance reports         | Yes (immutable snapshots)                      | Per-fix audit trail (git history, validation logs, test results)                                                       |
-| Approval-gated fixes      | Yes (server-generated patch bound to approval) | Customer's own PR review and CI/CD act as the gate                                                                     |
-| Scanner integrations      | Engine + GitHub Action + SARIF                 | 10+ native (CodeQL, Semgrep, Checkmarx, Snyk, SonarQube, Veracode, Fortify, AppScan, Polaris, Contrast) plus any SARIF |
-| Deployment                | Hosted + CLI + MCP + GitHub Action             | GitHub App, GitLab/Azure DevOps/Bitbucket, GitHub Action, SaaS, self-hosted, air-gapped                                |
+| Capability                | LyraShield AI                                                   | Pixee                                                                                                                  |
+| ------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Static analysis (SAST)    | Via engine                                                      | No (processes external SAST findings)                                                                                  |
+| Custom rules              | Not a primary feature                                           | No (fixes from ingested findings)                                                                                      |
+| SCA (dependency scanning) | Yes (native)                                                    | Triages and fixes external SCA findings (root-level dep resolution)                                                    |
+| Secret scanning           | Yes (engine + GitHub Action)                                    | Fixes exposed secrets found by other tools (no native detection)                                                       |
+| Agentic pentest           | Yes (core)                                                      | No                                                                                                                     |
+| Evidence states           | Yes (4 states)                                                  | No explicit evidence-state model                                                                                       |
+| Deterministic retest      | Yes                                                             | SAST re-scan after fix                                                                                                 |
+| Coverage receipts         | Yes (per-control)                                               | No                                                                                                                     |
+| Assurance reports         | Yes (immutable snapshots)                                       | Per-fix audit trail (git history, validation logs, test results)                                                       |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch | Customer's own PR review and CI/CD act as the gate                                                                     |
+| Scanner integrations      | Engine + GitHub Action + SARIF                                  | 10+ native (CodeQL, Semgrep, Checkmarx, Snyk, SonarQube, Veracode, Fortify, AppScan, Polaris, Contrast) plus any SARIF |
+| Deployment                | Hosted + CLI + MCP + GitHub Action                              | GitHub App, GitLab/Azure DevOps/Bitbucket, GitHub Action, SaaS, self-hosted, air-gapped                                |
 
 ## Deployment and pricing
 
 | Aspect     | LyraShield AI                                    | Pixee                                                                                                |
 | ---------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
 | Deployment | Hosted + CLI + MCP + GitHub Action               | GitHub App (Pixeebot), GitHub Action, SaaS, self-hosted, air-gapped; SOC 2 compliant; BYOM supported |
-| Pricing    | See [pricing](/pricing) for current plan details | Not public — outcome-based ("pay per vulnerability resolved"), contact-sales only, no free tier      |
+| Pricing    | See [pricing](/pricing) for current plan details | Check the vendor's current pricing or sales quote                                                    |
 | Languages  | Language-agnostic                                | Scanner-determined (fixes apply across the languages your scanners cover)                            |
 
 ## When to use which
@@ -59,7 +59,7 @@ faq:
 - You need release assurance with immutable evidence reports for release decisions
 - You do not yet have a detection stack and need agentic pentest, SCA, and secrets scanning in one product
 - Your app is AI-built and you want security checks inside your AI coding agent via MCP
-- You want fixes gated behind explicit approval before a patch is applied
+- You want recorded fix proposals before your team applies a patch
 - You need coverage receipts mapping to a control framework
 
 ### Use Pixee when
@@ -78,6 +78,6 @@ Read the methodology or try the free browser-local tools at [lyrashieldai.com](h
 
 ## Methodology and scope
 
-Every claim on this page is drawn from publicly documented capabilities at the date above. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for the assurance model behind the comparison, and treat anything not stated there as out of scope.
+This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for its assurance model, and verify vendor details before a purchasing decision.
 
 For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Pixee](/blog/pixee-vs-lyrashield).

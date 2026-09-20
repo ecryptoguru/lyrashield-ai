@@ -37,8 +37,8 @@ export function resolveLocation(
 function commandExists(command: string): Promise<boolean> {
   return new Promise((resolve) => {
     const isWin = process.platform === "win32"
-    const cmd = isWin ? "where" : "command"
-    const args = isWin ? [command] : ["-v", command]
+    const cmd = isWin ? "where" : "which"
+    const args = [command]
     execFile(cmd, args, { env: process.env, shell: false, windowsHide: true }, (err) => {
       resolve(!err)
     })

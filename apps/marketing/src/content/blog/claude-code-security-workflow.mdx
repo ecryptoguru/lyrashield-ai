@@ -125,7 +125,7 @@ If you use remote MCP, log server version used during generation. Small details 
 
 ## Why pair Claude Code with LyraShield
 
-LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.com. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, every finding produces an immutable assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
+LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.com. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
 MCP integration fits Claude Code. Local stdio via npx -y @lyrashield/mcp@0.2.8 uses env var keys for project scope, and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key with user or project scope. GitHub Action is diff aware and produces SARIF for code scanning so results appear in your pull request.
 
