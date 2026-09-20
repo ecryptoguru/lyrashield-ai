@@ -61,8 +61,9 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
     <code>connect_required</code> like any other connectionless call.
   </p>
   <p>
-    Historical approval records stay readable for audit through the REST routes, which remain
-    available for workspace members:
+    Historical agent-action approval records stay readable for audit. Browser Fix PR requests
+    still use an exact-patch approval and the REST approval routes below. These routes do not
+    reactivate the retired remote MCP <code>PENDING</code> flow:
   </p>
   <ul>
     <li><code>GET /api/v1/agent-approvals?workspaceId=&lt;id&gt;</code> — list approvals</li>

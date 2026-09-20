@@ -5,7 +5,7 @@ import type { Output } from "../output.js"
 
 export async function handleUninstall(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
-    boolean: ["global", "project"],
+    boolean: ["global", "project", "dry-run"],
   })
   const [agentId] = parsed._
   if (!agentId) {
@@ -30,7 +30,7 @@ export async function handleUninstall(args: string[], output: Output): Promise<n
     return 2
   }
 
-  const result = await uninstallAgent(agent, { scope })
+  const result = await uninstallAgent(agent, { scope, dryRun: parsed["dry-run"] })
 
   if (output.json) {
     output.result(result)
@@ -39,5 +39,5 @@ export async function handleUninstall(args: string[], output: Output): Promise<n
     if (result.message) output.notice(result.message)
   }
 
-  return 0
+  return result.outcome === "FAILED" ? 1 : 0
 }

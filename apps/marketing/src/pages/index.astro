@@ -37,11 +37,11 @@ const faqItems = [
   },
   {
     q: "Does LyraShield automatically fix my code?",
-    a: "No. LyraShield creates approval-gated fix proposals that explain the issue and stage a server-generated patch. Every code change requires your explicit review and approval. Nothing auto-merges.",
+    a: "No. LyraShield records fix proposals and can stage a server-generated patch. Browser Fix PR execution requires explicit approval. A connected OAuth agent may run only the operations authorized by its browser-confirmed grant, with checks at execution. Nothing auto-merges.",
   },
   {
     q: "Is this a replacement for my other security scanners?",
-    a: "No. LyraShield complements specialist scanners rather than replacing them: SCA, secrets scanning, dependency checks, and repo review are coverage layers inside a wider release-assurance workflow that adds evidence states, approval-gated fix proposals, and retests. Specialist tools may still provide deeper coverage in their own category.",
+    a: "No. LyraShield complements specialist scanners rather than replacing them: SCA, secrets scanning, dependency checks, and repo review are coverage layers inside a wider release-assurance workflow that adds evidence states, fix proposals, and retests. Specialist tools may still provide deeper coverage in their own category.",
   },
   {
     q: "What is the Operational Evidence Vault?",
@@ -57,7 +57,7 @@ const faqItems = [
   },
   {
     q: "How is the Lite Check different from the full review?",
-    a: "The Lite Check passively reads an authorized public URL for a bounded set of surface signals. The full platform can review repositories, URLs, and APIs, retain control-level evidence, stage approval-gated fixes, run fresh retests, and produce a shareable release record.",
+    a: "The Lite Check passively reads an authorized public URL for a bounded set of surface signals. The full platform can review repositories, URLs, and APIs, retain control-level evidence, stage fix proposals, run fresh retests, and produce a shareable release record.",
   },
 ]
 

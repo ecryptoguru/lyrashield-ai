@@ -1,6 +1,6 @@
 # LyraShield AI — Litepaper
 
-## Version 1.0.0 — 2026-09-12
+## Version 1.0.1 — 2026-09-19
 
 > A short, public overview of LyraShield AI: what it does, who it is for, and how it earns trust. For the full product narrative see [`whitepaper.md`](./whitepaper.md); for the technical specification see [`yellowpaper.md`](./yellowpaper.md).
 
@@ -45,7 +45,7 @@ Both modes share the same engine and the same loop. Optional Cloud Sync moves se
 - **WebMCP Assurance** — 14 deterministic controls over browser-registered agent tool surfaces.
 - **AI App Security** — eight deterministic signals mapped to the OWASP Top 10 for LLM Applications (2025).
 - **Lite Check** — a free, passive, no-signup outside-in check of a public URL.
-- **Distribution** — CLI, MCP server, agent plugin for 26 client surfaces, a diff-aware GitHub Action, and a versioned public API.
+- **Distribution** — CLI, MCP server, 26 documented client workflows (including standalone CLI paths), a diff-aware GitHub Action, and a versioned public API. A documented workflow is not a verified installation on every client and platform.
 
 ## 5. Honest evidence states
 

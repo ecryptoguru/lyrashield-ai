@@ -1,6 +1,6 @@
 # LyraShield AI User Guide
 
-Last verified against the application code and open-registration deployment: 2026-09-02
+Last checked against the application code: 2026-09-19. Client-specific runtime and published-package acceptance remain separate checks.
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
@@ -512,7 +512,7 @@ Account deletion is reviewed before removal so billing, audit, security-evidence
 
 ## 22. CLI, MCP, and agent workflows
 
-LyraShield ships three ways to run checks from a coding agent, an editor, or a terminal, sharing one underlying API client so their behavior cannot drift apart.
+LyraShield supports local CLI workflows, MCP connections in compatible clients, and a GitHub Action for CI. The CLI and MCP package share the API client; each client still needs its own installation and runtime check.
 
 ### CLI
 
@@ -520,23 +520,23 @@ The `lyrashield` command-line tool (published on npm; the scoped alias `@lyrashi
 
 ```bash
 npx lyrashield login              # hosted PKCE OAuth login or workspace API key
-npx lyrashield connect codex      # configure and verify a supported coding agent
+npx lyrashield connect codex      # configure a supported coding agent
 npx lyrashield connections        # inspect saved credential and agent connection state
-npx lyrashield init                # detect installed coding agents and configure them
+npx lyrashield init                # configure detected coding agents
 npx lyrashield doctor              # check what's configured and what's missing
 npx lyrashield gate                # CI-friendly diff-aware security gate
 ```
 
-`login --oauth` opens hosted consent with PKCE, then saves tokens and the selected workspace to `~/.lyrashield/credentials.json` with `0o600` permissions. Failed login preserves existing credentials. `login` accepts an API key instead. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com`. Shared credential storage keeps refresh, logout, and profile changes consistent between CLI and MCP.
+`login --oauth` opens hosted consent with PKCE, then saves tokens and the selected workspace to `~/.lyrashield/credentials.json` with `0o600` permissions. Failed login preserves existing credentials. `login` accepts an API key instead. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com`. Shared credential storage keeps refresh, logout, and profile changes consistent between the local CLI and stdio MCP. A hosted OAuth client authenticates in that client and does not need this local login step.
 
-`init`/`install <agent>` choose an install strategy based on the agent. `packages/agent-registry` contains 30 entries and resolves them into 26 preferred client surfaces. CLI `0.2.11`, MCP `0.2.8` and Agent Plugin `0.1.27` require Node 24 or newer.
+`init` configures detected clients; `install <agent>` deliberately selects one client. `packages/agent-registry` contains 30 entries resolving to 26 preferred documented client workflows. The source CLI, MCP and plugin packages target Node 24 or newer. Check the installed package's published engine requirement until new package versions are released. A successful installer or `doctor` result does not prove the client loaded a tool; restart the client and make a read call.
 
 - **Agent Plugin package** — Cursor accepts the generated local plugin directly. OpenAI Codex, Claude Code, and GitHub Copilot require their marketplace install commands; the Codex installer registers `ecryptoguru/lyrashield-marketplace` before adding `lyrashield@lyrashield-ai`. Kiro uses the generated stdio entry through `.kiro/settings/mcp.json` or `~/.kiro/settings/mcp.json`; copying a plugin directory alone is not an install. Plugin files never inline a raw API key. VS Code stays on its config-file strategy.
-- **Config-file** — the registry provides 16 writable config variants; 13 are preferred client paths and three remain explicit legacy alternatives for plugin-preferred clients. The CLI merges into the existing file, never overwrites, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
+- **Config-file** — the registry describes supported client paths and formats, including explicit legacy alternatives for some plugin-preferred clients. The CLI updates its own entry while retaining unrelated settings, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
-- **Guided manual** — Devin, JetBrains AI & Junie, PiCode, OpenClaw, Goose, Aider, and Codebuff receive client-specific instructions. Pi core and Aider do not expose native MCP configuration and Codebuff does not document the previously claimed `.agents/mcp.json`; their supported LyraShield path is the standalone CLI until a reviewed native extension exists. Cline CLI reads `~/.cline/data/settings/cline_mcp_settings.json` with `CLINE_MCP_SETTINGS_PATH` as an override.
+- **Guided manual** — Devin, JetBrains AI & Junie, Pi, OpenClaw, Goose, Aider, and Codebuff receive client-specific instructions. Pi core and Aider use the standalone LyraShield CLI, not native MCP. Codebuff's adapter is read-only; it does not use the previously claimed `.agents/mcp.json`. Cline CLI reads `~/.cline/data/settings/cline_mcp_settings.json` with `CLINE_MCP_SETTINGS_PATH` as an override.
 
-`uninstall <agent>` removes the LyraShield entry from the chosen agent's config or plugin directory.
+`uninstall <agent>` removes the managed LyraShield entry through that client's installation strategy; inspect its dry-run preview before changing a client.
 
 Other commands mirror the dashboard and the MCP tools below: `scan`, `status`, `findings`, `explain <findingId>`, `fix-plan <findingId>`, `verify <findingId>`, `report`, `readiness`, `targets`, `targets remove <targetId>` (soft delete — history is retained and the plan cap slot is freed), and `rules add/remove/check <agent>` (writes or removes LyraShield's security policy in that agent's native rules format — `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others — inside a checksummed block so re-running never clobbers your own edits to the surrounding file). `check-diff` is the same fast, local, **advisory** heuristic as the MCP tool of the same purpose — not a full recorded scan. Every command supports `--json` for scripting, and `gate` exits non-zero when a finding at or above the configured severity is present, matching the GitHub Action's own gate semantics.
 
@@ -560,10 +560,10 @@ LyraShield exposes an MCP server for local editors and a hosted remote endpoint.
 
 #### Read tools
 
-- `lyrashield_list_workspaces` — list workspaces the API key can access;
+- `lyrashield_list_workspaces` — list workspaces the credential can access;
 - `lyrashield_list_targets` — list targets in a workspace;
 - `lyrashield_get_scan_status` — status and events for a scan;
-- `lyrashield_get_findings` — list findings with optional target or severity filters;
+- `lyrashield_get_findings` — list findings with target, scan, severity, status, or verification filters; use the returned cursor to continue a bounded result page;
 - `lyrashield_explain_finding` — full detail and plain-language explanation of a finding;
 - `lyrashield_generate_fix_plan` — assemble a remediation plan from a finding;
 - `lyrashield_get_launch_readiness` — retrieve the current scoped launch-readiness gate result (`READY`, `NOT_READY` or `INSUFFICIENT_EVIDENCE`);
