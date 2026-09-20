@@ -13,14 +13,14 @@ faq:
   - q: "Does SonarQube verify AI-generated code?"
     a: "Yes. SonarQube positions itself as an independent verification layer for AI-generated and human-written code, detecting bugs, vulnerabilities, code smells, and secrets. It applies deterministic static analysis. It does not, however, run a live agentic pentest or produce an immutable release-assurance record."
   - q: "Is LyraShield a code quality tool?"
-    a: "No. LyraShield focuses on security release assurance for AI-built apps: an agentic pentest, SCA, secrets, evidence states, and approval-gated fixes. It does not replace SonarQube for code quality, maintainability, duplication, or architectural analysis."
+    a: "No. LyraShield focuses on security release assurance for AI-built apps: an agentic pentest, SCA, secrets, evidence states, and reviewed fix proposals. It does not replace SonarQube for code quality, maintainability, duplication, or architectural analysis."
   - q: "Do SonarQube and LyraShield overlap?"
     a: "They overlap on security detection but solve different problems. SonarQube provides continuous static analysis and quality gates across 30-plus languages. LyraShield provides a focused release-assurance loop with proof of exploitability and an immutable evidence record. Many teams use both."
   - q: "Does SonarQube have an MCP server?"
     a: "Yes. SonarQube offers an MCP Server that connects its analysis engine to AI coding agents and custom pipelines. LyraShield also runs inside AI coding agents through the Model Context Protocol. Both can integrate with agent workflows, though with different goals."
 ---
 
-SonarQube is an established static analysis platform covering code quality and security across more than 40 languages, with quality gates, taint analysis, secrets detection, and AI-powered fix suggestions used by over 7 million developers. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with approval-gated fixes. SonarQube excels at continuous code quality and SAST; LyraShield closes the proof and release-decision gap.
+SonarQube is an established static analysis platform covering code quality and security across more than 40 languages, with quality gates, taint analysis, secrets detection, and AI-powered fix suggestions used by over 7 million developers. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with reviewed fix proposals. SonarQube excels at continuous code quality and SAST; LyraShield closes the proof and release-decision gap.
 
 This comparison is part of our broader [vibe coding security guide](/blog/vibe-coding-security-guide), which covers the full release-assurance methodology for AI-built applications.
 
@@ -40,7 +40,7 @@ LyraShield AI agrees with SonarQube's core insight: independent verification mat
 
 The LyraShield loop is target, review, evidence, fix, retest, report. A SAST finding, however precise, is a prediction about the code. The agentic pentest tests that prediction against the running app and records the result as an evidence state: detected, proven, or fixed and retested. That immutable record is the release artifact, not a quality gate. A quality gate tells you the code meets a standard; an evidence state tells you whether a specific finding was proven exploitable and whether the fix was verified.
 
-LyraShield runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), the same protocol SonarQube's MCP Server uses to reach agents. The difference is that LyraShield's checks are part of a release-assurance loop with approval-gated fixes, not continuous quality analysis. Fix proposals require a developer's approval before merging, and a mandatory retest closes each finding. This is a stronger constraint than a suggestion or a one-click fix.
+LyraShield runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), the same protocol SonarQube's MCP Server uses to reach agents. The difference is that LyraShield's checks are part of a release-assurance loop with reviewed fix proposals, not continuous quality analysis. Fix proposals require a developer's approval before merging, and a mandatory retest closes each finding. This is a stronger constraint than a suggestion or a one-click fix.
 
 For dependency risk, LyraShield uses SCA backed by sources like the [OSV database](https://osv.dev/). SonarQube does not currently provide deep SCA as a primary capability, so the two complement each other on supply-chain coverage. LyraShield emits SARIF so results can flow into existing tooling alongside SonarQube's findings.
 
@@ -66,7 +66,7 @@ For the detailed breakdown see the [SonarQube comparison page](/compare/sonarqub
 
 ## Why teams choose LyraShield for AI-built apps
 
-Teams choose LyraShield when a quality gate is not the same as a release decision. The agentic pentest proves whether a finding is real against the running app, the immutable evidence record gives reviewers and auditors something concrete, and approval-gated fixes keep a human accountable for every agent-proposed change. For apps where the code came from a coding agent and the team needs to sign off before production, that loop is the difference between a clean quality gate and a defensible release decision.
+Teams choose LyraShield when a quality gate is not the same as a release decision. The agentic pentest attempts to verify findings against an authorized running target and retains each result’s evidence state, the immutable evidence record gives reviewers and auditors something concrete, and reviewed fix proposals leave responsibility for code changes with the team. For apps where the code came from a coding agent and the team needs to sign off before production, that loop is the difference between a clean quality gate and a defensible release decision.
 
 SonarQube is a proven, broad verification layer with deep language coverage and a long track record. LyraShield does not try to replace it for code quality. The value is the focused loop: target, review, evidence, fix, retest, report. For an app whose code came from a coding agent, that loop is what turns a clean quality gate into a defensible release sign-off backed by proof.
 

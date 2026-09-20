@@ -19,9 +19,24 @@ describe("agent wizard connection snippets", () => {
     const wizard = buildAgentWizard("openai-codex-agent-plugin", "https://app.lyrashieldai.com")
 
     expect(wizard?.steps.some((step) => step.id === "config")).toBe(false)
-    expect(wizard?.steps.find((step) => step.id === "api-key")?.command).toBe(
-      "lyrashield login --oauth"
-    )
+    expect(wizard?.steps.find((step) => step.id === "api-key")?.command).toBeUndefined()
+    expect(wizard?.steps.find((step) => step.id === "api-key")?.summary).toContain("OAuth in")
+  })
+
+  it("uses standalone instructions for Aider and Pi", () => {
+    for (const agentId of ["aider", "picode"]) {
+      const wizard = buildAgentWizard(agentId, "https://app.lyrashieldai.com")
+      expect(wizard?.steps.some((step) => step.title.includes("MCP"))).toBe(false)
+      expect(wizard?.steps.find((step) => step.id === "verify")?.command).toBe(
+        "lyrashield check-diff"
+      )
+    }
+  })
+
+  it("includes manual plugin activation and honest client verification", () => {
+    const wizard = buildAgentWizard("kiro-agent-plugin", "https://app.lyrashieldai.com")
+    expect(wizard?.steps.find((step) => step.id === "config")?.summary).toContain(".mcp.kiro.json")
+    expect(wizard?.steps.find((step) => step.id === "verify")?.note).toContain("read-only")
   })
 
   it("uses Devin's MCP Marketplace instead of a fictitious local config file", () => {

@@ -7,7 +7,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for Zed — Setup Guide"
 const description =
   'Connect LyraShield to Zed editor. Add the MCP server under the context_servers key (not mcpServers) in Zed settings.json to enable inline security checks.'
-const updatedDate = "2026-07-31"
+const updatedDate = "2026-09-19"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
@@ -37,9 +37,9 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
   <h2>Install with the CLI (fastest)</h2>
   <p>
     Run <code>npx lyrashield install zed</code> from your project root. It detects Zed, writes the
-    correct config automatically, and never inlines your API key into a file you might commit. Add{" "}
+    current flat <code>command</code>, <code>args</code>, and <code>env</code> fields. Add{" "}
     <code>--dry-run</code> first to preview the change with no write, or run{" "}
-    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+    <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
   </p>
   <pre><code>npx lyrashield install zed</code></pre>
   <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
@@ -56,16 +56,27 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
   </p>
 
   <AgentSnippet agentId="zed" transport="stdio" />
+  <p>
+    Older Zed examples used nested <code>command.path</code>; the current
+    <a href="https://zed.dev/docs/ai/mcp">Zed MCP settings</a> use flat fields. Update a legacy entry through Zed settings rather than creating a second LyraShield server.
+  </p>
+
+  <h2>Remote HTTP alternative</h2>
+  <p>
+    Zed can connect to a remote URL without an Authorization header and start its OAuth flow.
+    Keep an existing stdio connection unless you choose to migrate.
+  </p>
+  <AgentSnippet agentId="zed" transport="remote-http" secondary />
 
   <h2>Verify the connection</h2>
   <p>
     Save <code>settings.json</code>. Open the Zed AI assistant panel and check that the lyrashield
-    context server appears in the active servers list. You can ask the assistant to list available
-    tools to confirm.
+    context server appears as active. Restart Zed, inspect the tool list and rules, then make a
+    read-only LyraShield call; a config file or doctor result alone does not prove connection.
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The{" "}
+    <strong>Local stdio requirements:</strong> Node.js 24+ and a local OAuth login or workspace API key. Remote OAuth does not require a local API key. The{" "}
     <code>@lyrashield/mcp</code> package is published on npm, so{" "}
     <code>npx -y @lyrashield/mcp@0.2.8</code> resolves directly.
   </div>

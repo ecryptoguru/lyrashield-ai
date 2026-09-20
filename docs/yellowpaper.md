@@ -1,6 +1,6 @@
 # LyraShield AI — Yellowpaper
 
-## Version 1.0.0 — 2026-09-12
+## Version 1.0.1 — 2026-09-19
 
 > The technical specification for LyraShield AI: system architecture, scan pipeline, coverage contracts, evidence integrity, tenancy, and distribution interfaces. Public-safe — provider internals, model identifiers, and operational cost data are deliberately excluded. For product narrative see [`whitepaper.md`](./whitepaper.md); for the short overview see [`litepaper.md`](./litepaper.md).
 
@@ -148,7 +148,7 @@ Every workspace query is explicitly scoped by `workspaceId`; request context tra
 
 ### 5.2 Authorization
 
-Role order: `OWNER > ADMIN > SECURITY_ADMIN > APPSEC_MANAGER > BILLING_ADMIN > DEVELOPER > MEMBER > EXTERNAL_PENTESTER > AUDITOR > VIEWER`. Consequential actions require permission plus a browser-confirmed connection grant bound to workflow, target, profile, and idempotency key; write-scoped API-key calls on the remote MCP endpoint are refused with `connect_required` and exact-input approval (single-use, expiry-aware, bound to action name and input hash) remains only for legacy nondelegated hosted credentials. Remote OAuth is read-only by default.
+Role order: `OWNER > ADMIN > SECURITY_ADMIN > APPSEC_MANAGER > BILLING_ADMIN > DEVELOPER > MEMBER > EXTERNAL_PENTESTER > AUDITOR > VIEWER`. Hosted MCP writes require a browser-confirmed OAuth connection grant bound to workspace, scopes, allowed operations, target scope, profiles, and expiry, plus a stable idempotency key. The server revalidates permission and the grant at execution. Nondelegated remote callers, including write-scoped API keys, receive `connect_required`; the former remote `PENDING`/`approvalId` flow is retired. Remote OAuth is read-only by default. Local stdio requests use their credential permissions without the hosted delegation gate.
 
 Platform administration sits outside workspace roles: a fixed email allowlist, verified `PLATFORM_OPERATOR` accounts, recent TOTP-stamped browser sessions, action-specific single-use elevation nonces, transaction-time authority revalidation, and atomic platform audit rows. Bearer credentials and workspace roles never cross this boundary.
 
@@ -204,14 +204,14 @@ Threat model covered: license forgery and tampering (signature over exact payloa
 
 ## 8. Distribution contracts
 
-| Surface                 | Contract                                                                                                                                                                                                                                                                                      |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lyrashield` CLI        | `login/use/doctor/install/init`, scan/finding/report commands, `check-diff`, `gate`; Node 24+                                                                                                                                                                                                 |
-| Gate exit codes         | `0` ready/no blocking findings · `1` not ready/blocking findings · `2` error — stable contract                                                                                                                                                                                                |
-| `@lyrashield/mcp`       | stdio server + remote Streamable HTTP endpoint with hosted OAuth; read tools by default; delegated writes revalidate membership, permission, scope, expiry, idempotency                                                                                                                       |
-| Agent plugin / registry | 30 registry entries resolving 26 preferred client surfaces across config-file, vendor-CLI, guided-manual, and plugin-package install paths                                                                                                                                                    |
-| GitHub Action           | Account-less, diff-aware gate on the user's runner; SARIF output; high-confidence WebMCP subset mirrors CLI rule IDs                                                                                                                                                                          |
-| Public API `/api/v1`    | Additive-only: no removed fields, renamed paths, changed status semantics, or narrowed request shapes; breaking changes ship as `/api/v2`; ≥90-day deprecation notice with OpenAPI `deprecated: true` and a documented migration path (full policy: [`api-stability.md`](./api-stability.md)) |
+| Surface              | Contract                                                                                                                                                                                                                                                                                      |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lyrashield` CLI     | `login/use/doctor/install/init`, scan/finding/report commands, `check-diff`, `gate`; Node 24+                                                                                                                                                                                                 |
+| Gate exit codes      | `0` ready/no blocking findings · `1` not ready/blocking findings · `2` error — stable contract                                                                                                                                                                                                |
+| `@lyrashield/mcp`    | stdio server + remote Streamable HTTP endpoint with hosted OAuth; read tools by default; delegated writes revalidate membership, permission, scope, expiry, idempotency                                                                                                                       |
+| Agent workflows      | 30 registry entries resolving 26 preferred documented client workflows across MCP and standalone CLI paths; installation strategies include config-file, vendor-CLI, guided-manual, and plugin-package paths. Documentation is not real-client verification.                                  |
+| GitHub Action        | Account-less, diff-aware gate on the user's runner; SARIF output; high-confidence WebMCP subset mirrors CLI rule IDs                                                                                                                                                                          |
+| Public API `/api/v1` | Additive-only: no removed fields, renamed paths, changed status semantics, or narrowed request shapes; breaking changes ship as `/api/v2`; ≥90-day deprecation notice with OpenAPI `deprecated: true` and a documented migration path (full policy: [`api-stability.md`](./api-stability.md)) |
 
 ## 9. Contract-version registry
 
