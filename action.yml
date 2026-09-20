@@ -22,12 +22,53 @@ inputs:
     description: "Checkout depth. 0 (full history) is required for accurate diff derivation."
     required: false
     default: "0"
+  recorded_scan:
+    description: "When 'true', submit a recorded Review Changes scan to the LyraShield API (POST /api/v1/scans) for the resolved base/head — the hosted, evidence-producing run. Requires api_key, workspace_id, and target_id. The local gate above stays advisory regardless."
+    required: false
+    default: "false"
+  api_key:
+    description: "Workspace write-scoped LyraShield API key (lsk_...). Required only when recorded_scan is 'true'."
+    required: false
+    default: ""
+  api_url:
+    description: "LyraShield API base URL for the recorded scan submission."
+    required: false
+    default: "https://app.lyrashieldai.com"
+  workspace_id:
+    description: "LyraShield workspace ID. Required only when recorded_scan is 'true'."
+    required: false
+    default: ""
+  target_id:
+    description: "LyraShield REPO target ID connected to this repository. Required only when recorded_scan is 'true'."
+    required: false
+    default: ""
+  recorded_scan_depth:
+    description: "Depth for the recorded Review Changes scan: quick, standard, or deep. Depth is always explicit — never inferred from the target."
+    required: false
+    default: "quick"
+  base_ref:
+    description: "Review Changes comparison base (branch or commit SHA) for the recorded scan. Defaults to the resolved diff base SHA."
+    required: false
+    default: ""
+  head_ref:
+    description: "Review Changes comparison head (branch or commit SHA) for the recorded scan. Defaults to the resolved diff head SHA."
+    required: false
+    default: ""
+
+outputs:
+  recorded_scan_id:
+    description: "ID of the recorded Review Changes scan when recorded_scan is enabled; empty otherwise."
+    value: ${{ steps.recorded.outputs.scan_id }}
 
 # This is a lightweight, diff-scoped CI gate that runs entirely in the
 # customer's runner with the customer's GITHUB_TOKEN — it does not call the
-# hosted LyraShield engine. It uses gitleaks for secret detection plus a set of
-# high-signal risky-pattern checks, and emits SARIF. For the full agentic scan,
-# connect the target in the LyraShield app
+# hosted LyraShield engine unless recorded_scan is explicitly enabled, in
+# which case it submits a recorded Review Changes scan (immutable diff-scope
+# execution plan) and reports the scan id; the hosted run executes
+# asynchronously on LyraShield. It uses gitleaks for secret detection plus a
+# set of high-signal risky-pattern checks, and emits SARIF. The SARIF upload
+# is a findings upload only — never a verification claim. For the full
+# agentic scan, connect the target in the LyraShield app
 # (or use the MCP server / REST API). All third-party actions are SHA-pinned
 # and the action requests no elevated permissions of its own; the calling job
 # controls the token scope (security-events: write is needed only to publish
@@ -243,6 +284,75 @@ runs:
       with:
         sarif_file: ${{ steps.gate.outputs.sarif_file }}
         category: lyrashield-diff-scan
+
+    - name: Submit recorded Review Changes scan
+      id: recorded
+      if: inputs.recorded_scan == 'true'
+      shell: bash
+      env:
+        API_KEY: ${{ inputs.api_key }}
+        API_URL: ${{ inputs.api_url }}
+        WORKSPACE_ID: ${{ inputs.workspace_id }}
+        TARGET_ID: ${{ inputs.target_id }}
+        DEPTH_INPUT: ${{ inputs.recorded_scan_depth }}
+        BASE_REF_INPUT: ${{ inputs.base_ref }}
+        HEAD_REF_INPUT: ${{ inputs.head_ref }}
+        BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+        HEAD_SHA: ${{ steps.diff.outputs.head_sha }}
+        REPOSITORY: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        # Recorded scans are the evidence-producing path: the API resolves the
+        # refs to immutable git object IDs and the server-owned execution plan
+        # binds them. The advisory gate above is unchanged either way.
+        if [ -z "$API_KEY" ] || [ -z "$WORKSPACE_ID" ] || [ -z "$TARGET_ID" ]; then
+          echo "::error::recorded_scan requires api_key, workspace_id, and target_id"
+          exit 1
+        fi
+        case "$(echo "$DEPTH_INPUT" | tr '[:upper:]' '[:lower:]')" in
+          quick) MODE="QUICK" ;;
+          standard) MODE="STANDARD" ;;
+          deep) MODE="DEEP" ;;
+          *) echo "::error::Invalid recorded_scan_depth (quick|standard|deep)"; exit 1 ;;
+        esac
+        BASE="${BASE_REF_INPUT:-$BASE_SHA}"
+        HEAD="${HEAD_REF_INPUT:-$HEAD_SHA}"
+        if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
+          echo "::error::recorded_scan requires a resolvable base/head for the Review Changes comparison"
+          exit 1
+        fi
+        echo "::add-mask::$API_KEY"
+        # Stable retry identity: rerunning the job for the same comparison
+        # returns the existing scan instead of billing a duplicate. git
+        # hash-object is portable across every hosted runner image.
+        IDEMPOTENCY_KEY="gha:$(printf '%s' "${REPOSITORY}:${BASE}:${HEAD}" | git hash-object --stdin)"
+        RESPONSE="$(mktemp)"
+        HTTP_CODE="$(curl -sS -o "$RESPONSE" -w '%{http_code}' \
+          -X POST "${API_URL%/}/api/v1/scans" \
+          -H "Authorization: Bearer $API_KEY" \
+          -H "Content-Type: application/json" \
+          -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
+          -d "$(jq -n \
+            --arg workspaceId "$WORKSPACE_ID" \
+            --arg targetId "$TARGET_ID" \
+            --arg mode "$MODE" \
+            --arg baseRef "$BASE" \
+            --arg headRef "$HEAD" \
+            '{workspaceId:$workspaceId,targetId:$targetId,goal:"CHECK_PR",mode:$mode,workflow:"REVIEW_CHANGES",baseRef:$baseRef,headRef:$headRef}')")"
+        if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+          SCAN_ID="$(jq -r '.data.id // empty' "$RESPONSE")"
+          if [ -z "$SCAN_ID" ]; then
+            echo "::error::recorded scan accepted but no scan id was returned"
+            exit 1
+          fi
+          echo "scan_id=$SCAN_ID" >> "$GITHUB_OUTPUT"
+          echo "::notice::Recorded Review Changes scan $SCAN_ID submitted (${API_URL%/}/dashboard — immutable diff $BASE...$HEAD, depth $MODE)"
+        else
+          CODE="$(jq -r '.error.code // empty' "$RESPONSE" 2>/dev/null || true)"
+          MSG="$(jq -r '.error.message // empty' "$RESPONSE" 2>/dev/null || true)"
+          echo "::error::Recorded scan submission failed ($HTTP_CODE): ${CODE:-unknown}${MSG:+ — $MSG}"
+          exit 1
+        fi
 
     - name: Enforce gate
       if: steps.gate.outputs.failed == '1'

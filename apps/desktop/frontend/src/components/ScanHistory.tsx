@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react"
 import { listScans } from "../lib/tauri"
-import type { ScanSummary } from "../lib/types"
+import type { ScanSummary, ScanWorkflow } from "../lib/types"
+
+function workflowLabel(workflow: ScanWorkflow): string {
+  return workflow === "REVIEW_CHANGES" ? "review changes" : "review target"
+}
 
 export function ScanHistory({ onOpen }: { onOpen: (scanId: string) => void }) {
   const [scans, setScans] = useState<ScanSummary[]>([])
@@ -56,7 +60,9 @@ export function ScanHistory({ onOpen }: { onOpen: (scanId: string) => void }) {
           >
             <span className="block break-all font-medium">{scan.target}</span>
             <span className="text-sm text-muted-foreground">
-              {scan.status} · {scan.findingCount} findings · {scan.startedAt}
+              {scan.status} · {scan.backend === "cloud" ? "cloud" : "local"} ·{" "}
+              {scan.workflow === "unknown" ? "workflow unknown" : workflowLabel(scan.workflow)} ·{" "}
+              {scan.mode} · {scan.findingCount} findings · {scan.startedAt}
             </span>
           </button>
         ))

@@ -6,11 +6,18 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use tauri::{AppHandle, Manager};
 
-const MIGRATIONS: &[(i64, &str, &str)] = &[(
-    1,
-    "create scans and findings tables",
-    include_str!("../sql/001_init.sql"),
-)];
+const MIGRATIONS: &[(i64, &str, &str)] = &[
+    (
+        1,
+        "create scans and findings tables",
+        include_str!("../sql/001_init.sql"),
+    ),
+    (
+        2,
+        "workflow and evidence projection columns",
+        include_str!("../sql/002_workflow_evidence.sql"),
+    ),
+];
 const MIGRATION_TABLE: &str = "CREATE TABLE IF NOT EXISTS _sqlx_migrations (
     version BIGINT PRIMARY KEY,
     description TEXT NOT NULL,
@@ -240,9 +247,8 @@ pub struct TestStorage {
 
 impl TestStorage {
     pub fn new_in_memory() -> Self {
-        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
-        conn.execute_batch(include_str!("../sql/001_init.sql"))
-            .expect("init test db");
+        let mut conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        migrate_database(&mut conn, MIGRATIONS).expect("migrate test db");
         Self {
             conn: Mutex::new(conn),
         }
@@ -307,13 +313,16 @@ pub async fn create_scan(
     scan_id: &str,
     target: &str,
     mode: &ScanMode,
+    workflow: &ScanWorkflow,
+    diff_base: Option<&str>,
+    diff_head: Option<&str>,
 ) -> Result<(), String> {
     let store = storage_for(app);
     let now = chrono::Utc::now().to_rfc3339();
     let mode_str = serde_json::to_string(mode).map_err(|e| e.to_string())?;
     store
         .execute(
-            "INSERT INTO scans (scan_id, target, mode, status, started_at, finding_count) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO scans (scan_id, target, mode, status, started_at, finding_count, workflow, backend, diff_base, diff_head) VALUES (?, ?, ?, ?, ?, ?, ?, 'local', ?, ?)",
             vec![
                 scan_id.into(),
                 target.into(),
@@ -321,6 +330,40 @@ pub async fn create_scan(
                 serde_json::Value::String("pending".into()),
                 now.into(),
                 0.into(),
+                workflow.as_str().into(),
+                diff_base.map(|s| JsonValue::String(s.to_string())).unwrap_or(JsonValue::Null),
+                diff_head.map(|s| JsonValue::String(s.to_string())).unwrap_or(JsonValue::Null),
+            ],
+        )
+        .await
+}
+
+/// Record a hosted Review Changes / Review Target scan submitted to
+/// LyraShield Cloud. Status `submitted` is honest: the run executes
+/// server-side and the desktop never fakes local progress or findings for it.
+pub async fn create_submitted_scan(
+    app: &AppHandle,
+    scan_id: &str,
+    target: &str,
+    mode: &ScanMode,
+    workflow: &ScanWorkflow,
+    diff_base: Option<&str>,
+    diff_head: Option<&str>,
+) -> Result<(), String> {
+    let store = storage_for(app);
+    let now = chrono::Utc::now().to_rfc3339();
+    let mode_str = serde_json::to_string(mode).map_err(|e| e.to_string())?;
+    store
+        .execute(
+            "INSERT INTO scans (scan_id, target, mode, status, started_at, finding_count, workflow, backend, diff_base, diff_head) VALUES (?, ?, ?, 'submitted', ?, 0, ?, 'cloud', ?, ?)",
+            vec![
+                scan_id.into(),
+                target.into(),
+                mode_str.into(),
+                now.into(),
+                workflow.as_str().into(),
+                diff_base.map(|s| JsonValue::String(s.to_string())).unwrap_or(JsonValue::Null),
+                diff_head.map(|s| JsonValue::String(s.to_string())).unwrap_or(JsonValue::Null),
             ],
         )
         .await
@@ -341,9 +384,11 @@ pub async fn persist_finding(
     scan_id: &str,
     finding: &Finding,
 ) -> Result<(), String> {
+    // `verified` stays a local-only flag — never the engine's own claim. The
+    // authoritative tier is `verification_state` (always DETECTED locally).
     storage_for(app)
         .execute(
-            "INSERT INTO findings (id, scan_id, severity, title, description, file_path, line_number, status, verified, detected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO findings (id, scan_id, severity, title, description, file_path, line_number, status, verified, detected_at, verification_state, evidence_pending, counterevidence, confidence_rationale, fix_verification, http_exchange_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             vec![
                 finding.id.clone().into(),
                 scan_id.into(),
@@ -353,11 +398,83 @@ pub async fn persist_finding(
                 finding.file_path.clone().map(JsonValue::String).unwrap_or(JsonValue::Null),
                 finding.line_number.map(|line| JsonValue::Number(line.into())).unwrap_or(JsonValue::Null),
                 finding.status.clone().into(),
-                finding.verified.into(),
+                false.into(),
                 finding.detected_at.clone().into(),
+                VERIFICATION_STATE_DETECTED.into(),
+                finding.evidence_pending.into(),
+                finding.counterevidence.clone().map(JsonValue::String).unwrap_or(JsonValue::Null),
+                finding.confidence_rationale.clone().map(JsonValue::String).unwrap_or(JsonValue::Null),
+                finding.fix_verification.clone().map(JsonValue::String).unwrap_or(JsonValue::Null),
+                serde_json::to_string(&finding.http_exchange_ids)
+                    .map(JsonValue::String)
+                    .unwrap_or(JsonValue::Null),
             ],
         )
         .await
+}
+
+/// Stamp the engine run contract observed for a scan (run.json
+/// `schema_version`). Unknown stays NULL — never backfilled with a guess.
+pub async fn set_scan_contract_version(
+    app: &AppHandle,
+    scan_id: &str,
+    contract_version: &str,
+) -> Result<(), String> {
+    storage_for(app)
+        .execute(
+            "UPDATE scans SET contract_version = ? WHERE scan_id = ? AND contract_version IS NULL",
+            vec![contract_version.into(), scan_id.into()],
+        )
+        .await
+}
+
+/// Merge richer engine evidence fields onto a persisted finding (matched by
+/// the run's finding id). Engine attestation only — verification_state stays
+/// DETECTED and evidence_pending is raised, never cleared, by this path.
+pub async fn update_finding_evidence(
+    app: &AppHandle,
+    scan_id: &str,
+    finding_id: &str,
+    evidence: &FindingEvidenceUpdate,
+) -> Result<(), String> {
+    storage_for(app)
+        .execute(
+            "UPDATE findings SET evidence_pending = 1, counterevidence = COALESCE(?, counterevidence), confidence_rationale = COALESCE(?, confidence_rationale), fix_verification = COALESCE(?, fix_verification), http_exchange_ids = COALESCE(?, http_exchange_ids) WHERE scan_id = ? AND id = ?",
+            vec![
+                evidence
+                    .counterevidence
+                    .clone()
+                    .map(JsonValue::String)
+                    .unwrap_or(JsonValue::Null),
+                evidence
+                    .confidence_rationale
+                    .clone()
+                    .map(JsonValue::String)
+                    .unwrap_or(JsonValue::Null),
+                evidence
+                    .fix_verification
+                    .clone()
+                    .map(JsonValue::String)
+                    .unwrap_or(JsonValue::Null),
+                evidence
+                    .http_exchange_ids
+                    .clone()
+                    .map(JsonValue::String)
+                    .unwrap_or(JsonValue::Null),
+                scan_id.into(),
+                finding_id.into(),
+            ],
+        )
+        .await
+}
+
+/// Evidence fields merged from the engine run artifacts (untrusted content,
+/// attestation only — see `update_finding_evidence`).
+pub struct FindingEvidenceUpdate {
+    pub counterevidence: Option<String>,
+    pub confidence_rationale: Option<String>,
+    pub fix_verification: Option<String>,
+    pub http_exchange_ids: Option<String>,
 }
 
 pub async fn set_finding_count(
@@ -534,6 +651,7 @@ pub async fn save_scan_result(
         ScanStatus::Cancelled => "cancelled",
         ScanStatus::Running => "running",
         ScanStatus::Pending => "pending",
+        ScanStatus::Submitted => "submitted",
     };
     // For legacy callers without app, we still persist via test storage; in production this path is not used.
     let _ = (scan_id, target, mode_str, status_str, now, findings);
@@ -545,7 +663,7 @@ pub async fn list_scans(app: &AppHandle) -> Result<Vec<ScanSummary>, String> {
     let store = storage_for(app);
     let rows = store
         .select(
-            "SELECT scan_id, target, mode, status, started_at, completed_at, finding_count FROM scans ORDER BY started_at DESC",
+            "SELECT scan_id, target, mode, workflow, backend, contract_version, diff_base, diff_head, status, started_at, completed_at, finding_count FROM scans ORDER BY started_at DESC",
             vec![],
         )
         .await?;
@@ -560,7 +678,7 @@ pub async fn get_scan_detail(app: &AppHandle, scan_id: &str) -> Result<ScanDetai
     let store = storage_for(app);
     let rows = store
         .select(
-            "SELECT scan_id, target, mode, status, started_at, completed_at, finding_count FROM scans WHERE scan_id = ?",
+            "SELECT scan_id, target, mode, workflow, backend, contract_version, diff_base, diff_head, status, started_at, completed_at, finding_count FROM scans WHERE scan_id = ?",
             vec![scan_id.into()],
         )
         .await?;
@@ -568,7 +686,7 @@ pub async fn get_scan_detail(app: &AppHandle, scan_id: &str) -> Result<ScanDetai
     let detail = row_to_detail(row)?;
     let finding_rows = store
         .select(
-            "SELECT id, severity, title, description, file_path, line_number, status, verified, detected_at FROM findings WHERE scan_id = ?",
+            "SELECT id, severity, title, description, file_path, line_number, status, verified, detected_at, verification_state, evidence_pending, counterevidence, confidence_rationale, fix_verification, http_exchange_ids FROM findings WHERE scan_id = ?",
             vec![scan_id.into()],
         )
         .await?;
@@ -604,6 +722,32 @@ pub async fn get_scan_detail(app: &AppHandle, scan_id: &str) -> Result<ScanDetai
                 .and_then(|v| v.as_i64())
                 .map(|n| n != 0)
                 .unwrap_or(false),
+            // Missing data stays unknown-renderable: legacy rows default to
+            // DETECTED with no attestation, never a fabricated tier.
+            verification_state: fr
+                .get("verification_state")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| VERIFICATION_STATE_DETECTED.to_string()),
+            evidence_pending: fr
+                .get("evidence_pending")
+                .and_then(|v| v.as_i64())
+                .map(|n| n != 0)
+                .unwrap_or(false),
+            counterevidence: get_string(&fr, "counterevidence")
+                .ok()
+                .filter(|s| !s.is_empty()),
+            confidence_rationale: get_string(&fr, "confidence_rationale")
+                .ok()
+                .filter(|s| !s.is_empty()),
+            fix_verification: get_string(&fr, "fix_verification")
+                .ok()
+                .filter(|s| !s.is_empty()),
+            http_exchange_ids: fr
+                .get("http_exchange_ids")
+                .and_then(|v| v.as_str())
+                .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
+                .unwrap_or_default(),
             detected_at: get_string(&fr, "detected_at")?,
         });
     }
@@ -611,12 +755,36 @@ pub async fn get_scan_detail(app: &AppHandle, scan_id: &str) -> Result<ScanDetai
         scan_id: detail.scan_id,
         target: detail.target,
         mode: detail.mode,
+        workflow: detail.workflow,
+        backend: detail.backend,
+        contract_version: detail.contract_version,
+        diff_base: detail.diff_base,
+        diff_head: detail.diff_head,
         status: detail.status,
         started_at: detail.started_at,
         completed_at: detail.completed_at,
         finding_count: detail.finding_count,
         findings,
     })
+}
+
+fn stored_status(raw: &str) -> ScanStatus {
+    match raw {
+        "pending" => ScanStatus::Pending,
+        "running" => ScanStatus::Running,
+        "completed" => ScanStatus::Completed,
+        "failed" => ScanStatus::Failed,
+        "cancelled" => ScanStatus::Cancelled,
+        "submitted" => ScanStatus::Submitted,
+        _ => ScanStatus::Failed,
+    }
+}
+
+fn opt_string(row: &HashMap<String, JsonValue>, key: &str) -> Option<String> {
+    row.get(key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
 }
 
 fn row_to_summary(row: &HashMap<String, JsonValue>) -> Result<ScanSummary, String> {
@@ -634,18 +802,23 @@ fn row_to_summary(row: &HashMap<String, JsonValue>) -> Result<ScanSummary, Strin
         .and_then(|v| v.as_i64())
         .unwrap_or(0) as usize;
     let mode = ScanMode::from_stored(&mode_str);
-    let status = match status_str.as_str() {
-        "pending" => ScanStatus::Pending,
-        "running" => ScanStatus::Running,
-        "completed" => ScanStatus::Completed,
-        "failed" => ScanStatus::Failed,
-        "cancelled" => ScanStatus::Cancelled,
-        _ => ScanStatus::Failed,
-    };
+    let status = stored_status(&status_str);
+    // v1 rows have NULL workflow — stored as the column default
+    // 'REVIEW_TARGET' on migration; truly unparseable values surface as
+    // Unknown rather than a fabricated workflow.
+    let workflow = opt_string(row, "workflow")
+        .map(|w| ScanWorkflow::from_stored(&w))
+        .unwrap_or_default();
+    let backend = opt_string(row, "backend").unwrap_or_else(|| "local".to_string());
     Ok(ScanSummary {
         scan_id,
         target,
         mode,
+        workflow,
+        backend,
+        contract_version: opt_string(row, "contract_version"),
+        diff_base: opt_string(row, "diff_base"),
+        diff_head: opt_string(row, "diff_head"),
         status,
         started_at,
         completed_at,
@@ -658,14 +831,14 @@ fn row_to_detail(row: &HashMap<String, JsonValue>) -> Result<ScanDetail, String>
         scan_id: get_string(row, "scan_id")?,
         target: get_string(row, "target")?,
         mode: ScanMode::from_stored(&get_string(row, "mode")?),
-        status: match get_string(row, "status")?.as_str() {
-            "pending" => ScanStatus::Pending,
-            "running" => ScanStatus::Running,
-            "completed" => ScanStatus::Completed,
-            "failed" => ScanStatus::Failed,
-            "cancelled" => ScanStatus::Cancelled,
-            _ => ScanStatus::Failed,
-        },
+        workflow: opt_string(row, "workflow")
+            .map(|w| ScanWorkflow::from_stored(&w))
+            .unwrap_or_default(),
+        backend: opt_string(row, "backend").unwrap_or_else(|| "local".to_string()),
+        contract_version: opt_string(row, "contract_version"),
+        diff_base: opt_string(row, "diff_base"),
+        diff_head: opt_string(row, "diff_head"),
+        status: stored_status(&get_string(row, "status")?),
         started_at: get_string(row, "started_at")?,
         completed_at: row
             .get("completed_at")
@@ -895,7 +1068,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(count, 1);
+        assert_eq!(count, super::MIGRATIONS.len() as i64);
         writer.execute_batch("ROLLBACK").unwrap();
     }
 
@@ -967,7 +1140,7 @@ mod tests {
                 conn.query_row("SELECT count(*) FROM _sqlx_migrations", [], |row| row
                     .get::<_, i64>(0))
                     .unwrap(),
-                1
+                super::MIGRATIONS.len() as i64
             );
         }
         let mut conn = open_database(&path).unwrap();
@@ -993,7 +1166,7 @@ mod tests {
             conn.query_row("SELECT count(*) FROM _sqlx_migrations", [], |row| row
                 .get::<_, i64>(0))
                 .unwrap(),
-            1
+            MIGRATIONS.len() as i64
         );
         drop(conn);
         let mut conn = open_database(&path).unwrap();
@@ -1008,7 +1181,8 @@ mod tests {
         );
         let next = [
             MIGRATIONS[0],
-            (2, "next", "CREATE TABLE next_version (id INTEGER);"),
+            MIGRATIONS[1],
+            (3, "next", "CREATE TABLE next_version (id INTEGER);"),
         ];
         migrate_database(&mut conn, &next).unwrap();
         migrate_database(&mut conn, &next).unwrap();
@@ -1016,7 +1190,7 @@ mod tests {
             conn.query_row("SELECT count(*) FROM _sqlx_migrations", [], |row| row
                 .get::<_, i64>(0))
                 .unwrap(),
-            2
+            3
         );
     }
 
@@ -1025,7 +1199,7 @@ mod tests {
         for alteration in [
             "UPDATE _sqlx_migrations SET checksum=x'00'",
             "UPDATE _sqlx_migrations SET success=0",
-            "UPDATE _sqlx_migrations SET version=99",
+            "UPDATE _sqlx_migrations SET version=99 WHERE version=2",
         ] {
             let tmp = tempfile::tempdir().unwrap();
             let path = tmp.path().join("lyrashield.db");
@@ -1086,5 +1260,64 @@ mod tests {
         };
         let s = serde_json::to_string(&ev).unwrap();
         assert!(!s.contains("sk-"), "event should not contain secret");
+    }
+
+    #[test]
+    fn v1_database_migrates_and_old_rows_stay_readable() {
+        // Simulate a shipped v1 database: apply only the initial schema through
+        // the same ledger, then run the full migration set. Old rows keep
+        // readable defaults — workflow REVIEW_TARGET (pre-workflow scans were
+        // snapshot reviews), verification DETECTED, evidence fields NULL
+        // (unknown, never guessed).
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        super::migrate_database(&mut conn, &super::MIGRATIONS[..1]).unwrap();
+        conn.execute(
+            "INSERT INTO scans (scan_id, target, mode, status, started_at, finding_count) VALUES ('s1','/repo','\"standard\"','completed','now',1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO findings (id, scan_id, severity, title, status, verified, detected_at) VALUES ('f1','s1','HIGH','t','OPEN',1,'2026-09-19')",
+            [],
+        )
+        .unwrap();
+        super::migrate_database(&mut conn, super::MIGRATIONS).unwrap();
+
+        let (workflow, backend, contract): (String, String, Option<String>) = conn
+            .query_row(
+                "SELECT workflow, backend, contract_version FROM scans WHERE scan_id='s1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(workflow, "REVIEW_TARGET");
+        assert_eq!(backend, "local");
+        assert!(contract.is_none(), "unknown contract stays NULL");
+
+        let (vstate, pending, counter): (String, i64, Option<String>) = conn
+            .query_row(
+                "SELECT verification_state, evidence_pending, counterevidence FROM findings WHERE id='f1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(vstate, "DETECTED");
+        assert_eq!(pending, 0);
+        assert!(counter.is_none());
+
+        // And the new write path accepts the extended fields.
+        conn.execute(
+            "INSERT INTO findings (id, scan_id, severity, title, status, verified, detected_at, verification_state, evidence_pending, counterevidence, http_exchange_ids) VALUES ('f2','s1','HIGH','t2','OPEN',0,'2026-09-20','DETECTED',1,'ce','[\"ex-1\"]')",
+            [],
+        )
+        .unwrap();
+        let pending2: i64 = conn
+            .query_row(
+                "SELECT evidence_pending FROM findings WHERE id='f2'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending2, 1);
     }
 }

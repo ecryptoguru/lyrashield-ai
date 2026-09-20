@@ -6,7 +6,12 @@
     "status": "completed",
     "started_at": "2026-09-19",
     "completed_at": "2026-09-19",
-    "finding_count": 2
+    "finding_count": 2,
+    "workflow": "REVIEW_TARGET",
+    "backend": "local",
+    "contract_version": null,
+    "diff_base": null,
+    "diff_head": null
   },
   "detail": {
     "scan_id": "scan-a",
@@ -26,7 +31,13 @@
         "line_number": 7,
         "status": "DETECTED",
         "verified": false,
-        "detected_at": "2026-09-19"
+        "detected_at": "2026-09-19",
+        "verification_state": "DETECTED",
+        "evidence_pending": false,
+        "counterevidence": null,
+        "confidence_rationale": null,
+        "fix_verification": null,
+        "http_exchange_ids": []
       },
       {
         "id": "f1",
@@ -37,9 +48,20 @@
         "line_number": 7,
         "status": "DETECTED",
         "verified": false,
-        "detected_at": "2026-09-19"
+        "detected_at": "2026-09-19",
+        "verification_state": "DETECTED",
+        "evidence_pending": false,
+        "counterevidence": null,
+        "confidence_rationale": null,
+        "fix_verification": null,
+        "http_exchange_ids": []
       }
-    ]
+    ],
+    "workflow": "REVIEW_TARGET",
+    "backend": "local",
+    "contract_version": null,
+    "diff_base": null,
+    "diff_head": null
   },
   "events": [
     {
@@ -64,7 +86,13 @@
         "line_number": 7,
         "status": "DETECTED",
         "verified": false,
-        "detected_at": "2026-09-19"
+        "detected_at": "2026-09-19",
+        "verification_state": "DETECTED",
+        "evidence_pending": false,
+        "counterevidence": null,
+        "confidence_rationale": null,
+        "fix_verification": null,
+        "http_exchange_ids": []
       }
     },
     {

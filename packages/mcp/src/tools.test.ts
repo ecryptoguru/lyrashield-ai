@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import {
   createScanTargetTool,
+  createRunPrScanTool,
   createGetFindingsTool,
   createGetLaunchReadinessTool,
   createCreateReportTool,
@@ -146,6 +147,134 @@ describe("createScanTargetTool", () => {
     expect(result.isError).toBe(true)
     expect(result.content[0]!.text).toContain("local stdio MCP server")
     expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  describe("recorded Review Changes workflow", () => {
+    it("forwards workflow, both refs, and attachmentIds verbatim to POST /api/scans", async () => {
+      mockFetch.mockResolvedValueOnce(makeApiResponse({ id: "scan-9", status: "QUEUED" }))
+      const tool = createScanTargetTool(context)
+      const result = await tool.handler({
+        workspaceId: "ws-1",
+        targetId: "t-1",
+        workflow: "REVIEW_CHANGES",
+        baseRef: "main",
+        headRef: "feature/42",
+        attachmentIds: ["att_01"],
+      })
+      expect(result.isError).toBeUndefined()
+      const request = mockFetch.mock.calls[0]![1] as RequestInit
+      expect(JSON.parse(String(request.body))).toMatchObject({
+        workflow: "REVIEW_CHANGES",
+        baseRef: "main",
+        headRef: "feature/42",
+        attachmentIds: ["att_01"],
+      })
+    })
+
+    it("rejects headRef without baseRef before any API call", async () => {
+      const tool = createScanTargetTool(context)
+      const result = await tool.handler({
+        workspaceId: "ws-1",
+        targetId: "t-1",
+        headRef: "feature/42",
+      })
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toContain("headRef requires baseRef")
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it("rejects refs without the REVIEW_CHANGES workflow", async () => {
+      const tool = createScanTargetTool(context)
+      const result = await tool.handler({
+        workspaceId: "ws-1",
+        targetId: "t-1",
+        workflow: "REVIEW_TARGET",
+        baseRef: "main",
+      })
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toContain("REVIEW_CHANGES")
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it("requires baseRef for REVIEW_CHANGES", async () => {
+      const tool = createScanTargetTool(context)
+      const result = await tool.handler({
+        workspaceId: "ws-1",
+        targetId: "t-1",
+        workflow: "REVIEW_CHANGES",
+      })
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toContain("requires a baseRef")
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it("rejects an unknown workflow without inventing one", async () => {
+      const tool = createScanTargetTool(context)
+      const result = await tool.handler({
+        workspaceId: "ws-1",
+        targetId: "t-1",
+        workflow: "PENTEST",
+      })
+      expect(result.isError).toBe(true)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it("passes AUTHENTICATED_ASSESSMENT through so the server answers SCAN_WORKFLOW_UNAVAILABLE", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        headers: new Headers(),
+        json: async () => ({
+          success: false,
+          error: { code: "SCAN_WORKFLOW_UNAVAILABLE", message: "not wired" },
+        }),
+      })
+      const tool = createScanTargetTool(context)
+      const result = await tool.handler({
+        workspaceId: "ws-1",
+        targetId: "t-1",
+        workflow: "AUTHENTICATED_ASSESSMENT",
+      })
+      expect(result.isError).toBe(true)
+      const request = mockFetch.mock.calls[0]![1] as RequestInit
+      expect(JSON.parse(String(request.body))).toMatchObject({
+        workflow: "AUTHENTICATED_ASSESSMENT",
+      })
+    })
+  })
+})
+
+describe("createRunPrScanTool", () => {
+  it("records a Review Changes run when base/head refs are given", async () => {
+    mockFetch.mockResolvedValueOnce(makeApiResponse({ id: "scan-rc", status: "QUEUED" }))
+    const tool = createRunPrScanTool(context)
+    const result = await tool.handler({
+      workspaceId: "ws-1",
+      targetId: "t-1",
+      workflow: "REVIEW_CHANGES",
+      baseRef: "main",
+      headRef: "feature/42",
+    })
+    expect(result.isError).toBeUndefined()
+    const request = mockFetch.mock.calls[0]![1] as RequestInit
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      goal: "CHECK_PR",
+      workflow: "REVIEW_CHANGES",
+      baseRef: "main",
+      headRef: "feature/42",
+    })
+  })
+
+  it("stays a snapshot CHECK_PR scan without refs — never a silent diff", async () => {
+    mockFetch.mockResolvedValueOnce(makeApiResponse({ id: "scan-snap", status: "QUEUED" }))
+    const tool = createRunPrScanTool(context)
+    const result = await tool.handler({ workspaceId: "ws-1", targetId: "t-1" })
+    expect(result.isError).toBeUndefined()
+    const request = mockFetch.mock.calls[0]![1] as RequestInit
+    const body = JSON.parse(String(request.body))
+    expect(body.goal).toBe("CHECK_PR")
+    expect(body).not.toHaveProperty("workflow")
+    expect(body).not.toHaveProperty("baseRef")
   })
 })
 

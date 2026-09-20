@@ -23,6 +23,12 @@ export interface ScanInput {
   /** Review Changes comparison refs (branch names or full SHAs). */
   baseRef?: string
   headRef?: string
+  /**
+   * Immutable input-evidence references recorded into the server-owned
+   * execution plan. IDs name previously staged workspace artifacts — never
+   * host paths — and are validated again at the staging boundary.
+   */
+  attachmentIds?: string[]
 }
 
 export interface GetScanOptions {
