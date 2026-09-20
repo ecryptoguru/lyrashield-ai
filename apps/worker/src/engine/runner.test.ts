@@ -103,10 +103,38 @@ it("reads the owned singular threat-model artifact before any legacy plural file
   await writeFile(join(outputDir, "threat_model.json"), canonical, "utf8")
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(join(outputDir, "threat_models.json"), "{}", "utf8")
+  // Canonical evidence is bound to the producer's run manifest.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(
+    join(outputDir, "run.json"),
+    JSON.stringify({
+      schema_version: "1.1",
+      run_id: "scan-1",
+      result_manifest: {
+        schema_version: 1,
+        artifacts: {
+          "threat_model.json": {
+            path: "threat_model.json",
+            bytes: Buffer.byteLength(canonical),
+            sha256: createHash("sha256").update(canonical).digest("hex"),
+          },
+        },
+      },
+    })
+  )
 
   const output = await readEngineOutput(outputDir)
 
   expect(output.artifacts.threatModelsRaw).toBe(canonical)
+})
+
+it("rejects an unbound canonical threat model without a 1.1 run receipt", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-unbound-evidence-"))
+  cleanupPaths.push(outputDir)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_model.json"), JSON.stringify({ models: [] }))
+  const output = await readEngineOutput(outputDir)
+  expect(output.artifacts.threatModelsRaw).toBeNull()
 })
 
 it("rejects a threat model that is missing or differs from the run manifest", async () => {
@@ -128,7 +156,10 @@ it("rejects a threat model that is missing or differs from the run manifest", as
     },
   }
   // eslint-disable-next-line security/detect-non-literal-fs-filename
-  await writeFile(join(outputDir, "run.json"), JSON.stringify({ result_manifest: manifest }))
+  await writeFile(
+    join(outputDir, "run.json"),
+    JSON.stringify({ schema_version: "1.1", run_id: "scan-1", result_manifest: manifest })
+  )
 
   const missing = await readEngineOutput(outputDir)
   expect(missing.artifacts.threatModelsRaw).toBeNull()

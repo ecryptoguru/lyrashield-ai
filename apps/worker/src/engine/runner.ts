@@ -1046,14 +1046,18 @@ export async function readEngineOutput(outputDir: string): Promise<{
     "threat_model.json",
     MAX_ENGINE_THREAT_MODEL_BYTES
   )
-  let verifiedThreatModelRaw = threatModelRaw
+  // The singular owned artifact only exists under run.json 1.1. An absent or
+  // older receipt cannot bind its bytes; legacy plural evidence is separate.
+  let verifiedThreatModelRaw = runJsonRaw || threatModelRaw === undefined ? threatModelRaw : null
   if (runJsonRaw) {
     try {
       const run = JSON.parse(runJsonRaw) as {
         schema_version?: unknown
         result_manifest?: { schema_version?: unknown; artifacts?: Record<string, unknown> }
       }
-      if (run.schema_version === "1.1" || run.result_manifest !== undefined) {
+      if (run.schema_version !== "1.1" && threatModelRaw !== undefined) {
+        verifiedThreatModelRaw = null
+      } else if (run.schema_version === "1.1" || run.result_manifest !== undefined) {
         const entry = run.result_manifest?.artifacts?.["threat_model.json"] as
           { path?: unknown; bytes?: unknown; sha256?: unknown } | undefined
         if (entry !== undefined || threatModelRaw !== undefined) {
