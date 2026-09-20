@@ -629,3 +629,7 @@ export * from "./scan-execution-plan"
 export * from "./scan-attachments"
 export * from "./retest-profile"
 export * from "./plain-language"
+// The attachment module shipped in 5c1aa8a3 without a barrel export — the db
+// service imports it through the package root.
+export * from "./scan-attachments"
+export * from "./scan-quality"

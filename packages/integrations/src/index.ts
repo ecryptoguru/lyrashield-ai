@@ -29,6 +29,42 @@ export {
   type NotificationChannelSender,
 } from "./notifications"
 
+export {
+  CONNECTOR_PROVIDERS,
+  capConnectorOutput,
+  ConnectorOutputError,
+  type ConnectorCredential,
+  type ConnectorInvocationContext,
+  type ConnectorProvider,
+  type ConnectorTool,
+  type ConnectorToolResult,
+} from "./connectors/types"
+export {
+  CONNECTOR_TOOLS,
+  getConnectorTool,
+  listConnectorTools,
+  connectorToolResource,
+} from "./connectors/registry"
+export { githubConnectorTools, GitHubConnectorError } from "./connectors/github"
+export {
+  slackConnectorTools,
+  slackApi,
+  exchangeSlackOAuthCode,
+  getSlackAuthorizeUrl,
+  SlackConnectorError,
+  SLACK_READ_METHODS,
+  SLACK_CONNECT_SCOPES,
+  type SlackReadMethod,
+  type SlackOAuthExchangeResult,
+} from "./connectors/slack"
+export {
+  evaluateConnectorAdmission,
+  getConnectorAdmission,
+  type ConnectorAdmissionDecision,
+  type ConnectorAdmissionMode,
+  type ConnectorAdmissionReason,
+} from "./connectors/admission"
+
 export { getRedis, closeRedis } from "./redis"
 export {
   getScanQueue,

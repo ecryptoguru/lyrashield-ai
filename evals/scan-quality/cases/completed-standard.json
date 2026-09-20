@@ -1,0 +1,79 @@
+{
+  "id": "completed-standard",
+  "title": "Completed Standard engine scan with mixed verification tiers and engine-declared coverage",
+  "note": "Stored evidence for a completed engine-backed run: deterministic receipts plus model-declared scoped coverage. Engine-declared receipts are counted separately and never become measured outcomes.",
+  "evidence": {
+    "scan": {
+      "status": "COMPLETED",
+      "mode": "STANDARD",
+      "determinismMode": "default",
+      "durationMs": 609000,
+      "llmRequestCount": 189
+    },
+    "receipts": [
+      { "scanner": "sast", "controlId": "vibe-01", "status": "COMPLETED" },
+      { "scanner": "sast", "controlId": "vibe-02", "status": "COMPLETED" },
+      { "scanner": "secrets", "controlId": "vibe-21", "status": "COMPLETED" },
+      {
+        "scanner": "sca",
+        "controlId": "vibe-30",
+        "status": "PARTIAL",
+        "reason": "registry timeout"
+      },
+      {
+        "scanner": "engine",
+        "controlId": "engine-scope:auth-flow",
+        "status": "COMPLETED",
+        "metadata": { "declaredBy": "engine_model" }
+      },
+      {
+        "scanner": "engine",
+        "controlId": "engine-gap:0:coverage_limit",
+        "status": "PARTIAL",
+        "reason": "declared gap",
+        "metadata": { "declaredBy": "engine_runtime" }
+      },
+      {
+        "scanner": "connector",
+        "controlId": "connector:github.get_repository",
+        "status": "COMPLETED",
+        "metadata": { "declaredBy": "connector_runtime" }
+      }
+    ],
+    "findings": [
+      { "verificationStatus": "DETECTED", "severity": "HIGH" },
+      { "verificationStatus": "DETECTED", "severity": "MEDIUM" },
+      { "verificationStatus": "DETECTED", "severity": "LOW" },
+      { "verificationStatus": "VALIDATED", "severity": "HIGH" },
+      { "verificationStatus": "VERIFIED", "severity": "CRITICAL" },
+      { "verificationStatus": "INCONCLUSIVE", "severity": "MEDIUM" }
+    ],
+    "manifestChecksum": "ebfa3fb0ba19d97d8d9393432f8dbe37078b4bcf0367a7b91c21fe54a78e5687",
+    "ingestionWarnings": [],
+    "attachments": { "count": 1, "totalBytes": 2048 }
+  },
+  "expect": {
+    "facts.scanStatus": "COMPLETED",
+    "facts.scanMode": "STANDARD",
+    "facts.deterministicRun": false,
+    "facts.llmRequests": 189,
+    "facts.findings.total": 6,
+    "facts.findings.byVerificationStatus.DETECTED": 3,
+    "facts.findings.byVerificationStatus.VALIDATED": 1,
+    "facts.findings.byVerificationStatus.VERIFIED": 1,
+    "facts.findings.validatedCount": 1,
+    "facts.findings.verifiedCount": 1,
+    "facts.findings.nonConclusiveCount": 1,
+    "facts.coverage.receiptsTotal": 7,
+    "facts.coverage.byStatus.COMPLETED": 5,
+    "facts.coverage.byStatus.PARTIAL": 2,
+    "facts.coverage.engineDeclaredReceipts": 2,
+    "facts.coverage.connectorReceipts": 1,
+    "facts.evidence.manifestPresent": true,
+    "facts.evidence.manifestChecksum": "ebfa3fb0ba19d97d8d9393432f8dbe37078b4bcf0367a7b91c21fe54a78e5687",
+    "facts.evidence.ingestionWarningCount": 0,
+    "facts.evidence.attachmentCount": 1,
+    "estimates.verifiedFindingRatio.value": 0.16666666666666666,
+    "estimates.assessedReceiptRatio.value": 0.7142857142857143
+  }
+}

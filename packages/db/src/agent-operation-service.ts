@@ -11,6 +11,15 @@ export interface ClaimAgentOperationParams {
   authorizationVersion?: number
   /** OAuth connection principal. Mutually exclusive with apiKeyId/userId. */
   connectionId?: string
+  /**
+   * External provider connection principal (an Integration row, e.g. a GitHub
+   * App installation or Slack workspace connection). Connector invocations
+   * bind idempotency to the connection's stable identity, so a reconnect that
+   * preserves the row also preserves operation identity. The
+   * `connectionId` column stays null — that FK references agent_connections
+   * only.
+   */
+  connectorPrincipal?: string
   /** API-key principal identity (the key id). */
   apiKeyId?: string
   /** Browser-session principal id (the user id). */
@@ -30,7 +39,10 @@ export type PrincipalIdentity = {
  * session is never fabricated into a connection.
  */
 export function resolveOperationPrincipal(
-  params: Pick<ClaimAgentOperationParams, "connectionId" | "apiKeyId" | "userId">
+  params: Pick<
+    ClaimAgentOperationParams,
+    "connectionId" | "connectorPrincipal" | "apiKeyId" | "userId"
+  >
 ): PrincipalIdentity {
   if (params.connectionId) {
     return {
@@ -38,6 +50,12 @@ export function resolveOperationPrincipal(
       principalId: params.connectionId,
       connectionId: params.connectionId,
     }
+  }
+  // An outbound-connector invocation is an OAuth-bound principal too: the
+  // provider grant lives on the Integration row, and principalId carries its
+  // namespaced id. `connectionId` stays null (FK to agent_connections only).
+  if (params.connectorPrincipal) {
+    return { principalType: "OAUTH_CONNECTION", principalId: params.connectorPrincipal }
   }
   if (params.apiKeyId) return { principalType: "API_KEY", principalId: params.apiKeyId }
   if (params.userId) return { principalType: "BROWSER_SESSION", principalId: params.userId }

@@ -3,9 +3,9 @@ import { logger } from "@lyrashield/logger"
 import { createHmac, createSign, timingSafeEqual as cryptoTimingSafeEqual } from "crypto"
 import { getRedis } from "./redis"
 
-const GITHUB_API_BASE = "https://api.github.com"
+export const GITHUB_API_BASE = "https://api.github.com"
 
-const GITHUB_HEADERS = {
+export const GITHUB_HEADERS = {
   Accept: "application/vnd.github+json",
   "X-GitHub-Api-Version": "2022-11-28",
 } as const
@@ -51,11 +51,20 @@ export function createAppJWT(): string {
  * that carry a Retry-After (secondary rate limit). A 403 WITHOUT Retry-After is
  * an auth/permission error and is NOT retried. Honors Retry-After, else backs
  * off exponentially (capped).
+ *
+ * Exported for the read-only outbound connector tools (connectors/github.ts);
+ * callers must keep it on GET/HEAD paths — the retry policy assumes idempotent
+ * requests.
  */
-async function githubFetch(url: string, init: RequestInit, retries = 3): Promise<Response> {
+export async function githubFetch(
+  url: string,
+  init: RequestInit,
+  retries = 3,
+  fetchFn: typeof fetch = fetch
+): Promise<Response> {
   let attempt = 0
   while (true) {
-    const res = await fetch(url, {
+    const res = await fetchFn(url, {
       ...init,
       signal: init.signal ?? AbortSignal.timeout(30_000),
     })

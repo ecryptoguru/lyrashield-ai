@@ -37,6 +37,7 @@ const COMMANDS: Record<string, CommandThunk> = {
   scan: () => import("./commands/scan.js").then((m) => m.handleScan),
   "pr-scan": () => import("./commands/pr-scan.js").then((m) => m.handlePrScan),
   status: () => import("./commands/status.js").then((m) => m.handleStatus),
+  quality: () => import("./commands/quality.js").then((m) => m.handleQuality),
   findings: () => import("./commands/findings.js").then((m) => m.handleFindings),
   explain: () => import("./commands/explain.js").then((m) => m.handleExplain),
   "fix-plan": () => import("./commands/fix-plan.js").then((m) => m.handleFixPlan),
@@ -76,6 +77,7 @@ Commands:
   scan                 Start a security scan [--base <ref> --head <ref> for Review Changes]
   pr-scan              Start a PR-focused scan (alias for scan --goal CHECK_PR; --base/--head record a Review Changes run)
   status [scanId]      Show scan status
+  quality <scanId>     Show the scan's measured evidence-quality surface
   findings             List findings
   explain <findingId>  Explain a finding
   fix-plan <findingId> Generate a fix plan

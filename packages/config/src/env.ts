@@ -265,6 +265,13 @@ const envSchema = z
     SLACK_WEBHOOK_URL: z.string().optional().or(z.literal("")),
     DISCORD_WEBHOOK_URL: z.string().optional().or(z.literal("")),
     NOTIFICATION_FROM_EMAIL: z.string().optional().or(z.literal("")),
+    // Outbound connectors (read-only workspace integrations feeding scan
+    // context). Off by default: admission requires an explicit canary
+    // allowlist or a reviewed public rollout. Never a write path.
+    SLACK_CLIENT_ID: z.string().optional().or(z.literal("")),
+    SLACK_CLIENT_SECRET: z.string().optional().or(z.literal("")),
+    OUTBOUND_CONNECTOR_ADMISSION: z.enum(["off", "canary", "public"]).default("off"),
+    CONNECTOR_CANARY_WORKSPACE_IDS: z.string().optional().default(""),
 
     // Billing (Sprint 10)
     POLAR_ACCESS_TOKEN: z.string().optional().or(z.literal("")),

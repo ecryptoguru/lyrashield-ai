@@ -842,6 +842,9 @@ importers:
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../logger
+      '@lyrashield/security':
+        specifier: workspace:*
+        version: link:../security
       '@lyrashield/types':
         specifier: workspace:*
         version: link:../types

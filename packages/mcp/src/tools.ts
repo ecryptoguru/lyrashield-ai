@@ -62,6 +62,12 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     destructiveHint: false,
     openWorldHint: false,
   },
+  lyrashield_get_scan_quality: {
+    title: "Get scan evidence quality",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
   lyrashield_check_diff: {
     title: "Check a diff",
     readOnlyHint: true,
@@ -665,6 +671,36 @@ export function createGetScanStatusTool(context: ToolHandlerContext): McpTool {
   }
 }
 
+export function createGetScanQualityTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_get_scan_quality",
+    mutating: false,
+    description:
+      "Get a scan's measured evidence-quality surface: stored-evidence facts (finding verification tiers, coverage receipts, manifest checksum), labeled heuristics, and the per-surface parity table. Read-only; nothing here is a model claim or accuracy guarantee.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", description: "Workspace ID" },
+        scanId: { type: "string", description: "Scan ID" },
+      },
+      required: ["workspaceId", "scanId"],
+    },
+    handler: async (args) => {
+      try {
+        const params = new URLSearchParams({ workspaceId: args.workspaceId as string })
+        const data = await apiCall(
+          context,
+          "GET",
+          `/api/scans/${encodeURIComponent(args.scanId as string)}/quality?${params.toString()}`
+        )
+        return makeToolResult(data)
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Workflow tools — the developer loop (pre-PR check → scan → explain → fix →
 // verify → recap). Honest scoping: check_diff and the recap are advisory
@@ -1098,6 +1134,7 @@ export function createAllTools(context: ToolHandlerContext): McpTool[] {
     createListWorkspacesTool(context),
     createListTargetsTool(context),
     createGetScanStatusTool(context),
+    createGetScanQualityTool(context),
     // Core
     createScanTargetTool(context),
     createGetFindingsTool(context),

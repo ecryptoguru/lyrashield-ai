@@ -107,8 +107,9 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     )
     const body = await readJson(res)
     const tools = (body.result as { tools?: Array<{ name: string }> })?.tools ?? []
-    expect(tools.length).toBe(14)
+    expect(tools.length).toBe(15)
     expect(tools.map((t) => t.name)).toContain("lyrashield_run_pr_scan")
+    expect(tools.map((t) => t.name)).toContain("lyrashield_get_scan_quality")
   })
 
   it("runs a read-only tool", async () => {
