@@ -54,7 +54,7 @@ const faqItems = [
   },
   {
     q: "Is there a CLI, or do I have to hand-edit config files?",
-    a: "There's a CLI. lyrashield (also published as the scoped alias @lyrashield/cli) is on npm — first run npx lyrashield login --oauth, then run npx lyrashield init to detect installed agents and configure them in one command. npx lyrashield doctor checks what is already set up. The CLI writes the same config shown in each guide, so the guides double as a reference.",
+    a: "The lyrashield CLI is on npm. For local stdio, sign in with npx lyrashield login --oauth, then run npx lyrashield init to prepare detected clients. Hosted OAuth happens in the client; marketplace and standalone paths have separate activation steps. npx lyrashield doctor checks local state, while an actual client read call verifies the connection.",
   },
   {
     q: "What is the Agent Plugin?",
@@ -150,15 +150,15 @@ npx lyrashield init</code></pre>
     through its documented local, marketplace, or MCP settings path.
   </p>
   <p>
-    <code>npx lyrashield init</code> copies the package directly for Cursor and OpenAI Codex. It
-    prints marketplace commands for Claude Code and GitHub Copilot, and the documented MCP merge
+    <code>npx lyrashield init</code> can copy the package for detected Cursor installations. Codex
+    registers through its marketplace manager; Claude Code and GitHub Copilot require marketplace steps, and Kiro requires the documented MCP merge
     for Kiro. Other clients use their config-file, vendor-CLI, or guided-manual path. Full detail is in the{" "}
     <a href="/docs/integrations/agent-plugins">Agent Plugins guide</a>.
   </p>
   <div class="callout">
-    <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>,
-    the local MCP server reads the selected workspace credential from{" "}
-    <code>~/.lyrashield/credentials.json</code>. API keys remain a CI and non-OAuth-client fallback;
+    <strong>No credential in committed files:</strong> For local stdio, after <code>npx lyrashield login --oauth</code>,
+    the MCP server reads the selected workspace credential from{" "}
+    <code>~/.lyrashield/credentials.json</code>. Hosted OAuth does not need that local file. API keys remain a CI and non-OAuth-client fallback;
     do not commit either credential.
   </div>
   <div class="nav-cards">

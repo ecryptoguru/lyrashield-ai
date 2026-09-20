@@ -17,7 +17,7 @@ faq:
     a: "Use the includeTools array in the server entry to allow only the tools you need, such as scan, lyrashield_list_targets, and lyrashield_get_findings. Set trust to false so the agent prompts before running a tool. Combine includeTools with the mcp.allowed policy list for a second layer of control."
 ---
 
-Fastest path: run `npx lyrashield init` to detect Gemini CLI and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference.
+For a local stdio setup, configure the server in Gemini CLI settings and authenticate through the local LyraShield CLI. `lyrashield doctor` checks the local setup, but a Gemini tool call is needed to prove client discovery. A remote HTTP connection has a separate authentication path.
 
 Secure AI generated apps from your terminal by connecting Gemini CLI to LyraShield AI through MCP, running bounded checks without leaving the CLI, and enforcing the same policy in a diff aware GitHub Action. The server loads from `settings.json` under `mcpServers` and supports local stdio via `npx -y @lyrashield/mcp@0.2.8` plus remote HTTP with a bearer key.
 
@@ -84,7 +84,7 @@ Gemini CLI expands `$VAR_NAME` and `${VAR_NAME}` references in MCP environment v
 
 ## 3. Verify the connection in Gemini CLI
 
-Restart Gemini CLI and run `gemini mcp list` or ask "list MCP tools". You should see `lyrashield` with `scan` and `lyrashield_get_findings`. Run a status call: `gemini mcp call lyrashield lyrashield_get_scan_status`. If auth fails, ensure the credential var is exported in the shell that launched `gemini` (see the gotcha above for the naming rule). If tools do not appear, check `mcp.allowed` includes your server names and that `includeTools` does not hide them. For troubleshooting, the [Gemini CLI GitHub repo](https://github.com/google-gemini/gemini-cli) issues show common env visibility problems, and the [MCP spec](https://modelcontextprotocol.io/specification/2025-03-26) explains transport negotiation.
+Restart Gemini CLI and run `gemini mcp list`, then ask Gemini to call `lyrashield_list_targets`. Confirm the returned workspace before starting a scan. If local authentication fails, check the credential source inherited by the server; if tools do not appear, check `mcp.allowed` and `includeTools`. Gemini reads project guidance from `GEMINI.md` by default. Use a different filename only when `context.fileName` in settings explicitly includes it, as documented in the [Gemini CLI context guide](https://geminicli.com/docs/cli/gemini-md/).
 
 ## 4. Run an inline check from the CLI
 

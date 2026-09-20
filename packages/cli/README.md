@@ -1,4 +1,4 @@
-# LyraShield CLI 0.2.11
+# LyraShield CLI 0.2.12
 
 The `lyrashield` command-line interface installs, configures, and drives LyraShield scans from a terminal or CI pipeline.
 

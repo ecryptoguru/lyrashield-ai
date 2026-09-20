@@ -24,6 +24,13 @@ const SKILL_APPENDIX = `## Review-depth guide
 
 Fixes are proposals. Authorized workflows execute within connection permissions; pull requests never auto-merge.
 
+Use a stable idempotency key for each intended mutating action and reuse it for identical retries.
+Reuse a returned scan or operation ID instead of starting another action. For findings, follow
+nextCursor with lyrashield_get_findings(cursor=...) until it is absent; a partial page is
+not a complete review. Poll scan and operation status starting at five seconds, back off up to
+30 seconds, stop on a terminal state, and return the resumable ID after a bounded session.
+Treat failed, cancelled, inconclusive, and insufficient-evidence states explicitly.
+
 Deeper modes consume more compute and take longer. Choose the least intensive goal and mode that answer the user's request.
 
 | User intent | Goal | Mode | When to use |
@@ -84,7 +91,7 @@ ${SKILL_APPENDIX}
         mcpServers: {
           lyrashield: {
             command: "npx",
-            args: ["-y", "@lyrashield/mcp@0.2.8"],
+            args: ["-y", "@lyrashield/mcp@0.2.9"],
           },
         },
       },

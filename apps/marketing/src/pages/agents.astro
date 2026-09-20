@@ -11,21 +11,21 @@ const description = agentOnboarding.description
 const buildDate = buildDateFor("src/pages/agents.astro", "src/lib/agent-onboarding.ts")
 
 const answerFirst =
-  "LyraShield runs as an MCP server inside 26 coding agents including Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro. The agent can request a review of an authorized target and read the findings back with their evidence state. Every fix proposal is approval-gated, so nothing reaches your repository without your explicit review. Setup is one command: npx lyrashield init."
+  `LyraShield documents ${agentOnboarding.clients.length} coding-agent workflows. Most connect through MCP; Aider and Pi use the standalone CLI or CI path. Availability and setup differ by client, and the integration labels below show the evidence behind each claim. Read-only tools can retrieve recorded findings; hosted writes run only within a browser-confirmed connection grant and are checked again at execution.`
 
 const howToSteps = [
   {
     "@type": "HowToStep" as const,
     position: 1,
-    name: "Sign in with OAuth",
-    text: `Run ${agentOnboarding.commands[0]} to select a workspace and save the local credential.`,
+    name: "Choose a client workflow",
+    text: "Use the matching integration guide and check its support tier, transport, and activation steps.",
     url: `${pageUrl}#setup`,
   },
   {
     "@type": "HowToStep" as const,
     position: 2,
-    name: "Install the Agent Plugin",
-    text: `Run ${agentOnboarding.commands[1]} to detect and configure your coding agent.`,
+    name: "Configure and authenticate",
+    text: "Use client-hosted OAuth when supported; local stdio flows use the LyraShield CLI credential store or an API key.",
     url: `${pageUrl}#setup`,
   },
   {
@@ -38,8 +38,8 @@ const howToSteps = [
   {
     "@type": "HowToStep" as const,
     position: 4,
-    name: "Use review tools with approval",
-    text: "Read-only tools are available after authentication; mutations require write scope and explicit human approval.",
+    name: "Verify in the client",
+    text: "Restart the client, inspect its tool list and rules, and make a read-only call. Hosted writes require a scoped connection grant and execution-time checks.",
     url: `${pageUrl}#safety`,
   },
 ]
@@ -69,9 +69,8 @@ const jsonLd = [
     "@type": "HowTo",
     name: "Set up LyraShield for your coding agent",
     description:
-      "Start with OAuth, then run the Agent Plugin installer. Read-only tools are available after authentication; mutations need a write scope and human out-of-band approval.",
+      "Select a documented client workflow, authenticate through the supported method, and verify a read-only tool call in that client.",
     step: howToSteps,
-    totalTime: "PT2M",
   },
   {
     "@context": "https://schema.org",
@@ -152,7 +151,7 @@ const jsonLd = [
   <section class="px-4 py-12 sm:px-6 lg:px-8" id="setup">
     <div class="mx-auto max-w-5xl">
       <h2 class="font-mono text-sm uppercase tracking-[0.12em] text-text-muted" data-reveal>
-        Two-command setup
+        Local stdio setup
       </h2>
       <div
         class="mt-6 overflow-hidden rounded-xl border border-border bg-bg-raised"
@@ -164,43 +163,37 @@ const jsonLd = [
         ></pre>
       </div>
       <p class="mt-4 max-w-2xl text-sm text-text-muted" data-reveal>
-        Log in with OAuth first, then run the init command to detect and configure your agent.
+        These commands prepare local stdio integrations. Hosted OAuth starts inside a supported client; standalone Aider and Pi use CLI or CI checks. Follow the client guide for activation and verification.
       </p>
-      {/* Real numbered markup matching the HowTo schema's four steps 1:1. The
-          schema previously described four steps (OAuth, install, choose agent,
-          use tools with approval) with nothing on the page rendered as an
-          actual <ol> — Google's HowTo/list-snippet feature wants the visible
-          markup and the schema to correspond, not just the schema alone. */}
       <ol class="mt-8 space-y-4 border-t border-border pt-8" data-reveal-group>
         <li class="flex gap-3" data-reveal>
           <span class="font-mono text-sm text-accent">1</span>
           <span class="text-sm text-text-muted">
-            <span class="font-medium text-text">Sign in with OAuth</span> — run{" "}
-            <code class="rounded bg-bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-text">{agentOnboarding.commands[0]}</code>{" "}
-            to select a workspace and save the local credential.
+            <span class="font-medium text-text">Choose a client workflow</span> — use the
+            matching <a href="#clients" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">integration guide</a> and check its support label.
           </span>
         </li>
         <li class="flex gap-3" data-reveal>
           <span class="font-mono text-sm text-accent">2</span>
           <span class="text-sm text-text-muted">
-            <span class="font-medium text-text">Install the Agent Plugin</span> — run{" "}
-            <code class="rounded bg-bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-text">{agentOnboarding.commands[1]}</code>{" "}
-            to detect and configure your coding agent.
+            <span class="font-medium text-text">Configure and authenticate</span> — use the client's
+            documented MCP or standalone path. Hosted OAuth runs in the client; local stdio uses
+            the CLI credential store or an API key.
           </span>
         </li>
         <li class="flex gap-3" data-reveal>
           <span class="font-mono text-sm text-accent">3</span>
           <span class="text-sm text-text-muted">
-            <span class="font-medium text-text">Choose your supported coding agent</span> — use the
-            matching <a href="#clients" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">integration guide</a> for your client.
+            <span class="font-medium text-text">Check activation</span> — restart the client,
+            inspect its discovered tools and rules, and make a read-only call.
           </span>
         </li>
         <li class="flex gap-3" data-reveal>
           <span class="font-mono text-sm text-accent">4</span>
           <span class="text-sm text-text-muted">
-            <span class="font-medium text-text">Use review tools with approval</span> — read-only
-            tools are available after authentication; mutations require write scope and{" "}
-            <a href="#safety" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">explicit human approval</a>.
+            <span class="font-medium text-text">Use scoped review tools</span> — hosted writes require
+            a browser-confirmed grant and execution-time checks.{" "}
+            <a href="#safety" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">Read the safety model</a>.
           </span>
         </li>
       </ol>
@@ -210,13 +203,13 @@ const jsonLd = [
   <section class="px-4 py-12 sm:px-6 lg:px-8" id="clients">
     <div class="mx-auto max-w-5xl">
       <h2 class="font-mono text-sm uppercase tracking-[0.12em] text-text-muted" data-reveal>
-        Supported coding agents ({agentOnboarding.clients.length})
+        Documented client workflows ({agentOnboarding.clients.length})
       </h2>
       <p class="mt-4 max-w-2xl leading-7 text-text-muted" data-reveal>
         <code class="rounded bg-bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-text"
           >npx lyrashield init</code
-        > detects which of these you have installed and configures each one. The badge says what setup
-        looks like for that client; every name links to its own guide.
+        > detects supported local clients and prepares eligible integrations. Marketplace activation,
+        hosted authentication, and standalone workflows have additional client-specific steps.
       </p>
       {
         agentOnboarding.clientGroups.map((group) => (
@@ -236,6 +229,7 @@ const jsonLd = [
                   >
                     <span class="font-semibold text-text">{client.name}</span>
                     <span class="text-xs text-text-muted">{client.strategyLabel}</span>
+                    <span class="text-xs text-text-muted">{client.supportTier} · {client.evidence.replaceAll("_", " ").toLowerCase()} evidence</span>
                   </a>
                 </li>
               ))}

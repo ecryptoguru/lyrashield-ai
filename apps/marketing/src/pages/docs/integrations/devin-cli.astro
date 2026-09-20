@@ -6,8 +6,8 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for Devin CLI — Setup Guide"
 const description =
-  "Connect LyraShield to Devin CLI (Cognition). Configure .devin/config.local.json with the mcpServers object for stdio, then manage servers with devin mcp add."
-const updatedDate = "2026-08-07"
+  "Connect LyraShield to Devin CLI using its current dedicated MCP config files, local stdio, or remote HTTP with OAuth."
+const updatedDate = "2026-09-19"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
@@ -27,8 +27,8 @@ const jsonLd: unknown[] = [
       {
         "@type": "HowToStep",
         position: 1,
-        name: "Open .devin/config.local.json",
-        text: "Open or create .devin/config.local.json in your project root. This file is gitignored.",
+        name: "Open .devin/mcp_config.local.json",
+        text: "Open or create .devin/mcp_config.local.json in your project root for Devin CLI v3000.3 or later.",
       },
       {
         "@type": "HowToStep",
@@ -59,27 +59,38 @@ const jsonLd: unknown[] = [
   <h1>Devin CLI</h1>
   <p>
     Devin CLI (by Cognition, separate from Devin's web application) reads MCP server configuration
-    from <code>.devin/config.local.json</code> in your project root. This file is gitignored and
-    uses a <code>mcpServers</code> object. Devin CLI supports stdio transport only.
+    from <code>.devin/mcp_config.local.json</code> in your project root for v3000.3 and later.
+    This file is gitignored and uses a <code>mcpServers</code> object. Devin CLI also supports
+    remote HTTP and OAuth.
   </p>
 
   <h2>Install with the CLI (fastest)</h2>
   <p>
     Run <code>npx lyrashield install devin-cli</code> from your project root. It detects Devin CLI,
-    writes the correct config automatically, and never inlines your API key into a file you might
-    commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
-    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+    writes the current dedicated config. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
   </p>
   <pre><code>npx lyrashield install devin-cli</code></pre>
   <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
 
   <h2>Local stdio setup</h2>
   <p>
-    Add the following to <code>.devin/config.local.json</code>. Create the file if it does not
+    Add the following to <code>.devin/mcp_config.local.json</code>. Create the file if it does not
     exist. You can also manage servers with <code>devin mcp add</code>.
   </p>
 
   <AgentSnippet agentId="devin-cli" transport="stdio" />
+  <p>
+    Devin CLI versions before v3000.3 stored <code>mcpServers</code> in
+    <code>.devin/config.local.json</code> or another main config file. Current Devin migrates
+    those entries on startup. Inspect the migrated entry before adding a second server.
+    Project-shared and user-level alternatives are <code>.devin/mcp_config.json</code> and
+    <code>~/.config/devin/mcp_config.json</code>.
+  </p>
+
+  <h2>Remote HTTP alternative</h2>
+  <p>Devin CLI supports Streamable HTTP and OAuth. Use <code>devin mcp login lyrashield</code> after adding the URL.</p>
+  <AgentSnippet agentId="devin-cli" transport="remote-http" secondary />
 
   <div class="callout">
     <strong>Managing servers:</strong> Use <code>devin mcp add|login|enable|disable</code> to
@@ -95,7 +106,7 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace API key. The{" "}
+    <strong>Local stdio requirements:</strong> Node.js 24+ and a local OAuth login or workspace API key. Remote OAuth does not require a local API key. The{" "}
     <code>@lyrashield/mcp</code> package is published on npm, so{" "}
     <code>npx -y @lyrashield/mcp@0.2.8</code> resolves directly.
   </div>
