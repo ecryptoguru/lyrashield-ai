@@ -339,6 +339,14 @@ export function ScanScreen({ onScanStarted, onBack }: Props) {
                   {w.label}
                 </button>
               ))}
+              <button
+                disabled
+                aria-disabled="true"
+                title={URL_TARGET_UNAVAILABLE_REASON}
+                className="rounded-md border border-border px-3 py-1.5 text-sm opacity-50"
+              >
+                URL
+              </button>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
               {WORKFLOW_OPTIONS.find((w) => w.value === workflow)?.hint}

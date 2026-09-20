@@ -16,6 +16,8 @@ use tokio::process::{Child, Command};
 // per-line length, per-stream total bytes, and event count; an engine that
 // exceeds the budget is hostile or malfunctioning and gets killed.
 const MAX_STREAM_BYTES: usize = 32 * 1024 * 1024;
+// Match the worker's bounded threat-model reader; valid writer output can exceed 1 MiB.
+const MAX_THREAT_MODEL_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_LINE_BYTES: usize = 64 * 1024;
 const MAX_STREAM_EVENTS: usize = 50_000;
 
@@ -1105,7 +1107,7 @@ fn has_bound_threat_model(run_dir: &std::path::Path, run: &serde_json::Value) ->
     let Some(expected_bytes) = entry["bytes"].as_u64() else {
         return false;
     };
-    if expected_bytes > 1_048_576 {
+    if expected_bytes > MAX_THREAT_MODEL_BYTES {
         return false;
     }
     let path = run_dir.join("threat_model.json");
@@ -1129,9 +1131,14 @@ fn has_bound_threat_model(run_dir: &std::path::Path, run: &serde_json::Value) ->
         && document["run_id"] == run["run_id"]
         && document.get("error").is_none()
         && document["models"].as_array().is_some_and(|models| {
-            models
-                .iter()
-                .any(|model| model["target"].is_string() && model["content"].is_string())
+            models.iter().any(|model| {
+                model["target"]
+                    .as_str()
+                    .is_some_and(|target| !target.trim().is_empty())
+                    && model["content"]
+                        .as_str()
+                        .is_some_and(|content| !content.trim().is_empty())
+            })
         })
 }
 
@@ -1769,6 +1776,18 @@ mod tests {
             }}}
         });
         assert!(super::has_bound_threat_model(run_dir.path(), &run));
+        let mut large: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        let mut model = large["models"][0].clone();
+        model["content"] = serde_json::json!("a".repeat(64_000));
+        large["models"] = serde_json::json!(vec![model; 20]);
+        let large_bytes = serde_json::to_vec(&large).unwrap();
+        assert!(large_bytes.len() > 1_048_576);
+        std::fs::write(run_dir.path().join("threat_model.json"), &large_bytes).unwrap();
+        run["result_manifest"]["artifacts"]["threat_model.json"]["bytes"] =
+            serde_json::json!(large_bytes.len());
+        run["result_manifest"]["artifacts"]["threat_model.json"]["sha256"] =
+            serde_json::json!(format!("{:x}", sha2::Sha256::digest(&large_bytes)));
+        assert!(super::has_bound_threat_model(run_dir.path(), &run));
         let mut errored: serde_json::Value = serde_json::from_slice(bytes).unwrap();
         errored["models"] = serde_json::json!([]);
         errored["error"] = serde_json::json!("threat model mirror unreadable");
@@ -1778,6 +1797,15 @@ mod tests {
             serde_json::json!(errored_bytes.len());
         run["result_manifest"]["artifacts"]["threat_model.json"]["sha256"] =
             serde_json::json!(format!("{:x}", sha2::Sha256::digest(&errored_bytes)));
+        assert!(!super::has_bound_threat_model(run_dir.path(), &run));
+        let mut blank: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        blank["models"][0]["content"] = serde_json::json!("  \n  ");
+        let blank_bytes = serde_json::to_vec(&blank).unwrap();
+        std::fs::write(run_dir.path().join("threat_model.json"), &blank_bytes).unwrap();
+        run["result_manifest"]["artifacts"]["threat_model.json"]["bytes"] =
+            serde_json::json!(blank_bytes.len());
+        run["result_manifest"]["artifacts"]["threat_model.json"]["sha256"] =
+            serde_json::json!(format!("{:x}", sha2::Sha256::digest(&blank_bytes)));
         assert!(!super::has_bound_threat_model(run_dir.path(), &run));
         std::fs::write(run_dir.path().join("threat_model.json"), b"changed").unwrap();
         assert!(!super::has_bound_threat_model(run_dir.path(), &run));

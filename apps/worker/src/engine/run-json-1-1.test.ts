@@ -291,6 +291,41 @@ describe("run.json 1.1 golden fixture", () => {
     expect(result.ingestionIssues.some((issue) => issue.includes("run_id mismatch"))).toBe(true)
   })
 
+  it("does not present a blank model as usable threat evidence", () => {
+    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), {
+      ...artifacts(),
+      threatModelsRaw: JSON.stringify({
+        schema_version: "lyrashield-threat-model/1.0",
+        generated_at: "2026-09-20 00:00:00 UTC",
+        run_id: "fixture-run-1-1",
+        models: [{ target: "https://app.example.com", content: "  \n  " }],
+      }),
+    })
+
+    expect(result.threatModels).toBeNull()
+    expect(result.ingestionIssues.some((issue) => issue.includes("no usable models"))).toBe(true)
+  })
+
+  it("rejects canonical threat evidence with an error or missing run binding", () => {
+    const document = {
+      schema_version: "lyrashield-threat-model/1.0",
+      generated_at: "2026-09-20 00:00:00 UTC",
+      run_id: "fixture-run-1-1",
+      models: [{ target: "https://app.example.com", content: "Declared boundary" }],
+    }
+    const errored = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), {
+      ...artifacts(),
+      threatModelsRaw: JSON.stringify({ ...document, error: "mirror unreadable" }),
+    })
+    expect(errored.threatModels).toBeNull()
+
+    const unbound = parseEngineOutput(V1_1_VULNS(), "{invalid", {
+      ...artifacts(),
+      threatModelsRaw: JSON.stringify(document),
+    })
+    expect(unbound.threatModels).toBeNull()
+  })
+
   it("parses the exchange export into the cited-id index and canonical artifact", () => {
     const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), artifacts())
     expect(result.httpExchangeExport?.exchangeCount).toBe(2)

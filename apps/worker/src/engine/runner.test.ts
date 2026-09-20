@@ -137,14 +137,16 @@ it("round-trips an actual redacted engine writer artifact through the manifest-b
     new URL("./fixtures/run-json-1.1/threat_model.json", import.meta.url),
     "utf8"
   )
+  const runRecord = JSON.parse(
+    await readFile(new URL("./fixtures/run-json-1.1/run.json", import.meta.url), "utf8")
+  )
   const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-writer-fixture-"))
   cleanupPaths.push(outputDir)
   await writeFile(join(outputDir, "threat_model.json"), canonical, "utf8")
   await writeFile(
     join(outputDir, "run.json"),
     JSON.stringify({
-      schema_version: "1.1",
-      run_id: "fixture-run-1-1",
+      ...runRecord,
       result_manifest: {
         schema_version: 1,
         artifacts: {

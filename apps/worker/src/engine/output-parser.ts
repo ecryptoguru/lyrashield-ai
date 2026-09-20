@@ -1684,7 +1684,11 @@ function parseThreatModels(
   type ThreatModelEntry = z.infer<typeof threatModelEntrySchema>
   const maybeModels = (doc as { models?: unknown }).models
   const isCanonical = Array.isArray(maybeModels)
-  if (isCanonical && runId && (doc as { run_id?: unknown }).run_id !== runId) {
+  if (isCanonical && Object.hasOwn(doc, "error")) {
+    recordIngestionIssue(issues, "threat_model.json reports a writer error — artifact ignored")
+    return null
+  }
+  if (isCanonical && (!runId || (doc as { run_id?: unknown }).run_id !== runId)) {
     recordIngestionIssue(issues, "threat_model.json run_id mismatch — artifact ignored")
     return null
   }
@@ -1710,7 +1714,9 @@ function parseThreatModels(
       model === null ||
       Array.isArray(model) ||
       typeof (model as { target?: unknown }).target !== "string" ||
-      typeof (model as { content?: unknown }).content !== "string"
+      !model.target.trim() ||
+      typeof (model as { content?: unknown }).content !== "string" ||
+      !model.content.trim()
     ) {
       recordIngestionIssue(
         issues,
