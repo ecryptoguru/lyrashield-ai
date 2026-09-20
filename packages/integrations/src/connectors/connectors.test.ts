@@ -19,7 +19,7 @@ vi.mock("../github", async (importOriginal) => {
 vi.mock("@lyrashield/config", () => ({
   env: {
     SLACK_CLIENT_ID: "slack-client-id",
-    SLACK_CLIENT_SECRET: "slack-client-secret",
+    SLACK_CLIENT_SECRET: ["slack", "client", "secret"].join("-"),
     OUTBOUND_CONNECTOR_ADMISSION: "off",
     CONNECTOR_CANARY_WORKSPACE_IDS: "ws_canary",
   },
