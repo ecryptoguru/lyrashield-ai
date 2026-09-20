@@ -1,15 +1,15 @@
 import { expect, test } from "@playwright/test"
 
-test("agent onboarding has OAuth-first setup and an explicit approval boundary", async ({
-  page,
-}) => {
+test("agent onboarding distinguishes local setup and scoped hosted writes", async ({ page }) => {
   await page.goto("/agents")
   await expect(page).toHaveTitle(/coding agents/i)
   // The commands render in both the setup <pre> block and the numbered-step
   // inline <code> elements — first() avoids the strict-mode multiple match.
   await expect(page.getByText("npx lyrashield login --oauth").first()).toBeVisible()
   await expect(page.getByText("npx lyrashield init").first()).toBeVisible()
-  await expect(page.getByText(/explicit human approval/i).first()).toBeVisible()
+  await expect(
+    page.locator("#setup").getByText(/browser-confirmed grant and execution-time checks/i)
+  ).toBeVisible()
   await expect(
     page.getByRole("link", { name: /Set up LyraShield for your agent/i })
   ).toHaveAttribute("href", "/docs/integrations/agent-plugins")

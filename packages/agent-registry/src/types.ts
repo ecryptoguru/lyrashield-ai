@@ -40,6 +40,8 @@ export interface AgentEntry {
   rootKey: string | null
   locations: ConfigLocation[]
   transports: Transport[]
+  integrationKind?: "mcp" | "standalone-cli"
+  preferredTransport?: Transport | null
   /** Preferred authentication for native remote HTTP connections. */
   remoteAuth?: "oauth" | "api-key"
   credential: CredentialStyle
@@ -72,6 +74,8 @@ export interface AgentEntry {
 
 /** Entry returned by the registry after support evidence is attached. */
 export type RegistryAgentEntry = AgentEntry & {
+  integrationKind: "mcp" | "standalone-cli"
+  preferredTransport: Transport | null
   supportTier: SupportTier
   verification: IntegrationVerification
 }

@@ -9,13 +9,13 @@ draft: false
 heroImage: agent-security-28
 faq:
   - q: Is Devin CLI the same as Devin Desktop or Windsurf
-    a: No. Devin CLI is the Cognition command line agent, separate from Devin Desktop and Windsurf. It uses .devin/config.local.json for MCP config, not the desktop or editor settings.
+    a: No. Devin CLI is the Cognition command line agent, separate from Devin Desktop and Windsurf. Current CLI releases use dedicated .devin/mcp_config.local.json for local MCP config.
   - q: Where does Devin CLI keep its MCP config
-    a: Devin CLI uses .devin/config.local.json with a root mcpServers key, and the file is gitignored by default. Only stdio transport is documented for CLI MCP servers.
+    a: Since Devin CLI v3000.3, local MCP settings live in .devin/mcp_config.local.json under mcpServers; project and user scopes have their own dedicated files. Both stdio and remote HTTP with OAuth are documented. Older main-config entries are migrated by Devin on startup.
   - q: How do I manage Devin CLI MCP servers
     a: Use the devin mcp commands to add, login, enable, and disable servers. Connected tools are namespaced as mcp__name so you can see which server a tool call came from.
   - q: Should I commit the Devin CLI config file
-    a: The config is gitignored by default and often holds local credentials. Keep it local, and store any shared server definitions in a separate committed file that references env vars instead of literal secrets.
+    a: The local override is gitignored by default and may hold credentials. Keep it local; shared server definitions belong in .devin/mcp_config.json without literal secrets.
 ---
 
 Before launching a Devin CLI built app, review what data entered the Cognition agent, protect its gitignored MCP config, verify dependencies the agent added, scan for committed secrets, and collect independent launch evidence. Devin CLI is the command line agent from Cognition and is separate from Devin Desktop and Windsurf. It accelerates implementation but does not verify the runtime security of what it helped create.
@@ -25,7 +25,7 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates gen
 | Review area          | Evidence to collect before launch                                                                          |
 | -------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Data handling        | Approved data classes, current Devin CLI settings, and a record of any sensitive prompt or terminal output |
-| Config and tools     | Reviewed .devin/config.local.json servers and mcp\_\_name tool namespace                                   |
+| Config and tools     | Reviewed current `.devin/mcp_config.local.json` servers and `mcp__name` tool namespace                       |
 | Secrets              | Clean tree, scanned credentials, rotated keys, and local config kept out of version control                |
 | Dependencies         | Resolved lockfile, package identity, advisory result, and install script decision                          |
 | Application controls | Negative authorization, tenant boundary, and input validation tests                                        |
@@ -39,7 +39,7 @@ That is a data handling review, not an application security result. Do not pipe 
 
 ## 2. Protect the gitignored MCP config and tool namespace
 
-Devin CLI stores MCP server configuration in .devin/config.local.json with a root mcpServers key, and the file is gitignored by default. Only stdio transport is documented for CLI MCP servers. You manage servers with the devin mcp commands: add to register a server, login to authenticate, enable to turn a server on, and disable to turn it off. Connected tools are namespaced as mcp\_\_name, so you can see which server a tool call came from. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how these servers expose tools.
+Devin CLI v3000.3 and newer stores local MCP configuration in `.devin/mcp_config.local.json` under `mcpServers`; `.devin/mcp_config.json` is the shared project scope and `~/.config/devin/mcp_config.json` is the user scope. Older versions stored MCP entries in their main config files, which current Devin migrates on startup. Both local stdio and remote HTTP servers are documented, with `devin mcp login` for OAuth. Review the actual client version and each scope before adding another entry. Connected tools use the `mcp__name` namespace. The [Devin CLI MCP documentation](https://docs.devin.ai/cli/extensibility/mcp/configuration) specifies these paths and transport rules.
 
 Treat the config file as policy bearing, even though it is gitignored. Review which MCP servers are enabled, what tools each exposes, and what credentials back them. The gitignore default protects local credentials but also means the team does not share the same server set automatically. If you need a shared definition, store the server entries in a separate committed file that references environment variables instead of literal secrets. Require a security owner for changes to agent configuration.
 
@@ -47,7 +47,7 @@ Treat the config file as policy bearing, even though it is gitignored. Review wh
 
 Devin CLI can produce code that embeds a real key, token, or connection string into a committed file. Run a secret scan across the whole repository before launch. The [CWE list of credential handling weaknesses](https://cwe.mitre.org/data/definitions/798.html) covers hard coded passwords and the broader [MITRE CWE database](https://cwe.mitre.org/) tracks related credential exposure patterns. Do not rely on the agent noticing its own mistake.
 
-Keep live secrets outside the working tree using environment variables or a secrets manager. The .devin/config.local.json file is gitignored for this reason, but a secret can still land in source code the agent writes. Use placeholders and synthetic fixtures for examples the agent sees. Review the final diff for any new string that resembles a key, token, or connection string. If a credential may have been committed, rotate it immediately and check access logs.
+Keep live secrets outside the working tree using environment variables or a secrets manager. The `.devin/mcp_config.local.json` override is gitignored by default, but a secret can still land in source code the agent writes. Use placeholders and synthetic fixtures for examples the agent sees. Review the final diff for any new string that resembles a key, token, or connection string. If a credential may have been committed, rotate it immediately and check access logs.
 
 ## 4. Verify the resolved dependencies
 

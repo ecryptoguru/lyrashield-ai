@@ -1,6 +1,6 @@
 # LyraShield AI — Whitepaper
 
-## Version 1.0.0 — 2026-09-12
+## Version 1.0.1 — 2026-09-19
 
 > The authoritative public description of LyraShield AI: the problem, the product, the evidence model, the commercial structure, and the boundaries of what we claim. Companion documents: [`litepaper.md`](./litepaper.md) (executive overview) and [`yellowpaper.md`](./yellowpaper.md) (technical specification).
 
@@ -147,13 +147,13 @@ The free Lite Check returns a distinct result — never the official LyraShield 
 
 ## 6. Distribution
 
-| Surface                 | Role                                                                             |
-| ----------------------- | -------------------------------------------------------------------------------- |
-| `lyrashield` CLI        | Scan, findings, reports, `check-diff`, `gate` with stable exit codes             |
-| `@lyrashield/mcp`       | MCP server over stdio and remote Streamable HTTP with hosted OAuth               |
-| Agent plugin / registry | 30 registry entries across 26 preferred client surfaces                          |
-| GitHub Action           | Account-less, diff-aware PR gate emitting SARIF, running on the user's runner    |
-| Public API `/api/v1`    | Additive-only contract with a 90-day deprecation policy (see `api-stability.md`) |
+| Surface              | Role                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------- |
+| `lyrashield` CLI     | Scan, findings, reports, `check-diff`, `gate` with stable exit codes                                    |
+| `@lyrashield/mcp`    | MCP server over stdio and remote Streamable HTTP with hosted OAuth                                      |
+| Agent workflows      | 30 registry entries covering 26 preferred client workflows; some use the standalone CLI rather than MCP |
+| GitHub Action        | Account-less, diff-aware PR gate emitting SARIF, running on the user's runner                           |
+| Public API `/api/v1` | Additive-only contract with a 90-day deprecation policy (see `api-stability.md`)                        |
 
 ## 7. Security and trust architecture (overview)
 
@@ -161,7 +161,7 @@ The free Lite Check returns a distinct result — never the official LyraShield 
 - **Audit.** Sensitive mutations write hash-chained audit events through a single advisory-locked transaction that owns chain ordering.
 - **Evidence storage.** Private, checksum-bound, encrypted (AES-256-GCM envelope encryption), workspace-isolated, and fail-closed.
 - **Network.** URL inputs pass SSRF validation; DNS is resolved, validated, and pinned at connection time; every redirect hop is revalidated. Worker public egress is denied by default; approved fetching goes through an authenticated SSRF-safe proxy. Repository execution is sandboxed: non-root, bounded resources, deny-by-default egress.
-- **Agents.** Model-facing inputs are normalized and injection-guarded. Remote OAuth is read-only by default; delegated writes revalidate membership, permission, scope, expiry, and idempotency on every call. Write-scoped API-key calls on the remote endpoint receive a `connect_required` response; single-use approval bound to the exact action and input hash remains only for legacy nondelegated hosted credentials.
+- **Agents.** Model-facing inputs are normalized and injection-guarded. Remote OAuth is read-only by default; a browser-confirmed connection grant can authorize delegated writes. Every delegated call revalidates membership, permission, scope, expiry, and idempotency. Nondelegated remote callers, including write-scoped API keys, receive `connect_required`; no remote approval is queued. Local stdio calls use the credential's API permissions and any client-side approval setting remains a separate client control.
 - **Platform administration.** A hidden, noindex read console restricted to exactly two allowlisted, verified, TOTP-enrolled operators; bearer credentials and workspace roles never grant access.
 
 ## 8. Commercial model
