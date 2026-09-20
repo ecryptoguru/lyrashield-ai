@@ -17,7 +17,7 @@ describe("marketplace fixtures", () => {
     const cline = JSON.parse(
       await readFile(path.join(marketplaceRoot, "cline", "submission.json"), "utf8")
     ) as Record<string, unknown>
-    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.27" })
+    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.28" })
     expect(gemini.mcpServers).toBeTruthy()
     expect(cline).toMatchObject({
       license: "Apache-2.0",
@@ -34,8 +34,8 @@ describe("marketplace fixtures", () => {
       safeFailures: string[]
     }
     const openclaw = await readFile(path.join(marketplaceRoot, "openclaw", "SKILL.md"), "utf8")
-    expect(workflows.positiveWorkflows).toHaveLength(5)
-    expect(workflows.safeFailures).toHaveLength(3)
+    expect(workflows.positiveWorkflows.join(" ")).toContain("idempotency key")
+    expect(workflows.safeFailures.join(" ")).toContain("revoke")
     expect(openclaw).toContain("not an official OpenClaw channel")
   })
 })

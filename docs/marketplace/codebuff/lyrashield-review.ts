@@ -4,7 +4,7 @@ const apiKey = process.env.LYRASHIELD_API_KEY?.trim()
 
 const definition: AgentDefinition = {
   id: "lyrashield-review",
-  version: "0.1.27",
+  version: "0.1.28",
   publisher: "lyrashield",
   displayName: "LyraShield Review",
   model: "anthropic/claude-sonnet-4.5",
@@ -13,7 +13,7 @@ const definition: AgentDefinition = {
   mcpServers: {
     lyrashield: {
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.8"],
+      args: ["-y", "@lyrashield/mcp@0.2.9"],
       env: apiKey ? { LYRASHIELD_API_KEY: apiKey } : {},
     },
   },
@@ -24,7 +24,7 @@ const definition: AgentDefinition = {
 1. Inspect the current diff and identify the relevant target.
 2. Read the latest evidence, findings, and launch-readiness state.
 3. Explain detected, independently verified, retest-confirmed, and inconclusive states.
-4. If a write is requested, explain that LyraShield approval is pending and link to dashboard evidence.
+4. If a write is requested, explain that this adapter is read-only. Hosted writes require a browser-confirmed connection grant; nondelegated calls receive connect_required.
 5. Return a concise summary with dashboard links; do not recreate the dashboard or expose tokens.`,
   stepPrompt: "Continue the read-only review and finish with evidence links.",
 }

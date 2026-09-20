@@ -17,10 +17,10 @@ faq:
   - q: "Can I run LyraShield inside my IDE like Semgrep?"
     a: "LyraShield runs inside AI coding agents through the Model Context Protocol, so checks happen where agents like Cursor and Claude Code write code. It also ships a reusable GitHub Action with SARIF output for CI. Semgrep CE runs locally as a CLI and in IDE plugins."
   - q: "Which tool should I pick for an AI-built app?"
-    a: "Use Semgrep when you want fast, customizable pattern scanning and you will triage findings yourself. Use LyraShield when you need an agentic pentest to prove exploitability, an immutable evidence record, and approval-gated fixes before a release decision."
+    a: "Use Semgrep when you want fast, customizable pattern scanning and you will triage findings yourself. Use LyraShield when you need an agentic pentest to prove exploitability, an immutable evidence record, and reviewed fix proposals before a release decision."
 ---
 
-Semgrep is a fast, open-source static analysis tool that finds insecure code patterns across more than 30 languages, with a commercial AppSec Platform that adds SCA, secrets, and cross-file taint analysis. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with approval-gated fixes. Semgrep excels at pattern detection; LyraShield closes the proof and release-decision gap.
+Semgrep is a fast, open-source static analysis tool that finds insecure code patterns across more than 30 languages, with a commercial AppSec Platform that adds SCA, secrets, and cross-file taint analysis. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with reviewed fix proposals. Semgrep excels at pattern detection; LyraShield closes the proof and release-decision gap.
 
 This comparison is part of our broader [vibe coding security guide](/blog/vibe-coding-security-guide), which covers the full release-assurance methodology for AI-built applications.
 
@@ -40,11 +40,11 @@ LyraShield AI does not compete with Semgrep on rule breadth or pattern detection
 
 The LyraShield loop is target, review, evidence, fix, retest, report. An agentic pentest attempts to exercise detected findings against the live target, and each result is recorded as an evidence state that distinguishes a detected pattern from a proven exploitable issue from a fixed and retested one. That separation matters because a SAST finding, however precise, is still a prediction about the code, not a proof about the running system. A Semgrep rule can tell you a pattern matches, but it cannot tell you whether that pattern is actually reachable and exploitable in the deployed app.
 
-LyraShield also runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), so security checks happen at the point where an agent generates code, not only in a later CI scan. This is a different integration point than Semgrep's CLI and IDE plugins, which are designed for developer-initiated scans. Fix proposals are approval-gated: a developer reviews and approves the change before it merges, which keeps a human accountable for agent-written code. The full assurance record is immutable and can be shared for compliance or handoff.
+LyraShield also runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), so security checks happen at the point where an agent generates code, not only in a later CI scan. This is a different integration point than Semgrep's CLI and IDE plugins, which are designed for developer-initiated scans. Fix proposals are recorded for review; repository controls govern whether a developer merges any resulting change. The full assurance record is immutable and can be shared for compliance or handoff.
 
 For dependency risk, LyraShield uses SCA backed by sources like the [OSV database](https://osv.dev/), and it emits SARIF so findings integrate with existing tooling rather than replacing it. This means a team can run Semgrep for continuous scanning and LyraShield for the assurance run, with both feeding results into the same workflow.
 
-The approval-gated fix model reflects a specific bet about AI-built apps. When an agent writes code, an unattended auto-fix can compound the problem: the agent that introduced a flaw is also trusted to rewrite the fix, and a merged patch that is subtly wrong can be harder to catch than the original finding. LyraShield requires a developer to approve the proposed change and then retests it against the live target before the finding closes. That adds a checkpoint, but it is the checkpoint that makes the resulting evidence record trustworthy enough to base a release decision on.
+The reviewable fix proposal model reflects a specific bet about AI-built apps. When an agent writes code, an unattended auto-fix can compound the problem: the agent that introduced a flaw is also trusted to rewrite the fix, and a merged patch that is subtly wrong can be harder to catch than the original finding. LyraShield records a proposal for review, and a fresh retest can establish whether the finding persists. The repository governs any code change. That adds a checkpoint, but it is the checkpoint that makes the resulting evidence record trustworthy enough to base a release decision on.
 
 ## Who each tool fits
 
@@ -66,7 +66,7 @@ For the detailed breakdown see the [Semgrep comparison page](/compare/semgrep). 
 
 ## Why teams choose LyraShield for AI-built apps
 
-Teams choose LyraShield when a scan report is not enough to ship. The agentic pentest validates exploitability against the running app, the immutable evidence record gives reviewers and auditors something concrete to sign off on, and approval-gated fixes ensure no agent-written change merges without a human signature. For apps where the code was generated by a coding agent and the team needs to make a go or no-go decision, that loop turns a backlog of findings into a defensible release decision.
+Teams choose LyraShield when a scan report is not enough to ship. The agentic pentest attempts to validate exploitability against an authorized running target and retains each result’s evidence state, the immutable evidence record gives reviewers and auditors something concrete to sign off on, and reviewed fix proposals leave repository merge controls with the team. For apps where the code was generated by a coding agent and the team needs to make a go or no-go decision, that loop turns a backlog of findings into a defensible release decision.
 
 Semgrep is a superb detection tool with a mature open-source ecosystem and deep customizability. LyraShield does not try to out-detect it. The value is the loop: target, review, evidence, fix, retest, report. For an app whose code was generated by a coding agent, that loop is the difference between knowing what patterns match and knowing whether the app is safe to release.
 

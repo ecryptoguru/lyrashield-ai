@@ -33,12 +33,6 @@ export async function handleInit(args: string[], output: Output): Promise<number
   }
 
   const creds = await getEffectiveCredentials()
-  if (!creds.apiKey) {
-    output.error(
-      "No LyraShield credential. Run: lyrashield login --oauth, or use an API key for CI."
-    )
-    return 3
-  }
 
   const scope = parsed.global ? "global" : parsed.project ? "project" : undefined
   const selectedAgents: string[] = Array.isArray(parsed.agent)
@@ -72,7 +66,8 @@ export async function handleInit(args: string[], output: Output): Promise<number
       (id) => !(getPreferredAgent?.(id) ?? allAgents.find((agent) => agent.id === id))
     )
     if (missing.length) {
-      output.warn(`Unknown agent(s): ${missing.join(", ")}`)
+      output.error(`Unknown agent(s): ${missing.join(", ")}`)
+      return 2
     }
   }
 
@@ -86,12 +81,13 @@ export async function handleInit(args: string[], output: Output): Promise<number
   for (const agent of orderedAgents) {
     const result = await installAgent({
       agent,
-      transport: requestedTransport ?? agent.transports[0]!,
+      transport: requestedTransport ?? agent.preferredTransport ?? agent.transports[0] ?? "stdio",
       apiUrl: creds.apiUrl,
       apiKey: creds.credentialKind === "api-key" ? creds.apiKey : undefined,
       useCredentialStore: creds.credentialKind === "oauth",
       scope,
-      all: parsed.all,
+      all: parsed.all || selectedAgents.length > 0,
+      autoDetect: !parsed.all && selectedAgents.length === 0,
       dryRun: parsed["dry-run"],
       inlineSecret: parsed["inline-secret"],
       yes: parsed.yes,
@@ -115,5 +111,5 @@ export async function handleInit(args: string[], output: Output): Promise<number
     for (const [outcome, count] of byOutcome) output.log(`  ${outcomeLabel(outcome)}: ${count}`)
   }
 
-  return 0
+  return results.some((result) => result.outcome === "FAILED") ? 1 : 0
 }
