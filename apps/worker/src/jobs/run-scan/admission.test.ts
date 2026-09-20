@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   runWithAccountContext: vi.fn(),
   updateScanStatus: vi.fn(),
   refreshGate: vi.fn(),
+  resolveAuthenticatedAssessmentAuthorization: vi.fn(),
 }))
 
 vi.mock("@lyrashield/auth/permissions", () => ({
@@ -26,6 +27,14 @@ vi.mock("@lyrashield/db", () => ({
   prisma: mocks.prisma,
   runWithAccountContext: mocks.runWithAccountContext,
   updateScanStatus: mocks.updateScanStatus,
+  resolveAuthenticatedAssessmentAuthorization: mocks.resolveAuthenticatedAssessmentAuthorization,
+  LiveAiSafetyError: class LiveAiSafetyError extends Error {
+    readonly code: string
+    constructor(code: string) {
+      super(code)
+      this.code = code
+    }
+  },
 }))
 vi.mock("./lifecycle-utils", () => ({
   refreshGateVerdictAfterTerminalScan: mocks.refreshGate,
@@ -300,6 +309,7 @@ describe("verifyScanAdmission", () => {
             executionPlan: betaPlan,
             targetType: "API",
             destructiveTestsAllowed: true,
+            authAssessmentPermitted: true,
           })
         )
       ).resolves.toMatchObject({
@@ -313,6 +323,89 @@ describe("verifyScanAdmission", () => {
             executionPlan: betaPlan,
             targetType: "API",
             destructiveTestsAllowed: false,
+            authAssessmentPermitted: true,
+          })
+        )
+      ).resolves.toEqual({ ok: true })
+    })
+
+    it("denies AUTHENTICATED_ASSESSMENT when the beta gate is off at execution time", async () => {
+      const betaPlan = buildScanExecutionPlan({
+        workflow: "AUTHENTICATED_ASSESSMENT",
+        targetType: "API",
+        mode: "DEEP",
+        authorizationRef: "authz_1",
+      })
+      // authAssessmentPermitted defaults to false — flag off or workspace
+      // dropped from the allowlist between queue and run fails closed.
+      await expect(
+        verifyScanAdmission(params({ executionPlan: betaPlan, targetType: "API" }))
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_WORKFLOW_UNAVAILABLE" },
+      })
+      expect(mocks.resolveAuthenticatedAssessmentAuthorization).not.toHaveBeenCalled()
+      expect(mocks.evaluateScanEntitlement).not.toHaveBeenCalled()
+      expect(mocks.updateScanStatus).toHaveBeenCalledWith(
+        "scan-1",
+        "FAILED",
+        expect.objectContaining({ errorCategory: "SCAN_WORKFLOW_UNAVAILABLE" })
+      )
+    })
+
+    it("fails AUTHENTICATED_ASSESSMENT when the recorded authorization was revoked mid-run", async () => {
+      const betaPlan = buildScanExecutionPlan({
+        workflow: "AUTHENTICATED_ASSESSMENT",
+        targetType: "API",
+        mode: "DEEP",
+        authorizationRef: "authz_1",
+      })
+      const { LiveAiSafetyError } = await import("@lyrashield/db")
+      mocks.resolveAuthenticatedAssessmentAuthorization.mockRejectedValue(
+        new LiveAiSafetyError("AUTH_ASSESSMENT_AUTH_NOT_READY")
+      )
+      await expect(
+        verifyScanAdmission(
+          params({
+            executionPlan: betaPlan,
+            targetType: "API",
+            authAssessmentPermitted: true,
+          })
+        )
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_AUTHORIZATION_REVOKED" },
+      })
+      expect(mocks.resolveAuthenticatedAssessmentAuthorization).toHaveBeenCalledWith({
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        authorizationRef: "authz_1",
+      })
+      expect(mocks.updateScanStatus).toHaveBeenCalledWith(
+        "scan-1",
+        "FAILED",
+        expect.objectContaining({ errorCategory: "SCAN_AUTHORIZATION_REVOKED" })
+      )
+      expect(mocks.evaluateScanEntitlement).not.toHaveBeenCalled()
+    })
+
+    it("re-verifies the recorded authorization before admitting the beta", async () => {
+      const betaPlan = buildScanExecutionPlan({
+        workflow: "AUTHENTICATED_ASSESSMENT",
+        targetType: "API",
+        mode: "DEEP",
+        authorizationRef: "authz_1",
+      })
+      mocks.resolveAuthenticatedAssessmentAuthorization.mockResolvedValue({
+        planId: "authz_1",
+        credentialId: "cred-1",
+      })
+      await expect(
+        verifyScanAdmission(
+          params({
+            executionPlan: betaPlan,
+            targetType: "API",
+            authAssessmentPermitted: true,
           })
         )
       ).resolves.toEqual({ ok: true })

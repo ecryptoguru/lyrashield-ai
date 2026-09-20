@@ -29,6 +29,12 @@ export interface ScanInput {
    * host paths — and are validated again at the staging boundary.
    */
   attachmentIds?: string[]
+  /**
+   * AUTHENTICATED_ASSESSMENT only: the recorded scoped authorization
+   * reference. The gated beta is denied server-side unless the deployment
+   * enables it for this workspace/target. Never a credential.
+   */
+  authorizationRef?: string
 }
 
 export interface GetScanOptions {

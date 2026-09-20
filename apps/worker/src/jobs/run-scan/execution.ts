@@ -1,5 +1,10 @@
 import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
-import { addScanEvent, prisma } from "@lyrashield/db"
+import {
+  addScanEvent,
+  prisma,
+  resolveAuthenticatedAssessmentAuthorization,
+  type AuthenticatedAssessmentAuthorization,
+} from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import {
   buildUrlTargetInstruction,
@@ -25,8 +30,14 @@ import {
   type EngineRunResult,
 } from "../../engine/runner"
 import { resolveScanBudgetUsd, type TargetType } from "../../engine/command-builder"
-import type { ScanExecutionPlan } from "@lyrashield/types"
+import {
+  AUTHENTICATED_ASSESSMENT_BETA_LIMITS,
+  AUTHENTICATED_ASSESSMENT_DENIED_PATHS,
+  type ScanExecutionPlan,
+} from "@lyrashield/types"
+import type { RelaySessionBinding } from "@lyrashield/security"
 import type { ScanJobData, ScanJobResult } from "../../types"
+import { AuthSessionError, resolveRelaySessionBinding } from "./auth-session"
 import {
   stageScanAttachments,
   ScanAttachmentStagingError,
@@ -114,6 +125,10 @@ export async function executeScanTarget(params: {
   let stagedAttachments: StagedScanAttachments | null = null
 
   const plannedAttachmentIds = executionPlan?.attachmentIds ?? []
+  // The authenticated staging beta: every ceiling below is a hard cap taken
+  // from the hash-verified plan — never from client input or broader
+  // Standard/Deep profiles.
+  const isAuthAssessment = executionPlan?.workflow === "AUTHENTICATED_ASSESSMENT"
 
   if (deterministicRetest) {
     if (target.repoProvider !== "github") {
@@ -167,6 +182,11 @@ export async function executeScanTarget(params: {
     }
   } else if (engineBacked) {
     maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd, target.type)
+    if (isAuthAssessment && executionPlan) {
+      // $5 internal ceiling is a hard cap for the beta — the workspace policy
+      // and mode defaults can only narrow it further.
+      maxBudgetUsd = Math.min(maxBudgetUsd, executionPlan.limits.maxBudgetUsd)
+    }
     if (maxBudgetUsd <= 0) {
       const errorMessage = "Protected run limit is zero"
       logger.warn("Scan rejected: zero budget", { scanId, workspaceId, policyMaxBudgetUsd })
@@ -332,11 +352,48 @@ export async function executeScanTarget(params: {
         }
       }
 
-      const engineTimeoutMsForGrant = resolveEngineRuntimeBudgetMs(
-        mode,
-        target.type,
-        scanRuntimeBudgetMs,
-        elapsedScanMs()
+      // Authenticated beta: re-verify the recorded scoped authorization and
+      // resolve the referenced test-session binding BEFORE minting the grant.
+      // A revoked/expired/mismatched record between admission and execution is
+      // a bounded stop — never a fallback to an unauthenticated run.
+      let authorization: AuthenticatedAssessmentAuthorization | null = null
+      if (isAuthAssessment) {
+        try {
+          authorization = await resolveAuthenticatedAssessmentAuthorization({
+            workspaceId,
+            targetId: target.id,
+            authorizationRef: executionPlan?.authorizationRef ?? "",
+          })
+        } catch (authError) {
+          await addScanEvent(
+            scanId,
+            "engine_skipped",
+            "error",
+            "The recorded assessment authorization is no longer valid",
+            {
+              code:
+                authError instanceof Error ? authError.message : "AUTH_ASSESSMENT_AUTH_NOT_FOUND",
+            }
+          )
+          return {
+            ok: false,
+            result: {
+              status: "failed",
+              errorCategory: "SCAN_AUTHORIZATION_REVOKED",
+              errorMessage:
+                "The recorded assessment authorization is no longer valid. Record a new scoped authorization and start a new scan.",
+            },
+          }
+        }
+      }
+
+      const engineTimeoutMsForGrant = Math.min(
+        resolveEngineRuntimeBudgetMs(mode, target.type, scanRuntimeBudgetMs, elapsedScanMs()),
+        // The 12-minute engine budget inside the 15-minute total is a hard
+        // ceiling for the beta; the general resolver can only tighten it.
+        isAuthAssessment && executionPlan
+          ? executionPlan.limits.maxEngineMs
+          : Number.POSITIVE_INFINITY
       )
       try {
         const specServerHosts =
@@ -352,19 +409,99 @@ export async function executeScanTarget(params: {
             apiSpecUrl: target.apiSpecUrl,
             specServerHosts,
             engineBudgetMs: engineTimeoutMsForGrant,
-            destructiveTestsAllowed: policy?.destructiveTestsAllowed === true,
-            blockedPaths: policy?.blockedPaths ?? [],
+            // The beta grant always carries read-only methods regardless of
+            // policy; admission already denied a destructive-allowed policy.
+            destructiveTestsAllowed: !isAuthAssessment && policy?.destructiveTestsAllowed === true,
+            blockedPaths: isAuthAssessment
+              ? [
+                  ...new Set([
+                    ...(policy?.blockedPaths ?? []),
+                    ...AUTHENTICATED_ASSESSMENT_DENIED_PATHS,
+                  ]),
+                ]
+              : (policy?.blockedPaths ?? []),
             allowedDomains: policy?.allowedDomains ?? [],
+            ...(isAuthAssessment && executionPlan?.limits.maxRequests
+              ? {
+                  authenticatedBeta: {
+                    maxRequests: executionPlan.limits.maxRequests,
+                    maxResponseBytes:
+                      executionPlan.limits.maxResponseBytes ??
+                      AUTHENTICATED_ASSESSMENT_BETA_LIMITS.maxResponseBytes,
+                  },
+                }
+              : {}),
           },
           relayConfig
         )
-        await registerRelayGrant(scanId, minted.grant, relayConfig)
+        // Session material binds to the scan at the relay boundary over the
+        // admin channel — never inside the signed grant, the engine
+        // environment, or this job's logs.
+        let sessionBinding: RelaySessionBinding | undefined
+        if (isAuthAssessment) {
+          if (!authorization) throw new Error("AUTH_ASSESSMENT_AUTH_NOT_FOUND")
+          try {
+            sessionBinding = resolveRelaySessionBinding(authorization, {
+              grantExpiresAtMs: minted.scope.exp,
+            })
+          } catch (sessionError) {
+            // Credential failure stops the run — it must not silently fall
+            // back to an unauthenticated clean result.
+            const code =
+              sessionError instanceof AuthSessionError
+                ? sessionError.code
+                : "AUTH_SESSION_UNAVAILABLE"
+            await addScanEvent(
+              scanId,
+              "engine_skipped",
+              "error",
+              "The recorded test session could not be applied",
+              { code }
+            )
+            return {
+              ok: false,
+              result: {
+                status: "failed",
+                errorCategory: code,
+                errorMessage:
+                  "The recorded test session is unavailable or out of scope. Re-create the test session and start a new scan.",
+              },
+            }
+          }
+        }
+        await registerRelayGrant(scanId, minted.grant, relayConfig, sessionBinding)
         relayCtx = { url: relayConfig.url, grant: minted.grant }
         await addScanEvent(scanId, "relay_scope", "info", "Relay scope granted", {
           hosts: minted.scope.hosts,
           methods: minted.scope.methods,
           maxRequests: minted.scope.maxRequests,
         })
+        if (sessionBinding && authorization) {
+          // The receipt records what was bound — the credential reference,
+          // scoped hosts, optional role label, and expiry — never session
+          // material and never a raw vault reference.
+          const credentialScope =
+            authorization.credentialScope &&
+            typeof authorization.credentialScope === "object" &&
+            !Array.isArray(authorization.credentialScope)
+              ? (authorization.credentialScope as Record<string, unknown>)
+              : {}
+          await addScanEvent(
+            scanId,
+            "auth_session_bound",
+            "info",
+            "Pre-created test session bound to the relay scope",
+            {
+              authorizationRef: authorization.planId,
+              credentialId: authorization.credentialId,
+              sessionHosts: sessionBinding.hosts,
+              sessionExpiresAt: new Date(sessionBinding.exp).toISOString(),
+              ...(typeof credentialScope.role === "string"
+                ? { credentialRole: credentialScope.role }
+                : {}),
+            }
+          )
+        }
       } catch (grantErr) {
         await addScanEvent(scanId, "engine_skipped", "error", "Relay grant could not be minted", {
           targetType: target.type,
@@ -395,11 +532,12 @@ export async function executeScanTarget(params: {
 
     // Keep the profile's deterministic-scanner reserve available even when
     // the model is healthy until its own wall-clock cap.
-    const engineTimeoutMs = resolveEngineRuntimeBudgetMs(
-      mode,
-      target.type,
-      scanRuntimeBudgetMs,
-      elapsedScanMs()
+    const engineTimeoutMs = Math.min(
+      resolveEngineRuntimeBudgetMs(mode, target.type, scanRuntimeBudgetMs, elapsedScanMs()),
+      // Beta hard cap: the engine can never exceed the recorded plan's budget.
+      isAuthAssessment && executionPlan
+        ? executionPlan.limits.maxEngineMs
+        : Number.POSITIVE_INFINITY
     )
     if (engineTimeoutMs <= 0) {
       markGlobalScanTimeout()

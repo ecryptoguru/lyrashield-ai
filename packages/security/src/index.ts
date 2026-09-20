@@ -34,6 +34,7 @@ export {
   relayHostAllowed,
   relayMethodAllowed,
   relayPathAllowed,
+  relaySessionHostAllowed,
   normalizeRelayHost,
   normalizeRelayPath,
   CONNECTOR_RELAY_PROFILES,
@@ -42,8 +43,15 @@ export {
   isConnectorRelayProvider,
   type ConnectorRelayProvider,
   type ConnectorRelayProfile,
+  validateRelaySessionBinding,
+  INJECTABLE_SESSION_HEADERS,
+  MAX_SESSION_HEADERS,
+  MAX_SESSION_HEADER_VALUE_BYTES,
+  MAX_SESSION_HOSTS,
   type RelayGrantScope,
   type RelayDenyReason,
+  type RelaySessionBinding,
+  type RelaySessionDenyReason,
 } from "./relay-grant"
 
 export {

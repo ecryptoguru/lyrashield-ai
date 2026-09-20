@@ -1,6 +1,13 @@
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth/permissions"
 import { evaluateScanEntitlement } from "@lyrashield/billing"
-import { prisma, runWithAccountContext, updateScanStatus, type ScanStatus } from "@lyrashield/db"
+import {
+  LiveAiSafetyError,
+  prisma,
+  resolveAuthenticatedAssessmentAuthorization,
+  runWithAccountContext,
+  updateScanStatus,
+  type ScanStatus,
+} from "@lyrashield/db"
 import { resolveScanProfile, type ScanExecutionPlan } from "@lyrashield/types"
 import type { ScanJobData, ScanJobResult } from "../../types"
 import { refreshGateVerdictAfterTerminalScan } from "./lifecycle-utils"
@@ -26,6 +33,14 @@ export async function verifyScanAdmission(params: {
   planRequired?: boolean
   /** Current policy: a destructive-allowed policy can never run the beta. */
   destructiveTestsAllowed?: boolean
+  /**
+   * Execution-time re-evaluation of the authenticated-beta gate
+   * (LYRASHIELD_AUTH_ASSESSMENT_ENABLED + LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST,
+   * resolved by the caller against this scan's workspace/target). The API
+   * applied the same gate at creation; disabling the flag or tightening the
+   * allowlist between queueing and execution still denies the run.
+   */
+  authAssessmentPermitted?: boolean
 }): Promise<{ ok: true } | { ok: false; result: ScanJobResult }> {
   const {
     scanId,
@@ -39,6 +54,7 @@ export async function verifyScanAdmission(params: {
     targetType,
     planRequired = false,
     destructiveTestsAllowed = false,
+    authAssessmentPermitted = false,
   } = params
 
   // All producers converge here, including schedules and retests. Recheck
@@ -103,11 +119,38 @@ export async function verifyScanAdmission(params: {
         errorMessage:
           "Stored execution plan exceeds the limits currently allowed for this profile.",
       }
-    } else if (executionPlan.workflow === "AUTHENTICATED_ASSESSMENT" && destructiveTestsAllowed) {
-      admissionError = {
-        errorCategory: "SCAN_PLAN_DENIED",
-        errorMessage:
-          "The workspace policy allows destructive tests, so the authenticated assessment cannot run.",
+    } else if (executionPlan.workflow === "AUTHENTICATED_ASSESSMENT") {
+      if (!authAssessmentPermitted) {
+        admissionError = {
+          errorCategory: "SCAN_WORKFLOW_UNAVAILABLE",
+          errorMessage:
+            "The authenticated assessment beta is not enabled for this workspace and target.",
+        }
+      } else if (destructiveTestsAllowed) {
+        admissionError = {
+          errorCategory: "SCAN_PLAN_DENIED",
+          errorMessage:
+            "The workspace policy allows destructive tests, so the authenticated assessment cannot run.",
+        }
+      } else {
+        // Execution-time re-verification of the recorded scoped authorization:
+        // a revoked/expired/mismatched record between creation and execution
+        // is a bounded stop, never a fallback to an unauthenticated run.
+        try {
+          await resolveAuthenticatedAssessmentAuthorization({
+            workspaceId,
+            targetId: targetId ?? "",
+            authorizationRef: executionPlan.authorizationRef ?? "",
+          })
+        } catch (error) {
+          admissionError = {
+            errorCategory: "SCAN_AUTHORIZATION_REVOKED",
+            errorMessage:
+              error instanceof LiveAiSafetyError
+                ? `The recorded assessment authorization is no longer valid (${error.code}).`
+                : "The recorded assessment authorization could not be verified.",
+          }
+        }
       }
     }
   }

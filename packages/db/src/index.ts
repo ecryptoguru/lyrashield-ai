@@ -444,7 +444,10 @@ export {
   verifyDnsDomainVerification,
   upsertLiveAiSafetySettings,
   createLiveAiSafetyPlan,
+  resolveAuthenticatedAssessmentAuthorization,
   LiveAiSafetyError,
+  AUTH_ASSESSMENT_SESSION_MAX_LIFETIME_MS,
+  type AuthenticatedAssessmentAuthorization,
 } from "./live-ai-safety-service"
 export {
   CANONICAL_OPERATIONS,

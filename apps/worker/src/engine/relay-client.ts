@@ -9,7 +9,9 @@ import {
   safeFetchDetailed,
   createEgressProxyFetchFn,
   type RelayGrantScope,
+  type RelaySessionBinding,
 } from "@lyrashield/security"
+import { AUTHENTICATED_ASSESSMENT_BETA_LIMITS } from "@lyrashield/types"
 
 /**
  * Worker-side client for the scan-scoped target relay.
@@ -55,11 +57,22 @@ const RELAY_LIMITS = {
 const GRANT_GRACE_MS = 5 * 60 * 1000
 const SAFE_METHODS = ["GET", "HEAD", "OPTIONS", "POST"]
 const DESTRUCTIVE_METHODS = ["PUT", "PATCH", "DELETE"]
+/** The authenticated staging beta permits read methods only — never POST. */
+const AUTH_BETA_METHODS = ["GET", "HEAD", "OPTIONS"]
 
 interface MintRelayGrantInput {
   scanId: string
   /** Review depth — selects the relay rate/byte/request cap profile. */
   mode: "STANDARD" | "DEEP"
+  /**
+   * Authenticated staging beta ceilings, taken from the hash-verified
+   * execution plan (the schema enforces the exact contract values). When
+   * present, the grant is clamped to the beta profile: read-only methods,
+   * the aggregate request counter, and a per-response byte cap. Values above
+   * the beta ceilings throw — broader Standard/Deep relay limits must never
+   * leak into this preset.
+   */
+  authenticatedBeta?: { maxRequests: number; maxResponseBytes: number }
   /** DNS-verified apex domain (authorizes it + subdomains). */
   verifiedDomain: string
   /** Target URL; its host is scoped only when inside the verified apex. */
@@ -79,7 +92,30 @@ export function mintScanRelayGrant(
   input: MintRelayGrantInput,
   config: RelayRuntimeConfig
 ): { grant: string; scope: RelayGrantScope } {
-  const limits = RELAY_LIMITS[input.mode]
+  const beta = input.authenticatedBeta
+  if (
+    beta &&
+    (beta.maxRequests > AUTHENTICATED_ASSESSMENT_BETA_LIMITS.maxRequests ||
+      beta.maxResponseBytes > AUTHENTICATED_ASSESSMENT_BETA_LIMITS.maxResponseBytes ||
+      beta.maxRequests <= 0 ||
+      beta.maxResponseBytes <= 0)
+  ) {
+    // Defense in depth: a plan carrying wider ceilings than the beta contract
+    // must not mint a broader grant even if plan validation was bypassed.
+    throw new Error("RELAY_SCOPE_INVALID")
+  }
+  const limits = beta
+    ? {
+        maxRequests: beta.maxRequests,
+        // Aggregate byte cap: every request's response is individually capped
+        // at maxResponseBytes, so the budget can never exceed the request
+        // counter times that cap.
+        maxBytes: beta.maxRequests * beta.maxResponseBytes,
+        ratePerMinute: AUTHENTICATED_ASSESSMENT_BETA_LIMITS.maxRequests,
+        perPathPerMinute: 10,
+        maxResponseBytes: beta.maxResponseBytes,
+      }
+    : RELAY_LIMITS[input.mode]
 
   const hosts = new Set<string>()
   const addHost = (raw: string | null | undefined) => {
@@ -128,11 +164,17 @@ export function mintScanRelayGrant(
     v: 1,
     scanId: input.scanId,
     hosts: scopedHosts,
-    methods: input.destructiveTestsAllowed
-      ? [...SAFE_METHODS, ...DESTRUCTIVE_METHODS]
-      : SAFE_METHODS,
+    // The authenticated beta never inherits destructive or POST methods —
+    // only explicitly approved GET/HEAD/OPTIONS operations are forwarded.
+    methods: beta
+      ? [...AUTH_BETA_METHODS]
+      : input.destructiveTestsAllowed
+        ? [...SAFE_METHODS, ...DESTRUCTIVE_METHODS]
+        : SAFE_METHODS,
     blockedPaths: input.blockedPaths ?? [],
-    exp: Date.now() + input.engineBudgetMs + GRANT_GRACE_MS,
+    // engineBudgetMs derives from the monotonic clock and can be fractional;
+    // the grant schema requires a safe-integer expiry — floor, never round up.
+    exp: Math.floor(Date.now() + input.engineBudgetMs + GRANT_GRACE_MS),
     ...limits,
   }
   return { grant: mintRelayGrant(scope, config.signingSecret), scope }
@@ -219,15 +261,26 @@ export async function fetchRelayAudit(
   }
 }
 
-/** Admit this exact grant once, before execution. Never retry after relay restart. */
+/**
+ * Admit this exact grant once, before execution. Never retry after relay
+ * restart. When `session` is present, the relay binds the referenced
+ * test-session headers to the scan server-side — credentials travel only on
+ * this admin-authenticated channel, never inside the signed grant.
+ */
 export async function registerRelayGrant(
   scanId: string,
   grant: string,
-  config: RelayRuntimeConfig
+  config: RelayRuntimeConfig,
+  session?: RelaySessionBinding
 ): Promise<void> {
   const response = await fetch(`${config.url}/v1/register/${encodeURIComponent(scanId)}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${config.adminSecret}`, "x-lyra-relay-grant": grant },
+    headers: {
+      Authorization: `Bearer ${config.adminSecret}`,
+      "x-lyra-relay-grant": grant,
+      ...(session ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(session ? { body: JSON.stringify({ session }) } : {}),
     signal: AbortSignal.timeout(10_000),
     redirect: "error",
   })

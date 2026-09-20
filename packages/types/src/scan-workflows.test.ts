@@ -140,6 +140,37 @@ describe("scan-workflows parity fixture", () => {
     ).toThrowError(/authorization reference/i)
   })
 
+  it("requires authorizationRef at the input schema for AUTHENTICATED_ASSESSMENT only", () => {
+    const base = {
+      workspaceId: "ws-1",
+      targetId: "t-1",
+      goal: "TEST_APP",
+      mode: "DEEP",
+    }
+    // Missing on the beta workflow → rejected.
+    expect(
+      CreateScanInputSchema.safeParse({ ...base, workflow: "AUTHENTICATED_ASSESSMENT" }).success
+    ).toBe(false)
+    // Present on any other workflow → rejected; the reference can never leak
+    // into a plan that does not verify it.
+    expect(
+      CreateScanInputSchema.safeParse({
+        ...base,
+        workflow: "REVIEW_TARGET",
+        authorizationRef: "authz_1",
+      }).success
+    ).toBe(false)
+    // Well-formed beta input parses — the server still applies the gated
+    // admission and verifies the recorded authorization.
+    expect(
+      CreateScanInputSchema.safeParse({
+        ...base,
+        workflow: "AUTHENTICATED_ASSESSMENT",
+        authorizationRef: "authz_1",
+      }).success
+    ).toBe(true)
+  })
+
   it("never derives scan depth from target shape", () => {
     // Depth comes from the explicit mode only: the same STANDARD request must
     // map to STANDARD on every target type, never to a target-implied tier.
