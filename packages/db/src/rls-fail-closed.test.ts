@@ -63,6 +63,7 @@ const enqueuedArtifactDeletionTaskId = createId()
 const enqueuedAttachmentTaskId = createId()
 let evidenceStorageUri = ""
 let attachmentStorageUri = ""
+let attachmentId = ""
 let restricted: PrismaClient
 
 describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
@@ -146,7 +147,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       },
     })
     attachmentStorageUri = `s3://evidence/evidence/${workspaceId}/scan-attachments/u/${createId()}`
-    await prisma.scanAttachment.create({
+    const attachment = await prisma.scanAttachment.create({
       data: {
         workspaceId,
         filename: "rls-attachment.txt",
@@ -158,6 +159,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         createdById: `rls-fc-attachment-user-${suffix}`,
       },
     })
+    attachmentId = attachment.id
   })
 
   afterAll(async () => {
@@ -930,6 +932,46 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         ) AS id`
       )
     ).rejects.toThrow()
+  })
+
+  it("fails closed on ScanAttachment reads without a bound workspace (v20 2.3)", async () => {
+    // The permissive arm is gone: an unbound read must return zero rows and a
+    // foreign binding must never see the row. Only the owning workspace's
+    // bound context reads it back.
+    const countThisAttachment = async (
+      tx: Omit<PrismaClient, "$transaction" | "$connect" | "$disconnect">
+    ) => {
+      const rows = await tx.$queryRaw<Array<{ count: bigint }>>`
+        SELECT count(*)::bigint AS count FROM "ScanAttachment" WHERE id = ${attachmentId}`
+      return Number(rows[0]?.count ?? 0)
+    }
+    expect(await asWorkspace(workspaceId, countThisAttachment)).toBe(1)
+    expect(await asWorkspace(null, countThisAttachment)).toBe(0)
+    expect(await asWorkspace(otherWorkspaceId, countThisAttachment)).toBe(0)
+
+    // A bound read over the whole table sees only the owning workspace's
+    // rows — never another tenant's.
+    const boundVisible = await asWorkspace(workspaceId, async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ workspaceId: string }>>`
+        SELECT DISTINCT "workspaceId" FROM "ScanAttachment"`
+      return rows.map((row) => row.workspaceId)
+    })
+    expect(boundVisible).toEqual([workspaceId])
+
+    // Writes obey the same boundary: a foreign or absent context cannot even
+    // update the row's bookkeeping fields.
+    const tampered = await asWorkspace(
+      otherWorkspaceId,
+      (tx) => tx.$executeRaw`UPDATE "ScanAttachment" SET filename = 'x' WHERE id = ${attachmentId}`
+    )
+    expect(tampered).toBe(0)
+    await expect(
+      asWorkspace(
+        otherWorkspaceId,
+        (tx) =>
+          tx.$executeRaw`INSERT INTO "ScanAttachment" (id, "workspaceId", filename, "mediaType", "byteLength", checksum, "storageUri", "encryptionKeyRef", "createdById") VALUES (${createId()}, ${workspaceId}, 'x.txt', 'text/plain', 1, ${suffix.padEnd(64, "2").slice(0, 64)}, ${`s3://x/evidence/${workspaceId}/${createId()}`}, 'k', 'u')`
+      )
+    ).rejects.toThrow(/row-level security/i)
   })
 
   it("keeps AI security score snapshots inside the owning workspace", async () => {
