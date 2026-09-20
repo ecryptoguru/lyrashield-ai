@@ -44,6 +44,14 @@ for test_path in "${contract_tests[@]}"; do
   fi
 done
 
+engine_threat_fixture="$engine_checkout/tests/fixtures/threat_model_writer_1_1.json"
+app_threat_fixture="$app_checkout/apps/worker/src/engine/fixtures/run-json-1.1/threat_model.json"
+if [[ ! -f "$engine_threat_fixture" || ! -f "$app_threat_fixture" ]] ||
+   ! cmp -s "$engine_threat_fixture" "$app_threat_fixture"; then
+  echo "Engine writer and worker reader threat-model fixtures differ." >&2
+  exit 2
+fi
+
 help="$(cd "$engine_checkout" && uv run lyrashield --help)"
 for flag in --non-interactive --target --scan-mode --instruction --max-budget-usd; do
   if ! grep -Fq -- "$flag" <<< "$help"; then

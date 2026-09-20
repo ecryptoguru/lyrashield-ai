@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { mkdtemp, mkdir, realpath, rm, symlink, utimes, writeFile } from "fs/promises"
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, utimes, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import { join } from "path"
 import { createHash } from "crypto"
@@ -126,6 +126,43 @@ it("reads the owned singular threat-model artifact before any legacy plural file
   const output = await readEngineOutput(outputDir)
 
   expect(output.artifacts.threatModelsRaw).toBe(canonical)
+})
+
+it("round-trips an actual redacted engine writer artifact through the manifest-bound reader", async () => {
+  // Produced by build_threat_model_document + write_threat_model_artifact in
+  // lyrashield-engine; unlike synthetic models: [] fixtures, it exercises the
+  // writer's model-array, amendment, target-redaction and run binding shape.
+  const canonical = await readFile(
+    new URL("./fixtures/run-json-1.1/threat_model.json", import.meta.url),
+    "utf8"
+  )
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-writer-fixture-"))
+  cleanupPaths.push(outputDir)
+  await writeFile(join(outputDir, "threat_model.json"), canonical, "utf8")
+  await writeFile(
+    join(outputDir, "run.json"),
+    JSON.stringify({
+      schema_version: "1.1",
+      run_id: "fixture-run-1-1",
+      result_manifest: {
+        schema_version: 1,
+        artifacts: {
+          "threat_model.json": {
+            path: "threat_model.json",
+            bytes: Buffer.byteLength(canonical),
+            sha256: createHash("sha256").update(canonical).digest("hex"),
+          },
+        },
+      },
+    })
+  )
+
+  const output = await readEngineOutput(outputDir)
+  const parsed = parseEngineOutput(output.vulnerabilitiesRaw, output.runJsonRaw, output.artifacts)
+  expect(output.artifacts.threatModelsRaw).toBe(canonical)
+  expect(parsed.threatModels?.models).toHaveLength(1)
+  expect(JSON.stringify(parsed.threatModels)).toContain("[SECRET]")
+  expect(JSON.stringify(parsed.threatModels)).not.toContain("sample-secret-123")
 })
 
 it("rejects an unbound canonical threat model without a 1.1 run receipt", async () => {
