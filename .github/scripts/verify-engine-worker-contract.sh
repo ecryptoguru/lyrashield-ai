@@ -16,10 +16,8 @@ if ! [[ "$reviewed_app_sha" =~ ^[0-9a-f]{40}$ ]]; then
   echo "Engine worker-consumer pin is not an immutable commit SHA." >&2
   exit 2
 fi
-if ! git -C "$app_checkout" merge-base --is-ancestor "$reviewed_app_sha" HEAD; then
-  echo "Current app does not descend from engine-reviewed consumer $reviewed_app_sha." >&2
-  exit 2
-fi
+# Engine CI tests the pinned consumer; this invocation tests this exact app
+# checkout, which may be a squash merge of that reviewed consumer.
 # Verify the caller's committed tree without discarding local work. Tool setup
 # drift must be resolved explicitly before this check, never by restoring files.
 tracked_changes="$(git -C "$app_checkout" status --porcelain --untracked-files=no)"

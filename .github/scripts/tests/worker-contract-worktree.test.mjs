@@ -45,3 +45,41 @@ test("worker contract verification refuses a dirty checkout without overwriting 
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("worker contract verification tests the merged app even after a squash", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "worker-contract-squash-"))
+  const app = path.join(directory, "app")
+  const engine = path.join(directory, "engine")
+  mkdirSync(app)
+  mkdirSync(path.join(engine, "scripts"), { recursive: true })
+  const git = (...args) => execFileSync("git", args, { cwd: app, encoding: "utf8" })
+  const commit = (message) => {
+    git("add", "source.txt")
+    git("-c", "user.name=Review Test", "-c", "user.email=review@example.invalid", "commit", "-qm", message)
+  }
+  try {
+    git("init", "-q", "-b", "main")
+    writeFileSync(path.join(app, "source.txt"), "base\n")
+    commit("base")
+    git("switch", "-qc", "reviewed")
+    writeFileSync(path.join(app, "source.txt"), "reviewed branch\n")
+    commit("reviewed")
+    const reviewed = git("rev-parse", "HEAD").trim()
+    git("switch", "-q", "main")
+    writeFileSync(path.join(app, "source.txt"), "squash merge\n")
+    commit("squashed")
+    writeFileSync(path.join(engine, ".lyrashield-worker-pin"), `${reviewed}\n`)
+    writeFileSync(path.join(engine, "scripts/worker-contract-tests.txt"), "missing-test.ts\n")
+
+    assert.equal(spawnSync("git", ["merge-base", "--is-ancestor", reviewed, "HEAD"], { cwd: app }).status, 1)
+    const result = spawnSync(
+      "bash",
+      [path.resolve(".github/scripts/verify-engine-worker-contract.sh"), engine, app],
+      { encoding: "utf8" }
+    )
+    assert.equal(result.status, 2)
+    assert.match(result.stderr, /Missing worker contract test: missing-test\.ts/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
