@@ -296,7 +296,7 @@ export interface ParsedScanOutput {
   ingestionIssues: string[]
   /** Model-declared scoped coverage (coverage.json), never control outcomes. */
   scopedCoverage: ParsedEngineCoverage | null
-  /** Versioned scan-bound threat model document (threat_models.json). */
+  /** Versioned scan-bound threat model document (threat_model.json). */
   threatModels: ParsedThreatModels | null
   /** The scan's bounded proxy-exchange export (http_exchanges.json). */
   httpExchangeExport: ParsedHttpExchangeExport | null
@@ -1644,52 +1644,69 @@ function parseEngineCoverage(
   }
 }
 
+function redactThreatModelText(value: string): string {
+  return value
+    .replace(
+      /\b(password|passwd|pwd|api[_-]?key|secret|token|credential|authorization)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s"'<>]+)/gi,
+      "$1=[REDACTED]"
+    )
+    .replace(/\bBearer\s+[^\s"'<>]+/gi, "Bearer [REDACTED]")
+}
+
 /**
- * threat_models.json — the scan's threat model document, keyed by normalized
- * target identity. The artifact is stored verbatim-but-validated in encrypted
- * storage; it is a declared model, never proof its attack paths were tested.
+ * threat_model.json — the owned engine's models array. Older target-keyed
+ * documents are adapted by this reader; neither form proves paths were tested.
  */
 function parseThreatModels(
   raw: string | null | undefined,
-  issues?: string[]
+  issues?: string[],
+  runId?: string
 ): ParsedThreatModels | null {
   if (raw === undefined) return null
   if (raw === null) {
-    recordIngestionIssue(issues, "threat_models.json unreadable or oversized — artifact ignored")
+    recordIngestionIssue(issues, "threat_model.json unreadable or oversized — artifact ignored")
     return null
   }
   if (!raw.trim()) return null
-  const data = parseJsonArtifact(raw, "threat_models.json", issues)
+  const data = parseJsonArtifact(raw, "threat_model.json", issues)
   if (data === undefined) return null
   const parsed = threatModelsDocumentSchema.safeParse(data)
   if (!parsed.success) {
-    recordIngestionIssue(issues, "threat_models.json failed schema validation — artifact ignored")
-    logger.warn("Engine output: threat_models.json failed schema validation", {
+    recordIngestionIssue(issues, "threat_model.json failed schema validation — artifact ignored")
+    logger.warn("Engine output: threat_model.json failed schema validation", {
       errors: parsed.error.issues.map((issue) => issue.message).slice(0, 20),
     })
     return null
   }
   const doc = parsed.data
-  // The upstream store is a bare target→entry record; a wrapped document adds
-  // schema_version under a `models` key. A bare record CAN legitimately hold a
-  // model under the literal key "models" — distinguish by content: an entry
-  // has a `content` field, a wrapped record does not.
+  // Canonical owned output is an array. Older upstream documents were bare
+  // records or wrapped records; a bare record may contain a key named models.
   type ThreatModelEntry = z.infer<typeof threatModelEntrySchema>
   const maybeModels = (doc as { models?: unknown }).models
+  const isCanonical = Array.isArray(maybeModels)
+  if (isCanonical && Object.hasOwn(doc, "error")) {
+    recordIngestionIssue(issues, "threat_model.json reports a writer error — artifact ignored")
+    return null
+  }
+  if (isCanonical && (!runId || (doc as { run_id?: unknown }).run_id !== runId)) {
+    recordIngestionIssue(issues, "threat_model.json run_id mismatch — artifact ignored")
+    return null
+  }
   const isWrapped =
     typeof maybeModels === "object" &&
     maybeModels !== null &&
     !Array.isArray(maybeModels) &&
     !("content" in maybeModels)
   const schemaVersion =
-    isWrapped && (doc as { schema_version?: unknown }).schema_version !== undefined
+    (isCanonical || isWrapped) && (doc as { schema_version?: unknown }).schema_version !== undefined
       ? String((doc as { schema_version?: unknown }).schema_version)
       : undefined
-  const rawModels = (isWrapped ? maybeModels : doc) as Record<string, ThreatModelEntry>
+  const rawModels = (isCanonical || isWrapped ? maybeModels : doc) as
+    ThreatModelEntry[] | Record<string, ThreatModelEntry>
   const models: ParsedThreatModelEntry[] = []
   for (const [key, model] of Object.entries(rawModels)) {
     if (models.length >= MAX_THREAT_MODELS) {
-      recordIngestionIssue(issues, `threat_models.json: models truncated at ${MAX_THREAT_MODELS}`)
+      recordIngestionIssue(issues, `threat_model.json: models truncated at ${MAX_THREAT_MODELS}`)
       break
     }
     if (
@@ -1697,55 +1714,78 @@ function parseThreatModels(
       model === null ||
       Array.isArray(model) ||
       typeof (model as { target?: unknown }).target !== "string" ||
-      typeof (model as { content?: unknown }).content !== "string"
+      !model.target.trim() ||
+      typeof (model as { content?: unknown }).content !== "string" ||
+      !model.content.trim()
     ) {
       recordIngestionIssue(
         issues,
-        `threat_models.json: model ${key.slice(0, 64)} malformed — dropped`
+        `threat_model.json: model ${key.slice(0, 64)} malformed — dropped`
       )
       continue
     }
     models.push({
-      target: model.target,
-      ...(model.written_at ? { writtenAt: model.written_at } : {}),
-      ...(model.written_by ? { writtenBy: model.written_by } : {}),
-      content: model.content,
+      target: redactThreatModelText(model.target),
+      ...(model.written_at ? { writtenAt: redactThreatModelText(model.written_at) } : {}),
+      ...(model.written_by ? { writtenBy: redactThreatModelText(model.written_by) } : {}),
+      content: redactThreatModelText(model.content),
       ...(model.amendments?.length
         ? {
             amendments: model.amendments.map((amendment) => ({
-              ...(amendment.at ? { at: amendment.at } : {}),
-              ...(amendment.by ? { by: amendment.by } : {}),
-              content: amendment.content,
+              ...(amendment.at ? { at: redactThreatModelText(amendment.at) } : {}),
+              ...(amendment.by ? { by: redactThreatModelText(amendment.by) } : {}),
+              content: redactThreatModelText(amendment.content),
             })),
           }
         : {}),
     })
   }
-  if (models.length === 0) return null
+  if (models.length === 0) {
+    recordIngestionIssue(issues, "threat_model.json contains no usable models — artifact ignored")
+    return null
+  }
   // Persist the validated canonical document — not raw bytes — so nothing
   // outside the declared contract reaches encrypted storage.
+  const serializedModels = models.map((model) => ({
+    target: model.target,
+    ...(model.writtenAt ? { written_at: model.writtenAt } : {}),
+    ...(model.writtenBy ? { written_by: model.writtenBy } : {}),
+    content: model.content,
+    ...(model.amendments?.length
+      ? {
+          amendments: model.amendments.map((amendment) => ({
+            ...(amendment.at ? { at: amendment.at } : {}),
+            ...(amendment.by ? { by: amendment.by } : {}),
+            content: amendment.content,
+          })),
+        }
+      : {}),
+  }))
+  const canonical = isCanonical
+    ? (doc as {
+        generated_at: string
+        run_id: string
+        run_name?: string
+        note?: string
+        truncated?: boolean
+        error?: string
+      })
+    : null
   const document = JSON.stringify({
     schema_version: schemaVersion ?? "1.0",
-    models: Object.fromEntries(
-      models.map((model) => [
-        model.target,
-        {
-          target: model.target,
-          ...(model.writtenAt ? { written_at: model.writtenAt } : {}),
-          ...(model.writtenBy ? { written_by: model.writtenBy } : {}),
-          content: model.content,
-          ...(model.amendments?.length
-            ? {
-                amendments: model.amendments.map((amendment) => ({
-                  ...(amendment.at ? { at: amendment.at } : {}),
-                  ...(amendment.by ? { by: amendment.by } : {}),
-                  content: amendment.content,
-                })),
-              }
-            : {}),
-        },
-      ])
-    ),
+    ...(canonical
+      ? {
+          generated_at: redactThreatModelText(canonical.generated_at),
+          run_id: redactThreatModelText(canonical.run_id),
+          ...(canonical.run_name ? { run_name: redactThreatModelText(canonical.run_name) } : {}),
+          ...(canonical.note ? { note: redactThreatModelText(canonical.note) } : {}),
+          ...(canonical.truncated !== undefined ? { truncated: canonical.truncated } : {}),
+          ...(canonical.error ? { error: redactThreatModelText(canonical.error) } : {}),
+        }
+      : {}),
+    models: isCanonical
+      ? serializedModels
+      : Object.fromEntries(serializedModels.map((model) => [model.target, model])),
   })
   return {
     ...(schemaVersion ? { schemaVersion } : {}),
@@ -1829,7 +1869,11 @@ export function parseEngineOutput(
   const vulnerabilities = parsedVulnerabilities.vulnerabilities
   const runRecord = parseRunJson(runJsonRaw)
   const scopedCoverage = parseEngineCoverage(artifacts?.coverageRaw, ingestionIssues)
-  const threatModels = parseThreatModels(artifacts?.threatModelsRaw, ingestionIssues)
+  const threatModels = parseThreatModels(
+    artifacts?.threatModelsRaw,
+    ingestionIssues,
+    runRecord?.run_id
+  )
 
   const summary = runRecord?.status
     ? `Engine status: ${runRecord.status}. ${vulnerabilities.length} finding(s) reported.`

@@ -640,6 +640,7 @@ mod tests {
             confidence_rationale: None,
             fix_verification: None,
             http_exchange_ids: vec![],
+            evidence_context: None,
             detected_at: "2026-08-22T00:00:00Z".into(),
         };
         let json = serde_json::json!({

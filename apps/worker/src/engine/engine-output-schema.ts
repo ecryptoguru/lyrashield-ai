@@ -31,10 +31,10 @@ export const MAX_SCOPED_COVERAGE_ENTRIES = 500
 export const MAX_COVERAGE_GAPS = 50
 export const MAX_COVERAGE_PREVIOUS_OUTCOMES = 40
 export const MAX_COVERAGE_STRING_CHARS = 4096
-export const MAX_THREAT_MODELS = 8
+export const MAX_THREAT_MODELS = 20
 export const MAX_THREAT_MODEL_AMENDMENTS = 40
-export const MAX_THREAT_MODEL_CONTENT_CHARS = 512 * 1024
-export const MAX_THREAT_MODEL_AMENDMENT_CHARS = 64 * 1024
+export const MAX_THREAT_MODEL_CONTENT_CHARS = 64_000
+export const MAX_THREAT_MODEL_AMENDMENT_CHARS = 8_000
 export const MAX_HTTP_EXCHANGE_ENTRIES = 500
 // Reader-side slack over the writer's 4096-byte decoded body-sample budget —
 // redaction can alter length slightly, but an 8 KiB cap keeps a hostile
@@ -337,7 +337,7 @@ const threatModelAmendmentSchema = z
   .object({
     at: boundedString,
     by: boundedString,
-    content: z.string().min(1).max(MAX_THREAT_MODEL_AMENDMENT_CHARS),
+    content: z.string().max(MAX_THREAT_MODEL_AMENDMENT_CHARS),
   })
   .strip()
 
@@ -346,19 +346,29 @@ export const threatModelEntrySchema = z
     target: z.string().min(1).max(1024),
     written_at: boundedString,
     written_by: boundedString,
-    content: z.string().min(1).max(MAX_THREAT_MODEL_CONTENT_CHARS),
+    content: z.string().max(MAX_THREAT_MODEL_CONTENT_CHARS),
     amendments: z.array(threatModelAmendmentSchema).max(MAX_THREAT_MODEL_AMENDMENTS).optional(),
   })
   .strip()
 
 /**
- * threat_models.json — the engine's per-scan threat model document, keyed by
- * normalized target identity (upstream store shape) or wrapped with an
- * explicit schema_version. Stored verbatim-but-validated in encrypted
- * artifact storage; it is a declared model, never proof that the attack
- * paths it names were exercised.
+ * Canonical threat_model.json is the owned engine's versioned models array.
+ * Older plural fixtures used an upstream target-keyed record; they remain an
+ * explicitly named reader adapter, never a substitute for the owned writer.
  */
 export const threatModelsDocumentSchema = z.union([
+  z
+    .object({
+      schema_version: z.literal("lyrashield-threat-model/1.0"),
+      generated_at: boundedString,
+      run_id: boundedString,
+      run_name: boundedString.optional(),
+      models: z.array(threatModelEntrySchema).max(MAX_THREAT_MODELS),
+      note: boundedString.optional(),
+      truncated: z.boolean().optional(),
+      error: boundedString.optional(),
+    })
+    .strip(),
   z.record(z.string().max(1024), threatModelEntrySchema),
   z
     .object({

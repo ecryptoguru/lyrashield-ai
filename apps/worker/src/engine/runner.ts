@@ -1,4 +1,5 @@
 import { execFile, spawn, type ChildProcess } from "child_process"
+import { createHash } from "crypto"
 import { constants as fsConstants } from "fs"
 import { rm, mkdir, readdir, lstat, realpath, open, writeFile } from "fs/promises"
 import { join, relative, resolve, sep } from "path"
@@ -124,7 +125,7 @@ const MAX_ENGINE_RUN_BYTES = 1 * 1024 * 1024
 const MAX_ENGINE_TRIAGE_ARTIFACT_BYTES = 128 * 1024
 // run.json 1.1 sibling artifacts — bounded like every other engine output.
 const MAX_ENGINE_COVERAGE_BYTES = 256 * 1024
-const MAX_ENGINE_THREAT_MODEL_BYTES = 1 * 1024 * 1024
+const MAX_ENGINE_THREAT_MODEL_BYTES = 32 * 1024 * 1024
 const MAX_ENGINE_HTTP_EXCHANGES_BYTES = 2 * 1024 * 1024
 const SIGKILL_GRACE_MS = 5000
 // Purely informational "still running" ScanEvent row. Each tick is a Postgres
@@ -981,7 +982,7 @@ export async function readEngineSpendUsd(
   }
 }
 
-async function readEngineOutput(outputDir: string): Promise<{
+export async function readEngineOutput(outputDir: string): Promise<{
   vulnerabilitiesRaw: string
   runJsonRaw: string
   artifacts: EngineArtifactInput
@@ -1041,12 +1042,56 @@ async function readEngineOutput(outputDir: string): Promise<{
     }
   }
 
+  const threatModelRaw = await readOptionalArtifact(
+    "threat_model.json",
+    MAX_ENGINE_THREAT_MODEL_BYTES
+  )
+  // The singular owned artifact only exists under run.json 1.1. An absent or
+  // older receipt cannot bind its bytes; legacy plural evidence is separate.
+  let verifiedThreatModelRaw = runJsonRaw || threatModelRaw === undefined ? threatModelRaw : null
+  let allowLegacyPlural = runJsonRaw === undefined
+  if (runJsonRaw) {
+    try {
+      const run = JSON.parse(runJsonRaw) as {
+        schema_version?: unknown
+        result_manifest?: { schema_version?: unknown; artifacts?: Record<string, unknown> }
+      }
+      allowLegacyPlural = run.schema_version === "1.0" && run.result_manifest === undefined
+      if (run.schema_version !== "1.1" && threatModelRaw !== undefined) {
+        verifiedThreatModelRaw = null
+      } else if (run.schema_version === "1.1" || run.result_manifest !== undefined) {
+        const entry = run.result_manifest?.artifacts?.["threat_model.json"] as
+          { path?: unknown; bytes?: unknown; sha256?: unknown } | undefined
+        if (entry !== undefined || threatModelRaw !== undefined) {
+          const digest =
+            typeof threatModelRaw === "string"
+              ? createHash("sha256").update(threatModelRaw, "utf8").digest("hex")
+              : null
+          if (
+            run.result_manifest?.schema_version !== 1 ||
+            entry?.path !== "threat_model.json" ||
+            entry?.bytes !== Buffer.byteLength(threatModelRaw ?? "", "utf8") ||
+            typeof entry?.sha256 !== "string" ||
+            entry.sha256 !== digest
+          ) {
+            verifiedThreatModelRaw = null
+            logger.warn("threat_model.json missing or differs from run manifest", { outputDir })
+          }
+        }
+      }
+    } catch {
+      // The run parser reports malformed run.json; never accept its unbound evidence.
+      verifiedThreatModelRaw = null
+    }
+  }
   const artifacts: EngineArtifactInput = {
     coverageRaw: await readOptionalArtifact("coverage.json", MAX_ENGINE_COVERAGE_BYTES),
-    threatModelsRaw: await readOptionalArtifact(
-      "threat_models.json",
-      MAX_ENGINE_THREAT_MODEL_BYTES
-    ),
+    // The owned engine exports singular threat_model.json. A plural artifact
+    // is read only as an explicit pre-contract compatibility fallback.
+    threatModelsRaw:
+      allowLegacyPlural && verifiedThreatModelRaw === undefined
+        ? await readOptionalArtifact("threat_models.json", MAX_ENGINE_THREAT_MODEL_BYTES)
+        : verifiedThreatModelRaw,
     httpExchangesRaw: await readOptionalArtifact(
       "http_exchanges.json",
       MAX_ENGINE_HTTP_EXCHANGES_BYTES

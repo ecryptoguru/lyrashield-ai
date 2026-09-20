@@ -114,13 +114,18 @@ interface FindingDetail {
   evidence?: Array<{ id: string; type: string; redactionStatus: string }>
   /** Engine-declared claim context — assertions, never app verification. */
   evidenceInsights?: {
-    counterevidence?: string[]
+    counterevidence?: string
     evidenceWarnings?: string[]
-    severityChangeConditions?: string[]
-    assumptions?: string[]
+    severityChangeConditions?: string
+    assumptions?: string
     confidenceRationale?: string
     contextualCvssReasoning?: string
-    advisoryCvss?: number
+    advisoryCvss?: {
+      score: number
+      vector?: string
+      source?: string
+      metric_reasoning?: string
+    }
     engineVerificationState?: string
     engineConfidence?: string
   } | null
@@ -218,13 +223,20 @@ const evidenceSchema = z
  */
 const evidenceInsightsSchema = z
   .object({
-    counterevidence: z.array(z.string()).optional(),
+    counterevidence: z.string().optional(),
     evidenceWarnings: z.array(z.string()).optional(),
-    severityChangeConditions: z.array(z.string()).optional(),
-    assumptions: z.array(z.string()).optional(),
+    severityChangeConditions: z.string().optional(),
+    assumptions: z.string().optional(),
     confidenceRationale: z.string().optional(),
     contextualCvssReasoning: z.string().optional(),
-    advisoryCvss: z.number().optional(),
+    advisoryCvss: z
+      .object({
+        score: z.number(),
+        vector: z.string().optional(),
+        source: z.string().optional(),
+        metric_reasoning: z.string().optional(),
+      })
+      .optional(),
     engineVerificationState: z.string().optional(),
     engineConfidence: z.string().optional(),
   })
@@ -1198,8 +1210,26 @@ export function FindingDetailDrawer({
                           <dt className="text-muted-foreground text-xs">Advisory severity</dt>
                           <dd>
                             <Badge variant="warning">
-                              Advisory CVSS {detail.evidenceInsights.advisoryCvss}
+                              Advisory CVSS {detail.evidenceInsights.advisoryCvss.score}
                             </Badge>
+                          </dd>
+                        </div>
+                      )}
+                      {detail.evidenceInsights.advisoryCvss?.vector && (
+                        <div>
+                          <dt className="text-muted-foreground text-xs">Advisory vector</dt>
+                          <dd className="text-muted-foreground mt-0.5 break-all font-mono text-xs">
+                            {detail.evidenceInsights.advisoryCvss.vector}
+                          </dd>
+                        </div>
+                      )}
+                      {detail.evidenceInsights.advisoryCvss?.metric_reasoning && (
+                        <div>
+                          <dt className="text-muted-foreground text-xs">
+                            Advisory metric reasoning
+                          </dt>
+                          <dd className="text-muted-foreground mt-0.5 text-xs">
+                            {detail.evidenceInsights.advisoryCvss.metric_reasoning}
                           </dd>
                         </div>
                       )}
@@ -1241,29 +1271,29 @@ export function FindingDetailDrawer({
                           </dd>
                         </div>
                       )}
-                      {(detail.evidenceInsights.counterevidence?.length ?? 0) > 0 && (
+                      {detail.evidenceInsights.counterevidence && (
                         <div>
                           <dt className="text-muted-foreground text-xs">Counterevidence</dt>
-                          <dd>
-                            <ul className="text-muted-foreground mt-0.5 list-inside list-disc text-xs">
-                              {detail.evidenceInsights.counterevidence!.map((item, i) => (
-                                <li key={i}>{item}</li>
-                              ))}
-                            </ul>
+                          <dd className="text-muted-foreground mt-0.5 whitespace-pre-wrap text-xs">
+                            {detail.evidenceInsights.counterevidence}
                           </dd>
                         </div>
                       )}
-                      {(detail.evidenceInsights.severityChangeConditions?.length ?? 0) > 0 && (
+                      {detail.evidenceInsights.severityChangeConditions && (
                         <div>
                           <dt className="text-muted-foreground text-xs">
                             Severity change conditions
                           </dt>
-                          <dd>
-                            <ul className="text-muted-foreground mt-0.5 list-inside list-disc text-xs">
-                              {detail.evidenceInsights.severityChangeConditions!.map((item, i) => (
-                                <li key={i}>{item}</li>
-                              ))}
-                            </ul>
+                          <dd className="text-muted-foreground mt-0.5 whitespace-pre-wrap text-xs">
+                            {detail.evidenceInsights.severityChangeConditions}
+                          </dd>
+                        </div>
+                      )}
+                      {detail.evidenceInsights.assumptions && (
+                        <div>
+                          <dt className="text-muted-foreground text-xs">Assumptions</dt>
+                          <dd className="text-muted-foreground mt-0.5 whitespace-pre-wrap text-xs">
+                            {detail.evidenceInsights.assumptions}
                           </dd>
                         </div>
                       )}

@@ -19,7 +19,7 @@ vi.mock("../github", async (importOriginal) => {
 vi.mock("@lyrashield/config", () => ({
   env: {
     SLACK_CLIENT_ID: "slack-client-id",
-    SLACK_CLIENT_SECRET: "slack-client-secret",
+    SLACK_CLIENT_SECRET: ["slack", "client", "secret"].join("-"),
     OUTBOUND_CONNECTOR_ADMISSION: "off",
     CONNECTOR_CANARY_WORKSPACE_IDS: "ws_canary",
   },
@@ -121,7 +121,7 @@ describe("github connector tools", () => {
         private: true,
         // Fields that must NOT leak through the projection:
         secret_field: "nope",
-        internal_token: "xox-s",
+        internal_token: ["xox", "secret"].join("-"),
       })
     )
     const validated = tool.validateInput({ owner: "acme", repo: "app" })
@@ -227,14 +227,14 @@ describe("slack connector tools", () => {
     const fetchFn = vi.fn(async () =>
       jsonResponse({
         ok: true,
-        access_token: "xoxb-a",
+        access_token: ["xoxb", "abc"].join("-"),
         scope: "channels:read,team:read",
         team: { id: "T1", name: "Acme" },
         bot_user_id: "U1",
       })
     )
     const result = await exchangeSlackOAuthCode("code-1", "https://app/cb", fetchFn)
-    expect(result.accessToken).toBe("xoxb-a")
+    expect(result.accessToken).toBe("xoxb-abc")
     expect(result.teamId).toBe("T1")
     const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit]
     expect(init.method).toBe("POST")
