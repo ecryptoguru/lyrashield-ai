@@ -83,3 +83,11 @@ test("worker contract verification tests the merged app even after a squash", ()
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("engine-worker contract is not skipped on app main or pull requests", () => {
+  const workflow = readFileSync(path.resolve(".github/workflows/ci.yml"), "utf8")
+  const job = workflow.split("  engine-worker-contract:")[1]?.split("  deploy-marketing:")[0]
+  assert.ok(job)
+  assert.match(job, /name: Pinned Engine \/ Worker Contract/)
+  assert.doesNotMatch(job, /\n\s+if:/)
+})

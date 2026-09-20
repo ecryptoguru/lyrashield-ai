@@ -514,7 +514,6 @@ jobs:
   engine-worker-contract:
     name: Pinned Engine / Worker Contract
     needs: changes
-    if: github.event_name == 'pull_request' && (needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true')
     runs-on: ubuntu-24.04
     steps:
       - name: Configure git default branch
