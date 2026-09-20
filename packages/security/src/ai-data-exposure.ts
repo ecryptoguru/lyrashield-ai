@@ -52,7 +52,7 @@ export function scanAiDataExposure(source: AiDataExposureSource): AiDataExposure
           "Raw AI prompt or response logged",
           "HIGH",
           "CWE-532",
-          "A logger call includes prompt, message, response, or completion content.",
+          "A logger call includes prompt, message, response or completion content.",
           "Redact or omit AI prompt and response content from logs; retain only approved metadata.",
           line,
           [33, 40]
@@ -108,7 +108,7 @@ export function scanAiDataExposure(source: AiDataExposureSource): AiDataExposure
           "RAG ingestion lacks a declared access-control scope",
           "MEDIUM",
           "CWE-284",
-          "A vector/RAG ingestion call does not show a tenant, user, or access-control scope.",
+          "A vector/RAG ingestion call does not show a tenant, user or access-control scope.",
           "Declare and enforce an access-control scope before ingesting documents into a shared retrieval store.",
           line,
           [40]

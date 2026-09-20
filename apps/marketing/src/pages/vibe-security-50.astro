@@ -50,7 +50,7 @@ const STRATEGY_BLURB: Record<VibeCoverageStrategy, string> = {
   hybrid:
     "An automated signal finds the pattern; establishing whether it is actually exploitable in your app needs review.",
   engine:
-    "Requires authentication, data-flow reasoning, live interaction, or business context, so an agent works through it.",
+    "Requires authentication, data-flow reasoning, live interaction or business context, so an agent works through it.",
   evidence:
     "Cannot be established safely from a repository or URL scan. It needs accountable operational or human review outside the current scan.",
 }
@@ -69,7 +69,7 @@ const description = `The full ${totalControls}-control checklist LyraShield AI r
 const faq = [
   {
     q: "What is the Vibe Security 50?",
-    a: `It is a fixed list of ${totalControls} security controls that LyraShield AI reviews on AI-built applications. ${reviewControls.length} enter deterministic, hybrid, or engine-led review where applicable, while ${evidenceControls.length} require evidence a scan cannot establish on its own. The list is versioned as ${VIBE_SECURITY_COVERAGE_VERSION}.`,
+    a: `It is a fixed list of ${totalControls} security controls that LyraShield AI reviews on AI-built applications. ${reviewControls.length} enter deterministic, hybrid or engine-led review where applicable, while ${evidenceControls.length} require evidence a scan cannot establish on its own. The list is versioned as ${VIBE_SECURITY_COVERAGE_VERSION}.`,
   },
   {
     q: "Does a clean result mean my app is secure?",
@@ -77,11 +77,11 @@ const faq = [
   },
   {
     q: "Why can't all 50 controls be automated?",
-    a: `Seven of them describe operational practice rather than code: audit coverage, monitoring, restore proof, deployment egress, test independence, multi-agent trust, and accountable review. A repository or URL scan cannot observe those safely, so they remain outside-scan evidence requirements instead of guessed results.`,
+    a: `Seven of them describe operational practice rather than code: audit coverage, monitoring, restore proof, deployment egress, test independence, multi-agent trust and accountable review. A repository or URL scan cannot observe those safely, so they remain outside-scan evidence requirements instead of guessed results.`,
   },
   {
     q: "Does every scan check all 50 controls?",
-    a: "No, and the record says which. Applicability depends on the target: a URL or API scan cannot exercise repository or operational controls, and each control gets a receipt recording whether it completed, was limited, did not apply, or still needs evidence.",
+    a: "No and the record says which. Applicability depends on the target: a URL or API scan cannot exercise repository or operational controls and each control gets a receipt recording whether it completed, was limited, did not apply or still needs evidence.",
   },
   {
     q: "Where is evidence for the 7 operational controls stored?",
@@ -152,7 +152,7 @@ const jsonLd = [
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
         A fixed list of {totalControls} security controls LyraShield AI reviews on AI-built
-        applications. {reviewControls.length} are routed to deterministic, hybrid, or agentic
+        applications. {reviewControls.length} are routed to deterministic, hybrid or agentic
         code/URL review where applicable. The remaining {
           evidenceControls.length
         } describe operational practice that a repository or URL scan cannot establish safely, so
@@ -180,7 +180,7 @@ const jsonLd = [
           <dt class="font-semibold text-text">No finding returned</dt>
           <dd class="mt-2 leading-7 text-text-muted">
             The assigned check completed without reporting anything in scope. A no-finding result
-            is not independent verification, and LyraShield never shows it as passed.
+            is not independent verification and LyraShield never shows it as passed.
           </dd>
         </div>
         <div data-reveal>

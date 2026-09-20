@@ -162,7 +162,7 @@ export function buildOpenApiSpec(): Record<string, unknown> {
     Finding: {
       type: "object",
       description:
-        "Finding result with explicit verification trust tiers. `verified` is the legacy boolean summary; `verificationStatus` is the authoritative tier — DETECTED (recorded observation), VALIDATED (deterministic check), VERIFIED (independent confirmation), or the non-conclusive BLOCKED/INCONCLUSIVE. Clients must never conflate the tiers or present DETECTED as verified.",
+        "Finding result with explicit verification trust tiers. `verified` is the legacy boolean summary; `verificationStatus` is the authoritative tier — DETECTED (recorded observation), VALIDATED (deterministic check), VERIFIED (independent confirmation) or the non-conclusive BLOCKED/INCONCLUSIVE. Clients must never conflate the tiers or present DETECTED as verified.",
       additionalProperties: true,
       properties: {
         id: { type: "string" },
@@ -209,7 +209,7 @@ export function buildOpenApiSpec(): Record<string, unknown> {
       title: "LyraShield AI API",
       version: "1.0.0",
       description:
-        "Curated public v1 surface for scans, findings, targets, fix proposals, retests, reports, launch readiness, workspaces, schedules, and projects.",
+        "Curated public v1 surface for scans, findings, targets, fix proposals, retests, reports, launch readiness, workspaces, schedules and projects.",
     },
     servers: [{ url: "/api/v1", description: "Version 1 API root" }],
     security: [{ bearerAuth: [] }],
@@ -255,7 +255,7 @@ export function buildOpenApiSpec(): Record<string, unknown> {
         get: {
           summary: "Get a scan",
           description:
-            "Returns the scan with its recorded execution plan (workflow, scope, resolved immutable source revisions), events, result-manifest checksum, and coverage receipts.",
+            "Returns the scan with its recorded execution plan (workflow, scope, resolved immutable source revisions), events, result-manifest checksum and coverage receipts.",
           parameters: [
             idPathParam,
             workspaceIdParam,

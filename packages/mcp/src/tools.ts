@@ -275,7 +275,7 @@ async function resolveTargetId(
     repo = await detectGitRepo()
     if (!repo) throw new Error("No git origin remote found in the current directory.")
   } else {
-    throw new Error("Either targetId, repo, or auto=true is required.")
+    throw new Error("Either targetId, repo or auto=true is required.")
   }
 
   const targetId = await findOrCreateRepoTarget(context, args.workspaceId, repo)
@@ -287,7 +287,7 @@ async function resolveTargetId(
  * (`lyrashield_scan_target`, `lyrashield_run_pr_scan`). The fields mirror
  * POST /api/scans verbatim: the server resolves refs to immutable git object
  * IDs and owns the execution plan; the MCP layer only forwards workflow
- * intent — it never builds plan fields, limits, or capabilities itself.
+ * intent — it never builds plan fields, limits or capabilities itself.
  */
 const WORKFLOW_INPUT_PROPERTIES = {
   workflow: {
@@ -399,7 +399,7 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_scan_target",
     mutating: true,
     description:
-      "Trigger a security scan on a registered target. Provide targetId, or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target. Workflow REVIEW_CHANGES on a repository target requires baseRef and records an immutable diff-scope plan.",
+      "Trigger a security scan on a registered target. Provide targetId or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target. Workflow REVIEW_CHANGES on a repository target requires baseRef and records an immutable diff-scope plan.",
     inputSchema: {
       type: "object",
       properties: {
@@ -418,12 +418,12 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
         goal: {
           type: "string",
           description:
-            "Scan goal: CHECK_PR, TEST_APP, LAUNCH_REVIEW, WEEKLY_MONITOR, FULL_PENTEST, or COMPLIANCE_REVIEW",
+            "Scan goal: CHECK_PR, TEST_APP, LAUNCH_REVIEW, WEEKLY_MONITOR, FULL_PENTEST or COMPLIANCE_REVIEW",
         },
         mode: {
           type: "string",
           description:
-            "Scan depth: QUICK, STANDARD, DEEP, or CUSTOM. SAFE remains a compatibility alias for QUICK. Depth is always explicit — it is never inferred from the target shape.",
+            "Scan depth: QUICK, STANDARD, DEEP or CUSTOM. SAFE remains a compatibility alias for QUICK. Depth is always explicit — it is never inferred from the target shape.",
         },
         ...WORKFLOW_INPUT_PROPERTIES,
       },
@@ -538,7 +538,7 @@ export function createCreateReportTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_create_report",
     mutating: true,
     description:
-      "Generate a shareable security report from scan findings. Pass targetId to use that target's latest completed scan, or pass scanId for an exact scan.",
+      "Generate a shareable security report from scan findings. Pass targetId to use that target's latest completed scan or pass scanId for an exact scan.",
     inputSchema: {
       type: "object",
       properties: {
@@ -640,7 +640,7 @@ export function createGetScanStatusTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_get_scan_status",
     mutating: false,
     description:
-      "Get the current status, timing, and event trail of a scan by its scanId. Poll this after starting a scan. Supply operationId instead of scanId to inspect durable retry status and recovery.",
+      "Get the current status, timing and event trail of a scan by its scanId. Poll this after starting a scan. Supply operationId instead of scanId to inspect durable retry status and recovery.",
     inputSchema: {
       type: "object",
       properties: {
@@ -676,7 +676,7 @@ export function createGetScanQualityTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_get_scan_quality",
     mutating: false,
     description:
-      "Get a scan's measured evidence-quality surface: stored-evidence facts (finding verification tiers, coverage receipts, manifest checksum), labeled heuristics, and the per-surface parity table. Read-only; nothing here is a model claim or accuracy guarantee.",
+      "Get a scan's measured evidence-quality surface: stored-evidence facts (finding verification tiers, coverage receipts, manifest checksum), labeled heuristics and the per-surface parity table. Read-only; nothing here is a model claim or accuracy guarantee.",
     inputSchema: {
       type: "object",
       properties: {
@@ -746,7 +746,7 @@ export function createCheckDiffTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_check_diff",
     mutating: false,
     description:
-      "Fast ADVISORY heuristic scan of a code diff for obviously risky patterns (hardcoded secrets, eval, unsafe HTML, SQL concatenation). This is a lightweight pre-PR pre-filter only — it is NOT a substitute for a full recorded scan. Run lyrashield_run_pr_scan for a bounded repository scan with findings, coverage receipts, evidence states, and explicit limitations; results are not automatically independently verified or exploit-validated.",
+      "Fast ADVISORY heuristic scan of a code diff for obviously risky patterns (hardcoded secrets, eval, unsafe HTML, SQL concatenation). This is a lightweight pre-PR pre-filter only — it is NOT a substitute for a full recorded scan. Run lyrashield_run_pr_scan for a bounded repository scan with findings, coverage receipts, evidence states and explicit limitations; results are not automatically independently verified or exploit-validated.",
     inputSchema: {
       type: "object",
       properties: {
@@ -792,14 +792,14 @@ export function createRunPrScanTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_run_pr_scan",
     mutating: true,
     description:
-      "Start a PR-focused security scan (goal CHECK_PR) on a registered target. Provide targetId, or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target. Pass baseRef/headRef for a recorded Review Changes diff run — distinct from the advisory lyrashield_check_diff pre-filter, which records nothing.",
+      "Start a PR-focused security scan (goal CHECK_PR) on a registered target. Provide targetId or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target. Pass baseRef/headRef for a recorded Review Changes diff run — distinct from the advisory lyrashield_check_diff pre-filter, which records nothing.",
     inputSchema: {
       type: "object",
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: {
           type: "string",
-          description: "Target ID (the repo/app to scan, or use repo/auto instead)",
+          description: "Target ID (the repo/app to scan or use repo/auto instead)",
         },
         repo: {
           type: "string",
@@ -814,7 +814,7 @@ export function createRunPrScanTool(context: ToolHandlerContext): McpTool {
         mode: {
           type: "string",
           description:
-            "Scan depth: QUICK (default), STANDARD, DEEP, or CUSTOM. SAFE remains a compatibility alias for QUICK. Depth is always explicit — it is never inferred from the target shape.",
+            "Scan depth: QUICK (default), STANDARD, DEEP or CUSTOM. SAFE remains a compatibility alias for QUICK. Depth is always explicit — it is never inferred from the target shape.",
         },
         ...WORKFLOW_INPUT_PROPERTIES,
       },
@@ -880,7 +880,7 @@ export function createGenerateFixPlanTool(context: ToolHandlerContext): McpTool 
     name: "lyrashield_generate_fix_plan",
     mutating: false,
     description:
-      "Assemble a remediation plan for a finding from its recorded detail, recommended fix, and plain-language explanation. Read-only — records nothing. Use lyrashield_record_fix_proposal to persist a proposal on the finding.",
+      "Assemble a remediation plan for a finding from its recorded detail, recommended fix and plain-language explanation. Read-only — records nothing. Use lyrashield_record_fix_proposal to persist a proposal on the finding.",
     inputSchema: {
       type: "object",
       properties: {

@@ -4,7 +4,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/support", origin).toString()
 const supportEmail = (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
 const securityEmail = (import.meta.env.PUBLIC_SECURITY_EMAIL as string | undefined) || "security@lyrashieldai.com"
-const description = "Get help with LyraShield AI: OAuth and MCP setup for coding agents, CLI and API key issues, and where to report a suspected security vulnerability."
+const description = "Get help with LyraShield AI: OAuth and MCP setup for coding agents, CLI and API key issues and where to report a suspected security vulnerability."
 // Fallback must stay in sync with DEFAULT_API_URL in packages/credentials/src/index.ts
 // (marketing deliberately has no dependency edge on that package).
 const appUrl =
@@ -34,18 +34,18 @@ const jsonLd: unknown[] = [
   <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
     <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Support</p>
     <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Connect with confidence.</h1>
-    <p class="mt-6 text-lg leading-8 text-text-muted">Setup help, contact routes, and how to report a vulnerability. LyraShield is in open beta, so response times are best-effort rather than a contractual SLA.</p>
+    <p class="mt-6 text-lg leading-8 text-text-muted">Setup help, contact routes and how to report a vulnerability. LyraShield is in open beta, so response times are best-effort rather than a contractual SLA.</p>
     <div class="prose prose-slate mt-12 max-w-none dark:prose-invert">
       <h2>Where to look first</h2>
       <p>Most setup questions are answered by a guide that already exists. Check these before opening a support thread:</p>
       <ul>
         <li><a href="/docs/integrations/troubleshooting">Integration troubleshooting</a> — the config-key differences that break MCP setup (VS Code uses <code>servers</code>, Zed uses <code>context_servers</code>, Gemini CLI uses <code>httpUrl</code>, OpenCode uses <code>{`{env:VAR}`}</code> interpolation).</li>
-        <li><a href="/docs/integrations/rest-api">REST API and API keys</a> — creating <code>lsk_</code> keys, scopes, and where to store them.</li>
+        <li><a href="/docs/integrations/rest-api">REST API and API keys</a> — creating <code>lsk_</code> keys, scopes and where to store them.</li>
         <li><a href="/docs/approvals">Agent authorization</a> — why a mutating action returns <code>connect_required</code> and what grants it.</li>
         <li><a href="/methodology">Methodology</a> — what an evidence state means, so a result is not read as a stronger claim than it is.</li>
       </ul>
       <h2>Setup help</h2><p>Start with the <a href="/docs/integrations">integration guides</a>. Marketplace clients use OAuth discovery and workspace consent; CLI and CI clients can use an API key stored in <code>~/.lyrashield/credentials.json</code>.</p>
-      <h2>Contact</h2><p>General support: <a href={`mailto:${supportEmail}`}>{supportEmail}</a>. Include the client name, connection type, and a timestamp—never include tokens, prompts, or customer data.</p>
+      <h2>Contact</h2><p>General support: <a href={`mailto:${supportEmail}`}>{supportEmail}</a>. Include the client name, connection type and a timestamp—never include tokens, prompts or customer data.</p>
       <h2>Security reports</h2><p>Use the <a href="/security-reporting">security-reporting instructions</a> to send vulnerability reports to <a href={`mailto:${securityEmail}`}>{securityEmail}</a>. Use encrypted attachments only when requested and do not test systems without authorization.</p>
     </div>
 

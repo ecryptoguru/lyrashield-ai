@@ -1,35 +1,35 @@
 ---
 title: "LyraShield vs Semgrep — release assurance compared"
-description: "How LyraShield AI compares to Semgrep for AI-built application security. Evidence states, coverage framework, MCP integration, and custom rules differences."
+description: "How LyraShield AI compares to Semgrep for AI-built application security. Evidence states, coverage framework, MCP integration and custom rules differences."
 competitor: "Semgrep"
 heading: "LyraShield AI vs Semgrep"
-disclaimer: "Factual comparison. Semgrep by Semgrep Inc. provides pattern-based static analysis with custom rules, SCA, and secrets detection. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence, and a fresh retest into one reviewable assurance record. Neither replaces the other."
+disclaimer: "Factual comparison. Semgrep by Semgrep Inc. provides pattern-based static analysis with custom rules, SCA and secrets detection. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence and a fresh retest into one reviewable assurance record. Neither replaces the other."
 updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace Semgrep?"
-    a: "No. Semgrep excels at fast, customizable pattern-based scanning with rules that look like code, 30+ languages, and an LGPL Community Edition. LyraShield in open beta is not a general SAST engine; it pairs agentic pentest with SCA and secrets to produce evidence states and an immutable assurance record for release decisions."
+    a: "No. Semgrep excels at fast, customizable pattern-based scanning with rules that look like code, 30+ languages and an LGPL Community Edition. LyraShield in open beta is not a general SAST engine; it pairs agentic pentest with SCA and secrets to produce evidence states and an immutable assurance record for release decisions."
   - q: "Can I use Semgrep and LyraShield together?"
     a: "Yes. Both emit SARIF and run in CI, so findings can coexist in GitHub code scanning. Teams commonly run Semgrep Community or AppSec Platform for continuous custom-rule detection throughout development, then add LyraShield's target, review, evidence, fix, retest, report loop for the release gate, with reviewed fix proposals."
   - q: "When should I choose Semgrep over LyraShield?"
-    a: "Choose Semgrep when you need deterministic, developer-controlled scanning with custom rules, open-source local CLI, and reachability-aware SCA. Its registry with 1000+ rules and AI-assisted triage makes it ideal for continuous feedback. Use LyraShield when the bottleneck is proving exploitability and signing off before ship."
+    a: "Choose Semgrep when you need deterministic, developer-controlled scanning with custom rules, open-source local CLI and reachability-aware SCA. Its registry with 1000+ rules and AI-assisted triage makes it ideal for continuous feedback. Use LyraShield when the bottleneck is proving exploitability and signing off before ship."
   - q: "Is LyraShield free like Semgrep Community Edition?"
     a: "No, not in the same way. Semgrep CE is free and open-source; Semgrep's platform has a free tier for small teams and paid Team tiers, which are priced per contributor on the vendor's pricing page. LyraShield is live in open beta with open registration and published pricing at lyrashieldai.com/pricing, so evaluate on outcome, not list price."
 ---
 
 ## Core approach
 
-| Aspect                  | LyraShield AI                                                                                                                                      | Semgrep                                                                           |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Primary focus           | Release assurance for AI-built apps: one record of what was tested, the evidence behind each result, and what a retest established before shipping | Pattern-based static analysis, SCA, secrets, custom rules                         |
-| Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                         | Semantic pattern matching with data-flow and taint analysis                       |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays separate from proof)                                         | Open → reviewing → fixed or ignored; AI auto-triage for false positives           |
-| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                        | No published control framework; rule-based detection                              |
-| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                             | AI autofix suggestions (not approval-bound)                                       |
-| Custom rules            | Not a primary feature                                                                                                                              | Yes — write custom rules in Semgrep syntax (key differentiator)                   |
-| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                               | Semgrep Multimodal (AI detection for business logic flaws); AI triage and autofix |
-| Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes, and limitations                                        | No release assurance record; finding-based dashboard                              |
+| Aspect                  | LyraShield AI                                                                                                                                     | Semgrep                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Primary focus           | Release assurance for AI-built apps: one record of what was tested, the evidence behind each result and what a retest established before shipping | Pattern-based static analysis, SCA, secrets, custom rules                         |
+| Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                        | Semantic pattern matching with data-flow and taint analysis                       |
+| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays separate from proof)                                        | Open → reviewing → fixed or ignored; AI auto-triage for false positives           |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                       | No published control framework; rule-based detection                              |
+| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                            | AI autofix suggestions (not approval-bound)                                       |
+| Custom rules            | Not a primary feature                                                                                                                             | Yes — write custom rules in Semgrep syntax (key differentiator)                   |
+| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                              | Semgrep Multimodal (AI detection for business logic flaws); AI triage and autofix |
+| Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes and limitations                                        | No release assurance record; finding-based dashboard                              |
 
 ## Capability comparison
 
@@ -78,6 +78,6 @@ LyraShield AI is live and open for registration — create an account and run yo
 
 ## Methodology and scope
 
-This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for its assurance model, and verify vendor details before a purchasing decision.
+This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
 
 For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Semgrep](/blog/semgrep-vs-lyrashield).

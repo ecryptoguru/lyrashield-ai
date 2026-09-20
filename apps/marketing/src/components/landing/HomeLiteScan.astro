@@ -8,7 +8,7 @@ const scannerAvailable = Boolean(appOrigin)
     <div class="max-w-xl" data-reveal>
       <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Live URL scan · passive and read-only</p>
       <h2 id="free-scan-heading" class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl">See your app&apos;s gaps in 30 seconds. Free, no signup.</h2>
-      <p class="mt-5 text-lg leading-8 text-text-muted">Paste your live app URL for a passive check of exposed secrets, browser protections, frontend data-layer signals, and HTTPS. We fetch only the public URL you authorize. No login or installation.</p>
+      <p class="mt-5 text-lg leading-8 text-text-muted">Paste your live app URL for a passive check of exposed secrets, browser protections, frontend data-layer signals and HTTPS. We fetch only the public URL you authorize. No login or installation.</p>
       <p class="mt-4 text-sm leading-6 text-text-muted">For checks that never leave your browser, use the <a href="/tools/webmcp-security-checker" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4">WebMCP Security Checker</a> or other <a href="/tools" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4">browser-local tools</a>.</p>
       <a href="/scan" class="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">What it covers / what it cannot prove</a>
       <p class="mt-5 text-sm leading-6 text-text-muted">Want the full repo and target loop? <a href="https://app.lyrashieldai.com/sign-up?source=landing_lite_check&cta=review_app&target=url" data-cta-id="home-lite-scan-create-account" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create an account</a>.</p>
@@ -17,7 +17,7 @@ const scannerAvailable = Boolean(appOrigin)
     {/* `data-reveal` (vertical) rather than `data-reveal="right"`: the horizontal
         pre-reveal shift of ±2rem in global.css is wider than this section's
         gutter, so while the form was still un-revealed it measured 32px past the
-        right edge at 768px and dragged its label, field, and button with it. The
+        right edge at 768px and dragged its label, field and button with it. The
         entrance animation stays, without the horizontal overhang. */}
     <form id="home-lite-scan-form" action="/scan" data-reveal class="border-l-2 border-accent pl-5 sm:pl-8">
       <label for="home-scan-url" class="block text-sm font-semibold text-text">Public app URL</label>
@@ -35,7 +35,7 @@ const scannerAvailable = Boolean(appOrigin)
   </div>
 
   {/* Shows the shape of a Lite Check result before the visitor spends 30 seconds
-      on one. Sample values, real check names, and the honest closing line: a
+      on one. Sample values, real check names and the honest closing line: a
       passive check cannot prove absence. All text, so it stays crawlable. */}
   <figure class="lite-sample mx-auto mt-12 max-w-6xl" data-reveal="scale">
     <figcaption class="lite-sample__head">
@@ -70,9 +70,9 @@ const scannerAvailable = Boolean(appOrigin)
     </ul>
     <p class="lite-sample__foot">
       A passive check reads what your app already exposes publicly. It can show you what is missing;
-      it cannot prove nothing is wrong. The deeper questions — auth flows, logic, and whether a fix
+      it cannot prove nothing is wrong. The deeper questions — auth flows, logic and whether a fix
       actually held — need the full loop.{" "}
-      <a href="/scan">What the Lite Check covers, and what it cannot prove</a>
+      <a href="/scan">What the Lite Check covers and what it cannot prove</a>
     </p>
   </figure>
 </section>

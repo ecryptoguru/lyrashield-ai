@@ -233,7 +233,7 @@ function ScanProgress({ scanId, onBack }: Props) {
           <h2 className="mb-3 text-sm font-medium text-foreground">Findings ({findings.length})</h2>
           {meta?.backend === "cloud" ? (
             <p className="text-sm text-muted-foreground">
-              Recorded scan submitted to LyraShield Cloud. Progress, evidence, and verification
+              Recorded scan submitted to LyraShield Cloud. Progress, evidence and verification
               states are tracked server-side — open the LyraShield dashboard to review them. Local
               findings are never fabricated for cloud scans.
             </p>

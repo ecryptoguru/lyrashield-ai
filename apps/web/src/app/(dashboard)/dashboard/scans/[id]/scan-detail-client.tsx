@@ -751,7 +751,9 @@ export function ScanDetailClient({
                 </div>
                 <div>
                   <dt className="text-muted-foreground text-xs">Depth</dt>
-                  <dd className="mt-0.5 font-medium">{scan.executionPlan.depth}</dd>
+                  <dd className="mt-0.5 font-medium">
+                    {getScanModeLabel(scan.executionPlan.depth)}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground text-xs">Effective scope</dt>

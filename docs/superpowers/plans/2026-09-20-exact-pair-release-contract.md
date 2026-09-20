@@ -10,9 +10,9 @@
 
 ## Global Constraints
 
-- No new bot, token, scheduled workflow, merge-method change, scan, or billing mutation.
-- Preserve engine SHA provenance, fixture equality, CLI flag checks, contract test execution, and dirty-checkout denial.
-- Preserve existing required checks, review requirements, current-main guard, and deployment smoke gates.
+- No new bot, token, scheduled workflow, merge-method change, scan or billing mutation.
+- Preserve engine SHA provenance, fixture equality, CLI flag checks, contract test execution and dirty-checkout denial.
+- Preserve existing required checks, review requirements, current-main guard and deployment smoke gates.
 - Work only on a focused branch and PR; never push directly to main.
 
 ---
@@ -25,11 +25,11 @@
 
 **Interfaces:**
 - Consumes: `bash .github/scripts/verify-engine-worker-contract.sh <engine-checkout> <app-checkout>`.
-- Produces: exit 2 for an invalid or dirty checkout, and substantive contract checks for a clean non-descendant app commit.
+- Produces: exit 2 for an invalid or dirty checkout and substantive contract checks for a clean non-descendant app commit.
 
 - [ ] **Step 1: Add the failing squash regression test**
 
-Create a temporary app Git graph: `main` base commit, `reviewed` child commit stored in `.lyrashield-worker-pin`, and a separate clean `main` squash commit that is not a descendant of `reviewed`. Set the declared contract path to `missing-test.ts`. Invoke the verifier and assert stderr includes `Missing worker contract test: missing-test.ts`, not an ancestry error. Keep the existing staged/unstaged dirty-checkout test unchanged.
+Create a temporary app Git graph: `main` base commit, `reviewed` child commit stored in `.lyrashield-worker-pin` and a separate clean `main` squash commit that is not a descendant of `reviewed`. Set the declared contract path to `missing-test.ts`. Invoke the verifier and assert stderr includes `Missing worker contract test: missing-test.ts`, not an ancestry error. Keep the existing staged/unstaged dirty-checkout test unchanged.
 
 ```js
 assert.equal(spawnSync("git", ["merge-base", "--is-ancestor", reviewed, "HEAD"], { cwd: app }).status, 1)
@@ -54,7 +54,7 @@ fi
 # The engine tests its pinned consumer; this invocation tests this exact app checkout.
 ```
 
-Retain all following clean-checkout, test-list, fixture, CLI, and Vitest checks.
+Retain all following clean-checkout, test-list, fixture, CLI and Vitest checks.
 
 - [ ] **Step 4: Confirm focused tests pass and commit**
 
@@ -89,7 +89,7 @@ Expected: assertion finds the current PR/path-only job condition.
 
 - [ ] **Step 3: Remove the job-level `if` only**
 
-Keep `needs: changes`, all setup steps, the immutable engine checkout, provenance verification, and contract invocation. The existing workflow `on` already includes PR and main push.
+Keep `needs: changes`, all setup steps, the immutable engine checkout, provenance verification and contract invocation. The existing workflow `on` already includes PR and main push.
 
 - [ ] **Step 4: Confirm checks pass and commit**
 
@@ -122,8 +122,8 @@ Push `codex/exact-pair-release-contract`; create PR against app main. Confirm `P
 
 - [ ] **Step 3: Add the existing CI job to app main's required checks**
 
-Read current protection first. Add `Pinned Engine / Worker Contract` while preserving the `SCA & Secret Scan` and `Lint, Typecheck, Test & Build` GitHub Actions checks, strict mode, one required review, and admin enforcement. Read back all settings and the PR's mergeability.
+Read current protection first. Add `Pinned Engine / Worker Contract` while preserving the `SCA & Secret Scan` and `Lint, Typecheck, Test & Build` GitHub Actions checks, strict mode, one required review and admin enforcement. Read back all settings and the PR's mergeability.
 
 - [ ] **Step 4: Merge only after protection passes, then prove deployment separately**
 
-After required review and fresh green CI, squash-merge the PR. Verify the main CI run for the merged SHA has a **successful, not skipped** contract job. Verify `release-production.yml` targets that same SHA and passes image build, guarded worker promotion, Azure deployment, and smoke. Read back deployed product/engine revisions and image digests, then probe app/scanner/worker readiness. Report any unproven provider, paid-scan, or commercial gate separately.
+After required review and fresh green CI, squash-merge the PR. Verify the main CI run for the merged SHA has a **successful, not skipped** contract job. Verify `release-production.yml` targets that same SHA and passes image build, guarded worker promotion, Azure deployment and smoke. Read back deployed product/engine revisions and image digests, then probe app/scanner/worker readiness. Report any unproven provider, paid-scan or commercial gate separately.

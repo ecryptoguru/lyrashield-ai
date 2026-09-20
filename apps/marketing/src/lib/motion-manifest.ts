@@ -51,7 +51,7 @@ export const CHAPTER_POSTER_ALT: Readonly<Record<EvidenceChapterId, string>> = {
     "Abstract 3D artwork for the target chapter: a glowing faceted orb connected by white cables to a row of colored panels and a dark console.",
   scan: "Abstract 3D artwork for the review chapter: glowing pale-blue arches framing four colored panels beneath a floating console in a dark void.",
   "evidence-state":
-    "Abstract 3D artwork for the evidence chapter: four vertical panels in slate, mint, yellow, and rose connected by a light beam to a dark console.",
+    "Abstract 3D artwork for the evidence chapter: four vertical panels in slate, mint, yellow and rose connected by a light beam to a dark console.",
   "fix-proposal":
     "Abstract 3D artwork for the fix chapter: a pale-yellow card with curled tabs layered over dark panels, with a cyan ribbon extending off-screen.",
   retest:
@@ -66,14 +66,14 @@ const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "p
     start: 0,
     end: 6,
     eyebrow: 'From "it works" to "ready to ship"',
-    title: "One reviewable record of what you checked, fixed, and retested before you ship.",
-    body: "AI builds fast. LyraShield keeps what you checked, how you checked it, and what changed after in one reviewable record instead of scattered chats and manual checks.",
+    title: "One reviewable record of what you checked, fixed and retested before you ship.",
+    body: "AI builds fast. LyraShield keeps what you checked, how you checked it and what changed after in one reviewable record instead of scattered chats and manual checks.",
     supportingCard: {
       eyebrow: "Live in open beta",
       title: "Start with the surface you need to ship.",
-      body: "Review a repository, public URL, or API. Use a passive Lite Check for a quick public-surface read, or create an account for the full evidence loop.",
+      body: "Review a repository, public URL or API. Use a passive Lite Check for a quick public-surface read or create an account for the full evidence loop.",
       items: [
-        "Repository, URL, and API targets",
+        "Repository, URL and API targets",
         "GitHub and coding-agent workflows",
         "Approval-gated fixes and fresh retests",
       ],
@@ -85,7 +85,7 @@ const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "p
     end: 12,
     eyebrow: "01 / Target",
     title: "Choose what you are actually shipping.",
-    body: "Name your repo, live URL, or API before anything runs. Nothing is tested outside the boundary you explicitly approve.",
+    body: "Name your repo, live URL or API before anything runs. Nothing is tested outside the boundary you explicitly approve.",
   },
   {
     id: "scan",
@@ -93,7 +93,7 @@ const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "p
     end: 18,
     eyebrow: "02 / Review",
     title: "Run checks that do not blur together.",
-    body: "Deterministic checks find known signals. AI-assisted review examines logic, auth flows, and data handling. Separate coverage layers show what kind of evidence you actually have.",
+    body: "Deterministic checks find known signals. AI-assisted review examines logic, auth flows and data handling. Separate coverage layers show what kind of evidence you actually have.",
     supportingCard: {
       eyebrow: "Vibe Security 50",
       title: "Coverage stays explicit, including what needs human evidence.",
@@ -107,11 +107,11 @@ const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "p
     end: 24,
     eyebrow: "03 / Evidence",
     title: 'Keep "we saw it" separate from "we proved it".',
-    body: "Detected, independently verified, retest-confirmed, and inconclusive remain distinct. Missing proof stays visible; it never becomes a silent pass.",
+    body: "Detected, independently verified, retest-confirmed and inconclusive remain distinct. Missing proof stays visible; it never becomes a silent pass.",
     supportingCard: {
       eyebrow: "Illustrative evidence ledger",
       title: "Every conclusion carries its basis and its limit.",
-      body: "See which check produced the signal, whether independent proof exists, and whether a fresh retest confirmed the change. Shared records omit repository coordinates and raw secrets.",
+      body: "See which check produced the signal, whether independent proof exists and whether a fresh retest confirmed the change. Shared records omit repository coordinates and raw secrets.",
       items: [
         "Finding and evidence state",
         "Control-level coverage receipt",
@@ -151,11 +151,11 @@ const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "p
     end: 42,
     eyebrow: "06 / Report",
     title: "Ship one report that shows limits too.",
-    body: "Scope, coverage, findings, fixes, retest outcomes, and limits become one immutable release record. Shared versions exclude repository coordinates and raw secrets.",
+    body: "Scope, coverage, findings, fixes, retest outcomes and limits become one immutable release record. Shared versions exclude repository coordinates and raw secrets.",
     supportingCard: {
       eyebrow: "Your first release record",
       title: "Turn the next release into evidence your team can review.",
-      body: "Create a workspace, add the target you are shipping, and choose the depth of review. LyraShield keeps the resulting scope, evidence, and retest outcome together.",
+      body: "Create a workspace, add the target you are shipping and choose the depth of review. LyraShield keeps the resulting scope, evidence and retest outcome together.",
       primaryCta: {
         label: "Create account",
         href: "https://app.lyrashieldai.com/sign-up?source=landing_story&cta=report",

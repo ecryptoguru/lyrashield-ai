@@ -9,4 +9,4 @@ releases. This is a community listing, not an official OpenClaw marketplace acce
 
 - Corrected the canonical skill identifier to `lyrashield`.
 - Added security metadata; an API key is an optional read-only or CI fallback.
-- Hosted OAuth writes require a browser-confirmed connection grant, write scope, and execution-time checks.
+- Hosted OAuth writes require a browser-confirmed connection grant, write scope and execution-time checks.

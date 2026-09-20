@@ -6,7 +6,7 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for OpenAI Codex"
 const description =
-  "Connect LyraShield to OpenAI Codex CLI. Install the Agent Plugin for one-step setup, or add the [mcp_servers.lyrashield] table to ~/.codex/config.toml."
+  "Connect LyraShield to OpenAI Codex CLI. Install the Agent Plugin for one-step setup or add the [mcp_servers.lyrashield] table to ~/.codex/config.toml."
 const updatedDate = "2026-08-12"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
@@ -65,16 +65,16 @@ const jsonLd: unknown[] = [
   <h2>Install with the CLI (fastest)</h2>
   <p>
     Run <code>npx lyrashield install openai-codex</code> from your project root. It detects OpenAI
-    Codex, installs the Agent Plugin by default, and never inlines your API key into a file you
-    might commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    Codex, installs the Agent Plugin by default and never inlines your API key into a file you
+    might commit. Add <code>--dry-run</code> first to preview the change with no write or run{" "}
     <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
   </p>
   <pre><code>npx lyrashield install openai-codex</code></pre>
-  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+  <p>Prefer to see exactly what gets written or set it up without Node.js? Configure it by hand below.</p>
 
   <h2>Agent Plugin (recommended)</h2>
   <p>
-    OpenAI Codex supports the open Agent Plugins v1.0.0 standard (agent-plugins.org), and LyraShield
+    OpenAI Codex supports the open Agent Plugins v1.0.0 standard (agent-plugins.org) and LyraShield
     ships a portable plugin that bundles the MCP server and a security skill into a single
     installable package. The skill teaches Codex when to run LyraShield checks, so you get both the
     tools and the guidance in one step.

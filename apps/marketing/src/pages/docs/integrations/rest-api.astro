@@ -5,7 +5,7 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield REST API & API Keys — Reference"
 const description =
-  "Create and manage LyraShield workspace API keys (lsk_ prefix) in Settings then API keys, and use them for Bearer auth on the REST API and remote MCP endpoint."
+  "Create and manage LyraShield workspace API keys (lsk_ prefix) in Settings then API keys and use them for Bearer auth on the REST API and remote MCP endpoint."
 const updatedDate = "2026-08-12"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
@@ -29,7 +29,7 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
 >
   <h1>REST API &amp; API keys</h1>
   <p>
-    LyraShield workspace API keys authenticate requests to the REST API, the remote MCP endpoint,
+    LyraShield workspace API keys authenticate requests to the REST API, the remote MCP endpoint
     and the GitHub Action.
   </p>
 
@@ -47,7 +47,7 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
 
   <div class="callout callout--warn">
     <strong>Copy immediately:</strong> The full key value is only shown once at creation time. Store
-    it securely in a secrets manager, a CI secret, or an environment variable. Never commit an API
+    it securely in a secrets manager, a CI secret or an environment variable. Never commit an API
     key to source control.
   </div>
 

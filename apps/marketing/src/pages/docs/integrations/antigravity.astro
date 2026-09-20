@@ -28,7 +28,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 1,
         name: "Open the shared MCP config",
-        text: "Open or create ~/.gemini/config/mcp_config.json — one shared config serves the Antigravity IDE, the agy CLI, and 2.0.",
+        text: "Open or create ~/.gemini/config/mcp_config.json — one shared config serves the Antigravity IDE, the agy CLI and 2.0.",
       },
       {
         "@type": "HowToStep",
@@ -60,7 +60,7 @@ const jsonLd: unknown[] = [
   <p>
     Antigravity stores MCP configuration in a shared file at{" "}
     <code>~/.gemini/config/mcp_config.json</code> that serves the Antigravity IDE, the{" "}
-    <code>agy</code> CLI, and Antigravity 2.0. A project-scoped alternative lives at{" "}
+    <code>agy</code> CLI and Antigravity 2.0. A project-scoped alternative lives at{" "}
     <code>.agents/mcp_config.json</code>.
   </p>
 
@@ -72,12 +72,12 @@ const jsonLd: unknown[] = [
   <h2>Install with the CLI (fastest)</h2>
   <p>
     Run <code>npx lyrashield install antigravity</code> from your project root. It detects
-    Antigravity, writes the correct config automatically, and never inlines your API key into a file
-    you might commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    Antigravity, writes the correct config automatically and never inlines your API key into a file
+    you might commit. Add <code>--dry-run</code> first to preview the change with no write or run{" "}
     <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
   </p>
   <pre><code>npx lyrashield install antigravity</code></pre>
-  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+  <p>Prefer to see exactly what gets written or set it up without Node.js? Configure it by hand below.</p>
 
   <h2>Local stdio setup</h2>
   <p>
@@ -108,7 +108,7 @@ const jsonLd: unknown[] = [
 
   <div class="callout">
     <strong>Native OAuth:</strong> Antigravity detects LyraShield OAuth from this URL. Select{" "}
-    <strong>Authenticate</strong> in Agent Settings, choose one workspace, and approve the requested
+    <strong>Authenticate</strong> in Agent Settings, choose one workspace and approve the requested
     access once. Matching actions then run without another LyraShield review.
   </div>
 

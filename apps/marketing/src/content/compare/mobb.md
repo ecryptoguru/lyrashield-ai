@@ -1,19 +1,19 @@
 ---
 title: "LyraShield vs Mobb — release assurance compared"
-description: "How LyraShield AI compares to Mobb for remediation-first auto-fix. Evidence states, coverage, reviewed fix proposals, and deployment differences."
+description: "How LyraShield AI compares to Mobb for remediation-first auto-fix. Evidence states, coverage, reviewed fix proposals and deployment differences."
 competitor: "Mobb"
 heading: "LyraShield AI vs Mobb"
-disclaimer: "Factual comparison. Mobb is an AI-powered remediation platform that takes SAST scanner results as input and generates fix PRs, with a newer IDE layer (Mobb Vibe Shield) for AI-coding security. LyraShield AI is release assurance for AI-built apps with its own agentic pentest, SCA, and secrets scanning, producing immutable evidence reports and gating fixes behind approvals. The two target different parts of the workflow; neither replaces the other."
+disclaimer: "Factual comparison. Mobb is an AI-powered remediation platform that takes SAST scanner results as input and generates fix PRs, with a newer IDE layer (Mobb Vibe Shield) for AI-coding security. LyraShield AI is release assurance for AI-built apps with its own agentic pentest, SCA and secrets scanning, producing immutable evidence reports and gating fixes behind approvals. The two target different parts of the workflow; neither replaces the other."
 updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace Mobb?"
-    a: "No. Mobb is an AI-powered remediation platform that ingests SAST results from Checkmarx, Fortify, Snyk, CodeQL, SonarQube, and Opengrep, auto-triages into Fixable, Irrelevant, Remaining, and generates fixes re-scanned to confirm clearance. LyraShield in open beta is a full assurance loop with its own agentic pentest, SCA, and secrets."
+    a: "No. Mobb is an AI-powered remediation platform that ingests SAST results from Checkmarx, Fortify, Snyk, CodeQL, SonarQube and Opengrep, auto-triages into Fixable, Irrelevant, Remaining and generates fixes re-scanned to confirm clearance. LyraShield in open beta is a full assurance loop with its own agentic pentest, SCA and secrets."
   - q: "Can I use Mobb and LyraShield together?"
     a: "Yes. LyraShield can provide detection with SARIF output for the assurance record, while Mobb fixes existing SAST backlog with deterministic rules plus GenAI validation. Check Mobb’s current plans with the vendor. LyraShield is live open beta with open registration at lyrashieldai.com, with some features on near-term roadmap."
   - q: "When should I choose Mobb over LyraShield?"
-    a: "Choose Mobb when you have a large SAST backlog and want anti-hallucination fix methodology with real-time IDE protection via Mobb Vibe Shield across Copilot, Cursor, Claude, and JetBrains through MCP. Its ROI dashboard tracks fixes. Choose LyraShield when you need immutable assurance reports, coverage receipts, and permission-gated Fix PR requests for AI-built app releases."
+    a: "Choose Mobb when you have a large SAST backlog and want anti-hallucination fix methodology with real-time IDE protection via Mobb Vibe Shield across Copilot, Cursor, Claude and JetBrains through MCP. Its ROI dashboard tracks fixes. Choose LyraShield when you need immutable assurance reports, coverage receipts and permission-gated Fix PR requests for AI-built app releases."
 ---
 
 ## Core approach
@@ -21,7 +21,7 @@ faq:
 | Aspect                  | LyraShield AI                                                                        | Mobb                                                                                                |
 | ----------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
 | Primary focus           | Evidence-backed release assurance for AI-built apps                                  | Fix SAST findings at scale; "platform for AI code trust"                                            |
-| Scanning approach       | Agentic engine, coverage framework, evidence states                                  | Ingests external SAST results, or self-scans via Opengrep (SAST)                                    |
+| Scanning approach       | Agentic engine, coverage framework, evidence states                                  | Ingests external SAST results or self-scans via Opengrep (SAST)                                     |
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                 | Ingested → auto-triaged (Fixable / Irrelevant / Remaining) → fix PR or commit                       |
 | Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                          | No published control framework; auto-triage classification                                          |
 | Fix model               | Recorded fix proposals; Fix PR requests need permission and a server-generated patch | Deterministic rules plus GenAI validation; fixes re-scanned to confirm cleared; PR or direct commit |
@@ -29,21 +29,21 @@ faq:
 
 ## Capability comparison
 
-| Capability                | LyraShield AI                                                   | Mobb                                                                               |
-| ------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Static analysis (SAST)    | Via engine                                                      | Processes external SAST findings; or self-scans via Opengrep                       |
-| Custom rules              | Not a primary feature                                           | No (works from scanner output)                                                     |
-| SCA (dependency scanning) | Yes (native)                                                    | Not a core capability                                                              |
-| Secret scanning           | Yes (engine + GitHub Action)                                    | Not a core capability                                                              |
-| Agentic pentest           | Yes (core)                                                      | No                                                                                 |
-| Evidence states           | Yes (4 states)                                                  | No explicit evidence-state model                                                   |
-| Deterministic retest      | Yes                                                             | Re-scan to confirm finding cleared                                                 |
-| Coverage receipts         | Yes (per-control)                                               | No                                                                                 |
-| Assurance reports         | Yes (immutable snapshots)                                       | ROI dashboard metrics; no immutable evidence artifacts                             |
-| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch | Developer PR review is the gate; no policy/approval engine                         |
-| Multi-scanner input       | Engine + GitHub Action + SARIF                                  | Yes (Checkmarx, Fortify, Snyk, CodeQL, SonarQube, Semgrep/Opengrep, Polaris)       |
-| MCP / IDE integration     | Yes (documented MCP client workflows)                           | Yes (Mobb Vibe Shield via MCP across Copilot, Cursor, Claude, JetBrains, and more) |
-| Fix languages             | Language-agnostic                                               | Java, JavaScript/TypeScript, C#, Python                                            |
+| Capability                | LyraShield AI                                                   | Mobb                                                                              |
+| ------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Static analysis (SAST)    | Via engine                                                      | Processes external SAST findings; or self-scans via Opengrep                      |
+| Custom rules              | Not a primary feature                                           | No (works from scanner output)                                                    |
+| SCA (dependency scanning) | Yes (native)                                                    | Not a core capability                                                             |
+| Secret scanning           | Yes (engine + GitHub Action)                                    | Not a core capability                                                             |
+| Agentic pentest           | Yes (core)                                                      | No                                                                                |
+| Evidence states           | Yes (4 states)                                                  | No explicit evidence-state model                                                  |
+| Deterministic retest      | Yes                                                             | Re-scan to confirm finding cleared                                                |
+| Coverage receipts         | Yes (per-control)                                               | No                                                                                |
+| Assurance reports         | Yes (immutable snapshots)                                       | ROI dashboard metrics; no immutable evidence artifacts                            |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch | Developer PR review is the gate; no policy/approval engine                        |
+| Multi-scanner input       | Engine + GitHub Action + SARIF                                  | Yes (Checkmarx, Fortify, Snyk, CodeQL, SonarQube, Semgrep/Opengrep, Polaris)      |
+| MCP / IDE integration     | Yes (documented MCP client workflows)                           | Yes (Mobb Vibe Shield via MCP across Copilot, Cursor, Claude, JetBrains and more) |
+| Fix languages             | Language-agnostic                                               | Java, JavaScript/TypeScript, C#, Python                                           |
 
 ## Deployment and pricing
 
@@ -58,7 +58,7 @@ faq:
 ### Use LyraShield AI when
 
 - You need release assurance with immutable evidence reports for release decisions
-- You want agentic pentest, SCA, and secrets scanning in one product rather than fixing external SAST output
+- You want agentic pentest, SCA and secrets scanning in one product rather than fixing external SAST output
 - Your app is AI-built and you want security checks inside your AI coding agent via MCP
 - You want recorded fix proposals before your team applies a patch
 - You need coverage receipts mapping to a control framework
@@ -79,6 +79,6 @@ Read the methodology or try the free browser-local tools at [lyrashieldai.com](h
 
 ## Methodology and scope
 
-This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for its assurance model, and verify vendor details before a purchasing decision.
+This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
 
 For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Mobb](/blog/mobb-vs-lyrashield).

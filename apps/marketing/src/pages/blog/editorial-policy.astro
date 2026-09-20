@@ -5,7 +5,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/blog/editorial-policy", origin).toString()
 const title = "Editorial Policy for Security Guidance | LyraShield AI"
 const description =
-  "How LyraShield AI researches, reviews, corrects, illustrates, and publishes practical security guidance for builders of AI-built applications."
+  "How LyraShield AI researches, reviews, corrects, illustrates and publishes practical security guidance for builders of AI-built applications."
 const reviewedDate = "2026-07-17"
 const jsonLd = [
   {
@@ -37,9 +37,9 @@ const jsonLd = [
     <header class="editorial-policy__header">
       <h1>How LyraShield AI publishes security guidance</h1>
       <p>
-        This policy explains how the LyraShield Team researches, reviews, illustrates, updates, and
+        This policy explains how the LyraShield Team researches, reviews, illustrates, updates and
         corrects public security guidance. A polished article is not evidence that a security claim
-        is true. The sources, technical review, stated scope, and retained limitations carry that
+        is true. The sources, technical review, stated scope and retained limitations carry that
         responsibility.
       </p>
       <p class="editorial-policy__reviewed">
@@ -52,8 +52,8 @@ const jsonLd = [
         <h2 id="assistance-heading">AI assistance</h2>
         <p>
           AI tools may help organize research, compare an article against its brief, prepare an
-          early draft, check internal links, or develop image concepts. They do not approve a
-          source, establish a product fact, perform the final technical review, or decide that an
+          early draft, check internal links or develop image concepts. They do not approve a
+          source, establish a product fact, perform the final technical review or decide that an
           article is ready to publish.
         </p>
       </section>
@@ -63,7 +63,7 @@ const jsonLd = [
         <p>
           The LyraShield Team remains accountable for every published claim. A reviewer checks the
           cited source, the current repository behavior behind product statements, safe wording,
-          examples, limitations, links, metadata, and the final release candidate. Organization
+          examples, limitations, links, metadata and the final release candidate. Organization
           authorship means the team owns corrections; it is not a claim that one unnamed person has
           tested every system described.
         </p>
@@ -73,9 +73,9 @@ const jsonLd = [
         <h2 id="sources-heading">Primary sources</h2>
         <p>
           Material technical claims should use standards bodies, government guidance, official
-          vulnerability taxonomies, RFCs, vendor documentation, security advisories, or original
+          vulnerability taxonomies, RFCs, vendor documentation, security advisories or original
           research. Community discussion can reveal reader questions, but it does not establish
-          prevalence, product performance, or a security outcome. Editorial inferences are labeled
+          prevalence, product performance or a security outcome. Editorial inferences are labeled
           as inferences and kept separate from what a source directly establishes.
         </p>
       </section>
@@ -83,7 +83,7 @@ const jsonLd = [
       <section aria-labelledby="examples-heading">
         <h2 id="examples-heading">Safe examples and automated-check limits</h2>
         <p>
-          Examples use inert code, synthetic accounts, placeholder credentials, and systems the
+          Examples use inert code, synthetic accounts, placeholder credentials and systems the
           tester owns or has permission to assess. We do not publish working exploits against named
           targets. Automated checks are described by the surface and evidence they actually cover.
           A clean result is never presented as proof that an application has no vulnerabilities.
@@ -93,7 +93,7 @@ const jsonLd = [
       <section aria-labelledby="corrections-heading">
         <h2 id="corrections-heading">Corrections and material updates</h2>
         <p>
-          We correct factual, technical, and product-boundary errors when they are found. A material
+          We correct factual, technical and product-boundary errors when they are found. A material
           correction receives a visible update date and an explanatory note when readers need that
           context. Stable URLs and stable heading anchors are preserved whenever possible so cited
           links continue to reach the intended guidance. Editorial cleanup that does not change the
@@ -106,8 +106,8 @@ const jsonLd = [
         <p>
           Blog artwork may be generated with Codex Imagegen, then cropped and compressed through a
           deterministic production pipeline. A person reviews the source, central crop, alternate
-          text, derivative dimensions, file size, and article fit before approval. Images remain
-          text-free and cannot imply customers, certifications, live findings, or security guarantees.
+          text, derivative dimensions, file size and article fit before approval. Images remain
+          text-free and cannot imply customers, certifications, live findings or security guarantees.
         </p>
       </section>
 
@@ -115,12 +115,12 @@ const jsonLd = [
         <h2 id="claims-heading">Prohibited claims</h2>
         <p>
           LyraShield AI does not claim "SOC 2 compliant," "certified," "guarantees security,"
-          "AI safety tested" (without a named framework), or "adversarial robustness proven."
+          "AI safety tested" (without a named framework) or "adversarial robustness proven."
           Each of those requires external attestation, a reproducible evaluation corpus, a defined
-          threat model, or a formal certificate that LyraShield has not yet obtained. The internal
-          map of what each claim requires, what is honest today, and the sequencing to get there
+          threat model or a formal certificate that LyraShield has not yet obtained. The internal
+          map of what each claim requires, what is honest today and the sequencing to get there
           lives in <code>docs/whitepaper.md</code> §9. Public copy must stay evidence-backed,
-          scope-bounded, and limitation-aware.
+          scope-bounded and limitation-aware.
         </p>
       </section>
     </div>

@@ -39,7 +39,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 3,
         name: "Authenticate and verify",
-        text: "Start Copilot, complete the hosted LyraShield OAuth flow, and verify a read-only workspace query.",
+        text: "Start Copilot, complete the hosted LyraShield OAuth flow and verify a read-only workspace query.",
       },
     ],
   },
@@ -57,8 +57,8 @@ const jsonLd: unknown[] = [
 >
   <h1>GitHub Copilot</h1>
   <p>
-    LyraShield ships a GitHub Copilot plugin with a portable manifest, MCP connection, and security
-    skill. Copilot installs it through a registered marketplace, a repository, or a local path.
+    LyraShield ships a GitHub Copilot plugin with a portable manifest, MCP connection and security
+    skill. Copilot installs it through a registered marketplace, a repository or a local path.
   </p>
 
   <h2>Install from the LyraShield marketplace</h2>
@@ -83,7 +83,7 @@ copilot plugin install lyrashield@lyrashield-ai</code></pre>
 
   <h2>Verify the connection</h2>
   <p>
-    Start Copilot, complete LyraShield's hosted OAuth flow, and ask it to list LyraShield
+    Start Copilot, complete LyraShield's hosted OAuth flow and ask it to list LyraShield
     workspaces. Delegated mutations execute within the connection grant. Mutations authenticated
     with an API key receive a connect_required response pointing at OAuth connect. Historical
     exact-input approval records are not an active hosted connection flow.
@@ -91,7 +91,7 @@ copilot plugin install lyrashield@lyrashield-ai</code></pre>
 
   <div class="callout callout--warn">
     <strong>Acceptance boundary:</strong> a valid manifest and successful marketplace install prove
-    installability. Authenticated reads, approval-bound writes, revocation, restart, and upgrade
+    installability. Authenticated reads, approval-bound writes, revocation, restart and upgrade
     need separate client-runtime receipts.
   </div>
 </DocsLayout>

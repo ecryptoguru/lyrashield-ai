@@ -10,8 +10,8 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/tools", origin).toString()
 const description = `Seven free browser-local tools to review AI app launch controls, HTTP headers, exposed secrets, Supabase RLS policies, JWT sessions and WebMCP surfaces.`
 const faq = [
-  { q: "How do these free security tools work?", a: "Each tool performs a focused deterministic check in your browser. The page explains exactly what input it reviews, what signals it reports, and what the result cannot establish." },
-  { q: "Are inputs uploaded?", a: "No. The checklist, pasted headers, selected files, SQL, JWTs, and cookie values are processed on your device by the page code. Use non-production tokens and review each tool's stated limits." },
+  { q: "How do these free security tools work?", a: "Each tool performs a focused deterministic check in your browser. The page explains exactly what input it reviews, what signals it reports and what the result cannot establish." },
+  { q: "Are inputs uploaded?", a: "No. The checklist, pasted headers, selected files, SQL, JWTs and cookie values are processed on your device by the page code. Use non-production tokens and review each tool's stated limits." },
   { q: "Does a clear result mean my app is secure?", a: "No. Each tool reports a focused set of signals. A clear result does not prove the whole application is secure; it only means the specific checks did not find a signal." },
 ]
 const featuredTools = tools.filter((tool) => tool.slug === "webmcp-security-checker")
@@ -27,7 +27,7 @@ const jsonLd = [
   <section class="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:py-20">
     <header class="max-w-3xl" data-reveal-group>
       <h1 class="text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>Free security tools for AI-built apps</h1>
-      <p class="mt-5 max-w-2xl text-lg leading-8 text-text-muted" data-reveal>Get a useful answer before creating an account. Each focused check runs in your browser, keeps sensitive input on your device, and states what it cannot prove.</p>
+      <p class="mt-5 max-w-2xl text-lg leading-8 text-text-muted" data-reveal>Get a useful answer before creating an account. Each focused check runs in your browser, keeps sensitive input on your device and states what it cannot prove.</p>
     </header>
     {featuredTools.length > 0 && (
       <section class="mt-12" data-reveal="scale" aria-labelledby="featured-webmcp-heading">
@@ -78,7 +78,7 @@ const jsonLd = [
     <section class="mt-20 grid gap-8 border-y border-border py-10 lg:grid-cols-[1fr_auto] lg:items-center" data-reveal>
       <div class="max-w-3xl">
         <h2 class="text-2xl font-semibold text-text">Need an app-wide assurance record?</h2>
-        <p class="mt-4 leading-7 text-text-muted">The complete product adds authorized target scanning, SCA, and secret checks, explicit coverage receipts, evidence states, fix proposals, server-owned retests, immutable reports, schedules, notifications, and workspace-scoped audit history. Read the <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">evidence methodology</a> before interpreting a result.</p>
+        <p class="mt-4 leading-7 text-text-muted">The complete product adds authorized target scanning, SCA and secret checks, explicit coverage receipts, evidence states, fix proposals, server-owned retests, immutable reports, schedules, notifications and workspace-scoped audit history. Read the <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">evidence methodology</a> before interpreting a result.</p>
       </div>
       <a href={`${appUrl}/sign-up?source=tools&cta=create_account`} class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create a free account</a>
     </section>

@@ -4,13 +4,13 @@ Date: September 18, 2026
 
 Status: review and execution plan. Execution state is tracked in
 [`2026-09-18-seo-aeo-geo-ledger.md`](./2026-09-18-seo-aeo-geo-ledger.md) — branches, commit SHAs,
-verification results, and PR status live there; this document stays a point-in-time plan record.
+verification results and PR status live there; this document stays a point-in-time plan record.
 
 ## Goal
 
 Make every indexable page on `lyrashieldai.com` easier for search engines and answer engines to
-retrieve, understand, quote, and cite — without weakening the claim boundary, the indexability gates,
-the trailing-slash canonical contract, or founder-approved search copy — and leave behind an
+retrieve, understand, quote and cite — without weakening the claim boundary, the indexability gates,
+the trailing-slash canonical contract or founder-approved search copy — and leave behind an
 automated gate so the same class of defect cannot return silently.
 
 Scope: `apps/marketing` only. The authenticated app origin (`app.lyrashieldai.com`) deliberately
@@ -21,7 +21,7 @@ serves `Disallow: /` with per-page `robots: noindex`; that posture is unchanged 
 The site already carries the foundations: indexability-gated `robots.txt`, sitemap with real
 `lastmod`, dated `llms.txt`, `agents.md`, `Organization`/`WebSite` graph, per-page `WebPage` +
 `FAQPage` + `BreadcrumbList`, `BlogPosting` with author and `wordCount`, `TechArticle` on docs, a
-301 trailing-slash canonicalisation layer, and a post-deploy Lighthouse gate on the homepage.
+301 trailing-slash canonicalisation layer and a post-deploy Lighthouse gate on the homepage.
 
 This plan therefore contains **surgical fixes, not a rebuild**. It is the depth pass that follows the
 September SEO/AEO/conversion work (`f2b7d8fd`, `79c268ac`, `f8196dc1`). The audit deliberately
@@ -36,7 +36,7 @@ re-verified everything those passes touched and found it sound — see "Verified
   canonical, `h1` count, JSON-LD presence, robots directive, word count); targeted header/redirect
   probes; `rss.xml`, `robots.txt`, `llms.txt`, `agents.md`, `webmcp-controls.json` readback; frontmatter
   scan of all 161 blog posts; source review of every layout, page, schema block and CI gate.
-- Protocol: read-only. Nothing was created, edited, deleted, sent, or saved on production. No
+- Protocol: read-only. Nothing was created, edited, deleted, sent or saved on production. No
   analytics, no account, no form submission.
 - Evidence is reproducible with the commands in "Verification" — no screenshot corpus is required,
   because every finding below is a deterministic HTTP or source fact.
@@ -45,7 +45,7 @@ re-verified everything those passes touched and found it sound — see "Verified
 
 The site is in unusually good technical health. Across all 241 sitemap URLs there were **zero
 non-200 responses, zero duplicate titles, zero duplicate descriptions, zero duplicate canonicals, no
-page without a JSON-LD block, and no page with a missing or duplicated `h1`**. Canonical, `hreflang`,
+page without a JSON-LD block and no page with a missing or duplicated `h1`**. Canonical, `hreflang`,
 `og:url` and the sitemap agree everywhere except the homepage's trailing slash (SF-07).
 
 The gaps that matter cluster in five places:
@@ -53,35 +53,35 @@ The gaps that matter cluster in five places:
 1. **Crawler eligibility is under-declared.** `robots.txt` names five AI agents — all of them either
    training crawlers or general-purpose fetchers. The _retrieval_ agents that actually produce
    citations (OAI-SearchBot, ChatGPT-User, Claude-User, Claude-SearchBot, Perplexity-User,
-   GoogleOther, Applebot, DuckAssistBot, meta-externalagent, and others) are unlisted, so a future
+   GoogleOther, Applebot, DuckAssistBot, meta-externalagent and others) are unlisted, so a future
    tightening of the wildcard would silently revoke citation access (SF-02).
 2. **The machine-readable layer drifts from the site.** `llms.txt` lists 4 of 13 comparison pages,
-   omits `/webmcp` and `/demo` from its URL index, and is dated 2026-09-13 against content through
+   omits `/webmcp` and `/demo` from its URL index and is dated 2026-09-13 against content through
    2026-09-17 — because its compare and docs lists are hand-maintained arrays (SF-04). The RSS feed
    emits trailing-slash links that every one of them 301-redirects (SF-05).
 3. **Entity signals are thin.** `Organization.sameAs` is **empty in production**, there is no
-   `contactPoint`, and the schema `logo` is an SVG when Google's logo guidance requires a raster
+   `contactPoint` and the schema `logo` is an SVG when Google's logo guidance requires a raster
    image — while a 1024×1024 `logo.png` already exists unused (SF-10, SF-11). Across 161 posts the
    only author entity is an Organization; no human with credentials is named on security guidance
    (SF-13).
 4. **The content library does not link to the product.** 0 of 161 posts link to `/pricing`, 0 to
-   `/agents`, and only 15 to `/methodology`. The single largest asset on the site passes no equity and
+   `/agents` and only 15 to `/methodology`. The single largest asset on the site passes no equity and
    no reader to the pages that convert (SF-20).
 5. **Nothing enforces any of it.** The only built-HTML crawler covers `/blog*` and is not run in CI;
-   the SEO unit test is source-grep only; title/description limits, OG coverage, and
+   the SEO unit test is source-grep only; title/description limits, OG coverage and
    robots/llms/sitemap agreement are unchecked (SF-24, SF-25).
 
 Everything else is bounded metadata hygiene: 30 titles and 11 descriptions over the enforced limits,
-one shared OG image across ~40 pages, a promise/evidence mismatch on `/research`, and a handful of
+one shared OG image across ~40 pages, a promise/evidence mismatch on `/research` and a handful of
 thin pages.
 
 ## Prioritization method
 
 Priority combines eligibility impact (can the page be retrieved at all), reach (how many URLs are
-affected), evidence strength, and fix cost:
+affected), evidence strength and fix cost:
 
-- **P0** — the page makes a claim it cannot support, or the defect removes a surface from retrieval.
-- **P1** — affects retrieval, entity understanding, or the crawl path of many pages.
+- **P0** — the page makes a claim it cannot support or the defect removes a surface from retrieval.
+- **P1** — affects retrieval, entity understanding or the crawl path of many pages.
 - **P2** — bounded metadata or linking hygiene with a known workaround.
 - **P3** — record-only; revisit if measurement justifies it.
 
@@ -113,7 +113,7 @@ affected), evidence strength, and fix cost:
 | SF-22 | P2       | internal linking | `BlogCta` is only the product-updates form; no product path from any post                                                                                            | `src/components/BlogCta.astro`                          | Wave 4                                         |
 | SF-23 | P2       | thin pages       | `/support` 292w, `/security-reporting` 308w, `/demo` 366w, `/docs/approvals` 501w, `/research` 589w, `/agents` 627w                                                  | live word counts                                        | Wave 4 (bounded, no new claims)                |
 | SF-24 | P1       | guardrails       | No automated site-wide built-HTML gate; `crawl-built-blog.mjs` covers only `/blog*` and is not run in CI                                                             | `scripts/`, `ci.yml`                                    | Wave 1 — gate first                            |
-| SF-25 | P2       | guardrails       | No rendered title/description limit, OG-coverage, or robots/llms/sitemap agreement checks                                                                            | repo                                                    | Wave 1                                         |
+| SF-25 | P2       | guardrails       | No rendered title/description limit, OG-coverage or robots/llms/sitemap agreement checks                                                                             | repo                                                    | Wave 1                                         |
 | SF-26 | P3       | CI               | Post-deploy Lighthouse gate covers only the homepage                                                                                                                 | `ci.yml:710`                                            | Wave 1 — extend to 5 pages                     |
 | SF-27 | P3       | performance      | Hero image ships a single 1600×900 candidate with no responsive `srcset` widths                                                                                      | live HTML                                               | Backlog                                        |
 | SF-28 | P3       | internal linking | `/blog/editorial-policy` not linked from the `/blog` hub (reachable from post footers and `llms.txt`)                                                                | live                                                    | Wave 4                                         |
@@ -122,24 +122,24 @@ affected), evidence strength, and fix cost:
 
 Re-checked and deliberately left alone:
 
-- One `h1`, one `main`, and a parseable JSON-LD block on all 241 sitemap URLs.
-- No duplicate titles, descriptions, or canonicals anywhere on the site.
-- `noindex` correctly scoped: `/terms`, `/terms-of-sale`, `/404`, `/docs/index`, and blog pagination
+- One `h1`, one `main` and a parseable JSON-LD block on all 241 sitemap URLs.
+- No duplicate titles, descriptions or canonicals anywhere on the site.
+- `noindex` correctly scoped: `/terms`, `/terms-of-sale`, `/404`, `/docs/index` and blog pagination
   (which canonicalise to `/blog` with `rel=prev`/`next`).
 - `max-image-preview:large`, `max-snippet:-1` on every indexable page.
 - 301 trailing-slash canonicalisation and the `www` → apex redirect, both with path and query
   preservation.
 - Blog answers: the validator already enforces a 40–80 word direct answer, word-count bounds, FAQ
-  count 2–4, unique descriptions, and a 1600×900 image catalogue.
+  count 2–4, unique descriptions and a 1600×900 image catalogue.
 - `robots.txt` returning `Disallow: /` on non-indexable preview builds; `llms.txt` returning 404
   there; sitemap omitting `/scan` when no scanner is configured.
-- Security headers, CSP, HSTS preload, and `X-Robots-Tag: noindex` on `/api/*`.
+- Security headers, CSP, HSTS preload and `X-Robots-Tag: noindex` on `/api/*`.
 - `Organization` founder `Person` with LinkedIn/GitHub/X `sameAs` on `/about` and in the site graph.
 
 ## Waves
 
 Four focused branches, each an independently shippable PR. Every wave uses a focused branch and PR,
-preserves unrelated work, and stops when executable evidence no longer proves the change.
+preserves unrelated work and stops when executable evidence no longer proves the change.
 
 ### Wave 1 — gate, eligibility, machine-readable surfaces (PR A)
 
@@ -193,7 +193,7 @@ preserves unrelated work, and stops when executable evidence no longer proves th
 - `src/pages/pricing.astro`: add `BreadcrumbList`.
 - `src/pages/demo.astro`, `support.astro`, `security-reporting.astro`: add `WebPage` +
   `BreadcrumbList` from their existing titles and descriptions.
-- Author entity (SF-13): present the choice — strengthen the Organization author, or attribute posts
+- Author entity (SF-13): present the choice — strengthen the Organization author or attribute posts
   to a named `Person` where that is factually true. No speculative attribution.
 - Extend the Wave 1 gate so every indexable page must emit at least one page-level JSON-LD type and a
   `BreadcrumbList` where a hierarchy exists.
@@ -209,8 +209,8 @@ preserves unrelated work, and stops when executable evidence no longer proves th
   only the posts still over 65 rendered characters (SF-16), preserving each post's leading keyword.
 - **Descriptions** — trim the 11 over-length descriptions to ≤ 160 without dropping the primary
   entity or the qualification (SF-17).
-- **`/research`** — reword title, description, and lede to describe what the page is today
-  (methodology, privacy handling, planned research areas, how to cite), keep it indexed, and record
+- **`/research`** — reword title, description and lede to describe what the page is today
+  (methodology, privacy handling, planned research areas, how to cite), keep it indexed and record
   the publish-statistics work as a later, founder-gated item (SF-01).
 - **FAQ dedupe** — fix the duplicate question and add a duplicate-question rule to
   `blog-validation-lib.mjs` with a unit test (SF-19).
@@ -266,24 +266,24 @@ block now carries `logo.png`, a `contactPoint` and non-empty `sameAs`; assert th
 ### Measurement protocol (design only — not built)
 
 Freeze 12–20 queries across four intents (brand, category, comparison "X vs LyraShield", problem "how
-do I secure an AI-built app"). Run each on ChatGPT, Claude, Perplexity, and Gemini plus Google AI
+do I secure an AI-built app"). Run each on ChatGPT, Claude, Perplexity and Gemini plus Google AI
 Overview results, same location and time window, at least three runs, before and after the deploy.
-Record brand mentions, citations, and answer accuracy separately. These edits may improve clarity and
-extractability; they do not guarantee retrieval, mention, citation, ranking, traffic, or coverage.
+Record brand mentions, citations and answer accuracy separately. These edits may improve clarity and
+extractability; they do not guarantee retrieval, mention, citation, ranking, traffic or coverage.
 
 ## Risks
 
 - **Title rewrites touch established search copy.** Mitigation: only titles above the limit change,
-  the leading keyword is preserved, and no `description` that already fits is touched.
+  the leading keyword is preserved and no `description` that already fits is touched.
 - **`robots.txt` is a public policy surface.** The change is additive and reversible; the training
-  posture is unchanged by decision, and the reasoning is committed as a comment so a future
+  posture is unchanged by decision and the reasoning is committed as a comment so a future
   tightening cannot silently revoke citation access.
 - **New OG assets** are static files with no runtime cost, but add 8–10 files to `public/`; the gate
   asserts exactly 1200×630 and the size budget.
 - **IndexNow ping** depends on a live deploy and a hosted key file; keep it non-fatal so a network
   failure cannot fail a release.
 - **The e2e crawl adds CI time.** Bound concurrency, skip image fetching outside `/blog`, reuse the
-  Playwright `webServer`, and keep it under ~90 seconds.
+  Playwright `webServer` and keep it under ~90 seconds.
 - **workerd constraints**: no `node:fs` at render time; derive data at config/build time (the
   `__MARKETING_SOURCE_DATES__` pattern) or from content collections.
 
@@ -295,13 +295,13 @@ extractability; they do not guarantee retrieval, mention, citation, ranking, tra
 | 2   | `foundingDate` / `legalName` / registered address, if any should be published                 | Wave 2 Organization fields                                             |
 | 3   | Named human author for blog posts vs strengthening the Organization author                    | Wave 2 author entity                                                   |
 | 4   | Google/Bing verification codes and IndexNow key generation (account-side actions)             | Wave 1 discovery plumbing verification only — the code ships env-gated |
-| 5   | Whether to publish anonymized scan statistics on `/research`, and when                        | Later, founder-gated item; Wave 3 only rewords                         |
+| 5   | Whether to publish anonymized scan statistics on `/research` and when                         | Later, founder-gated item; Wave 3 only rewords                         |
 
 ## Off-site runbook (outside the repo)
 
-Verify `lyrashieldai.com` in Google Search Console (DNS, or the HTML tag that now renders when the env
+Verify `lyrashieldai.com` in Google Search Console (DNS or the HTML tag that now renders when the env
 var is set) and submit `sitemap-index.xml`. Register Bing Webmaster Tools — it drives Microsoft
-Copilot citations — submit the same sitemap, and enable IndexNow with the committed key. Claim only
+Copilot citations — submit the same sitemap and enable IndexNow with the committed key. Claim only
 profiles that genuinely exist and link them from the footer so `sameAs` has a real target. Re-check
 the Pages/Coverage reports after the first crawl cycle.
 
@@ -317,7 +317,7 @@ SF-08 through SF-12, SF-14 through SF-28 are closed; the exceptions and their re
 | SF-13 (named human author)            | **Founder decision, not taken.** No `Person` was attributed speculatively; the Organization author is unchanged.                                                                                                                                                                                                                                                                              |
 | SF-10 (`sameAs`)                      | **Partially closed.** `contactPoint` and the raster logo ship; `sameAs` stays absent because no verified product profile URL exists yet. Inventing one would be worse than the gap.                                                                                                                                                                                                           |
 | SF-23 (thin pages)                    | **Partially closed, then re-verified.** `/support`, `/security-reporting` and `/demo` gained depth from facts already published elsewhere. `/docs/approvals` and `/agents` were left as they are: adding prose would have needed evidence the repo does not have. The `/compare` and `/tools` hubs read as thin only by word count — they are link-dense by design — so no padding was added. |
-| SF-27 (responsive hero `srcset`)      | **Verified non-issue, no change made.** On a throttled Slow-4G + 4x CPU profile the homepage records FCP 1320 ms, LCP 1392 ms and CLS 0.0155 against the 2.5 s / 0.1 budgets, and the hero downloads its 26 KB AVIF rather than the 93 KB JPEG. Responsive variants would add build machinery for a few kilobytes.                                                                            |
+| SF-27 (responsive hero `srcset`)      | **Verified non-issue, no change made.** On a throttled Slow-4G + 4x CPU profile the homepage records FCP 1320 ms, LCP 1392 ms and CLS 0.0155 against the 2.5 s / 0.1 budgets and the hero downloads its 26 KB AVIF rather than the 93 KB JPEG. Responsive variants would add build machinery for a few kilobytes.                                                                             |
 
 Wave 1 also fixed a defect the gate surfaced: the middleware's http→https upgrade tested
 `url.hostname`, which `wrangler dev` rewrites to the custom domain, so every SSR route (`llms.txt`,

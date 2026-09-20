@@ -1,6 +1,6 @@
 id: lyrashield
 name: LyraShield AI
-description: Evidence-backed release assurance for AI-built software. Run security scans, review findings, and drive the fix -> verify loop from your agent.
+description: Evidence-backed release assurance for AI-built software. Run security scans, review findings and drive the fix -> verify loop from your agent.
 author: LyraShield AI
 url: https://github.com/ecryptoguru/lyrashield-marketplace
 category: security

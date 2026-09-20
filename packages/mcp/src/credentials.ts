@@ -6,7 +6,7 @@
  * drift.
  *
  * This path deliberately tolerates an unreadable credentials file: the MCP
- * server runs inside someone's editor, and a corrupt file must not stop a valid
+ * server runs inside someone's editor and a corrupt file must not stop a valid
  * LYRASHIELD_API_KEY environment variable from working.
  */
 import {
@@ -30,7 +30,7 @@ export type Credentials = Pick<StoredCredentials, "apiKey" | "oauthAccessToken" 
 export class NoApiKeyError extends Error {
   constructor() {
     super(
-      "No LyraShield bearer credential was found. Run `lyrashield login --oauth`, set LYRASHIELD_API_KEY, or set LYRASHIELD_OAUTH_ACCESS_TOKEN."
+      "No LyraShield bearer credential was found. Run `lyrashield login --oauth`, set LYRASHIELD_API_KEY or set LYRASHIELD_OAUTH_ACCESS_TOKEN."
     )
     this.name = "NoApiKeyError"
   }

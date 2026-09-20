@@ -225,7 +225,7 @@ const opencode: AgentEntry = {
   gotchas: [
     "OpenCode's global config is `~/.config/opencode/opencode.json`; project `opencode.json` overrides it.",
     "OpenCode uses single-brace `{env:VAR}` syntax, not `${VAR}`; wrong syntax passes the literal string through.",
-    'OpenCode local entries use `type: "local"`, a command array, and `environment`; remote entries use `type: "remote"`.',
+    'OpenCode local entries use `type: "local"`, a command array and `environment`; remote entries use `type: "remote"`.',
     "OpenCode stores servers under the top-level `mcp` object and uses `enabled: false` to disable an entry.",
   ],
 }
@@ -262,7 +262,7 @@ const kiloCode: AgentEntry = {
   gotchas: [
     "Kilo Code uses single-brace `{env:VAR}` syntax, not `${VAR}`; wrong syntax passes the literal string through.",
     "Kilo Code's file is JSONC; a JSON.parse/stringify round-trip destroys the user's comments.",
-    'Kilo Code local entries use `type: "local"`, a command array, and `environment`; remote entries use `type: "remote"`.',
+    'Kilo Code local entries use `type: "local"`, a command array and `environment`; remote entries use `type: "remote"`.',
   ],
 }
 
@@ -289,7 +289,7 @@ const zed: AgentEntry = {
     url: "https://zed.dev/docs/ai/mcp",
   },
   gotchas: [
-    "Current Zed settings use flat command, args, and env fields under context_servers. Legacy nested command.path entries should be updated through Zed settings.",
+    "Current Zed settings use flat command, args and env fields under context_servers. Legacy nested command.path entries should be updated through Zed settings.",
     "A remote URL without an Authorization header starts Zed's OAuth flow. Keep existing stdio connections unless you deliberately migrate.",
     "Zed's global settings path is `~/.config/zed/settings.json`; verify it for your platform.",
   ],
@@ -386,14 +386,14 @@ const picode: AgentEntry = {
   integrationKind: "standalone-cli",
   credential: { kind: "shell-env" },
   manualInstructions:
-    "Pi does not include MCP in core. Run `lyrashield check-diff` or `lyrashield gate --verdict` beside Pi, or use a separately reviewed Pi extension that implements MCP.",
+    "Pi does not include MCP in core. Run `lyrashield check-diff` or `lyrashield gate --verdict` beside Pi or use a separately reviewed Pi extension that implements MCP.",
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
     url: "https://pi.dev/docs/latest/usage",
   },
   gotchas: [
-    "Do not create `.mcp.json`, `.pi/mcp.json`, or another MCP file for Pi core; those paths belong to third-party adapters rather than Pi's official contract.",
+    "Do not create `.mcp.json`, `.pi/mcp.json` or another MCP file for Pi core; those paths belong to third-party adapters rather than Pi's official contract.",
   ],
 }
 
@@ -417,7 +417,7 @@ const openclaw: AgentEntry = {
     url: "https://docs.openclaw.ai/cli/mcp",
   },
   gotchas: [
-    "OpenClaw manages client-side servers with `openclaw mcp add`, `set`, and `configure`, or in its Control UI at /settings/mcp. Do not use mcporter configuration for OpenClaw-managed servers.",
+    "OpenClaw manages client-side servers with `openclaw mcp add`, `set` and `configure` or in its Control UI at /settings/mcp. Do not use mcporter configuration for OpenClaw-managed servers.",
     'Local entries use `command` and repeated `--arg` flags. For Streamable HTTP, use `transport: "streamable-http"`; then run `openclaw mcp doctor --probe` for a live tool-list check.',
   ],
 }
@@ -480,7 +480,7 @@ const antigravity: AgentEntry = {
   },
   gotchas: [
     "Antigravity uses `serverUrl`, not `url`, for HTTP servers — `url` is rejected.",
-    "One shared config at ~/.gemini/config/mcp_config.json serves the IDE, the agy CLI, and 2.0; the workspace .agents/mcp_config.json scopes to one project.",
+    "One shared config at ~/.gemini/config/mcp_config.json serves the IDE, the agy CLI and 2.0; the workspace .agents/mcp_config.json scopes to one project.",
     "Shared skills live in ~/.gemini/skills; project rules go in GEMINI.md (project) or AGENTS.md (global).",
   ],
 }
@@ -812,7 +812,7 @@ const vscodePlugin: AgentEntry = {
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
   manualInstructions:
-    "VS Code Agent Plugins must be installed from Customize, Install from Source, or an approved team marketplace. Use `lyrashield install vscode` for the supported `.vscode/mcp.json` path.",
+    "VS Code Agent Plugins must be installed from Customize, Install from Source or an approved team marketplace. Use `lyrashield install vscode` for the supported `.vscode/mcp.json` path.",
   rulesFiles: [".github/copilot-instructions.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -820,7 +820,7 @@ const vscodePlugin: AgentEntry = {
   },
   gotchas: [
     "VS Code reads the portable root `plugin.json`; there is no VS Code-specific shim directory. Our manifest declares the Agent Plugins 1.0 `$schema`, so VS Code classifies it as Agent Plugins 1.0 and takes MCP servers from the root `mcp.json`.",
-    "Auto-registration is NOT wired yet, so this path is a staging copy rather than a discovery path. VS Code only auto-discovers plugins under `~/.copilot/installed-plugins/`; everything else arrives via a configured marketplace, Install-from-Source, or an explicit entry in the `chat.pluginLocations` setting.",
+    "Auto-registration is NOT wired yet, so this path is a staging copy rather than a discovery path. VS Code only auto-discovers plugins under `~/.copilot/installed-plugins/`; everything else arrives via a configured marketplace, Install-from-Source or an explicit entry in the `chat.pluginLocations` setting.",
     "Until marketplace or Install-from-Source registration ships, install VS Code through its verified config-file path: `lyrashield install vscode` writes `.vscode/mcp.json`. Agent plugins additionally require the `chat.plugins.enabled` setting.",
     "Authenticate through the client-hosted OAuth flow when connecting the remote MCP server.",
   ],

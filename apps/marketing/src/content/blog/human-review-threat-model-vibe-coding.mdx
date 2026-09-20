@@ -1,6 +1,6 @@
 ---
 title: "Vibe coding threat model: template and checklist"
-description: "Build a threat model for your AI-built app with a worked example, reusable risk table, named owners, and release checks tied to evidence."
+description: "Build a threat model for your AI-built app with a worked example, reusable risk table, named owners and release checks tied to evidence."
 pubDate: 2026-07-17
 updatedDate: 2026-09-12
 author: lyrashield-team
@@ -13,22 +13,22 @@ draft: false
 heroImage: verification-05
 faq:
   - q: "Who should join a threat-model review?"
-    a: "Include someone who understands the user workflow, someone who can explain the implementation and deployment, and the person accountable for accepting or reducing the material risks. One person may hold multiple roles on a small team."
+    a: "Include someone who understands the user workflow, someone who can explain the implementation and deployment and the person accountable for accepting or reducing the material risks. One person may hold multiple roles on a small team."
   - q: "How long should the first session take?"
-    a: "For a small app, timebox the first pass to about 60 to 90 minutes after the system inventory exists. Complex payment, identity, health, or agent workflows may need separate sessions rather than one rushed meeting."
+    a: "For a small app, timebox the first pass to about 60 to 90 minutes after the system inventory exists. Complex payment, identity, health or agent workflows may need separate sessions rather than one rushed meeting."
   - q: "Do we need a specialized threat-modeling tool?"
-    a: "No. A whiteboard or versioned diagram and risk table can work if they show actual flows, trust boundaries, threats, owners, decisions, and evidence. Tools help with consistency, but they do not supply accountable reasoning."
+    a: "No. A whiteboard or versioned diagram and risk table can work if they show actual flows, trust boundaries, threats, owners, decisions and evidence. Tools help with consistency, but they do not supply accountable reasoning."
   - q: "When should the threat model be updated?"
-    a: "Review it when data classes, external services, trust boundaries, privileged actions, deployment topology, or agent capabilities change. Also revisit it after incidents or tests reveal an assumption that was wrong."
+    a: "Review it when data classes, external services, trust boundaries, privileged actions, deployment topology or agent capabilities change. Also revisit it after incidents or tests reveal an assumption that was wrong."
 ---
 
-**Direct answer:** Draw the app's users, data stores, external services, trust boundaries, and privileged actions. Ask what can go wrong at each boundary, choose an owner and response for each material threat, then turn the response into a test or release gate. Human review means accountable reasoning and recorded evidence, not an approval click.
+**Direct answer:** Draw the app's users, data stores, external services, trust boundaries and privileged actions. Ask what can go wrong at each boundary, choose an owner and response for each material threat, then turn the response into a test or release gate. Human review means accountable reasoning and recorded evidence, not an approval click.
 
-A lightweight threat model makes those assumptions discussable. It does not require a large compliance template. Start with the running system, its deployment configuration, and its real permissions. The inventory should fit the [complete vibe coding security model](/blog/vibe-coding-security-guide), while staying specific enough that one person can own each decision.
+A lightweight threat model makes those assumptions discussable. It does not require a large compliance template. Start with the running system, its deployment configuration and its real permissions. The inventory should fit the [complete vibe coding security model](/blog/vibe-coding-security-guide), while staying specific enough that one person can own each decision.
 
 ## Prepare facts before the session
 
-Collect a short, current inventory. Include entry points, authentication, user roles, sensitive data, storage, external APIs, queues, agent tools, secrets, administrative paths, and deployment identities. Pull these facts from code and configuration rather than relying on an assistant's summary.
+Collect a short, current inventory. Include entry points, authentication, user roles, sensitive data, storage, external APIs, queues, agent tools, secrets, administrative paths and deployment identities. Pull these facts from code and configuration rather than relying on an assistant's summary.
 
 Bring one ordinary user journey and one privileged journey. For a document application, the ordinary journey might be "member opens a document." The privileged journey might be "owner exports all workspace records." If an agent can call tools, include the content it reads and the actions those tools permit.
 
@@ -36,26 +36,26 @@ Record uncertainty instead of filling gaps with guesses. "Worker network policy 
 
 ## Draw the smallest useful data-flow model
 
-Use boxes for processes and stores, arrows for data movement, and clear lines for trust boundaries. Label arrows with the data and protocol that cross them. "API call" is too vague. "Session cookie and project ID over HTTPS" gives the team something to question.
+Use boxes for processes and stores, arrows for data movement and clear lines for trust boundaries. Label arrows with the data and protocol that cross them. "API call" is too vague. "Session cookie and project ID over HTTPS" gives the team something to question.
 
 For a small hosted app, the first model might contain:
 
 - browser and anonymous internet traffic
 - application server and its authenticated session boundary
 - primary database and object storage
-- email, payment, model, or source-control providers
+- email, payment, model or source-control providers
 - background worker and queue
 - administrative console and deployment pipeline
 
-Add privileged actions beside the component that performs them: changing roles, deleting a workspace, reading all tenant records, rotating credentials, deploying code, or asking an agent to execute a tool. Mark where identity changes, data leaves your control, and lower-trust content enters a more privileged process.
+Add privileged actions beside the component that performs them: changing roles, deleting a workspace, reading all tenant records, rotating credentials, deploying code or asking an agent to execute a tool. Mark where identity changes, data leaves your control and lower-trust content enters a more privileged process.
 
 Do not turn the diagram into a map of every function. Its job is to expose boundaries and consequences. Split the model when one page becomes unreadable.
 
 ## Ask four questions at each boundary
 
-The [Threat Modeling Manifesto](https://www.threatmodelingmanifesto.org/) frames the work with four questions: what are we working on, what can go wrong, what are we going to do about it, and whether the job was done well. Those questions keep the session tied to decisions rather than threat vocabulary.
+The [Threat Modeling Manifesto](https://www.threatmodelingmanifesto.org/) frames the work with four questions: what are we working on, what can go wrong, what are we going to do about it and whether the job was done well. Those questions keep the session tied to decisions rather than threat vocabulary.
 
-At each boundary, ask who controls the input, how identity is established, which resource is selected, what authority the receiver holds, and what happens after a failure. Consider misuse by an anonymous visitor, an ordinary member, a compromised integration, and an over-permissioned agent where those actors exist in the system.
+At each boundary, ask who controls the input, how identity is established, which resource is selected, what authority the receiver holds and what happens after a failure. Consider misuse by an anonymous visitor, an ordinary member, a compromised integration and an over-permissioned agent where those actors exist in the system.
 
 An inert example for a workspace export might read:
 
@@ -69,23 +69,23 @@ Owner: application engineering
 Release gate: named integration test passes on the release commit
 ```
 
-This is a reasoning aid, not an exploit recipe. Use synthetic tenants and a disposable environment for the negative test. The example also makes accountability visible: a control, evidence, owner, and release decision are attached to the same threat.
+This is a reasoning aid, not an exploit recipe. Use synthetic tenants and a disposable environment for the negative test. The example also makes accountability visible: a control, evidence, owner and release decision are attached to the same threat.
 
-[OWASP's Threat Modeling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html) describes a repeatable process that models the system, identifies threats, selects responses, and reviews the result. A checklist can support that process, but the team still has to decide which threats matter for this architecture.
+[OWASP's Threat Modeling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html) describes a repeatable process that models the system, identifies threats, selects responses and reviews the result. A checklist can support that process, but the team still has to decide which threats matter for this architecture.
 
 ## Copy this threat-model review template
 
 Use one row per concrete failure path. Replace the example values with facts from your app; blank evidence means the control has not been demonstrated.
 
-| Field              | Example for a workspace export                                 |
-| ------------------ | -------------------------------------------------------------- |
-| Flow and boundary  | Browser to export API to worker to private storage             |
-| Asset and actor    | Workspace documents; signed-in non-member                      |
-| Threat             | Changing a workspace ID exposes another tenant's export        |
-| Control            | Server checks current membership before queueing and download  |
-| Negative test      | Synthetic Account B requests Account A's export                |
-| Evidence           | Test result, commit, environment, and redacted audit reference |
-| Owner and decision | Named reviewer; block release until denial is demonstrated     |
+| Field              | Example for a workspace export                                |
+| ------------------ | ------------------------------------------------------------- |
+| Flow and boundary  | Browser to export API to worker to private storage            |
+| Asset and actor    | Workspace documents; signed-in non-member                     |
+| Threat             | Changing a workspace ID exposes another tenant's export       |
+| Control            | Server checks current membership before queueing and download |
+| Negative test      | Synthetic Account B requests Account A's export               |
+| Evidence           | Test result, commit, environment and redacted audit reference |
+| Owner and decision | Named reviewer; block release until denial is demonstrated    |
 
 Review the download as well as job creation. A protected export API can still produce a publicly readable file. The [secure report-sharing guide](/blog/share-security-report-safely) covers the resulting access boundary.
 
@@ -93,7 +93,7 @@ Review the download as well as job creation. A protected export API can still pr
 
 Not every idea deserves a release block. Estimate impact and plausibility using a small scale the team understands, then record why. Avoid calculated scores whose inputs are guesses. A production deletion path and a cosmetic preference leak should not compete on an unexplained decimal.
 
-Prioritize threats that cross tenant boundaries, expose credentials or sensitive data, change money or access, execute untrusted content, destroy unrecoverable state, or let one identity gain a much broader capability. Consider what existing controls reduce the path and whether those controls have current evidence.
+Prioritize threats that cross tenant boundaries, expose credentials or sensitive data, change money or access, execute untrusted content, destroy unrecoverable state or let one identity gain a much broader capability. Consider what existing controls reduce the path and whether those controls have current evidence.
 
 The UK's National Cyber Security Centre published [the vibe coding spectrum approach](https://www.ncsc.gov.uk/blogs/the-vibe-coding-spectrum-approach-to-ai-assisted-software-development) in June 2026. It connects greater autonomy and more sensitive work with stronger control and review. That is guidance for adjusting oversight, not a measurement that assigns one universal risk level to every AI-assisted project.
 
@@ -101,37 +101,37 @@ Keep deferred threats in a visible register with an owner and review date. "Acce
 
 ## Turn responses into owned work
 
-Each material threat needs one of four clear decisions: reduce it, avoid the risky design, transfer a defined responsibility, or accept the residual risk. Translate reduction into a change someone can implement and a check someone else can inspect.
+Each material threat needs one of four clear decisions: reduce it, avoid the risky design, transfer a defined responsibility or accept the residual risk. Translate reduction into a change someone can implement and a check someone else can inspect.
 
 For authorization, evidence might be a cross-tenant integration test using two synthetic accounts. For recovery, it might be a successful isolated restore with integrity checks. For an agent tool, it might be a denied out-of-scope call and a log entry that excludes sensitive arguments. For a provider webhook, it might be signature validation plus replay rejection.
 
-Do not let the same generated explanation count as design, implementation, and verification. The assistant can help enumerate paths or draft tests. A human still decides the system contract, reviews the actual change, and accepts the remaining risk. [NIST SSDF 1.1](https://csrc.nist.gov/pubs/sp/800/218/final) includes risk modeling during design and review across development, which supports treating the model as working engineering material.
+Do not let the same generated explanation count as design, implementation and verification. The assistant can help enumerate paths or draft tests. A human still decides the system contract, reviews the actual change and accepts the remaining risk. [NIST SSDF 1.1](https://csrc.nist.gov/pubs/sp/800/218/final) includes risk modeling during design and review across development, which supports treating the model as working engineering material.
 
 ## Run a short accountable review
 
-Timebox the first pass. Spend the opening minutes correcting the diagram. Walk the highest-consequence flows next. Use the final part to assign owners, due dates, and release gates. Park unrelated architecture debates rather than letting them consume the session.
+Timebox the first pass. Spend the opening minutes correcting the diagram. Walk the highest-consequence flows next. Use the final part to assign owners, due dates and release gates. Park unrelated architecture debates rather than letting them consume the session.
 
-Require each approval to name its scope. A reviewer should be able to say which flow was examined, which threats were considered material, which evidence was checked, and which limitations remain. A button press with no reasoning trail cannot answer those questions later.
+Require each approval to name its scope. A reviewer should be able to say which flow was examined, which threats were considered material, which evidence was checked and which limitations remain. A button press with no reasoning trail cannot answer those questions later.
 
 Disagreement is useful. If one reviewer believes a database policy contains tenant access while another believes the server identity bypasses it, verify the deployed identity and query path. Record the answer and update the model. Do not settle architecture facts by vote.
 
 ## Connect the model to tests and release gates
 
-Threat-model output should change what the team tests. Create a small mapping from threat to control, test, owner, and latest result. Keep security invariants outside the generated implementation so the tests do not merely repeat its assumptions.
+Threat-model output should change what the team tests. Create a small mapping from threat to control, test, owner and latest result. Keep security invariants outside the generated implementation so the tests do not merely repeat its assumptions.
 
-The guide to [reviewing AI-generated security tests](/blog/ai-generated-tests-security) explains how negative cases, controlled mutation, and independent review can expose shared mistakes. A passing test supports the named invariant in its documented environment. It does not prove the whole threat has disappeared.
+The guide to [reviewing AI-generated security tests](/blog/ai-generated-tests-security) explains how negative cases, controlled mutation and independent review can expose shared mistakes. A passing test supports the named invariant in its documented environment. It does not prove the whole threat has disappeared.
 
 When evidence is missing, label the result accordingly. A detected pattern is not independently verified. A clean deterministic retest can be retest-confirmed within its recorded coverage. An incomplete tool path may remain inconclusive. Human confidence does not change those evidence boundaries.
 
-Use the browser-local [AI app security checklist](/tools/ai-app-security-checklist) after the session to record control owners and missing evidence. It cannot discover the system's data flows, inspect the implementation, or accept risk for the team.
+Use the browser-local [AI app security checklist](/tools/ai-app-security-checklist) after the session to record control owners and missing evidence. It cannot discover the system's data flows, inspect the implementation or accept risk for the team.
 
 ## Update the model when the system changes
 
-Review the model when a new data class, external service, role, privileged action, deployment path, or agent capability appears. A small diagram diff can reveal a new boundary faster than a full annual review. Revisit it after incidents and after tests uncover a mistaken assumption.
+Review the model when a new data class, external service, role, privileged action, deployment path or agent capability appears. A small diagram diff can reveal a new boundary faster than a full annual review. Revisit it after incidents and after tests uncover a mistaken assumption.
 
 Archive decisions with the release or architecture record. Keep the diagram versioned when it does not expose sensitive details. If it contains operational secrets or exploitable internal detail, store it in an appropriately restricted system and link to it from the review record.
 
-The model remains incomplete by design. It reflects the people present, facts available, flows drawn, and threats considered on that date. Its value comes from accountable choices and testable follow-through, not from claiming exhaustive coverage.
+The model remains incomplete by design. It reflects the people present, facts available, flows drawn and threats considered on that date. Its value comes from accountable choices and testable follow-through, not from claiming exhaustive coverage.
 
 ## Sources
 

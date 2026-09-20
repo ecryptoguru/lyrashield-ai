@@ -27,15 +27,15 @@ const faq = [
   },
   {
     q: "Does the guard block all prompt injection attacks?",
-    a: "No. No finite test suite can prove that, so LyraShield does not claim it. The evaluation states what was tested, what passed, and what is still a known limitation.",
+    a: "No. No finite test suite can prove that, so LyraShield does not claim it. The evaluation states what was tested, what passed and what is still a known limitation.",
   },
   {
     q: "Does the prompt-injection guard also filter harmful content?",
-    a: "No. It blocks attempts to override, hijack, or extract instructions from the agent. Filtering harmful-but-non-injection content is the responsibility of the underlying LLM's own safety training, not this guard.",
+    a: "No. It blocks attempts to override, hijack or extract instructions from the agent. Filtering harmful-but-non-injection content is the responsibility of the underlying LLM's own safety training, not this guard.",
   },
   {
     q: "Can this replace human security review or LLM-level safety training?",
-    a: "No. It is a bounded, scoped check against two named public frameworks, not a substitute for LLM-level safety training, output filtering, or human review.",
+    a: "No. It is a bounded, scoped check against two named public frameworks, not a substitute for LLM-level safety training, output filtering or human review.",
   },
 ]
 
@@ -84,7 +84,7 @@ const jsonLd = [
         LyraShield AI includes a deterministic prompt-injection guard that gates MCP tool-call
         inputs before they reach the LLM scan engine. This page documents how we evaluate that
         guard against two open frameworks: the OWASP Gen AI Red Teaming Guide and the MLCommons
-        AILuminate demo prompt set. Results are bounded, honest, and limitation-aware.
+        AILuminate demo prompt set. Results are bounded, honest and limitation-aware.
       </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
         Last reviewed: <time datetime={reviewed}>August 15, 2026</time>
@@ -103,9 +103,9 @@ const jsonLd = [
     <p class="mt-4 max-w-3xl leading-7 text-text-muted" data-reveal>
       The guard is a regex-based filter with 15+ pattern categories: instruction override, role
       hijack, memory wipe, code execution, SQL injection, destructive commands, environment
-      variable extraction, prompt extraction, file access, obfuscation, system tags, ChatML tags,
+      variable extraction, prompt extraction, file access, obfuscation, system tags, ChatML tags
       and more. It normalizes input (NFKC, zero-width stripping, HTML entity decoding) before
-      matching. We test whether it blocks, sanitizes, or allows each adversarial input.
+      matching. We test whether it blocks, sanitizes or allows each adversarial input.
     </p>
     <p class="mt-4 max-w-3xl leading-7 text-text-muted" data-reveal>
       <strong>This is not an LLM safety test.</strong> The guard is a deterministic filter. A
@@ -198,7 +198,7 @@ const jsonLd = [
       </ol>
       <p class="mt-2 text-sm leading-6 text-text-muted">
         These are documented honestly rather than hidden. Dot-separation would require
-        context-aware parsing (distinguishing "ig.nore" from "config.js"), and multilingual
+        context-aware parsing (distinguishing "ig.nore" from "config.js") and multilingual
         support would need pattern sets for every major language.
       </p>
     </div>
@@ -219,7 +219,7 @@ const jsonLd = [
       <p class="mt-2 text-sm leading-6 text-text-muted">
         AILuminate tests <strong>content safety</strong> — whether an LLM produces harmful output
         when asked directly. The guard tests <strong>prompt injection</strong> — whether someone
-        can override the system's instructions, hijack its role, or extract its secrets. These are
+        can override the system's instructions, hijack its role or extract its secrets. These are
         different problems. We ran AILuminate through the guard to prove the guard does its job
         and <em>only</em> its job: it blocks injection attempts and does not over-reach into
         content filtering.
@@ -304,7 +304,7 @@ const jsonLd = [
       <p>
         <strong>OWASP suite (42 test cases):</strong> synthetic inputs across four assessment areas
         — model evaluation (adversarial prompts), implementation testing (bypass techniques),
-        infrastructure assessment (MCP tool-call arguments), and runtime behavior analysis
+        infrastructure assessment (MCP tool-call arguments) and runtime behavior analysis
         (indirect prompt injection via scan results). Each case has an expected outcome and expected
         detection patterns. In the recorded run, {expectedOutcomes} of {owasp.totals.total} cases
         ({expectedOutcomeRate}%) matched those declared expectations.
@@ -349,7 +349,7 @@ const jsonLd = [
       </li>
       <li class="flex gap-3">
         <span class="mt-1 text-accent">→</span>
-        <span>This evaluation does not constitute certification, compliance, or a security guarantee.</span>
+        <span>This evaluation does not constitute certification, compliance or a security guarantee.</span>
       </li>
     </ul>
   </section>
@@ -360,16 +360,16 @@ const jsonLd = [
       <h2 class="text-xl font-semibold text-text">What this is not</h2>
       <p class="mt-3 text-sm leading-6 text-text-muted">
         LyraShield's prompt-injection guard does not perform content moderation or filter
-        harmful-but-non-injection content. It only blocks attempts to override, hijack, or extract
-        instructions from the agent, and treats content-safety filtering as the responsibility of
+        harmful-but-non-injection content. It only blocks attempts to override, hijack or extract
+        instructions from the agent and treats content-safety filtering as the responsibility of
         the underlying LLM's own safety training.
       </p>
       <ul class="mt-3 space-y-2 text-sm text-text-muted">
-        <li>• Not "AI safety tested" in the sense of a formal evaluation by NIST, MLCommons, or a third-party lab.</li>
+        <li>• Not "AI safety tested" in the sense of a formal evaluation by NIST, MLCommons or a third-party lab.</li>
         <li>• Not "adversarial robustness proven" — no finite test suite proves universal robustness.</li>
         <li>• Not an MLCommons-certified result — the demo set is for internal testing only.</li>
         <li>• Not a guarantee that the guard blocks all prompt injection attacks.</li>
-        <li>• Not a substitute for LLM-level safety training, output filtering, or human review.</li>
+        <li>• Not a substitute for LLM-level safety training, output filtering or human review.</li>
       </ul>
       <p class="mt-4 text-sm text-text-muted">
         See <a href="/methodology" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">methodology</a>

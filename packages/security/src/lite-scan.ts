@@ -92,7 +92,7 @@ function toLiteCheck(signal: SurfaceSignal): LiteCheck {
 
   if (category === "data_layer") {
     whyItMatters =
-      "Access safety depends on server-enforced row-level security or security rules. This passive check did not query any table, collection, or authenticated endpoint."
+      "Access safety depends on server-enforced row-level security or security rules. This passive check did not query any table, collection or authenticated endpoint."
   }
 
   return {
@@ -176,8 +176,8 @@ export function analyzeLiteSurface(surface: LiteSurface): LiteCheckResult {
       findingCount: needsAttention + worthReviewing,
     },
     disclaimers: [
-      "This is a surface-level, passive check — a preview of what LyraShield's full loop does. It can't see everything, and a clean result here isn't a guarantee.",
-      "No authenticated access, exploit validation, table queries, or active RLS tests were performed.",
+      "This is a surface-level, passive check — a preview of what LyraShield's full loop does. It can't see everything and a clean result here isn't a guarantee.",
+      "No authenticated access, exploit validation, table queries or active RLS tests were performed.",
     ],
   }
 }
