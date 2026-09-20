@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { randomUUID } from "node:crypto"
+import { createId } from "@paralleldrive/cuid2"
 import { prisma } from "./client"
 import { withAccountRLS } from "./rls"
 import { getSystemPrisma } from "./system-client"
 import { verifyAuditChain } from "./audit-hash"
+import { claimArtifactDeletionTask, completeArtifactDeletionTask } from "./artifact-deletion"
 import {
   deleteUserAccount,
   getAccountDeletionPlan,
@@ -47,6 +49,10 @@ const activeWorkspaceName = `Active ${suffix}`
 const legacyWorkspaceName = `Legacy ${suffix}`
 const auditFailureWorkspaceName = "Account deletion audit rollback fixture"
 
+const attachmentUserId = `attach-user-${suffix}`
+const attachmentWorkspaceId = `attach-ws-${suffix}`
+const attachmentWorkspaceName = `Attach ${suffix}`
+
 const referralCode = `234567${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
 const rewardedReferralCode = `765432${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
 
@@ -64,6 +70,7 @@ async function cleanup() {
     activeWorkspaceId,
     legacyWorkspaceId,
     auditFailureWorkspaceId,
+    attachmentWorkspaceId,
   ]) {
     await prisma.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspaceId}`.catch(
       () => {}
@@ -85,6 +92,7 @@ async function cleanup() {
           auditFailureUserId,
           auditFailureOwnerId,
           myraUserId,
+          attachmentUserId,
         ],
       },
     },
@@ -93,7 +101,11 @@ async function cleanup() {
     where: { code: { in: [referralCode, rewardedReferralCode] } },
   })
   await prisma.artifactDeletionTask.deleteMany({
-    where: { workspaceId: { in: [richWorkspaceId, activeWorkspaceId, legacyWorkspaceId] } },
+    where: {
+      workspaceId: {
+        in: [richWorkspaceId, activeWorkspaceId, legacyWorkspaceId, attachmentWorkspaceId],
+      },
+    },
   })
   // v16 2.2 fixtures: paid affiliate + license owner.
   await prisma.payoutItem
@@ -432,6 +444,101 @@ describe("account deletion", () => {
         where: { kind_storageUri: { kind: "EVIDENCE", storageUri: evidenceStorageUri } },
       })
     ).toMatchObject({ workspaceId: richWorkspaceId, status: "PENDING" })
+  })
+
+  /**
+   * Scan attachments are encrypted objects under the workspace prefix. Their
+   * rows die with the workspace cascade, so the deletion transaction must
+   * enqueue a durable outbox task for every status — ACTIVE and already
+   * soft-deleted alike — before the cascade runs. The task then survives the
+   * workspace row and the drain can dispatch the object removal.
+   */
+  it("enqueues durable deletion tasks for every scan attachment before the workspace cascade", async () => {
+    await prisma.user.create({
+      data: { id: attachmentUserId, name: "Attach", email: `${attachmentUserId}@example.com` },
+    })
+    await prisma.workspace.create({
+      data: {
+        id: attachmentWorkspaceId,
+        name: attachmentWorkspaceName,
+        slug: attachmentWorkspaceId,
+      },
+    })
+    await prisma.workspaceMember.create({
+      data: {
+        workspaceId: attachmentWorkspaceId,
+        userId: attachmentUserId,
+        role: "OWNER",
+        status: "active",
+      },
+    })
+    const attachmentUri = (label: string) =>
+      `s3://evidence-test/evidence/${attachmentWorkspaceId}/scan-attachments/${attachmentUserId}/${label}-${suffix.slice(0, 12)}`
+    const activeUri = attachmentUri("active")
+    const deletedUri = attachmentUri("deleted")
+    await prisma.scanAttachment.create({
+      data: {
+        workspaceId: attachmentWorkspaceId,
+        filename: "active.txt",
+        mediaType: "text/plain",
+        byteLength: 32,
+        checksum: suffix.padEnd(64, "0").slice(0, 64),
+        storageUri: activeUri,
+        encryptionKeyRef: "envkeystore/lyrashield-evidence-kek/v1",
+        status: "ACTIVE",
+        createdById: attachmentUserId,
+      },
+    })
+    await prisma.scanAttachment.create({
+      data: {
+        id: createId(),
+        workspaceId: attachmentWorkspaceId,
+        filename: "deleted.txt",
+        mediaType: "text/plain",
+        byteLength: 16,
+        checksum: suffix.padEnd(64, "1").slice(0, 64),
+        storageUri: deletedUri,
+        encryptionKeyRef: "envkeystore/lyrashield-evidence-kek/v1",
+        status: "DELETED",
+        deletedAt: new Date(),
+        createdById: attachmentUserId,
+      },
+    })
+
+    const deletion = await deleteUserAccount(attachmentUserId, attachmentWorkspaceName)
+
+    // The workspace row and its cascaded attachment rows are gone; the outbox
+    // tasks must outlive them so the encrypted objects are still removed.
+    expect(await prisma.workspace.findUnique({ where: { id: attachmentWorkspaceId } })).toBeNull()
+    expect(
+      await prisma.scanAttachment.count({ where: { workspaceId: attachmentWorkspaceId } })
+    ).toBe(0)
+    const tasks = await prisma.artifactDeletionTask.findMany({
+      where: { workspaceId: attachmentWorkspaceId },
+    })
+    expect(tasks).toHaveLength(2)
+    for (const storageUri of [activeUri, deletedUri]) {
+      expect(tasks.find((task) => task.storageUri === storageUri)).toMatchObject({
+        kind: "SCAN_ATTACHMENT",
+        status: "PENDING",
+      })
+    }
+    expect(deletion.artifactDeletionTaskIds.sort()).toEqual(tasks.map((task) => task.id).sort())
+
+    // The drain dispatches each pending task to the object deleter; a
+    // successful removal completes the task for good.
+    for (const task of tasks) {
+      const claimed = await claimArtifactDeletionTask([task.id])
+      expect(claimed).toMatchObject({
+        id: task.id,
+        kind: "SCAN_ATTACHMENT",
+        status: "PROCESSING",
+      })
+      expect(await completeArtifactDeletionTask(claimed!.id, claimed!.leaseToken!)).toBe(true)
+    }
+    expect(
+      await prisma.artifactDeletionTask.count({ where: { workspaceId: attachmentWorkspaceId } })
+    ).toBe(0)
   })
 
   it("fails closed while a deletable workspace has an active scan", async () => {

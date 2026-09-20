@@ -60,7 +60,9 @@ let scanId = ""
 let findingId = ""
 const artifactDeletionTaskId = createId()
 const enqueuedArtifactDeletionTaskId = createId()
+const enqueuedAttachmentTaskId = createId()
 let evidenceStorageUri = ""
+let attachmentStorageUri = ""
 let restricted: PrismaClient
 
 describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
@@ -143,6 +145,19 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         storageUri: `s3://test/evidence/${workspaceId}/fixture.enc`,
       },
     })
+    attachmentStorageUri = `s3://evidence/evidence/${workspaceId}/scan-attachments/u/${createId()}`
+    await prisma.scanAttachment.create({
+      data: {
+        workspaceId,
+        filename: "rls-attachment.txt",
+        mediaType: "text/plain",
+        byteLength: 16,
+        checksum: suffix.padEnd(64, "0").slice(0, 64),
+        storageUri: attachmentStorageUri,
+        encryptionKeyRef: "envkeystore/lyrashield-evidence-kek/v1",
+        createdById: `rls-fc-attachment-user-${suffix}`,
+      },
+    })
   })
 
   afterAll(async () => {
@@ -153,7 +168,11 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       return
     }
     await prisma.artifactDeletionTask.deleteMany({
-      where: { id: { in: [artifactDeletionTaskId, enqueuedArtifactDeletionTaskId] } },
+      where: {
+        id: {
+          in: [artifactDeletionTaskId, enqueuedArtifactDeletionTaskId, enqueuedAttachmentTaskId],
+        },
+      },
     })
     if (targetId) {
       await prisma.$executeRaw`DELETE FROM "Target" WHERE id = ${targetId}`
@@ -856,6 +875,61 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       where: { id: enqueuedArtifactDeletionTaskId },
     })
     expect(task).toMatchObject({ workspaceId, storageUri: evidenceStorageUri, kind: "EVIDENCE" })
+  })
+
+  it("lets the runtime role enqueue only a bound-workspace scan attachment URI", async () => {
+    const returnedId = await asWorkspace(workspaceId, async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT app.enqueue_scan_attachment_deletion_task(
+          ${enqueuedAttachmentTaskId}, ${workspaceId}, ${attachmentStorageUri}
+        ) AS id`
+      return rows[0]?.id
+    })
+    expect(returnedId).toBe(enqueuedAttachmentTaskId)
+
+    const task = await prisma.artifactDeletionTask.findUnique({
+      where: { id: enqueuedAttachmentTaskId },
+    })
+    expect(task).toMatchObject({
+      workspaceId,
+      storageUri: attachmentStorageUri,
+      kind: "SCAN_ATTACHMENT",
+      status: "PENDING",
+    })
+
+    // Bound to a different workspace, the function refuses another
+    // workspace's attachment before any row content is even consulted.
+    await expect(
+      asWorkspace(
+        otherWorkspaceId,
+        (tx) => tx.$queryRaw`
+        SELECT app.enqueue_scan_attachment_deletion_task(
+          ${createId()}, ${workspaceId}, ${attachmentStorageUri}
+        ) AS id`
+      )
+    ).rejects.toThrow()
+
+    // Unbound is a workspace context mismatch as well.
+    await expect(
+      asWorkspace(
+        null,
+        (tx) => tx.$queryRaw`
+        SELECT app.enqueue_scan_attachment_deletion_task(
+          ${createId()}, ${workspaceId}, ${attachmentStorageUri}
+        ) AS id`
+      )
+    ).rejects.toThrow()
+
+    // A URI the bound workspace does not retain as an attachment is refused.
+    await expect(
+      asWorkspace(
+        workspaceId,
+        (tx) => tx.$queryRaw`
+        SELECT app.enqueue_scan_attachment_deletion_task(
+          ${createId()}, ${workspaceId}, ${evidenceStorageUri}
+        ) AS id`
+      )
+    ).rejects.toThrow()
   })
 
   it("keeps AI security score snapshots inside the owning workspace", async () => {
