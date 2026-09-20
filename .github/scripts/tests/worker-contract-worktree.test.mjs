@@ -89,5 +89,5 @@ test("engine-worker contract is not skipped on app main or pull requests", () =>
   const job = workflow.split("  engine-worker-contract:")[1]?.split("  deploy-marketing:")[0]
   assert.ok(job)
   assert.match(job, /name: Pinned Engine \/ Worker Contract/)
-  assert.doesNotMatch(job, /\n\s+if:/)
+  assert.doesNotMatch(job, /^    if:/m)
 })
