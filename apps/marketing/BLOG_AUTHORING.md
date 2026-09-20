@@ -4,7 +4,7 @@ This guide is the publishing contract for the LyraShield AI authority blog. It c
 
 ## Current release boundary
 
-The program maps **161 published articles** across ten releases (`authority`, `batch-1` through `batch-10`) and a **75-image** source-artwork library. `apps/marketing/scripts/blog-validation-lib.mjs` declares this once as `PROGRAM_ARTICLE_COUNT` (161) and `IMAGE_CORPUS` (`{ authority: 1, shared: 74 }`); do not hardcode either number elsewhere. All mapped entries are `draft: false` in the current program. This file's boundary is only as current as the last time someone updated it after a merge — trust `blog-program.json` and the live validator output over this prose if they disagree.
+The program maps **166 published articles** across twelve releases (`authority`, `batch-1` through `batch-11`) and a **75-image** source-artwork library. `apps/marketing/scripts/blog-validation-lib.mjs` declares this once as `PROGRAM_ARTICLE_COUNT` (166) and `IMAGE_CORPUS` (`{ authority: 1, shared: 74 }`); do not hardcode either number elsewhere. All mapped entries are `draft: false` in the current program. This file's boundary is only as current as the last time someone updated it after a merge — trust `blog-program.json` and the live validator output over this prose if they disagree.
 
 The editorial policy is a permanent public resource, not one of the mapped articles. A sibling content collection, `/compare` (13 competitor-comparison pages under `src/content/compare/*.md`, membership in `src/content/compare-program.json`, gated by `compare:validate`), is governed the same way but counted separately — it is not part of `PROGRAM_ARTICLE_COUNT`.
 
@@ -181,4 +181,3 @@ Publication requires explicit founder approval for each article or clearly named
 - [ ] FAQ content is visible, non-duplicative, and consistent with JSON-LD.
 - [ ] Draft remains true unless explicit approval is recorded.
 - [ ] Selected release checks, build, Worker crawler, browser QA, and release gates pass.
-      s.

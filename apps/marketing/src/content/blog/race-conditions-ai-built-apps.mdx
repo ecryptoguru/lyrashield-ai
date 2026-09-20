@@ -74,7 +74,7 @@ const results = await Promise.allSettled(
     })
   )
 )
-const ok = results.filter((r) => r.status === "fulfilled").length
+const ok = results.filter((r) => r.status === "fulfilled" && r.value.ok).length
 // expect exactly 1
 ```
 
