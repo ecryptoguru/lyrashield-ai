@@ -454,6 +454,75 @@ fn resolve_byok_env() -> Result<HashMap<String, String>, String> {
     Ok(env)
 }
 
+/// Whether a repo-form target string names a checked-out source tree on disk
+/// rather than a remote Git remote.
+fn is_checked_out_source(path: &str) -> bool {
+    let trimmed = path.trim();
+    if trimmed.starts_with('~') {
+        return true;
+    }
+    std::path::Path::new(trimmed).is_dir()
+}
+
+/// Map the declared desktop target onto the engine's `--target-type` kind.
+///
+/// Engine target inference is offline-only, so a non-suffixed HTTP(S) Git
+/// remote would otherwise classify as a web target. `None` keeps omission
+/// semantics — the engine falls back to its offline inference. The flag only
+/// classifies input; it never authorizes fetching the target.
+fn engine_target_kind(target: &ScanTarget) -> Option<&'static str> {
+    match target {
+        ScanTarget::Url { .. } => Some("web_application"),
+        ScanTarget::LocalPath { .. } => Some("local_code"),
+        ScanTarget::Repo { path, .. } => {
+            if is_checked_out_source(path) {
+                Some("local_code")
+            } else {
+                // Remote refs — including bare host/path remotes the engine can
+                // no longer probe — keep repository classification; the engine
+                // validates the shape and errors actionably on a mismatch.
+                Some("repository")
+            }
+        }
+    }
+}
+
+/// Build the engine argv for a scan. Pure so target-kind mapping is testable.
+fn build_engine_args(
+    config: &ScanConfig,
+    scan_id: &str,
+    max_budget_usd: f64,
+) -> Result<Vec<String>, String> {
+    let mut args: Vec<String> = vec![
+        "--non-interactive".into(),
+        "--run-name".into(),
+        scan_id.to_string(),
+        "--target".into(),
+        config.target.target_arg(),
+        "--scan-mode".into(),
+        config.mode.engine_arg()?.to_string(),
+        "--max-budget-usd".into(),
+        max_budget_usd.to_string(),
+    ];
+    if let Some(kind) = engine_target_kind(&config.target) {
+        args.push("--target-type".into());
+        args.push(kind.into());
+    }
+    if let Some(instruction) = &config.instruction {
+        if !instruction.is_empty() {
+            args.push("--instruction".into());
+            args.push(instruction.clone());
+        }
+    }
+    if let ScanTarget::Repo { branch, .. } = &config.target {
+        if let Some(b) = branch.as_ref().map(|b| b.trim()).filter(|b| !b.is_empty()) {
+            args.push("--repository-branch".into());
+            args.push(b.to_string());
+        }
+    }
+    Ok(args)
+}
+
 /// Durable two-phase: create scan record BEFORE subprocess. Fail-closed on persistence.
 pub async fn create_scan_record(app: AppHandle, config: &ScanConfig) -> Result<(), String> {
     // BYOK validation before creation
@@ -569,32 +638,7 @@ async fn run_scan(
     let engine_cmd = crate::runtime::resolve_engine_bin()?;
 
     let max_budget_usd = validate_max_budget_usd(config.max_budget_usd)?;
-    // Re-check at spawn time so no call path can ever emit `--scan-mode url`
-    // or a silently substituted tier.
-    let engine_mode = config.mode.engine_arg()?;
-    let mut args: Vec<String> = vec![
-        "--non-interactive".into(),
-        "--run-name".into(),
-        scan_id.clone(),
-        "--target".into(),
-        config.target.target_arg(),
-        "--scan-mode".into(),
-        engine_mode.into(),
-        "--max-budget-usd".into(),
-        max_budget_usd.to_string(),
-    ];
-    if let Some(instruction) = &config.instruction {
-        if !instruction.is_empty() {
-            args.push("--instruction".into());
-            args.push(instruction.clone());
-        }
-    }
-    if let ScanTarget::Repo { branch, .. } = &config.target {
-        if let Some(b) = branch.as_ref().map(|b| b.trim()).filter(|b| !b.is_empty()) {
-            args.push("--repository-branch".into());
-            args.push(b.to_string());
-        }
-    }
+    let args = build_engine_args(&config, &scan_id, max_budget_usd)?;
 
     let mut cmd = Command::new(engine_cmd);
     cmd.args(&args);
@@ -1026,6 +1070,99 @@ mod tests {
         assert!(validate_max_budget_usd(0.0).is_err());
         assert!(validate_max_budget_usd(f64::NAN).is_err());
         assert!(validate_max_budget_usd(101.0).is_err());
+    }
+
+    fn args_for(target: ScanTarget) -> Vec<String> {
+        let config = ScanConfig {
+            scan_id: "scan-kind".into(),
+            target,
+            mode: ScanMode::Standard,
+            instruction: None,
+            max_budget_usd: 3.2,
+        };
+        super::build_engine_args(&config, "scan-kind", 3.2).unwrap()
+    }
+
+    fn flag_value(args: &[String], flag: &str) -> Option<String> {
+        args.windows(2).find(|w| w[0] == flag).map(|w| w[1].clone())
+    }
+
+    #[test]
+    fn repo_remote_url_maps_to_repository_kind() {
+        for remote in [
+            "https://github.com/org/repo",
+            "https://gitlab.com/org/repo.git",
+            "git@github.com:org/repo.git",
+            "git://git.example.com/org/repo",
+            "github.com/org/repo",
+        ] {
+            let args = args_for(ScanTarget::Repo {
+                path: remote.into(),
+                branch: None,
+            });
+            assert_eq!(
+                flag_value(&args, "--target-type").as_deref(),
+                Some("repository"),
+                "remote {remote} must classify as repository"
+            );
+        }
+    }
+
+    #[test]
+    fn repo_checked_out_source_maps_to_local_code_kind() {
+        let dir = std::env::temp_dir();
+        let args = args_for(ScanTarget::Repo {
+            path: dir.to_string_lossy().into_owned(),
+            branch: None,
+        });
+        assert_eq!(
+            flag_value(&args, "--target-type").as_deref(),
+            Some("local_code")
+        );
+
+        let args = args_for(ScanTarget::Repo {
+            path: "~/checked-out-repo".into(),
+            branch: None,
+        });
+        assert_eq!(
+            flag_value(&args, "--target-type").as_deref(),
+            Some("local_code")
+        );
+    }
+
+    #[test]
+    fn url_and_local_path_targets_map_to_engine_kinds() {
+        let url_args = args_for(ScanTarget::Url {
+            url: "https://app.example.com".into(),
+        });
+        assert_eq!(
+            flag_value(&url_args, "--target-type").as_deref(),
+            Some("web_application")
+        );
+
+        let local_args = args_for(ScanTarget::LocalPath {
+            path: "/tmp/source".into(),
+        });
+        assert_eq!(
+            flag_value(&local_args, "--target-type").as_deref(),
+            Some("local_code")
+        );
+    }
+
+    #[test]
+    fn repository_branch_arg_is_unchanged_with_kind_flag() {
+        let args = args_for(ScanTarget::Repo {
+            path: "https://github.com/org/repo".into(),
+            branch: Some("release/2026.08".into()),
+        });
+        assert_eq!(
+            flag_value(&args, "--repository-branch").as_deref(),
+            Some("release/2026.08")
+        );
+        assert_eq!(
+            flag_value(&args, "--target-type").as_deref(),
+            Some("repository")
+        );
     }
 
     // VULN-F-002 — bounded engine-output reader (next_bounded_line)
