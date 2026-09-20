@@ -23,9 +23,11 @@ export interface ScanInput {
   /** Review Changes comparison refs (branch names or full SHAs). */
   baseRef?: string
   headRef?: string
-  /** Existing workspace-scoped scan attachment IDs (uploaded via the
-   * attachments API). The server verifies ownership, freshness, type, and
-   * checksum; host paths are never accepted. */
+  /**
+   * Immutable input-evidence references recorded into the server-owned
+   * execution plan. IDs name previously staged workspace artifacts — never
+   * host paths — and are validated again at the staging boundary.
+   */
   attachmentIds?: string[]
 }
 

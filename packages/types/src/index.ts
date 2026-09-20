@@ -92,6 +92,21 @@ export const FindingStatusSchema = z.enum([
   "FALSE_POSITIVE",
   "DUPLICATE",
 ])
+/**
+ * Verification trust tiers — deliberately distinct states that clients must
+ * never conflate: DETECTED is a recorded observation only, VALIDATED is a
+ * deterministic check, VERIFIED requires independent confirmation. BLOCKED
+ * and INCONCLUSIVE are explicitly non-conclusive outcomes, not failures to
+ * hide. Mirrors the Prisma FindingVerificationStatus enum; kept in sync by
+ * the scan-workflows parity fixture test.
+ */
+export const FindingVerificationStatusSchema = z.enum([
+  "DETECTED",
+  "VALIDATED",
+  "VERIFIED",
+  "BLOCKED",
+  "INCONCLUSIVE",
+])
 export const IntegrationTypeSchema = z.enum([
   "GITHUB",
   "GITLAB",
@@ -119,6 +134,7 @@ export type ScanMode = z.infer<typeof ScanModeSchema>
 export type ScanStatus = z.infer<typeof ScanStatusSchema>
 export type FindingSeverity = z.infer<typeof FindingSeveritySchema>
 export type FindingStatus = z.infer<typeof FindingStatusSchema>
+export type FindingVerificationStatus = z.infer<typeof FindingVerificationStatusSchema>
 export type IntegrationType = z.infer<typeof IntegrationTypeSchema>
 
 export const CreateWorkspaceSchema = z.object({
@@ -296,11 +312,12 @@ export const CreateScanSchema = z.object({
   // integration before the scan is admitted; abbreviated SHAs never persist.
   baseRef: z.string().min(1).max(255).refine(isValidGitRef, "Invalid Git ref").optional(),
   headRef: z.string().min(1).max(255).refine(isValidGitRef, "Invalid Git ref").optional(),
-  // Existing workspace-scoped scan attachment IDs (uploaded via
-  // /api/scans/attachments). The server verifies ownership, status, checksum,
-  // type, and limits before they enter the immutable plan; host paths are
-  // never accepted here.
-  attachmentIds: z.array(z.string().min(1).max(128)).max(20).optional(),
+  // Immutable input-evidence references. IDs are recorded verbatim into the
+  // server-owned execution plan (same cap as the plan contract); existence,
+  // workspace scope, checksum and content-type are enforced by the artifact
+  // staging boundary before anything mounts them — never by trusting this
+  // list. Clients must never pass host paths.
+  attachmentIds: z.array(z.string().trim().min(1).max(128)).max(20).optional(),
 })
 
 /** Create-scan input with cross-field workflow rules applied. Kept as a

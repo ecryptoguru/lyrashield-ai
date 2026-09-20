@@ -40,6 +40,19 @@ impl ScanMode {
         }
     }
 
+    /// Canonical API depth token for hosted submissions (QUICK/STANDARD/DEEP).
+    /// Same contract as `engine_arg`, different vocabulary — the hosted API
+    /// and the engine both reject retired/ambiguous modes at their own
+    /// boundaries too.
+    pub fn api_depth(&self) -> Result<&'static str, String> {
+        match self.engine_arg()? {
+            "quick" => Ok("QUICK"),
+            "standard" => Ok("STANDARD"),
+            "deep" => Ok("DEEP"),
+            _ => unreachable!(),
+        }
+    }
+
     /// Normalize a persisted mode token for display. Stored rows may be
     /// JSON-quoted (`"deep"`) or bare legacy strings (`deep`). Unambiguous
     /// aliases migrate to the canonical depth they actually ran as; `url` and
@@ -52,6 +65,45 @@ impl ScanMode {
             "deep" | "custom" => ScanMode::Deep,
             "url" => ScanMode::Url,
             _ => ScanMode::Unknown,
+        }
+    }
+}
+
+/// Recorded workflow for a launch — mirrors the shared contract
+/// (`packages/types/src/scan-execution-plan.ts`). `ReviewTarget` is the
+/// full/snapshot review; `ReviewChanges` is the diff-scoped review that pins
+/// the caller-supplied base/head refs. `AUTHENTICATED_ASSESSMENT` is
+/// hosted-only and is never offered here — no local substitute exists.
+/// `Unknown` covers stored rows written before workflow tracking so history
+/// never silently claims a workflow the scan did not run as.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum ScanWorkflow {
+    #[serde(rename = "REVIEW_TARGET")]
+    #[default]
+    ReviewTarget,
+    #[serde(rename = "REVIEW_CHANGES")]
+    ReviewChanges,
+    #[serde(other)]
+    Unknown,
+}
+
+impl ScanWorkflow {
+    /// Canonical contract token — the same value the API/SDK/CLI/MCP use.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ScanWorkflow::ReviewTarget => "REVIEW_TARGET",
+            ScanWorkflow::ReviewChanges => "REVIEW_CHANGES",
+            ScanWorkflow::Unknown => "unknown",
+        }
+    }
+
+    /// Normalize a persisted token; unrecognized values are `Unknown`, never
+    /// silently ReviewTarget.
+    pub fn from_stored(raw: &str) -> ScanWorkflow {
+        match raw.trim().trim_matches('"') {
+            "REVIEW_TARGET" => ScanWorkflow::ReviewTarget,
+            "REVIEW_CHANGES" => ScanWorkflow::ReviewChanges,
+            _ => ScanWorkflow::Unknown,
         }
     }
 }
@@ -88,9 +140,24 @@ pub struct ScanConfig {
     pub scan_id: String,
     pub target: ScanTarget,
     pub mode: ScanMode,
+    /// Explicit workflow — never inferred from the target shape.
+    #[serde(default)]
+    pub workflow: ScanWorkflow,
+    /// Review Changes comparison base — a branch name or commit SHA the local
+    /// engine resolves against the checked-out repository. Required when
+    /// `workflow` is `ReviewChanges`; meaningless otherwise.
+    #[serde(default)]
+    pub diff_base: Option<String>,
+    /// Review Changes comparison head. Defaults to the checkout's HEAD.
+    #[serde(default)]
+    pub diff_head: Option<String>,
     pub instruction: Option<String>,
     pub max_budget_usd: f64,
 }
+
+/// The only verification tier a local engine run can produce. DETECTED is a
+/// recorded observation — never VALIDATED or VERIFIED.
+pub const VERIFICATION_STATE_DETECTED: &str = "DETECTED";
 
 /// A single finding from the engine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,8 +169,32 @@ pub struct Finding {
     pub file_path: Option<String>,
     pub line_number: Option<u32>,
     pub status: String,
+    /// Legacy summary flag — always false locally: the engine's own
+    /// `verified` output is an unverified attestation, never a promotion.
     pub verified: bool,
+    /// Authoritative verification tier — always `DETECTED` for a local run.
+    #[serde(default = "detected_verification_state")]
+    pub verification_state: String,
+    /// True when the engine emitted attestation fields (a `verified` claim,
+    /// fix_verification, counterevidence, exchange refs) that have not been
+    /// exported for upstream verification. Rendered as "engine-attested —
+    /// evidence export pending"; never presented as verified.
+    #[serde(default)]
+    pub evidence_pending: bool,
+    #[serde(default)]
+    pub counterevidence: Option<String>,
+    #[serde(default)]
+    pub confidence_rationale: Option<String>,
+    /// Engine attestation of a fix check — serialized JSON or statement.
+    #[serde(default)]
+    pub fix_verification: Option<String>,
+    #[serde(default)]
+    pub http_exchange_ids: Vec<String>,
     pub detected_at: String,
+}
+
+fn detected_verification_state() -> String {
+    VERIFICATION_STATE_DETECTED.to_string()
 }
 
 /// Scan status as tracked locally.
@@ -115,6 +206,9 @@ pub enum ScanStatus {
     Completed,
     Failed,
     Cancelled,
+    /// Recorded scan submitted to LyraShield Cloud — progress and evidence
+    /// live server-side; the desktop never fakes local execution for it.
+    Submitted,
 }
 
 /// Summary of a scan (for the history list).
@@ -123,10 +217,32 @@ pub struct ScanSummary {
     pub scan_id: String,
     pub target: String,
     pub mode: ScanMode,
+    /// Recorded workflow (`REVIEW_TARGET`/`REVIEW_CHANGES`); `unknown` only on
+    /// rows written before workflow tracking.
+    #[serde(default)]
+    pub workflow: ScanWorkflow,
+    /// Execution backend: `local` (bundled BYOK engine) or `cloud` (hosted
+    /// recorded scan). Rows written before this field are local runs.
+    #[serde(default = "local_backend")]
+    pub backend: String,
+    /// Engine run contract observed (`strix_runs/<run>/run.json`
+    /// `schema_version`, e.g. "1.1"). NULL means unknown — never guessed.
+    #[serde(default)]
+    pub contract_version: Option<String>,
+    /// Recorded Review Changes base ref; NULL for snapshot reviews.
+    #[serde(default)]
+    pub diff_base: Option<String>,
+    /// Recorded Review Changes head ref; NULL when the checkout HEAD applied.
+    #[serde(default)]
+    pub diff_head: Option<String>,
     pub status: ScanStatus,
     pub started_at: String,
     pub completed_at: Option<String>,
     pub finding_count: usize,
+}
+
+fn local_backend() -> String {
+    "local".to_string()
 }
 
 /// Detailed scan record with findings.
@@ -135,6 +251,16 @@ pub struct ScanDetail {
     pub scan_id: String,
     pub target: String,
     pub mode: ScanMode,
+    #[serde(default)]
+    pub workflow: ScanWorkflow,
+    #[serde(default = "local_backend")]
+    pub backend: String,
+    #[serde(default)]
+    pub contract_version: Option<String>,
+    #[serde(default)]
+    pub diff_base: Option<String>,
+    #[serde(default)]
+    pub diff_head: Option<String>,
     pub status: ScanStatus,
     pub started_at: String,
     pub completed_at: Option<String>,
@@ -143,6 +269,10 @@ pub struct ScanDetail {
 }
 
 /// Events streamed to the frontend during a scan.
+// Finding variants carry the full finding record — a few hundred bytes per
+// buffered event is deliberate; boxing would add indirection without changing
+// the wire shape or meaningfully reducing total memory.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum ScanEvent {

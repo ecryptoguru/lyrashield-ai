@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from "react"
-import type { Finding, ScanEvent, ScanStatus } from "../lib/types"
+import type { Finding, ScanEvent, ScanStatus, ScanWorkflow } from "../lib/types"
 import { cancelScan, exportSarif, getScanEvents, getScanDetail, onScanEvent } from "../lib/tauri"
 
 interface Props {
   scanId: string
   onBack: () => void
+}
+
+interface ScanMeta {
+  workflow: ScanWorkflow
+  backend: "local" | "cloud"
+  contractVersion: string | null
+  diffBase: string | null
+  diffHead: string | null
 }
 
 export function ScanProgressScreen(props: Props) {
@@ -15,6 +23,7 @@ function ScanProgress({ scanId, onBack }: Props) {
   const [progressLines, setProgressLines] = useState<string[]>([])
   const [findings, setFindings] = useState<Finding[]>([])
   const [status, setStatus] = useState<ScanStatus>("pending")
+  const [meta, setMeta] = useState<ScanMeta | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
@@ -74,6 +83,13 @@ function ScanProgress({ scanId, onBack }: Props) {
         if (disposed) return
         detail.findings.forEach((finding) => applyEvent({ type: "finding", scanId, finding }))
         setStatus(detail.status)
+        setMeta({
+          workflow: detail.workflow,
+          backend: detail.backend,
+          contractVersion: detail.contractVersion,
+          diffBase: detail.diffBase,
+          diffHead: detail.diffHead,
+        })
         buffered.forEach(applyEvent)
         ready = true
       } catch (e) {
@@ -141,13 +157,24 @@ function ScanProgress({ scanId, onBack }: Props) {
                 ? "bg-warning/20 text-warning"
                 : status === "completed"
                   ? "bg-success/20 text-success"
-                  : status === "cancelled"
+                  : status === "cancelled" || status === "submitted"
                     ? "bg-muted text-muted-foreground"
                     : "bg-destructive/20 text-destructive"
             }`}
           >
             {cancelling ? "Cancelling…" : status}
           </span>
+          {meta && (
+            <span className="text-xs text-muted-foreground">
+              {meta.backend === "cloud" ? "cloud" : "local"} ·{" "}
+              {meta.workflow === "REVIEW_CHANGES"
+                ? `review changes${meta.diffBase ? ` ${meta.diffBase}${meta.diffHead ? `…${meta.diffHead}` : ""}` : ""}`
+                : meta.workflow === "unknown"
+                  ? "workflow unknown"
+                  : "review target"}
+              {meta.contractVersion ? ` · engine contract ${meta.contractVersion}` : ""}
+            </span>
+          )}
         </div>
         <div className="flex gap-2">
           {active && (
@@ -173,7 +200,13 @@ function ScanProgress({ scanId, onBack }: Props) {
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto sm:flex-row">
         <div className="min-w-0 sm:w-1/2 overflow-y-auto border-r border-border p-4">
           <h2 className="mb-3 text-sm font-medium text-foreground">Findings ({findings.length})</h2>
-          {findings.length === 0 ? (
+          {meta?.backend === "cloud" ? (
+            <p className="text-sm text-muted-foreground">
+              Recorded scan submitted to LyraShield Cloud. Progress, evidence, and verification
+              states are tracked server-side — open the LyraShield dashboard to review them. Local
+              findings are never fabricated for cloud scans.
+            </p>
+          ) : findings.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {status === "running"
                 ? "Waiting for findings…"
@@ -201,6 +234,42 @@ function ScanProgress({ scanId, onBack }: Props) {
                   )}
                   {f.description && (
                     <p className="mt-1 text-xs text-muted-foreground">{f.description}</p>
+                  )}
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    <span className="rounded bg-muted px-1.5 py-0.5 font-medium">
+                      {f.verificationState || "DETECTED"}
+                    </span>
+                    {f.evidencePending && (
+                      <span className="ml-2">engine-attested — evidence export pending</span>
+                    )}
+                  </p>
+                  {(f.counterevidence || f.confidenceRationale || f.fixVerification) && (
+                    <dl className="mt-2 space-y-1 border-l-2 border-border pl-2 text-xs text-muted-foreground">
+                      {f.counterevidence && (
+                        <div>
+                          <dt className="font-medium">Counterevidence</dt>
+                          <dd>{f.counterevidence}</dd>
+                        </div>
+                      )}
+                      {f.confidenceRationale && (
+                        <div>
+                          <dt className="font-medium">Confidence rationale</dt>
+                          <dd>{f.confidenceRationale}</dd>
+                        </div>
+                      )}
+                      {f.fixVerification && (
+                        <div>
+                          <dt className="font-medium">Fix verification</dt>
+                          <dd>{f.fixVerification}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  )}
+                  {f.httpExchangeIds.length > 0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      HTTP exchange evidence: {f.httpExchangeIds.length} recorded exchange
+                      {f.httpExchangeIds.length === 1 ? "" : "s"}
+                    </p>
                   )}
                 </div>
               ))}

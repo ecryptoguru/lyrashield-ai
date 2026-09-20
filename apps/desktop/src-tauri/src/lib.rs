@@ -38,6 +38,8 @@ pub fn run() {
             get_byok_metadata,
             get_byok_status,
             start_scan,
+            start_cloud_scan,
+            list_cloud_targets,
             cancel_scan,
             list_scans,
             get_scan_detail,

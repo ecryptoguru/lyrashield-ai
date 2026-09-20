@@ -37,6 +37,35 @@ export const TargetSchema = z
   })
   .passthrough()
 
+/**
+ * The server-owned immutable execution plan recorded on a scan
+ * (`lyrashield-scan-plan/1.0.0`). Present on scans created after plan
+ * persistence shipped; legacy scans return null/absent — clients must render
+ * the absence as "not recorded", never as a fabricated plan.
+ */
+export const ScanExecutionPlanResultSchema = z
+  .object({
+    version: z.string(),
+    workflow: z.enum(["REVIEW_TARGET", "REVIEW_CHANGES", "AUTHENTICATED_ASSESSMENT"]),
+    targetType: z.enum(["REPO", "WEB_APP", "API"]),
+    depth: z.enum(["QUICK", "STANDARD", "DEEP"]),
+    profileId: z.string(),
+    scope: z.enum(["SNAPSHOT", "DIFF", "LIVE"]),
+    source: z
+      .object({
+        revision: z.string(),
+        baseRevision: z.string().optional(),
+        mergeBaseRevision: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    limits: z.record(z.string(), z.number()).optional(),
+    capabilities: z.array(z.string()).optional(),
+    attachmentIds: z.array(z.string()).optional(),
+    authorizationRef: z.string().optional(),
+  })
+  .passthrough()
+
 export const ScanSchema = z
   .object({
     id: z.string(),
@@ -47,6 +76,9 @@ export const ScanSchema = z
     status: z.string(),
     createdAt: DateString,
     updatedAt: DateString.optional(),
+    // Recorded workflow/scope/provenance facts — never trusted client input.
+    executionPlan: ScanExecutionPlanResultSchema.nullable().optional(),
+    executionPlanHash: z.string().nullable().optional(),
   })
   .passthrough()
 
@@ -67,6 +99,19 @@ export const FindingSchema = z
     controlId: z.string().optional(),
     createdAt: DateString,
     updatedAt: DateString.optional(),
+    /**
+     * Verification trust tiers — DETECTED (recorded observation), VALIDATED
+     * (deterministic check), VERIFIED (independent confirmation), and the
+     * non-conclusive BLOCKED/INCONCLUSIVE. Never conflate them, and never
+     * treat the legacy `verified` boolean as proof of independent
+     * verification on its own.
+     */
+    verified: z.boolean().optional(),
+    verificationStatus: z
+      .enum(["DETECTED", "VALIDATED", "VERIFIED", "BLOCKED", "INCONCLUSIVE"])
+      .optional(),
+    verificationMethod: z.string().nullable().optional(),
+    verificationReason: z.string().nullable().optional(),
   })
   .passthrough()
 

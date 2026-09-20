@@ -24,7 +24,11 @@ async function native(
   await page.addInitScript(
     ({ options, wire }) => {
       const state = {
-        calls: [] as { command: string; args?: Record<string, unknown> }[],
+        calls: [] as {
+          command: string
+          args?: Record<string, unknown>
+          resolvedListeners: number
+        }[],
         listeners: new Map<string, (event: { payload: unknown }) => void>(),
         failures: 0,
         listenCalls: 0,
@@ -47,7 +51,7 @@ async function native(
       }
       window.desktopNative = {
         async invoke(command, args) {
-          state.calls.push({ command, args })
+          state.calls.push({ command, args, resolvedListeners: state.resolvedListenCalls })
           if (command === "startup_revalidate_license")
             return {
               state: "expired_eligibility",
@@ -131,13 +135,23 @@ test("listener registration finishes before replay; stored detail restores fast 
       )
     )
     .toBeGreaterThan(0)
-  expect(
-    await page.evaluate(() =>
-      (
-        window as unknown as { desktopState: { calls: { command: string }[] } }
-      ).desktopState.calls.some((c) => c.command === "get_scan_events")
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as unknown as { desktopState: { calls: { command: string }[] } }
+        ).desktopState.calls.some((c) => c.command === "get_scan_events")
+      )
     )
-  ).toBe(false)
+    .toBe(true)
+  const replayCall = await page.evaluate(() =>
+    (
+      window as unknown as {
+        desktopState: { calls: { command: string; resolvedListeners: number }[] }
+      }
+    ).desktopState.calls.find((c) => c.command === "get_scan_events")
+  )
+  expect(replayCall?.resolvedListeners).toBeGreaterThanOrEqual(1)
   await expect(page.getByText("completed", { exact: true })).toBeVisible()
   await expect(page.getByText("Alpha", { exact: true })).toBeVisible()
 })

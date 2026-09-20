@@ -6,6 +6,7 @@ import {
   ScanModeSchema,
   FindingSeveritySchema,
   FindingStatusSchema,
+  FindingVerificationStatusSchema,
   CreateWorkspaceSchema,
   CreateRepoTargetSchema,
   CreateUrlTargetSchema,
@@ -21,6 +22,7 @@ import {
   FindingQuerySchema,
   CreatePRSchema,
 } from ".."
+import { ScanExecutionPlanSchema } from "../scan-execution-plan"
 import {
   securitySchemes,
   workspaceIdParam,
@@ -132,6 +134,48 @@ export function buildOpenApiSpec(): Record<string, unknown> {
     ScanMode: toJsonSchema(ScanModeSchema),
     FindingSeverity: toJsonSchema(FindingSeveritySchema),
     FindingStatus: toJsonSchema(FindingStatusSchema),
+    FindingVerificationStatus: toJsonSchema(FindingVerificationStatusSchema),
+    ScanExecutionPlan: {
+      ...toJsonSchema(ScanExecutionPlanSchema),
+      description:
+        "Server-owned immutable execution plan recorded on each scan (lyrashield-scan-plan/1.0.0): workflow, target type, explicit depth, scope, resolved immutable source revisions, limits, capabilities and attachment references. Never client-supplied; absent only on legacy pre-plan scans.",
+    },
+    Scan: {
+      type: "object",
+      description:
+        "Scan result. `executionPlan` carries the recorded workflow, scope and resolved immutable provenance; `executionPlanHash` is its content digest. A null plan means not recorded (legacy row), never an inferred plan.",
+      additionalProperties: true,
+      properties: {
+        id: { type: "string" },
+        status: ref("ScanStatus"),
+        mode: ref("ScanMode"),
+        goal: ref("ScanGoal"),
+        targetId: { type: "string" },
+        queuePosition: { type: "integer", nullable: true },
+        executionPlan: { anyOf: [ref("ScanExecutionPlan"), { type: "null" }] },
+        executionPlanHash: { type: "string", nullable: true },
+        createdAt: { type: "string", format: "date-time" },
+        completedAt: { type: "string", format: "date-time", nullable: true },
+      },
+      required: ["id", "status", "mode", "goal"],
+    },
+    Finding: {
+      type: "object",
+      description:
+        "Finding result with explicit verification trust tiers. `verified` is the legacy boolean summary; `verificationStatus` is the authoritative tier — DETECTED (recorded observation), VALIDATED (deterministic check), VERIFIED (independent confirmation), or the non-conclusive BLOCKED/INCONCLUSIVE. Clients must never conflate the tiers or present DETECTED as verified.",
+      additionalProperties: true,
+      properties: {
+        id: { type: "string" },
+        severity: ref("FindingSeverity"),
+        status: ref("FindingStatus"),
+        title: { type: "string" },
+        verified: { type: "boolean" },
+        verificationStatus: ref("FindingVerificationStatus"),
+        verificationMethod: { type: "string", nullable: true },
+        verificationReason: { type: "string", nullable: true },
+      },
+      required: ["id", "severity", "status", "title"],
+    },
     CreateWorkspace: toJsonSchema(CreateWorkspaceSchema),
     CreateRepoTarget: toJsonSchema(CreateRepoTargetSchema),
     CreateUrlTarget: toJsonSchema(CreateUrlTargetSchema),
@@ -187,20 +231,22 @@ export function buildOpenApiSpec(): Record<string, unknown> {
             { name: "If-None-Match", in: "header", required: false, schema: { type: "string" } },
           ],
           responses: {
-            200: paginatedResponse(genericItem, "List of scans"),
+            200: paginatedResponse(ref("Scan"), "List of scans"),
             304: { description: "Not Modified", headers: { ETag: { schema: { type: "string" } } } },
             ...commonErrors,
           },
         },
         post: {
           summary: "Create a scan",
+          description:
+            "Creates a recorded scan with a server-owned immutable execution plan. `workflow` selects REVIEW_TARGET (default) or REVIEW_CHANGES (repository diff review — requires `baseRef`, optional `headRef`); `attachmentIds` reference previously staged workspace artifacts. AUTHENTICATED_ASSESSMENT returns SCAN_WORKFLOW_UNAVAILABLE (400) until wired. Advisory local checks (CLI check-diff, GitHub Action gate) are never equivalent to this recorded path.",
           parameters: [workspaceIdParam],
           requestBody: {
             required: true,
             content: { "application/json": { schema: ref("CreateScan") } },
           },
           responses: {
-            201: successResponse(genericItem, "Scan created"),
+            201: successResponse(ref("Scan"), "Scan created"),
             ...commonErrors,
           },
         },
@@ -208,13 +254,15 @@ export function buildOpenApiSpec(): Record<string, unknown> {
       "/scans/{id}": {
         get: {
           summary: "Get a scan",
+          description:
+            "Returns the scan with its recorded execution plan (workflow, scope, resolved immutable source revisions), events, result-manifest checksum, and coverage receipts.",
           parameters: [
             idPathParam,
             workspaceIdParam,
             { name: "If-None-Match", in: "header", required: false, schema: { type: "string" } },
           ],
           responses: {
-            200: successResponse(genericItem, "Scan details"),
+            200: successResponse(ref("Scan"), "Scan details"),
             304: { description: "Not Modified", headers: { ETag: { schema: { type: "string" } } } },
             ...commonErrors,
           },
@@ -265,7 +313,7 @@ export function buildOpenApiSpec(): Record<string, unknown> {
           summary: "List findings",
           parameters: [workspaceIdParam, ...queryParamsFromSchema(findingQueryJson)],
           responses: {
-            200: paginatedResponse(genericItem, "List of findings"),
+            200: paginatedResponse(ref("Finding"), "List of findings"),
             ...commonErrors,
           },
         },
@@ -275,7 +323,7 @@ export function buildOpenApiSpec(): Record<string, unknown> {
           summary: "Get a finding",
           parameters: [idPathParam, workspaceIdParam],
           responses: {
-            200: successResponse(genericItem, "Finding details"),
+            200: successResponse(ref("Finding"), "Finding details"),
             ...commonErrors,
           },
         },

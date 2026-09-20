@@ -120,11 +120,18 @@ pub fn get_byok_status() -> Result<byok::ByokStatus, String> {
 
 // --- Scan commands ---
 
+// Tauri command arity is bounded by the IPC contract — each argument is a
+// top-level request field the frontend sends; grouping them into a nested
+// options object would make the wire harder to evolve without helping.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn start_scan(
     app: tauri::AppHandle,
     target: ScanTarget,
     mode: ScanMode,
+    workflow: Option<ScanWorkflow>,
+    diff_base: Option<String>,
+    diff_head: Option<String>,
     instruction: Option<String>,
     max_budget_usd: f64,
 ) -> Result<String, String> {
@@ -139,10 +146,166 @@ pub async fn start_scan(
         scan_id: scan_id.clone(),
         target,
         mode,
+        workflow: workflow.unwrap_or_default(),
+        diff_base,
+        diff_head,
         instruction,
         max_budget_usd,
     };
     scan::start_scan(app, config).await
+}
+
+/// A connected LyraShield Cloud target eligible for recorded scan submission.
+#[derive(serde::Serialize)]
+pub struct CloudTarget {
+    pub id: String,
+    pub label: String,
+    pub target_type: String,
+}
+
+/// List the connected workspace's targets for cloud scan submission. Uses the
+/// keychain-held Cloud Sync API key — it never reaches the webview.
+#[tauri::command]
+pub async fn list_cloud_targets(
+    api_url: Option<String>,
+    workspace_id: String,
+) -> Result<Vec<CloudTarget>, String> {
+    crate::license::ensure_license_operational(api_url.clone(), BUNDLED_PUBLIC_KEY)
+        .await
+        .map_err(|e| format!("license not operational: {}", e))?;
+    // cuid-shaped workspace ids only — the value lands in a URL path segment.
+    if workspace_id.is_empty()
+        || workspace_id.len() > 64
+        || !workspace_id.chars().all(|c| c.is_ascii_alphanumeric())
+    {
+        return Err("invalid workspace id".into());
+    }
+    let client = sync::sync_api_client(api_url)?;
+    let resp = client
+        .get(&format!(
+            "{}/api/v1/targets?workspaceId={}&limit=100",
+            client.base_url(),
+            workspace_id
+        ))
+        .await?;
+    if !resp.status.is_success() {
+        return Err(format!("target list failed ({})", resp.status));
+    }
+    let envelope: serde_json::Value =
+        serde_json::from_str(&resp.body).map_err(|_| "invalid target list response".to_string())?;
+    let items = envelope
+        .get("data")
+        .and_then(|d| d.get("items"))
+        .and_then(|i| i.as_array())
+        .cloned()
+        .unwrap_or_default();
+    Ok(items
+        .iter()
+        .filter_map(|t| {
+            let id = t.get("id")?.as_str()?.to_string();
+            let target_type = t
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let label = ["name", "repoFullName", "url"]
+                .iter()
+                .filter_map(|k| t.get(*k).and_then(|v| v.as_str()))
+                .next()
+                .unwrap_or(&id)
+                .to_string();
+            Some(CloudTarget {
+                id,
+                label,
+                target_type,
+            })
+        })
+        .collect())
+}
+
+/// Submit a recorded scan to LyraShield Cloud — the hosted, evidence-producing
+/// run with a server-owned immutable execution plan. Only ever an explicit
+/// user action; local findings stay untouched and the record is marked
+/// `backend=cloud`, `status=submitted` — the desktop never fakes local
+/// progress or verification for it.
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn start_cloud_scan(
+    app: tauri::AppHandle,
+    api_url: Option<String>,
+    workspace_id: String,
+    target_id: String,
+    mode: ScanMode,
+    workflow: ScanWorkflow,
+    base_ref: Option<String>,
+    head_ref: Option<String>,
+) -> Result<String, String> {
+    crate::license::ensure_license_operational(api_url.clone(), BUNDLED_PUBLIC_KEY)
+        .await
+        .map_err(|e| format!("license not operational: {}", e))?;
+    let depth = mode.api_depth()?;
+    match workflow {
+        ScanWorkflow::ReviewChanges => {
+            if base_ref.as_deref().map(str::trim).unwrap_or("").is_empty() {
+                return Err("Review Changes requires a base ref to compare against".into());
+            }
+        }
+        ScanWorkflow::ReviewTarget => {
+            if base_ref.is_some() || head_ref.is_some() {
+                return Err("base/head refs apply only to a Review Changes scan".into());
+            }
+        }
+        ScanWorkflow::Unknown => {
+            return Err("unrecognized scan workflow".into());
+        }
+    }
+    let body = serde_json::json!({
+        "workspaceId": workspace_id,
+        "targetId": target_id,
+        "goal": "TEST_APP",
+        "mode": depth,
+        "workflow": workflow.as_str(),
+        "baseRef": base_ref,
+        "headRef": head_ref,
+    });
+    let client = sync::sync_api_client(api_url)?;
+    let resp = client
+        .post(&format!("{}/api/v1/scans", client.base_url()), &body)
+        .await?;
+    if !resp.status.is_success() {
+        // Surface only the structured error code — never echo the raw body.
+        let code = serde_json::from_str::<serde_json::Value>(&resp.body)
+            .ok()
+            .and_then(|v| {
+                v.get("error")
+                    .and_then(|e| e.get("code"))
+                    .and_then(|c| c.as_str().map(|s| s.to_string()))
+            })
+            .unwrap_or_else(|| "request failed".to_string());
+        return Err(format!("cloud scan rejected ({}): {}", resp.status, code));
+    }
+    let envelope: serde_json::Value =
+        serde_json::from_str(&resp.body).map_err(|_| "invalid scan response".to_string())?;
+    if envelope.get("success").and_then(|v| v.as_bool()) != Some(true) {
+        return Err("cloud scan rejected: envelope success=false".into());
+    }
+    let scan_id = envelope
+        .get("data")
+        .and_then(|d| d.get("id"))
+        .and_then(|v| v.as_str())
+        .ok_or("cloud scan response missing scan id")?
+        .to_string();
+    crate::scan::store::create_submitted_scan(
+        &app,
+        &scan_id,
+        &target_id,
+        &mode,
+        &workflow,
+        base_ref.as_deref(),
+        head_ref.as_deref(),
+    )
+    .await?;
+    Ok(scan_id)
 }
 
 #[tauri::command]

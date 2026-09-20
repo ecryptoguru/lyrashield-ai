@@ -208,6 +208,12 @@ fn authenticated_client(api_url: Option<String>) -> Result<ApiClient, String> {
     ApiClient::new_authenticated(api_url, &api_key)
 }
 
+/// The keychain-held workspace API key used by Cloud Sync — also the
+/// credential for explicit cloud scan submission. Never exposed to the webview.
+pub(crate) fn sync_api_client(api_url: Option<String>) -> Result<ApiClient, String> {
+    authenticated_client(api_url)
+}
+
 fn save_sync_state_blocking(
     workspace_id: &str,
     seq: u64,
@@ -582,7 +588,7 @@ pub fn disconnect() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scan::types::Finding;
+    use crate::scan::types::{Finding, VERIFICATION_STATE_DETECTED};
 
     #[test]
     fn envelope_parsing_uses_data_seq_not_top_level_cursor() {
@@ -628,6 +634,12 @@ mod tests {
             line_number: None,
             status: "OPEN".into(),
             verified: true,
+            verification_state: VERIFICATION_STATE_DETECTED.to_string(),
+            evidence_pending: true,
+            counterevidence: None,
+            confidence_rationale: None,
+            fix_verification: None,
+            http_exchange_ids: vec![],
             detected_at: "2026-08-22T00:00:00Z".into(),
         };
         let json = serde_json::json!({

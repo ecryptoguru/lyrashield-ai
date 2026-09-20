@@ -4,6 +4,7 @@ import type {
   AzureMetadata,
   ByokStatus,
   ChatGptAuthStatus,
+  CloudTarget,
   Finding,
   LicenseStatus,
   RuntimeStatus,
@@ -12,6 +13,7 @@ import type {
   ScanMode,
   ScanSummary,
   ScanTarget,
+  ScanWorkflow,
   SequencedEvent,
   SyncConnection,
   SyncResult,
@@ -21,19 +23,43 @@ import type {
 
 // Rust scan structs use snake_case on the existing IPC/storage wire. Keep that
 // contract here so components and cloud DTOs consistently use camelCase.
-type NativeFinding = Omit<Finding, "filePath" | "lineNumber" | "detectedAt"> & {
+type NativeFinding = Omit<
+  Finding,
+  | "filePath"
+  | "lineNumber"
+  | "detectedAt"
+  | "verificationState"
+  | "evidencePending"
+  | "confidenceRationale"
+  | "fixVerification"
+  | "httpExchangeIds"
+> & {
   file_path: string | null
   line_number: number | null
   detected_at: string
+  verification_state: string
+  evidence_pending: boolean
+  confidence_rationale: string | null
+  fix_verification: string | null
+  http_exchange_ids: string[]
 }
 type NativeScanSummary = Omit<
   ScanSummary,
-  "scanId" | "startedAt" | "completedAt" | "findingCount"
+  | "scanId"
+  | "startedAt"
+  | "completedAt"
+  | "findingCount"
+  | "contractVersion"
+  | "diffBase"
+  | "diffHead"
 > & {
   scan_id: string
   started_at: string
   completed_at: string | null
   finding_count: number
+  contract_version: string | null
+  diff_base: string | null
+  diff_head: string | null
 }
 type NativeScanEvent =
   | { type: "started" | "cancelled"; scan_id: string }
@@ -46,18 +72,56 @@ function fromNativeFinding({
   file_path,
   line_number,
   detected_at,
+  verification_state,
+  evidence_pending,
+  confidence_rationale,
+  fix_verification,
+  http_exchange_ids,
   ...finding
 }: NativeFinding): Finding {
-  return { ...finding, filePath: file_path, lineNumber: line_number, detectedAt: detected_at }
+  return {
+    ...finding,
+    filePath: file_path,
+    lineNumber: line_number,
+    detectedAt: detected_at,
+    verificationState: verification_state,
+    evidencePending: evidence_pending,
+    confidenceRationale: confidence_rationale,
+    fixVerification: fix_verification,
+    httpExchangeIds: http_exchange_ids,
+  }
 }
-function toNativeFinding({ filePath, lineNumber, detectedAt, ...finding }: Finding): NativeFinding {
-  return { ...finding, file_path: filePath, line_number: lineNumber, detected_at: detectedAt }
+function toNativeFinding({
+  filePath,
+  lineNumber,
+  detectedAt,
+  verificationState,
+  evidencePending,
+  confidenceRationale,
+  fixVerification,
+  httpExchangeIds,
+  ...finding
+}: Finding): NativeFinding {
+  return {
+    ...finding,
+    file_path: filePath,
+    line_number: lineNumber,
+    detected_at: detectedAt,
+    verification_state: verificationState,
+    evidence_pending: evidencePending,
+    confidence_rationale: confidenceRationale,
+    fix_verification: fixVerification,
+    http_exchange_ids: httpExchangeIds,
+  }
 }
 function fromNativeSummary({
   scan_id,
   started_at,
   completed_at,
   finding_count,
+  contract_version,
+  diff_base,
+  diff_head,
   ...scan
 }: NativeScanSummary): ScanSummary {
   return {
@@ -66,6 +130,9 @@ function fromNativeSummary({
     startedAt: started_at,
     completedAt: completed_at,
     findingCount: finding_count,
+    contractVersion: contract_version,
+    diffBase: diff_base,
+    diffHead: diff_head,
   }
 }
 function fromNativeEvent(event: NativeScanEvent): ScanEvent {
@@ -130,10 +197,63 @@ export async function getByokStatus(): Promise<ByokStatus> {
 export async function startScan(
   target: ScanTarget,
   mode: ScanMode,
+  workflow: ScanWorkflow,
+  diffBase: string | undefined,
+  diffHead: string | undefined,
   instruction: string | undefined,
   maxBudgetUsd: number
 ): Promise<string> {
-  return invoke("start_scan", { target, mode, instruction: instruction ?? null, maxBudgetUsd })
+  return invoke("start_scan", {
+    target,
+    mode,
+    workflow,
+    diffBase: diffBase ?? null,
+    diffHead: diffHead ?? null,
+    instruction: instruction ?? null,
+    maxBudgetUsd,
+  })
+}
+
+/**
+ * Submit a recorded scan to LyraShield Cloud — the hosted, evidence-producing
+ * path whose server-owned execution plan binds workflow/scope/refs. Explicit
+ * user action only; the local engine is never a substitute for it.
+ */
+export async function startCloudScan(
+  apiUrl: string | undefined,
+  workspaceId: string,
+  targetId: string,
+  mode: ScanMode,
+  workflow: ScanWorkflow,
+  baseRef: string | undefined,
+  headRef: string | undefined
+): Promise<string> {
+  return invoke("start_cloud_scan", {
+    apiUrl: apiUrl ?? null,
+    workspaceId,
+    targetId,
+    mode,
+    workflow,
+    baseRef: baseRef ?? null,
+    headRef: headRef ?? null,
+  })
+}
+
+type NativeCloudTarget = Omit<CloudTarget, "targetType"> & { target_type: string }
+
+/**
+ * Connected LyraShield Cloud targets for recorded scan submission. Uses the
+ * keychain-held Cloud Sync key — the key itself never reaches the webview.
+ */
+export async function listCloudTargets(
+  apiUrl: string | undefined,
+  workspaceId: string
+): Promise<CloudTarget[]> {
+  const rows = await invoke<NativeCloudTarget[]>("list_cloud_targets", {
+    apiUrl: apiUrl ?? null,
+    workspaceId,
+  })
+  return rows.map(({ target_type, ...t }) => ({ ...t, targetType: target_type }))
 }
 export async function cancelScan(scanId: string): Promise<void> {
   return invoke("cancel_scan", { scanId })
