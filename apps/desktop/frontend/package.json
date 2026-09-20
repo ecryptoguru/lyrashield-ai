@@ -21,10 +21,10 @@
     "@tauri-apps/cli": "^2",
     "@types/react": "^19",
     "@types/react-dom": "^19.2.5",
-    "@vitejs/plugin-react": "^6.1.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "eslint": "^9",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vite": "^8.2.2"
+    "vite": "^8.3.0"
   }
 }
