@@ -193,6 +193,7 @@ run_case() {
   local free_bytes=${10:-9999999000}
   local container_present=${11:-1}
   local old_image_present=${12:-1}
+  local floor_bytes=${13:-}
   local case_dir="$tmp/$name"
   mkdir -p "$case_dir"
   write_mocks "$case_dir"
@@ -229,6 +230,7 @@ run_case() {
       MOCK_OLD_IMAGE_PRESENT="$old_image_present" \
       MOCK_FAIL_IMAGE_CHECK="$fail_image_check" \
       MOCK_REPLACEMENT_STOP="$replacement_stop" \
+      LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES="$floor_bytes" \
       LYRASHIELD_WORKER_RUNTIME_CONFIG="$case_dir/runtime.conf" \
       LYRASHIELD_WORKER_ENV_FILE="$case_dir/worker.env" \
       LYRASHIELD_WORKER_PROMOTION_STATE_DIR="$case_dir/promotion" \
@@ -285,6 +287,10 @@ run_case() {
     if [ "$name" = missing-rollback-image ]; then
       grep -Fq 'No local rollback image' <<< "$output"
     fi
+    if [ "$name" = missing-rollback-tunable-floor ]; then
+      grep -Fq 'No local rollback image' <<< "$output"
+      grep -Fq '2147483648-byte floor' <<< "$output"
+    fi
   fi
   if [ -n "$replacement_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
@@ -309,6 +315,10 @@ run_case missing-rollback-image 1 1 1 success 0 '' 0 '' 30000000000 0 0
 # 3 GiB free would satisfy a measured-image preflight but not the 26 GiB
 # floor, so the promotion must stop at the disk check.
 run_case missing-rollback-tight-disk 1 1 1 failure 0 '' 0 '' 3000000000 0 0
+# The floor is tunable: with LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES=2147483648
+# the required budget drops to 8 GiB, so 9 GiB of free space promotes where
+# the 26 GiB default would stop.
+run_case missing-rollback-tunable-floor 1 1 1 success 0 '' 0 '' 9663676416 0 0 2147483648
 run_case preserves-existing-stop 1 1 1 success 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}'
 run_case preserves-newer-stop 1 1 1 success 1 '' 0 '{"operator":"on-call","reason":"new-incident"}'
 run_case resumes-owned-stop-on-rollback 1 1 1 failure 1 '' 1
