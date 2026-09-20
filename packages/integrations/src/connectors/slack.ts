@@ -3,9 +3,12 @@
  *
  * The Slack Web API accepts GET for every read method used here, so the
  * transport itself proves read-only: `slackApi` hard-fails on any method
- * outside SLACK_READ_METHODS and never issues a POST on the tool path. The
- * matching relay profile allows GET to `slack.com` only, so a write-shaped
- * request is denied at egress even if a tool bug attempted one.
+ * outside SLACK_READ_METHODS and never issues a POST on the tool path. That
+ * allowlist plus the connection capability check in `invokeConnectorTool` is
+ * the entire boundary — the connector relay grant machinery in
+ * @lyrashield/security (`mintConnectorRelayGrant`) has no production callers
+ * and does not mediate these requests, so a write-shaped request is stopped
+ * by the allowlist rather than by any egress profile.
  *
  * Bot tokens are never constructed or logged by these tools — the bound
  * connection's sealed credential is resolved by the caller and injected as

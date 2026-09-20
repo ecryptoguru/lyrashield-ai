@@ -32,7 +32,7 @@ import {
   getConnectorTool,
   listConnectorTools,
 } from "./registry"
-import { githubConnectorTools } from "./github"
+import { connectorScopesForInstallationPermissions, githubConnectorTools } from "./github"
 import {
   SlackConnectorError,
   exchangeSlackOAuthCode,
@@ -103,6 +103,29 @@ describe("connector tool registry", () => {
 
 describe("github connector tools", () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it("maps granted installation permissions to connector scopes", () => {
+    const scopes = connectorScopesForInstallationPermissions({
+      metadata: "read",
+      contents: "write",
+      issues: "read",
+    })
+    expect(scopes).toEqual(["repo:metadata", "repo:contents", "repo:issues"])
+    // Every registered github tool's required scope must be producible by
+    // the permission map — a scope the map cannot grant would make the tool
+    // permanently unusable.
+    for (const tool of githubConnectorTools) {
+      expect(scopes.concat("repo:pull_requests")).toContain(tool.requiredScope)
+    }
+  })
+
+  it("grants nothing for absent or empty permission sets", () => {
+    expect(connectorScopesForInstallationPermissions(undefined)).toEqual([])
+    expect(connectorScopesForInstallationPermissions({})).toEqual([])
+    expect(
+      connectorScopesForInstallationPermissions({ contents: "none", metadata: "read" })
+    ).toEqual(["repo:metadata"])
+  })
 
   it("get_repository validates input and projects bounded fields", async () => {
     const tool = getConnectorTool("github.get_repository")!

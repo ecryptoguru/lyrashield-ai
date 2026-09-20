@@ -222,6 +222,20 @@ export interface InstallationInfo {
     id: number
     type: string
   }
+  /**
+   * Granted app permissions as the provider reports them, e.g.
+   * `{ contents: "read", metadata: "read" }`. Absent only if the provider
+   * omits the field — consumers must treat that as "no permissions", never
+   * as a full grant.
+   */
+  permissions?: Record<string, string>
+  /**
+   * Whether the installation reaches "all" current and future repositories
+   * or a "selected" list (enumerable via GET /installation/repositories).
+   * Consumers should treat any other or missing value as "selected" — the
+   * narrower reading fails closed.
+   */
+  repository_selection?: "all" | "selected"
 }
 
 export async function getAppInstallations(): Promise<InstallationInfo[]> {

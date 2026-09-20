@@ -491,6 +491,7 @@ export {
 } from "./agent-operation-service"
 export {
   CONNECTOR_PROVIDERS,
+  CONNECTOR_ALLOWED_PLANS,
   connectorPrincipal,
   isConnectorProvider,
   defaultConnectorAdmission,
