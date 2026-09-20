@@ -127,3 +127,36 @@ describe("scan workflow parity matrix (CLI)", () => {
     expect(getScanBody()?.body?.mode).toBe("STANDARD")
   })
 })
+
+describe("scan attachments (CLI)", () => {
+  it("forwards repeated --attachment flags as a deduplicated attachmentIds list", async () => {
+    const output = makeOutput()
+    expect(
+      await handleScan(
+        [
+          "--target",
+          "t-1",
+          "--attachment",
+          "att-1",
+          "--attachment",
+          "att-2",
+          "--attachment",
+          "att-1",
+        ],
+        output
+      )
+    ).toBe(0)
+
+    const body = getScanBody()?.body
+    // The POST body carries the workspace-scoped ids verbatim and deduped;
+    // the server keeps authoritative ownership/freshness validation.
+    expect(body?.attachmentIds).toEqual(["att-1", "att-2"])
+    expect(body).toMatchObject({ workspaceId: "ws-parity", targetId: "t-1" })
+  })
+
+  it("omits attachmentIds entirely when no --attachment is given", async () => {
+    const output = makeOutput()
+    expect(await handleScan(["--target", "t-1"], output)).toBe(0)
+    expect(getScanBody()?.body).not.toHaveProperty("attachmentIds")
+  })
+})
