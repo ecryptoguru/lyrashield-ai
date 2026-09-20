@@ -74,7 +74,10 @@ export interface SequencedEvent {
   event: ScanEvent
 }
 
-export type ScanMode = "safe" | "quick" | "standard" | "deep" | "custom" | "url"
+// Stored records may carry retired values ("url" — a target kind, never an
+// engine depth — and "unknown" for unparseable legacy rows). New launches use
+// only the three public depths: quick, standard, deep.
+export type ScanMode = "safe" | "quick" | "standard" | "deep" | "custom" | "url" | "unknown"
 
 export type ScanTarget =
   | { type: "repo"; path: string; branch: string | null }

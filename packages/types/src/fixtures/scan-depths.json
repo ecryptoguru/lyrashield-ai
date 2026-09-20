@@ -1,0 +1,55 @@
+{
+  "version": "scan-depths/1.0.0",
+  "publicDepths": ["QUICK", "STANDARD", "DEEP"],
+  "storedModeEngineArgs": {
+    "safe": "quick",
+    "quick": "quick",
+    "standard": "standard",
+    "deep": "deep",
+    "custom": "deep"
+  },
+  "depths": [
+    {
+      "depth": "QUICK",
+      "engineMode": "quick",
+      "depthLabel": "Quick",
+      "label": "Release Check",
+      "description": "Fast, bounded repository review before you ship.",
+      "executionLimits": {
+        "maxDurationMinutes": 15,
+        "maxEngineMinutes": 12
+      },
+      "queueReserve": {
+        "scannerReserveMinutes": 3
+      }
+    },
+    {
+      "depth": "STANDARD",
+      "engineMode": "standard",
+      "depthLabel": "Standard",
+      "label": "Code Review",
+      "description": "Broader repository and dependency analysis.",
+      "executionLimits": {
+        "maxDurationMinutes": 15,
+        "maxEngineMinutes": 12
+      },
+      "queueReserve": {
+        "scannerReserveMinutes": 3
+      }
+    },
+    {
+      "depth": "DEEP",
+      "engineMode": "deep",
+      "depthLabel": "Deep",
+      "label": "Deep Security Review",
+      "description": "Deep cross-file review for complex or high-risk releases.",
+      "executionLimits": {
+        "maxDurationMinutes": 45,
+        "maxEngineMinutes": 40
+      },
+      "queueReserve": {
+        "scannerReserveMinutes": 5
+      }
+    }
+  ]
+}
