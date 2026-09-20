@@ -782,7 +782,7 @@ export function ScanDetailClient({
                         : null,
                     ]
                       .filter(Boolean)
-                      .join(" · ") || "Bounded run"}
+                      .join(" · ") || "Bounded scan"}
                   </dd>
                 </div>
                 <div>
