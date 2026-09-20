@@ -30,6 +30,12 @@ export interface RelayGrantScope {
   ratePerMinute: number
   /** Cap on requests to a single path prefix per minute (anti junk-submission). */
   perPathPerMinute: number
+  /**
+   * Per-response body cap in bytes (optional, additive). The relay's global
+   * response ceiling still applies; this narrows it for constrained workflows
+   * such as the authenticated staging beta.
+   */
+  maxResponseBytes?: number
 }
 
 export type RelayDenyReason =
@@ -61,6 +67,7 @@ function canonicalJson(scope: RelayGrantScope): string {
     maxBytes: scope.maxBytes,
     ratePerMinute: scope.ratePerMinute,
     perPathPerMinute: scope.perPathPerMinute,
+    ...(scope.maxResponseBytes !== undefined ? { maxResponseBytes: scope.maxResponseBytes } : {}),
   }
   return JSON.stringify(ordered)
 }
@@ -137,6 +144,11 @@ export function verifyRelayGrant(
     scope.maxBytes > 1024 * 1024 * 1024 ||
     scope.ratePerMinute > 10_000 ||
     scope.perPathPerMinute > 10_000 ||
+    // Optional per-response cap: when present it must be a sane positive bound.
+    (scope.maxResponseBytes !== undefined &&
+      (!Number.isSafeInteger(scope.maxResponseBytes) ||
+        scope.maxResponseBytes <= 0 ||
+        scope.maxResponseBytes > 64 * 1024 * 1024)) ||
     // Signed grants are readable by their bearer. Never put credentials in them.
     "injectHeaders" in scope
   ) {
@@ -200,4 +212,119 @@ export function relayPathAllowed(scope: RelayGrantScope, path: string): boolean 
     const prefix = normalizeRelayPath(blocked)
     return prefix === null || normalized.startsWith(prefix)
   })
+}
+
+/**
+ * Scan-scoped test-session binding for the authenticated staging beta.
+ *
+ * The signed grant is a bearer credential and stays credential-free (the
+ * `injectHeaders` field is rejected above). Session material therefore
+ * travels separately: the worker registers it over the admin-authenticated
+ * `/v1/register` channel alongside the grant, and the relay injects the
+ * headers server-side — they never enter the grant, the engine sandbox, the
+ * model context, or the audit log.
+ */
+export interface RelaySessionBinding {
+  /** Header name → value pairs injected on in-scope forwarded requests. */
+  headers: Record<string, string>
+  /** Normalized hostnames the session may be injected for — a subset of the grant hosts. */
+  hosts: string[]
+  /** Session expiry, epoch ms — never later than the grant expiry. */
+  exp: number
+}
+
+/** Header names the relay may inject. Anything else is refused at registration. */
+export const INJECTABLE_SESSION_HEADERS = [
+  "authorization",
+  "cookie",
+  "x-api-key",
+  "x-session-token",
+] as const
+
+export const MAX_SESSION_HEADERS = 4
+export const MAX_SESSION_HEADER_VALUE_BYTES = 8 * 1024
+export const MAX_SESSION_HOSTS = 8
+
+export type RelaySessionDenyReason =
+  "session_malformed" | "session_header_not_allowed" | "session_out_of_scope" | "session_expired"
+
+/**
+ * Validate a session binding against an already-verified grant scope. The
+ * binding may only NARROW the grant — hosts must be a subset of the grant's
+ * scope and the expiry cannot outlive it.
+ */
+export function validateRelaySessionBinding(
+  scope: RelayGrantScope,
+  session: unknown
+): { ok: true; session: RelaySessionBinding } | { ok: false; reason: RelaySessionDenyReason } {
+  if (!session || typeof session !== "object" || Array.isArray(session)) {
+    return { ok: false, reason: "session_malformed" }
+  }
+  const candidate = session as Record<string, unknown>
+  const headers = candidate.headers
+  const hosts = candidate.hosts
+  const exp = candidate.exp
+
+  if (
+    !headers ||
+    typeof headers !== "object" ||
+    Array.isArray(headers) ||
+    !Array.isArray(hosts) ||
+    hosts.length === 0 ||
+    hosts.length > MAX_SESSION_HOSTS ||
+    !Number.isSafeInteger(exp)
+  ) {
+    return { ok: false, reason: "session_malformed" }
+  }
+  // The binding can never outlive the grant, and an already-expired session
+  // admits nothing.
+  if ((exp as number) <= Date.now()) return { ok: false, reason: "session_expired" }
+  if ((exp as number) > scope.exp) return { ok: false, reason: "session_out_of_scope" }
+
+  const headerEntries = Object.entries(headers as Record<string, unknown>)
+  if (headerEntries.length === 0 || headerEntries.length > MAX_SESSION_HEADERS) {
+    return { ok: false, reason: "session_malformed" }
+  }
+  for (const [name, value] of headerEntries) {
+    const normalizedName = name.trim().toLowerCase()
+    if (
+      !INJECTABLE_SESSION_HEADERS.includes(
+        normalizedName as (typeof INJECTABLE_SESSION_HEADERS)[number]
+      ) ||
+      typeof value !== "string" ||
+      value.length === 0 ||
+      Buffer.byteLength(value, "utf8") > MAX_SESSION_HEADER_VALUE_BYTES ||
+      /[\r\n]/.test(value)
+    ) {
+      return { ok: false, reason: "session_header_not_allowed" }
+    }
+  }
+
+  const normalizedHosts: string[] = []
+  for (const raw of hosts) {
+    if (typeof raw !== "string") return { ok: false, reason: "session_malformed" }
+    const normalized = normalizeRelayHost(raw)
+    if (!normalized || !relayHostAllowed(scope, normalized)) {
+      return { ok: false, reason: "session_out_of_scope" }
+    }
+    normalizedHosts.push(normalized)
+  }
+
+  return {
+    ok: true,
+    session: {
+      headers: Object.fromEntries(
+        headerEntries.map(([name, value]) => [name.trim().toLowerCase(), value as string])
+      ),
+      hosts: normalizedHosts,
+      exp: exp as number,
+    },
+  }
+}
+
+/** Whether a normalized request host may receive the session headers. */
+export function relaySessionHostAllowed(session: RelaySessionBinding, host: string): boolean {
+  const normalized = normalizeRelayHost(host)
+  if (!normalized) return false
+  return session.hosts.some((scoped) => normalized === scoped || normalized.endsWith(`.${scoped}`))
 }

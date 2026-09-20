@@ -7,6 +7,8 @@ import {
   relayHostAllowed,
   relayMethodAllowed,
   relayPathAllowed,
+  relaySessionHostAllowed,
+  validateRelaySessionBinding,
   verifyRelayGrant,
   type RelayGrantScope,
 } from "./relay-grant"
@@ -120,5 +122,90 @@ describe("relay grant", () => {
     expect(normalizeRelayHost("EXAMPLE.COM.")).toBe("example.com")
     expect(normalizeRelayHost("[::1]")).toBe("::1")
     expect(normalizeRelayHost("")).toBeNull()
+  })
+
+  it("round-trips a grant carrying the optional per-response byte cap", () => {
+    const scope = { ...baseScope, maxResponseBytes: 1_048_576 }
+    const verified = verifyRelayGrant(mintRelayGrant(scope, SECRET), SECRET)
+    expect(verified).toMatchObject({ ok: true })
+    if (verified.ok) expect(verified.scope.maxResponseBytes).toBe(1_048_576)
+  })
+
+  it.each([0, -1, 1.5, "1048576", 64 * 1024 * 1024 + 1])(
+    "rejects malformed maxResponseBytes %j",
+    (maxResponseBytes) => {
+      const payload = Buffer.from(JSON.stringify({ ...baseScope, maxResponseBytes })).toString(
+        "base64url"
+      )
+      const signature = createHmac("sha256", SECRET).update(payload).digest("base64url")
+      expect(verifyRelayGrant(`lrg1.${payload}.${signature}`, SECRET)).toEqual({
+        ok: false,
+        reason: "malformed",
+      })
+    }
+  )
+})
+
+describe("relay session binding", () => {
+  const binding = {
+    headers: { authorization: "Bearer test-session-material" },
+    hosts: ["app.example.com"],
+    // Inside the grant's expiry — the binding can never outlive the grant.
+    exp: baseScope.exp - 1_000,
+  }
+
+  it("accepts a binding narrower than the grant scope", () => {
+    const result = validateRelaySessionBinding(baseScope, binding)
+    expect(result).toEqual({
+      ok: true,
+      session: {
+        headers: { authorization: "Bearer test-session-material" },
+        hosts: ["app.example.com"],
+        exp: binding.exp,
+      },
+    })
+  })
+
+  it.each([
+    null,
+    "session",
+    {},
+    { ...binding, headers: {} },
+    { ...binding, headers: { authorization: "x".repeat(9 * 1024) } },
+    { ...binding, headers: { authorization: "line1\r\nline2" } },
+    { ...binding, headers: { "x-forwarded-for": "spoof" } },
+    { ...binding, headers: { host: "evil.example.com" } },
+    { ...binding, hosts: [] },
+    { ...binding, hosts: ["evil.example.com"] },
+    { ...binding, hosts: ["app.example.com", "sibling.example.com"] },
+    { ...binding, hosts: [123] },
+    { ...binding, exp: Date.now() - 1 },
+    { ...binding, exp: baseScope.exp + 1 },
+    { ...binding, exp: "soon" },
+  ])("rejects out-of-contract binding %j", (session) => {
+    expect(validateRelaySessionBinding(baseScope, session).ok).toBe(false)
+  })
+
+  it("keeps the session inside the grant expiry and grant hosts", () => {
+    // A subdomain of a scoped host is a valid narrowing.
+    const narrowed = validateRelaySessionBinding(baseScope, {
+      ...binding,
+      hosts: ["sub.app.example.com"],
+    })
+    expect(narrowed.ok).toBe(true)
+    // The apex of a scoped host is NOT — the session can never widen scope.
+    const widened = validateRelaySessionBinding(
+      { ...baseScope, hosts: ["app.example.com"] },
+      { ...binding, hosts: ["example.com"] }
+    )
+    expect(widened).toEqual({ ok: false, reason: "session_out_of_scope" })
+  })
+
+  it("matches only session-scoped hosts for injection", () => {
+    const validated = validateRelaySessionBinding(baseScope, binding)
+    if (!validated.ok) throw new Error("fixture should validate")
+    expect(relaySessionHostAllowed(validated.session, "app.example.com")).toBe(true)
+    expect(relaySessionHostAllowed(validated.session, "sub.app.example.com")).toBe(true)
+    expect(relaySessionHostAllowed(validated.session, "api.example.com")).toBe(false)
   })
 })

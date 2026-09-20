@@ -94,9 +94,13 @@
       "expectError": "SCAN_PLAN_INVALID"
     },
     {
-      "name": "authenticated assessment is unavailable",
+      "name": "authenticated assessment is unavailable without the beta gates",
       "targetType": "WEB_APP",
-      "request": { "mode": "DEEP", "workflow": "AUTHENTICATED_ASSESSMENT" },
+      "request": {
+        "mode": "DEEP",
+        "workflow": "AUTHENTICATED_ASSESSMENT",
+        "authorizationRef": "authz_fixture"
+      },
       "expectError": "SCAN_WORKFLOW_UNAVAILABLE"
     }
   ],

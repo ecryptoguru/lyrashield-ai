@@ -239,7 +239,7 @@ export function buildOpenApiSpec(): Record<string, unknown> {
         post: {
           summary: "Create a scan",
           description:
-            "Creates a recorded scan with a server-owned immutable execution plan. `workflow` selects REVIEW_TARGET (default) or REVIEW_CHANGES (repository diff review — requires `baseRef`, optional `headRef`); `attachmentIds` reference previously staged workspace artifacts. AUTHENTICATED_ASSESSMENT returns SCAN_WORKFLOW_UNAVAILABLE (400) until wired. Advisory local checks (CLI check-diff, GitHub Action gate) are never equivalent to this recorded path.",
+            "Creates a recorded scan with a server-owned immutable execution plan. `workflow` selects REVIEW_TARGET (default) or REVIEW_CHANGES (repository diff review — requires `baseRef`, optional `headRef`); `attachmentIds` reference previously staged workspace artifacts. AUTHENTICATED_ASSESSMENT is a gated staging beta: it requires `authorizationRef` (a recorded scoped authorization) and returns SCAN_WORKFLOW_UNAVAILABLE (400) unless the deployment enables it for this workspace/target. Advisory local checks (CLI check-diff, GitHub Action gate) are never equivalent to this recorded path.",
           parameters: [workspaceIdParam],
           requestBody: {
             required: true,

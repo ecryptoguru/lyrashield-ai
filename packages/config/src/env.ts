@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { APPROVED_PLATFORM_ADMIN_EMAILS, normalizePlatformAdminEmails } from "./platform-admin"
 import { normalizeMyraAllowedEmails } from "./myra-access"
+import { parseAuthAssessmentAllowlist } from "./auth-assessment"
 
 /**
  * Literal-loopback http check for bearer-grant URLs: the host must be exactly
@@ -199,6 +200,15 @@ const envSchema = z
     // admission requires every scan job to carry a stored, hash-verified
     // execution plan; missing plans are denied, never fabricated.
     LYRASHIELD_SCAN_PLAN_REQUIRED: z.enum(["0", "1"]).optional().default("0"),
+    // Authenticated-assessment staging beta — default OFF, fails closed. Both
+    // this flag AND the explicit canary allowlist must admit a workspace/target
+    // pair before the AUTHENTICATED_ASSESSMENT workflow is accepted at the API
+    // or re-verified by the worker at execution time.
+    LYRASHIELD_AUTH_ASSESSMENT_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    // Comma-separated entries: `workspaceId` or `workspaceId:targetId`. Empty
+    // (the default) admits nothing even when the flag is on; a malformed entry
+    // fails the whole list closed. See packages/config/src/auth-assessment.ts.
+    LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST: z.string().optional().default(""),
     LYRASHIELD_AI_TRIAGE_MAX_BUDGET_USD: z.coerce.number().positive().max(5).default(0.2),
     // Docker sandbox resource limits passed to the Strix engine (e.g. "4g", "2", "512").
     STRIX_SANDBOX_MEM_LIMIT: z.string().optional().default("4g"),
@@ -643,6 +653,23 @@ const envSchema = z
         "accept unverified open registration as a deliberate choice.",
     }
   )
+  .superRefine((val, ctx) => {
+    // Enabling the authenticated beta without an explicit allowlist is a
+    // production misconfiguration — the allowlist is the second required gate,
+    // so an enabled flag with nothing allowlisted must fail at boot rather
+    // than silently admitting nothing (or everything after a bad edit).
+    if (
+      val.LYRASHIELD_AUTH_ASSESSMENT_ENABLED === "1" &&
+      !parseAuthAssessmentAllowlist(val.LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST)?.length
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST"],
+        message:
+          "LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST must name at least one valid workspaceId or workspaceId:targetId entry when the authenticated assessment beta is enabled",
+      })
+    }
+  })
   .superRefine((val, ctx) => {
     if (
       val.CLOUDFLARE_ORIGIN_MTLS === "required" &&
