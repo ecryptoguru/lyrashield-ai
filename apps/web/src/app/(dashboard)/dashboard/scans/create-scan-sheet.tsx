@@ -152,7 +152,7 @@ export function CreateScanSheet({
                 <span className="text-muted-foreground text-xs">Simple options: pick one</span>
               </div>
 
-              <div role="radiogroup" aria-label="Review type" className="grid grid-cols-1 gap-3">
+              <div role="radiogroup" aria-label="Scan type" className="grid grid-cols-1 gap-3">
                 {availableOptions.map((option) => {
                   const isSelected = selectedOption?.id === option.id
                   const isDisabled = !option.available
@@ -489,8 +489,8 @@ export function CreateScanSheet({
                         <dt className="text-muted-foreground font-medium">Workflow</dt>
                         <dd>
                           {selectedOption.workflow === "REVIEW_CHANGES"
-                            ? "Review changes"
-                            : "Review target"}
+                            ? "Scan changes"
+                            : "Scan target"}
                         </dd>
                       </div>
                       <div>

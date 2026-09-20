@@ -2,14 +2,14 @@ import { MODE_LABELS, SEVERITY_LABELS } from "./labels"
 
 const SCAN_GOAL_LABELS: Record<string, string> = {
   CHECK_PR: "Check PR",
-  TEST_APP: "Code review",
+  TEST_APP: "Code scan",
   LAUNCH_REVIEW: "Release check",
   WEEKLY_MONITOR: "Weekly monitor",
-  FULL_PENTEST: "Deep security review",
-  COMPLIANCE_REVIEW: "Compliance review",
+  FULL_PENTEST: "Deep security scan",
+  COMPLIANCE_REVIEW: "Compliance scan",
   // Legacy identifier from the pre-V2 goal enum; kept so historical rows and
   // old clients still render a human label instead of the raw token.
-  SECURITY_REVIEW: "Security review",
+  SECURITY_REVIEW: "Security scan",
 }
 
 const SCAN_MODE_LABELS: Readonly<Record<string, string>> = MODE_LABELS

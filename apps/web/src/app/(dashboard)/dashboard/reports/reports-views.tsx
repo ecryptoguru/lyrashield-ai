@@ -253,7 +253,7 @@ export function ShareLinkCard({
           </Button>
           <a
             className="hover:bg-accent bg-card inline-flex h-11 items-center rounded-lg border px-3 text-xs font-medium"
-            href={`mailto:?subject=${encodeURIComponent("Security review ready")}&body=${encodeURIComponent(handoffMessage)}`}
+            href={`mailto:?subject=${encodeURIComponent("Security scan ready")}&body=${encodeURIComponent(handoffMessage)}`}
           >
             Email client
           </a>

@@ -214,7 +214,7 @@ export function PathChooserView({
           <span className="text-muted-foreground mt-1 block text-xs">
             {githubUnavailable
               ? "Unavailable right now — pick another option."
-              : "Review a repository. Connect an authorized repository. Scans inspect code; fixes and pull requests are separate actions."}
+              : "Scan a repository. Connect an authorized repository. Scans inspect code; fixes and pull requests are separate actions."}
           </span>
         </button>
 

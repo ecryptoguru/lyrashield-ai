@@ -39,7 +39,7 @@ Deeper modes consume more compute and take longer. Choose the least intensive go
 | "Quick check" / "Is this file safe?" | TEST_APP | QUICK | Fastest bounded repository scan. |
 | "Review this repo" / "Standard security review" | TEST_APP | STANDARD | General code review. This is the default for general review. |
 | "Launch review" / "Ready to ship?" | LAUNCH_REVIEW | STANDARD | Launch gating. |
-| "Repository pentest" / "Deep security review" | FULL_PENTEST | DEEP | Intrusive agentic testing inside the authorized isolated repository sandbox. Never reinterpret this as permission to attack a live URL or API. |
+| "Repository pentest" / "Deep security scan" | FULL_PENTEST | DEEP | Intrusive agentic testing inside the authorized isolated repository sandbox. Never reinterpret this as permission to attack a live URL or API. |
 | "Compliance review" | COMPLIANCE_REVIEW | DEEP | Compliance / audit use case. |
 | "Weekly monitor" / "Re-check this" | WEEKLY_MONITOR | QUICK | Recurring lightweight check. |
 
@@ -52,7 +52,7 @@ Use these as a guide for common user requests:
 - "Check this diff before I commit" → Run \`lyrashield_check_diff\` on the diff. If it reports issues, or the user asks for a full recorded scan, run \`lyrashield_run_pr_scan\` with goal \`CHECK_PR\` and mode \`QUICK\`.
 - "Scan this repo" / "Review this project" → Resolve the current/default target, then run \`lyrashield_scan_target\` with goal \`TEST_APP\` and mode \`STANDARD\`.
 - "Run a launch review" → Run \`lyrashield_scan_target\` with goal \`LAUNCH_REVIEW\` and mode \`STANDARD\`.
-- "Repository pentest" / "Deep security review" → For an authorized repository target, run \`lyrashield_scan_target\` with goal \`FULL_PENTEST\` and mode \`DEEP\`. For URL/API targets, explain that Deep is non-mutating behavioral review, not live exploit testing.
+- "Repository pentest" / "Deep security scan" → For an authorized repository target, run \`lyrashield_scan_target\` with goal \`FULL_PENTEST\` and mode \`DEEP\`. For URL/API targets, explain that Deep is non-mutating behavioral review, not live exploit testing.
 - "Explain finding f-123" → Run \`lyrashield_explain_finding\` with the finding ID.
 - "How do I fix this?" → Run \`lyrashield_generate_fix_plan\` with the finding ID.
 - "I applied the fix" → Run \`lyrashield_verify_fix\` with the finding ID, poll the returned retest scan to a terminal state, and include its outcome and scan reference in the PR. Call it independently verified only when a separate independent-verification receipt exists.

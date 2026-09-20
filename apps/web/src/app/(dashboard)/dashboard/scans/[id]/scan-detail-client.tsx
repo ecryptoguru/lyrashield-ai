@@ -743,10 +743,10 @@ export function ScanDetailClient({
                   <dt className="text-muted-foreground text-xs">Workflow</dt>
                   <dd className="mt-0.5 font-medium">
                     {scan.executionPlan.workflow === "REVIEW_CHANGES"
-                      ? "Review changes"
+                      ? "Scan changes"
                       : scan.executionPlan.workflow === "AUTHENTICATED_ASSESSMENT"
                         ? "Authenticated assessment"
-                        : "Review target"}
+                        : "Scan target"}
                   </dd>
                 </div>
                 <div>
