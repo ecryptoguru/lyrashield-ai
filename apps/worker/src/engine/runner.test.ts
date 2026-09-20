@@ -128,6 +128,7 @@ it("reads the owned singular threat-model artifact before any legacy plural file
   expect(output.artifacts.threatModelsRaw).toBe(canonical)
 })
 
+/* eslint-disable security/detect-non-literal-fs-filename -- This test reads a fixed fixture and writes only to its own temporary directory. */
 it("round-trips an actual redacted engine writer artifact through the manifest-bound reader", async () => {
   // Produced by build_threat_model_document + write_threat_model_artifact in
   // lyrashield-engine; unlike synthetic models: [] fixtures, it exercises the
@@ -164,6 +165,7 @@ it("round-trips an actual redacted engine writer artifact through the manifest-b
   expect(JSON.stringify(parsed.threatModels)).toContain("[SECRET]")
   expect(JSON.stringify(parsed.threatModels)).not.toContain("sample-secret-123")
 })
+/* eslint-enable security/detect-non-literal-fs-filename */
 
 it("rejects an unbound canonical threat model without a 1.1 run receipt", async () => {
   const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-unbound-evidence-"))

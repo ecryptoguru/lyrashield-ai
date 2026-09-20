@@ -1,5 +1,6 @@
 use crate::scan::types::*;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -444,6 +445,75 @@ fn redact_credentials(line: &str) -> String {
     redacted
 }
 
+fn bounded_evidence_context(
+    report: &serde_json::Map<String, serde_json::Value>,
+) -> Option<FindingEvidenceContext> {
+    let contextual_cvss_reasoning = report
+        .get("contextual_cvss_reasoning")
+        .and_then(|v| v.as_str())
+        .filter(|s| s.len() <= 10_000)
+        .map(str::to_string);
+    let advisory_cvss = report.get("advisory_cvss").and_then(|value| {
+        let object = value.as_object()?;
+        let score = object.get("score")?.as_f64()?;
+        if !score.is_finite() || !(0.0..=10.0).contains(&score) {
+            return None;
+        }
+        let mut bounded = serde_json::Map::new();
+        bounded.insert("score".into(), serde_json::json!(score));
+        for (key, max) in [
+            ("vector", 256),
+            ("source", 256),
+            ("metric_reasoning", 4_096),
+        ] {
+            if let Some(text) = object
+                .get(key)
+                .and_then(|v| v.as_str())
+                .filter(|s| s.len() <= max)
+            {
+                bounded.insert(key.into(), serde_json::Value::String(text.into()));
+            }
+        }
+        Some(serde_json::Value::Object(bounded))
+    });
+    let evidence_warnings: Vec<String> = report
+        .get("evidence_warnings")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .take(10)
+                .filter_map(|v| v.as_str().filter(|s| s.len() <= 10_000).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    let update_history: Vec<serde_json::Value> = report
+        .get("update_history")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .take(10)
+                .filter(|v| v.is_object() && v.to_string().len() <= 4_096)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    if contextual_cvss_reasoning.is_none()
+        && advisory_cvss.is_none()
+        && evidence_warnings.is_empty()
+        && update_history.is_empty()
+    {
+        return None;
+    }
+    Some(FindingEvidenceContext {
+        contextual_cvss_reasoning,
+        advisory_cvss,
+        evidence_warnings,
+        update_history,
+    })
+}
+
 fn parse_finding_line(line: &str) -> Option<Finding> {
     let trimmed = line.trim();
     if !trimmed.starts_with('{') {
@@ -480,7 +550,9 @@ fn parse_finding_line(line: &str) -> Option<Finding> {
         #[serde(default)]
         detected_at: Option<String>,
     }
-    let raw: RawFinding = serde_json::from_str(trimmed).ok()?;
+    let raw_value: serde_json::Value = serde_json::from_str(trimmed).ok()?;
+    let evidence_context = bounded_evidence_context(raw_value.as_object()?);
+    let raw: RawFinding = serde_json::from_value(raw_value).ok()?;
     let severity = raw.severity?;
     let title = raw.title?;
     let http_exchange_ids = raw.http_exchange_ids.unwrap_or_default();
@@ -497,7 +569,8 @@ fn parse_finding_line(line: &str) -> Option<Finding> {
         || fix_verification.is_some()
         || raw.counterevidence.is_some()
         || raw.confidence_rationale.is_some()
-        || !http_exchange_ids.is_empty();
+        || !http_exchange_ids.is_empty()
+        || evidence_context.is_some();
     Some(Finding {
         id: raw.id.unwrap_or_else(|| format!("finding-{}", uuid_v4())),
         severity,
@@ -515,6 +588,7 @@ fn parse_finding_line(line: &str) -> Option<Finding> {
         confidence_rationale: raw.confidence_rationale,
         fix_verification,
         http_exchange_ids,
+        evidence_context,
         detected_at: raw
             .detected_at
             .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
@@ -1023,6 +1097,39 @@ async fn persist_finding_row(app: &AppHandle, scan_id: &str, f: &Finding) -> Res
 /// `verification_state = DETECTED` and anything attested is marked
 /// `evidence_pending` for export — this path can never promote or clear
 /// verification state.
+fn has_bound_threat_model(run_dir: &std::path::Path, run: &serde_json::Value) -> bool {
+    let entry = &run["result_manifest"]["artifacts"]["threat_model.json"];
+    if entry["path"].as_str() != Some("threat_model.json") {
+        return false;
+    }
+    let Some(expected_bytes) = entry["bytes"].as_u64() else {
+        return false;
+    };
+    if expected_bytes > 1_048_576 {
+        return false;
+    }
+    let path = run_dir.join("threat_model.json");
+    let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+        return false;
+    };
+    if !metadata.file_type().is_file() || metadata.len() != expected_bytes {
+        return false;
+    }
+    let Ok(bytes) = std::fs::read(&path) else {
+        return false;
+    };
+    let digest = format!("{:x}", Sha256::digest(&bytes));
+    if bytes.len() as u64 != expected_bytes || entry["sha256"].as_str() != Some(digest.as_str()) {
+        return false;
+    }
+    let Ok(document) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return false;
+    };
+    document["schema_version"].as_str() == Some("lyrashield-threat-model/1.0")
+        && document["run_id"] == run["run_id"]
+        && document["models"].is_array()
+}
+
 async fn project_engine_evidence(
     app: &AppHandle,
     run_workdir: &std::path::Path,
@@ -1032,25 +1139,34 @@ async fn project_engine_evidence(
     let run_dir = run_workdir.join("strix_runs").join(scan_id);
     let workdir = run_dir.clone();
     let scan_id_owned = scan_id.to_string();
-    let parsed = tokio::task::spawn_blocking(move || -> Option<(String, serde_json::Value)> {
-        let run_json: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(workdir.join("run.json")).ok()?).ok()?;
-        let schema_version = run_json
-            .get("schema_version")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())?;
-        let vulns: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(workdir.join("vulnerabilities.json")).unwrap_or_default(),
-        )
-        .unwrap_or(serde_json::Value::Null);
-        Some((schema_version, vulns))
-    })
+    let parsed = tokio::task::spawn_blocking(
+        move || -> Option<(String, serde_json::Value, Option<bool>)> {
+            let run_json: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(workdir.join("run.json")).ok()?)
+                    .ok()?;
+            let schema_version = run_json
+                .get("schema_version")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())?;
+            let threat_available =
+                (schema_version == "1.1").then(|| has_bound_threat_model(&workdir, &run_json));
+            let vulns: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(workdir.join("vulnerabilities.json")).unwrap_or_default(),
+            )
+            .unwrap_or(serde_json::Value::Null);
+            Some((schema_version, vulns, threat_available))
+        },
+    )
     .await;
-    let Ok(Some((schema_version, vulns))) = parsed else {
+    let Ok(Some((schema_version, vulns, threat_available))) = parsed else {
         return;
     };
     let _ =
         crate::scan::store::set_scan_contract_version(app, &scan_id_owned, &schema_version).await;
+    if let Some(available) = threat_available {
+        let _ = crate::scan::store::set_scan_threat_model_available(app, &scan_id_owned, available)
+            .await;
+    }
     let Some(reports) = vulns.as_array() else {
         return;
     };
@@ -1093,11 +1209,13 @@ async fn project_engine_evidence(
             confidence_rationale: string_field("confidence_rationale"),
             fix_verification,
             http_exchange_ids,
+            evidence_context: bounded_evidence_context(report),
         };
         if update.counterevidence.is_some()
             || update.confidence_rationale.is_some()
             || update.fix_verification.is_some()
             || update.http_exchange_ids.is_some()
+            || update.evidence_context.is_some()
             || engine_claimed
         {
             let _ = crate::scan::store::update_finding_evidence(
@@ -1610,6 +1728,44 @@ mod tests {
             .expect("finding parses");
         assert!(!plain.evidence_pending);
         assert_eq!(plain.verification_state, "DETECTED");
+    }
+
+    #[test]
+    fn engine_contextual_evidence_stays_structured_and_unverified() {
+        let finding = super::parse_finding_line(
+            r#"{"id":"vuln-3","severity":"high","title":"Z","contextual_cvss_reasoning":"Scope narrowed by authentication.","advisory_cvss":{"score":8.6,"vector":"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H"},"evidence_warnings":["No admin session"],"update_history":[{"timestamp":"2026-09-20T00:00:00Z","fields":["severity"],"reason":"Scope changed"}]}"#,
+        )
+        .expect("finding parses");
+        let context = finding.evidence_context.expect("context preserved");
+        assert_eq!(
+            context.contextual_cvss_reasoning.as_deref(),
+            Some("Scope narrowed by authentication.")
+        );
+        assert_eq!(context.advisory_cvss.unwrap()["score"], 8.6);
+        assert_eq!(context.evidence_warnings, vec!["No admin session"]);
+        assert_eq!(context.update_history.len(), 1);
+        assert!(!finding.verified);
+        assert_eq!(finding.verification_state, "DETECTED");
+    }
+
+    #[test]
+    fn threat_model_availability_requires_manifest_bound_writer_bytes() {
+        let run_dir = tempfile::tempdir().unwrap();
+        let bytes = include_bytes!(
+            "../../../../../apps/worker/src/engine/fixtures/run-json-1.1/threat_model.json"
+        );
+        std::fs::write(run_dir.path().join("threat_model.json"), bytes).unwrap();
+        let run = serde_json::json!({
+            "run_id": "fixture-run-1-1",
+            "result_manifest": {"artifacts": {"threat_model.json": {
+                "path": "threat_model.json",
+                "bytes": bytes.len(),
+                "sha256": format!("{:x}", sha2::Sha256::digest(bytes))
+            }}}
+        });
+        assert!(super::has_bound_threat_model(run_dir.path(), &run));
+        std::fs::write(run_dir.path().join("threat_model.json"), b"changed").unwrap();
+        assert!(!super::has_bound_threat_model(run_dir.path(), &run));
     }
 
     #[test]

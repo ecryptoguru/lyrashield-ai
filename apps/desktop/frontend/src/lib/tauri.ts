@@ -33,6 +33,7 @@ type NativeFinding = Omit<
   | "confidenceRationale"
   | "fixVerification"
   | "httpExchangeIds"
+  | "evidenceContext"
 > & {
   file_path: string | null
   line_number: number | null
@@ -42,6 +43,7 @@ type NativeFinding = Omit<
   confidence_rationale: string | null
   fix_verification: string | null
   http_exchange_ids: string[]
+  evidence_context: Finding["evidenceContext"] | null
 }
 type NativeScanSummary = Omit<
   ScanSummary,
@@ -77,6 +79,7 @@ function fromNativeFinding({
   confidence_rationale,
   fix_verification,
   http_exchange_ids,
+  evidence_context,
   ...finding
 }: NativeFinding): Finding {
   return {
@@ -89,6 +92,7 @@ function fromNativeFinding({
     confidenceRationale: confidence_rationale,
     fixVerification: fix_verification,
     httpExchangeIds: http_exchange_ids,
+    evidenceContext: evidence_context ?? null,
   }
 }
 function toNativeFinding({
@@ -100,6 +104,7 @@ function toNativeFinding({
   confidenceRationale,
   fixVerification,
   httpExchangeIds,
+  evidenceContext,
   ...finding
 }: Finding): NativeFinding {
   return {
@@ -112,6 +117,7 @@ function toNativeFinding({
     confidence_rationale: confidenceRationale,
     fix_verification: fixVerification,
     http_exchange_ids: httpExchangeIds,
+    evidence_context: evidenceContext,
   }
 }
 function fromNativeSummary({
@@ -262,11 +268,14 @@ export async function listScans(): Promise<ScanSummary[]> {
   return (await invoke<NativeScanSummary[]>("list_scans")).map(fromNativeSummary)
 }
 export async function getScanDetail(scanId: string): Promise<ScanDetail> {
-  const { findings, ...summary } = await invoke<NativeScanSummary & { findings: NativeFinding[] }>(
-    "get_scan_detail",
-    { scanId }
-  )
-  return { ...fromNativeSummary(summary), findings: findings.map(fromNativeFinding) }
+  const { findings, threat_model_available, ...summary } = await invoke<
+    NativeScanSummary & { findings: NativeFinding[]; threat_model_available: boolean | null }
+  >("get_scan_detail", { scanId })
+  return {
+    ...fromNativeSummary(summary),
+    threatModelAvailable: threat_model_available ?? null,
+    findings: findings.map(fromNativeFinding),
+  }
 }
 export async function getScanEvents(scanId: string, fromSeq?: number): Promise<SequencedEvent[]> {
   const events = await invoke<{ seq: number; event: NativeScanEvent }[]>("get_scan_events", {

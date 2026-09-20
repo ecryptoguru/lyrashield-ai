@@ -37,7 +37,22 @@
         "counterevidence": null,
         "confidence_rationale": null,
         "fix_verification": null,
-        "http_exchange_ids": []
+        "http_exchange_ids": [],
+        "evidence_context": {
+          "contextual_cvss_reasoning": "Unauthenticated remote reach.",
+          "advisory_cvss": {
+            "score": 8.6,
+            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H"
+          },
+          "evidence_warnings": ["No authenticated coverage"],
+          "update_history": [
+            {
+              "timestamp": "2026-09-20T00:00:00Z",
+              "fields": ["severity"],
+              "reason": "Scope changed"
+            }
+          ]
+        }
       },
       {
         "id": "f1",
@@ -54,12 +69,14 @@
         "counterevidence": null,
         "confidence_rationale": null,
         "fix_verification": null,
-        "http_exchange_ids": []
+        "http_exchange_ids": [],
+        "evidence_context": null
       }
     ],
     "workflow": "REVIEW_TARGET",
     "backend": "local",
     "contract_version": null,
+    "threat_model_available": true,
     "diff_base": null,
     "diff_head": null
   },
@@ -92,7 +109,8 @@
         "counterevidence": null,
         "confidence_rationale": null,
         "fix_verification": null,
-        "http_exchange_ids": []
+        "http_exchange_ids": [],
+        "evidence_context": null
       }
     },
     {
