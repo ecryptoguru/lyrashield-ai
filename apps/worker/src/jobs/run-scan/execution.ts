@@ -182,9 +182,8 @@ export async function executeScanTarget(params: {
     }
   } else if (engineBacked) {
     maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd, target.type)
-    if (isAuthAssessment && executionPlan) {
-      // $5 internal ceiling is a hard cap for the beta — the workspace policy
-      // and mode defaults can only narrow it further.
+    if (executionPlan) {
+      // Current policy and mode defaults may narrow, never widen, a queued plan.
       maxBudgetUsd = Math.min(maxBudgetUsd, executionPlan.limits.maxBudgetUsd)
     }
     if (maxBudgetUsd <= 0) {
@@ -389,11 +388,8 @@ export async function executeScanTarget(params: {
 
       const engineTimeoutMsForGrant = Math.min(
         resolveEngineRuntimeBudgetMs(mode, target.type, scanRuntimeBudgetMs, elapsedScanMs()),
-        // The 12-minute engine budget inside the 15-minute total is a hard
-        // ceiling for the beta; the general resolver can only tighten it.
-        isAuthAssessment && executionPlan
-          ? executionPlan.limits.maxEngineMs
-          : Number.POSITIVE_INFINITY
+        // The recorded engine ceiling applies to every planned run.
+        executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
       )
       try {
         const specServerHosts =
@@ -534,10 +530,8 @@ export async function executeScanTarget(params: {
     // the model is healthy until its own wall-clock cap.
     const engineTimeoutMs = Math.min(
       resolveEngineRuntimeBudgetMs(mode, target.type, scanRuntimeBudgetMs, elapsedScanMs()),
-      // Beta hard cap: the engine can never exceed the recorded plan's budget.
-      isAuthAssessment && executionPlan
-        ? executionPlan.limits.maxEngineMs
-        : Number.POSITIVE_INFINITY
+      // The engine can never exceed the recorded plan's budget.
+      executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
     )
     if (engineTimeoutMs <= 0) {
       markGlobalScanTimeout()
