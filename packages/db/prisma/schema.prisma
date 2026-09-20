@@ -581,6 +581,7 @@ model Workspace {
   agentConnections         AgentConnection[]
   agentOperations          AgentOperation[]
   loopClosures             LoopClosure[]
+  scanAttachments          ScanAttachment[]
 
   @@index([agencySponsorAccountId])
 }
@@ -1072,6 +1073,33 @@ model ScanCoverageReceipt {
   @@unique([scanId, controlId])
   @@index([scanId])
   @@index([status])
+}
+
+/// Workspace-scoped supporting file uploaded before a scan and referenced from
+/// the immutable execution plan as `attachmentIds`. Rows record the stored
+/// object's integrity (sha256 `checksum`, encrypted `storageUri`) so scan
+/// admission and the worker can prove the exact bytes they stage. Content is
+/// untrusted input evidence: it is never instructions, credentials, scope, or
+/// budget, and it is never mutated in place — workers mount verified copies.
+model ScanAttachment {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  filename         String
+  mediaType        String
+  byteLength       Int
+  /// sha256 hex of the stored plaintext bytes — set at upload, verified on read.
+  checksum         String
+  storageUri       String    @unique
+  encryptionKeyRef String
+  status           String    @default("ACTIVE")
+  createdById      String
+  createdAt        DateTime  @default(now())
+  deletedAt        DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, status])
 }
 
 model FindingCandidate {

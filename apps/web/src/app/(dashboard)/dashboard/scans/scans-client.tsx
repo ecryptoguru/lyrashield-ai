@@ -9,10 +9,12 @@ import Link from "next/link"
 import { Play, RefreshCw } from "lucide-react"
 import { Button, Select } from "@lyrashield/ui"
 import {
+  scanAttachmentListSchema,
   scanCancelSchema,
   scanEligibilitySchema,
   scanItemSchema,
   scansPaginatedSchema,
+  type ScanAttachmentItem,
 } from "@/lib/api-schemas"
 import { ApiError, apiDelete, apiPost, apiGet, apiGetPaginated } from "@/lib/api-client"
 import { RUN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
@@ -28,7 +30,7 @@ import {
   scanStateStatusLabel,
   type ScanStateFilter,
 } from "@/lib/scan-presentation"
-import { getManualScanOptions } from "@/lib/scan-presets"
+import { getDefaultScanOptionId, getManualScanOptions } from "@/lib/scan-presets"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import type { ScanEligibilityState, ScanItem, TargetItem } from "./scan-types"
 
@@ -91,15 +93,17 @@ export function ScansClient({
   const [selectedFocus, setSelectedFocus] = useState<string | null>(null)
   const [selectedPreset, setSelectedPreset] = useState(() => {
     const target = targets.find((item) => item.id === initialSelectedTarget)
-    return findRecoveryPreset(
-      getManualScanOptions({
-        type: target?.type ?? "",
-        hasApiSpec: Boolean(target?.apiSpecUrl),
-      }),
-      initialGoal,
-      initialMode
-    )
+    const options = getManualScanOptions({
+      type: target?.type ?? "",
+      hasApiSpec: Boolean(target?.apiSpecUrl),
+    })
+    return findRecoveryPreset(options, initialGoal, initialMode) || getDefaultScanOptionId(options)
   })
+  // Review Changes revision inputs — resolved to immutable SHAs server-side.
+  const [baseRef, setBaseRef] = useState("")
+  const [headRef, setHeadRef] = useState("")
+  const [attachments, setAttachments] = useState<ScanAttachmentItem[]>([])
+  const [selectedAttachments, setSelectedAttachments] = useState<string[]>([])
   const choosePreset = useCallback((id: string) => {
     reviewChoiceVersion.current++
     setSelectedPreset(id)
@@ -222,6 +226,10 @@ export function ScansClient({
       setError("No review option is available for this target")
       return
     }
+    if (selectedOption.requiresRevisionInputs && !baseRef.trim()) {
+      setError("Enter the base revision to compare against")
+      return
+    }
     setCreating(true)
     setError(null)
     try {
@@ -232,13 +240,27 @@ export function ScansClient({
           targetId: selectedTarget,
           goal: selectedOption.goal,
           mode: selectedOption.mode,
+          ...(selectedOption.workflow !== "REVIEW_TARGET"
+            ? { workflow: selectedOption.workflow }
+            : {}),
+          ...(selectedOption.requiresRevisionInputs
+            ? {
+                baseRef: baseRef.trim(),
+                ...(headRef.trim() ? { headRef: headRef.trim() } : {}),
+              }
+            : {}),
           ...(selectedFocus ? { focus: selectedFocus } : {}),
+          // Immutable inputs only — never configuration or instructions.
+          ...(selectedAttachments.length > 0 ? { attachmentIds: selectedAttachments } : {}),
         },
         { schema: scanItemSchema }
       )
       setScans((prev) => [result, ...prev])
       setShowCreate(false)
       setSelectedFocus(null)
+      setBaseRef("")
+      setHeadRef("")
+      setSelectedAttachments([])
       // Clear back to the preselect default (the sole target when there is
       // exactly one) rather than an unconditional blank.
       setSelectedTarget(initialSelectedTarget)
@@ -249,7 +271,7 @@ export function ScansClient({
           type: target.type,
           hasApiSpec: Boolean(target.apiSpecUrl),
         })
-        return options.find((o) => o.available)?.id ?? ""
+        return getDefaultScanOptionId(options)
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create scan")
@@ -349,7 +371,10 @@ export function ScansClient({
     hasApiSpec: Boolean(selectedTargetDetails?.apiSpecUrl),
   })
   const enabledOptions = availableOptions.filter((o) => o.available)
-  const selectedOption = enabledOptions.find((o) => o.id === selectedPreset) ?? enabledOptions[0]
+  const selectedOption =
+    enabledOptions.find((o) => o.id === selectedPreset) ??
+    enabledOptions.find((o) => o.id === getDefaultScanOptionId(availableOptions)) ??
+    enabledOptions[0]
   const reviewSetupGuidance = selectedTargetDetails
     ? getReviewSetupGuidance({
         targetId: selectedTargetDetails.id,
@@ -433,11 +458,38 @@ export function ScansClient({
     eligibilityAttempt,
   ])
 
+  // ─── Supporting files: workspace-scoped attachments for this review ────
+  // Loaded lazily when the sheet opens; only ACTIVE, workspace-owned artifacts
+  // are listed by the API. Selection is inert — ids are validated again
+  // server-side at creation and staged read-only by the worker.
+  useEffect(() => {
+    if (!showCreate) return
+    const controller = new AbortController()
+    apiGet(`/api/scans/attachments?workspaceId=${encodeURIComponent(workspaceId)}`, {
+      schema: scanAttachmentListSchema,
+      signal: controller.signal,
+    })
+      .then((result) => {
+        if (!controller.signal.aborted) setAttachments(result.items)
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setAttachments([])
+      })
+    return () => controller.abort()
+  }, [showCreate, workspaceId])
+
+  function toggleAttachment(id: string) {
+    setSelectedAttachments((prev) =>
+      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
+    )
+  }
+
   const eligibilityBlocked = eligibility.status === "ready" && !eligibility.eligibility.allowed
   const startDisabled =
     creating ||
     !selectedTarget ||
     !selectedOption ||
+    (selectedOption?.requiresRevisionInputs === true && !baseRef.trim()) ||
     eligibility.status === "checking" ||
     eligibility.status === "error" ||
     eligibilityBlocked
@@ -484,7 +536,7 @@ export function ScansClient({
       setModeResetNotice(null)
       return
     }
-    const firstAvailable = options.find((o) => o.available)
+    const firstAvailable = options.find((o) => o.id === getDefaultScanOptionId(options))
     if (firstAvailable) {
       setSelectedPreset(firstAvailable.id)
       setModeResetNotice(
@@ -617,6 +669,13 @@ export function ScansClient({
         handleCreateScan={handleCreateScan}
         showAdvanced={showAdvanced}
         setShowAdvanced={setShowAdvanced}
+        baseRef={baseRef}
+        setBaseRef={setBaseRef}
+        headRef={headRef}
+        setHeadRef={setHeadRef}
+        attachments={attachments}
+        selectedAttachments={selectedAttachments}
+        toggleAttachment={toggleAttachment}
       />
 
       <ScanList

@@ -14,7 +14,13 @@ const requirePermission = vi.fn()
 
 vi.mock("@lyrashield/db", () => ({
   getFinding,
-  prisma: { auditLog: { create: vi.fn() } },
+  prisma: {
+    auditLog: { create: vi.fn() },
+    evidence: { findFirst: vi.fn().mockResolvedValue(null) },
+  },
+}))
+vi.mock("@lyrashield/evidence-storage", () => ({
+  readEncryptedArtifact: vi.fn(),
 }))
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { finding: { view: "finding:view" } } }))

@@ -112,6 +112,18 @@ interface FindingDetail {
     createdAt: string
   }>
   evidence?: Array<{ id: string; type: string; redactionStatus: string }>
+  /** Engine-declared claim context — assertions, never app verification. */
+  evidenceInsights?: {
+    counterevidence?: string[]
+    evidenceWarnings?: string[]
+    severityChangeConditions?: string[]
+    assumptions?: string[]
+    confidenceRationale?: string
+    contextualCvssReasoning?: string
+    advisoryCvss?: number
+    engineVerificationState?: string
+    engineConfidence?: string
+  } | null
   fixProposals?: Array<{
     id: string
     status: string
@@ -200,6 +212,24 @@ const evidenceSchema = z
   .object({ id: z.string(), type: z.string(), redactionStatus: z.string() })
   .passthrough()
 
+/**
+ * Engine-declared claim-context projection — allowlisted server-side, every
+ * field labeled as an engine assertion rather than app verification.
+ */
+const evidenceInsightsSchema = z
+  .object({
+    counterevidence: z.array(z.string()).optional(),
+    evidenceWarnings: z.array(z.string()).optional(),
+    severityChangeConditions: z.array(z.string()).optional(),
+    assumptions: z.array(z.string()).optional(),
+    confidenceRationale: z.string().optional(),
+    contextualCvssReasoning: z.string().optional(),
+    advisoryCvss: z.number().optional(),
+    engineVerificationState: z.string().optional(),
+    engineConfidence: z.string().optional(),
+  })
+  .nullable()
+
 const fixProposalSchema = z
   .object({
     id: z.string(),
@@ -260,6 +290,7 @@ const findingDetailSchema = z
     scanId: z.string().nullable().optional(),
     verificationReceipts: z.array(verificationReceiptSchema).optional(),
     evidence: z.array(evidenceSchema).optional(),
+    evidenceInsights: evidenceInsightsSchema.optional(),
     fixProposals: z.array(fixProposalSchema).optional(),
     retests: z.array(retestSchema).optional(),
     historyPagination: z
@@ -1151,6 +1182,104 @@ export function FindingDetailDrawer({
                         Load more evidence
                       </Button>
                     )}
+                  </div>
+                )}
+
+                {detail.evidenceInsights && (
+                  <div className="rounded-lg border p-3">
+                    <h3 className="text-sm font-medium">Engine-declared evidence</h3>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      Assertions the engine recorded for this finding. They are evidence about the
+                      engine&apos;s own view — not LyraShield verification.
+                    </p>
+                    <dl className="mt-2 space-y-2 text-sm">
+                      {detail.evidenceInsights.advisoryCvss != null && (
+                        <div className="flex flex-wrap gap-2">
+                          <dt className="text-muted-foreground text-xs">Advisory severity</dt>
+                          <dd>
+                            <Badge variant="warning">
+                              Advisory CVSS {detail.evidenceInsights.advisoryCvss}
+                            </Badge>
+                          </dd>
+                        </div>
+                      )}
+                      {detail.evidenceInsights.engineConfidence && (
+                        <div className="flex flex-wrap gap-2">
+                          <dt className="text-muted-foreground text-xs">Engine confidence</dt>
+                          <dd>
+                            <Badge variant="muted">
+                              {detail.evidenceInsights.engineConfidence} (engine-declared)
+                            </Badge>
+                          </dd>
+                        </div>
+                      )}
+                      {detail.evidenceInsights.engineVerificationState && (
+                        <div className="flex flex-wrap gap-2">
+                          <dt className="text-muted-foreground text-xs">Engine claim</dt>
+                          <dd>
+                            <Badge variant="muted">
+                              {detail.evidenceInsights.engineVerificationState} (engine-declared)
+                            </Badge>
+                          </dd>
+                        </div>
+                      )}
+                      {detail.evidenceInsights.contextualCvssReasoning && (
+                        <div>
+                          <dt className="text-muted-foreground text-xs">
+                            Contextual severity reasoning
+                          </dt>
+                          <dd className="text-muted-foreground mt-0.5 text-xs">
+                            {detail.evidenceInsights.contextualCvssReasoning}
+                          </dd>
+                        </div>
+                      )}
+                      {detail.evidenceInsights.confidenceRationale && (
+                        <div>
+                          <dt className="text-muted-foreground text-xs">Confidence rationale</dt>
+                          <dd className="text-muted-foreground mt-0.5 text-xs">
+                            {detail.evidenceInsights.confidenceRationale}
+                          </dd>
+                        </div>
+                      )}
+                      {(detail.evidenceInsights.counterevidence?.length ?? 0) > 0 && (
+                        <div>
+                          <dt className="text-muted-foreground text-xs">Counterevidence</dt>
+                          <dd>
+                            <ul className="text-muted-foreground mt-0.5 list-inside list-disc text-xs">
+                              {detail.evidenceInsights.counterevidence!.map((item, i) => (
+                                <li key={i}>{item}</li>
+                              ))}
+                            </ul>
+                          </dd>
+                        </div>
+                      )}
+                      {(detail.evidenceInsights.severityChangeConditions?.length ?? 0) > 0 && (
+                        <div>
+                          <dt className="text-muted-foreground text-xs">
+                            Severity change conditions
+                          </dt>
+                          <dd>
+                            <ul className="text-muted-foreground mt-0.5 list-inside list-disc text-xs">
+                              {detail.evidenceInsights.severityChangeConditions!.map((item, i) => (
+                                <li key={i}>{item}</li>
+                              ))}
+                            </ul>
+                          </dd>
+                        </div>
+                      )}
+                      {(detail.evidenceInsights.evidenceWarnings?.length ?? 0) > 0 && (
+                        <div>
+                          <dt className="text-muted-foreground text-xs">Evidence warnings</dt>
+                          <dd>
+                            <ul className="mt-0.5 list-inside list-disc text-xs text-amber-600">
+                              {detail.evidenceInsights.evidenceWarnings!.map((item, i) => (
+                                <li key={i}>{item}</li>
+                              ))}
+                            </ul>
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
                   </div>
                 )}
 

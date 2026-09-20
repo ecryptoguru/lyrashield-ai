@@ -21,6 +21,15 @@ const mocks = vi.hoisted(() => ({
   requireEngineModel: vi.fn(),
   resolveEngineRuntimeBudgetMs: vi.fn(),
   normalizeDomainForProof: vi.fn(),
+  resolveAuthenticatedAssessmentAuthorization: vi.fn(),
+  resolveRelaySessionBinding: vi.fn(),
+  AuthSessionError: class AuthSessionError extends Error {
+    readonly code: string
+    constructor(code: string) {
+      super(code)
+      this.code = code
+    }
+  },
 }))
 
 vi.mock("@lyrashield/evidence-storage", () => ({
@@ -29,6 +38,7 @@ vi.mock("@lyrashield/evidence-storage", () => ({
 vi.mock("@lyrashield/db", () => ({
   addScanEvent: mocks.addScanEvent,
   prisma: mocks.prisma,
+  resolveAuthenticatedAssessmentAuthorization: mocks.resolveAuthenticatedAssessmentAuthorization,
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -61,6 +71,10 @@ vi.mock("../../engine/command-builder", () => ({
 vi.mock("./lifecycle-utils", () => ({
   requireEngineModel: mocks.requireEngineModel,
   resolveEngineRuntimeBudgetMs: mocks.resolveEngineRuntimeBudgetMs,
+}))
+vi.mock("./auth-session", () => ({
+  resolveRelaySessionBinding: mocks.resolveRelaySessionBinding,
+  AuthSessionError: mocks.AuthSessionError,
 }))
 
 import { buildScanExecutionPlan } from "@lyrashield/types"
@@ -271,5 +285,150 @@ describe("executeScanTarget relay lifecycle", () => {
     )
     // No relay grant is minted for a repository Review Changes run.
     expect(mocks.mintScanRelayGrant).not.toHaveBeenCalled()
+  })
+})
+
+describe("executeScanTarget authenticated staging beta", () => {
+  const betaPlan = () =>
+    buildScanExecutionPlan({
+      workflow: "AUTHENTICATED_ASSESSMENT",
+      targetType: "WEB_APP",
+      mode: "DEEP",
+      authorizationRef: "authz_1",
+    })
+  const stagingTarget = { ...target, environment: "STAGING" } as never
+  const authorization = {
+    planId: "authz_1",
+    approvedHost: "app.example.com",
+    credentialId: "cred-1",
+    credentialKind: "BEARER_TOKEN",
+    credentialVaultRef: "env:LYRASHIELD_TEST_SESSION_ACME",
+    credentialScope: null,
+    credentialExpiresAt: new Date(Date.now() + 3_600_000),
+  }
+  const sessionBinding = {
+    headers: { authorization: "Bearer test-session-material" },
+    hosts: ["app.example.com"],
+    exp: Date.now() + 3_600_000,
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks()
+    mocks.resolveScanBudgetUsd.mockReturnValue(5)
+    mocks.resolveEngineProfile.mockReturnValue({ model: "engine-model" })
+    mocks.requireEngineModel.mockImplementation((model: string) => model)
+    mocks.resolveEngineRuntimeBudgetMs.mockReturnValue(20 * 60 * 1000)
+    mocks.normalizeDomainForProof.mockReturnValue("app.example.com")
+    mocks.resolveRelayRuntimeConfig.mockReturnValue(relayConfig)
+    mocks.prisma.targetDomainVerification.findFirst.mockResolvedValue({ id: "ver-1" })
+    mocks.mintScanRelayGrant.mockReturnValue({
+      grant: "grant-1",
+      scope: {
+        hosts: ["app.example.com"],
+        methods: ["GET", "HEAD", "OPTIONS"],
+        maxRequests: 25,
+        exp: Date.now() + 60_000,
+      },
+    })
+    mocks.registerRelayGrant.mockResolvedValue(undefined)
+    mocks.resolveSpecServerHosts.mockResolvedValue([])
+    mocks.fetchRelayAudit.mockResolvedValue([])
+    mocks.revokeRelayGrant.mockResolvedValue(undefined)
+    mocks.addScanEvent.mockResolvedValue({ id: "evt-1" })
+    mocks.runEngine.mockResolvedValue(engineResult)
+    mocks.resolveAuthenticatedAssessmentAuthorization.mockResolvedValue(authorization)
+    mocks.resolveRelaySessionBinding.mockReturnValue(sessionBinding)
+  })
+
+  it("mints a read-only beta grant with the exact plan ceilings and registers the session", async () => {
+    const plan = betaPlan()
+    const result = await executeScanTarget(
+      params({
+        target: stagingTarget,
+        executionPlan: plan,
+        policy: { blockedPaths: ["/internal"], destructiveTestsAllowed: false } as never,
+      })
+    )
+
+    expect(result).toMatchObject({ ok: true })
+    expect(mocks.mintScanRelayGrant).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanId: "scan-1",
+        authenticatedBeta: { maxRequests: 25, maxResponseBytes: 1_048_576 },
+        destructiveTestsAllowed: false,
+        blockedPaths: expect.arrayContaining(["/internal", "/logout", "/admin"]),
+      }),
+      relayConfig
+    )
+    // The engine grant expiry narrows to the plan's engine budget.
+    const mintInput = mocks.mintScanRelayGrant.mock.calls[0]![0] as {
+      engineBudgetMs: number
+    }
+    expect(mintInput.engineBudgetMs).toBeLessThanOrEqual(plan.limits.maxEngineMs)
+    // The resolved session binding is registered on the admin channel —
+    // never minted into the grant.
+    expect(mocks.registerRelayGrant).toHaveBeenCalledWith(
+      "scan-1",
+      "grant-1",
+      relayConfig,
+      sessionBinding
+    )
+    expect(mocks.resolveRelaySessionBinding).toHaveBeenCalledWith(
+      authorization,
+      expect.objectContaining({ grantExpiresAtMs: expect.any(Number) })
+    )
+    // Budget clamps to the $5 plan ceiling.
+    expect(mocks.runEngine).toHaveBeenCalledWith(
+      expect.objectContaining({ maxBudgetUsd: 5 }),
+      "scan-1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything()
+    )
+    // The binding receipt records references, never session material.
+    const boundEvent = mocks.addScanEvent.mock.calls.find(
+      (call) => call[1] === "auth_session_bound"
+    )
+    expect(boundEvent).toBeDefined()
+    expect(JSON.stringify(mocks.addScanEvent.mock.calls)).not.toContain("test-session-material")
+  })
+
+  it("is a bounded stop when the authorization was revoked mid-run", async () => {
+    mocks.resolveAuthenticatedAssessmentAuthorization.mockRejectedValue(
+      new Error("AUTH_ASSESSMENT_AUTH_NOT_READY")
+    )
+
+    await expect(
+      executeScanTarget(params({ target: stagingTarget, executionPlan: betaPlan() }))
+    ).resolves.toEqual({
+      ok: false,
+      result: {
+        status: "failed",
+        errorCategory: "SCAN_AUTHORIZATION_REVOKED",
+        errorMessage: expect.stringContaining("authorization"),
+      },
+    })
+    expect(mocks.mintScanRelayGrant).not.toHaveBeenCalled()
+    expect(mocks.registerRelayGrant).not.toHaveBeenCalled()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when the recorded test session cannot be applied", async () => {
+    mocks.resolveRelaySessionBinding.mockImplementation(() => {
+      throw new mocks.AuthSessionError("AUTH_SESSION_UNAVAILABLE")
+    })
+
+    await expect(
+      executeScanTarget(params({ target: stagingTarget, executionPlan: betaPlan() }))
+    ).resolves.toEqual({
+      ok: false,
+      result: expect.objectContaining({
+        status: "failed",
+        errorCategory: "AUTH_SESSION_UNAVAILABLE",
+      }),
+    })
+    // The minted grant is never registered; the engine never runs.
+    expect(mocks.registerRelayGrant).not.toHaveBeenCalled()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
   })
 })

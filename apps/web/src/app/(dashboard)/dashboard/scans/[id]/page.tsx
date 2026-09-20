@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { cache } from "react"
 import { getScanWithEvents, getScanResultManifestDetail, prisma } from "@lyrashield/db"
+import { ScanExecutionPlanSchema } from "@lyrashield/types"
 import { defaultStandards, renderStandards } from "@lyrashield/security"
 import { notFound, redirect } from "next/navigation"
 import { Radar } from "lucide-react"
@@ -61,7 +62,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
   // the client table pages, the one-time manifest detail, and the scorecard
   // pair (gated on status only — findings.length refines the render below).
   const wantsScorecard = scan.status === "COMPLETED" && !!scan.targetId
-  const [findings, manifestDetail, scoreSnapshot, membership] = await Promise.all([
+  const [findings, manifestDetail, scoreSnapshot, membership, planRow] = await Promise.all([
     prisma.finding.findMany({
       where: { scanId: id, workspaceId, deletedAt: null },
       select: {
@@ -121,9 +122,38 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
           select: { role: true },
         })
       : null,
+    // The immutable execution plan is fetched only here (never on the poll
+    // path) and projected to an allowlisted summary — the client sees
+    // workflow/scope/limits, never provider routing or cost internals.
+    prisma.scan.findFirst({
+      where: { id, workspaceId, deletedAt: null },
+      select: { executionPlan: true },
+    }),
   ])
 
   const target = scan.target
+
+  const planParsed = planRow?.executionPlan
+    ? ScanExecutionPlanSchema.safeParse(planRow.executionPlan)
+    : null
+  const plan = planParsed?.success === true ? planParsed.data : null
+  const executionPlan = plan
+    ? {
+        workflow: plan.workflow,
+        targetType: plan.targetType,
+        depth: plan.depth,
+        scope: plan.scope,
+        profileId: plan.profileId,
+        sourceRevision: plan.source?.revision ?? null,
+        baseRevision: plan.source?.baseRevision ?? null,
+        // Minutes only — never provider cost internals.
+        maxDurationMinutes: Math.round(plan.limits.maxDurationMs / 60_000),
+        maxRequests: plan.limits.maxRequests ?? null,
+        attachmentCount: plan.attachmentIds.length,
+        authorizationRequired: Boolean(plan.authorizationRef),
+        capabilities: plan.capabilities,
+      }
+    : null
 
   const scanData = {
     id: scan.id,
@@ -158,9 +188,14 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
           : null,
       createdAt: e.createdAt.toISOString(),
     })),
+    executionPlan,
     integrity: {
       manifestChecksum: manifestDetail?.checksum ?? scan.resultManifest?.checksum ?? null,
       urlExecution: manifestDetail?.urlExecution ?? null,
+      scopedCoverage: manifestDetail?.scopedCoverage ?? null,
+      threatModel: manifestDetail?.threatModel ?? null,
+      attachments: manifestDetail?.attachments ?? null,
+      ingestionWarnings: manifestDetail?.ingestionWarnings ?? [],
       coverage: scan.coverageReceipts.map((receipt) => ({
         scanner: receipt.scanner,
         controlId: receipt.controlId,

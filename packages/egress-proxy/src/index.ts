@@ -180,6 +180,39 @@ const HEADERS_TIMEOUT_MS = 10_000
 const REQUEST_TIMEOUT_MS = 30_000
 const MAX_CONNECTIONS = 256
 
+/** Body cap for the register endpoint — session bindings are small JSON. */
+const REGISTER_BODY_MAX_BYTES = 16_384
+
+/**
+ * Read the optional `{ session }` JSON body on /v1/register. A request with no
+ * body yields `{ session: undefined }` — absent and present-but-empty both
+ * admit a grant-only registration.
+ */
+async function readRegisterSession(
+  request: IncomingMessage
+): Promise<{ ok: true; session?: unknown } | { ok: false }> {
+  const contentLength = Number(request.headers["content-length"] ?? 0)
+  const wantsJson = request.headers["content-type"] === "application/json"
+  if (contentLength <= 0 && !wantsJson) return { ok: true }
+  try {
+    const chunks: Buffer[] = []
+    let total = 0
+    for await (const chunk of request) {
+      total += (chunk as Buffer).byteLength
+      if (total > REGISTER_BODY_MAX_BYTES) return { ok: false }
+      chunks.push(chunk as Buffer)
+    }
+    if (total === 0) return { ok: true }
+    const body: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+    if (body !== null && typeof body === "object" && !Array.isArray(body) && "session" in body) {
+      return { ok: true, session: (body as { session: unknown }).session }
+    }
+    return { ok: true }
+  } catch {
+    return { ok: false }
+  }
+}
+
 export function startProxy(options: ProxyOptions): ProxyServer {
   const { token, port = 4000, relaySigningSecret, relayDeps } = options
   const relay = relaySigningSecret ? createRelayHandler(relaySigningSecret, relayDeps) : null
@@ -226,9 +259,30 @@ export function startProxy(options: ProxyOptions): ProxyServer {
           sendJson(response, 405, { ok: false, reason: "method_not_allowed" })
           return
         }
-        const grant = request.headers["x-lyra-relay-grant"]
-        const result = relay.register(scanId, typeof grant === "string" ? grant : undefined)
-        sendJson(response, result.ok ? 200 : 403, result)
+        // An optional bounded JSON body carries the authenticated-beta session
+        // binding. It arrives only over this admin-authenticated channel — the
+        // grant header stays credential-free.
+        void readRegisterSession(request)
+          .then((parsed) => {
+            if (!parsed.ok) {
+              sendJson(response, 400, { ok: false, reason: "malformed" })
+              return
+            }
+            const grant = request.headers["x-lyra-relay-grant"]
+            const result = relay.register(
+              scanId,
+              typeof grant === "string" ? grant : undefined,
+              parsed.session
+            )
+            sendJson(response, result.ok ? 200 : 403, result)
+          })
+          .catch((err) => {
+            logger.error("Relay register handler error", { error: String(err) })
+            if (!response.headersSent) {
+              response.writeHead(500, { "Content-Type": "application/json" })
+            }
+            response.end(JSON.stringify({ ok: false, reason: "request_failed" }))
+          })
         return
       }
       if (reqUrl.startsWith("/v1/revoke/")) {

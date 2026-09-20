@@ -2,7 +2,11 @@ import type { Job } from "bullmq"
 import { boundedCleanup, finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
 import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
+import {
+  env,
+  evaluateAuthAssessmentAdmission,
+  resolveWorkerExecutionProvenance,
+} from "@lyrashield/config"
 import type { checkoutDeterministicRetest } from "../engine/deterministic-retest"
 
 import { summarizeVibeSecurityCoverage } from "@lyrashield/security"
@@ -135,6 +139,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         policy?.maxDurationMinutes,
         target.type
       )
+      // The authenticated staging beta is a hard 15-minute wall-clock cap —
+      // the recorded plan ceiling narrows the runtime budget, never widens it.
+      if (executionPlan?.workflow === "AUTHENTICATED_ASSESSMENT") {
+        scanRuntimeBudgetMs = Math.min(scanRuntimeBudgetMs, executionPlan.limits.maxDurationMs)
+      }
 
       const hasGlobalScanTimeout = (): boolean => {
         if (elapsedScanMs() >= scanRuntimeBudgetMs) {
@@ -222,6 +231,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         // migration: OFF drains legacy null-plan rows on their original path;
         // ON requires every job to carry a stored, hash-verified plan.
         planRequired: env.LYRASHIELD_SCAN_PLAN_REQUIRED === "1",
+        // Execution-time re-evaluation of the beta gate: flag off, allowlist
+        // tightened, or entry removed between queue and run all deny here.
+        authAssessmentPermitted: evaluateAuthAssessmentAdmission({
+          enabled: env.LYRASHIELD_AUTH_ASSESSMENT_ENABLED === "1",
+          allowlist: env.LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST,
+          workspaceId,
+          targetId,
+        }).allowed,
       })
       if (!admission.ok) return admission.result
 
@@ -256,6 +273,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       engineModel = execution.engineModel
       maxBudgetUsd = execution.maxBudgetUsd
       engineStartedAtMs = execution.engineStartedAtMs
+      const stagedAttachments = execution.stagedAttachments ?? null
 
       if (target.type !== "REPO" && globalScanTimeoutReached) {
         const timeoutMessage = timeoutErrorMessage(scanRuntimeBudgetMs)
@@ -394,6 +412,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
           workerExecution,
+          ...(stagedAttachments ? { attachments: stagedAttachments } : {}),
           terminalOutcome: {
             status: "STOPPED_BUDGET",
             errorCategory: "BUDGET_EXCEEDED",
@@ -453,6 +472,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             ...(reconciliationReason ? { reconciliationReason } : {}),
           },
           workerExecution,
+          ...(stagedAttachments ? { attachments: stagedAttachments } : {}),
           terminalOutcome: {
             status: "FAILED",
             errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
@@ -609,6 +629,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         maxBudgetUsd,
         workerExecution,
         engineExecution,
+        stagedAttachments,
         terminalErrorAfterMeter: () => agentMinuteTerminalError ?? engineTerminalError,
         meterEngineRun,
         onDurableResult: (result) => {

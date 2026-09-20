@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const configMocks = vi.hoisted(() => ({
+  authAssessment: { enabled: "0", allowlist: "" },
+}))
+
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
   revalidateTag: vi.fn(),
@@ -8,6 +12,26 @@ vi.mock("next/cache", () => ({
   refresh: vi.fn(),
   cacheTag: vi.fn(),
 }))
+
+// Real config module (including the allowlist parser); only the beta env
+// values are stubbed so each test controls the gate deterministically.
+vi.mock("@lyrashield/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lyrashield/config")>()
+  return {
+    ...actual,
+    env: new Proxy(actual.env, {
+      get(target, prop) {
+        if (prop === "LYRASHIELD_AUTH_ASSESSMENT_ENABLED") {
+          return configMocks.authAssessment.enabled
+        }
+        if (prop === "LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST") {
+          return configMocks.authAssessment.allowlist
+        }
+        return Reflect.get(target, prop)
+      },
+    }),
+  }
+})
 
 vi.mock("@lyrashield/db", () => ({
   WorkspaceScanConcurrencyLimitError: class WorkspaceScanConcurrencyLimitError extends Error {},
@@ -22,6 +46,22 @@ vi.mock("@lyrashield/db", () => ({
   createScan: vi.fn(),
   listScans: vi.fn(),
   updateScanStatus: vi.fn(),
+  resolveScanAttachments: vi.fn().mockResolvedValue([]),
+  resolveAuthenticatedAssessmentAuthorization: vi.fn(),
+  LiveAiSafetyError: class LiveAiSafetyError extends Error {
+    readonly code: string
+    constructor(code: string) {
+      super(code)
+      this.code = code
+    }
+  },
+  ScanAttachmentError: class ScanAttachmentError extends Error {
+    code: string
+    constructor(code: string, message: string) {
+      super(message)
+      this.code = code
+    }
+  },
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
@@ -85,6 +125,10 @@ import {
   createScan,
   listScans,
   updateScanStatus,
+  resolveScanAttachments,
+  resolveAuthenticatedAssessmentAuthorization,
+  LiveAiSafetyError,
+  ScanAttachmentError,
   WorkspaceScanConcurrencyLimitError,
 } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
@@ -140,6 +184,8 @@ function defaultAuthMock() {
 describe("POST /api/scans", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    configMocks.authAssessment.enabled = "0"
+    configMocks.authAssessment.allowlist = ""
     defaultAuthMock()
     vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
     vi.mocked(enqueueScanJob).mockResolvedValue("job-1")
@@ -593,8 +639,92 @@ describe("POST /api/scans", () => {
       expect(createScan).not.toHaveBeenCalled()
     })
 
-    it("rejects AUTHENTICATED_ASSESSMENT until the workflow is available", async () => {
-      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+    it("rejects AUTHENTICATED_ASSESSMENT when the beta flag is off", async () => {
+      configMocks.authAssessment.enabled = "0"
+      configMocks.authAssessment.allowlist = "ws-1:web-1"
+      const webTarget = {
+        id: "web-1",
+        type: "WEB_APP",
+        url: "https://staging.example.com",
+        environment: "STAGING",
+        apiSpecUrl: null,
+      }
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-1",
+          targetId: "web-1",
+          goal: "TEST_APP",
+          mode: "DEEP",
+          workflow: "AUTHENTICATED_ASSESSMENT",
+          authorizationRef: "authz_1",
+        })
+      )
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("SCAN_WORKFLOW_UNAVAILABLE")
+      expect(createScan).not.toHaveBeenCalled()
+      expect(resolveAuthenticatedAssessmentAuthorization).not.toHaveBeenCalled()
+    })
+
+    it("rejects AUTHENTICATED_ASSESSMENT when the workspace/target is not allowlisted", async () => {
+      configMocks.authAssessment.enabled = "1"
+      // Allowlist present but names a different workspace/target pair.
+      configMocks.authAssessment.allowlist = "ws-other:t-9,ws-1:other-target"
+      const webTarget = {
+        id: "web-1",
+        type: "WEB_APP",
+        url: "https://staging.example.com",
+        environment: "STAGING",
+        apiSpecUrl: null,
+      }
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-1",
+          targetId: "web-1",
+          goal: "TEST_APP",
+          mode: "DEEP",
+          workflow: "AUTHENTICATED_ASSESSMENT",
+          authorizationRef: "authz_1",
+        })
+      )
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("SCAN_WORKFLOW_UNAVAILABLE")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects AUTHENTICATED_ASSESSMENT with a malformed allowlist — fail closed", async () => {
+      configMocks.authAssessment.enabled = "1"
+      configMocks.authAssessment.allowlist = "ws-1, bogus!!"
+      const webTarget = {
+        id: "web-1",
+        type: "WEB_APP",
+        url: "https://staging.example.com",
+        environment: "STAGING",
+        apiSpecUrl: null,
+      }
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-1",
+          targetId: "web-1",
+          goal: "TEST_APP",
+          mode: "DEEP",
+          workflow: "AUTHENTICATED_ASSESSMENT",
+          authorizationRef: "authz_1",
+        })
+      )
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("SCAN_WORKFLOW_UNAVAILABLE")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects AUTHENTICATED_ASSESSMENT without an authorizationRef at the schema", async () => {
+      configMocks.authAssessment.enabled = "1"
+      configMocks.authAssessment.allowlist = "ws-1"
 
       const res = await POST(
         makeRequest({
@@ -606,8 +736,117 @@ describe("POST /api/scans", () => {
         })
       )
       expect(res.status).toBe(400)
-      expect((await res.json()).error.code).toBe("SCAN_WORKFLOW_UNAVAILABLE")
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR")
       expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects an authorization reference that does not resolve for the target", async () => {
+      configMocks.authAssessment.enabled = "1"
+      configMocks.authAssessment.allowlist = "ws-1:web-1"
+      const webTarget = {
+        id: "web-1",
+        type: "WEB_APP",
+        url: "https://staging.example.com",
+        environment: "STAGING",
+        apiSpecUrl: null,
+      }
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
+      vi.mocked(resolveAuthenticatedAssessmentAuthorization).mockRejectedValue(
+        new LiveAiSafetyError("AUTH_ASSESSMENT_AUTH_NOT_FOUND")
+      )
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-1",
+          targetId: "web-1",
+          goal: "TEST_APP",
+          mode: "DEEP",
+          workflow: "AUTHENTICATED_ASSESSMENT",
+          authorizationRef: "authz_missing",
+        })
+      )
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("AUTH_ASSESSMENT_AUTH_NOT_FOUND")
+      expect(resolveAuthenticatedAssessmentAuthorization).toHaveBeenCalledWith({
+        workspaceId: "ws-1",
+        targetId: "web-1",
+        authorizationRef: "authz_missing",
+      })
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects AUTHENTICATED_ASSESSMENT on a production target", async () => {
+      configMocks.authAssessment.enabled = "1"
+      configMocks.authAssessment.allowlist = "ws-1"
+      const prodTarget = {
+        id: "web-prod",
+        type: "WEB_APP",
+        url: "https://example.com",
+        environment: "PRODUCTION",
+        apiSpecUrl: null,
+      }
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(prodTarget as never)
+      vi.mocked(resolveAuthenticatedAssessmentAuthorization).mockRejectedValue(
+        new LiveAiSafetyError("AUTH_ASSESSMENT_PRODUCTION_DENIED")
+      )
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-1",
+          targetId: "web-prod",
+          goal: "TEST_APP",
+          mode: "DEEP",
+          workflow: "AUTHENTICATED_ASSESSMENT",
+          authorizationRef: "authz_1",
+        })
+      )
+      expect(res.status).toBe(403)
+      expect((await res.json()).error.code).toBe("AUTH_ASSESSMENT_PRODUCTION_DENIED")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("admits the authenticated staging beta under flag + allowlist + recorded authorization", async () => {
+      configMocks.authAssessment.enabled = "1"
+      configMocks.authAssessment.allowlist = "ws-1:web-1"
+      const webTarget = {
+        id: "web-1",
+        type: "WEB_APP",
+        url: "https://staging.example.com",
+        environment: "STAGING",
+        apiSpecUrl: null,
+      }
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
+      vi.mocked(resolveAuthenticatedAssessmentAuthorization).mockResolvedValue({
+        planId: "authz_1",
+        credentialId: "cred-1",
+      } as never)
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-beta",
+        status: "QUEUED",
+        goal: "TEST_APP",
+        mode: "DEEP",
+        targetId: "web-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-1",
+          targetId: "web-1",
+          goal: "TEST_APP",
+          mode: "DEEP",
+          workflow: "AUTHENTICATED_ASSESSMENT",
+          authorizationRef: "authz_1",
+        })
+      )
+      expect(res.status).toBe(201)
+      expect(createScan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workflow: "AUTHENTICATED_ASSESSMENT",
+          authorizationRef: "authz_1",
+        })
+      )
+      expect(enqueueScanJob).toHaveBeenCalledWith(expect.objectContaining({ scanId: "scan-beta" }))
     })
 
     it("rejects REVIEW_CHANGES on a non-repository target", async () => {
@@ -1232,5 +1471,129 @@ describe("FREE-plan URL scan per-IP limit", () => {
     await POST(makeRequest(freeScanBody))
 
     expect(checkFreeUrlScanRateLimit).not.toHaveBeenCalled()
+  })
+
+  describe("scan attachments", () => {
+    const repoTarget = {
+      id: "repo-1",
+      type: "REPO",
+      installationId: "1234",
+      repoOwner: "acme",
+      repoName: "app",
+      repoFullName: "acme/app",
+      branch: "main",
+    }
+
+    it("passes validated attachmentIds into createScan", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(resolveScanAttachments).mockResolvedValue([{ id: "att-1" }] as never)
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-att",
+        status: "QUEUED",
+        goal: "TEST_APP",
+        mode: "STANDARD",
+        targetId: "repo-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-att",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          attachmentIds: ["att-1"],
+        })
+      )
+
+      expect(res.status).toBe(201)
+      expect(resolveScanAttachments).toHaveBeenCalledWith("ws-att", ["att-1"])
+      expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ attachmentIds: ["att-1"] }))
+    })
+
+    it("rejects a cross-workspace or unknown attachment id", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(resolveScanAttachments).mockRejectedValue(
+        new ScanAttachmentError("SCAN_ATTACHMENT_NOT_FOUND", "not found") as never
+      )
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-att-x",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          attachmentIds: ["att-foreign"],
+        })
+      )
+
+      expect(res.status).toBe(404)
+      expect((await res.json()).error.code).toBe("SCAN_ATTACHMENT_NOT_FOUND")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects a deleted or stale attachment", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(resolveScanAttachments).mockRejectedValue(
+        new ScanAttachmentError("SCAN_ATTACHMENT_UNAVAILABLE", "deleted") as never
+      )
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-att-del",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          attachmentIds: ["att-deleted"],
+        })
+      )
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("SCAN_ATTACHMENT_UNAVAILABLE")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("rejects more attachment IDs than the plan cap", async () => {
+      const ids = Array.from({ length: 21 }, (_, i) => `att-${i}`)
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-att-many",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          attachmentIds: ids,
+        })
+      )
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("deduplicates attachment IDs before recording them on the plan", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
+      vi.mocked(resolveScanAttachments).mockResolvedValue([{ id: "att-1" }] as never)
+      vi.mocked(createScan).mockResolvedValue({
+        id: "scan-att-dup",
+        status: "QUEUED",
+        goal: "TEST_APP",
+        mode: "STANDARD",
+        targetId: "repo-1",
+        createdAt: new Date(),
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-att-dup",
+          targetId: "repo-1",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          attachmentIds: ["att-1", "att-1"],
+        })
+      )
+
+      expect(res.status).toBe(201)
+      expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ attachmentIds: ["att-1"] }))
+    })
   })
 })

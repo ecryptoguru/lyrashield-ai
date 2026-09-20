@@ -318,6 +318,12 @@ export const CreateScanSchema = z.object({
   // staging boundary before anything mounts them — never by trusting this
   // list. Clients must never pass host paths.
   attachmentIds: z.array(z.string().trim().min(1).max(128)).max(20).optional(),
+  // AUTHENTICATED_ASSESSMENT only: references the recorded scoped
+  // authorization artifact (a READY live-safety authorization record). The
+  // server verifies it covers the exact target host before admission; it is
+  // recorded verbatim into the immutable execution plan. Never a credential —
+  // session material stays in the vault behind this reference.
+  authorizationRef: z.string().trim().min(1).max(256).optional(),
 })
 
 /** Create-scan input with cross-field workflow rules applied. Kept as a
@@ -336,6 +342,21 @@ export const CreateScanInputSchema = CreateScanSchema.superRefine((data, ctx) =>
       code: "custom",
       path: ["baseRef"],
       message: "REVIEW_CHANGES requires a baseRef to compare against",
+    })
+  }
+  if (data.authorizationRef && data.workflow !== "AUTHENTICATED_ASSESSMENT") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["authorizationRef"],
+      message: "authorizationRef is only valid with workflow AUTHENTICATED_ASSESSMENT",
+    })
+  }
+  if (data.workflow === "AUTHENTICATED_ASSESSMENT" && !data.authorizationRef) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["authorizationRef"],
+      message:
+        "AUTHENTICATED_ASSESSMENT requires an authorizationRef to a recorded scoped authorization",
     })
   }
 })
@@ -605,5 +626,6 @@ export type FindingQueryInput = z.infer<typeof FindingQuerySchema>
 export * from "./url-scan-capabilities"
 export * from "./scan-profile"
 export * from "./scan-execution-plan"
+export * from "./scan-attachments"
 export * from "./retest-profile"
 export * from "./plain-language"

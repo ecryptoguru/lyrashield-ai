@@ -219,14 +219,14 @@ describe("createScanTargetTool", () => {
       expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it("passes AUTHENTICATED_ASSESSMENT through so the server answers SCAN_WORKFLOW_UNAVAILABLE", async () => {
+    it("forwards AUTHENTICATED_ASSESSMENT with its authorization reference — the server gates it", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
         headers: new Headers(),
         json: async () => ({
           success: false,
-          error: { code: "SCAN_WORKFLOW_UNAVAILABLE", message: "not wired" },
+          error: { code: "SCAN_WORKFLOW_UNAVAILABLE", message: "beta off" },
         }),
       })
       const tool = createScanTargetTool(context)
@@ -234,11 +234,13 @@ describe("createScanTargetTool", () => {
         workspaceId: "ws-1",
         targetId: "t-1",
         workflow: "AUTHENTICATED_ASSESSMENT",
+        authorizationRef: "authz_1",
       })
       expect(result.isError).toBe(true)
       const request = mockFetch.mock.calls[0]![1] as RequestInit
       expect(JSON.parse(String(request.body))).toMatchObject({
         workflow: "AUTHENTICATED_ASSESSMENT",
+        authorizationRef: "authz_1",
       })
     })
   })

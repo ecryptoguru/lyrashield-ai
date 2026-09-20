@@ -161,6 +161,17 @@ export {
   failArtifactDeletionTask,
 } from "./artifact-deletion"
 export {
+  createScanAttachmentRecord,
+  listScanAttachments,
+  resolveScanAttachments,
+  softDeleteScanAttachment,
+  ScanAttachmentError,
+  type ScanAttachmentErrorCode,
+  type ScanAttachmentSummary,
+  type CreateScanAttachmentRecordInput,
+  type ScanAttachment,
+} from "./scan-attachment-service"
+export {
   createScan,
   updateScanStatus,
   addScanEvent,
@@ -433,7 +444,10 @@ export {
   verifyDnsDomainVerification,
   upsertLiveAiSafetySettings,
   createLiveAiSafetyPlan,
+  resolveAuthenticatedAssessmentAuthorization,
   LiveAiSafetyError,
+  AUTH_ASSESSMENT_SESSION_MAX_LIFETIME_MS,
+  type AuthenticatedAssessmentAuthorization,
 } from "./live-ai-safety-service"
 export {
   CANONICAL_OPERATIONS,

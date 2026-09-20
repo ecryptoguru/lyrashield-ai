@@ -3,7 +3,7 @@
 import Link from "next/link"
 import type { Dispatch, SetStateAction } from "react"
 import { AlertCircle, Check, ChevronDown, ChevronRight, Clock, Play } from "lucide-react"
-import { Badge, Button, cn, FormField, Select, Spinner } from "@lyrashield/ui"
+import { Badge, Button, cn, FormField, Input, Select, Spinner } from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Sheet,
@@ -18,6 +18,7 @@ import type { ManualScanOption } from "@/lib/scan-presets"
 import { RUN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
 import { getReviewSetupGuidance, isBillingRecoveryCode } from "./scans-client.utils"
 import type { ScanEligibilityState, TargetItem } from "./scan-types"
+import type { ScanAttachmentItem } from "@/lib/api-schemas"
 
 function modeBadgeVariant(mode: string): "default" | "success" | "info" | "warning" | "muted" {
   switch (mode) {
@@ -58,6 +59,13 @@ export function CreateScanSheet({
   handleCreateScan,
   showAdvanced,
   setShowAdvanced,
+  baseRef,
+  setBaseRef,
+  headRef,
+  setHeadRef,
+  attachments,
+  selectedAttachments,
+  toggleAttachment,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -84,6 +92,13 @@ export function CreateScanSheet({
   handleCreateScan: () => Promise<void>
   showAdvanced: boolean
   setShowAdvanced: Dispatch<SetStateAction<boolean>>
+  baseRef: string
+  setBaseRef: Dispatch<SetStateAction<string>>
+  headRef: string
+  setHeadRef: Dispatch<SetStateAction<string>>
+  attachments: ScanAttachmentItem[]
+  selectedAttachments: string[]
+  toggleAttachment: (id: string) => void
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -257,6 +272,72 @@ export function CreateScanSheet({
                   </div>
                 </div>
               )}
+              {selectedOption?.requiresRevisionInputs && (
+                <div
+                  className="mt-3 space-y-3 rounded-lg border p-3"
+                  role="group"
+                  aria-label="Revisions to compare"
+                >
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    Compare an exact change set. The base ref is required; the head defaults to the
+                    target&apos;s branch. Both resolve to immutable commits before the review
+                    starts.
+                  </p>
+                  <FormField label="Base revision (required)" htmlFor="scan-base-ref">
+                    <Input
+                      id="scan-base-ref"
+                      value={baseRef}
+                      onChange={(e) => setBaseRef(e.target.value)}
+                      placeholder="main or a commit SHA"
+                      autoComplete="off"
+                      required
+                    />
+                  </FormField>
+                  <FormField label="Head revision (optional)" htmlFor="scan-head-ref">
+                    <Input
+                      id="scan-head-ref"
+                      value={headRef}
+                      onChange={(e) => setHeadRef(e.target.value)}
+                      placeholder="Defaults to the target branch"
+                      autoComplete="off"
+                    />
+                  </FormField>
+                </div>
+              )}
+              {attachments.length > 0 && (
+                <fieldset className="mt-3 rounded-lg border p-3">
+                  <legend className="px-1 text-xs font-medium">Supporting files (optional)</legend>
+                  <p className="text-muted-foreground mb-2 text-xs leading-relaxed">
+                    Selected files are recorded on the {RUN_SINGULAR.toLowerCase()}&apos;s immutable
+                    plan, verified against their stored checksums, and staged read-only. They are
+                    review inputs only — they can never change scope, checks, limits, or
+                    authorization.
+                  </p>
+                  <ul className="max-h-40 space-y-1 overflow-y-auto">
+                    {attachments.slice(0, 20).map((attachment) => (
+                      <li key={attachment.id}>
+                        <label className="hover:bg-accent/50 flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="border-border size-4 shrink-0 rounded"
+                            checked={selectedAttachments.includes(attachment.id)}
+                            onChange={() => toggleAttachment(attachment.id)}
+                          />
+                          <span className="truncate">{attachment.filename}</span>
+                          <span className="text-muted-foreground shrink-0 text-xs">
+                            {Math.max(1, Math.ceil(attachment.byteLength / 1024))} KB
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                  {selectedAttachments.length > 0 && (
+                    <p className="text-muted-foreground mt-2 text-xs" role="status">
+                      {selectedAttachments.length} selected — recorded as immutable inputs.
+                    </p>
+                  )}
+                </fieldset>
+              )}
               {reviewSetupGuidance && (
                 <div
                   className="border-primary/20 bg-primary/5 mt-3 flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
@@ -398,18 +479,58 @@ export function CreateScanSheet({
                   id="scan-advanced-panel"
                   className="bg-muted/40 border-border mt-2 rounded-lg border p-4"
                 >
-                  <div className="space-y-3">
+                  <dl className="space-y-3 text-xs leading-relaxed">
                     <div>
-                      <p className="text-sm font-medium">What this review covers</p>
-                      <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                        {selectedOption.hint}
-                      </p>
+                      <dt className="text-sm font-medium">What this review covers</dt>
+                      <dd className="text-muted-foreground mt-1">{selectedOption.hint}</dd>
                     </div>
-                    <p className="text-muted-foreground text-xs leading-relaxed">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
+                        <dt className="text-muted-foreground font-medium">Workflow</dt>
+                        <dd>
+                          {selectedOption.workflow === "REVIEW_CHANGES"
+                            ? "Review changes"
+                            : "Review target"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground font-medium">Depth</dt>
+                        <dd>{getScanModeLabel(selectedOption.mode)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground font-medium">Effective scope</dt>
+                        <dd>{selectedOption.scopeSummary}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground font-medium">Limits</dt>
+                        <dd>{selectedOption.limitsSummary}</dd>
+                      </div>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground font-medium">Applicable checks</dt>
+                      <dd>
+                        <ul className="text-muted-foreground mt-1 list-inside list-disc">
+                          {selectedOption.applicableChecks.map((check) => (
+                            <li key={check}>{check}</li>
+                          ))}
+                        </ul>
+                      </dd>
+                    </div>
+                    {selectedOption.authorizationHint ? (
+                      <div>
+                        <dt className="text-muted-foreground font-medium">
+                          Authorization required
+                        </dt>
+                        <dd className="text-muted-foreground">
+                          {selectedOption.authorizationHint}
+                        </dd>
+                      </div>
+                    ) : null}
+                    <dd className="text-muted-foreground">
                       The completed scan records the applicable evidence and any limitations so you
                       can decide what to fix or retest next.
-                    </p>
-                  </div>
+                    </dd>
+                  </dl>
                 </div>
               )}
             </div>

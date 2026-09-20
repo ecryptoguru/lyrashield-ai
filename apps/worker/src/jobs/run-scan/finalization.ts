@@ -54,6 +54,8 @@ export async function finalizeScanLifecycle(params: {
   maxBudgetUsd: number
   workerExecution: ReturnType<typeof resolveWorkerExecutionProvenance>
   engineExecution?: Parameters<typeof persistResultManifest>[0]["engineExecution"]
+  /** Checksum-verified attachment staging receipt (null when none staged). */
+  stagedAttachments?: Parameters<typeof persistResultManifest>[0]["attachments"]
   terminalErrorAfterMeter: () => ScanTerminalError | null
   meterEngineRun: (
     outcome: "completed" | "partial" | "failed" | "cancelled",
@@ -80,6 +82,7 @@ export async function finalizeScanLifecycle(params: {
     maxBudgetUsd,
     workerExecution,
     engineExecution,
+    stagedAttachments,
     meterEngineRun,
     onDurableResult,
   } = params
@@ -114,6 +117,13 @@ export async function finalizeScanLifecycle(params: {
           ...(engineResult.output.threatModels.schemaVersion
             ? { schemaVersion: engineResult.output.threatModels.schemaVersion }
             : {}),
+          // Bounded engine-declared preview for truthful rendering. The
+          // sealed artifact remains authoritative; previews are capped so the
+          // manifest stays small.
+          entries: engineResult.output.threatModels.models.slice(0, 10).map((model) => ({
+            target: model.target.slice(0, 120),
+            preview: model.content.slice(0, 300),
+          })),
         }
       } catch (error) {
         recordIngestionWarning(
@@ -290,6 +300,7 @@ export async function finalizeScanLifecycle(params: {
         scopedCoverage: engineResult.output.scopedCoverage,
         threatModel: threatModelRef,
         httpExchangeEvidence: httpExchangeRef,
+        ...(stagedAttachments ? { attachments: stagedAttachments } : {}),
         ...(ingestionWarnings.length > 0 ? { ingestionWarnings } : {}),
         terminalOutcome: terminalError
           ? {

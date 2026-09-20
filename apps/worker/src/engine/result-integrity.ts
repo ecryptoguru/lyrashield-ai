@@ -86,6 +86,9 @@ type ResultManifestInput = {
     byteLength: number
     modelCount: number
     schemaVersion?: string
+    /** Bounded engine-declared preview for truthful rendering — the sealed
+     * artifact stays authoritative; never treated as verification. */
+    entries?: { target: string; preview: string }[]
   } | null
   /**
    * Checksum-bound reference to the scan's bounded redacted proxy-exchange
@@ -96,6 +99,17 @@ type ResultManifestInput = {
     byteLength: number
     exchangeCount: number
     schemaVersion?: string
+  } | null
+  /**
+   * Checksum-bound receipt for the plan's staged attachments: how many input
+   * files were verified and staged read-only, their aggregate bytes, and the
+   * sha256 of the manifest the engine consumed. Absent when the plan had no
+   * attachments or the tier never staged them.
+   */
+  attachments?: {
+    count: number
+    totalBytes: number
+    manifestChecksum: string
   } | null
   /** Bounded explicit issues recorded while ingesting engine evidence. */
   ingestionWarnings?: string[]
@@ -444,6 +458,7 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
       : {}),
     ...(input.threatModel ? { threatModel: input.threatModel } : {}),
     ...(input.httpExchangeEvidence ? { httpExchangeEvidence: input.httpExchangeEvidence } : {}),
+    ...(input.attachments ? { attachments: input.attachments } : {}),
     ...(input.ingestionWarnings?.length
       ? { ingestionWarnings: input.ingestionWarnings.slice(0, 100) }
       : {}),
