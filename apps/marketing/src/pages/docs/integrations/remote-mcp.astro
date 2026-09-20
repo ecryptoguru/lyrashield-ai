@@ -11,7 +11,7 @@ const updatedDate = "2026-09-09"
 const faqItems = [
   {
     q: "Can cloud editors run mutating LyraShield tools?",
-    a: "A browser-confirmed OAuth connection can run the workflows and targets granted at consent without another LyraShield review. LyraShield still checks the user's current workspace role, connection state, scope, target access, budget, expiry, and idempotency for every call. A mutating call authenticated with an API key receives one connect_required response pointing at OAuth connect. A delegated call outside the recorded grant is denied. Exact-input approval applies only to legacy nondelegated hosted credentials.",
+    a: "A browser-confirmed OAuth connection can run the workflows and targets granted at consent without another LyraShield review. LyraShield still checks the user's current workspace role, connection state, scope, target access, budget, expiry, and idempotency for every call. A mutating call authenticated with an API key receives connect_required. A delegated call outside the recorded grant is denied.",
   },
   {
     q: "What is the difference between remote MCP and the GitHub Action?",
@@ -19,7 +19,7 @@ const faqItems = [
   },
   {
     q: "When will LyraShield still ask for approval?",
-    a: "Exact-input approval remains only for legacy nondelegated hosted credentials; a pending approval of that kind expires after 15 minutes. API-key writes on the remote endpoint receive connect_required and delegated calls outside the grant are denied, so neither path creates an approval.",
+    a: "Hosted OAuth requests a browser-confirmed connection grant. Subsequent matching actions run within that grant and are checked at execution. API-key writes receive connect_required; out-of-grant delegated calls are denied. Local stdio approval is a separate client flow.",
   },
 ]
 
@@ -106,7 +106,7 @@ const jsonLd: unknown[] = [
     Requests outside the recorded grant, expired, or revoked connections and lost workspace access
     never inherit delegated permission; out-of-grant delegated calls are denied. A mutating call
     authenticated with an API key receives a connect_required response pointing at OAuth connect.
-    Exact-input approval remains only for legacy nondelegated hosted credentials. LyraShield-generated
+    Historical exact-input approval records are not an active hosted authorization path. LyraShield-generated
     fixes and pull requests remain proposals; LyraShield never merges a pull request automatically.
   </p>
 

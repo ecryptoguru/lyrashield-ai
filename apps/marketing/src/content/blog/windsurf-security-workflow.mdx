@@ -122,7 +122,7 @@ Keep evidence for several releases so you can show trend, exception closure and 
 
 ## Why pair Windsurf with LyraShield
 
-LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, every finding produces an immutable assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
+LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
 MCP integration fits Windsurf. Local stdio via npx -y @lyrashield/mcp@0.2.8 runs with env var keys, and remote via serverUrl https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key from env. Diff aware GitHub Action and SARIF output surface verified findings in pull requests so review stays in context.
 

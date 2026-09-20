@@ -19,10 +19,10 @@ import type { AgentEntry, InstallStrategy } from "./types"
 //      the documented `lyrashield install github-copilot` fails as an unknown
 //      agent. The same was true of `kiro`.
 //
-// Deliberately absent: `vscode`. It has a verified config-file path
+// Deliberately absent: `vscode`. It has a documented config-file path
 // (.vscode/mcp.json, root key `servers`), no generated VS Code shim exists, and
-// its plugin discovery path is unverified — mapping it here would reroute a
-// working install onto an unverified one. Revisit only once a VS Code shim is
+// its plugin discovery path lacks client-runtime proof — mapping it here would reroute a
+// documented install onto an unverified one. Revisit only once a VS Code shim is
 // generated and the discovery path is confirmed.
 const PREFERRED_PLUGIN_ID_BY_AGENT_ID: Readonly<Record<string, string>> = {
   "claude-code": "claude-code-agent-plugin",

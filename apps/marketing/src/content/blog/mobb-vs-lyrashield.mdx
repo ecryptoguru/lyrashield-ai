@@ -13,14 +13,14 @@ faq:
   - q: "Does Mobb fix vulnerabilities from other scanners?"
     a: "Yes. Mobb integrates with scanners like Snyk and Black Duck, automatically triages their findings, and applies predictable, reviewable fixes that integrate into CI and CD pipelines. LyraShield runs its own agentic pentest alongside SCA and secrets, then produces an immutable evidence record for the release decision."
   - q: "How do the fix models compare?"
-    a: "Mobb emphasizes consistent, predictable fixes: same issue, same fix, across repos and time, with built-in security context so developers understand the reasoning. LyraShield proposes approval-gated fixes and retests them before closing, recording the result as an evidence state in an immutable record."
+    a: "Mobb emphasizes consistent, predictable fixes: same issue, same fix, across repos and time, with built-in security context so developers understand the reasoning. LyraShield records fix proposals for review and retests them before closing, recording the result as an evidence state in an immutable record."
   - q: "Does Mobb govern AI coding agents?"
     a: "Mobb integrates with VS Code, Copilot, Claude, Gemini, Devin, and Tabnine, and its Tracy product gives visibility into how AI-generated code shapes systems over time. LyraShield runs inside AI coding agents through the Model Context Protocol, focusing on the release-assurance loop."
   - q: "Is Mobb pricing public?"
     a: "Mobb offers a demo but does not publish pricing on its main site as of this writing. LyraShield is in open beta with open registration at lyrashieldai.com. Contact Mobb directly for current pricing and plan details."
 ---
 
-Mobb is an AI-powered remediation platform founded in 2021 that triages and fixes code vulnerabilities with predictable, reviewable fixes, integrates with scanners like Snyk and Black Duck, and offers Tracy for AI code visibility and governance. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with approval-gated fixes. Mobb excels at consistent, scalable remediation; LyraShield closes the proof and release-decision gap.
+Mobb is an AI-powered remediation platform founded in 2021 that triages and fixes code vulnerabilities with predictable, reviewable fixes, integrates with scanners like Snyk and Black Duck, and offers Tracy for AI code visibility and governance. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with reviewed fix proposals. Mobb excels at consistent, scalable remediation; LyraShield closes the proof and release-decision gap.
 
 This comparison is part of our broader [vibe coding security guide](/blog/vibe-coding-security-guide), which covers the full release-assurance methodology for AI-built applications.
 
@@ -40,7 +40,7 @@ Mobb and LyraShield both target AI-generated code and both gate fixes behind hum
 
 The LyraShield loop is target, review, evidence, fix, retest, report. The agentic pentest runs its own checks against the live target, rather than triaging another scanner's findings. Results are recorded as evidence states that distinguish a detected pattern from a proven exploitable issue from a fixed and retested one. That immutable record is the deliverable for a release decision, not a count of fixed findings. Mobb's Tracy gives visibility into how AI code shapes systems; LyraShield's evidence record gives proof for a specific release.
 
-LyraShield runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), so checks happen where the agent writes code. Fix proposals are approval-gated and retested before closing. The difference from Mobb's predictable-fix model is that LyraShield requires a retest to close a finding, not just a consistent patch. v1 coverage pairs the agentic pentest with SCA, secrets, a reusable GitHub Action, and SARIF output.
+LyraShield runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), so checks happen where the agent writes code. Fix proposals are recorded for review, and a fresh retest records the outcome. The difference from Mobb's predictable-fix model is that LyraShield requires a retest to close a finding, not just a consistent patch. v1 coverage pairs the agentic pentest with SCA, secrets, a reusable GitHub Action, and SARIF output.
 
 For dependency risk, LyraShield uses SCA backed by sources like the [OSV database](https://osv.dev/). Mobb's strength is scalable, consistent remediation across a scanner stack; LyraShield's is the release-assurance loop for one AI-built app at a time.
 
@@ -50,7 +50,7 @@ The difference in what each tool records is the core distinction. Mobb records f
 
 Use Mobb when you have a scanner stack generating findings and your pain point is remediation at scale: you need predictable, reviewable fixes that integrate into CI and CD, plus visibility into how AI-generated code is evolving. It is a strong choice for enterprises that want to burn down backlogs consistently across repos and teams, with Tracy for governance and visibility into AI coding patterns.
 
-Use LyraShield AI when the specific need is a release decision for an AI-built app, backed by proof, an immutable record, and approval-gated fixes with a mandatory retest. The tools can complement each other: Mobb for backlog reduction and AI code visibility, LyraShield for release sign-off.
+Use LyraShield AI when the specific need is a release decision for an AI-built app, backed by proof, an immutable record, and reviewed fix proposals with a mandatory retest. The tools can complement each other: Mobb for backlog reduction and AI code visibility, LyraShield for release sign-off.
 
 Mobb and LyraShield fit naturally at different stages. Mobb runs continuously, triaging scanner findings and applying consistent fixes across repos, with Tracy providing the governance visibility that engineering leaders need. LyraShield runs at the release gate, producing the evidence record that supports a specific ship decision. Because Mobb integrates with existing scanners and LyraShield emits SARIF, the two can sit in the same pipeline, with Mobb handling remediation throughput and LyraShield handling release assurance.
 
@@ -66,7 +66,7 @@ For the detailed breakdown see the [Mobb comparison page](/compare/mobb). If you
 
 ## Why teams choose LyraShield for AI-built apps
 
-Teams choose LyraShield when the deliverable is a release decision, not a fixed finding count. The agentic pentest proves whether a finding is real against the running app, the immutable evidence record gives reviewers and auditors something concrete, and approval-gated fixes with a mandatory retest keep a human accountable for every change. For apps where the code came from a coding agent and the team needs to make a go or no-go decision, that loop turns a stream of fixes into a defensible release decision.
+Teams choose LyraShield when the deliverable is a release decision, not a fixed finding count. The agentic pentest attempts to verify findings against an authorized running target and retains each result’s evidence state, the immutable evidence record gives reviewers and auditors something concrete, and reviewed fix proposals and a fresh retest keep the release decision tied to evidence. For apps where the code came from a coding agent and the team needs to make a go or no-go decision, that loop turns a stream of fixes into a defensible release decision.
 
 Mobb is a strong remediation platform with consistent fixes and Tracy for AI code visibility. LyraShield does not try to out-remediate it. The value is the focused loop: target, review, evidence, fix, retest, report. For an app whose code came from a coding agent, that loop is what turns a stream of fixes into a defensible go or no-go backed by proof.
 
