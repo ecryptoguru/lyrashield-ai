@@ -7,6 +7,9 @@ const canonical = new URL("/demo", origin).toString()
 const description =
   "Book a 30-minute walkthrough of LyraShield AI with the founder — how evidence, retests and release records fit your app."
 const title = "Book a demo | LyraShield AI"
+// Last content change to this page — the explicit freshness input for the
+// WebPage dateModified (same convention as about.astro's updatedDate).
+const updatedDate = "2026-09-20"
 const jsonLd: unknown[] = [
   {
     "@context": "https://schema.org",
@@ -14,6 +17,7 @@ const jsonLd: unknown[] = [
     name: title,
     description,
     url: canonical,
+    dateModified: updatedDate,
     isPartOf: { "@id": `${origin}/#website` },
   },
   {

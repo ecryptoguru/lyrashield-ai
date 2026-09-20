@@ -9,6 +9,11 @@ const pageUrl = canonical
 const title = "LyraShield AI for coding agents — MCP and agent tools"
 const description = agentOnboarding.description
 const buildDate = buildDateFor("src/pages/agents.astro", "src/lib/agent-onboarding.ts")
+// Explicit freshness floor: the last content change to this page. The
+// git-derived buildDate wins when it resolves; the floor keeps dateModified
+// honest when the page ships without .git.
+const updatedDate = "2026-09-20"
+const dateModified = buildDate ?? `${updatedDate}T00:00:00.000Z`
 
 const answerFirst =
   `LyraShield documents ${agentOnboarding.clients.length} coding-agent workflows. Most connect through MCP; Aider and Pi use the standalone CLI or CI path. Availability and setup differ by client and the integration labels below show the evidence behind each claim. Read-only tools can retrieve recorded findings; hosted writes run only within a browser-confirmed connection grant and are checked again at execution.`
@@ -51,7 +56,7 @@ const jsonLd = [
     headline: title,
     description,
     url: pageUrl,
-    ...(buildDate ? { dateModified: buildDate } : {}),
+    dateModified,
     author: { "@id": `${origin}/#organization` },
     publisher: { "@id": `${origin}/#organization` },
     inLanguage: "en-US",
@@ -78,7 +83,7 @@ const jsonLd = [
     name: title,
     description,
     url: pageUrl,
-    ...(buildDate ? { dateModified: buildDate } : {}),
+    dateModified,
     isPartOf: { "@id": `${origin}/#website` },
     about: { "@id": `${origin}/#application` },
     inLanguage: "en-US",

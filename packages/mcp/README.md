@@ -31,6 +31,7 @@ Every API-backed tool calls the LyraShield REST API with a workspace API key or 
 | `lyrashield_list_workspaces`          | read  | List workspaces this key can access                                                                     |
 | `lyrashield_list_targets`             | read  | List targets (repos/apps/APIs) in a workspace                                                           |
 | `lyrashield_get_scan_status`          | read  | Status, timing and events for a scan                                                                    |
+| `lyrashield_get_scan_quality`         | read  | Evidence-quality surface for a scan: verification tiers, coverage receipts and labeled heuristics       |
 | `lyrashield_get_findings`             | read  | Paginated findings (default 50, max 100), filterable by target, scan, status, severity and verification |
 | `lyrashield_explain_finding`          | read  | Full detail + plain-language explanation of a finding                                                   |
 | `lyrashield_generate_fix_plan`        | read  | Assemble a remediation plan from a finding                                                              |

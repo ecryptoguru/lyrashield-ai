@@ -8,7 +8,7 @@ colors:
   border-dark: "#203246"
   text-dark: "#edf6fb"
   text-muted-dark: "#91a7b8"
-  accent-dark: "#54d6df"
+  accent-dark: "#00bae6"
   accent-dim-dark: "#153d48"
   bg-light: "#f5f9fc"
   bg-raised-light: "#ffffff"
@@ -80,7 +80,10 @@ showing scope, evidence state and limits — never by decoration.
 - Dark-first: `--bg #08111c`, raised `#0e1a28`, border `#203246`, text `#edf6fb`,
   muted `#91a7b8`. Light theme: `--bg #f5f9fc`, raised `#ffffff`, text `#102235`,
   muted `#5f7081`.
-- Single accent: cyan `#54d6df` (dark) / `#087f78` (light). Accent-dim for
+- Single accent: cyan `#00bae6` (dark — `oklch(0.72 0.16 218)` in
+  `apps/web/src/app/globals.css`; dark foreground text such as
+  `--color-primary-foreground` `oklch(0.14 0.015 264)` provides contrast on it)
+  / `#087f78` (light). Accent-dim for
   tinted fills only. The amber focus ring (Shapes) is an accessibility
   indicator, not a second brand accent.
 - Semantic: danger `#ff7168`/`#e5534b`; warning/amber `#f3b95f`. Success uses

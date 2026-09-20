@@ -15,6 +15,9 @@ const canonical = new URL("/pricing", origin).toString()
 const title = "Pricing — Cloud & Local Plans | LyraShield AI"
 const description =
   "Cloud plans from $29 a month with a free trial of 60 agent-minutes and no card. Prepaid minute packs and annual billing are available; Local launches later."
+// Last content change to this page — the explicit freshness input for the
+// WebPage dateModified (same convention as about.astro's updatedDate).
+const updatedDate = "2026-09-20"
 
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
 const enterprisePlan = getPlan("ENTERPRISE")
@@ -67,6 +70,7 @@ const jsonLd = [
     name: title,
     description,
     url: canonical,
+    dateModified: updatedDate,
     isPartOf: { "@id": `${origin}/#website` },
   },
   {
