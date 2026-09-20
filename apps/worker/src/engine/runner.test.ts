@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { mkdtemp, mkdir, realpath, rm, symlink, utimes, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import { join } from "path"
+import { createHash } from "crypto"
+import { parseEngineOutput } from "./output-parser"
 
 vi.mock("@lyrashield/config", () => ({
   env: {
@@ -43,6 +45,7 @@ import {
   parseEngineProgressFingerprint,
   readEngineProgressFingerprint,
   readEngineSpendUsd,
+  readEngineOutput,
   createEngineStreamTail,
   appendEngineStreamTail,
   flushEngineStreamTail,
@@ -86,6 +89,63 @@ it("finds an upstream Strix output directory", async () => {
   cleanupPaths.push(workDir)
   const expected = await createRun(workDir, "strix_runs", "upstream", "run.json", new Date(1_000))
   await expect(findRunOutputDir(workDir)).resolves.toBe(expected)
+})
+
+it("reads the owned singular threat-model artifact before any legacy plural file", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-owned-evidence-"))
+  cleanupPaths.push(outputDir)
+  const canonical = JSON.stringify({
+    schema_version: "lyrashield-threat-model/1.0",
+    run_id: "scan-1",
+    models: [],
+  })
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_model.json"), canonical, "utf8")
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_models.json"), "{}", "utf8")
+
+  const output = await readEngineOutput(outputDir)
+
+  expect(output.artifacts.threatModelsRaw).toBe(canonical)
+})
+
+it("rejects a threat model that is missing or differs from the run manifest", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-manifest-evidence-"))
+  cleanupPaths.push(outputDir)
+  const canonical = JSON.stringify({
+    schema_version: "lyrashield-threat-model/1.0",
+    run_id: "scan-1",
+    models: [],
+  })
+  const manifest = {
+    schema_version: 1,
+    artifacts: {
+      "threat_model.json": {
+        path: "threat_model.json",
+        bytes: Buffer.byteLength(canonical),
+        sha256: createHash("sha256").update(canonical).digest("hex"),
+      },
+    },
+  }
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "run.json"), JSON.stringify({ result_manifest: manifest }))
+
+  const missing = await readEngineOutput(outputDir)
+  expect(missing.artifacts.threatModelsRaw).toBeNull()
+  expect(
+    parseEngineOutput(missing.vulnerabilitiesRaw, missing.runJsonRaw, missing.artifacts)
+      .ingestionIssues
+  ).toContain("threat_model.json unreadable or oversized — artifact ignored")
+
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_model.json"), canonical.replace("scan-1", "scan-2"))
+  const changed = await readEngineOutput(outputDir)
+  expect(changed.artifacts.threatModelsRaw).toBeNull()
+
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_model.json"), canonical)
+  const valid = await readEngineOutput(outputDir)
+  expect(valid.artifacts.threatModelsRaw).toBe(canonical)
 })
 
 it("selects the newest valid output across both layouts", async () => {
