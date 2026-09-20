@@ -228,6 +228,44 @@ describe("command-builder", () => {
       expect(cmd.args).toContain("deep")
     })
 
+    it("pins REPO remote URLs to --target-type repository", () => {
+      const cmd = buildEngineCommand({
+        scanId: "scan-kind-repo",
+        goal: "VULNERABILITY_SCAN",
+        mode: "SAFE",
+        target: { ...REPO_TARGET, repoUrl: "https://gitlab.com/org/repo" },
+      })
+      const idx = cmd.args.indexOf("--target-type")
+      expect(idx).toBeGreaterThan(-1)
+      expect(cmd.args[idx + 1]).toBe("repository")
+    })
+
+    it("pins a checked-out REPO source tree to --target-type local_code", () => {
+      const cmd = buildEngineCommand({
+        scanId: "scan-kind-checkout",
+        goal: "VULNERABILITY_SCAN",
+        mode: "SAFE",
+        target: { ...REPO_TARGET, repoUrl: "/var/lib/lyrashield/checkouts/org-repo" },
+      })
+      const idx = cmd.args.indexOf("--target-type")
+      expect(cmd.args[idx + 1]).toBe("local_code")
+    })
+
+    it.each(["WEB_APP", "API"] as const)(
+      "pins %s targets to --target-type web_application",
+      (type) => {
+        const cmd = buildEngineCommand({
+          scanId: `scan-kind-${type}`,
+          goal: "VULNERABILITY_SCAN",
+          mode: "STANDARD",
+          target: { ...WEB_TARGET, type },
+        })
+        const idx = cmd.args.indexOf("--target-type")
+        expect(idx).toBeGreaterThan(-1)
+        expect(cmd.args[idx + 1]).toBe("web_application")
+      }
+    )
+
     it("rejects an unknown mode instead of escalating execution", () => {
       expect(() =>
         buildEngineCommand({
