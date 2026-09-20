@@ -29,7 +29,7 @@ export default async function AffiliateLinksPage() {
     <div className="mx-auto max-w-4xl px-4 py-8">
       <PageHeader
         title="Referral Links"
-        description="Your primary referral link, campaign variants, and promo code."
+        description="Your primary referral link, campaign variants and promo code."
       />
 
       <section className="mt-6 space-y-6">

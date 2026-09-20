@@ -60,7 +60,7 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-muted-foreground text-sm">
-          Connect coding agents like Claude Code, Cursor, and cloud IDEs to LyraShield so they can
+          Connect coding agents like Claude Code, Cursor and cloud IDEs to LyraShield so they can
           read evidence and scan results from this workspace.
         </p>
 
@@ -69,8 +69,8 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
             <div>
               <p className="text-sm font-semibold">Recommended: connect with OAuth</p>
               <p className="text-muted-foreground mt-1 text-xs leading-5">
-                Marketplace clients use protected-resource discovery, select one workspace, and
-                start read-only. Write actions always stay behind LyraShield approval.
+                Marketplace clients use protected-resource discovery, select one workspace and start
+                read-only. Write actions always stay behind LyraShield approval.
               </p>
             </div>
             <Button

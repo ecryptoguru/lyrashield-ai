@@ -446,7 +446,7 @@ export function AiAssuranceClient({
                             />
                           </label>
                           <p className="text-xs text-muted-foreground">
-                            PDF, PNG, JPEG, or text; up to 5 files and 20 MiB total.
+                            PDF, PNG, JPEG or text; up to 5 files and 20 MiB total.
                           </p>
                           <Button
                             type="submit"

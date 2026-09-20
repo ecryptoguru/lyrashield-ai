@@ -28,7 +28,7 @@ export default async function PlatformAdminUsersPage({
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Users"
-        description="Minimal account security state. Sessions, credentials, and customer content are excluded."
+        description="Minimal account security state. Sessions, credentials and customer content are excluded."
       />
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full min-w-3xl text-left text-sm">

@@ -48,7 +48,7 @@ export default function LicenseRetrievalPage() {
       setLicense(body.data)
       setToken(null)
     } catch {
-      setError("This retrieval link is invalid, expired, or already used.")
+      setError("This retrieval link is invalid, expired or already used.")
     } finally {
       setLoading(false)
     }

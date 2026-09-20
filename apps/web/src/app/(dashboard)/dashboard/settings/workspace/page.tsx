@@ -33,7 +33,7 @@ export default async function WorkspaceSettingsPage() {
       <div>
         <PageHeader
           title="Workspace settings"
-          description="Workspace access, automation, and connected services."
+          description="Workspace access, automation and connected services."
         />
         <NoWorkspaceState
           icon={Settings}
@@ -81,7 +81,7 @@ export default async function WorkspaceSettingsPage() {
     <div className="min-w-0 space-y-6">
       <PageHeader
         title="Workspace settings"
-        description="Workspace access, automation, and connected services."
+        description="Workspace access, automation and connected services."
       />
 
       <Card>

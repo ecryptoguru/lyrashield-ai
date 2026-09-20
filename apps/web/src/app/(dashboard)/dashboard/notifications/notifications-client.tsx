@@ -139,7 +139,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
     <div>
       <PageHeader
         title="Notifications"
-        description="Scan alerts, finding warnings, and fix PR updates"
+        description="Scan alerts, finding warnings and fix PR updates"
         action={markAllReadAction}
       />
 
@@ -169,7 +169,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
         <EmptyState
           icon={Bell}
           title="No notifications"
-          description="You'll see scan alerts, critical finding warnings, and fix PR updates here."
+          description="You'll see scan alerts, critical finding warnings and fix PR updates here."
           action={null}
         />
       ) : (
