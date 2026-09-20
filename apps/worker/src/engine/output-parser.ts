@@ -1,10 +1,78 @@
 import { logger } from "@lyrashield/logger"
+import type { z } from "zod"
 import { checkOutputSafety, computeDedupeKey } from "@lyrashield/security"
 import {
+  advisoryCvssSchema,
   checkRunRecordSchemaVersion,
+  coverageGapSchema,
+  engineCoverageDocumentSchema,
   engineRunRecordSchema,
   engineVulnerabilitySchema,
+  findingRevisionSchema,
+  fixVerificationSchema,
+  httpExchangeExportSchema,
+  MAX_COVERAGE_GAPS,
+  MAX_EVIDENCE_FIELD_CHARS,
+  MAX_FINDING_REVISIONS,
+  MAX_HTTP_EXCHANGE_IDS,
+  MAX_INGESTION_ISSUES,
+  MAX_INGESTION_ISSUE_CHARS,
+  MAX_METADATA_ENTRIES,
+  MAX_METADATA_NESTED_ENTRIES,
+  MAX_METADATA_NESTED_VALUE_CHARS,
+  MAX_METADATA_VALUE_CHARS,
+  MAX_SCOPED_COVERAGE_ENTRIES,
+  MAX_THREAT_MODELS,
+  scopedCoverageEntrySchema,
+  threatModelEntrySchema,
+  threatModelsDocumentSchema,
 } from "./engine-output-schema"
+
+/**
+ * dependency_metadata is a bounded flat provenance record that may also carry
+ * structured contextual-CVSS members (advisory score, contextual score,
+ * vector, per-metric breakdown, reasoning). Values stay shallow: short
+ * strings, finite numbers, booleans, or a one-level string map — deep JSON
+ * never survives the worker boundary.
+ */
+export type EngineMetadataValue = string | number | boolean | Record<string, string>
+
+/**
+ * Structured advisory CVSS (upstream `{score, vector, source,
+ * metric_reasoning}`). The advisory score is evidence about the dependency,
+ * never the finding's normalized CVSS.
+ */
+export interface AdvisoryCvss {
+  score: number
+  vector?: string
+  source?: string
+  metric_reasoning?: string
+}
+
+/**
+ * fix_verification — an ENGINE ATTESTATION that the filing agent ran a fix
+ * check (`kind: "engine_attestation"`). It is evidence, never a verification
+ * receipt and never proof that a fix works.
+ */
+export interface FixVerificationAttestation {
+  kind?: string
+  statement: string
+  method?: string
+  evidence_refs?: string[]
+}
+
+/** Append-only engine revision attribution for a finding. */
+export interface FindingRevision {
+  timestamp: string
+  fields: string[]
+  dropped_fields?: string[]
+  reason?: string
+  agent_id?: string
+  agent_name?: string
+  previous_severity?: string
+  previous_cvss?: number
+  previous_confidence?: string
+}
 
 export interface EngineVulnerability {
   id: string
@@ -25,11 +93,50 @@ export interface EngineVulnerability {
   assumptions?: string
   fix_effort?: "trivial" | "low" | "medium" | "high"
   finding_class?: string
-  dependency_metadata?: Record<string, string>
+  dependency_metadata?: Record<string, EngineMetadataValue>
   poc_description?: string
   poc_script_code?: string
   remediation_steps?: string
   control_ids?: number[]
+  // ── run.json 1.1 evidence fields ──────────────────────────────────────────
+  // All of these are engine-asserted evidence. The engine's own `verified`
+  // claim is deliberately NOT part of this interface: it is untrusted input
+  // and is dropped at the boundary. App verification only ever comes from
+  // FindingVerification receipts written by trusted paths.
+  counterevidence?: string
+  /** Engine-declared confidence (wire field `confidence`); evidence only. */
+  engine_confidence?: "high" | "medium" | "low"
+  confidence_rationale?: string
+  severity_change_conditions?: string
+  /** Engine attestation object — never a verification receipt. */
+  fix_verification?: FixVerificationAttestation
+  contextual_cvss_reasoning?: string
+  advisory_cvss?: AdvisoryCvss
+  /**
+   * Proxy exchange ids the finding cites. Only present when the ids survived
+   * both shape validation and (when an exchange export is available) the
+   * current-scan exchange index; they are evidence references, never a
+   * verification receipt.
+   */
+  http_exchange_ids?: string[]
+  /**
+   * True when the engine declared exchange references that were dropped during
+   * ingestion (unknown ids, or the exchange export was unavailable). The flag
+   * keeps the dropped-evidence warning durable beside the finding.
+   */
+  http_exchange_refs_dropped?: boolean
+  update_history?: FindingRevision[]
+  updated_at?: string
+  /** Engine-recorded per-finding ingestion warnings. */
+  evidence_warnings?: string[]
+  /** Upstream evidence-schema stamp ("1.1") — provenance only. */
+  evidence_contract_version?: string
+  /**
+   * The engine's declared verification_state verbatim (wire field
+   * `verification_state`). Engine-asserted evidence — it can never become the
+   * app's verification status.
+   */
+  engine_verification_state?: string
   code_locations?: Array<{
     file?: string
     start_line?: number
@@ -93,6 +200,86 @@ export interface EngineRunRecord {
   cleanup?: { sandbox_removed: boolean }
   scan_mode?: string
   terminal_reason?: string
+  /** run.json 1.1: monotonic revision of the run's report artifacts. */
+  report_artifacts_revision?: number
+  /** run.json 1.1: the engine's exchange-export outcome (evidence status). */
+  evidence_export?: {
+    status?: "exported" | "partial" | "skipped" | "failed"
+    reason?: string
+    exchanges?: number
+    missing_request_ids?: string[]
+  }
+}
+
+/** Agent-reported coverage outcome from coverage.json (upstream VALID_OUTCOMES). */
+export type ScopedCoverageOutcome =
+  "reported" | "no_issue_found" | "ruled_out" | "not_applicable" | "needs_follow_up"
+
+/**
+ * One model-declared scoped coverage entry. `subject` is the surface the
+ * agent says it looked at; `outcome` is its declared close reason; neither is
+ * a deterministic control outcome.
+ */
+export interface ScopedCoverageEntry {
+  id: string
+  subject: string
+  outcome: ScopedCoverageOutcome
+  reason?: string
+  evidenceRefs?: string[]
+  recordedBy?: string
+  recordedAt?: string
+  updatedAt?: string
+  previousOutcomes?: string[]
+}
+
+/** A coverage gap the engine's runtime or agents declared unexamined. */
+export interface EngineCoverageGap {
+  kind: string
+  subject?: string
+  detail: string
+}
+
+export interface ParsedEngineCoverage {
+  schemaVersion?: string
+  entries: ScopedCoverageEntry[]
+  gaps: EngineCoverageGap[]
+  completeness?: { complete: boolean; caveats: string[] }
+}
+
+export interface ParsedThreatModelEntry {
+  target: string
+  writtenAt?: string
+  writtenBy?: string
+  content: string
+  amendments?: Array<{ at?: string; by?: string; content: string }>
+}
+
+export interface ParsedThreatModels {
+  schemaVersion?: string
+  models: ParsedThreatModelEntry[]
+  /** Canonical bounded JSON persisted to encrypted artifact storage. */
+  document: string
+}
+
+export interface ParsedHttpExchangeExport {
+  schemaVersion?: string
+  exchangeCount: number
+  /** The exchange ids the scan's proxy export attests for this run. */
+  knownIds: Set<string>
+  /** Canonical bounded JSON persisted to encrypted artifact storage. */
+  document: string
+}
+
+/**
+ * Optional run.json 1.1 sibling artifacts, read bounded by the runner.
+ * `undefined` means the artifact is absent; `null` means it existed but
+ * failed the bounded read (oversized or unreadable) — an explicit ingestion
+ * issue rather than a silently missing artifact.
+ */
+export interface EngineArtifactInput {
+  coverageRaw?: string | null
+  threatModelsRaw?: string | null
+  httpExchangesRaw?: string | null
 }
 
 export interface ParsedScanOutput {
@@ -102,6 +289,17 @@ export interface ParsedScanOutput {
   findingCount: number
   /** False when the engine did not provide a valid findings artifact. */
   findingsComplete: boolean
+  /**
+   * Explicit evidence-ingestion issues — malformed or unverifiable evidence
+   * that was dropped rather than silently trusted. Bounded.
+   */
+  ingestionIssues: string[]
+  /** Model-declared scoped coverage (coverage.json), never control outcomes. */
+  scopedCoverage: ParsedEngineCoverage | null
+  /** Versioned scan-bound threat model document (threat_models.json). */
+  threatModels: ParsedThreatModels | null
+  /** The scan's bounded proxy-exchange export (http_exchanges.json). */
+  httpExchangeExport: ParsedHttpExchangeExport | null
 }
 
 const VALID_SEVERITIES = new Set([
@@ -118,16 +316,36 @@ const MAX_TEXT_FIELD_LENGTH = 64 * 1024
 const MAX_CODE_LOCATIONS = 100
 const MAX_RUN_TARGETS = 100
 const MAX_CONTROL_IDS = 10
-const MAX_METADATA_ENTRIES = 32
 const MAX_LLM_USAGE_NODES = 500
 const MAX_DB_INTEGER = 2_147_483_647
 const MAX_DB_DECIMAL_12_6 = 1_000_000
 const MAX_LLM_USAGE_REQUESTS = 10_000
 const GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000
 const CONTROL_ID_TOKEN_PATTERN = /^-?\d+$/
+const HTTP_EXCHANGE_ID_PATTERN = /^[0-9]{1,128}$/
 
 function boundedString(value: unknown): string | undefined {
   return typeof value === "string" && value.length <= MAX_TEXT_FIELD_LENGTH ? value : undefined
+}
+
+/**
+ * Bounded sink for explicit evidence-ingestion issues. Issues are capped so a
+ * hostile artifact cannot flood scan storage; once full, only a truncation
+ * marker is appended.
+ */
+function recordIngestionIssue(issues: string[] | undefined, message: string): void {
+  if (!issues) return
+  if (issues.length >= MAX_INGESTION_ISSUES) {
+    if (issues.length === MAX_INGESTION_ISSUES) {
+      issues.push(`further ingestion issues truncated after ${MAX_INGESTION_ISSUES} entries`)
+    }
+    return
+  }
+  issues.push(
+    message.length > MAX_INGESTION_ISSUE_CHARS
+      ? `${message.slice(0, MAX_INGESTION_ISSUE_CHARS)}…`
+      : message
+  )
 }
 
 function boundedStringRecord(value: unknown): Record<string, string> | undefined {
@@ -140,6 +358,73 @@ function boundedStringRecord(value: unknown): Record<string, string> | undefined
       return undefined
     }
     normalized[key] = candidate
+  }
+  return normalized
+}
+
+/** One bounded metadata value: short string, finite number, boolean, or flat string map. */
+function boundedMetadataValue(candidate: unknown): EngineMetadataValue | undefined {
+  if (typeof candidate === "string") {
+    return candidate.length <= MAX_METADATA_VALUE_CHARS ? candidate : undefined
+  }
+  if (typeof candidate === "number") {
+    return Number.isFinite(candidate) && Math.abs(candidate) <= MAX_DB_INTEGER
+      ? candidate
+      : undefined
+  }
+  if (typeof candidate === "boolean") return candidate
+  if (typeof candidate === "object" && candidate !== null && !Array.isArray(candidate)) {
+    const nested = Object.entries(candidate)
+    if (nested.length === 0 || nested.length > MAX_METADATA_NESTED_ENTRIES) return undefined
+    const flat: Record<string, string> = {}
+    for (const [nestedKey, nestedValue] of nested) {
+      if (
+        nestedKey.length > 64 ||
+        typeof nestedValue !== "string" ||
+        nestedValue.length > MAX_METADATA_NESTED_VALUE_CHARS
+      ) {
+        return undefined
+      }
+      flat[nestedKey] = nestedValue
+    }
+    return flat
+  }
+  return undefined
+}
+
+function boundedMetadataRecord(
+  value: unknown,
+  findingId: string,
+  issues?: string[]
+): Record<string, EngineMetadataValue> | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: dependency_metadata is not an object — field dropped`
+    )
+    return undefined
+  }
+  const entries = Object.entries(value)
+  if (entries.length === 0) return undefined
+  if (entries.length > MAX_METADATA_ENTRIES) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: dependency_metadata exceeds ${MAX_METADATA_ENTRIES} entries — field dropped`
+    )
+    return undefined
+  }
+  const normalized: Record<string, EngineMetadataValue> = {}
+  for (const [key, candidate] of entries) {
+    const normalizedValue = key.length <= 128 ? boundedMetadataValue(candidate) : undefined
+    if (normalizedValue === undefined) {
+      recordIngestionIssue(
+        issues,
+        `finding ${findingId}: dependency_metadata.${key.slice(0, 64)} is not a bounded metadata value — field dropped`
+      )
+      return undefined
+    }
+    normalized[key] = normalizedValue
   }
   return normalized
 }
@@ -239,6 +524,246 @@ function validateControlIds(value: unknown): number[] | undefined {
     ...new Set(normalizedIds.filter((candidate) => candidate >= 1 && candidate <= 50)),
   ]
   return controlIds.length > 0 ? controlIds : undefined
+}
+
+/**
+ * Per-artifact evidence context for the ingestion path.
+ *
+ * `httpExchangeIds` carries the run's exported exchange-id index:
+ * - `undefined` — the caller supplies no export context (standalone parsing);
+ *   declared refs are carried as engine-asserted evidence, never trusted.
+ * - `null` — an ingestion context exists but the export is absent or
+ *   unreadable; declared refs are omitted and a warning is recorded.
+ * - `Set<string>` — the current scan's exchange ids; refs not in the set are
+ *   unknown and fail validation.
+ */
+interface EvidenceIngestionContext {
+  issues?: string[]
+  httpExchangeIds?: Set<string> | null
+}
+
+function evidenceString(
+  value: unknown,
+  field: string,
+  findingId: string,
+  issues?: string[]
+): string | undefined {
+  if (value === undefined) return undefined
+  // The 1.1 evidence fields carry the writer's own 10K bound, not the looser
+  // legacy 64K text bound.
+  const result =
+    typeof value === "string" && value.length <= MAX_EVIDENCE_FIELD_CHARS ? value : undefined
+  if (result === undefined) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: ${field} is malformed or oversized — field dropped`
+    )
+  }
+  return result
+}
+
+function parseEngineConfidence(
+  value: unknown,
+  findingId: string,
+  issues?: string[]
+): EngineVulnerability["engine_confidence"] {
+  if (value === undefined) return undefined
+  const candidate = typeof value === "string" ? value.trim().toLowerCase() : undefined
+  if (candidate === "high" || candidate === "medium" || candidate === "low") {
+    return candidate
+  }
+  recordIngestionIssue(
+    issues,
+    `finding ${findingId}: confidence claim is not a recognized level — field dropped`
+  )
+  return undefined
+}
+
+function parseAdvisoryCvss(
+  value: unknown,
+  findingId: string,
+  issues?: string[]
+): AdvisoryCvss | undefined {
+  if (value === undefined) return undefined
+  // A bare advisory number normalizes to the structured form so nothing
+  // downstream sees an unlabelled number; every other non-object shape drops.
+  let candidate: unknown = value
+  if (typeof value === "number") {
+    candidate = value >= 0 && value <= 10 ? { score: value } : undefined
+  } else if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    candidate = undefined
+  }
+  if (candidate === undefined) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: advisory_cvss is not a bounded score or structured object — field dropped`
+    )
+    return undefined
+  }
+  const parsed = advisoryCvssSchema.safeParse(candidate)
+  if (!parsed.success) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: advisory_cvss failed validation — field dropped`
+    )
+    return undefined
+  }
+  return parsed.data
+}
+
+/**
+ * fix_verification accepts a bare statement string or the attestation object
+ * and always normalizes to `{kind: "engine_attestation", ...}` — matching the
+ * upstream writer so the marker survives the worker boundary intact.
+ */
+function parseFixVerification(
+  value: unknown,
+  findingId: string,
+  issues?: string[]
+): FixVerificationAttestation | undefined {
+  if (value === undefined) return undefined
+  const candidate = typeof value === "string" ? { statement: value } : value
+  const parsed = fixVerificationSchema.safeParse(candidate)
+  if (!parsed.success) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: fix_verification is malformed — field dropped`
+    )
+    return undefined
+  }
+  return { ...parsed.data, kind: parsed.data.kind ?? "engine_attestation" }
+}
+
+function parseHttpExchangeIds(
+  value: unknown,
+  findingId: string,
+  ctx?: EvidenceIngestionContext
+): { ids?: string[]; refsDropped?: boolean } {
+  if (value === undefined) return {}
+  if (!Array.isArray(value)) {
+    recordIngestionIssue(
+      ctx?.issues,
+      `finding ${findingId}: http_exchange_ids is not a list — field dropped`
+    )
+    return { refsDropped: true }
+  }
+  const distinct: string[] = []
+  let malformed = false
+  for (const item of value) {
+    if (typeof item !== "string" || !HTTP_EXCHANGE_ID_PATTERN.test(item)) {
+      malformed = true
+      continue
+    }
+    if (!distinct.includes(item)) distinct.push(item)
+  }
+  if (malformed) {
+    recordIngestionIssue(
+      ctx?.issues,
+      `finding ${findingId}: http_exchange_ids contained non-numeric or oversized ids — entries dropped`
+    )
+  }
+  if (distinct.length === 0) return { refsDropped: value.length > 0 }
+  if (distinct.length > MAX_HTTP_EXCHANGE_IDS) {
+    recordIngestionIssue(
+      ctx?.issues,
+      `finding ${findingId}: http_exchange_ids exceeds ${MAX_HTTP_EXCHANGE_IDS} distinct ids — field dropped`
+    )
+    return { refsDropped: true }
+  }
+  // No exchange-export context: carry the refs as engine-asserted evidence.
+  // They are claims, not verification receipts.
+  if (ctx?.httpExchangeIds === undefined) return { ids: distinct }
+  if (ctx.httpExchangeIds === null) {
+    recordIngestionIssue(
+      ctx.issues,
+      `finding ${findingId}: proxy exchange export unavailable — http_exchange_ids omitted (unverifiable)`
+    )
+    return { refsDropped: true }
+  }
+  const knownIds: Set<string> = ctx.httpExchangeIds
+  const unknown = distinct.filter((id) => !knownIds.has(id))
+  if (unknown.length > 0) {
+    recordIngestionIssue(
+      ctx.issues,
+      `finding ${findingId}: http_exchange_ids reference unknown exchange id(s) ${unknown
+        .map((id) => id.slice(0, 32))
+        .join(", ")} — field dropped`
+    )
+    return { refsDropped: true }
+  }
+  return { ids: distinct }
+}
+
+function parseEvidenceWarnings(
+  value: unknown,
+  findingId: string,
+  issues?: string[]
+): string[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: evidence_warnings is not a list — field dropped`
+    )
+    return undefined
+  }
+  const warnings: string[] = []
+  let dropped = 0
+  for (const item of value.slice(0, 10)) {
+    if (typeof item === "string" && item.length <= MAX_EVIDENCE_FIELD_CHARS) {
+      warnings.push(item)
+    } else {
+      dropped += 1
+    }
+  }
+  if (dropped > 0) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: ${dropped} malformed evidence_warnings entr${dropped === 1 ? "y" : "ies"} dropped`
+    )
+  }
+  if (value.length > 10) {
+    recordIngestionIssue(issues, `finding ${findingId}: evidence_warnings truncated at 10 entries`)
+  }
+  return warnings.length > 0 ? warnings : undefined
+}
+
+function parseUpdateHistory(
+  value: unknown,
+  findingId: string,
+  issues?: string[]
+): FindingRevision[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: update_history is not a list — field dropped`
+    )
+    return undefined
+  }
+  const entries: FindingRevision[] = []
+  let dropped = 0
+  for (const item of value.slice(0, MAX_FINDING_REVISIONS)) {
+    const parsed = findingRevisionSchema.safeParse(item)
+    if (parsed.success) {
+      entries.push(parsed.data)
+    } else {
+      dropped += 1
+    }
+  }
+  if (dropped > 0) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: ${dropped} malformed update_history entr${dropped === 1 ? "y" : "ies"} dropped`
+    )
+  }
+  if (value.length > MAX_FINDING_REVISIONS) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: update_history truncated at ${MAX_FINDING_REVISIONS} revisions`
+    )
+  }
+  return entries.length > 0 ? entries : undefined
 }
 
 function usageInteger(value: unknown): number | undefined {
@@ -596,7 +1121,10 @@ function normalizeModelUsageBuckets(value: unknown): Array<Record<string, unknow
   return normalized
 }
 
-function validateVulnerability(v: Record<string, unknown>): EngineVulnerability | null {
+function validateVulnerability(
+  v: Record<string, unknown>,
+  ctx?: EvidenceIngestionContext
+): EngineVulnerability | null {
   const id = boundedString(v.id)
   if (!id?.trim()) return null
   const title = boundedString(v.title)
@@ -629,9 +1157,51 @@ function validateVulnerability(v: Record<string, unknown>): EngineVulnerability 
       ? fixEffort
       : undefined
   const cvssBreakdown = boundedStringRecord(v.cvss_breakdown)
-  const dependencyMetadata = boundedStringRecord(v.dependency_metadata)
+  const dependencyMetadata = boundedMetadataRecord(v.dependency_metadata, id, ctx?.issues)
   const controlIds = validateControlIds(v.control_ids)
   const codeLocations = validateCodeLocations(v.code_locations)
+
+  // ── run.json 1.1 evidence fields ──────────────────────────────────────────
+  // Additive, bounded, and failure-explicit: malformed values are dropped and
+  // recorded as ingestion issues rather than silently trusted. An engine
+  // `verified` claim is never read — it is untrusted input that cannot become
+  // an app verification receipt.
+  const counterevidence = evidenceString(v.counterevidence, "counterevidence", id, ctx?.issues)
+  const engineConfidence = parseEngineConfidence(v.confidence, id, ctx?.issues)
+  const confidenceRationale = evidenceString(
+    v.confidence_rationale,
+    "confidence_rationale",
+    id,
+    ctx?.issues
+  )
+  const severityChangeConditions = evidenceString(
+    v.severity_change_conditions,
+    "severity_change_conditions",
+    id,
+    ctx?.issues
+  )
+  const fixVerification = parseFixVerification(v.fix_verification, id, ctx?.issues)
+  const contextualCvssReasoning = evidenceString(
+    v.contextual_cvss_reasoning,
+    "contextual_cvss_reasoning",
+    id,
+    ctx?.issues
+  )
+  const advisoryCvss = parseAdvisoryCvss(v.advisory_cvss, id, ctx?.issues)
+  const httpExchangeRefs = parseHttpExchangeIds(v.http_exchange_ids, id, ctx)
+  const updateHistory = parseUpdateHistory(v.update_history, id, ctx?.issues)
+  const updatedAt = evidenceString(v.updated_at, "updated_at", id, ctx?.issues)
+  const evidenceWarnings = parseEvidenceWarnings(v.evidence_warnings, id, ctx?.issues)
+  const evidenceContractVersion =
+    typeof v.evidence_contract_version === "string" && v.evidence_contract_version.length <= 64
+      ? v.evidence_contract_version
+      : undefined
+  // The engine's declared verification_state is carried verbatim as
+  // engine-asserted evidence. It is NEVER read as a verification receipt.
+  const engineVerificationState =
+    typeof v.verification_state === "string" && v.verification_state.length <= 64
+      ? v.verification_state
+      : undefined
 
   // Detect prompt-injection artifacts that the model may have echoed or acted on.
   const textFields = [
@@ -644,6 +1214,22 @@ function validateVulnerability(v: Record<string, unknown>): EngineVulnerability 
     boundedString(v.poc_description),
     boundedString(v.poc_script_code),
     boundedString(v.remediation_steps),
+    counterevidence,
+    confidenceRationale,
+    severityChangeConditions,
+    fixVerification?.statement,
+    fixVerification?.method,
+    contextualCvssReasoning,
+    advisoryCvss?.metric_reasoning,
+    advisoryCvss?.vector,
+    advisoryCvss?.source,
+    engineVerificationState,
+    ...(evidenceWarnings ?? []),
+    ...(updateHistory ?? []).flatMap((revision) => [
+      revision.reason,
+      revision.previous_severity,
+      revision.agent_name,
+    ]),
   ]
     .filter((field): field is string => typeof field === "string")
     .join("\n")
@@ -690,10 +1276,35 @@ function validateVulnerability(v: Record<string, unknown>): EngineVulnerability 
       : {}),
     ...(controlIds ? { control_ids: controlIds } : {}),
     ...(codeLocations ? { code_locations: codeLocations } : {}),
+    ...(counterevidence !== undefined ? { counterevidence } : {}),
+    ...(engineConfidence !== undefined ? { engine_confidence: engineConfidence } : {}),
+    ...(confidenceRationale !== undefined ? { confidence_rationale: confidenceRationale } : {}),
+    ...(severityChangeConditions !== undefined
+      ? { severity_change_conditions: severityChangeConditions }
+      : {}),
+    ...(fixVerification !== undefined ? { fix_verification: fixVerification } : {}),
+    ...(contextualCvssReasoning !== undefined
+      ? { contextual_cvss_reasoning: contextualCvssReasoning }
+      : {}),
+    ...(advisoryCvss !== undefined ? { advisory_cvss: advisoryCvss } : {}),
+    ...(httpExchangeRefs.ids ? { http_exchange_ids: httpExchangeRefs.ids } : {}),
+    ...(httpExchangeRefs.refsDropped ? { http_exchange_refs_dropped: true } : {}),
+    ...(updateHistory !== undefined ? { update_history: updateHistory } : {}),
+    ...(updatedAt !== undefined ? { updated_at: updatedAt } : {}),
+    ...(evidenceWarnings !== undefined ? { evidence_warnings: evidenceWarnings } : {}),
+    ...(evidenceContractVersion !== undefined
+      ? { evidence_contract_version: evidenceContractVersion }
+      : {}),
+    ...(engineVerificationState !== undefined
+      ? { engine_verification_state: engineVerificationState }
+      : {}),
   }
 }
 
-function parseVulnerabilitiesArtifact(raw: string): {
+function parseVulnerabilitiesArtifact(
+  raw: string,
+  ctx?: EvidenceIngestionContext
+): {
   vulnerabilities: EngineVulnerability[]
   complete: boolean
 } {
@@ -711,7 +1322,7 @@ function parseVulnerabilitiesArtifact(raw: string): {
     const validated: EngineVulnerability[] = []
     for (const item of data) {
       if (typeof item !== "object" || item === null) continue
-      const vuln = validateVulnerability(item as Record<string, unknown>)
+      const vuln = validateVulnerability(item as Record<string, unknown>, ctx)
       if (!vuln) continue
       // Strict schema contract: reject anything that survived coercion but
       // still violates the expected shape or value bounds.
@@ -721,6 +1332,10 @@ function parseVulnerabilitiesArtifact(raw: string): {
           id: vuln.id,
           errors: parsed.error.issues.map((issue) => issue.message),
         })
+        recordIngestionIssue(
+          ctx?.issues,
+          `finding ${vuln.id.slice(0, 128)}: rejected by strict schema validation`
+        )
         continue
       }
       validated.push(vuln)
@@ -817,6 +1432,13 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
       ...(boundedString(record.terminal_reason)
         ? { terminal_reason: boundedString(record.terminal_reason) }
         : {}),
+      ...(Number.isInteger(record.report_artifacts_revision) &&
+      (record.report_artifacts_revision as number) >= 0
+        ? { report_artifacts_revision: record.report_artifacts_revision as number }
+        : {}),
+      ...(parseEvidenceExportOutcome(record.evidence_export)
+        ? { evidence_export: parseEvidenceExportOutcome(record.evidence_export) }
+        : {}),
     }
 
     const parsed = engineRunRecordSchema.safeParse(runRecord)
@@ -828,14 +1450,16 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
       return null
     }
 
-    // Tripwire, not a gate: surface cross-repo contract drift that the
-    // .strip()ed schema would otherwise swallow.
+    // Tripwire for cross-repo contract drift. An error-level check means an
+    // unsupported MAJOR: the record is rejected rather than ingested under a
+    // contract the worker does not understand.
     const versionCheck = checkRunRecordSchemaVersion(parsed.data.schema_version)
     if (versionCheck) {
       logger[versionCheck.level === "error" ? "error" : "warn"](
         "Engine output: run.json schema version check",
         { runId, schemaVersion: parsed.data.schema_version ?? null, ...versionCheck }
       )
+      if (versionCheck.level === "error") return null
     }
 
     return runRecord
@@ -847,13 +1471,365 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
   }
 }
 
+/** Bounded parse of the run-level evidence_export outcome stamp (1.1). */
+function parseEvidenceExportOutcome(
+  value: unknown
+): NonNullable<EngineRunRecord["evidence_export"]> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
+  const record = value as {
+    status?: unknown
+    reason?: unknown
+    exchanges?: unknown
+    missing_request_ids?: unknown
+  }
+  const status = ["exported", "partial", "skipped", "failed"].includes(String(record.status))
+    ? (String(record.status) as "exported" | "partial" | "skipped" | "failed")
+    : undefined
+  const reason = boundedString(record.reason)
+  const exchanges =
+    Number.isInteger(record.exchanges) && (record.exchanges as number) >= 0
+      ? (record.exchanges as number)
+      : undefined
+  const missing = Array.isArray(record.missing_request_ids)
+    ? record.missing_request_ids
+        .filter((id): id is string => typeof id === "string" && HTTP_EXCHANGE_ID_PATTERN.test(id))
+        .slice(0, 500)
+    : undefined
+  if (status === undefined && reason === undefined && exchanges === undefined && !missing?.length) {
+    return undefined
+  }
+  return {
+    ...(status ? { status } : {}),
+    ...(reason ? { reason } : {}),
+    ...(exchanges !== undefined ? { exchanges } : {}),
+    ...(missing?.length ? { missing_request_ids: missing } : {}),
+  }
+}
+
+function parseJsonArtifact(raw: string, artifact: string, issues?: string[]): unknown | undefined {
+  try {
+    return JSON.parse(raw) as unknown
+  } catch {
+    recordIngestionIssue(issues, `${artifact}: invalid JSON — artifact ignored`)
+    return undefined
+  }
+}
+
+/**
+ * coverage.json — the engine's scoped coverage ledger. Entries and gaps are
+ * model/runtime declarations; they map into namespaced coverage receipts and
+ * never alter deterministic control outcomes.
+ */
+function parseEngineCoverage(
+  raw: string | null | undefined,
+  issues?: string[]
+): ParsedEngineCoverage | null {
+  if (raw === undefined) return null
+  if (raw === null) {
+    recordIngestionIssue(issues, "coverage.json unreadable or oversized — artifact ignored")
+    return null
+  }
+  if (!raw.trim()) return null
+  const data = parseJsonArtifact(raw, "coverage.json", issues)
+  if (data === undefined) return null
+  const parsed = engineCoverageDocumentSchema.safeParse(data)
+  if (!parsed.success) {
+    recordIngestionIssue(issues, "coverage.json failed schema validation — artifact ignored")
+    logger.warn("Engine output: coverage.json failed schema validation", {
+      errors: parsed.error.issues.map((issue) => issue.message).slice(0, 20),
+    })
+    return null
+  }
+  const doc = parsed.data
+  if (doc.truncated?.entries_dropped) {
+    recordIngestionIssue(
+      issues,
+      `coverage.json: engine dropped ${doc.truncated.entries_dropped} entr${doc.truncated.entries_dropped === 1 ? "y" : "ies"} at its ${doc.truncated.entry_limit ?? "declared"} limit`
+    )
+  }
+  const rawEntries = doc.entries ?? []
+  if (rawEntries.length > MAX_SCOPED_COVERAGE_ENTRIES) {
+    recordIngestionIssue(
+      issues,
+      `coverage.json: entries truncated at ${MAX_SCOPED_COVERAGE_ENTRIES}`
+    )
+  }
+  const entries: ScopedCoverageEntry[] = []
+  const seenIds = new Set<string>()
+  let dropped = 0
+  for (const [index, rawEntry] of rawEntries.slice(0, MAX_SCOPED_COVERAGE_ENTRIES).entries()) {
+    const parsedEntry = scopedCoverageEntrySchema.safeParse(rawEntry)
+    if (!parsedEntry.success) {
+      dropped += 1
+      continue
+    }
+    const entry = parsedEntry.data
+    // The overlay contract uses `id`/`subject`/`investigation_status`/`reason`;
+    // the substrate renders `entry_id`/`surface`/`outcome`/`evidence`. Accept
+    // either spelling so substrate-only documents still map.
+    const declaredId = (entry.id ?? entry.entry_id ?? "").trim()
+    const id = declaredId || `entry-${index + 1}`
+    if (seenIds.has(id)) {
+      recordIngestionIssue(
+        issues,
+        `coverage.json: duplicate entry id ${id.slice(0, 64)} — entry dropped`
+      )
+      dropped += 1
+      continue
+    }
+    seenIds.add(id)
+    const surface = (entry.subject ?? entry.surface ?? "").trim()
+    if (!surface) {
+      dropped += 1
+      continue
+    }
+    const outcome = entry.investigation_status ?? entry.outcome
+    const reason = (entry.reason ?? entry.evidence ?? "").trim()
+    entries.push({
+      id,
+      subject: entry.risk_area ? `${surface} — ${entry.risk_area}`.slice(0, 4096) : surface,
+      outcome,
+      ...(reason ? { reason: reason.slice(0, 4096) } : {}),
+      ...(entry.evidence_refs?.length ? { evidenceRefs: entry.evidence_refs } : {}),
+      ...(entry.recorded_by ? { recordedBy: entry.recorded_by } : {}),
+      ...(entry.recorded_at ? { recordedAt: entry.recorded_at } : {}),
+      ...(entry.updated_at ? { updatedAt: entry.updated_at } : {}),
+      ...(entry.previous_outcomes?.length ? { previousOutcomes: entry.previous_outcomes } : {}),
+    })
+  }
+  if (dropped > 0) {
+    recordIngestionIssue(
+      issues,
+      `coverage.json: ${dropped} entr${dropped === 1 ? "y" : "ies"} dropped — malformed or missing surface`
+    )
+  }
+  const rawGaps = doc.gaps ?? []
+  if (rawGaps.length > MAX_COVERAGE_GAPS) {
+    recordIngestionIssue(issues, `coverage.json: gaps truncated at ${MAX_COVERAGE_GAPS}`)
+  }
+  const gaps: EngineCoverageGap[] = []
+  let droppedGaps = 0
+  for (const rawGap of rawGaps.slice(0, MAX_COVERAGE_GAPS)) {
+    const parsedGap = coverageGapSchema.safeParse(rawGap)
+    if (!parsedGap.success) {
+      droppedGaps += 1
+      continue
+    }
+    const gap = parsedGap.data
+    gaps.push({
+      kind: gap.kind,
+      ...(gap.surface ? { subject: gap.surface.slice(0, 4096) } : {}),
+      ...(!gap.surface && gap.risk_area ? { subject: gap.risk_area.slice(0, 256) } : {}),
+      ...(!gap.surface && !gap.risk_area && gap.agent_name
+        ? { subject: gap.agent_name.slice(0, 256) }
+        : {}),
+      detail: gap.detail.slice(0, 4096),
+    })
+  }
+  if (droppedGaps > 0) {
+    recordIngestionIssue(issues, `coverage.json: ${droppedGaps} malformed gap(s) dropped`)
+  }
+  return {
+    ...(doc.schema_version !== undefined ? { schemaVersion: String(doc.schema_version) } : {}),
+    entries,
+    gaps,
+    ...(doc.completeness
+      ? {
+          completeness: {
+            complete: doc.completeness.complete,
+            caveats: doc.completeness.caveats ?? [],
+          },
+        }
+      : {}),
+  }
+}
+
+/**
+ * threat_models.json — the scan's threat model document, keyed by normalized
+ * target identity. The artifact is stored verbatim-but-validated in encrypted
+ * storage; it is a declared model, never proof its attack paths were tested.
+ */
+function parseThreatModels(
+  raw: string | null | undefined,
+  issues?: string[]
+): ParsedThreatModels | null {
+  if (raw === undefined) return null
+  if (raw === null) {
+    recordIngestionIssue(issues, "threat_models.json unreadable or oversized — artifact ignored")
+    return null
+  }
+  if (!raw.trim()) return null
+  const data = parseJsonArtifact(raw, "threat_models.json", issues)
+  if (data === undefined) return null
+  const parsed = threatModelsDocumentSchema.safeParse(data)
+  if (!parsed.success) {
+    recordIngestionIssue(issues, "threat_models.json failed schema validation — artifact ignored")
+    logger.warn("Engine output: threat_models.json failed schema validation", {
+      errors: parsed.error.issues.map((issue) => issue.message).slice(0, 20),
+    })
+    return null
+  }
+  const doc = parsed.data
+  // The upstream store is a bare target→entry record; a wrapped document adds
+  // schema_version under a `models` key. A bare record CAN legitimately hold a
+  // model under the literal key "models" — distinguish by content: an entry
+  // has a `content` field, a wrapped record does not.
+  type ThreatModelEntry = z.infer<typeof threatModelEntrySchema>
+  const maybeModels = (doc as { models?: unknown }).models
+  const isWrapped =
+    typeof maybeModels === "object" &&
+    maybeModels !== null &&
+    !Array.isArray(maybeModels) &&
+    !("content" in maybeModels)
+  const schemaVersion =
+    isWrapped && (doc as { schema_version?: unknown }).schema_version !== undefined
+      ? String((doc as { schema_version?: unknown }).schema_version)
+      : undefined
+  const rawModels = (isWrapped ? maybeModels : doc) as Record<string, ThreatModelEntry>
+  const models: ParsedThreatModelEntry[] = []
+  for (const [key, model] of Object.entries(rawModels)) {
+    if (models.length >= MAX_THREAT_MODELS) {
+      recordIngestionIssue(issues, `threat_models.json: models truncated at ${MAX_THREAT_MODELS}`)
+      break
+    }
+    if (
+      typeof model !== "object" ||
+      model === null ||
+      Array.isArray(model) ||
+      typeof (model as { target?: unknown }).target !== "string" ||
+      typeof (model as { content?: unknown }).content !== "string"
+    ) {
+      recordIngestionIssue(
+        issues,
+        `threat_models.json: model ${key.slice(0, 64)} malformed — dropped`
+      )
+      continue
+    }
+    models.push({
+      target: model.target,
+      ...(model.written_at ? { writtenAt: model.written_at } : {}),
+      ...(model.written_by ? { writtenBy: model.written_by } : {}),
+      content: model.content,
+      ...(model.amendments?.length
+        ? {
+            amendments: model.amendments.map((amendment) => ({
+              ...(amendment.at ? { at: amendment.at } : {}),
+              ...(amendment.by ? { by: amendment.by } : {}),
+              content: amendment.content,
+            })),
+          }
+        : {}),
+    })
+  }
+  if (models.length === 0) return null
+  // Persist the validated canonical document — not raw bytes — so nothing
+  // outside the declared contract reaches encrypted storage.
+  const document = JSON.stringify({
+    schema_version: schemaVersion ?? "1.0",
+    models: Object.fromEntries(
+      models.map((model) => [
+        model.target,
+        {
+          target: model.target,
+          ...(model.writtenAt ? { written_at: model.writtenAt } : {}),
+          ...(model.writtenBy ? { written_by: model.writtenBy } : {}),
+          content: model.content,
+          ...(model.amendments?.length
+            ? {
+                amendments: model.amendments.map((amendment) => ({
+                  ...(amendment.at ? { at: amendment.at } : {}),
+                  ...(amendment.by ? { by: amendment.by } : {}),
+                  content: amendment.content,
+                })),
+              }
+            : {}),
+        },
+      ])
+    ),
+  })
+  return {
+    ...(schemaVersion ? { schemaVersion } : {}),
+    models,
+    document,
+  }
+}
+
+/**
+ * http_exchanges.json — the bounded redacted exchange index exported before
+ * sandbox teardown. The id set is the "current proxy project" a finding's
+ * http_exchange_ids must validate against; raw exchange bodies never enter
+ * this artifact.
+ */
+function parseHttpExchangeExport(
+  raw: string | null | undefined,
+  issues?: string[]
+): ParsedHttpExchangeExport | null {
+  if (raw === undefined) return null
+  if (raw === null) {
+    recordIngestionIssue(
+      issues,
+      "http_exchanges.json unreadable or oversized — exchange refs unverifiable"
+    )
+    return null
+  }
+  if (!raw.trim()) {
+    recordIngestionIssue(issues, "http_exchanges.json is empty — exchange refs unverifiable")
+    return null
+  }
+  const data = parseJsonArtifact(raw, "http_exchanges.json", issues)
+  if (data === undefined) return null
+  const parsed = httpExchangeExportSchema.safeParse(data)
+  if (!parsed.success) {
+    recordIngestionIssue(
+      issues,
+      "http_exchanges.json failed schema validation — exchange refs unverifiable"
+    )
+    logger.warn("Engine output: http_exchanges.json failed schema validation", {
+      errors: parsed.error.issues.map((issue) => issue.message).slice(0, 20),
+    })
+    return null
+  }
+  const doc = parsed.data
+  const knownIds = new Set(doc.exchanges.map((exchange) => exchange.proxy_request_id))
+  // Persist the validated canonical document — not raw bytes — so nothing
+  // outside the declared contract reaches encrypted storage.
+  const document = JSON.stringify({
+    ...(doc.schema_version !== undefined ? { schema_version: doc.schema_version } : {}),
+    ...(doc.generated_at ? { generated_at: doc.generated_at } : {}),
+    ...(doc.binding ? { binding: doc.binding } : {}),
+    exchanges: doc.exchanges,
+    ...(doc.missing_request_ids?.length ? { missing_request_ids: doc.missing_request_ids } : {}),
+    ...(doc.truncated ? { truncated: doc.truncated } : {}),
+  })
+  return {
+    ...(doc.schema_version !== undefined ? { schemaVersion: String(doc.schema_version) } : {}),
+    exchangeCount: doc.exchanges.length,
+    knownIds,
+    document,
+  }
+}
+
 export function parseEngineOutput(
   vulnerabilitiesRaw: string,
-  runJsonRaw: string
+  runJsonRaw: string,
+  artifacts?: EngineArtifactInput
 ): ParsedScanOutput {
-  const parsedVulnerabilities = parseVulnerabilitiesArtifact(vulnerabilitiesRaw)
+  const ingestionIssues: string[] = []
+  const httpExchangeExport = parseHttpExchangeExport(artifacts?.httpExchangesRaw, ingestionIssues)
+  // `undefined` means this caller supplied no exchange context at all (e.g.
+  // unit tests of the standalone parser): declared refs are carried but never
+  // trusted. `null` means the export is absent or unreadable — declared refs
+  // are omitted and a warning is recorded.
+  const knownExchangeIds =
+    artifacts === undefined ? undefined : (httpExchangeExport?.knownIds ?? null)
+  const parsedVulnerabilities = parseVulnerabilitiesArtifact(vulnerabilitiesRaw, {
+    issues: ingestionIssues,
+    httpExchangeIds: knownExchangeIds,
+  })
   const vulnerabilities = parsedVulnerabilities.vulnerabilities
   const runRecord = parseRunJson(runJsonRaw)
+  const scopedCoverage = parseEngineCoverage(artifacts?.coverageRaw, ingestionIssues)
+  const threatModels = parseThreatModels(artifacts?.threatModelsRaw, ingestionIssues)
 
   const summary = runRecord?.status
     ? `Engine status: ${runRecord.status}. ${vulnerabilities.length} finding(s) reported.`
@@ -865,6 +1841,10 @@ export function parseEngineOutput(
     summary,
     findingCount: vulnerabilities.length,
     findingsComplete: parsedVulnerabilities.complete,
+    ingestionIssues,
+    scopedCoverage,
+    threatModels,
+    httpExchangeExport,
   }
 }
 
@@ -887,11 +1867,17 @@ export function mapSeverity(
 export function generateDedupeKey(vuln: EngineVulnerability, targetId: string): string {
   const location = vuln.code_locations?.[0]
   const dependency = vuln.dependency_metadata
+  // dependency_metadata values are typed unions in the 1.1 contract; package
+  // identity fields are only meaningful when they are strings.
+  const packageName =
+    typeof dependency?.package_name === "string" ? dependency.package_name : undefined
+  const packageEcosystem =
+    typeof dependency?.package_ecosystem === "string" ? dependency.package_ecosystem : undefined
   // OSV advisories are not always assigned a CVE. The OSV id is still stable,
   // so use it together with the resolved package identity for every dependency
   // scanner rather than letting SCA and AI-03 duplicate the same advisory.
   const isDependencyFinding = Boolean(
-    dependency?.package_name &&
+    packageName &&
     (vuln.finding_class === "dependency_cve" || vuln.finding_class === "dependency_advisory")
   )
   return computeDedupeKey(
@@ -900,8 +1886,8 @@ export function generateDedupeKey(vuln: EngineVulnerability, targetId: string): 
           cve: vuln.cve,
           id: vuln.id,
           dependency: {
-            packageEcosystem: dependency?.package_ecosystem,
-            packageName: dependency?.package_name,
+            packageEcosystem,
+            packageName,
           },
         }
       : {

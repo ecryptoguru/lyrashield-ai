@@ -1,5 +1,6 @@
 import {
   addScanEvent,
+  assertEvidenceEncrypted,
   completeScanWithScore,
   prisma,
   updateScanStatus,
@@ -11,6 +12,7 @@ import type { resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import type { finalizationGrace } from "../../engine/scan-deadline"
 import type { checkoutDeterministicRetest } from "../../engine/deterministic-retest"
 import { persistFindings } from "../../engine/finding-persister"
+import { uploadScanArtifact } from "../../engine/evidence-storage"
 import type { EngineRunResult } from "../../engine/runner"
 import type { runScannerOrchestrator } from "../../engine/scanner-orchestrator"
 import type { ScannerCoverageIssue } from "../../engine/scanner-coverage"
@@ -83,6 +85,81 @@ export async function finalizeScanLifecycle(params: {
   } = params
 
   return withScanFinalizationClaim(scanId, workspaceId, async () => {
+    // run.json 1.1 evidence artifacts. Both uploads run BEFORE findings
+    // persist so a finding's claim context can checksum-bind the exact
+    // exchange export its http_exchange_ids validated against. An upload
+    // failure leaves explicit incomplete evidence (a recorded warning),
+    // never a fabricated successful binding.
+    const ingestionWarnings = [...engineResult.output.ingestionIssues]
+    const recordIngestionWarning = (message: string) => {
+      if (ingestionWarnings.length < 100) ingestionWarnings.push(message.slice(0, 500))
+    }
+    let threatModelRef: Parameters<typeof persistResultManifest>[0]["threatModel"] = null
+    if (engineResult.output.threatModels) {
+      try {
+        grace.assertRemaining()
+        const uploaded = await uploadScanArtifact({
+          workspaceId,
+          scanId,
+          type: "threat_model",
+          artifactId: "threat-models",
+          content: engineResult.output.threatModels.document,
+          contentType: "application/json; charset=utf-8",
+        })
+        assertEvidenceEncrypted(uploaded.encryptionKeyRef)
+        threatModelRef = {
+          checksum: uploaded.checksum,
+          byteLength: uploaded.byteLength,
+          modelCount: engineResult.output.threatModels.models.length,
+          ...(engineResult.output.threatModels.schemaVersion
+            ? { schemaVersion: engineResult.output.threatModels.schemaVersion }
+            : {}),
+        }
+      } catch (error) {
+        recordIngestionWarning(
+          `threat model artifact could not be stored: ${error instanceof Error ? error.message : String(error)}`
+        )
+        logger.error("Failed to store threat-model evidence artifact", {
+          scanId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+    let httpExchangeRef: Parameters<typeof persistResultManifest>[0]["httpExchangeEvidence"] = null
+    if (engineResult.output.httpExchangeExport) {
+      try {
+        grace.assertRemaining()
+        const uploaded = await uploadScanArtifact({
+          workspaceId,
+          scanId,
+          type: "http_exchanges",
+          artifactId: "http-exchanges",
+          content: engineResult.output.httpExchangeExport.document,
+          contentType: "application/json; charset=utf-8",
+        })
+        assertEvidenceEncrypted(uploaded.encryptionKeyRef)
+        httpExchangeRef = {
+          checksum: uploaded.checksum,
+          byteLength: uploaded.byteLength,
+          exchangeCount: engineResult.output.httpExchangeExport.exchangeCount,
+          ...(engineResult.output.httpExchangeExport.schemaVersion
+            ? { schemaVersion: engineResult.output.httpExchangeExport.schemaVersion }
+            : {}),
+        }
+      } catch (error) {
+        // The exchange ids were still validated against the parsed export;
+        // without the stored artifact they remain honest claims but carry no
+        // durable binding — recorded as a warning, never a receipt.
+        recordIngestionWarning(
+          `http exchange export artifact could not be stored: ${error instanceof Error ? error.message : String(error)}`
+        )
+        logger.error("Failed to store http-exchange evidence artifact", {
+          scanId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
     const persistedFindings = await persistFindings({
       scanId,
       workspaceId,
@@ -92,6 +169,9 @@ export async function finalizeScanLifecycle(params: {
       // Stamp the scanned revision on every finding so fix patches apply
       // against exactly the commit that was analyzed.
       ...(engineResult.sourceRevision ? { sourceRevision: engineResult.sourceRevision } : {}),
+      ...(httpExchangeRef?.checksum
+        ? { httpExchangeArtifactChecksum: httpExchangeRef.checksum }
+        : {}),
     })
 
     const newFindings = persistedFindings.filter((f) => f.isNew).length
@@ -132,6 +212,26 @@ export async function finalizeScanLifecycle(params: {
         scanId,
         error: eventErr instanceof Error ? eventErr.message : String(eventErr),
       })
+    }
+
+    // Evidence that was dropped or could not be verified is part of the
+    // honest result record — persist it as a bounded warning event and into
+    // the immutable manifest rather than losing it in logs.
+    if (ingestionWarnings.length > 0) {
+      try {
+        await addScanEvent(
+          scanId,
+          "engine_evidence",
+          "warning",
+          `Engine evidence ingestion recorded ${ingestionWarnings.length} issue(s)`,
+          { issues: ingestionWarnings.slice(0, 50) }
+        )
+      } catch (eventErr) {
+        logger.warn("Failed to persist engine_evidence warning event", {
+          scanId,
+          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+        })
+      }
     }
 
     // Persist the result manifest for every outcome, including a failed or
@@ -187,6 +287,10 @@ export async function finalizeScanLifecycle(params: {
           ...(reconciliationReason ? { reconciliationReason } : {}),
         },
         workerExecution,
+        scopedCoverage: engineResult.output.scopedCoverage,
+        threatModel: threatModelRef,
+        httpExchangeEvidence: httpExchangeRef,
+        ...(ingestionWarnings.length > 0 ? { ingestionWarnings } : {}),
         terminalOutcome: terminalError
           ? {
               status: terminalError.status as "PARTIAL" | "FAILED" | "STOPPED_BUDGET",

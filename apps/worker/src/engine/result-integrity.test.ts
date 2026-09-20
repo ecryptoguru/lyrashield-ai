@@ -987,4 +987,215 @@ describe("result integrity", () => {
       )
     })
   })
+
+  describe("run.json 1.1 scoped coverage and artifact evidence", () => {
+    it("persists model-declared coverage under namespaced receipt ids", async () => {
+      vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
+
+      await persistResultManifest({
+        scanId: "scan-scoped",
+        target: { id: "target-1", type: "URL", url: "https://example.com" },
+        sourceCheckoutAvailable: false,
+        engineFindingCount: 1,
+        coverageIssues: [],
+        scopedCoverage: {
+          entries: [
+            {
+              id: "a1b2c3",
+              subject: "src/auth/login.ts — SQL injection",
+              outcome: "reported",
+              reason: "vuln-1-1-0001",
+              evidenceRefs: ["42"],
+              recordedBy: "vulnerability-scanner",
+              previousOutcomes: ["needs_follow_up"],
+            },
+            {
+              id: "7a8b9c",
+              subject: "src/api/admin.ts",
+              outcome: "needs_follow_up",
+              reason: "Agent limit reached mid-review.",
+            },
+          ],
+          gaps: [
+            {
+              kind: "agent_recorded_no_coverage",
+              subject: "config-scanner",
+              detail: "config-scanner ran without recording coverage.",
+            },
+          ],
+          completeness: { complete: false, caveats: ["coverage is agent-reported"] },
+        },
+      })
+
+      const receiptCall = vi.mocked(prisma.scanCoverageReceipt.createMany).mock.calls[0][0] as {
+        data: Array<Record<string, unknown>>
+      }
+      const scoped = receiptCall.data.filter(
+        (row) => typeof row.controlId === "string" && row.controlId.startsWith("engine-scope:")
+      )
+      expect(scoped).toHaveLength(2)
+      expect(scoped.find((row) => row.controlId === "engine-scope:a1b2c3")).toMatchObject({
+        status: "COMPLETED",
+        subject: "src/auth/login.ts — SQL injection",
+        metadata: expect.objectContaining({
+          declaredBy: "engine_model",
+          outcome: "reported",
+          evidenceRefs: ["42"],
+          recordedBy: "vulnerability-scanner",
+          previousOutcomes: ["needs_follow_up"],
+        }),
+      })
+      expect(scoped.find((row) => row.controlId === "engine-scope:7a8b9c")).toMatchObject({
+        status: "PARTIAL",
+        subject: "src/api/admin.ts",
+      })
+      const gaps = receiptCall.data.filter(
+        (row) => typeof row.controlId === "string" && row.controlId.startsWith("engine-gap:")
+      )
+      expect(gaps).toHaveLength(1)
+      expect(gaps[0]).toMatchObject({
+        status: "PARTIAL",
+        subject: "config-scanner",
+        metadata: expect.objectContaining({
+          declaredBy: "engine_runtime",
+          kind: "agent_recorded_no_coverage",
+        }),
+      })
+      // Scoped rows never collide with deterministic families or vibe controls.
+      expect(
+        receiptCall.data.every((row) =>
+          !String(row.controlId).startsWith("engine-scope:") &&
+          !String(row.controlId).startsWith("engine-gap:")
+            ? !String(row.scanner).startsWith("engine-")
+            : true
+        )
+      ).toBe(true)
+    })
+
+    it("binds artifact checksums and ingestion warnings into the immutable manifest", async () => {
+      vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
+
+      await persistResultManifest({
+        scanId: "scan-artifacts",
+        target: { id: "target-1", type: "URL", url: "https://example.com" },
+        sourceCheckoutAvailable: false,
+        engineFindingCount: 2,
+        coverageIssues: [],
+        ingestionWarnings: ["coverage.json: malformed entries dropped"],
+        scopedCoverage: {
+          schemaVersion: "1",
+          entries: [{ id: "a1b2c3", subject: "src/auth/login.ts", outcome: "reported" }],
+          gaps: [],
+          completeness: { complete: true, caveats: [] },
+        },
+        threatModel: { checksum: "a".repeat(64), byteLength: 512, modelCount: 1 },
+        httpExchangeEvidence: {
+          checksum: "b".repeat(64),
+          byteLength: 1024,
+          exchangeCount: 2,
+        },
+      })
+
+      const createCall = vi.mocked(prisma.scanResultManifest.create).mock.calls[0][0] as {
+        data: { manifest: Record<string, unknown> }
+      }
+      expect(createCall.data.manifest).toMatchObject({
+        version: 7,
+        ingestionWarnings: ["coverage.json: malformed entries dropped"],
+        threatModel: { checksum: "a".repeat(64), byteLength: 512, modelCount: 1 },
+        httpExchangeEvidence: {
+          checksum: "b".repeat(64),
+          byteLength: 1024,
+          exchangeCount: 2,
+        },
+      })
+      expect(createCall.data.manifest.scopedCoverage).toEqual({
+        schemaVersion: "1",
+        entryCount: 1,
+        gapCount: 0,
+        completeness: { complete: true, caveats: [] },
+      })
+    })
+
+    it("carries richer evidence hashes in the detection ledger without promoting trust", async () => {
+      vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+
+      await persistDetectionReceipt({
+        scanId: "scan-1",
+        workspaceId: "workspace-1",
+        targetId: "target-1",
+        findingId: "finding-1",
+        severity: "HIGH",
+        dedupeKey: "dedupe-1",
+        httpExchangeArtifactChecksum: "c".repeat(64),
+        finding: {
+          id: "engine-1",
+          title: "SQL injection in login handler",
+          severity: "high",
+          timestamp: "2026-09-10T11:03:12Z",
+          engine_confidence: "high",
+          counterevidence: "A WAF rule could still block exploitation.",
+          confidence_rationale: "Sink reachable; payload round-trips.",
+          severity_change_conditions: "Downgrade if auth precedes handler.",
+          fix_verification: {
+            kind: "engine_attestation",
+            statement: "Filing agent replayed the request.",
+            method: "proxy_replay",
+            evidence_refs: ["42"],
+          },
+          contextual_cvss_reasoning: "Unauthenticated remote reach.",
+          advisory_cvss: { score: 8.6, vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H" },
+          http_exchange_ids: ["42"],
+          update_history: [{ timestamp: "t", fields: ["severity"] }],
+          evidence_warnings: ["poc script omitted"],
+          evidence_contract_version: "1.1",
+          engine_verification_state: "engine_asserted",
+          poc_script_code: "raw-script-body-must-not-persist",
+        },
+      })
+
+      const upsert = vi.mocked(prisma.findingCandidate.upsert).mock.calls[0][0] as {
+        create: { payload: Record<string, unknown> }
+      }
+      const payload = upsert.create.payload
+      // Structured values persist; every other new field lands in contentHashes.
+      expect(payload.advisoryCvss).toEqual({
+        score: 8.6,
+        vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H",
+      })
+      expect(payload.httpExchangeIds).toEqual(["42"])
+      const hashes = payload.contentHashes as Record<string, string>
+      for (const key of [
+        "engineConfidence",
+        "counterevidence",
+        "confidenceRationale",
+        "severityChangeConditions",
+        "fixVerification",
+        "contextualCvssReasoning",
+        "updateHistory",
+        "evidenceWarnings",
+        "evidenceContractVersion",
+        "engineVerificationState",
+      ]) {
+        expect(hashes[key], key).toMatch(/^[0-9a-f]{64}$/)
+      }
+      // The candidate ledger never stores raw PoC or verification claims.
+      expect(JSON.stringify(payload)).not.toContain("raw-script-body")
+      expect(JSON.stringify(payload)).not.toContain('"verified"')
+
+      // An engine-source finding records an ENGINE_CLAIM detection receipt —
+      // never a verification — even with richer 1.1 evidence attached.
+      expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            status: "DETECTED",
+            method: "ENGINE_CLAIM",
+            evidence: expect.objectContaining({
+              httpExchangeArtifactChecksum: "c".repeat(64),
+            }),
+          }),
+        })
+      )
+    })
+  })
 })

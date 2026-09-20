@@ -7,7 +7,7 @@ import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { addScanEvent } from "@lyrashield/db"
 import { buildEngineCommand, type ScanConfig, type EngineCommand } from "./command-builder"
-import { parseEngineOutput, type ParsedScanOutput } from "./output-parser"
+import { parseEngineOutput, type EngineArtifactInput, type ParsedScanOutput } from "./output-parser"
 import {
   parseEngineTriageArtifact,
   type EngineTriageArtifact,
@@ -122,6 +122,10 @@ export function interpretExitCode(
 const MAX_ENGINE_VULNERABILITIES_BYTES = 10 * 1024 * 1024
 const MAX_ENGINE_RUN_BYTES = 1 * 1024 * 1024
 const MAX_ENGINE_TRIAGE_ARTIFACT_BYTES = 128 * 1024
+// run.json 1.1 sibling artifacts — bounded like every other engine output.
+const MAX_ENGINE_COVERAGE_BYTES = 256 * 1024
+const MAX_ENGINE_THREAT_MODEL_BYTES = 1 * 1024 * 1024
+const MAX_ENGINE_HTTP_EXCHANGES_BYTES = 2 * 1024 * 1024
 const SIGKILL_GRACE_MS = 5000
 // Purely informational "still running" ScanEvent row. Each tick is a Postgres
 // insert competing with finding writes, and the UI polls on its own (slower)
@@ -980,6 +984,7 @@ export async function readEngineSpendUsd(
 async function readEngineOutput(outputDir: string): Promise<{
   vulnerabilitiesRaw: string
   runJsonRaw: string
+  artifacts: EngineArtifactInput
 }> {
   let vulnerabilitiesRaw = ""
   let runJsonRaw = ""
@@ -1005,7 +1010,50 @@ async function readEngineOutput(outputDir: string): Promise<{
     })
   }
 
-  return { vulnerabilitiesRaw, runJsonRaw }
+  /**
+   * run.json 1.1 sibling artifacts are optional: `undefined` when absent,
+   * `null` when the artifact exists but failed the bounded read — the parser
+   * records an explicit ingestion issue rather than trusting nothing.
+   */
+  const readOptionalArtifact = async (
+    name: string,
+    maxBytes: number
+  ): Promise<string | null | undefined> => {
+    // Artifact names are fixed constants joined to a validated run directory.
+    const artifactPath = join(outputDir, name)
+    try {
+      return await readTextFileBounded(artifactPath, maxBytes)
+    } catch (error) {
+      try {
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
+        const artifactStat = await lstat(artifactPath)
+        if (artifactStat.isFile() || artifactStat.isSymbolicLink()) {
+          logger.warn(`${name} present but unreadable or oversized`, {
+            outputDir,
+            error: error instanceof Error ? error.message : String(error),
+          })
+          return null
+        }
+      } catch {
+        // absent
+      }
+      return undefined
+    }
+  }
+
+  const artifacts: EngineArtifactInput = {
+    coverageRaw: await readOptionalArtifact("coverage.json", MAX_ENGINE_COVERAGE_BYTES),
+    threatModelsRaw: await readOptionalArtifact(
+      "threat_models.json",
+      MAX_ENGINE_THREAT_MODEL_BYTES
+    ),
+    httpExchangesRaw: await readOptionalArtifact(
+      "http_exchanges.json",
+      MAX_ENGINE_HTTP_EXCHANGES_BYTES
+    ),
+  }
+
+  return { vulnerabilitiesRaw, runJsonRaw, artifacts }
 }
 
 /**
@@ -1270,11 +1318,11 @@ export async function runEngine(
   }
 
   const outputDir = await findRunOutputDir(absWorkDir, scanId)
-  const { vulnerabilitiesRaw, runJsonRaw } = outputDir
+  const { vulnerabilitiesRaw, runJsonRaw, artifacts } = outputDir
     ? await readEngineOutput(outputDir)
-    : { vulnerabilitiesRaw: "", runJsonRaw: "" }
+    : { vulnerabilitiesRaw: "", runJsonRaw: "", artifacts: {} }
 
-  const output = parseEngineOutput(vulnerabilitiesRaw, runJsonRaw)
+  const output = parseEngineOutput(vulnerabilitiesRaw, runJsonRaw, artifacts)
   const sourceCheckoutPath = await resolveEngineSourceCheckout(output.runRecord, scanId)
   const sourceRevision = await resolveEngineSourceRevision(sourceCheckoutPath)
   const sandboxRemoved = await verifySandboxRemoved(scanId)

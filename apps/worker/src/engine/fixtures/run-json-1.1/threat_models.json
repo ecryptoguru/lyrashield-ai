@@ -1,0 +1,15 @@
+{
+  "https://app.example.com": {
+    "target": "https://app.example.com",
+    "written_at": "2026-09-10T11:01:00+00:00",
+    "written_by": "threat-model-agent",
+    "content": "## Overview\nPublic SaaS login surface.\n## Trust Boundaries\nBoundary between unauthenticated requests and the user database.\n## Assumptions\nTLS terminates at the edge.\n## Attack Surface\nPOST /api/login accepts JSON credentials.\n## Severity Calibration\nCredential bypass is high severity.",
+    "amendments": [
+      {
+        "at": "2026-09-10T11:07:00+00:00",
+        "by": "vulnerability-scanner",
+        "content": "Admin routes exist but were not reachable during this scan."
+      }
+    ]
+  }
+}

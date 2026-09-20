@@ -759,9 +759,17 @@ describe("checkRunRecordSchemaVersion", () => {
 })
 
 describe("parseRunJson schema version", () => {
-  it("preserves the producer schema version for the contract tripwire", () => {
+  it("rejects an unsupported major instead of guessing the contract", () => {
+    // A foreign-major run record is refused — its fields cannot be trusted to
+    // mean what this reader thinks they mean.
     expect(
       parseRunJson(JSON.stringify({ schema_version: "99.0", run_id: "run-1", status: "completed" }))
-    ).toMatchObject({ schema_version: "99.0" })
+    ).toBeNull()
+  })
+
+  it("preserves the producer schema version for a supported record", () => {
+    expect(
+      parseRunJson(JSON.stringify({ schema_version: "1.1", run_id: "run-1", status: "completed" }))
+    ).toMatchObject({ schema_version: "1.1" })
   })
 })

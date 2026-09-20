@@ -2,9 +2,13 @@ import { createHash } from "crypto"
 import { getWorkspaceContext, prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { VIBE_SECURITY_CONTROLS, VIBE_SECURITY_COVERAGE_VERSION } from "@lyrashield/security"
 import type { UrlExecutionSummary } from "@lyrashield/types"
-import type { EngineVulnerability } from "./output-parser"
+import type { EngineVulnerability, ParsedEngineCoverage } from "./output-parser"
 import type { NormalizedFinding } from "./normalizer"
-import type { ScannerCoverageIssue, ScannerDiscovery } from "./scanner-coverage"
+import {
+  scopedCoverageReceipts,
+  type ScannerCoverageIssue,
+  type ScannerDiscovery,
+} from "./scanner-coverage"
 import type {
   AiAppSecurityDiscoveryReceipt,
   WebMcpCoverageReceipt,
@@ -66,6 +70,35 @@ type ResultManifestInput = {
     errorCategory: string | null
     errorMessage: string | null
   }
+  /**
+   * run.json 1.1: model-declared scoped coverage (coverage.json). Entries map
+   * into namespaced receipt rows (`engine-scope:*`/`engine-gap:*`) and are
+   * never read as deterministic control outcomes.
+   */
+  scopedCoverage?: ParsedEngineCoverage | null
+  /**
+   * Checksum-bound reference to the scan's threat-model artifact in encrypted
+   * evidence storage. The artifact is a declared model — never proof that the
+   * attack paths it names were exercised.
+   */
+  threatModel?: {
+    checksum: string
+    byteLength: number
+    modelCount: number
+    schemaVersion?: string
+  } | null
+  /**
+   * Checksum-bound reference to the scan's bounded redacted proxy-exchange
+   * index (http_exchanges.json) in encrypted evidence storage.
+   */
+  httpExchangeEvidence?: {
+    checksum: string
+    byteLength: number
+    exchangeCount: number
+    schemaVersion?: string
+  } | null
+  /** Bounded explicit issues recorded while ingesting engine evidence. */
+  ingestionWarnings?: string[]
 }
 
 type FindingInput = EngineVulnerability | NormalizedFinding
@@ -73,7 +106,7 @@ type FindingInput = EngineVulnerability | NormalizedFinding
 const MANIFEST_VERSION = 7
 const SCANNER_CONTRACT_VERSION = "2026-09-13a"
 
-type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
+type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED" | "PARTIAL"
 
 type FamilyReceipt = {
   scanner: string
@@ -349,7 +382,15 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
     }
   })
 
-  return [...familyReceipts, ...controlReceipts]
+  // run.json 1.1: engine-declared scoped coverage becomes namespaced receipt
+  // rows (engine-scope:*/engine-gap:*). They are append-only declarations —
+  // they never join familyReceipts or controlReceipts and can never mark a
+  // deterministic outcome.
+  const scopedReceipts: FamilyReceipt[] = input.scopedCoverage
+    ? scopedCoverageReceipts(input.scopedCoverage.entries, input.scopedCoverage.gaps)
+    : []
+
+  return [...familyReceipts, ...controlReceipts, ...scopedReceipts]
 }
 
 export async function persistResultManifest(input: ResultManifestInput): Promise<void> {
@@ -386,6 +427,26 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
     // their bounded subjects and reasons in the manifest, not only in the
     // mutable receipt table.
     coverage,
+    // ── run.json 1.1 evidence links (additive; absent keys on 1.0 scans) ──
+    // The threat-model and exchange-export entries are checksum-bound
+    // references to encrypted artifacts. Neither is proof of verification —
+    // the threat model is a declared model and exchange refs are evidence
+    // pointers.
+    ...(input.scopedCoverage
+      ? {
+          scopedCoverage: {
+            schemaVersion: input.scopedCoverage.schemaVersion ?? null,
+            entryCount: input.scopedCoverage.entries.length,
+            gapCount: input.scopedCoverage.gaps.length,
+            completeness: input.scopedCoverage.completeness ?? null,
+          },
+        }
+      : {}),
+    ...(input.threatModel ? { threatModel: input.threatModel } : {}),
+    ...(input.httpExchangeEvidence ? { httpExchangeEvidence: input.httpExchangeEvidence } : {}),
+    ...(input.ingestionWarnings?.length
+      ? { ingestionWarnings: input.ingestionWarnings.slice(0, 100) }
+      : {}),
   }
   const manifestChecksum = checksum(manifest)
 
@@ -430,6 +491,18 @@ function candidatePayload(finding: FindingInput, severity: string, dedupeKey: st
       remediationSteps: finding.remediation_steps,
       cvssBreakdown: finding.cvss_breakdown,
       dependencyMetadata: finding.dependency_metadata,
+      // run.json 1.1 evidence — hashed verbatim, never flattened or trusted.
+      counterevidence: finding.counterevidence,
+      engineConfidence: finding.engine_confidence,
+      confidenceRationale: finding.confidence_rationale,
+      severityChangeConditions: finding.severity_change_conditions,
+      fixVerification: finding.fix_verification,
+      contextualCvssReasoning: finding.contextual_cvss_reasoning,
+      updateHistory: finding.update_history,
+      updatedAt: finding.updated_at,
+      evidenceWarnings: finding.evidence_warnings,
+      evidenceContractVersion: finding.evidence_contract_version,
+      engineVerificationState: finding.engine_verification_state,
     }).flatMap(([key, value]) => (value === undefined ? [] : [[key, checksum(value)]]))
   )
   return {
@@ -442,6 +515,10 @@ function candidatePayload(finding: FindingInput, severity: string, dedupeKey: st
     findingClass: finding.finding_class ?? null,
     fixEffort: finding.fix_effort ?? null,
     controlIds: finding.control_ids ?? [],
+    // Small structured evidence stays literal; large text is hash-bound above.
+    advisoryCvss: finding.advisory_cvss ?? null,
+    httpExchangeIds: finding.http_exchange_ids ?? [],
+    httpExchangeRefsDropped: finding.http_exchange_refs_dropped === true,
     contentHashes,
     codeLocations: (finding.code_locations ?? []).map(
       ({ file, start_line, end_line, label, snippet, fix_before, fix_after }) => ({
@@ -465,6 +542,12 @@ export async function persistDetectionReceipt(params: {
   finding: FindingInput
   severity: string
   dedupeKey: string
+  /**
+   * Checksum of the scan's encrypted proxy-exchange export. Included when the
+   * finding cites exchange ids so the refs bind to the exact exported
+   * evidence they were validated against.
+   */
+  httpExchangeArtifactChecksum?: string
 }): Promise<void> {
   const normalized = isNormalizedFinding(params.finding) ? params.finding : null
   const payload = candidatePayload(params.finding, params.severity, params.dedupeKey)
@@ -526,7 +609,15 @@ export async function persistDetectionReceipt(params: {
         method,
         reason,
         verifierVersion: "result-integrity-v2",
-        evidence: { candidateEvidenceHash: evidenceHash },
+        evidence: {
+          candidateEvidenceHash: evidenceHash,
+          ...(params.finding.http_exchange_ids?.length
+            ? {
+                httpExchangeIds: params.finding.http_exchange_ids,
+                httpExchangeArtifactChecksum: params.httpExchangeArtifactChecksum ?? null,
+              }
+            : {}),
+        },
         idempotencyKey,
       },
       update: {},
