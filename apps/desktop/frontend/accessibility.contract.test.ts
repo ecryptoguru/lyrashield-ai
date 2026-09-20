@@ -38,10 +38,24 @@ describe("desktop setup accessibility", () => {
     expect(scan).toContain("aria-invalid={!budgetValid}")
     expect(scan).toContain('role="alert"')
     expect(scan).toContain("onClick={() => setMode(m.value)}")
-    for (const id of ["scan-url", "scan-path", "scan-branch", "scan-instruction"]) {
+    for (const id of ["scan-path", "scan-branch", "scan-instruction"]) {
       expect(scan).toContain(`htmlFor="${id}"`)
       expect(scan).toContain(`id="${id}"`)
     }
     expect(scan).toContain("BYOK maximum model budget")
+  })
+
+  it("offers only the three public depths and keeps URL targets visibly disabled", () => {
+    // Depth choices are derived from the shared profile contract fixture, not
+    // a hand-maintained list — and retired modes can never be launched.
+    expect(scan).toContain('fixtures/scan-depths.json"')
+    expect(scan).toContain("DEPTH_OPTIONS.map((m)")
+    expect(scan).not.toContain('"url"')
+    expect(scan).not.toContain('"safe"')
+    expect(scan).not.toContain('"custom"')
+    // The URL target kind stays visible as a disabled choice with a reason,
+    // never a silent BYOK-billed AI substitution.
+    expect(scan).toContain("URL_TARGET_UNAVAILABLE_REASON")
+    expect(scan).toContain('aria-disabled="true"')
   })
 })
