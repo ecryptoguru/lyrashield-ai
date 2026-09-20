@@ -75,6 +75,73 @@ function normalizedMode(mode: string): string {
   return mode.trim().toUpperCase()
 }
 
+/**
+ * Cross-language launch contract for the three public repository depths.
+ *
+ * `scanDepthContract()` derives the canonical engine `--scan-mode` arguments,
+ * visible labels, capability explanations, and execution ceilings from
+ * `REPOSITORY_PROFILES`/`REPOSITORY_MODE_ALIASES` — the same data the web and
+ * worker use. The checked-in fixture at `src/fixtures/scan-depths.json` is a
+ * serialization of this object: the Rust desktop tests and frontend consume
+ * that file so there is no second hand-maintained table. Regenerate the
+ * fixture when profile data changes.
+ *
+ * `queueReserve` is kept structurally separate from `executionLimits`: reserve
+ * minutes cover deterministic scanner/queue time and are NOT an engine
+ * execution ceiling.
+ */
+export const SCAN_DEPTH_CONTRACT_VERSION = "scan-depths/1.0.0" as const
+
+export type ScanDepthContract = {
+  version: typeof SCAN_DEPTH_CONTRACT_VERSION
+  /** The only depths a new launch may select. */
+  publicDepths: RepositoryScanMode[]
+  /**
+   * Stored-mode token (lowercase, as serialized by the desktop client) to the
+   * canonical engine `--scan-mode` argument. `url` is deliberately absent: it
+   * is a target kind, never an engine scan mode.
+   */
+  storedModeEngineArgs: Record<string, string>
+  depths: {
+    depth: RepositoryScanMode
+    engineMode: "quick" | "standard" | "deep"
+    depthLabel: string
+    label: string
+    description: string
+    executionLimits: { maxDurationMinutes: number; maxEngineMinutes: number }
+    queueReserve: { scannerReserveMinutes: number }
+  }[]
+}
+
+export function scanDepthContract(): ScanDepthContract {
+  return {
+    version: SCAN_DEPTH_CONTRACT_VERSION,
+    publicDepths: ["QUICK", "STANDARD", "DEEP"],
+    storedModeEngineArgs: Object.fromEntries(
+      Object.entries(REPOSITORY_MODE_ALIASES).map(([stored, depth]) => [
+        stored.toLowerCase(),
+        REPOSITORY_PROFILES[depth].engineMode,
+      ])
+    ) as Record<string, string>,
+    depths: (["QUICK", "STANDARD", "DEEP"] as const).map((depth) => {
+      const profile = REPOSITORY_PROFILES[depth]
+      return {
+        depth,
+        // engineMode is non-null for every repository profile.
+        engineMode: profile.engineMode as "quick" | "standard" | "deep",
+        depthLabel: depth.charAt(0) + depth.slice(1).toLowerCase(),
+        label: profile.label,
+        description: profile.description,
+        executionLimits: {
+          maxDurationMinutes: profile.maxDurationMinutes,
+          maxEngineMinutes: profile.maxEngineMinutes,
+        },
+        queueReserve: { scannerReserveMinutes: profile.scannerReserveMinutes },
+      }
+    }),
+  }
+}
+
 export function resolveScanProfile(input: { targetType: string; mode: string }): ScanProfile {
   const mode = normalizedMode(input.mode)
   if (input.targetType === "REPO") {
