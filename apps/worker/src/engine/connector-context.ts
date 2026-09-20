@@ -37,9 +37,9 @@ export interface ScanConnectorInvocationParams {
   /** Caller's idempotency key — replays return the recorded outcome. */
   idempotencyKey: string
   /**
-   * The sponsor account's trusted `effectivePlan` for the PROVISIONAL
-   * service-side plan gate (Agency and Enterprise only, pending founder
-   * ruling). Resolve it from the billing account — e.g. the scan's
+   * The sponsor account's trusted `effectivePlan` for the service-side plan
+   * gate (Agency tier: LAUNCH_ASSURANCE/legacy AGENCY, plus ENTERPRISE).
+   * Resolve it from the billing account — e.g. the scan's
    * sponsorAccountId/createdById through `resolveAccountBilling` — never
    * `workspace.plan`. Absent fails closed inside the service.
    */

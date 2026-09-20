@@ -207,7 +207,7 @@ describe("connector authorization matrix", () => {
   })
 
   it.each(["STARTER", "PRO", "FREE", "not-a-plan", undefined])(
-    "provisionally denies connector tools for sponsor plan %s",
+    "denies connector tools for sponsor plan %s",
     async (sponsorEffectivePlan) => {
       const params = baseParams({ sponsorEffectivePlan })
       const result = await invokeConnectorTool(params as never)
@@ -217,7 +217,7 @@ describe("connector authorization matrix", () => {
     }
   )
 
-  it.each(["AGENCY", "ENTERPRISE"])(
+  it.each(["AGENCY", "LAUNCH_ASSURANCE", "ENTERPRISE"])(
     "allows connector tools for sponsor plan %s",
     async (sponsorEffectivePlan) => {
       const params = baseParams({ sponsorEffectivePlan })

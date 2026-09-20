@@ -394,11 +394,17 @@ async function recordConnectorReceipt(
 // ── Idempotent invocation ───────────────────────────────────────────────────
 
 /**
- * PROVISIONAL plan gate — pending founder ruling. Connector tools are
- * limited to Agency and Enterprise sponsors by default. This is a policy
- * constant, not pricing: do not edit it as part of plan or billing changes.
+ * Connector plan gate. Connector tools are limited to the Agency tier and
+ * Enterprise sponsors: LAUNCH_ASSURANCE is the self-serve Agency plan billing
+ * resolves (`effectivePlan === "LAUNCH_ASSURANCE"`), AGENCY covers legacy
+ * sponsor rows, and ENTERPRISE is contact-led. This is a policy constant, not
+ * pricing: do not edit it as part of plan or billing changes.
  */
-export const CONNECTOR_ALLOWED_PLANS: readonly string[] = ["AGENCY", "ENTERPRISE"]
+export const CONNECTOR_ALLOWED_PLANS: readonly string[] = [
+  "AGENCY",
+  "LAUNCH_ASSURANCE",
+  "ENTERPRISE",
+]
 
 function defaultCapOutput(
   output: unknown,
@@ -469,11 +475,10 @@ export async function invokeConnectorTool(
     }
   }
 
-  // PROVISIONAL plan gate — pending founder ruling: connector tool
-  // invocation is limited to Agency and Enterprise sponsors by default. The
-  // caller supplies the sponsor account's trusted `effectivePlan`; an absent
-  // or unrecognized plan fails closed before any connection lookup or
-  // idempotent claim.
+  // Plan gate: connector tool invocation is limited to the Agency tier and
+  // Enterprise sponsors. The caller supplies the sponsor account's trusted
+  // `effectivePlan`; an absent or unrecognized plan fails closed before any
+  // connection lookup or idempotent claim.
   if (!CONNECTOR_ALLOWED_PLANS.includes(params.sponsorEffectivePlan ?? "")) {
     return {
       ok: false,
