@@ -194,6 +194,11 @@ run_case() {
   local container_present=${11:-1}
   local old_image_present=${12:-1}
   local floor_bytes=${13:-}
+  local floor_via=${14:-env}
+  local floor_env=""
+  if [ "$floor_via" = env ]; then
+    floor_env=$floor_bytes
+  fi
   local case_dir="$tmp/$name"
   mkdir -p "$case_dir"
   write_mocks "$case_dir"
@@ -207,6 +212,9 @@ run_case() {
   : > "$case_dir/systemctl.log"
   : > "$case_dir/order.log"
   printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$old_image" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
+  if [ "$floor_via" = config ] && [ -n "$floor_bytes" ]; then
+    printf 'LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES=%s\n' "$floor_bytes" >> "$case_dir/runtime.conf"
+  fi
   printf 'GHCR_TOKEN=test-token\nREDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\n' > "$case_dir/worker.env"
 
   set +e
@@ -230,7 +238,7 @@ run_case() {
       MOCK_OLD_IMAGE_PRESENT="$old_image_present" \
       MOCK_FAIL_IMAGE_CHECK="$fail_image_check" \
       MOCK_REPLACEMENT_STOP="$replacement_stop" \
-      LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES="$floor_bytes" \
+      LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES="$floor_env" \
       LYRASHIELD_WORKER_RUNTIME_CONFIG="$case_dir/runtime.conf" \
       LYRASHIELD_WORKER_ENV_FILE="$case_dir/worker.env" \
       LYRASHIELD_WORKER_PROMOTION_STATE_DIR="$case_dir/promotion" \
@@ -262,8 +270,15 @@ run_case() {
       grep -Fq 'No local rollback image' <<< "$output"
       grep -Fq 'Worker image pull requires' <<< "$output"
     fi
+    if [ "$name" = missing-rollback-bad-floor ]; then
+      grep -Fq 'LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES must be a positive integer' <<< "$output"
+    fi
   fi
-  if [ "$container_present" = 1 ]; then
+  if [ "$name" = missing-rollback-bad-floor ]; then
+    # The malformed floor exits at the disk-preflight sizing step, before any
+    # prune, so the usual docker-log assertions do not apply.
+    :
+  elif [ "$container_present" = 1 ]; then
     grep -Fq 'image prune --all --force' "$case_dir/docker.log"
   else
     grep -Fxq "image inspect $old_image --format {{.Size}}" "$case_dir/docker.log"
@@ -319,6 +334,10 @@ run_case missing-rollback-tight-disk 1 1 1 failure 0 '' 0 '' 3000000000 0 0
 # the required budget drops to 8 GiB, so 9 GiB of free space promotes where
 # the 26 GiB default would stop.
 run_case missing-rollback-tunable-floor 1 1 1 success 0 '' 0 '' 9663676416 0 0 2147483648
+# Same override read from the runtime config when the env var is absent.
+run_case missing-rollback-config-floor 1 1 1 success 0 '' 0 '' 9663676416 0 0 2147483648 config
+# A malformed floor fails closed instead of silently falling back.
+run_case missing-rollback-bad-floor 1 1 1 failure 0 '' 0 '' 9663676416 0 0 abc
 run_case preserves-existing-stop 1 1 1 success 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}'
 run_case preserves-newer-stop 1 1 1 success 1 '' 0 '{"operator":"on-call","reason":"new-incident"}'
 run_case resumes-owned-stop-on-rollback 1 1 1 failure 1 '' 1
