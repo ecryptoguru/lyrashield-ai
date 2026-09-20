@@ -1,6 +1,6 @@
 ---
 title: Codex app security workflow for trusted releases
-description: Lock down Codex config and MCP servers, gate dependencies and secrets, and capture SARIF evidence for every AI assisted release.
+description: Lock down Codex config and MCP servers, gate dependencies and secrets and capture SARIF evidence for every AI assisted release.
 pubDate: "2026-07-30"
 updatedDate: 2026-08-07
 author: lyrashield-team
@@ -15,10 +15,10 @@ faq:
   - q: Is Codex CLI safe with production secrets?
     a: No. Keep production secrets in a secret manager and outside agent context. Use scoped staging credentials and require human approval for prod access.
   - q: Where does Codex store MCP server config?
-    a: Codex stores MCP servers in ~/.codex/config.toml under [mcp_servers.*] sections with command, args, and bearer_token_env_var for remote auth. Keep the token in an env var referenced by the config so the literal never lands in the committed TOML file.
+    a: Codex stores MCP servers in ~/.codex/config.toml under [mcp_servers.*] sections with command, args and bearer_token_env_var for remote auth. Keep the token in an env var referenced by the config so the literal never lands in the committed TOML file.
 ---
 
-OpenAI Codex CLI can read, edit, and run across your repo quickly, so secure its config, MCP servers and dependency changes before shipping. This workflow shows how to lock down ~/.codex/config.toml using bearer_token_env_var, require approval for risky edits and collect SARIF for release evidence. Pair it with LyraShield as release assurance for AI built apps. Baseline context is in our [vibe coding security guide](/blog/vibe-coding-security-guide), then apply Codex specific controls below for team use.
+OpenAI Codex CLI can read, edit and run across your repo quickly, so secure its config, MCP servers and dependency changes before shipping. This workflow shows how to lock down ~/.codex/config.toml using bearer_token_env_var, require approval for risky edits and collect SARIF for release evidence. Pair it with LyraShield as release assurance for AI built apps. Baseline context is in our [vibe coding security guide](/blog/vibe-coding-security-guide), then apply Codex specific controls below for team use.
 
 ## Map Codex to your threat model
 
@@ -65,11 +65,11 @@ Codex respects AGENTS.md or similar project docs at repo root. Use that file as 
 
 Include three policy blocks:
 
-Edit scope: allow src, tests, and docs. Protect env files, secrets, infra, and auth configs unless security owner approves. Deny direct edits to production workflow files and migration files that run automatically.
+Edit scope: allow src, tests and docs. Protect env files, secrets, infra and auth configs unless security owner approves. Deny direct edits to production workflow files and migration files that run automatically.
 
 Command policy: allow npm run test and build and lint, require confirm for package installs and database migrations, deny curl with secrets, deny git push to main from agent context and deny unscoped docker commands.
 
-Network policy: state which external registries or APIs the agent may call during generation, and forbid arbitrary network egress or uploads of code snippets to unknown endpoints.
+Network policy: state which external registries or APIs the agent may call during generation and forbid arbitrary network egress or uploads of code snippets to unknown endpoints.
 
 Pair policy with shell controls. Run Codex in a project scoped shell session that does not have production credentials loaded. Use temporary staging credentials with short expiry and rotate after heavy agent work. Ask Codex to write a short plan markdown before large edits and review that plan before execution. That mirrors plan mode ideas from other agentic tools and reduces blast radius when prompts are vague.
 
@@ -110,11 +110,11 @@ That file plus SARIF provides a repeatable proof point for internal review and f
 
 ## Why pair Codex with LyraShield
 
-LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
+LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
 MCP integration fits Codex config.toml design. Stdio via npx -y @lyrashield/mcp@0.2.8 runs locally with env var secrets, remote at https://app.lyrashieldai.com/api/mcp accepts bearer_token_env_var for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
 
-Build honesty: LyraShield is live in open beta with open registration. The scan pipeline, findings, and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. The runner-local Action provides an advisory diff gate with SARIF; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution and live paid activation are not enabled.
+Build honesty: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. The runner-local Action provides an advisory diff gate with SARIF; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 ## Final checks before you ship
 
@@ -123,7 +123,7 @@ Before merge and release, confirm these controls.
 - Confirm config.toml uses bearer_token_env_var for all remote MCP and no raw bearer tokens are in file or dotfiles repo.
 - Confirm AGENTS.md lists protected paths, command allow list and network policy.
 - Run and upload dependency and secret SARIF to code scanning.
-- Require tests and reviewer for auth, payment, or file upload changes.
-- Update security evidence file per release with MCP list, commit, and reviewers.
+- Require tests and reviewer for auth, payment or file upload changes.
+- Update security evidence file per release with MCP list, commit and reviewers.
 
 Apply the same evidence flow with our [AI app security checklist tool](/tools/ai-app-security-checklist) and create an account at https://lyrashieldai.com to start building assurance records today. For cross builder consistency, also review [Bolt app security checklist](/blog/bolt-app-security-checklist) and [Replit app security checklist](/blog/replit-app-security-checklist).

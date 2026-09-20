@@ -5,11 +5,11 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     id: "WEBMCP-01",
     title: "WebMCP annotation/behavior mismatch",
     description:
-      "A tool claims to be read-only or safe but its implementation performs mutation, network calls, or handles untrusted content inconsistently with its annotations.",
+      "A tool claims to be read-only or safe but its implementation performs mutation, network calls or handles untrusted content inconsistently with its annotations.",
     strategy: "deterministic",
     severity: "HIGH",
     negativeEvidence:
-      "Every tool's readOnlyHint, untrustedContentHint, and behavior classification are consistent with its execute body and schema.",
+      "Every tool's readOnlyHint, untrustedContentHint and behavior classification are consistent with its execute body and schema.",
     falsePositiveNotes:
       "Protective wording and educational examples that mention dangerous patterns without exposing a tool must not be flagged.",
     remediationTemplate:
@@ -19,13 +19,13 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     id: "WEBMCP-02",
     title: "Externally influenced output lacks untrusted content hint",
     description:
-      "A tool fetches or returns content from an external origin, user, or unvalidated source but does not set untrustedContentHint.",
+      "A tool fetches or returns content from an external origin, user or unvalidated source but does not set untrustedContentHint.",
     strategy: "deterministic",
     severity: "MEDIUM",
     negativeEvidence:
-      "Every tool that returns external, user-generated, or otherwise unvalidated content sets untrustedContentHint.",
+      "Every tool that returns external, user-generated or otherwise unvalidated content sets untrustedContentHint.",
     falsePositiveNotes:
-      "Static values, hard-coded templates, and fully server-validated responses are not external influence.",
+      "Static values, hard-coded templates and fully server-validated responses are not external influence.",
     remediationTemplate:
       "Set untrustedContentHint for tools whose output is sourced from or influenced by external content.",
   },
@@ -33,7 +33,7 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     id: "WEBMCP-03",
     title: "Unsafe or dynamic cross-origin tool exposure",
     description:
-      "A tool is exposed to an untrusted origin, a wildcard, or a value that cannot be resolved at analysis time.",
+      "A tool is exposed to an untrusted origin, a wildcard or a value that cannot be resolved at analysis time.",
     strategy: "deterministic",
     severity: "HIGH",
     negativeEvidence:
@@ -47,27 +47,27 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     id: "WEBMCP-04",
     title: "Explicitly unsafe tool permissions or disabled origin isolation",
     description:
-      "The site or config exposes tools broadly through Permissions-Policy: tools=*, Origin-Agent-Cluster: ?0, document.domain manipulation, or delegated cross-origin iframes.",
+      "The site or config exposes tools broadly through Permissions-Policy: tools=*, Origin-Agent-Cluster: ?0, document.domain manipulation or delegated cross-origin iframes.",
     strategy: "deterministic",
     severity: "HIGH",
     negativeEvidence:
-      "No Permissions-Policy wildcard, no OAC ?0, no document.domain assignment, and no delegated tool iframe is present in assessed source.",
+      "No Permissions-Policy wildcard, no OAC ?0, no document.domain assignment and no delegated tool iframe is present in assessed source.",
     falsePositiveNotes:
       "Missing explicit hardening headers is a hardening opportunity, not a finding, because the platform default is tools=(self).",
     remediationTemplate:
-      "Add Origin-Agent-Cluster: ?1, keep Permissions-Policy tools=(self), remove document.domain assignments, and avoid cross-origin tool delegation.",
+      "Add Origin-Agent-Cluster: ?1, keep Permissions-Policy tools=(self), remove document.domain assignments and avoid cross-origin tool delegation.",
   },
   {
     id: "WEBMCP-05",
     title: "Durable/resource-consuming mutation lacks visible confirmation boundary",
     description:
-      "A tool performs a durable, resource-consuming, or otherwise destructive mutation without a visible human confirmation step.",
+      "A tool performs a durable, resource-consuming or otherwise destructive mutation without a visible human confirmation step.",
     strategy: "deterministic",
     severity: "CRITICAL",
     negativeEvidence:
       "Every mutation tool in supported files shows an explicit confirmation prompt or is prepared for the user to review before submission.",
     falsePositiveNotes:
-      "UI-only state changes, preview-only tools, and read operations are not mutations.",
+      "UI-only state changes, preview-only tools and read operations are not mutations.",
     remediationTemplate:
       "Add a visible confirmation step before any durable mutation. For declarative forms, omit toolautosubmit and require the user to click Submit.",
   },
@@ -75,15 +75,15 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     id: "WEBMCP-06",
     title: "Sensitive or unbounded input/output contract",
     description:
-      "A tool accepts or returns unbounded, sensitive, or poorly described data without limits or closed schema constraints.",
+      "A tool accepts or returns unbounded, sensitive or poorly described data without limits or closed schema constraints.",
     strategy: "deterministic",
     severity: "MEDIUM",
     negativeEvidence:
-      "Every supported tool schema has bounded string/array lengths, closed object schemas with additionalProperties: false where safe, and descriptions for sensitive fields.",
+      "Every supported tool schema has bounded string/array lengths, closed object schemas with additionalProperties: false where safe and descriptions for sensitive fields.",
     falsePositiveNotes:
       "Open-ended string parameters in genuinely optional fields may remain acceptable when other controls are present.",
     remediationTemplate:
-      "Add maxLength, maxItems, additionalProperties: false, and clear descriptions. Bound output arrays and mark sensitive parameters.",
+      "Add maxLength, maxItems, additionalProperties: false and clear descriptions. Bound output arrays and mark sensitive parameters.",
   },
   {
     id: "WEBMCP-07",
@@ -116,7 +116,7 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     id: "WEBMCP-09",
     title: "Weak schema or missing runtime validation at a trust boundary",
     description:
-      "A tool accepts structured input without a closed schema, type checks, or a validation library at the trust boundary.",
+      "A tool accepts structured input without a closed schema, type checks or a validation library at the trust boundary.",
     strategy: "deterministic",
     severity: "HIGH",
     negativeEvidence:
@@ -124,31 +124,31 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     falsePositiveNotes:
       "Primitive-only tools with no object input have a naturally constrained surface.",
     remediationTemplate:
-      "Define a strict JSON Schema, set additionalProperties: false for object inputs, and add runtime validation before using tool input.",
+      "Define a strict JSON Schema, set additionalProperties: false for object inputs and add runtime validation before using tool input.",
   },
   {
     id: "WEBMCP-10",
-    title: "Duplicate, overlapping, ambiguous, or misleading tool contract",
+    title: "Duplicate, overlapping, ambiguous or misleading tool contract",
     description:
-      "Two or more tools share a name, have misleading titles or descriptions, or overlap so much that an agent cannot choose safely.",
+      "Two or more tools share a name, have misleading titles or descriptions or overlap so much that an agent cannot choose safely.",
     strategy: "deterministic",
     severity: "MEDIUM",
     negativeEvidence:
-      "Every tool has a unique name, a clear title and description, and a distinct purpose.",
+      "Every tool has a unique name, a clear title and description and a distinct purpose.",
     falsePositiveNotes:
       "Mentioning similar concepts is not a duplicate; look for identical names or indistinguishable descriptions.",
     remediationTemplate:
-      "Rename, merge, or clarify duplicate tools so each has a unique name and a distinct, honest description.",
+      "Rename, merge or clarify duplicate tools so each has a unique name and a distinct, honest description.",
   },
   {
     id: "WEBMCP-11",
     title: "Credential or secret embedded in a tool definition",
     description:
-      "A tool's name, title, description, or input schema embeds a credential, API key, token, or connection string, disclosing it to the model and to anyone who can read the tool surface.",
+      "A tool's name, title, description or input schema embeds a credential, API key, token or connection string, disclosing it to the model and to anyone who can read the tool surface.",
     strategy: "deterministic",
     severity: "HIGH",
     negativeEvidence:
-      "No tool name, title, description, or schema field contains a credential-shaped value.",
+      "No tool name, title, description or schema field contains a credential-shaped value.",
     falsePositiveNotes:
       "A field named 'apiKey' that is an empty input parameter the caller fills is not an embedded secret; only literal credential values are flagged.",
     remediationTemplate:
@@ -172,7 +172,7 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     id: "WEBMCP-13",
     title: "Spec drift or misplaced WebMCP registration option",
     description:
-      "Source uses a legacy WebMCP API, a non-standard annotation, or places registration-only exposedTo or signal options inside the tool definition.",
+      "Source uses a legacy WebMCP API, a non-standard annotation or places registration-only exposedTo or signal options inside the tool definition.",
     strategy: "deterministic",
     severity: "MEDIUM",
     negativeEvidence:
@@ -180,13 +180,13 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     falsePositiveNotes:
       "Only parsed executable source is assessed; documentation and string examples are not treated as tool registrations.",
     remediationTemplate:
-      "Use document.modelContext, remove retired APIs and non-standard annotations, and pass exposedTo or signal in registerTool's options argument.",
+      "Use document.modelContext, remove retired APIs and non-standard annotations and pass exposedTo or signal in registerTool's options argument.",
   },
   {
     id: "WEBMCP-14",
     title: "Tool contract exceeds browser guidance",
     description:
-      "A tool or parameter name, description, or identifier exceeds the WebMCP syntax or Chrome guidance budget.",
+      "A tool or parameter name, description or identifier exceeds the WebMCP syntax or Chrome guidance budget.",
     strategy: "deterministic",
     severity: "MEDIUM",
     negativeEvidence:
@@ -194,7 +194,7 @@ export const WEBMCP_CONTROLS: WebMcpControlDefinition[] = [
     falsePositiveNotes:
       "Budgets are deterministic review guidance, not proof that a shorter contract is safe or that a longer one is malicious.",
     remediationTemplate:
-      "Use a concise permitted identifier, keep names within 30 characters, tool descriptions within 500 characters, and parameter descriptions within 150 characters.",
+      "Use a concise permitted identifier, keep names within 30 characters, tool descriptions within 500 characters and parameter descriptions within 150 characters.",
   },
 ]
 

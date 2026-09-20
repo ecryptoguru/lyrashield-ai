@@ -2,7 +2,7 @@
 
 1. Open Cline and click **MCP Servers** → **Configure MCP Servers**.
 2. Add the LyraShield server to `~/.cline/data/settings/cline_mcp_settings.json` for Cline CLI
-   (`CLINE_MCP_SETTINGS_PATH` can override it), or to the IDE extension's settings JSON opened
+   (`CLINE_MCP_SETTINGS_PATH` can override it) or to the IDE extension's settings JSON opened
    from MCP Servers → Configure:
 
    ```json
@@ -28,4 +28,4 @@ For the full Cline MCP Marketplace listing, open an issue at https://github.com/
 
 - **GitHub Repo URL:** https://github.com/ecryptoguru/lyrashield-marketplace
 - **Logo Image:** https://raw.githubusercontent.com/ecryptoguru/lyrashield-marketplace/main/assets/lyrashield-400.png
-- **Reason for Addition:** LyraShield gives Cline users evidence-backed release-assurance tools (security scans, fix proposals, retests, and launch-readiness) over a standard MCP connection.
+- **Reason for Addition:** LyraShield gives Cline users evidence-backed release-assurance tools (security scans, fix proposals, retests and launch-readiness) over a standard MCP connection.

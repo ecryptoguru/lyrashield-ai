@@ -1,15 +1,15 @@
 ---
 title: "LyraShield vs GitHub Advanced Security — compared"
-description: "How LyraShield AI compares to GitHub Advanced Security (GHAS). Evidence states, coverage framework, MCP integration, and deployment model differences."
+description: "How LyraShield AI compares to GitHub Advanced Security (GHAS). Evidence states, coverage framework, MCP integration and deployment model differences."
 competitor: "GitHub Advanced Security"
 heading: "LyraShield AI vs GitHub Advanced Security"
-disclaimer: "Factual comparison. GitHub Advanced Security is GitHub's security suite (CodeQL, secret scanning, Dependabot). LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence, and a fresh retest into one reviewable assurance record. The LyraShield GitHub Action complements GHAS rather than replacing it — it adds diff-aware pattern checks that run in your own runner with no account required."
+disclaimer: "Factual comparison. GitHub Advanced Security is GitHub's security suite (CodeQL, secret scanning, Dependabot). LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence and a fresh retest into one reviewable assurance record. The LyraShield GitHub Action complements GHAS rather than replacing it — it adds diff-aware pattern checks that run in your own runner with no account required."
 updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace GitHub Advanced Security?"
-    a: "No. GHAS is a mature, integrated scanner inside GitHub with CodeQL, secret scanning for 180+ providers, and Dependabot. LyraShield is release assurance for AI-built apps in open beta that separates detection from proof and produces an immutable assurance record. They solve different problems and complement each other."
+    a: "No. GHAS is a mature, integrated scanner inside GitHub with CodeQL, secret scanning for 180+ providers and Dependabot. LyraShield is release assurance for AI-built apps in open beta that separates detection from proof and produces an immutable assurance record. They solve different problems and complement each other."
   - q: "Can I use LyraShield and GitHub Advanced Security together?"
     a: "Yes. LyraShield ships a GitHub Action with SARIF output and a diff-aware gate that writes to the same code scanning view GHAS uses. Run GHAS for continuous deterministic scanning and Dependabot updates, then run LyraShield for the target, review, evidence, fix, retest, report loop before release. LyraShield is live with open registration."
   - q: "When should I choose GitHub Advanced Security over LyraShield?"
@@ -20,16 +20,16 @@ faq:
 
 ## Core approach
 
-| Aspect                  | LyraShield AI                                                                                                                                      | GHAS                                                                        |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Primary focus           | Release assurance for AI-built apps: one record of what was tested, the evidence behind each result, and what a retest established before shipping | Code scanning, secret scanning, dependency management within GitHub         |
-| Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                         | CodeQL (data-flow analysis), pattern matching for secrets                   |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays separate from proof)                                         | Open → dismissed or fixed (alert-based workflow)                            |
-| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                        | No published control framework; query-based detection                       |
-| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                             | Copilot Autofix for CodeQL alerts (suggested, not approval-bound)           |
-| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                               | Copilot Autofix for CodeQL alerts; AI-powered detections for some languages |
-| Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes, and limitations                                        | No release assurance record; alert-based findings                           |
-| Platform lock-in        | No — works with any Git repo or public URL                                                                                                         | Yes — requires GitHub (cloud or Enterprise Server)                          |
+| Aspect                  | LyraShield AI                                                                                                                                     | GHAS                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Primary focus           | Release assurance for AI-built apps: one record of what was tested, the evidence behind each result and what a retest established before shipping | Code scanning, secret scanning, dependency management within GitHub         |
+| Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                        | CodeQL (data-flow analysis), pattern matching for secrets                   |
+| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays separate from proof)                                        | Open → dismissed or fixed (alert-based workflow)                            |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                       | No published control framework; query-based detection                       |
+| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                            | Copilot Autofix for CodeQL alerts (suggested, not approval-bound)           |
+| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                              | Copilot Autofix for CodeQL alerts; AI-powered detections for some languages |
+| Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes and limitations                                        | No release assurance record; alert-based findings                           |
+| Platform lock-in        | No — works with any Git repo or public URL                                                                                                        | Yes — requires GitHub (cloud or Enterprise Server)                          |
 
 ## Capability comparison
 
@@ -62,7 +62,7 @@ faq:
 - You need release assurance — a reviewable record of what was tested and the evidence behind it — before a ship decision
 - Your app is AI-built and you need AI-specific pattern coverage (agent rules, MCP configs, AI patterns)
 - You need recorded fix proposals and permission-gated Fix PR requests tied to a server-generated patch
-- You need immutable assurance reports for compliance, client handoff, or stakeholder review
+- You need immutable assurance reports for compliance, client handoff or stakeholder review
 - You want security checks inside your AI coding agent via MCP
 
 ### Use GHAS when
@@ -80,6 +80,6 @@ LyraShield AI is live and open for registration — create an account and run yo
 
 ## Methodology and scope
 
-This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for its assurance model, and verify vendor details before a purchasing decision.
+This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
 
 For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs GitHub Advanced Security](/blog/github-advanced-security-vs-lyrashield).

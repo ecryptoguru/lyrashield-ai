@@ -11,14 +11,14 @@ const description = agentOnboarding.description
 const buildDate = buildDateFor("src/pages/agents.astro", "src/lib/agent-onboarding.ts")
 
 const answerFirst =
-  `LyraShield documents ${agentOnboarding.clients.length} coding-agent workflows. Most connect through MCP; Aider and Pi use the standalone CLI or CI path. Availability and setup differ by client, and the integration labels below show the evidence behind each claim. Read-only tools can retrieve recorded findings; hosted writes run only within a browser-confirmed connection grant and are checked again at execution.`
+  `LyraShield documents ${agentOnboarding.clients.length} coding-agent workflows. Most connect through MCP; Aider and Pi use the standalone CLI or CI path. Availability and setup differ by client and the integration labels below show the evidence behind each claim. Read-only tools can retrieve recorded findings; hosted writes run only within a browser-confirmed connection grant and are checked again at execution.`
 
 const howToSteps = [
   {
     "@type": "HowToStep" as const,
     position: 1,
     name: "Choose a client workflow",
-    text: "Use the matching integration guide and check its support tier, transport, and activation steps.",
+    text: "Use the matching integration guide and check its support tier, transport and activation steps.",
     url: `${pageUrl}#setup`,
   },
   {
@@ -39,7 +39,7 @@ const howToSteps = [
     "@type": "HowToStep" as const,
     position: 4,
     name: "Verify in the client",
-    text: "Restart the client, inspect its tool list and rules, and make a read-only call. Hosted writes require a scoped connection grant and execution-time checks.",
+    text: "Restart the client, inspect its tool list and rules and make a read-only call. Hosted writes require a scoped connection grant and execution-time checks.",
     url: `${pageUrl}#safety`,
   },
 ]
@@ -69,7 +69,7 @@ const jsonLd = [
     "@type": "HowTo",
     name: "Set up LyraShield for your coding agent",
     description:
-      "Select a documented client workflow, authenticate through the supported method, and verify a read-only tool call in that client.",
+      "Select a documented client workflow, authenticate through the supported method and verify a read-only tool call in that client.",
     step: howToSteps,
   },
   {
@@ -185,7 +185,7 @@ const jsonLd = [
           <span class="font-mono text-sm text-accent">3</span>
           <span class="text-sm text-text-muted">
             <span class="font-medium text-text">Check activation</span> — restart the client,
-            inspect its discovered tools and rules, and make a read-only call.
+            inspect its discovered tools and rules and make a read-only call.
           </span>
         </li>
         <li class="flex gap-3" data-reveal>
@@ -209,7 +209,7 @@ const jsonLd = [
         <code class="rounded bg-bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-text"
           >npx lyrashield init</code
         > detects supported local clients and prepares eligible integrations. Marketplace activation,
-        hosted authentication, and standalone workflows have additional client-specific steps.
+        hosted authentication and standalone workflows have additional client-specific steps.
       </p>
       {
         agentOnboarding.clientGroups.map((group) => (

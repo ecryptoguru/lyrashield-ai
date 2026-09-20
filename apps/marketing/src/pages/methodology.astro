@@ -8,7 +8,7 @@ const canonical = new URL("/methodology", origin).toString()
 const title = "AI app security evidence methodology | LyraShield AI"
 const buildDate = buildDateFor("src/pages/methodology.astro")
 const description =
-  "How LyraShield AI records authorized scan scope, coverage, finding evidence, independent verification, retest outcomes, and every known limitation."
+  "How LyraShield AI records authorized scan scope, coverage, finding evidence, independent verification, retest outcomes and every known limitation."
 const evidenceStates = [
   {
     name: "Detected candidate",
@@ -30,11 +30,11 @@ const evidenceStates = [
 const faq = [
   {
     q: "What is an evidence state?",
-    a: "An evidence state describes how much support a finding has. Detected, independently verified, retest-confirmed, and inconclusive are separate states, not interchangeable labels.",
+    a: "An evidence state describes how much support a finding has. Detected, independently verified, retest-confirmed and inconclusive are separate states, not interchangeable labels.",
   },
   {
     q: "Does a clean or high score prove an app is secure?",
-    a: "No. A score is an interpretation aid derived from the evidence. It does not override the underlying findings, coverage limits, or retest receipts.",
+    a: "No. A score is an interpretation aid derived from the evidence. It does not override the underlying findings, coverage limits or retest receipts.",
   },
   {
     q: "What does 'no finding returned' mean?",
@@ -117,7 +117,7 @@ const jsonLd = [
       <div class="mt-6 rounded-xl border border-border bg-bg-raised p-5 text-sm leading-7 text-text-muted" data-reveal="fade">
         <p class="font-semibold text-text">TL;DR</p>
         <p class="mt-2">
-          Every finding carries one of four evidence states: <strong>detected candidate</strong> (a scanner signal that needs review), <strong>independently verified</strong> (a separate receipt supports it), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent), or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A score or clean result never overrides these facts.
+          Every finding carries one of four evidence states: <strong>detected candidate</strong> (a scanner signal that needs review), <strong>independently verified</strong> (a separate receipt supports it), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent) or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A score or clean result never overrides these facts.
         </p>
       </div>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-07-29">July 29, 2026</time> · Maintained by LyraShield Security + Engineering</p>
@@ -126,8 +126,8 @@ const jsonLd = [
     <section aria-labelledby="record-heading" class="mt-16 border-y border-border py-12">
       <h2 id="record-heading" class="text-2xl font-semibold text-text" data-reveal>What every new scan record preserves</h2>
       <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
-        <div data-reveal><dt class="font-semibold text-text">Scope</dt><dd class="mt-2 leading-7 text-text-muted">The authorized target, available source, scan mode, and immutable result-manifest checksum.</dd></div>
-        <div data-reveal><dt class="font-semibold text-text">Coverage</dt><dd class="mt-2 leading-7 text-text-muted">Which checks completed, were limited, were skipped, or did not apply, including retained limitations.</dd></div>
+        <div data-reveal><dt class="font-semibold text-text">Scope</dt><dd class="mt-2 leading-7 text-text-muted">The authorized target, available source, scan mode and immutable result-manifest checksum.</dd></div>
+        <div data-reveal><dt class="font-semibold text-text">Coverage</dt><dd class="mt-2 leading-7 text-text-muted">Which checks completed, were limited, were skipped or did not apply, including retained limitations.</dd></div>
         <div data-reveal><dt class="font-semibold text-text">Provenance</dt><dd class="mt-2 leading-7 text-text-muted">Which scanner produced a candidate and whether an independent verification receipt exists.</dd></div>
         <div data-reveal><dt class="font-semibold text-text">Outcome</dt><dd class="mt-2 leading-7 text-text-muted">The server-owned retest result and the evidence boundary behind validated or inconclusive status.</dd></div>
       </dl>
@@ -141,7 +141,7 @@ const jsonLd = [
         chrome="app.lyrashieldai.com/scans"
       >
         <b>Records accumulate; they are not overwritten.</b> Each run keeps what ran, when it started
-        and ended, and two counts held separately: what the engine reported, and what was retained
+        and ended and two counts held separately: what the engine reported and what was retained
         after review. Target and repository names are blurred.
       </ProductShot>
     </section>
@@ -185,7 +185,7 @@ const jsonLd = [
         </div>
         <div data-reveal>
           <dt class="font-semibold text-text">Go with conditions</dt>
-          <dd class="mt-2 leading-7 text-text-muted">Score 40–79. The result is releasable only if the conditions recorded in the scorecard—open findings, coverage limits, and retest state—are accepted.</dd>
+          <dd class="mt-2 leading-7 text-text-muted">Score 40–79. The result is releasable only if the conditions recorded in the scorecard—open findings, coverage limits and retest state—are accepted.</dd>
         </div>
         <div data-reveal>
           <dt class="font-semibold text-text">No go</dt>
@@ -210,9 +210,9 @@ const jsonLd = [
 
     <section aria-labelledby="interpret-heading" class="py-16" data-reveal-group>
       <h2 id="interpret-heading" class="text-2xl font-semibold text-text" data-reveal>How should you interpret a LyraShield AI result?</h2>
-      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected candidates from independently verified findings, then read the retest receipt and retained limitations. A LyraShield score or confidence value never replaces the underlying scope, coverage, evidence-state, and retest facts.</p>
+      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected candidates from independently verified findings, then read the retest receipt and retained limitations. A LyraShield score or confidence value never replaces the underlying scope, coverage, evidence-state and retest facts.</p>
       <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>For a broader catalog of web application verification requirements, consult the <a href="https://owasp.org/asvs" rel="noreferrer" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">OWASP Application Security Verification Standard</a>. This reference does not imply certification or full ASVS coverage.</p>
-      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>LyraShield AI does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework), or "adversarial robustness proven." Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model, or a formal certificate that LyraShield has not yet obtained.</p>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>LyraShield AI does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework) or "adversarial robustness proven." Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate that LyraShield has not yet obtained.</p>
     </section>
 
     <section aria-labelledby="faq-heading" class="py-16">

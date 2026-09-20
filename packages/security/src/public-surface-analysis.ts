@@ -258,7 +258,7 @@ function cookieSignals(subject: SurfaceSubject): SurfaceSignal[] {
       title: `Sensitive cookie ${name} is missing ${missing.join(", ")}`,
       description: `The ${name} cookie appears to carry authentication or session state but is missing required browser protections: ${missing.join(", ")}.`,
       remediation:
-        "Set Secure, HttpOnly, and an explicit SameSite policy on every authentication and session cookie.",
+        "Set Secure, HttpOnly and an explicit SameSite policy on every authentication and session cookie.",
       evidence: { cookieName: name, missing },
     })
   }
@@ -334,9 +334,9 @@ function verboseErrorSignals(subject: SurfaceSubject): SurfaceSignal[] {
       severity: "MEDIUM",
       title: "Verbose error or stack trace exposed",
       description:
-        "The response exposes a framework, database, or application stack trace that can reveal internal paths and implementation details.",
+        "The response exposes a framework, database or application stack trace that can reveal internal paths and implementation details.",
       remediation:
-        "Return a generic error response to users, disable production debug mode, and send detailed errors only to access-controlled monitoring.",
+        "Return a generic error response to users, disable production debug mode and send detailed errors only to access-controlled monitoring.",
       evidence: {},
     },
   ]
@@ -358,7 +358,7 @@ function sourceMapSignals(subject: SurfaceSubject): SurfaceSignal[] {
       severity: "LOW",
       title: "Source map referenced by production response",
       description:
-        "The production response references a JavaScript or CSS source map that may expose original source, internal routes, comments, or embedded configuration.",
+        "The production response references a JavaScript or CSS source map that may expose original source, internal routes, comments or embedded configuration.",
       remediation:
         "Do not publish production source maps publicly. Upload them privately to the error-monitoring provider or require authenticated access.",
       evidence: {},
@@ -421,7 +421,7 @@ function privilegedSecretSignals(text: string, subject: SurfaceSubject): Surface
       description:
         "A public page or same-origin client asset contains a pattern associated with a server-side credential. The value is intentionally omitted from this result.",
       remediation:
-        "Move the credential behind a server-side boundary, rotate the exposed value, and audit build artifacts for embedded secrets.",
+        "Move the credential behind a server-side boundary, rotate the exposed value and audit build artifacts for embedded secrets.",
       evidence: {},
     },
   ]

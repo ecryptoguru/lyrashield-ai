@@ -5,18 +5,18 @@ Date: September 18, 2026
 Status: **in execution** (session 2, 2026-09-18). The founder authorised "fix all issues; Myra/demo
 should be live and working; do what's best for UX". Waves 1, 2A–2C, 3F and part of 4 are
 implemented on per-wave branches with local verification; 3D/3E are in progress. Nothing is pushed
-or merged, and this document still does not authorise deployment or production configuration
+or merged and this document still does not authorise deployment or production configuration
 changes — the enablement steps live in the ledger's "Production enablement" section. Execution state
 is tracked in [`2026-09-18-ui-ux-audit-ledger.md`](./2026-09-18-ui-ux-audit-ledger.md) — branches,
-commit SHAs, verification results, and PR status live there; this document stays a point-in-time plan
+commit SHAs, verification results and PR status live there; this document stays a point-in-time plan
 record.
 
 ## Goal
 
 Close every verified UI/UX defect found by the September 18 production audit of `lyrashieldai.com`
-and `app.lyrashieldai.com`, and leave behind regression coverage that prevents the same class of
+and `app.lyrashieldai.com` and leave behind regression coverage that prevents the same class of
 defect from returning — without weakening accessibility contracts, the design system, claim policy,
-terminology, tenancy, or billing behaviour.
+terminology, tenancy or billing behaviour.
 
 Audit register (severity, repro, evidence paths): [`AUDIT-FINDINGS.md`](../../dogfood-output/ui-ux-audit-2026-09-18/findings/AUDIT-FINDINGS.md).
 The register and this plan share the same `UF-nn` identifiers.
@@ -24,7 +24,7 @@ The register and this plan share the same `UF-nn` identifiers.
 ## Relationship to previous work
 
 This is the final UI/UX pass after the Deep Review v13/v16/v17 UX sweeps, the post-login dashboard
-UX/DX upgrade, and the `e2e/visual/uxv2-baseline.spec.ts` visual baselines. Those efforts already
+UX/DX upgrade and the `e2e/visual/uxv2-baseline.spec.ts` visual baselines. Those efforts already
 fixed the large structural issues (navigation reachability, terminology, failure-presentation
 consolidation, mobile shell). This plan therefore contains **surgical fixes, not redesigns**: no
 verified finding requires a layout rebuild.
@@ -51,28 +51,28 @@ surfaces, tap targets) and found them sound — see "Verified NOT findings" in t
   `dogfood-output/ui-ux-audit-2026-09-18/` (gitignored). Aggregate:
   `cross-cutting/aggregate-analysis.txt`; per-capture summaries: `<workstream>/raw/summary.jsonl`.
 - Protocol: read-only. No form was submitted with valid data; nothing was created, edited, deleted,
-  sent, or saved.
+  sent or saved.
 
 ## Executive verdict
 
 The product is in good visual and structural health. Across 270 captures there were **no critical
-layout failures, no broken navigation, no console errors on the dashboard, and every one of the 241
+layout failures, no broken navigation, no console errors on the dashboard and every one of the 241
 sitemap URLs returns 200**.
 
 The defects that matter cluster in four places:
 
 1. **The demo journey is dead.** `/demo` renders a booking widget that cannot load times (endpoint
-   404 in production), reports a misleading connection error, offers no alternative contact path, and
+   404 in production), reports a misleading connection error, offers no alternative contact path and
    throws an uncaught `TurnstileError` on every load. The underlying Turnstile misconfiguration means
    no token can ever be minted, so the moment public Myra/demo is enabled, booking and assistant
    sessions break for every anonymous visitor (UF-01, UF-02).
 2. **Light theme contrast** fails on three shared patterns (hero agent link 4.44:1, docs warn callout
    3.47:1, code comments 3.04:1) (UF-03).
-3. **Citation rot**: OWASP ASVS is dead-linked from `/methodology` and ~15 blog posts, and the
+3. **Citation rot**: OWASP ASVS is dead-linked from `/methodology` and ~15 blog posts and the
    GenAI red-teaming link is dead on `/ai-safety` (UF-04).
 4. **Accessibility gaps that axe can prove**: keyboard access to the two horizontally scrolling
    marketing tables, five public/app routes missing a `<main>` landmark, one route with no `h1`,
-   heading-order skips on six routes, and a destructive badge at 3.87:1 (UF-05…UF-09).
+   heading-order skips on six routes and a destructive badge at 3.87:1 (UF-05…UF-09).
 
 Everything else is bounded polish (overflow at 8 px boundaries, tap targets, mobile table
 affordances).
@@ -81,17 +81,17 @@ The dashboard deep pass (W5, 19 further findings — `findings/dashboard-seconda
 cluster: **design-token drift and information-architecture gaps in the console**. The light theme's
 primary action is royal blue `oklch(0.48 0.16 245)` instead of the documented teal, the focus ring is
 cyan with no offset instead of amber, `/dashboard/projects` is unreachable from any navigation, the
-mobile header labels two routes "Home", invalid ids return HTTP 200 soft 404s, and several empty
+mobile header labels two routes "Home", invalid ids return HTTP 200 soft 404s and several empty
 states duplicate the primary CTA. None of these is a crash; together they are the difference between
 a console that follows its own design system and one that only approximates it.
 
 ## Prioritization method
 
-Priority combines user impact, reach (how many pages/users), evidence strength, and fix cost:
+Priority combines user impact, reach (how many pages/users), evidence strength and fix cost:
 
-- **P0** — blocks a core conversion or auth journey, or will break one the moment a flag flips.
+- **P0** — blocks a core conversion or auth journey or will break one the moment a flag flips.
 - **P1** — a real accessibility failure (axe-provable or AA contrast), a dead citation on a trust
-  page, or layout overflow that hides content on a supported viewport.
+  page or layout overflow that hides content on a supported viewport.
 - **P2** — polish with a workaround (tap-target sizes, scroll affordances, native-validation parity).
 - **P3** — record-only; revisit if measurement justifies it.
 
@@ -122,7 +122,7 @@ Priority combines user impact, reach (how many pages/users), evidence strength, 
 ### Dashboard deep pass (W5) — register additions
 
 Full repro and evidence: `findings/dashboard-secondary.md`. Coordinator re-verified the soft-404
-status, the light-theme primary token, the orphaned Projects route, and the mobile "Home" header.
+status, the light-theme primary token, the orphaned Projects route and the mobile "Home" header.
 
 | ID    | Priority | Surface   | Finding                                                                                      | Source                         | Decision                      |
 | ----- | -------- | --------- | -------------------------------------------------------------------------------------------- | ------------------------------ | ----------------------------- |
@@ -172,14 +172,14 @@ Every fix wave must preserve these; a wave that cannot is rejected:
 - **Design system** (`DESIGN.md`): dark-first tokens, single cyan accent, **no purple/violet**, mono
   labels for machine states, one primary action per surface, honest empty/negative states, no emoji.
 - **Claims policy** (`docs/claims-policy.md`): no certification, compliance, guarantee, universal
-  detection, or robustness claims; evidence-limited wording only.
+  detection or robustness claims; evidence-limited wording only.
 - **Terminology**: customer copy says **Scan** and **Finding** — never the noun "run" or "issue".
 - **Accessibility contracts**: focus restoration on dialogs/sheets, `aria-live` status regions,
   reduced-motion honouring, visible focus rings, skip links, labelled controls.
 - **Failure surfaces**: structured `OperationFailurePresentation` (cause / effect / recovery + href),
   never raw error strings.
 - **Tenancy/billing/security**: no changes to RLS scopes, billing ownership, queue identity, evidence
-  encryption, or provider integrations. This plan touches presentation only.
+  encryption or provider integrations. This plan touches presentation only.
 - **Marketing build**: content validators (`blog:validate*`, `compare:validate`, `validate-redirects`)
   and the generated `dist/server/wrangler.json` deploy path must keep passing.
 - **Visual baselines**: `e2e/visual/uxv2-baseline.spec.ts` snapshots are the regression net. Update
@@ -201,7 +201,7 @@ Scope: make the audit reproducible in CI before touching pixels.
   `/blog/*`, `/webmcp`, `/demo`; app: `/dashboard`, `/dashboard/targets`, `/dashboard/scans`,
   `/dashboard/findings`, `/sign-in`, `/sign-up`, `/affiliates`, `/score/methodology`), asserts at
   393/768/1440 px:
-  1. no horizontal overflow (`scrollWidth ≤ clientWidth` for `documentElement`, and no element
+  1. no horizontal overflow (`scrollWidth ≤ clientWidth` for `documentElement` and no element
      crossing the viewport edge except declared scroll containers);
   2. axe violation budget = 0 for `wcag2a,wcag2aa` (excluding documented, justified exemptions);
   3. no uncaught JS errors.
@@ -237,10 +237,10 @@ unavailability surface. Rollback: revert the branch (no schema, no data).
 Scope (file sets are disjoint — parallelisable, see orchestration):
 
 - **UF-04** citations: replace the two dead URLs across `apps/marketing/src/pages/methodology.astro`,
-  `apps/marketing/src/pages/ai-safety.astro`, and the ~15 `src/content/blog/*.mdx` files that carry
+  `apps/marketing/src/pages/ai-safety.astro` and the ~15 `src/content/blog/*.mdx` files that carry
   the ASVS link (working URLs are recorded in the register).
 - **UF-03** contrast: light-theme accent text colour (hero agent link), warn-callout text token in
-  `apps/marketing/src/styles/global.css` (used by `DocsLayout.astro`/`AgentSnippet.astro`), and the
+  `apps/marketing/src/styles/global.css` (used by `DocsLayout.astro`/`AgentSnippet.astro`) and the
   code-comment colour emitted by the build-time highlighter (inline `#6A737D` on `#24292e`; locate
   the theme used by `@astrojs/markdown-satteri`). Target ≥4.5:1 in both themes.
 - **UF-05 / UF-12** keyboard access: make the `overflow-x-auto` wrappers in
@@ -259,7 +259,7 @@ Verification: Wave 0 harness green for the marketing page list; `pnpm --filter @
 lint/typecheck/test; all content validators; light+dark axe runs on home/docs/blog/pricing/webmcp;
 screenshot re-capture at three viewports.
 
-### Wave 3 — P1/P2: app + dashboard accessibility, failure surfaces, and design tokens
+### Wave 3 — P1/P2: app + dashboard accessibility, failure surfaces and design tokens
 
 Scope:
 
@@ -268,11 +268,11 @@ Scope:
   `/lite-check/[token]`, `/onboarding` — and contain stray content in landmarks.
 - **UF-07 / UF-20 / UF-21** failure surfaces: replace the inline `!scan` branch in
   `dashboard/scans/[id]/page.tsx:36-45` with `notFound()` (or the shared
-  `OperationFailurePresentation`), which fixes the missing `h1`, adds a recovery link, and returns a
+  `OperationFailurePresentation`), which fixes the missing `h1`, adds a recovery link and returns a
   real 404 status + correct document title. Apply the same treatment to the targets route so both
   error classes render identically. Verify with an authenticated `fetch` that the status is 404.
 - **UF-22** `app/not-found.tsx`: make "Go to dashboard" the single primary action, drop "Go home"
-  (or demote it), and add a contextual back link.
+  (or demote it) and add a contextual back link.
 - **UF-08 / UF-23** heading order: `/dashboard/reports`, `/dashboard/findings/reports`,
   `/dashboard/billing`, `/buy/local`, `/pricing` (marketing part already in Wave 2) — fix the shared
   `CardTitle` default (`packages/ui/src/card.tsx:30`) rather than patching call sites, then re-check
@@ -281,9 +281,9 @@ Scope:
   768–1023px) in `(dashboard)/layout.tsx`; this is the root cause of UF-28 and the wrapped step
   strips.
 - **UF-28** targets/products table: responsive `min-w`, correct column priority below `sm` (show
-  Status, drop Domain verification), and a scroll affordance.
+  Status, drop Domain verification) and a scroll affordance.
 - **UF-29 / UF-30** design tokens: set the light `--color-primary` to the documented teal band
-  (hue 175–215) with contrast-checked foreground, and set `--color-ring` to amber `#f5b84b` with a
+  (hue 175–215) with contrast-checked foreground and set `--color-ring` to amber `#f5b84b` with a
   visible offset; give sidebar/nav links the same `focus-visible` treatment. Re-check contrast for
   every primary button and the focus indicator on accent-coloured controls.
 - **UF-09** destructive badge contrast on `/dashboard/targets/[id]` (shared UI token; review every
@@ -295,7 +295,7 @@ Verification: Wave 0 harness green for the app page list; `pnpm lint`, `pnpm typ
 for the not-found routes; visual baselines updated only if pixels intentionally move (documented in
 the same PR).
 
-### Wave 4 — P2/P3: console IA, copy, and validation parity
+### Wave 4 — P2/P3: console IA, copy and validation parity
 
 Scope:
 
@@ -310,7 +310,7 @@ Scope:
   Coding Agents / Integrations to a secondary nav group (and fix the missing active-item cue) or
   remove/redirect them. Record the decision in the ledger before implementing.
 - **UF-33 / UF-34 / UF-35** copy: plural-aware "target(s)" fix, "review" → "scan" terminology sweep
-  (5 files), and a self-explaining Scans empty state with an inline CTA.
+  (5 files) and a self-explaining Scans empty state with an inline CTA.
 - **UF-36 / UF-37** Evidence Vault primary action for the outstanding step; focus restoration on
   inline create-form cancel (and consistent initial focus).
 - **UF-38** billing plan chooser content — **product decision required** (prices/minutes in-app vs a
@@ -325,8 +325,8 @@ Verification: as Wave 3, plus manual keyboard pass on the forms and a copy revie
 
 - Re-run the full audit harness on the exact merged SHA at 1440/768/393 in both themes; the register
   must reconcile to zero open P0/P1 items or carry explicit, reasoned deferrals.
-- Update `AGENTS.md` "Immediate execution queue", and remove branch-only wording after merge.
-- Ledger: record final SHAs, PR links, and the residual P2/P3 list.
+- Update `AGENTS.md` "Immediate execution queue" and remove branch-only wording after merge.
+- Ledger: record final SHAs, PR links and the residual P2/P3 list.
 
 ## Subagent orchestration for execution
 
@@ -358,14 +358,14 @@ diff touches files outside its declared set; ensure the ledger is updated before
 
 ## Out of scope / not a fix
 
-- Populated-data dashboard views, platform-admin console, and real-id share surfaces — untested in
+- Populated-data dashboard views, platform-admin console and real-id share surfaces — untested in
   this audit (no account); a follow-up audit is required before claiming coverage.
 - OAuth provider completion, password-reset completion, account creation, purchases, settings
   mutations — excluded by the read-only protocol.
 - `apps/desktop` (Tauri) and `apps/worker` — not part of this UI audit.
 - Third-party vendor behaviour (LinkedIn's bot-block `999`, PostHog/Turnstile CDN internals) beyond
   the one configuration bug in UF-02.
-- Any billing, tenancy, RLS, queue, evidence, or provider change.
+- Any billing, tenancy, RLS, queue, evidence or provider change.
 
 ## Evidence index
 

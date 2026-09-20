@@ -1,19 +1,19 @@
 ---
 title: "LyraShield vs Horizon3 NodeZero — compared"
-description: "How LyraShield AI compares to Horizon3.ai for autonomous infra pentest. Approach, evidence model, coverage framework, and deployment model differences."
+description: "How LyraShield AI compares to Horizon3.ai for autonomous infra pentest. Approach, evidence model, coverage framework and deployment model differences."
 competitor: "Horizon3.ai"
 heading: "LyraShield AI vs Horizon3.ai"
-disclaimer: "Factual comparison. [Horizon3.ai's NodeZero](https://www.horizon3.ai/nodezero/) is an autonomous, production-safe pentest platform that runs real attack techniques across web apps, infrastructure, cloud, data, and identity — chaining weaknesses into attack paths and verifying fixes, with no agents. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports, and reviewed fix proposals. NodeZero validates production resilience across the whole environment; LyraShield AI gates AI-generated-code releases. Neither replaces the other."
+disclaimer: "Factual comparison. [Horizon3.ai's NodeZero](https://www.horizon3.ai/nodezero/) is an autonomous, production-safe pentest platform that runs real attack techniques across web apps, infrastructure, cloud, data and identity — chaining weaknesses into attack paths and verifying fixes, with no agents. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports and reviewed fix proposals. NodeZero validates production resilience across the whole environment; LyraShield AI gates AI-generated-code releases. Neither replaces the other."
 updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace Horizon3 NodeZero?"
-    a: "No. NodeZero is an autonomous, production-safe pentest that chains weaknesses across internal, external, cloud, Kubernetes, Active Directory, and identity, with attack-path diagrams and Quick Verify retests. LyraShield in open beta is app-layer release assurance for AI-built apps with evidence states, coverage receipts, and reviewed fix proposals."
+    a: "No. NodeZero is an autonomous, production-safe pentest that chains weaknesses across internal, external, cloud, Kubernetes, Active Directory and identity, with attack-path diagrams and Quick Verify retests. LyraShield in open beta is app-layer release assurance for AI-built apps with evidence states, coverage receipts and reviewed fix proposals."
   - q: "Can I use Horizon3 NodeZero and LyraShield together?"
-    a: "Yes. Use NodeZero to prove production resilience across your environment and meet CTEM goals, and use LyraShield to gate releases of AI-built apps with an immutable assurance record. NodeZero offers Docker and OVA deploy for internal tests and has commercial terms that vary by scope; LyraShield is live open beta."
+    a: "Yes. Use NodeZero to prove production resilience across your environment and meet CTEM goals and use LyraShield to gate releases of AI-built apps with an immutable assurance record. NodeZero offers Docker and OVA deploy for internal tests and has commercial terms that vary by scope; LyraShield is live open beta."
   - q: "When should I choose Horizon3 NodeZero over LyraShield?"
-    a: "Choose NodeZero when you need continuous exposure validation across networks, identities, and cloud, not just one app, with FedRAMP High options for federal environments. Its strength is proving what an attacker can actually achieve across environments. Choose LyraShield when your bottleneck is AI-specific patterns, MCP configs, and a ship or no-ship decision."
+    a: "Choose NodeZero when you need continuous exposure validation across networks, identities and cloud, not just one app, with FedRAMP High options for federal environments. Its strength is proving what an attacker can actually achieve across environments. Choose LyraShield when your bottleneck is AI-specific patterns, MCP configs and a ship or no-ship decision."
 ---
 
 ## Core approach
@@ -76,6 +76,6 @@ NodeZero proves production resilience across the environment; LyraShield AI gate
 
 ## Methodology and scope
 
-This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for its assurance model, and verify vendor details before a purchasing decision.
+This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
 
 For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Horizon3.ai](/blog/horizon3-vs-lyrashield).

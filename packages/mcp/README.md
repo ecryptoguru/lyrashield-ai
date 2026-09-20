@@ -1,6 +1,6 @@
 # @lyrashield/mcp
 
-The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an AI coding tool run bounded security scans, read findings with their recorded evidence states, and drive the fix → verify loop against your LyraShield workspace — without leaving the editor.
+The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an AI coding tool run bounded security scans, read findings with their recorded evidence states and drive the fix → verify loop against your LyraShield workspace — without leaving the editor.
 
 Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0). The server is also distributed as a portable Agent Plugin via [`@lyrashield/agent-plugin`](../agent-plugin/README.md) (Agent Plugins v1.0.0).
 
@@ -10,15 +10,15 @@ are the explicit CI/headless fallback, not the default interactive setup.
 
 ## Protocol compatibility
 
-This release uses `@modelcontextprotocol/sdk` 1.30.0. Its latest stable protocol is `2025-11-25`; it also negotiates `2025-06-18`, `2025-03-26`, `2024-11-05`, and `2024-10-07` for older clients.
+This release uses `@modelcontextprotocol/sdk` 1.30.0. Its latest stable protocol is `2025-11-25`; it also negotiates `2025-06-18`, `2025-03-26`, `2024-11-05` and `2024-10-07` for older clients.
 
-- Server identity includes a title, description, website, version, and usage instructions.
-- Every tool publishes an input schema, output schema, title, safety annotations, and structured content.
+- Server identity includes a title, description, website, version and usage instructions.
+- Every tool publishes an input schema, output schema, title, safety annotations and structured content.
 - Tool calls currently publish `execution.taskSupport: "forbidden"`. A returned LyraShield scan ID is a durable product job that clients poll with `lyrashield_get_scan_status`; it is not an MCP protocol task.
 - Hosted responses use `Cache-Control: no-store` and vary on authorization and MCP protocol version. The server does not advertise unsupported MCP list-cache metadata.
 - Call arguments are validated against each tool's advertised `inputSchema` before execution; violations return a structured `Invalid tool arguments` error naming the offending fields.
 - Tool results are capped at 256 KiB serialized (`MCP_RESULT_MAX_BYTES`). Oversized text content and `structuredContent` are truncated with an explicit `[… truncated]` marker / `truncated: true` flag so a partial result is never mistaken for a complete one.
-- The hosted transport remains stateless and fail-closed. It does not advertise durable MCP Tasks because an in-memory task store would make serverless polling, cancellation, and replay unreliable.
+- The hosted transport remains stateless and fail-closed. It does not advertise durable MCP Tasks because an in-memory task store would make serverless polling, cancellation and replay unreliable.
 
 See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior and unsupported draft gaps. Tool annotations are client hints only; the server always enforces prompt-injection checks and the connection's server-side authorization independently.
 
@@ -26,28 +26,28 @@ See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior a
 
 Every API-backed tool calls the LyraShield REST API with a workspace API key or OAuth bearer; the local-only `lyrashield_check_diff` tool inspects the working tree directly and needs neither. New write-scoped OAuth consent has one Connect action authorizing the displayed workflows for the workspace, including current and future targets and supported scan profiles. Matching hosted calls run without another LyraShield review and require an idempotency key. Read-only requests remain read-only; existing restricted connections are never silently expanded.
 
-| Tool                                  | Kind  | What it does                                                                                             |
-| ------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------- |
-| `lyrashield_list_workspaces`          | read  | List workspaces this key can access                                                                      |
-| `lyrashield_list_targets`             | read  | List targets (repos/apps/APIs) in a workspace                                                            |
-| `lyrashield_get_scan_status`          | read  | Status, timing, and events for a scan                                                                    |
-| `lyrashield_get_findings`             | read  | Paginated findings (default 50, max 100), filterable by target, scan, status, severity, and verification |
-| `lyrashield_explain_finding`          | read  | Full detail + plain-language explanation of a finding                                                    |
-| `lyrashield_generate_fix_plan`        | read  | Assemble a remediation plan from a finding                                                               |
-| `lyrashield_get_launch_readiness`     | read  | GO / GO_WITH_CONDITIONS / NO_GO verdict                                                                  |
-| `lyrashield_create_pr_security_recap` | read  | Markdown recap for a PR comment                                                                          |
-| `lyrashield_check_diff`               | read  | Fast **advisory** heuristic pre-filter on a diff (not a scan)                                            |
-| `lyrashield_scan_target`              | write | Start a scan on a target                                                                                 |
-| `lyrashield_run_pr_scan`              | write | Start a PR-focused (CHECK_PR) scan                                                                       |
-| `lyrashield_record_fix_proposal`      | write | Record a fix proposal on a finding                                                                       |
-| `lyrashield_verify_fix`               | write | Queue a retest to verify a fix                                                                           |
-| `lyrashield_create_report`            | write | Generate a shareable report                                                                              |
+| Tool                                  | Kind  | What it does                                                                                            |
+| ------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------- |
+| `lyrashield_list_workspaces`          | read  | List workspaces this key can access                                                                     |
+| `lyrashield_list_targets`             | read  | List targets (repos/apps/APIs) in a workspace                                                           |
+| `lyrashield_get_scan_status`          | read  | Status, timing and events for a scan                                                                    |
+| `lyrashield_get_findings`             | read  | Paginated findings (default 50, max 100), filterable by target, scan, status, severity and verification |
+| `lyrashield_explain_finding`          | read  | Full detail + plain-language explanation of a finding                                                   |
+| `lyrashield_generate_fix_plan`        | read  | Assemble a remediation plan from a finding                                                              |
+| `lyrashield_get_launch_readiness`     | read  | GO / GO_WITH_CONDITIONS / NO_GO verdict                                                                 |
+| `lyrashield_create_pr_security_recap` | read  | Markdown recap for a PR comment                                                                         |
+| `lyrashield_check_diff`               | read  | Fast **advisory** heuristic pre-filter on a diff (not a scan)                                           |
+| `lyrashield_scan_target`              | write | Start a scan on a target                                                                                |
+| `lyrashield_run_pr_scan`              | write | Start a PR-focused (CHECK_PR) scan                                                                      |
+| `lyrashield_record_fix_proposal`      | write | Record a fix proposal on a finding                                                                      |
+| `lyrashield_verify_fix`               | write | Queue a retest to verify a fix                                                                          |
+| `lyrashield_create_report`            | write | Generate a shareable report                                                                             |
 
-> `lyrashield_check_diff` is a lightweight local heuristic (obvious hardcoded secrets, `eval`, unsafe HTML, SQL concatenation) meant as a pre-PR pre-filter. It is **not** a scanner — run `lyrashield_run_pr_scan` for a bounded repository scan with findings, coverage receipts, evidence states, and explicit limitations. Results are not automatically independently verified or exploit-validated.
+> `lyrashield_check_diff` is a lightweight local heuristic (obvious hardcoded secrets, `eval`, unsafe HTML, SQL concatenation) meant as a pre-PR pre-filter. It is **not** a scanner — run `lyrashield_run_pr_scan` for a bounded repository scan with findings, coverage receipts, evidence states and explicit limitations. Results are not automatically independently verified or exploit-validated.
 >
-> `lyrashield_scan_target` and `lyrashield_run_pr_scan` accept `targetId` directly, or you can pass `repo` (e.g. `ecryptoguru/lyrashield-ai`, `https://github.com/ecryptoguru/lyrashield-ai.git`, or `git@github.com:ecryptoguru/lyrashield-ai.git`) to create or reuse a target automatically. `auto: true` detects the current git repo only in the local stdio server; hosted MCP clients must pass `repo` or `targetId`.
+> `lyrashield_scan_target` and `lyrashield_run_pr_scan` accept `targetId` directly or you can pass `repo` (e.g. `ecryptoguru/lyrashield-ai`, `https://github.com/ecryptoguru/lyrashield-ai.git` or `git@github.com:ecryptoguru/lyrashield-ai.git`) to create or reuse a target automatically. `auto: true` detects the current git repo only in the local stdio server; hosted MCP clients must pass `repo` or `targetId`.
 >
-> **Review-depth guide:** choose `QUICK` for pre-PR and fast repository checks, `STANDARD` for general repository or launch reviews, and `DEEP` only for explicit deep/compliance work. `SAFE` is a compatibility alias for repository `QUICK`. `CUSTOM` selects only the repository `DEEP` profile; it does not select a goal. For an authorized repository pentest, send `goal: FULL_PENTEST` with `mode: DEEP` or `CUSTOM`. Deeper modes consume more compute and take longer, so choose the least intensive mode that answers the question. `lyrashield_scan_target` defaults to `STANDARD`; `lyrashield_run_pr_scan` defaults to `QUICK`.
+> **Review-depth guide:** choose `QUICK` for pre-PR and fast repository checks, `STANDARD` for general repository or launch reviews and `DEEP` only for explicit deep/compliance work. `SAFE` is a compatibility alias for repository `QUICK`. `CUSTOM` selects only the repository `DEEP` profile; it does not select a goal. For an authorized repository pentest, send `goal: FULL_PENTEST` with `mode: DEEP` or `CUSTOM`. Deeper modes consume more compute and take longer, so choose the least intensive mode that answers the question. `lyrashield_scan_target` defaults to `STANDARD`; `lyrashield_run_pr_scan` defaults to `QUICK`.
 
 ## Setup
 
@@ -104,30 +104,30 @@ command = "npx"
 args = ["-y", "@lyrashield/mcp"]
 ```
 
-For the API-key fallback, add explicit values under `[mcp_servers.lyrashield.env]`, or use
+For the API-key fallback, add explicit values under `[mcp_servers.lyrashield.env]` or use
 `env_vars = ["LYRASHIELD_API_KEY"]` when Codex should inherit the variable from its parent process.
 
-Per-client config for OpenCode, Kilo Code, Cline, Zed, and the cloud platforms lives in the LyraShield docs.
+Per-client config for OpenCode, Kilo Code, Cline, Zed and the cloud platforms lives in the LyraShield docs.
 
 ### Supported-client boundary
 
 The integration registry contains 30 install entries resolving to 26 preferred client surfaces.
-Entries are `COMPATIBLE`, `EXPERIMENTAL`, or `DEPRECATED` and record either documentation,
-package-conformance, or retained runtime evidence. Presence in the registry means LyraShield can
+Entries are `COMPATIBLE`, `EXPERIMENTAL` or `DEPRECATED` and record either documentation,
+package-conformance or retained runtime evidence. Presence in the registry means LyraShield can
 render or guide that client's current config shape; it does not claim that every client release
 completed an authenticated runtime matrix.
 
-- Preferred Agent Plugin installs: Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro.
+- Preferred Agent Plugin installs: Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro.
   Package-conformance checks cover the four generated shims; GitHub Copilot uses the portable root
   manifest and remains `EXPERIMENTAL` until a retained client-runtime receipt exists.
 - VS Code's reserved Agent Plugin entry is experimental and not preferred. Use its verified
   `.vscode/mcp.json` path.
 - Config or guided setup: VS Code, Zed, Gemini CLI, OpenCode, Kilo Code, Cline, JetBrains,
   Amp, Roo Code, MiMo Code, Codebuff, Oh-My-Pi, Copilot CLI, Goose, Aider, Devin CLI, Antigravity,
-  PiCode, OpenClaw, Hermes, and Devin, subject to each registry entry's support tier.
+  PiCode, OpenClaw, Hermes and Devin, subject to each registry entry's support tier.
 
 Run `lyrashield init` for detected clients or `lyrashield install <agent>` for one explicit target.
-Do not reuse a nearby client's JSON/TOML shape: root keys, transport names, credential interpolation,
+Do not reuse a nearby client's JSON/TOML shape: root keys, transport names, credential interpolation
 and discovery locations differ.
 
 ### Credentials resolution
@@ -136,7 +136,7 @@ The server gives `LYRASHIELD_API_KEY` or `LYRASHIELD_OAUTH_ACCESS_TOKEN` precede
 
 `@lyrashield/mcp` is an MCP stdio server, not a command-line scanner: start it with `npx -y @lyrashield/mcp` and let your MCP client call its tools. For pull-request CI, use the [LyraShield GitHub Action](../../README.md#github-action) instead.
 
-`lyrashield login --oauth` opens hosted consent using authorization code flow with PKCE and an issuer-bound loopback callback. It saves the selected workspace and tokens only after successful exchange and authenticated workspace discovery. Failed login preserves existing credentials. `lyrashield login` accepts an API key instead. `packages/credentials` owns storage, environment precedence, origin binding, refresh locking, and atomic updates for both CLI and MCP.
+`lyrashield login --oauth` opens hosted consent using authorization code flow with PKCE and an issuer-bound loopback callback. It saves the selected workspace and tokens only after successful exchange and authenticated workspace discovery. Failed login preserves existing credentials. `lyrashield login` accepts an API key instead. `packages/credentials` owns storage, environment precedence, origin binding, refresh locking and atomic updates for both CLI and MCP.
 
 ### Remote (Streamable HTTP) — for cloud editors
 
@@ -175,14 +175,14 @@ Register the endpoint without a static authorization header so the client can fo
 }
 ```
 
-The remote endpoint runs the same guard and tools as stdio. Hosted responses are never cacheable. OAuth automation binds each call to the connection, workspace, user, OAuth client, authorization version, scopes, expiry, operation, target, profile, and canonical input hash. Current membership and role are checked before returning a stored operation result as well as before execution. Pausing, revoking, expiring, or changing a connection invalidates subsequent calls immediately.
+The remote endpoint runs the same guard and tools as stdio. Hosted responses are never cacheable. OAuth automation binds each call to the connection, workspace, user, OAuth client, authorization version, scopes, expiry, operation, target, profile and canonical input hash. Current membership and role are checked before returning a stored operation result as well as before execution. Pausing, revoking, expiring or changing a connection invalidates subsequent calls immediately.
 
 ## Authorization behavior
 
 - **New delegated OAuth connection:** Connect is the authorization. Matching hosted mutations require `idempotencyKey`; reuse it only for identical retries.
 - **Connection outside its grant:** the call fails closed. Reconnect to authorize the required access.
 - **API key or legacy token on the hosted endpoint:** one structured `connect_required` response naming the OAuth connect path. Nothing is queued and nothing executes — connect a client first.
-- **Local stdio with an API key:** the REST API enforces the credential's scope, current role, target authorization, and budget without a second LyraShield prompt.
+- **Local stdio with an API key:** the REST API enforces the credential's scope, current role, target authorization and budget without a second LyraShield prompt.
 - **Read-only credential:** mutations are denied.
 
 Coding-agent hosts may impose their own tool permission dialogs. LyraShield cannot suppress those controls. API-key and local stdio calls do not claim the hosted OAuth operation ledger's replay guarantee. Pull requests never auto-merge.
@@ -193,7 +193,7 @@ Coding-agent hosts may impose their own tool permission dialogs. LyraShield cann
 - SDK lock: `@modelcontextprotocol/sdk` 1.30.0; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
 - `pnpm --filter @lyrashield/mcp test` covers protocol negotiation, stdio/HTTP transport,
-  credentials, prompt-injection guards, schemas, structured results, and approval policy.
+  credentials, prompt-injection guards, schemas, structured results and approval policy.
 - A stored OAuth credential is refreshed before the stdio server starts when it is expired or
   within the one-minute refresh window, including when `LYRASHIELD_API_URL` overrides the API
   origin; the rotated credential is atomically persisted. Environment credentials remain immutable
@@ -202,7 +202,7 @@ Coding-agent hosts may impose their own tool permission dialogs. LyraShield cann
   tests and lists intentionally unsupported draft features.
 
 These are repository compatibility receipts. Production OAuth callbacks, live provider state,
-client-specific authenticated browser flows, and marketplace publication require separate live
+client-specific authenticated browser flows and marketplace publication require separate live
 evidence and are not implied by a green package suite.
 
 ## License

@@ -1,6 +1,6 @@
 ---
 title: "Idempotency and Replay Protection for SaaS"
-description: "Make retries and duplicate webhooks safe with durable operation keys, canonical request binding, atomic state changes, and stored results."
+description: "Make retries and duplicate webhooks safe with durable operation keys, canonical request binding, atomic state changes and stored results."
 pubDate: 2026-07-17
 updatedDate: 2026-08-07
 author: lyrashield-team
@@ -16,12 +16,12 @@ faq:
   - q: "Do idempotent HTTP methods prevent duplicate webhook effects?"
     a: "No. HTTP method semantics describe the intended effect of repeated requests. A webhook POST still needs a durable uniqueness boundary and an atomic business mutation in the receiving application."
   - q: "How do I stop one key from being reused with different input?"
-    a: "Store a canonical hash of the operation type, authenticated scope, and validated request beside the key. Reject any later request whose hash differs instead of returning the first result."
+    a: "Store a canonical hash of the operation type, authenticated scope and validated request beside the key. Reject any later request whose hash differs instead of returning the first result."
 ---
 
-**Direct answer:** Make a side effect idempotent by binding a caller-supplied or provider operation key to one canonical request, enforcing uniqueness in durable storage, and committing the business mutation with the stored result in one transaction. Retries return that result. Reuse with different input is rejected. Handle event ordering separately from duplicate delivery.
+**Direct answer:** Make a side effect idempotent by binding a caller-supplied or provider operation key to one canonical request, enforcing uniqueness in durable storage and committing the business mutation with the stored result in one transaction. Retries return that result. Reuse with different input is rejected. Handle event ordering separately from duplicate delivery.
 
-Retries are normal. Browsers resend after a timeout, queues redeliver after a worker crash, providers retry webhooks, and users double-click. The dangerous case is uncertainty: the first request may have committed even though the caller never received the response.
+Retries are normal. Browsers resend after a timeout, queues redeliver after a worker crash, providers retry webhooks and users double-click. The dangerous case is uncertainty: the first request may have committed even though the caller never received the response.
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) treats repeatability as release evidence for one operation. A signature proves who signed a message. Authorization proves whether the operation is allowed. Idempotency controls what repeated delivery does.
 
@@ -53,9 +53,9 @@ Signature verification would not fix this. A provider can validly deliver the sa
 
 Generated handlers often implement idempotency as a preliminary lookup followed by ordinary business code. The steps look correct in sequence, but concurrency occurs between them. A cache lock can have the same gap if it expires before the database commit or covers only one application instance.
 
-Another shortcut stores only the key. If the caller accidentally reuses that key with a different amount, workspace, or operation, the server may return an unrelated result or silently apply the wrong intent.
+Another shortcut stores only the key. If the caller accidentally reuses that key with a different amount, workspace or operation, the server may return an unrelated result or silently apply the wrong intent.
 
-Idempotency also gets confused with ordering. Ignoring a duplicate does not stop an older subscription event from overwriting a newer state. The system needs a separate version, timestamp, or state-transition rule for out-of-order events.
+Idempotency also gets confused with ordering. Ignoring a duplicate does not stop an older subscription event from overwriting a newer state. The system needs a separate version, timestamp or state-transition rule for out-of-order events.
 
 ## Define the operation identity
 
@@ -84,13 +84,13 @@ const requestIdentity = canonicalHash({
 })
 ```
 
-Canonicalization must be deterministic. Define key ordering, number representation, omitted versus null values, and any normalized identifiers. Better still, hash a small validated command object rather than arbitrary raw JSON.
+Canonicalization must be deterministic. Define key ordering, number representation, omitted versus null values and any normalized identifiers. Better still, hash a small validated command object rather than arbitrary raw JSON.
 
-Stripe's current [idempotent request documentation](https://docs.stripe.com/api/idempotent_requests) stores the first result for a key and compares later parameters with the original. Stripe documents its own retention and pruning behavior. Your application should choose storage duration from its retry, dispute, and replay model rather than copying the provider's minimum.
+Stripe's current [idempotent request documentation](https://docs.stripe.com/api/idempotent_requests) stores the first result for a key and compares later parameters with the original. Stripe documents its own retention and pruning behavior. Your application should choose storage duration from its retry, dispute and replay model rather than copying the provider's minimum.
 
 ## Commit the key and mutation together
 
-Use a database unique constraint on the operation scope and key. Perform the idempotency insert, business mutation, and stored response in one transaction or another atomic unit supported by the storage system.
+Use a database unique constraint on the operation scope and key. Perform the idempotency insert, business mutation and stored response in one transaction or another atomic unit supported by the storage system.
 
 ```ts
 await db.transaction(async (tx) => {
@@ -125,7 +125,7 @@ Define terminal and recoverable states. `COMPLETED` can return its stored result
 
 Store only the response fields needed for a consistent retry. A full body can contain personal or short-lived data that should not remain for the entire key-retention period. If the original response includes a temporary download URL, store the durable artifact ID and mint a fresh authorized URL when returning the retry result.
 
-The example assumes the business mutation fits the same database transaction. External API calls do not roll back with a database. Use an outbox, provider idempotency key, or state machine that records intent before dispatch and reconciles uncertain results. Do not hold a database transaction open across a slow network call.
+The example assumes the business mutation fits the same database transaction. External API calls do not roll back with a database. Use an outbox, provider idempotency key or state machine that records intent before dispatch and reconciles uncertain results. Do not hold a database transaction open across a slow network call.
 
 ## Handle webhook duplication after authenticity
 
@@ -133,15 +133,15 @@ First verify the provider signature over the exact body. The [Stripe webhook sig
 
 Return success for a completed duplicate so the provider can stop retrying. Do not return success for a new event until its durable acceptance is complete. If work continues asynchronously, the queue insertion or outbox record must exist before the response.
 
-Scope provider event keys to the provider account and environment. A test event ID should not collide with a live event, and two connected accounts should not share one global key unless the provider guarantees global uniqueness. Retain the verified account context beside the key so a valid event from one account cannot satisfy another account's operation record.
+Scope provider event keys to the provider account and environment. A test event ID should not collide with a live event and two connected accounts should not share one global key unless the provider guarantees global uniqueness. Retain the verified account context beside the key so a valid event from one account cannot satisfy another account's operation record.
 
-Out-of-order events need a version-aware rule. Compare provider object versions, effective timestamps, or retrieve current provider state when an older event conflicts with newer local state. Avoid a blanket "last event processed wins" policy when arrival order is not guaranteed.
+Out-of-order events need a version-aware rule. Compare provider object versions, effective timestamps or retrieve current provider state when an older event conflicts with newer local state. Avoid a blanket "last event processed wins" policy when arrival order is not guaranteed.
 
 ## HTTP semantics are not database atomicity
 
-[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html) defines an idempotent method as one where multiple identical requests have the same intended effect as one. GET, PUT, and DELETE have idempotent semantics, but application bugs can still create duplicate side effects. POST can be made repeatable through an application idempotency contract.
+[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html) defines an idempotent method as one where multiple identical requests have the same intended effect as one. GET, PUT and DELETE have idempotent semantics, but application bugs can still create duplicate side effects. POST can be made repeatable through an application idempotency contract.
 
-Do not send analytics, email, or queue messages outside the transaction and assume the database rollback covers them. Use a transactional outbox and make each consumer idempotent too.
+Do not send analytics, email or queue messages outside the transaction and assume the database rollback covers them. Use a transactional outbox and make each consumer idempotent too.
 
 Client behavior should be predictable. Generate one key when the user begins the operation and reuse it only for retries of that exact intent. Do not generate a new key after every timeout, which defeats the contract. Do not reuse a page-load identifier for several different actions. Return a conflict for mismatched input rather than guessing what the caller meant.
 
@@ -153,13 +153,13 @@ Stop a worker after durable acceptance but before response, then retry. Restart 
 
 For webhooks, send the same signed test event twice and deliver two related events in reverse order. Confirm duplicate and ordering rules separately.
 
-The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help inventory non-repeatable side effects. It cannot create concurrent requests, inspect unique constraints, or prove transaction boundaries.
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help inventory non-repeatable side effects. It cannot create concurrent requests, inspect unique constraints or prove transaction boundaries.
 
 ## Limits of automated evidence
 
 Tests can establish behavior for known crash points and concurrency levels. Schema inspection can confirm a unique constraint. Logs can show replay decisions without storing sensitive request bodies.
 
-Automation cannot choose the correct business operation identity or retention window. It may also miss side effects in external systems. Document every committed system, the key passed to each one, and how uncertain outcomes are reconciled.
+Automation cannot choose the correct business operation identity or retention window. It may also miss side effects in external systems. Document every committed system, the key passed to each one and how uncertain outcomes are reconciled.
 
 ## Sources
 

@@ -14,7 +14,7 @@ The canonical plugin lives in the `plugin/` directory:
   performs authorization discovery and keeps write scope bound to the connection grant.
 - `plugin/skills/lyrashield/SKILL.md` — the skill body, generated from the
   `@lyrashield/agent-rules` policy. It now includes a mode/cost guide, example
-  user prompts and matching tool calls, and a minute-awareness note so the agent
+  user prompts and matching tool calls and a minute-awareness note so the agent
   picks the cheapest depth that fits the request.
 
 ## Client manifest shims
@@ -42,7 +42,7 @@ consumes the generated stdio entry through its workspace or user MCP settings fi
 | VS Code        | Portable root manifest | Experimental; no retained client-runtime receipt | `lyrashield install vscode`              |
 | GitHub Copilot | Portable root manifest | Experimental; no retained client-runtime receipt | Copilot marketplace commands             |
 
-Package-conformance means the generated manifest, schema, transport, version, and export
+Package-conformance means the generated manifest, schema, transport, version and export
 boundary passed repository tests. It does not mean every client version has completed an
 authenticated runtime matrix. The wider registry contains 30 install entries resolving to 26
 preferred client surfaces; use `lyrashield init` or `lyrashield install <agent>` to receive the
@@ -67,9 +67,9 @@ pnpm --filter @lyrashield/agent-plugin test
 
 ## Authentication and approvals
 
-The canonical, Claude, Cursor, and Codex artifacts connect to the hosted Streamable HTTP
+The canonical, Claude, Cursor and Codex artifacts connect to the hosted Streamable HTTP
 endpoint without embedding a secret. The client follows hosted OAuth discovery, selects one
-workspace, and receives read scope by default. Write scope is optional. Consent can delegate named
+workspace and receives read scope by default. Write scope is optional. Consent can delegate named
 workflows for selected targets and scan profiles so matching calls need no additional LyraShield
 review; mutating calls from API-key callers receive a `connect_required` response pointing at OAuth
 connect and the legacy exact-input approval path remains only for nondelegated hosted credentials.
@@ -89,11 +89,11 @@ against the remote endpoint receive `connect_required` instead.
 - Package: `@lyrashield/agent-plugin` 0.1.28; runtime: Node.js 24 or newer.
 - Standard schema: Agent Plugins 1.0.0.
 - `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
-  OAuth-first manifests, mutation exclusions, artifact versions, and the public export boundary.
+  OAuth-first manifests, mutation exclusions, artifact versions and the public export boundary.
 - `pnpm --filter @lyrashield/agent-plugin export:marketplace -- <directory>` creates the
   reviewable marketplace payload and provenance manifest.
 
-An exported or validated artifact is not proof that a vendor marketplace accepted, published,
+An exported or validated artifact is not proof that a vendor marketplace accepted, published
 or live-tested it. Public listings remain separate vendor-controlled submissions.
 
 ## See also

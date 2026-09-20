@@ -1,19 +1,19 @@
 ---
 title: "LyraShield vs Pixee — release assurance compared"
-description: "How LyraShield AI compares to Pixee for remediation-first security. Approach, evidence states, reviewed fix proposals, and coverage differences."
+description: "How LyraShield AI compares to Pixee for remediation-first security. Approach, evidence states, reviewed fix proposals and coverage differences."
 competitor: "Pixee"
 heading: "LyraShield AI vs Pixee"
-disclaimer: "Factual comparison. Pixee is an agentic AppSec platform that triages and fixes vulnerabilities found by your existing SAST, SCA, and DAST tools — it is not itself a scanner. LyraShield AI is release assurance for AI-built apps with its own agentic pentest, SCA, and secrets scanning, producing immutable evidence reports and gating fixes behind approvals. The two occupy different positions in the pipeline; neither replaces the other."
+disclaimer: "Factual comparison. Pixee is an agentic AppSec platform that triages and fixes vulnerabilities found by your existing SAST, SCA and DAST tools — it is not itself a scanner. LyraShield AI is release assurance for AI-built apps with its own agentic pentest, SCA and secrets scanning, producing immutable evidence reports and gating fixes behind approvals. The two occupy different positions in the pipeline; neither replaces the other."
 updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace Pixee?"
-    a: "No, they occupy different positions. Pixee is not a scanner; it ingests findings from 10+ tools like CodeQL, Semgrep, Checkmarx, and Snyk via SARIF and triages exploitability to generate validated fix PRs. LyraShield in open beta is a detector plus assurer: agentic pentest plus SCA and secrets with immutable reports and reviewed fix proposals."
+    a: "No, they occupy different positions. Pixee is not a scanner; it ingests findings from 10+ tools like CodeQL, Semgrep, Checkmarx and Snyk via SARIF and triages exploitability to generate validated fix PRs. LyraShield in open beta is a detector plus assurer: agentic pentest plus SCA and secrets with immutable reports and reviewed fix proposals."
   - q: "Can I use Pixee and LyraShield together?"
-    a: "Yes, and it is logical. Run LyraShield or other scanners to produce SARIF, then let Pixee triage backlog and generate constrained fixes validated by an independent evaluator plus your CI gate. Pixee pricing is outcome-based and not public, with self-hosted and air-gapped plus BYOM options. LyraShield is live with open registration in open beta."
+    a: "Yes and it is logical. Run LyraShield or other scanners to produce SARIF, then let Pixee triage backlog and generate constrained fixes validated by an independent evaluator plus your CI gate. Pixee pricing is outcome-based and not public, with self-hosted and air-gapped plus BYOM options. LyraShield is live with open registration in open beta."
   - q: "When should I choose Pixee over LyraShield?"
-    a: "Choose Pixee when you already have a mature scanner stack and the bottleneck is triage and remediation at scale, needing scanner-agnostic fixes, audit trails with git history and validation logs, and self-hosted sovereignty. Its Foresight spec review is valuable before code is written. Choose LyraShield when you lack detection and need release proof."
+    a: "Choose Pixee when you already have a mature scanner stack and the bottleneck is triage and remediation at scale, needing scanner-agnostic fixes, audit trails with git history and validation logs and self-hosted sovereignty. Its Foresight spec review is valuable before code is written. Choose LyraShield when you lack detection and need release proof."
 ---
 
 ## Core approach
@@ -57,7 +57,7 @@ faq:
 ### Use LyraShield AI when
 
 - You need release assurance with immutable evidence reports for release decisions
-- You do not yet have a detection stack and need agentic pentest, SCA, and secrets scanning in one product
+- You do not yet have a detection stack and need agentic pentest, SCA and secrets scanning in one product
 - Your app is AI-built and you want security checks inside your AI coding agent via MCP
 - You want recorded fix proposals before your team applies a patch
 - You need coverage receipts mapping to a control framework
@@ -66,7 +66,7 @@ faq:
 
 - You already have SAST/SCA/DAST scanners and a large backlog of findings to triage and fix
 - You want automated fix PRs with a published validation methodology (constrained generation + independent evaluator + CI gate)
-- You need scanner-agnostic triage that works with your existing toolchain (CodeQL, Semgrep, Checkmarx, Snyk, and more)
+- You need scanner-agnostic triage that works with your existing toolchain (CodeQL, Semgrep, Checkmarx, Snyk and more)
 - You want self-hosted or air-gapped deployment with bring-your-own-model for data sovereignty
 - You want proactive design-time review of specs before code is written (Foresight)
 
@@ -78,6 +78,6 @@ Read the methodology or try the free browser-local tools at [lyrashieldai.com](h
 
 ## Methodology and scope
 
-This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for its assurance model, and verify vendor details before a purchasing decision.
+This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
 
 For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Pixee](/blog/pixee-vs-lyrashield).
