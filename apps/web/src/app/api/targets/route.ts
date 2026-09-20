@@ -54,7 +54,7 @@ async function post(request: Request) {
             error: {
               code: "SSRF_BLOCKED",
               message:
-                "This URL is not allowed as a scan target (it targets an internal, private, or unresolvable address).",
+                "This URL is not allowed as a scan target (it targets an internal, private or unresolvable address).",
             },
           },
           { status: 400 }
@@ -70,7 +70,7 @@ async function post(request: Request) {
               error: {
                 code: "SSRF_BLOCKED",
                 message:
-                  "This OpenAPI URL is not allowed (it targets an internal, private, or unresolvable address).",
+                  "This OpenAPI URL is not allowed (it targets an internal, private or unresolvable address).",
               },
             },
             { status: 400 }

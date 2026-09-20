@@ -122,7 +122,7 @@ describe("scan detail — truthful scope and declared coverage", () => {
 
   it("renders the recorded workflow, depth, scope, limits, and attachments", () => {
     expect(plannedHtml).toContain("Scope and plan")
-    expect(plannedHtml).toContain("Review changes")
+    expect(plannedHtml).toContain("Scan changes")
     // Depth renders through the scan-mode label map, not the raw enum value.
     expect(plannedHtml).toContain(`>${getScanModeLabel("QUICK")}<`)
     expect(plannedHtml).not.toContain(">QUICK<")

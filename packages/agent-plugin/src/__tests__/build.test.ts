@@ -30,7 +30,7 @@ describe("buildPlugin", () => {
     expect(skillContent).toContain("## Example prompts and tool calls")
     expect(skillContent).toContain("## Depth and runtime awareness")
     expect(skillContent).toContain(
-      '| "Repository pentest" / "Deep security review" | FULL_PENTEST | DEEP |'
+      '| "Repository pentest" / "Deep security scan" | FULL_PENTEST | DEEP |'
     )
     expect(skillContent).toContain("authorized repository target")
     expect(skillContent).toContain("poll the returned retest scan to a terminal state")

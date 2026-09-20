@@ -65,7 +65,7 @@ export default async function AgentWizardPage({
         <h1 className="text-2xl font-bold tracking-tight">Set up {data.displayName}</h1>
         <p className="text-muted-foreground max-w-3xl text-sm leading-6">
           Follow the steps to connect {data.displayName} to LyraShield — install the integration,
-          authenticate, sync rules, and verify. Everything uses the real CLI commands, so you can
+          authenticate, sync rules and verify. Everything uses the real CLI commands, so you can
           paste them into your terminal.
         </p>
       </div>

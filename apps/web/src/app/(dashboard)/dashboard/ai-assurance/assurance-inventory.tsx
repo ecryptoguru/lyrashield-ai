@@ -168,7 +168,7 @@ export function AssuranceInventory({
         </CardHeader>
         <CardContent className="space-y-3 pt-3">
           <p className="text-sm text-muted-foreground">
-            Customer-declared. Inventory completeness is not verification, certification, or
+            Customer-declared. Inventory completeness is not verification, certification or
             data-lineage proof.
           </p>
           {profile ? (
@@ -260,7 +260,7 @@ export function AssuranceInventory({
         <CardContent className="space-y-3 pt-3">
           <p className="text-sm text-muted-foreground">
             Customer-declared, versioned threat scenarios. High and critical threats require an
-            owner, mitigation, and test plan.
+            owner, mitigation and test plan.
           </p>
           {threatModel ? (
             <p className="text-sm">

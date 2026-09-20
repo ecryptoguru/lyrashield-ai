@@ -60,13 +60,13 @@ const AUDIENCE_LABELS: Record<AudienceMode, string> = {
 function getAudienceLeadIn(mode: AudienceMode, severity: string, title: string): string {
   switch (mode) {
     case "founder":
-      return `As a business leader, this ${severity.toLowerCase()} finding ("${title}") represents a risk to your product, customers, or compliance posture. Your engineering team can resolve it — the key action is prioritising and tracking it.`
+      return `As a business leader, this ${severity.toLowerCase()} finding ("${title}") represents a risk to your product, customers or compliance posture. Your engineering team can resolve it — the key action is prioritising and tracking it.`
     case "developer":
       return `This is a ${severity.toLowerCase()} finding in your codebase. The steps below give you a direct path to fix it. Focus on the "How to fix" section for implementation guidance.`
     case "security-engineer":
-      return `${severity} severity finding. Review CWE, CVSS, and EPSS data in the Technical tab for triage. The fix guidance below is a starting point — validate against your threat model.`
+      return `${severity} severity finding. Review CWE, CVSS and EPSS data in the Technical tab for triage. The fix guidance below is a starting point — validate against your threat model.`
     case "enterprise-admin":
-      return `This ${severity.toLowerCase()} finding may affect compliance, SLAs, or vendor risk assessments. Ensure it is assigned to an owner and that resolution is tracked against your remediation SLA.`
+      return `This ${severity.toLowerCase()} finding may affect compliance, SLAs or vendor risk assessments. Ensure it is assigned to an owner and that resolution is tracked against your remediation SLA.`
     case "auditor":
       return `For audit purposes, this ${severity.toLowerCase()} finding ("${title}") should be referenced in your risk register. Verification receipts and retest history are available in the History tab.`
   }
@@ -647,7 +647,7 @@ export function FindingDetailDrawer({
           </nav>
           <SheetTitle>{finding.title}</SheetTitle>
           <SheetDescription className="sr-only">
-            Finding evidence, verification state, remediation, and retest actions
+            Finding evidence, verification state, remediation and retest actions
           </SheetDescription>
         </SheetHeader>
 
@@ -919,7 +919,7 @@ export function FindingDetailDrawer({
                             </TooltipTrigger>
                             <TooltipContent>
                               A fresh retest needs a linked server scan. Run a scan for this target
-                              first, or check that this finding came from a completed scan rather
+                              first or check that this finding came from a completed scan rather
                               than an imported report.
                             </TooltipContent>
                           </Tooltip>
@@ -1639,7 +1639,7 @@ function RemediationTimelineSection({
         <h3 className="text-sm font-medium">Remediation timeline</h3>
         <p className="text-muted-foreground mt-1 text-sm">
           No remediation receipts recorded yet. Timeline entries appear as fixes are proposed,
-          opened as PRs, merged, retested, and verified.
+          opened as PRs, merged, retested and verified.
         </p>
       </div>
     )
@@ -1664,8 +1664,8 @@ function RemediationTimelineSection({
         ))}
       </ol>
       <p className="text-muted-foreground mt-2 text-xs">
-        Built only from stored receipts. A proposed fix is not an applied fix, and a merged PR is
-        not verification.
+        Built only from stored receipts. A proposed fix is not an applied fix and a merged PR is not
+        verification.
       </p>
     </div>
   )

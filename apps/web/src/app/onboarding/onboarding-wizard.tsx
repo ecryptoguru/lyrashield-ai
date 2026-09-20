@@ -175,7 +175,7 @@ export function OnboardingWizard({
   function friendlyTargetError(cause: unknown): string {
     if (cause instanceof ApiError) {
       if (cause.code === "SSRF_BLOCKED") {
-        return "That URL isn't allowed because it points to an internal, private, or unresolvable address. Use a public target you own or are authorized to scan."
+        return "That URL isn't allowed because it points to an internal, private or unresolvable address. Use a public target you own or are authorized to scan."
       }
       if (cause.code === "VALIDATION_ERROR") {
         return "We couldn't save your target. Please check the name and URL and try again."
@@ -348,7 +348,7 @@ export function OnboardingWizard({
       setGithubUnavailable(true)
       if (step === 1) setPath(null)
       setError(
-        "GitHub connect is unavailable right now. You can add an app URL or API instead, or skip for now."
+        "GitHub connect is unavailable right now. You can add an app URL or API instead or skip for now."
       )
     } finally {
       setLoading(false)

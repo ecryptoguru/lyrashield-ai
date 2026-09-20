@@ -15,21 +15,21 @@ export const SCAN_PRESETS = {
     mode: "QUICK",
   },
   CODE_REVIEW: {
-    label: "Code review",
+    label: "Code scan",
     description: "Broader repository and dependency analysis.",
     hint: "Dependency and risky-pattern checks across the repository.",
     goal: "TEST_APP",
     mode: "STANDARD",
   },
   DEEP_REVIEW: {
-    label: "Deep security review",
+    label: "Deep security scan",
     description: "Deep cross-file scan for complex or high-risk releases.",
     hint: "Cross-file taint and reachability analysis for high-risk changes.",
     goal: "FULL_PENTEST",
     mode: "DEEP",
   },
   REVIEW_CHANGES: {
-    label: "Review changes",
+    label: "Scan changes",
     description: "Bounded scan of an exact code diff between two revisions.",
     hint: "Analyzes only the recorded change set between an immutable base and head. Requires a base ref; the head defaults to the target branch.",
     goal: "CHECK_PR",
@@ -54,8 +54,8 @@ const SCAN_PRESET_ORDER: ScanPresetId[] = [
   "WEEKLY_MONITOR",
 ]
 
-/** The default review for a repository target is the Standard-depth code
- * review — not the cheapest option — so a first scan has real coverage. */
+/** The default scan for a repository target is the Standard-depth code
+ * scan — not the cheapest option — so a first scan has real coverage. */
 const REPO_DEFAULT_PRESET: ScanPresetId = "CODE_REVIEW"
 
 /** Deterministic scanner families applicable to a repository target. */

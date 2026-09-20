@@ -150,11 +150,11 @@ export function OAuthConsentForm({
           </h2>
           <p className="text-muted-foreground mt-2 text-sm leading-6">
             {canAutomate
-              ? "Connecting authorizes this integration to run scans and retests, save fix proposals, create reports, and open fix pull requests for all current and future targets in this workspace. Scans and retests can consume your included usage and incur charges under your workspace plan."
+              ? "Connecting authorizes this integration to run scans and retests, save fix proposals, create reports and open fix pull requests for all current and future targets in this workspace. Scans and retests can consume your included usage and incur charges under your workspace plan."
               : "This integration requested read access. It can inspect workspace evidence but cannot make changes."}
           </p>
           <p className="text-muted-foreground mt-2 text-sm leading-6">
-            Your role, target authorization, plan limits, and budgets apply to every action. You can
+            Your role, target authorization, plan limits and budgets apply to every action. You can
             disconnect this integration at any time. Pull requests are never automatically merged.
           </p>
         </section>

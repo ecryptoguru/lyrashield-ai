@@ -40,8 +40,8 @@ describe("getOnboardingReviewOptions", () => {
       getOnboardingReviewOptions("github").map(({ label, mode }) => ({ label, mode }))
     ).toEqual([
       { label: "Release check", mode: "QUICK" },
-      { label: "Code review", mode: "STANDARD" },
-      { label: "Deep security review", mode: "DEEP" },
+      { label: "Code scan", mode: "STANDARD" },
+      { label: "Deep security scan", mode: "DEEP" },
     ])
   })
 
