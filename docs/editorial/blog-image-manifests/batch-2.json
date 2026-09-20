@@ -164,7 +164,7 @@
     "alt": "An untrusted file or diagnostic channel isolated from executable and public-response space",
     "sourceHash": "sha256:88d116c8658d46175ffcef46451b6c3370fd0c2ab9736d8be8bbeedb92c6b4ea",
     "cropNotes": "Keep the untrusted input, controlled internal channel, executable boundary and public-response plane visible in every crop",
-    "usageCount": 2,
+    "usageCount": 3,
     "approved": true
   },
   {
