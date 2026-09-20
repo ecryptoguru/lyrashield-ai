@@ -157,7 +157,11 @@ case "$1:$2" in
   image:prune) : ;;
   image:inspect)
     case "$*" in
-      *'{{.Size}}'*) printf '1000\n' ;;
+      *'{{.Size}}'*)
+        case "$*" in
+          *"$MOCK_OLD_IMAGE"*) [ "$MOCK_OLD_IMAGE_PRESENT" = 1 ] || exit 1 ;;
+        esac
+        printf '1000\n' ;;
       *org.opencontainers.image.revision*) printf '%s\n' "$MOCK_APP_REVISION" ;;
       *io.lyrashield.engine.revision*) printf '%s\n' "$MOCK_ENGINE_REVISION" ;;
       *) exit 1 ;;
@@ -188,6 +192,7 @@ run_case() {
   local replacement_stop=${9:-}
   local free_bytes=${10:-9999999000}
   local container_present=${11:-1}
+  local old_image_present=${12:-1}
   local case_dir="$tmp/$name"
   mkdir -p "$case_dir"
   write_mocks "$case_dir"
@@ -220,6 +225,8 @@ run_case() {
       MOCK_ORDER_LOG="$case_dir/order.log" \
       MOCK_IMAGE_ASSETS="$case_dir/image-assets" \
       MOCK_FREE_BYTES="$free_bytes" \
+      MOCK_OLD_IMAGE="$old_image" \
+      MOCK_OLD_IMAGE_PRESENT="$old_image_present" \
       MOCK_FAIL_IMAGE_CHECK="$fail_image_check" \
       MOCK_REPLACEMENT_STOP="$replacement_stop" \
       LYRASHIELD_WORKER_RUNTIME_CONFIG="$case_dir/runtime.conf" \
@@ -249,6 +256,10 @@ run_case() {
     if [ "$name" = insufficient-disk ]; then
       grep -Fq 'Worker image pull requires' <<< "$output"
     fi
+    if [ "$name" = missing-rollback-tight-disk ]; then
+      grep -Fq 'No local rollback image' <<< "$output"
+      grep -Fq 'Worker image pull requires' <<< "$output"
+    fi
   fi
   if [ "$container_present" = 1 ]; then
     grep -Fq 'image prune --all --force' "$case_dir/docker.log"
@@ -271,6 +282,9 @@ run_case() {
     [ -n "$restart_line" ] && [ -n "$claim_line" ] && [ -n "$queue_line" ]
     [ "$restart_line" -gt "$claim_line" ] && [ "$restart_line" -gt "$queue_line" ]
     [ -f "$case_dir/host/assets/worker-env.sh" ]
+    if [ "$name" = missing-rollback-image ]; then
+      grep -Fq 'No local rollback image' <<< "$output"
+    fi
   fi
   if [ -n "$replacement_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
@@ -288,6 +302,13 @@ run_case repairs-inactive-timer 0 1 1 success
 run_case repairs-disabled-units 1 0 0 success
 run_case repairs-inactive-service 1 1 1 success 0
 run_case recovers-missing-container 1 1 1 success 0 '' 0 '' 9999999000 0
+# No live container and no local rollback image: the preflight must still
+# size the pull from the 8 GiB floor (required free = 26 GiB) rather than
+# dying inside image inspection.
+run_case missing-rollback-image 1 1 1 success 0 '' 0 '' 30000000000 0 0
+# 3 GiB free would satisfy a measured-image preflight but not the 26 GiB
+# floor, so the promotion must stop at the disk check.
+run_case missing-rollback-tight-disk 1 1 1 failure 0 '' 0 '' 3000000000 0 0
 run_case preserves-existing-stop 1 1 1 success 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}'
 run_case preserves-newer-stop 1 1 1 success 1 '' 0 '{"operator":"on-call","reason":"new-incident"}'
 run_case resumes-owned-stop-on-rollback 1 1 1 failure 1 '' 1

@@ -3,10 +3,15 @@
  *
  * Credentials are the workspace's GitHub App installation, minted on demand
  * through the existing provider module (`getInstallationToken`); nothing is
- * persisted per call. Every tool issues GET requests only — the registered
- * relay profile for this provider (`CONNECTOR_RELAY_PROFILES.github` in
- * @lyrashield/security) allows GET/HEAD to `api.github.com` and nothing else,
- * so a mutated tool cannot smuggle a write through the scoped egress path.
+ * persisted per call. Every tool issues GET requests only.
+ *
+ * Enforcement note: the current tool path calls the provider directly via
+ * `githubFetch`/`getFileContent`. The read-only boundary is the registered
+ * tool set (all GET calls) plus the connection capability check in
+ * `invokeConnectorTool`. The relay-grant machinery (`mintConnectorRelayGrant`
+ * and `CONNECTOR_RELAY_PROFILES` in @lyrashield/security) exists but has no
+ * production callers — it does NOT mediate these requests, so do not treat
+ * it as an egress control here.
  */
 import {
   GITHUB_API_BASE,
@@ -28,6 +33,37 @@ const MAX_FILE_BYTES = 64 * 1024
 const MAX_OUTPUT_BYTES = 96 * 1024
 
 const GITHUB_OWNER_REPO = /^[A-Za-z0-9_.-]{1,100}$/
+
+/**
+ * GitHub App permission key → the connector scope that permission grants.
+ * The provider only reports granted permissions, so presence at any access
+ * level satisfies the read-only connector scope (a write grant includes
+ * read). A permission absent from this map grants nothing.
+ */
+export const GITHUB_PERMISSION_TO_CONNECTOR_SCOPE: Record<string, string> = {
+  metadata: "repo:metadata",
+  contents: "repo:contents",
+  pull_requests: "repo:pull_requests",
+  issues: "repo:issues",
+}
+
+/**
+ * Derive the connector scope list an installation's granted permissions
+ * support. Returns [] for absent or empty permission objects — the caller
+ * records the result verbatim so an under-privileged install fails closed at
+ * invocation time instead of silently holding every scope.
+ */
+export function connectorScopesForInstallationPermissions(
+  permissions: Record<string, string> | undefined
+): string[] {
+  if (!permissions) return []
+  return Object.entries(GITHUB_PERMISSION_TO_CONNECTOR_SCOPE)
+    .filter(([key]) => {
+      const level = permissions[key]
+      return typeof level === "string" && level !== "none"
+    })
+    .map(([, scope]) => scope)
+}
 
 export class GitHubConnectorError extends Error {
   constructor(

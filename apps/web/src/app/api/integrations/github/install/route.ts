@@ -10,6 +10,8 @@ import {
   getAppInstallations,
   exchangeInstallUserCode,
   userCanAdminInstallation,
+  connectorScopesForInstallationPermissions,
+  listInstallationRepos,
 } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
@@ -185,11 +187,38 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // The recorded grant must reflect what the provider actually granted.
+    // Connector tools fail closed on `capabilities.scopes`, so derive them
+    // from the installation's permission set — never invent scopes here.
+    //
+    // Resource scoping decision (stale-selection safety): an installation
+    // with repository_selection "all" reaches every current and future repo
+    // provider-side, so the grant stays resource-unconstrained — a stored
+    // list would be stale-narrow immediately and could never widen access.
+    // For "selected" (and for any missing or unrecognized value — the
+    // narrower reading fails closed) the grant snapshots the provider's own
+    // repository list. Repos added to the selection later deny until the
+    // workspace reconnects; repos removed provider-side keep denying at the
+    // GitHub API even while the snapshot still names them, so a stale
+    // snapshot cannot widen effective access.
+    const scopes = connectorScopesForInstallationPermissions(installation.permissions)
+    const repositorySelection = installation.repository_selection === "all" ? "all" : "selected"
+    let resources: string[] | undefined
+    if (repositorySelection === "selected") {
+      const repos = await listInstallationRepos(Number(canonicalInstallationId))
+      resources = repos.map((repo) => `repo:${repo.full_name}`)
+    }
+    const capabilities = {
+      scopes,
+      ...(resources !== undefined ? { resources } : {}),
+    }
+
     const metadata = {
       installationId: Number(canonicalInstallationId),
       accountLogin: installation.account.login,
       accountId: installation.account.id,
       accountType: installation.account.type,
+      repositorySelection,
       setupAction,
     }
 
@@ -203,6 +232,7 @@ export async function GET(request: NextRequest) {
               name: installation.account.login,
               status: "active",
               deletedAt: null,
+              capabilities,
               metadata,
             },
           })
@@ -213,6 +243,7 @@ export async function GET(request: NextRequest) {
               externalId: canonicalInstallationId,
               name: installation.account.login,
               status: "active",
+              capabilities,
               metadata,
             },
           })

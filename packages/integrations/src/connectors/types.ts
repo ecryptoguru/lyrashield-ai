@@ -40,8 +40,10 @@ export interface ConnectorToolResult {
 
 /**
  * A registered read-only connector tool. `execute` must perform only the
- * provider calls its declared HTTP-method/scope contract describes; the
- * relay grant and capability checks independently enforce read-only egress.
+ * provider calls its declared HTTP-method/scope contract describes. The
+ * capability check in `invokeConnectorTool` enforces the recorded grant; no
+ * relay grant is issued on the current tool path, so the tool's own GET-only
+ * calls are the egress boundary.
  */
 export interface ConnectorTool<I = unknown> {
   /** Canonical tool name, e.g. "github.get_repository". */

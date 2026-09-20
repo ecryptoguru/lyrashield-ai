@@ -80,6 +80,19 @@ describe("invokeScanConnectorTool", () => {
     expect(args.resourceOf({ owner: "acme", repo: "app" })).toBe("repo:acme/app")
   })
 
+  it("forwards the sponsor's effective plan for the service-side gate", async () => {
+    await invokeScanConnectorTool({
+      workspaceId: WORKSPACE,
+      sponsorEffectivePlan: "ENTERPRISE",
+      toolName: "github.get_repository",
+      input: { owner: "acme", repo: "app" },
+      idempotencyKey: "k-plan",
+    })
+    expect(invokeConnectorTool).toHaveBeenCalledWith(
+      expect.objectContaining({ sponsorEffectivePlan: "ENTERPRISE" })
+    )
+  })
+
   it("resolves github credentials from the connection's installation id", async () => {
     await invokeScanConnectorTool({
       workspaceId: WORKSPACE,

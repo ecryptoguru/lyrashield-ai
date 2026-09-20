@@ -88,6 +88,7 @@ export async function handleScan(args: string[], output: Output): Promise<number
       "scan-id",
       "base",
       "head",
+      "attachment",
     ],
     boolean: ["watch", "auto"],
     default: { goal: "TEST_APP", mode: "STANDARD" },
@@ -98,6 +99,27 @@ export async function handleScan(args: string[], output: Output): Promise<number
   const workspaceId = requireWorkspace(await getEffectiveCredentials())
 
   const sarifPath = parsed.sarif as string | undefined
+
+  // --attachment is repeatable and references attachment ids that were
+  // already uploaded to the workspace; the CLI never uploads local files.
+  // These checks are UX only — the server keeps authoritative validation.
+  const attachmentArgs = parsed.attachment as string | string[] | undefined
+  const attachmentIds = [
+    ...new Set(
+      (Array.isArray(attachmentArgs) ? attachmentArgs : [attachmentArgs])
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+    ),
+  ]
+  if (attachmentIds.some((id) => !id)) {
+    output.error("--attachment requires a non-empty id of an already-uploaded attachment.")
+    return 2
+  }
+  if (parsed["scan-id"] && attachmentIds.length > 0) {
+    output.error("--attachment selects inputs for a new scan; it cannot combine with --scan-id.")
+    return 2
+  }
+
   let sarifJson: unknown
   if (parsed["scan-id"] && !sarifPath) {
     output.error("--scan-id requires --sarif; it imports into an existing scan.")
@@ -130,7 +152,12 @@ export async function handleScan(args: string[], output: Output): Promise<number
 
   if (!resolved) {
     output.error("No target specified.")
-    output.notice("usage: lyrashield scan --target <targetId> [--goal ...] [--mode ...]")
+    output.notice(
+      "usage: lyrashield scan --target <targetId> [--goal ...] [--mode ...] [--attachment <id>...]"
+    )
+    output.notice(
+      "       --attachment <id> references an attachment already uploaded to the workspace; repeat the flag for several"
+    )
     output.notice("       lyrashield scan --auto [--repo owner/repo] [--name ...]")
     output.notice("       lyrashield project use  # set a default project once")
     return 2
@@ -183,6 +210,7 @@ export async function handleScan(args: string[], output: Output): Promise<number
           targetId: resolved.targetId,
           goal,
           mode,
+          ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
           ...(baseRef
             ? {
                 workflow: "REVIEW_CHANGES",

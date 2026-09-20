@@ -17,11 +17,11 @@ vi.mock("@lyrashield/logger", () => ({
 
 const { drainArtifactDeletionTasksWith } = await import("./deletion-drain")
 
-function task(index: number, attempts = 1) {
+function task(index: number, attempts = 1, kind = "EVIDENCE") {
   return {
     id: `task-${index}`,
     workspaceId: "workspace-1",
-    kind: "EVIDENCE",
+    kind,
     storageUri: `s3://evidence/evidence/workspace-1/${index}.enc`,
     status: "PROCESSING",
     attempts,
@@ -56,6 +56,39 @@ describe("artifact deletion drain", () => {
       "workspace-1"
     )
     expect(mocks.complete).toHaveBeenCalledWith("task-1", "lease-1")
+  })
+
+  it("dispatches scan attachment tasks to the same workspace-prefix-checked deleter", async () => {
+    mocks.claim.mockResolvedValueOnce(task(7, 1, "SCAN_ATTACHMENT")).mockResolvedValueOnce(null)
+    const deleteArtifact = vi.fn().mockResolvedValue(undefined)
+
+    await expect(drainArtifactDeletionTasksWith(deleteArtifact)).resolves.toEqual({
+      claimed: 1,
+      deleted: 1,
+      retrying: 0,
+      deadLettered: 0,
+    })
+    expect(deleteArtifact).toHaveBeenCalledWith(
+      "s3://evidence/evidence/workspace-1/7.enc",
+      "workspace-1"
+    )
+    expect(mocks.complete).toHaveBeenCalledWith("task-7", "lease-7")
+  })
+
+  it("keeps unknown kinds retryable instead of dispatching them", async () => {
+    mocks.claim.mockResolvedValueOnce(task(9, 1, "REPORT")).mockResolvedValueOnce(null)
+    const deleteArtifact = vi.fn().mockResolvedValue(undefined)
+
+    await expect(drainArtifactDeletionTasksWith(deleteArtifact)).resolves.toMatchObject({
+      claimed: 1,
+      deleted: 0,
+      retrying: 1,
+    })
+    expect(deleteArtifact).not.toHaveBeenCalled()
+    expect(mocks.fail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "task-9" }),
+      expect.any(Error)
+    )
   })
 
   it("keeps a failed deletion durable and succeeds on a later sweep", async () => {
