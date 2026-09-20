@@ -78,7 +78,7 @@ const devin: AgentEntry = {
   format: null,
   rootKey: null,
   locations: [],
-  transports: ["stdio", "remote-http"],
+  transports: ["remote-http"],
   remoteAuth: "oauth",
   credential: { kind: "inline-env" },
   transportFields: {
@@ -280,16 +280,17 @@ const zed: AgentEntry = {
       sharedByConvention: false,
     },
   ],
-  transports: ["stdio"],
+  transports: ["stdio", "remote-http"],
+  remoteAuth: "oauth",
   credential: { kind: "inline-env" },
-  commandWrapperKey: "command",
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
     url: "https://zed.dev/docs/ai/mcp",
   },
   gotchas: [
-    "Zed uses `context_servers`, and nests args/env inside a `command` object whose executable field is `path`, not `command`.",
+    "Current Zed settings use flat command, args, and env fields under context_servers. Legacy nested command.path entries should be updated through Zed settings.",
+    "A remote URL without an Authorization header starts Zed's OAuth flow. Keep existing stdio connections unless you deliberately migrate.",
     "Zed's global settings path is `~/.config/zed/settings.json`; verify it for your platform.",
   ],
 }
@@ -314,12 +315,13 @@ const geminiCli: AgentEntry = {
     "remote-http": { httpUrl: API_URL_PLACEHOLDER },
   },
   serverNamePattern: "^lyrashield$",
-  rulesFiles: ["AGENTS.md"],
+  rulesFiles: ["GEMINI.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
     url: "https://geminicli.com/docs/tools/mcp-server/",
   },
   gotchas: [
+    "GEMINI.md is the default context file. If context.fileName is customized in settings.json, use one of those configured filenames instead.",
     "Gemini CLI expands `$VAR_NAME` and `${VAR_NAME}` references in MCP `env` and `headers`; use a reference instead of a literal secret.",
     "Streamable HTTP servers use `httpUrl`; the `url` field is for SSE endpoints.",
     "Server name must not contain underscores; use `lyrashield`, never `lyra_shield`.",
@@ -354,11 +356,12 @@ const amp: AgentEntry = {
   format: null,
   rootKey: null,
   locations: [],
-  transports: ["stdio"],
+  transports: ["stdio", "remote-http"],
+  remoteAuth: "oauth",
   credential: { kind: "shell-env" },
   vendorCli: {
     command: "amp",
-    args: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.8"],
+    args: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.9"],
   },
   rulesFiles: ["AGENTS.md"],
   source: {
@@ -366,7 +369,7 @@ const amp: AgentEntry = {
     url: "https://ampcode.com/docs/customize/mcp",
   },
   gotchas: [
-    "Amp takes no --env flags; the key must be exported in the user's shell profile and inherited by the Amp CLI.",
+    "Amp takes no --env flags for its local stdio CLI; use a local OAuth credential or export a key. Remote HTTP/OAuth is a separate client-managed definition.",
     "Amp can use global or workspace settings. The CLI command adds an always-available server; use an Agent Skill when the tools should only load for a relevant task.",
   ],
 }
@@ -379,7 +382,8 @@ const picode: AgentEntry = {
   format: null,
   rootKey: null,
   locations: [],
-  transports: ["stdio"],
+  transports: [],
+  integrationKind: "standalone-cli",
   credential: { kind: "shell-env" },
   manualInstructions:
     "Pi does not include MCP in core. Run `lyrashield check-diff` or `lyrashield gate --verdict` beside Pi, or use a separately reviewed Pi extension that implements MCP.",
@@ -402,6 +406,7 @@ const openclaw: AgentEntry = {
   rootKey: null,
   locations: [],
   transports: ["stdio", "remote-http"],
+  remoteAuth: "oauth",
   credential: { kind: "inline-env" },
   transportFields: {
     "remote-http": { transport: "streamable-http", url: API_URL_PLACEHOLDER },
@@ -552,7 +557,8 @@ const aider: AgentEntry = {
   format: null,
   rootKey: null,
   locations: [],
-  transports: ["stdio"],
+  transports: [],
+  integrationKind: "standalone-cli",
   credential: { kind: "shell-env" },
   manualInstructions:
     "Aider does not document native MCP client support. Run `lyrashield check-diff` or `lyrashield gate --verdict` as a separate repository check; do not add an `mcp-servers` key to Aider configuration.",
@@ -577,11 +583,23 @@ const devinCli: AgentEntry = {
   locations: [
     {
       scope: "project",
-      path: ".devin/config.local.json",
+      path: ".devin/mcp_config.local.json",
+      sharedByConvention: false,
+    },
+    {
+      scope: "project",
+      path: ".devin/mcp_config.json",
+      sharedByConvention: true,
+    },
+    {
+      scope: "global",
+      path: "~/.config/devin/mcp_config.json",
+      platform: { win32: "~/AppData/Roaming/devin/mcp_config.json" },
       sharedByConvention: false,
     },
   ],
-  transports: ["stdio"],
+  transports: ["stdio", "remote-http"],
+  remoteAuth: "oauth",
   credential: { kind: "inline-env" },
   vendorCli: { command: "devin", args: ["mcp", "add"] },
   rulesFiles: ["AGENTS.md"],
@@ -590,8 +608,8 @@ const devinCli: AgentEntry = {
     url: "https://docs.devin.ai/cli/extensibility/mcp/configuration",
   },
   gotchas: [
-    "Devin CLI (separate from Devin Desktop) uses .devin/config.local.json (gitignored) with a mcpServers object; stdio only.",
-    "Manage servers with `devin mcp add|login|enable|disable`; remote servers needing OAuth authenticate via `devin mcp login <server>`. MCP tools are namespaced mcp__<server>__<tool>.",
+    "Devin CLI v3000.3+ uses dedicated mcp_config files; older main-config mcpServers entries migrate on startup. Inspect and migrate an existing legacy entry before adding a duplicate.",
+    "Remote HTTP uses a bare url and `devin mcp login lyrashield` for OAuth; stdio remains available. MCP tools are namespaced mcp__<server>__<tool>.",
   ],
 }
 
@@ -882,7 +900,8 @@ const kiroPlugin: AgentEntry = {
       sharedByConvention: false,
     },
   ],
-  transports: ["stdio"],
+  transports: ["stdio", "remote-http"],
+  remoteAuth: "oauth",
   credential: { kind: "shell-env" },
   manualInstructions:
     "Run `lyrashield login --oauth`, then merge the `lyrashield` entry from the package's `.mcp.kiro.json` into `.kiro/settings/mcp.json` or `~/.kiro/settings/mcp.json`. The staged plugin directory alone is not a Kiro MCP install.",
@@ -893,7 +912,7 @@ const kiroPlugin: AgentEntry = {
   },
   gotchas: [
     "Merge the exported `.mcp.kiro.json` server into `.kiro/settings/mcp.json` or `~/.kiro/settings/mcp.json`; the staged plugin directory alone does not establish MCP discovery.",
-    "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
+    "Kiro also supports remote HTTP/OAuth using a URL-only MCP entry. Keep stdio as the default until the hosted path has a retained client-runtime receipt.",
   ],
 }
 
@@ -949,6 +968,15 @@ export const AGENTS: readonly RegistryAgentEntry[] = [
 
   return {
     ...agent,
+    integrationKind: agent.integrationKind ?? "mcp",
+    preferredTransport:
+      agent.integrationKind === "standalone-cli"
+        ? null
+        : (agent.preferredTransport ?? agent.transports[0]!),
+    remoteAuth:
+      agent.installStrategy === "agent-plugin" && agent.transports.includes("remote-http")
+        ? (agent.remoteAuth ?? "oauth")
+        : agent.remoteAuth,
     supportTier,
     verification: {
       evidence,

@@ -11,16 +11,16 @@ draft: false
 heroImage: agent-security-39
 faq:
   - q: "Does Corgea run AI pentesting?"
-    a: "Yes. Corgea launched AI Pentesting with a multi-agent architecture that validates exploitability during the test and supports continuous retesting after remediation. LyraShield also runs an agentic pentest, but as part of a release-assurance loop that produces an immutable evidence record and approval-gated fixes."
+    a: "Yes. Corgea launched AI Pentesting with a multi-agent architecture that validates exploitability during the test and supports continuous retesting after remediation. LyraShield also runs an agentic pentest, but as part of a release-assurance loop that produces an immutable evidence record and reviewed fix proposals."
   - q: "How do the fix models compare?"
-    a: "Corgea issues pull requests with source code fixes for engineering approval, aiming to reduce development effort by about 80 percent. LyraShield proposes approval-gated fixes and retests them before closing, recording the result as an evidence state. Both require human approval; LyraShield adds a mandatory retest."
+    a: "Corgea issues pull requests with source code fixes for engineering approval, aiming to reduce development effort by about 80 percent. LyraShield records fix proposals for review and retests them before closing, recording the result as an evidence state. Both require human approval; LyraShield adds a mandatory retest."
   - q: "Does Corgea adapt to my codebase?"
     a: "Yes. Corgea's Auto-Discovery studies your codebase before scanning, detects frameworks and existing security controls, and generates project-specific false-positive policies. Its Learning feature turns developer feedback into approved policies over time."
   - q: "Is Corgea pricing public?"
     a: "Corgea pricing is not publicly listed on its site as of this writing. LyraShield is in open beta with open registration at lyrashieldai.com. Contact Corgea directly for current pricing and availability."
 ---
 
-Corgea is an AI-powered security platform founded in 2023 that automatically finds, triages, and fixes insecure code, with auto-discovery that adapts to your codebase and AI pentesting that validates exploitability. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with approval-gated fixes. Corgea excels at adaptive triage and auto-fix; LyraShield closes the proof and release-decision gap.
+Corgea is an AI-powered security platform founded in 2023 that automatically finds, triages, and fixes insecure code, with auto-discovery that adapts to your codebase and AI pentesting that validates exploitability. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with reviewed fix proposals. Corgea excels at adaptive triage and auto-fix; LyraShield closes the proof and release-decision gap.
 
 This comparison is part of our broader [vibe coding security guide](/blog/vibe-coding-security-guide), which covers the full release-assurance methodology for AI-built applications.
 
@@ -40,7 +40,7 @@ Corgea and LyraShield both run agentic pentests and both gate fixes behind human
 
 The LyraShield loop is target, review, evidence, fix, retest, report. The agentic pentest exercises findings against the live target, and each result is recorded as an evidence state: detected, proven, or fixed and retested. The full record is immutable, which is the artifact a reviewer or auditor signs off on. Corgea's loop is discover, fix, verify, which is faster and focused on continuous remediation but does not emphasize an immutable assurance record as the deliverable for a specific release.
 
-LyraShield runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), so checks happen where the agent writes code. Fix proposals are approval-gated and retested before closing, which is a stronger constraint than issuing a fix PR. The difference is that LyraShield requires a retest to close a finding, not just a merged fix, and records the result in an immutable record. v1 coverage pairs the agentic pentest with SCA, secrets, a reusable GitHub Action, and SARIF output.
+LyraShield runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), so checks happen where the agent writes code. Fix proposals are recorded for review, and a fresh retest records the outcome, which is a stronger constraint than issuing a fix PR. The difference is that LyraShield requires a retest to close a finding, not just a merged fix, and records the result in an immutable record. v1 coverage pairs the agentic pentest with SCA, secrets, a reusable GitHub Action, and SARIF output.
 
 For dependency risk, LyraShield uses SCA backed by sources like the [OSV database](https://osv.dev/). Both tools target AI-generated code, but LyraShield's framing is release assurance for a specific app, while Corgea's is reducing remediation effort across a codebase with adaptive analysis.
 
@@ -50,7 +50,7 @@ The distinction between Corgea's discover-fix-verify loop and LyraShield's targe
 
 Use Corgea when you want a scanner that adapts to your codebase, auto-discovers your security controls, and issues fix pull requests to burn down your backlog. It is a strong choice for teams whose pain point is remediation volume and who want continuous pentesting with retesting, plus design-stage threat analysis. The Auto-Discovery and Learning features make it particularly suited to teams tired of repeating the same false positives.
 
-Use LyraShield AI when the specific need is a release decision for an AI-built app, backed by proof, an immutable record, and approval-gated fixes with a mandatory retest. The tools can complement each other depending on whether the priority is backlog reduction or release sign-off.
+Use LyraShield AI when the specific need is a release decision for an AI-built app, backed by proof, an immutable record, and reviewed fix proposals with a mandatory retest. The tools can complement each other depending on whether the priority is backlog reduction or release sign-off.
 
 The two tools fit different points in the workflow. Corgea runs continuously, adapting to the codebase and reducing noise over time, which suits a team whose priority is remediation throughput. LyraShield runs at the release gate, where the question is whether the app is safe to ship and the deliverable is an evidence record a reviewer can trust. Because both target AI-generated code and both validate findings, a team can use Corgea for day-to-day remediation and LyraShield for the focused assurance run before production.
 
@@ -66,7 +66,7 @@ For the detailed breakdown see the [Corgea comparison page](/compare/corgea). If
 
 ## Why teams choose LyraShield for AI-built apps
 
-Teams choose LyraShield when the deliverable is a release decision, not a fix PR. The agentic pentest proves whether a finding is real against the running app, the immutable evidence record gives reviewers and auditors something concrete, and approval-gated fixes with a mandatory retest keep a human accountable for every change. For apps where the code came from a coding agent and the team needs to make a go or no-go decision, that loop turns a stream of fixes into a defensible release decision.
+Teams choose LyraShield when the deliverable is a release decision, not a fix PR. The agentic pentest attempts to verify findings against an authorized running target and retains each result’s evidence state, the immutable evidence record gives reviewers and auditors something concrete, and reviewed fix proposals and a fresh retest keep the release decision tied to evidence. For apps where the code came from a coding agent and the team needs to make a go or no-go decision, that loop turns a stream of fixes into a defensible release decision.
 
 Corgea is a strong adaptive remediation tool with Auto-Discovery and Learning that reduces noise over time. LyraShield does not try to out-adapt it. The value is the focused loop: target, review, evidence, fix, retest, report. For an app whose code came from a coding agent, that loop is what turns a stream of fixes into a defensible go or no-go backed by proof.
 
