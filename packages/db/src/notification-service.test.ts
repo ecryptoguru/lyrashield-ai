@@ -4,6 +4,8 @@ vi.mock("./client", () => ({
   prisma: {
     notification: {
       create: vi.fn(),
+      createMany: vi.fn(),
+      findUnique: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
       update: vi.fn(),
@@ -13,7 +15,6 @@ vi.mock("./client", () => ({
 }))
 
 import { prisma } from "./client"
-import { Prisma } from "./generated/prisma"
 import {
   createNotification,
   getNotification,
@@ -28,6 +29,8 @@ import {
 const mockPrisma = prisma as unknown as {
   notification: {
     create: ReturnType<typeof vi.fn>
+    createMany: ReturnType<typeof vi.fn>
+    findUnique: ReturnType<typeof vi.fn>
     findFirst: ReturnType<typeof vi.fn>
     findMany: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
@@ -53,6 +56,8 @@ const baseNotification = {
 describe("notification-service", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPrisma.notification.createMany.mockResolvedValue({ count: 1 })
+    mockPrisma.notification.findUnique.mockResolvedValue(baseNotification)
     mockPrisma.notification.updateMany.mockResolvedValue({ count: 1 })
   })
 
@@ -72,8 +77,6 @@ describe("notification-service", () => {
 
   describe("createNotification", () => {
     it("creates a notification with pending status", async () => {
-      mockPrisma.notification.create.mockResolvedValue(baseNotification)
-
       const result = await createNotification({
         workspaceId: "ws-1",
         channel: "in_app",
@@ -83,7 +86,7 @@ describe("notification-service", () => {
       })
 
       expect(result.status).toBe("pending")
-      expect(mockPrisma.notification.create).toHaveBeenCalledWith({
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledWith({
         data: expect.objectContaining({
           workspaceId: "ws-1",
           channel: "in_app",
@@ -93,12 +96,11 @@ describe("notification-service", () => {
           status: "pending",
           dedupeKey: expect.any(String),
         }),
+        skipDuplicates: true,
       })
     })
 
     it("creates with userId and metadata when provided", async () => {
-      mockPrisma.notification.create.mockResolvedValue({ ...baseNotification, userId: "user-1" })
-
       await createNotification({
         workspaceId: "ws-1",
         userId: "user-1",
@@ -109,7 +111,7 @@ describe("notification-service", () => {
         metadata: { severity: "CRITICAL" },
       })
 
-      expect(mockPrisma.notification.create).toHaveBeenCalledWith({
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledWith({
         data: expect.objectContaining({
           workspaceId: "ws-1",
           userId: "user-1",
@@ -121,6 +123,7 @@ describe("notification-service", () => {
           dedupeKey: expect.any(String),
           metadata: { severity: "CRITICAL" },
         }),
+        skipDuplicates: true,
       })
     })
   })
@@ -281,10 +284,26 @@ describe("notification-service", () => {
   })
 
   describe("createAndSendNotification", () => {
+    it("uses conflict-safe insertion so expected deduplication does not throw", async () => {
+      const sendFn = vi.fn().mockResolvedValue(true)
+
+      await createAndSendNotification({
+        workspaceId: "ws-1",
+        type: "scan.completed",
+        title: "Scan Done",
+        body: "All good",
+        channels: ["in_app"],
+        sendFn,
+      })
+
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledWith({
+        data: expect.objectContaining({ channel: "in_app", dedupeKey: expect.any(String) }),
+        skipDuplicates: true,
+      })
+      expect(mockPrisma.notification.create).not.toHaveBeenCalled()
+    })
+
     it("creates notifications and marks them sent when sendFn succeeds", async () => {
-      mockPrisma.notification.create.mockImplementation(({ data }) =>
-        Promise.resolve({ id: `notif-${data.channel}`, ...data })
-      )
       mockPrisma.notification.update.mockResolvedValue({ status: "sent" })
 
       const sendFn = vi.fn().mockResolvedValue(true)
@@ -298,7 +317,7 @@ describe("notification-service", () => {
         sendFn,
       })
 
-      expect(mockPrisma.notification.create).toHaveBeenCalledTimes(3)
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledTimes(3)
       expect(sendFn).toHaveBeenCalledTimes(3)
       expect(mockPrisma.notification.updateMany).toHaveBeenCalledTimes(6)
       const updateCalls = mockPrisma.notification.updateMany.mock.calls.filter(
@@ -311,9 +330,6 @@ describe("notification-service", () => {
     })
 
     it("marks notifications as failed when sendFn returns false", async () => {
-      mockPrisma.notification.create.mockImplementation(({ data }) =>
-        Promise.resolve({ id: `notif-${data.channel}`, ...data })
-      )
       mockPrisma.notification.update.mockResolvedValue({ status: "failed" })
 
       const sendFn = vi.fn().mockResolvedValue(false)
@@ -335,9 +351,6 @@ describe("notification-service", () => {
     })
 
     it("respects custom channels", async () => {
-      mockPrisma.notification.create.mockImplementation(({ data }) =>
-        Promise.resolve({ id: `notif-${data.channel}`, ...data })
-      )
       mockPrisma.notification.update.mockResolvedValue({ status: "sent" })
 
       const sendFn = vi.fn().mockResolvedValue(true)
@@ -351,18 +364,13 @@ describe("notification-service", () => {
         sendFn,
       })
 
-      expect(mockPrisma.notification.create).toHaveBeenCalledTimes(1)
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledTimes(1)
       expect(sendFn).toHaveBeenCalledTimes(1)
     })
 
     it("does not send when a concurrent worker holds an unexpired delivery lease", async () => {
-      mockPrisma.notification.create.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError("duplicate", {
-          code: "P2002",
-          clientVersion: "test",
-        })
-      )
-      mockPrisma.notification.findFirst.mockResolvedValue({
+      mockPrisma.notification.createMany.mockResolvedValue({ count: 0 })
+      mockPrisma.notification.findUnique.mockResolvedValue({
         ...baseNotification,
         status: "sending",
         deliveryLeaseExpiresAt: new Date(Date.now() + 60_000),

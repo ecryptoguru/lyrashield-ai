@@ -774,7 +774,11 @@ export async function completeRetestsForScan(params: {
         select: { findingId: true, scanId: true, scannerSource: true },
       }),
       tx.finding.findMany({
-        where: { scanId: params.scanId, workspaceId: params.workspaceId, deletedAt: null },
+        where: {
+          workspaceId: params.workspaceId,
+          deletedAt: null,
+          candidates: { some: { scanId: params.scanId } },
+        },
         select: { id: true },
       }),
     ])

@@ -106,7 +106,10 @@ const SECRET_PATTERNS: SecretPattern[] = [
     name: "Private Key (PEM)",
     severity: "critical",
     cwe: "CWE-321",
-    pattern: /-----BEGIN\s+(RSA\s+|EC\s+|OPENSSH\s+|PGP\s+|ENCRYPTED\s+)?PRIVATE KEY-----/g,
+    // A header literal is commonly present in PEM parsers. Require a body and
+    // matching footer before classifying source as an embedded private key.
+    pattern:
+      /-----BEGIN\s+(RSA\s+|EC\s+|OPENSSH\s+|PGP\s+|ENCRYPTED\s+)?PRIVATE KEY-----\s+[A-Za-z0-9+/=\r\n]{64,}-----END\s+(?:RSA\s+|EC\s+|OPENSSH\s+|PGP\s+|ENCRYPTED\s+)?PRIVATE KEY-----/g,
     description: "A PEM-encoded private key was found hardcoded in the source code.",
   },
   {

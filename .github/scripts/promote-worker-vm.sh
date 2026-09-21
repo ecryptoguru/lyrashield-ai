@@ -298,12 +298,16 @@ systemctl restart lyrashield-worker-secrets.service
 # JavaScript template literal is passed verbatim to the container.
 # shellcheck disable=SC2016
 promotion_step=claiming-admission-stop
-admission_stop_claim=$(redis_eval 'const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:null}); const key="lyrashield:scan-admission:stopped"; const value=JSON.stringify({operator:"github-actions",reason:"worker-promotion",at:new Date().toISOString()}); const claimed=await redis.eval(`if redis.call("EXISTS", KEYS[1]) == 1 then return 0 end redis.call("SET", KEYS[1], ARGV[1]) return 1`,1,key,value); console.log(claimed); if (claimed === 1) console.log(value); await redis.quit();')
+admission_stop_claim=$(redis_eval 'const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:null}); const key="lyrashield:scan-admission:stopped"; const value=JSON.stringify({operator:"github-actions",reason:"worker-promotion",at:new Date().toISOString()}); const [claimed,ownedValue,reclaimed]=await redis.eval(`local existing=redis.call("GET",KEYS[1]); if not existing then redis.call("SET",KEYS[1],ARGV[1]); return {1,ARGV[1],0} end; local ok,parsed=pcall(cjson.decode,existing); if ok and parsed["operator"] == "github-actions" and parsed["reason"] == "worker-promotion" then redis.call("SET",KEYS[1],ARGV[1]); return {1,ARGV[1],1} end; return {0,"",0}`,1,key,value); console.log(claimed); if (claimed === 1) console.log(ownedValue); if (reclaimed === 1) console.log("reclaimed"); await redis.quit();')
 admission_stop_owned=$(printf '%s\n' "$admission_stop_claim" | sed -n '1p')
 admission_stop_value=$(printf '%s\n' "$admission_stop_claim" | sed -n '2p')
+admission_stop_reclaimed=$(printf '%s\n' "$admission_stop_claim" | sed -n '3p')
 case "$admission_stop_owned" in
   0) echo "Existing scan admission stop preserved" ;;
-  1) [ -n "$admission_stop_value" ] || { echo "Worker promotion admission receipt is missing" >&2; exit 1; } ;;
+  1)
+    [ -n "$admission_stop_value" ] || { echo "Worker promotion admission receipt is missing" >&2; exit 1; }
+    [ "$admission_stop_reclaimed" != reclaimed ] || echo "Reclaimed stale worker-promotion admission stop"
+    ;;
   *) echo "Worker promotion could not establish scan admission ownership" >&2; exit 1 ;;
 esac
 
@@ -437,8 +441,6 @@ wait_healthy
 [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$expected_app" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$expected_engine" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
-promotion_step=checking-scan-readiness
-curl --fail --silent --show-error --max-time 10 https://app.lyrashieldai.com/api/ready/scans >/dev/null
 
 promotion_step=restoring-worker-units
 restore_timer
@@ -456,6 +458,8 @@ promotion_step=resuming-admission
 if [ "$admission_stop_owned" -eq 1 ]; then
   resume_admission
 fi
+promotion_step=checking-scan-readiness
+curl --fail --silent --show-error --max-time 10 https://app.lyrashieldai.com/api/ready/scans >/dev/null
 promotion_complete=1
 trap - EXIT HUP INT TERM
 cleanup_host_assets

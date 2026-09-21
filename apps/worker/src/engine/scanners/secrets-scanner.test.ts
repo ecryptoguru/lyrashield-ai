@@ -81,13 +81,22 @@ describe("scanSecrets", () => {
   it("detects private keys (PEM)", async () => {
     const dir = await setupRepo({
       "private.key":
-        "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----",
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEArandomfixturematerialonly0123456789abcdefghijklmno\nMIIEpAIBAAKCAQEArandomfixturematerialonly0123456789abcdefghijklmno\n-----END RSA PRIVATE KEY-----",
     })
     const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
     const pemKey = findings.find((f) => f.id.startsWith("private-key-pem"))
     expect(pemKey).toBeDefined()
     expect(pemKey!.severity).toBe("critical")
     expect(pemKey!.cwe).toBe("CWE-321")
+  })
+
+  it("does not flag PEM parser header literals without key material", async () => {
+    const dir = await setupRepo({
+      "pem-parser.ts":
+        'export const stripPem = (value: string) => value.replace(/-----BEGIN PRIVATE KEY-----/, "").replace(/-----END PRIVATE KEY-----/, "")',
+    })
+    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
+    expect(findings.some((f) => f.id.startsWith("private-key-pem"))).toBe(false)
   })
 
   it("detects Slack tokens", async () => {

@@ -455,7 +455,13 @@ export async function gatherReportData(
   let targetId: string | null = null
   let webMcpCoverage: ReportWebMcpAssurance | undefined = undefined
   let scanCoverageReceipts: Array<{ controlId: string; scanner: string; status: string }> = []
-  let scanWhere: { workspaceId: string; deletedAt: null; scanId?: string }
+  let scanWhere:
+    | { workspaceId: string; deletedAt: null }
+    | {
+        workspaceId: string
+        deletedAt: null
+        candidates: { some: { scanId: string } }
+      }
 
   if (scanId) {
     const scan = await prisma.scan.findFirst({
@@ -507,7 +513,7 @@ export async function gatherReportData(
       }
     }
 
-    scanWhere = { workspaceId, deletedAt: null, scanId }
+    scanWhere = { workspaceId, deletedAt: null, candidates: { some: { scanId } } }
   } else {
     scanWhere = { workspaceId, deletedAt: null }
   }
@@ -533,7 +539,10 @@ export async function gatherReportData(
       recommendedFix: true,
       firstSeenAt: true,
       candidates: {
-        where: { scannerSource: "ai_app_security" },
+        where: {
+          scannerSource: "ai_app_security",
+          ...(scanId ? { scanId } : {}),
+        },
         select: { payload: true },
       },
       fixProposals: { select: { id: true, status: true } },
