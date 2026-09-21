@@ -293,14 +293,21 @@ export async function createAndSendNotification(params: {
       // overwriting, so earlier events in the window are not erased. The
       // list stays bounded with an explicit overflow note.
       if (grouped) {
-        notification = await prisma.notification.update({
-          where: { id: notification.id },
-          data: {
-            body: appendDigestLine(
-              notification.body,
-              `• ${params.title} — ${params.routineGroup!.detail}`
-            ),
-          },
+        notification = await prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`notification:${channel}:${dedupeKey}`}, 0))`
+          const current = await tx.notification.findUnique({
+            where: { channel_dedupeKey: { channel, dedupeKey } },
+          })
+          if (!current) throw new Error("Notification disappeared during digest update")
+          return tx.notification.update({
+            where: { id: current.id },
+            data: {
+              body: appendDigestLine(
+                current.body,
+                `• ${params.title} — ${params.routineGroup!.detail}`
+              ),
+            },
+          })
         })
       }
       logger.info("Notification deduped (reusing delivery identity)", {
@@ -341,7 +348,7 @@ export async function createAndSendNotification(params: {
       sent = await params.sendFn(channel, {
         type: effectiveType,
         title: effectiveTitle,
-        body: effectiveBody,
+        body: grouped ? notification.body : effectiveBody,
         workspaceName: params.workspaceName,
       })
     } catch (error) {

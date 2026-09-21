@@ -29,6 +29,24 @@ interface SecretPattern {
   pattern: RegExp
   description: string
   falsePositiveHints?: string[]
+  validate?: (match: string) => boolean
+}
+
+function isValidPemPrivateKey(match: string): boolean {
+  const body = match
+    .split(/\r?\n/)
+    .filter(
+      (line) =>
+        !line.startsWith("-----") && !/^(?:Proc-Type|DEK-Info):/i.test(line) && line.trim() !== ""
+    )
+    .join("")
+  if (body.length < 64 || body.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(body)) {
+    return false
+  }
+  const decoded = Buffer.from(body, "base64")
+  return (
+    decoded.length > 0 && decoded.toString("base64").replace(/=+$/, "") === body.replace(/=+$/, "")
+  )
 }
 
 const SECRET_PATTERNS: SecretPattern[] = [
@@ -109,8 +127,9 @@ const SECRET_PATTERNS: SecretPattern[] = [
     // A header literal is commonly present in PEM parsers. Require a body and
     // matching footer before classifying source as an embedded private key.
     pattern:
-      /-----BEGIN\s+(RSA\s+|EC\s+|OPENSSH\s+|PGP\s+|ENCRYPTED\s+)?PRIVATE KEY-----\s+[A-Za-z0-9+/=\r\n]{64,}-----END\s+(?:RSA\s+|EC\s+|OPENSSH\s+|PGP\s+|ENCRYPTED\s+)?PRIVATE KEY-----/g,
+      /-----BEGIN\s+((?:RSA\s+|EC\s+|OPENSSH\s+|PGP\s+|ENCRYPTED\s+)?PRIVATE KEY)-----\s+[A-Za-z0-9+/=,: \t\r\n-]{64,}?-----END\s+\1-----/g,
     description: "A PEM-encoded private key was found hardcoded in the source code.",
+    validate: isValidPemPrivateKey,
   },
   {
     id: "jwt-token",
@@ -278,6 +297,7 @@ async function walkDir(
 }
 
 function isFalsePositive(match: string, pattern: SecretPattern): boolean {
+  if (pattern.validate && !pattern.validate(match)) return true
   const lowerMatch = match.toLowerCase()
   if (pattern.falsePositiveHints?.some((hint) => lowerMatch.includes(hint.toLowerCase()))) {
     return true

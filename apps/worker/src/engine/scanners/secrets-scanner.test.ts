@@ -79,15 +79,40 @@ describe("scanSecrets", () => {
   })
 
   it("detects private keys (PEM)", async () => {
+    const body = Buffer.alloc(96, 7).toString("base64")
     const dir = await setupRepo({
-      "private.key":
-        "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEArandomfixturematerialonly0123456789abcdefghijklmno\nMIIEpAIBAAKCAQEArandomfixturematerialonly0123456789abcdefghijklmno\n-----END RSA PRIVATE KEY-----",
+      "private.key": `-----BEGIN RSA PRIVATE KEY-----\n${body}\n-----END RSA PRIVATE KEY-----`,
     })
     const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
     const pemKey = findings.find((f) => f.id.startsWith("private-key-pem"))
     expect(pemKey).toBeDefined()
     expect(pemKey!.severity).toBe("critical")
     expect(pemKey!.cwe).toBe("CWE-321")
+  })
+
+  it("detects traditional encrypted private keys with PEM metadata", async () => {
+    const body = Buffer.alloc(96, 11).toString("base64")
+    const dir = await setupRepo({
+      "encrypted.key": [
+        "-----BEGIN RSA PRIVATE KEY-----",
+        "Proc-Type: 4,ENCRYPTED",
+        "DEK-Info: AES-256-CBC,0123456789ABCDEF",
+        "",
+        body,
+        "-----END RSA PRIVATE KEY-----",
+      ].join("\n"),
+    })
+    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
+    expect(findings.some((f) => f.id.startsWith("private-key-pem"))).toBe(true)
+  })
+
+  it("rejects private key blocks whose PEM labels do not match", async () => {
+    const body = Buffer.alloc(96, 13).toString("base64")
+    const dir = await setupRepo({
+      "mismatched.key": `-----BEGIN RSA PRIVATE KEY-----\n${body}\n-----END EC PRIVATE KEY-----`,
+    })
+    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
+    expect(findings.some((f) => f.id.startsWith("private-key-pem"))).toBe(false)
   })
 
   it("does not flag PEM parser header literals without key material", async () => {

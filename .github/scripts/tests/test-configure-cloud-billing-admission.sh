@@ -43,5 +43,6 @@ grep -Fq "if: github.ref == 'refs/heads/main'" "$workflow"
 grep -Fq 'properties.configuration.ingress.traffic[?weight==' "$script"
 grep -Fq 'allowlist_read_status=$?' "$script"
 grep -Fq 'elif [ "$allowlist_read_status" = "1" ]; then' "$script"
-grep -Fq 'group: deploy-azure-${{ github.ref }}' "$workflow"
+grep -Fq "group: deploy-azure-\${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-\${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}" "$workflow"
+grep -Fq "group: deploy-azure-\${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-\${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}" .github/workflows/deploy-azure.yml
 grep -Fq 'revision-weight "$previous_revision=100" --output none || true' "$script"

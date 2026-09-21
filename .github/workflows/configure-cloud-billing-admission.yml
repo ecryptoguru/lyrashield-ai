@@ -27,7 +27,7 @@ concurrency:
   # container-app traffic weights (each sets its revision to 100). Running
   # them concurrently can interleave and leave traffic split. Grouped so they
   # queue against each other.
-  group: deploy-azure-${{ github.ref }}
+  group: deploy-azure-${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
   cancel-in-progress: false
 
 permissions:
