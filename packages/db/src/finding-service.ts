@@ -538,7 +538,7 @@ export async function listFindingsByScan(
   workspaceId: string
 ): Promise<FindingForScore[]> {
   return prisma.finding.findMany({
-    where: { scanId, workspaceId, deletedAt: null },
+    where: { workspaceId, deletedAt: null, candidates: { some: { scanId } } },
     orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,

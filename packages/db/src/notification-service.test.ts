@@ -2,8 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("./client", () => ({
   prisma: {
+    $executeRaw: vi.fn(),
+    $transaction: vi.fn(),
     notification: {
       create: vi.fn(),
+      createMany: vi.fn(),
+      findUnique: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
       update: vi.fn(),
@@ -13,7 +17,6 @@ vi.mock("./client", () => ({
 }))
 
 import { prisma } from "./client"
-import { Prisma } from "./generated/prisma"
 import {
   createNotification,
   getNotification,
@@ -26,8 +29,12 @@ import {
 } from "./notification-service"
 
 const mockPrisma = prisma as unknown as {
+  $executeRaw: ReturnType<typeof vi.fn>
+  $transaction: ReturnType<typeof vi.fn>
   notification: {
     create: ReturnType<typeof vi.fn>
+    createMany: ReturnType<typeof vi.fn>
+    findUnique: ReturnType<typeof vi.fn>
     findFirst: ReturnType<typeof vi.fn>
     findMany: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
@@ -53,6 +60,12 @@ const baseNotification = {
 describe("notification-service", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPrisma.$executeRaw.mockResolvedValue(1)
+    mockPrisma.$transaction.mockImplementation(
+      async (callback: (tx: typeof mockPrisma) => unknown) => callback(mockPrisma)
+    )
+    mockPrisma.notification.createMany.mockResolvedValue({ count: 1 })
+    mockPrisma.notification.findUnique.mockResolvedValue(baseNotification)
     mockPrisma.notification.updateMany.mockResolvedValue({ count: 1 })
   })
 
@@ -72,8 +85,6 @@ describe("notification-service", () => {
 
   describe("createNotification", () => {
     it("creates a notification with pending status", async () => {
-      mockPrisma.notification.create.mockResolvedValue(baseNotification)
-
       const result = await createNotification({
         workspaceId: "ws-1",
         channel: "in_app",
@@ -83,7 +94,7 @@ describe("notification-service", () => {
       })
 
       expect(result.status).toBe("pending")
-      expect(mockPrisma.notification.create).toHaveBeenCalledWith({
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledWith({
         data: expect.objectContaining({
           workspaceId: "ws-1",
           channel: "in_app",
@@ -93,12 +104,11 @@ describe("notification-service", () => {
           status: "pending",
           dedupeKey: expect.any(String),
         }),
+        skipDuplicates: true,
       })
     })
 
     it("creates with userId and metadata when provided", async () => {
-      mockPrisma.notification.create.mockResolvedValue({ ...baseNotification, userId: "user-1" })
-
       await createNotification({
         workspaceId: "ws-1",
         userId: "user-1",
@@ -109,7 +119,7 @@ describe("notification-service", () => {
         metadata: { severity: "CRITICAL" },
       })
 
-      expect(mockPrisma.notification.create).toHaveBeenCalledWith({
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledWith({
         data: expect.objectContaining({
           workspaceId: "ws-1",
           userId: "user-1",
@@ -121,6 +131,7 @@ describe("notification-service", () => {
           dedupeKey: expect.any(String),
           metadata: { severity: "CRITICAL" },
         }),
+        skipDuplicates: true,
       })
     })
   })
@@ -281,10 +292,26 @@ describe("notification-service", () => {
   })
 
   describe("createAndSendNotification", () => {
+    it("uses conflict-safe insertion so expected deduplication does not throw", async () => {
+      const sendFn = vi.fn().mockResolvedValue(true)
+
+      await createAndSendNotification({
+        workspaceId: "ws-1",
+        type: "scan.completed",
+        title: "Scan Done",
+        body: "All good",
+        channels: ["in_app"],
+        sendFn,
+      })
+
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledWith({
+        data: expect.objectContaining({ channel: "in_app", dedupeKey: expect.any(String) }),
+        skipDuplicates: true,
+      })
+      expect(mockPrisma.notification.create).not.toHaveBeenCalled()
+    })
+
     it("creates notifications and marks them sent when sendFn succeeds", async () => {
-      mockPrisma.notification.create.mockImplementation(({ data }) =>
-        Promise.resolve({ id: `notif-${data.channel}`, ...data })
-      )
       mockPrisma.notification.update.mockResolvedValue({ status: "sent" })
 
       const sendFn = vi.fn().mockResolvedValue(true)
@@ -298,7 +325,7 @@ describe("notification-service", () => {
         sendFn,
       })
 
-      expect(mockPrisma.notification.create).toHaveBeenCalledTimes(3)
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledTimes(3)
       expect(sendFn).toHaveBeenCalledTimes(3)
       expect(mockPrisma.notification.updateMany).toHaveBeenCalledTimes(6)
       const updateCalls = mockPrisma.notification.updateMany.mock.calls.filter(
@@ -311,9 +338,6 @@ describe("notification-service", () => {
     })
 
     it("marks notifications as failed when sendFn returns false", async () => {
-      mockPrisma.notification.create.mockImplementation(({ data }) =>
-        Promise.resolve({ id: `notif-${data.channel}`, ...data })
-      )
       mockPrisma.notification.update.mockResolvedValue({ status: "failed" })
 
       const sendFn = vi.fn().mockResolvedValue(false)
@@ -335,9 +359,6 @@ describe("notification-service", () => {
     })
 
     it("respects custom channels", async () => {
-      mockPrisma.notification.create.mockImplementation(({ data }) =>
-        Promise.resolve({ id: `notif-${data.channel}`, ...data })
-      )
       mockPrisma.notification.update.mockResolvedValue({ status: "sent" })
 
       const sendFn = vi.fn().mockResolvedValue(true)
@@ -351,18 +372,13 @@ describe("notification-service", () => {
         sendFn,
       })
 
-      expect(mockPrisma.notification.create).toHaveBeenCalledTimes(1)
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledTimes(1)
       expect(sendFn).toHaveBeenCalledTimes(1)
     })
 
     it("does not send when a concurrent worker holds an unexpired delivery lease", async () => {
-      mockPrisma.notification.create.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError("duplicate", {
-          code: "P2002",
-          clientVersion: "test",
-        })
-      )
-      mockPrisma.notification.findFirst.mockResolvedValue({
+      mockPrisma.notification.createMany.mockResolvedValue({ count: 0 })
+      mockPrisma.notification.findUnique.mockResolvedValue({
         ...baseNotification,
         status: "sending",
         deliveryLeaseExpiresAt: new Date(Date.now() + 60_000),
@@ -385,6 +401,80 @@ describe("notification-service", () => {
           where: expect.objectContaining({ id: "notif-1" }),
         })
       )
+    })
+
+    it("sends the accumulated grouped digest body", async () => {
+      mockPrisma.notification.createMany.mockResolvedValue({ count: 0 })
+      const accumulated = `${baseNotification.body}\n• Earlier — retained`
+      mockPrisma.notification.update.mockResolvedValue({
+        ...baseNotification,
+        body: accumulated,
+      })
+      const sendFn = vi.fn().mockResolvedValue(true)
+
+      await createAndSendNotification({
+        workspaceId: "ws-1",
+        type: "scan.completed",
+        title: "Latest",
+        body: "Latest",
+        channels: ["in_app"],
+        routineGroup: {
+          groupType: "scan",
+          windowKey: "2026-09-21",
+          windowLabel: "Today",
+          detail: "retained",
+        },
+        sendFn,
+      })
+
+      expect(sendFn).toHaveBeenCalledWith("in_app", expect.objectContaining({ body: accumulated }))
+    })
+
+    it("serializes concurrent grouped digest appends", async () => {
+      mockPrisma.notification.createMany.mockResolvedValue({ count: 0 })
+      mockPrisma.notification.updateMany.mockResolvedValue({ count: 0 })
+      let stored = { ...baseNotification, body: "Routine activity for Today:" }
+      let lock = Promise.resolve()
+      mockPrisma.$transaction.mockImplementation(
+        async (callback: (tx: typeof mockPrisma) => unknown) => {
+          const previous = lock
+          let release = () => {}
+          lock = new Promise<void>((resolve) => {
+            release = resolve
+          })
+          await previous
+          try {
+            return await callback(mockPrisma)
+          } finally {
+            release()
+          }
+        }
+      )
+      mockPrisma.notification.findUnique.mockImplementation(async () => stored)
+      mockPrisma.notification.update.mockImplementation(async ({ data }) => {
+        stored = { ...stored, body: data.body }
+        return stored
+      })
+
+      const grouped = (title: string) =>
+        createAndSendNotification({
+          workspaceId: "ws-1",
+          type: "scan.completed",
+          title,
+          body: title,
+          channels: ["in_app"],
+          routineGroup: {
+            groupType: "scan",
+            windowKey: "2026-09-21",
+            windowLabel: "Today",
+            detail: "retained",
+          },
+          sendFn: vi.fn().mockResolvedValue(true),
+        })
+
+      await Promise.all([grouped("First"), grouped("Second")])
+      expect(stored.body).toContain("• First — retained")
+      expect(stored.body).toContain("• Second — retained")
     })
   })
 })

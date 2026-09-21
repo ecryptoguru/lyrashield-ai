@@ -50,7 +50,7 @@ export async function getScanQualitySurface(
         take: 500,
       }),
       tx.finding.findMany({
-        where: { scanId, workspaceId, deletedAt: null },
+        where: { workspaceId, deletedAt: null, candidates: { some: { scanId } } },
         select: { verificationStatus: true, severity: true },
         // Findings are small rows; the cap only bounds an extreme case, and
         // the surface reports exactly what was read — never an implied total.

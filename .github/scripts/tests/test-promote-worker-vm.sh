@@ -116,6 +116,18 @@ case "$1:$2" in
     esac ;;
   run:*)
     case "$*" in
+      *'cjson.decode'*)
+        promotion_stop='{"operator":"github-actions","reason":"worker-promotion"}'
+        if [ ! -s "$MOCK_ADMISSION_STOP" ]; then
+          printf '%s' "$promotion_stop" > "$MOCK_ADMISSION_STOP"
+          printf '1\n%s\n' "$promotion_stop"
+        elif grep -Fq '"operator":"github-actions"' "$MOCK_ADMISSION_STOP" && grep -Fq '"reason":"worker-promotion"' "$MOCK_ADMISSION_STOP"; then
+          promotion_stop='{"operator":"github-actions","reason":"worker-promotion"}'
+          printf '%s' "$promotion_stop" > "$MOCK_ADMISSION_STOP"
+          printf '1\n%s\nreclaimed\n' "$promotion_stop"
+        else
+          printf '0\n'
+        fi ;;
       *'redis.call("GET"'*)
         for argument in "$@"; do expected_stop=$argument; done
         if [ "$(cat "$MOCK_ADMISSION_STOP")" = "$expected_stop" ]; then
@@ -294,7 +306,7 @@ run_case() {
     # the old worker before the container is replaced.
     [ "$(grep -Fxc 'restart lyrashield-worker.service' "$case_dir/systemctl.log")" -eq 1 ]
     restart_line=$(grep -Fn 'systemctl restart lyrashield-worker.service' "$case_dir/order.log" | cut -d: -f1)
-    claim_line=$(grep -Fn 'redis.call("EXISTS"' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
+    claim_line=$(grep -Fn 'cjson.decode' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
     queue_line=$(grep -Fn 'getSystemPrisma' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
     [ -n "$restart_line" ] && [ -n "$claim_line" ] && [ -n "$queue_line" ]
     [ "$restart_line" -gt "$claim_line" ] && [ "$restart_line" -gt "$queue_line" ]
@@ -310,6 +322,9 @@ run_case() {
   if [ -n "$replacement_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
     grep -Fq 'Newer scan admission stop preserved' <<< "$output"
+  elif [ "$name" = reclaims-stale-promotion-stop ]; then
+    [ ! -s "$case_dir/admission-stop" ]
+    grep -Fq 'Reclaimed stale worker-promotion admission stop' <<< "$output"
   elif [ -n "$existing_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$existing_stop" ]
     grep -Fq 'Existing scan admission stop preserved' <<< "$output"
@@ -339,6 +354,7 @@ run_case missing-rollback-config-floor 1 1 1 success 0 '' 0 '' 9663676416 0 0 21
 # A malformed floor fails closed instead of silently falling back.
 run_case missing-rollback-bad-floor 1 1 1 failure 0 '' 0 '' 9663676416 0 0 abc
 run_case preserves-existing-stop 1 1 1 success 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}'
+run_case reclaims-stale-promotion-stop 1 1 1 success 1 '{"operator":"github-actions","reason":"worker-promotion","at":"2026-09-19T00:47:48.285Z"}'
 run_case preserves-newer-stop 1 1 1 success 1 '' 0 '{"operator":"on-call","reason":"new-incident"}'
 run_case resumes-owned-stop-on-rollback 1 1 1 failure 1 '' 1
 run_case preserves-existing-stop-on-rollback 1 1 1 failure 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}' 1
