@@ -65,6 +65,7 @@ run_runner() {
 dry_output=$(run_runner)
 grep -Fq '"applied":false' <<< "$dry_output"
 grep -Fq 'create --network bridge --env-file ' "$tmp/docker.log"
+grep -Fq -- '--import /app/apps/worker/node_modules/tsx/dist/loader.mjs' "$tmp/docker.log"
 grep -Fq "cp $tmp/assets/backfill-clear-wrong-trial-claims.ts trial-backfill-container:/app/apps/worker/node_modules/@lyrashield/db/scripts/backfill-clear-wrong-trial-claims.ts" "$tmp/docker.log"
 grep -Fq 'start --attach trial-backfill-container' "$tmp/docker.log"
 grep -Fq 'rm --force trial-backfill-container' "$tmp/docker.log"

@@ -8,6 +8,10 @@ worker_env_lib="${LYRASHIELD_WORKER_ENV_LIB:-/opt/lyrashield-worker-host/worker-
 host_assets_dir="${LYRASHIELD_WORKER_HOST_ASSETS_DIR:-/opt/lyrashield-worker-host}"
 backfill_source="$host_assets_dir/backfill-clear-wrong-trial-claims.ts"
 inside_source="/app/apps/worker/node_modules/@lyrashield/db/scripts/backfill-clear-wrong-trial-claims.ts"
+# The production image installs `tsx` under the worker package, not `/app`.
+# Keep this absolute path tied to the image layout so the maintenance runner
+# never depends on an undeclared global loader.
+tsx_loader="/app/apps/worker/node_modules/tsx/dist/loader.mjs"
 
 usage() {
   echo "Usage: lyrashield-trial-claim-backfill [--apply=$confirmation]" >&2
@@ -86,7 +90,7 @@ container=$(docker create \
   $env_args \
   --entrypoint node \
   "$LYRASHIELD_WORKER_IMAGE" \
-  --import tsx \
+  --import "$tsx_loader" \
   "$inside_source" \
   "$@")
 docker cp "$backfill_source" "$container:$inside_source"
