@@ -39,6 +39,12 @@ write_mocks() {
   do
     printf 'installed script: %s\n' "$host_script" > "$case_dir/host/libexec/$host_script"
   done
+  cat > "$case_dir/host/libexec/lyrashield-refresh-secrets" <<'MOCK'
+#!/bin/sh
+set -eu
+printf 'refresh-secrets\n' >> "$MOCK_ORDER_LOG"
+MOCK
+  chmod +x "$case_dir/host/libexec/lyrashield-refresh-secrets"
   for unit in \
     lyrashield-worker.service \
     lyrashield-worker-secrets.service \
@@ -87,7 +93,9 @@ case "$command:$unit" in
     if [ -n "${MOCK_REPLACEMENT_STOP:-}" ] && [ -s "$MOCK_ADMISSION_STOP" ]; then
       printf '%s' "$MOCK_REPLACEMENT_STOP" > "$MOCK_ADMISSION_STOP"
     fi ;;
-  restart:lyrashield-worker-secrets.service) : ;;
+  restart:lyrashield-worker-secrets.service)
+    echo "secret dependency restart would terminate the active worker" >&2
+    exit 1 ;;
   reset-failed:lyrashield-worker.service) ;;
   daemon-reload:) ;;
   *) echo "unexpected systemctl call: $command $unit" >&2; exit 1 ;;
@@ -305,6 +313,10 @@ run_case() {
     # the empty-queue check: a scan admitted before promotion finishes against
     # the old worker before the container is replaced.
     [ "$(grep -Fxc 'restart lyrashield-worker.service' "$case_dir/systemctl.log")" -eq 1 ]
+    if grep -Fxq 'restart lyrashield-worker-secrets.service' "$case_dir/systemctl.log"; then
+      echo "promotion restarted the secret dependency and could terminate the active worker" >&2
+      exit 1
+    fi
     restart_line=$(grep -Fn 'systemctl restart lyrashield-worker.service' "$case_dir/order.log" | cut -d: -f1)
     claim_line=$(grep -Fn 'cjson.decode' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
     queue_line=$(grep -Fn 'getSystemPrisma' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
@@ -359,5 +371,43 @@ run_case preserves-newer-stop 1 1 1 success 1 '' 0 '{"operator":"on-call","reaso
 run_case resumes-owned-stop-on-rollback 1 1 1 failure 1 '' 1
 run_case preserves-existing-stop-on-rollback 1 1 1 failure 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}' 1
 run_case insufficient-disk 1 1 1 failure 1 '' 0 '' 1000
+
+preflight_dir="$tmp/preflight"
+write_mocks "$preflight_dir"
+printf 1 > "$preflight_dir/service-active"
+printf 1 > "$preflight_dir/container-present"
+printf 1 > "$preflight_dir/timer-active"
+printf 1 > "$preflight_dir/service-enabled"
+printf 1 > "$preflight_dir/timer-enabled"
+: > "$preflight_dir/admission-stop"
+: > "$preflight_dir/docker.log"
+: > "$preflight_dir/systemctl.log"
+: > "$preflight_dir/order.log"
+printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\n' "$old_image" "$(printf 'e%.0s' {1..64})" > "$preflight_dir/runtime.conf"
+printf 'REDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\n' > "$preflight_dir/worker.env"
+preflight_output=$(
+  PATH="$preflight_dir/bin:$PATH" \
+    MOCK_TARGET="$target" \
+    MOCK_APP_REVISION="$app_revision" \
+    MOCK_ENGINE_REVISION="$engine_revision" \
+    MOCK_SERVICE_ACTIVE="$preflight_dir/service-active" \
+    MOCK_CONTAINER_PRESENT="$preflight_dir/container-present" \
+    MOCK_TIMER_ACTIVE="$preflight_dir/timer-active" \
+    MOCK_SERVICE_ENABLED="$preflight_dir/service-enabled" \
+    MOCK_TIMER_ENABLED="$preflight_dir/timer-enabled" \
+    MOCK_ADMISSION_STOP="$preflight_dir/admission-stop" \
+    MOCK_DOCKER_LOG="$preflight_dir/docker.log" \
+    MOCK_SYSTEMCTL_LOG="$preflight_dir/systemctl.log" \
+    MOCK_ORDER_LOG="$preflight_dir/order.log" \
+    LYRASHIELD_WORKER_RUNTIME_CONFIG="$preflight_dir/runtime.conf" \
+    LYRASHIELD_WORKER_ENV_FILE="$preflight_dir/worker.env" \
+    LYRASHIELD_WORKER_HOST_LIBEXEC_DIR="$preflight_dir/host/libexec" \
+    LYRASHIELD_WORKER_HOST_ASSETS_DIR="$preflight_dir/host/assets" \
+    LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
+    sh "$script" --preflight
+)
+grep -Fq 'Worker empty-queue preflight passed' <<< "$preflight_output"
+[ "$(grep -Fxc 'refresh-secrets' "$preflight_dir/order.log")" -eq 1 ]
+[ ! -s "$preflight_dir/systemctl.log" ]
 
 echo "Worker promotion systemd proof passed."
