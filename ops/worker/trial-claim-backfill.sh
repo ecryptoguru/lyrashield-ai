@@ -92,6 +92,8 @@ container=$(docker create \
   --entrypoint node \
   "$LYRASHIELD_WORKER_IMAGE" \
   --import "$tsx_loader" \
+  --input-type=module \
+  --eval 'await import(process.argv[1])' \
   "$inside_source" \
   "$@")
 docker cp "$backfill_source" "$container:$inside_source"
