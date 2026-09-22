@@ -490,6 +490,16 @@ const sha256Hash = z
   .regex(/^[a-f0-9]{64}$/i, "Expected SHA-256 hex")
   .optional()
 
+export const promptCacheReceiptSchema = z
+  .object({
+    enabled: z.boolean(),
+    routing_enabled: z.boolean(),
+    routing: z.literal("stable-prompt-v2").nullable(),
+    mode: z.enum(["explicit", "implicit"]).nullable(),
+    ttl: z.literal("30m").nullable(),
+  })
+  .strip()
+
 export const engineRunRecordSchema = z
   .object({
     // Producer's run.json contract version (engine RUN_RECORD_SCHEMA_VERSION).
@@ -511,6 +521,8 @@ export const engineRunRecordSchema = z
       .optional(),
     engine_version: boundedString,
     prompt_bundle_hash: sha256Hash,
+    /** Bounded cache-routing posture emitted by the engine for this run. */
+    prompt_cache: promptCacheReceiptSchema.optional(),
     model: boundedString,
     reasoning_effort: boundedString,
     delegate_model: boundedString,
