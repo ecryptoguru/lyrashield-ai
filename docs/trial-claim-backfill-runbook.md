@@ -6,19 +6,19 @@ A candidate is a user whose `trialStartedAt` is set while the account has neithe
 
 ## Steps
 
-1. Run a dry pass and read the candidate list (ids and created dates only — never emails):
+1. Run a dry pass from the production worker VM and read the candidate list (ids and created dates only — never emails):
 
    ```bash
-   DATABASE_SYSTEM_URL=<system-url> pnpm --filter @lyrashield/db exec tsx scripts/backfill-clear-wrong-trial-claims.ts
+   sudo /usr/local/libexec/lyrashield-trial-claim-backfill
    ```
 
 2. Review the `candidates` array. Apply with the explicit confirmation flag:
 
    ```bash
-   DATABASE_SYSTEM_URL=<system-url> pnpm --filter @lyrashield/db exec tsx scripts/backfill-clear-wrong-trial-claims.ts --apply=backfill-clear-wrong-trial-claims
+   sudo /usr/local/libexec/lyrashield-trial-claim-backfill --apply=backfill-clear-wrong-trial-claims
    ```
 
-   A bare `--apply` flag also applies the backfill — the script resolves it to the same confirmation slug. The pinned `--apply=backfill-clear-wrong-trial-claims` spelling is preferred in runbooks and shell history so the intent stays explicit.
+   The VM runner rejects a bare `--apply`; use the pinned confirmation spelling so the intent remains explicit in runbooks and shell history.
 
 3. The apply pass runs in one serializable transaction: each candidate's `trialStartedAt` is cleared and one chained `AuditLog` row (`trial.claim_cleared`, `resourceType: "user"`) is appended in the user's oldest owned workspace. A cleared user who owns no workspace is listed under `unaudited`.
 
@@ -26,4 +26,4 @@ A candidate is a user whose `trialStartedAt` is set while the account has neithe
 
 ## Production execution
 
-Production execution is a founder action run from the worker VM with the system database URL — never from a laptop and never under the runtime role. Retain the printed report as the receipt.
+Production execution is a founder action run from the worker VM — never from a laptop and never under the runtime role. The runner creates a one-shot container from the deployed digest, passes only the system database URL through a private temporary environment file, and copies the image-bound reviewed script into the deployed database package. It accepts only a dry run or the exact apply confirmation shown above. Retain the printed report as the receipt.

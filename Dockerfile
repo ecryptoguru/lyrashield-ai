@@ -176,6 +176,8 @@ COPY ops/worker/worker-env.sh /opt/lyrashield-worker-host/worker-env.sh
 COPY ops/worker/refresh-secrets.sh /opt/lyrashield-worker-host/refresh-secrets.sh
 COPY ops/worker/refresh-egress.sh /opt/lyrashield-worker-host/refresh-egress.sh
 COPY ops/worker/capture-stop-provenance.sh /opt/lyrashield-worker-host/capture-stop-provenance.sh
+COPY ops/worker/trial-claim-backfill.sh /opt/lyrashield-worker-host/trial-claim-backfill.sh
+COPY packages/db/scripts/backfill-clear-wrong-trial-claims.ts /opt/lyrashield-worker-host/backfill-clear-wrong-trial-claims.ts
 COPY ops/worker/lyrashield-worker.service /opt/lyrashield-worker-host/lyrashield-worker.service
 COPY ops/worker/lyrashield-worker-secrets.service /opt/lyrashield-worker-host/lyrashield-worker-secrets.service
 COPY ops/worker/lyrashield-worker-egress.service /opt/lyrashield-worker-host/lyrashield-worker-egress.service

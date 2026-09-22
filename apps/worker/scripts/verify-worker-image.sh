@@ -51,6 +51,8 @@ docker run --rm --entrypoint sh "$image" -c '
     refresh-secrets.sh \
     refresh-egress.sh \
     capture-stop-provenance.sh \
+    trial-claim-backfill.sh \
+    backfill-clear-wrong-trial-claims.ts \
     lyrashield-worker.service \
     lyrashield-worker-secrets.service \
     lyrashield-worker-egress.service \
