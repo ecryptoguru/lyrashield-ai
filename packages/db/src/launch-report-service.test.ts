@@ -68,6 +68,7 @@ vi.mock("@lyrashield/config", () => ({
 }))
 
 import {
+  confirmSharedLaunchReportIdentity,
   generateLaunchReport,
   getLaunchReportDetail,
   getSharedLaunchReport,
@@ -382,5 +383,115 @@ describe("getSharedLaunchReport — public frozen payload", () => {
     })
     await expect(getSharedLaunchReport("report-1", "a".repeat(64))).resolves.toBeNull()
     expect(mocks.reportFindFirst).not.toHaveBeenCalled()
+  })
+})
+
+describe("confirmSharedLaunchReportIdentity — confirmation without disclosure", () => {
+  const provenance = {
+    schemaVersion: "lyrashield-report-provenance/1.0.0",
+    gateVerdictId: "verdict-1",
+    verdictChecksum: "vc-1",
+    assessmentVersion: 2,
+    assessedIdentity: { kind: "COMMIT", value: COMMIT },
+    assessedAt: EVALUATED_AT.toISOString(),
+    issuedAt: EVALUATED_AT.toISOString(),
+    applicabilityCheckedAt: EVALUATED_AT.toISOString(),
+    applicability: "applicable",
+    reasonCodes: [],
+    historicalState: "READY",
+    effectiveState: "READY",
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getReportByShareToken.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "workspace-1",
+      shareExpiresAt: new Date(Date.now() + DAY_MS),
+    })
+    mocks.reportFindFirst.mockResolvedValue({
+      contentJson: { reportChecksum: "d".repeat(64) },
+      provenanceJson: provenance,
+    })
+  })
+
+  it("confirms the exact token-bound identity without returning its value", async () => {
+    await expect(
+      confirmSharedLaunchReportIdentity({
+        reportId: "report-1",
+        token: "a".repeat(64),
+        reportChecksum: "d".repeat(64),
+        identity: { kind: "COMMIT", value: COMMIT.toUpperCase() },
+      })
+    ).resolves.toBe("MATCH")
+  })
+
+  it("returns MISMATCH for a different identity of the same kind", async () => {
+    await expect(
+      confirmSharedLaunchReportIdentity({
+        reportId: "report-1",
+        token: "a".repeat(64),
+        reportChecksum: "d".repeat(64),
+        identity: { kind: "COMMIT", value: "c".repeat(40) },
+      })
+    ).resolves.toBe("MISMATCH")
+  })
+
+  it.each([
+    ["unknown token", null, "report-1", "d".repeat(64)],
+    [
+      "cross-report token",
+      {
+        id: "report-other",
+        workspaceId: "workspace-1",
+        shareExpiresAt: new Date(Date.now() + DAY_MS),
+      },
+      "report-1",
+      "d".repeat(64),
+    ],
+    [
+      "wrong signed checksum",
+      {
+        id: "report-1",
+        workspaceId: "workspace-1",
+        shareExpiresAt: new Date(Date.now() + DAY_MS),
+      },
+      "report-1",
+      "e".repeat(64),
+    ],
+  ])("collapses %s to UNAVAILABLE", async (_label, tokenResult, reportId, reportChecksum) => {
+    mocks.getReportByShareToken.mockResolvedValue(tokenResult)
+    await expect(
+      confirmSharedLaunchReportIdentity({
+        reportId,
+        token: "a".repeat(64),
+        reportChecksum,
+        identity: { kind: "COMMIT", value: COMMIT },
+      })
+    ).resolves.toBe("UNAVAILABLE")
+  })
+
+  it("collapses legacy provenance and identity-kind probing to UNAVAILABLE", async () => {
+    mocks.reportFindFirst.mockResolvedValueOnce({
+      contentJson: { reportChecksum: "d".repeat(64) },
+      provenanceJson: null,
+    })
+    await expect(
+      confirmSharedLaunchReportIdentity({
+        reportId: "report-1",
+        token: "a".repeat(64),
+        reportChecksum: "d".repeat(64),
+        identity: { kind: "COMMIT", value: COMMIT },
+      })
+    ).resolves.toBe("UNAVAILABLE")
+
+    await expect(
+      confirmSharedLaunchReportIdentity({
+        reportId: "report-1",
+        token: "a".repeat(64),
+        reportChecksum: "d".repeat(64),
+        identity: { kind: "ARTIFACT_DIGEST", value: `sha256:${"d".repeat(64)}` },
+      })
+    ).resolves.toBe("UNAVAILABLE")
   })
 })

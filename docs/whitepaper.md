@@ -210,7 +210,7 @@ Application-gated partner program: **25% recurring for 12 months** on Cloud mont
 
 The free surface is the acquisition engine: Lite Check, six browser-local tools, the GitHub Action and a technical-content program all route to account creation or the Local license. There is no permanent free product tier — the free tools give real value but no official score and no full loop.
 
-> **Note:** production purchase admission and final publishable pricing remain founder-gated launch decisions.
+> **Commercial decision (2026-09-22):** the pricing above is the approved public launch schedule. This approval does not authorize a new live charge or refund proof; provider execution remains a separate controlled gate.
 
 ## 9. Claims and assurance boundary
 
