@@ -4,6 +4,7 @@ set -eu
 config=${LYRASHIELD_WORKER_RUNTIME_CONFIG:-/etc/lyrashield/worker-runtime.conf}
 environment_file=${LYRASHIELD_WORKER_ENV_FILE:-/etc/lyrashield/worker.env}
 host_assets_dir=${LYRASHIELD_WORKER_HOST_ASSETS_DIR:-/opt/lyrashield-worker-host}
+host_libexec_dir=${LYRASHIELD_WORKER_HOST_LIBEXEC_DIR:-/usr/local/libexec}
 container=lyrashield-worker
 
 # The one-shot preflight and Redis evals must see the same environment the
@@ -98,7 +99,7 @@ assert_worker_environment_fresh() {
 
 assert_empty_queues_with_refreshed_environment() {
   # Refresh the one-shot preflight environment without touching the active worker.
-  systemctl restart lyrashield-worker-secrets.service
+  refresh_worker_secrets
   if ! preflight=$(worker_oneshot "$queue_count"); then
     echo "Worker promotion requires empty scan and webhook queues" >&2
     exit 1
@@ -111,6 +112,20 @@ assert_empty_queues_with_refreshed_environment() {
     echo "Worker environment is stale; continuing with the refreshed one-shot preflight"
   fi
 }
+
+refresh_worker_secrets() {
+  refresher="$host_libexec_dir/lyrashield-refresh-secrets"
+  case "$refresher" in
+    /*) ;;
+    *) echo "Worker secret refresher path must be absolute" >&2; exit 1 ;;
+  esac
+  [ -x "$refresher" ] || {
+    echo "Worker secret refresher is missing or not executable" >&2
+    exit 1
+  }
+  "$refresher"
+}
+
 if [ "${1:-}" = "--preflight" ]; then
   assert_empty_queues_with_refreshed_environment
   echo "Worker empty-queue preflight passed"
@@ -123,7 +138,6 @@ expected_engine=${3:?engine revision is required}
 timer=lyrashield-worker-egress-refresh.timer
 service=lyrashield-worker.service
 promotion_state_dir=${LYRASHIELD_WORKER_PROMOTION_STATE_DIR:-/var/lib/lyrashield}
-host_libexec_dir=${LYRASHIELD_WORKER_HOST_LIBEXEC_DIR:-/usr/local/libexec}
 systemd_dir=${LYRASHIELD_WORKER_SYSTEMD_DIR:-/etc/systemd/system}
 
 for directory in "$promotion_state_dir" "$host_libexec_dir" "$systemd_dir" "$host_assets_dir"; do
@@ -293,7 +307,7 @@ fi
 # stop and the empty-queue proof run against the new endpoint through
 # one-shot containers. The single restart later in this script is what cuts
 # the worker over.
-systemctl restart lyrashield-worker-secrets.service
+refresh_worker_secrets
 
 # JavaScript template literal is passed verbatim to the container.
 # shellcheck disable=SC2016
