@@ -88,6 +88,7 @@ container=$(docker create \
   --network bridge \
   --env-file "$maintenance_env" \
   $env_args \
+  --env TMPDIR=/tmp \
   --entrypoint node \
   "$LYRASHIELD_WORKER_IMAGE" \
   --import "$tsx_loader" \
