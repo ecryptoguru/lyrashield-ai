@@ -66,6 +66,13 @@ describe("run.json 1.1 golden fixture", () => {
       schema_version: "1.1",
       run_id: "fixture-run-1-1",
       status: "completed",
+      prompt_cache: {
+        enabled: true,
+        routing_enabled: true,
+        routing: "stable-prompt-v2",
+        mode: "explicit",
+        ttl: "30m",
+      },
       report_artifacts_revision: 4,
       evidence_export: { status: "exported", exchanges: 2 },
     })

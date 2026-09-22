@@ -10,6 +10,7 @@ import {
   engineVulnerabilitySchema,
   findingRevisionSchema,
   fixVerificationSchema,
+  promptCacheReceiptSchema,
   httpExchangeExportSchema,
   MAX_COVERAGE_GAPS,
   MAX_EVIDENCE_FIELD_CHARS,
@@ -188,6 +189,13 @@ export interface EngineRunRecord {
   scan_results?: Record<string, unknown>
   engine_version?: string
   prompt_bundle_hash?: string
+  prompt_cache?: {
+    enabled: boolean
+    routing_enabled: boolean
+    routing: "stable-prompt-v2" | null
+    mode: "explicit" | "implicit" | null
+    ttl: "30m" | null
+  }
   model?: string
   reasoning_effort?: string
   delegate_model?: string
@@ -1377,6 +1385,7 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
       : undefined
     const llmUsage = normalizeLlmUsage(record.llm_usage)
     const promptBundleHash = boundedString(record.prompt_bundle_hash)
+    const promptCache = promptCacheReceiptSchema.safeParse(record.prompt_cache)
     const delegateModel = boundedString(record.delegate_model)
     const delegateReasoningEffort = boundedString(record.delegate_reasoning_effort)
     const modelRoutingPolicy = boundedString(record.model_routing_policy)
@@ -1410,6 +1419,7 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
       ...(promptBundleHash && /^[a-f0-9]{64}$/i.test(promptBundleHash)
         ? { prompt_bundle_hash: promptBundleHash.toLowerCase() }
         : {}),
+      ...(promptCache.success ? { prompt_cache: promptCache.data } : {}),
       ...(boundedString(record.model) ? { model: boundedString(record.model) } : {}),
       ...(boundedString(record.reasoning_effort)
         ? { reasoning_effort: boundedString(record.reasoning_effort) }
