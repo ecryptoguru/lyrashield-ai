@@ -96,6 +96,9 @@ function baseParams(overrides: Record<string, unknown> = {}) {
     input: { owner: "acme", repo: "app" },
     idempotencyKey: "idem-1",
     isAdmitted: () => true,
+    // The provisional plan gate needs the sponsor account's trusted
+    // effectivePlan; tests exercise an allowed plan unless stated otherwise.
+    sponsorEffectivePlan: "AGENCY",
     resolveCredential: vi.fn(async () => ({ kind: "github_installation", installationId: 7 })),
     execute: vi.fn(async () => ({ fullName: "acme/app" })),
     ...overrides,
@@ -190,6 +193,39 @@ describe("connector authorization matrix", () => {
     const result = await invokeConnectorTool(baseParams() as never)
     expect(result).toMatchObject({ ok: false, code: "TOOL_NOT_GRANTED" })
   })
+
+  it.each([
+    ["null", null],
+    ["a non-object", "repo:metadata"],
+    ["missing the scopes list", { tools: [tool.name] }],
+    ["a malformed scopes list", { scopes: "repo:metadata", tools: [tool.name] }],
+    ["an empty scopes list", { scopes: [], tools: [tool.name] }],
+  ])("fails closed when capabilities are %s", async (_label, capabilities) => {
+    integrationFindFirst.mockResolvedValue(connection({ capabilities }))
+    const result = await invokeConnectorTool(baseParams() as never)
+    expect(result).toMatchObject({ ok: false, code: "TOOL_NOT_GRANTED" })
+  })
+
+  it.each(["STARTER", "PRO", "FREE", "not-a-plan", undefined])(
+    "denies connector tools for sponsor plan %s",
+    async (sponsorEffectivePlan) => {
+      const params = baseParams({ sponsorEffectivePlan })
+      const result = await invokeConnectorTool(params as never)
+      expect(result).toMatchObject({ ok: false, code: "PLAN_NOT_ELIGIBLE" })
+      expect(params.execute).not.toHaveBeenCalled()
+      expect(claimOrGetAgentOperation).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(["AGENCY", "LAUNCH_ASSURANCE", "ENTERPRISE"])(
+    "allows connector tools for sponsor plan %s",
+    async (sponsorEffectivePlan) => {
+      const params = baseParams({ sponsorEffectivePlan })
+      const result = await invokeConnectorTool(params as never)
+      expect(result).toMatchObject({ ok: true })
+      expect(params.execute).toHaveBeenCalledOnce()
+    }
+  )
 
   it("fails closed when the tool is not granted on the connection", async () => {
     integrationFindFirst.mockResolvedValue(
@@ -387,6 +423,15 @@ describe("checkConnectorAuthorization (pure)", () => {
       resource: "repo:acme/app",
     })
     expect(result).toEqual({ authorized: true })
+  })
+
+  it("denies a connection that records no granted scopes", () => {
+    const result = checkConnectorAuthorization({
+      connection: connection({ capabilities: null }),
+      workspaceId: WORKSPACE,
+      tool,
+    })
+    expect(result).toMatchObject({ authorized: false, code: "TOOL_NOT_GRANTED" })
   })
 })
 

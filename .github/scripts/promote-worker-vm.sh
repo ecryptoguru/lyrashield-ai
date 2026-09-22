@@ -4,6 +4,7 @@ set -eu
 config=${LYRASHIELD_WORKER_RUNTIME_CONFIG:-/etc/lyrashield/worker-runtime.conf}
 environment_file=${LYRASHIELD_WORKER_ENV_FILE:-/etc/lyrashield/worker.env}
 host_assets_dir=${LYRASHIELD_WORKER_HOST_ASSETS_DIR:-/opt/lyrashield-worker-host}
+host_libexec_dir=${LYRASHIELD_WORKER_HOST_LIBEXEC_DIR:-/usr/local/libexec}
 container=lyrashield-worker
 
 # The one-shot preflight and Redis evals must see the same environment the
@@ -98,7 +99,7 @@ assert_worker_environment_fresh() {
 
 assert_empty_queues_with_refreshed_environment() {
   # Refresh the one-shot preflight environment without touching the active worker.
-  systemctl restart lyrashield-worker-secrets.service
+  refresh_worker_secrets
   if ! preflight=$(worker_oneshot "$queue_count"); then
     echo "Worker promotion requires empty scan and webhook queues" >&2
     exit 1
@@ -111,6 +112,20 @@ assert_empty_queues_with_refreshed_environment() {
     echo "Worker environment is stale; continuing with the refreshed one-shot preflight"
   fi
 }
+
+refresh_worker_secrets() {
+  refresher="$host_libexec_dir/lyrashield-refresh-secrets"
+  case "$refresher" in
+    /*) ;;
+    *) echo "Worker secret refresher path must be absolute" >&2; exit 1 ;;
+  esac
+  [ -x "$refresher" ] || {
+    echo "Worker secret refresher is missing or not executable" >&2
+    exit 1
+  }
+  "$refresher"
+}
+
 if [ "${1:-}" = "--preflight" ]; then
   assert_empty_queues_with_refreshed_environment
   echo "Worker empty-queue preflight passed"
@@ -123,7 +138,6 @@ expected_engine=${3:?engine revision is required}
 timer=lyrashield-worker-egress-refresh.timer
 service=lyrashield-worker.service
 promotion_state_dir=${LYRASHIELD_WORKER_PROMOTION_STATE_DIR:-/var/lib/lyrashield}
-host_libexec_dir=${LYRASHIELD_WORKER_HOST_LIBEXEC_DIR:-/usr/local/libexec}
 systemd_dir=${LYRASHIELD_WORKER_SYSTEMD_DIR:-/etc/systemd/system}
 
 for directory in "$promotion_state_dir" "$host_libexec_dir" "$systemd_dir" "$host_assets_dir"; do
@@ -293,17 +307,21 @@ fi
 # stop and the empty-queue proof run against the new endpoint through
 # one-shot containers. The single restart later in this script is what cuts
 # the worker over.
-systemctl restart lyrashield-worker-secrets.service
+refresh_worker_secrets
 
 # JavaScript template literal is passed verbatim to the container.
 # shellcheck disable=SC2016
 promotion_step=claiming-admission-stop
-admission_stop_claim=$(redis_eval 'const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:null}); const key="lyrashield:scan-admission:stopped"; const value=JSON.stringify({operator:"github-actions",reason:"worker-promotion",at:new Date().toISOString()}); const claimed=await redis.eval(`if redis.call("EXISTS", KEYS[1]) == 1 then return 0 end redis.call("SET", KEYS[1], ARGV[1]) return 1`,1,key,value); console.log(claimed); if (claimed === 1) console.log(value); await redis.quit();')
+admission_stop_claim=$(redis_eval 'const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:null}); const key="lyrashield:scan-admission:stopped"; const value=JSON.stringify({operator:"github-actions",reason:"worker-promotion",at:new Date().toISOString()}); const [claimed,ownedValue,reclaimed]=await redis.eval(`local existing=redis.call("GET",KEYS[1]); if not existing then redis.call("SET",KEYS[1],ARGV[1]); return {1,ARGV[1],0} end; local ok,parsed=pcall(cjson.decode,existing); if ok and parsed["operator"] == "github-actions" and parsed["reason"] == "worker-promotion" then redis.call("SET",KEYS[1],ARGV[1]); return {1,ARGV[1],1} end; return {0,"",0}`,1,key,value); console.log(claimed); if (claimed === 1) console.log(ownedValue); if (reclaimed === 1) console.log("reclaimed"); await redis.quit();')
 admission_stop_owned=$(printf '%s\n' "$admission_stop_claim" | sed -n '1p')
 admission_stop_value=$(printf '%s\n' "$admission_stop_claim" | sed -n '2p')
+admission_stop_reclaimed=$(printf '%s\n' "$admission_stop_claim" | sed -n '3p')
 case "$admission_stop_owned" in
   0) echo "Existing scan admission stop preserved" ;;
-  1) [ -n "$admission_stop_value" ] || { echo "Worker promotion admission receipt is missing" >&2; exit 1; } ;;
+  1)
+    [ -n "$admission_stop_value" ] || { echo "Worker promotion admission receipt is missing" >&2; exit 1; }
+    [ "$admission_stop_reclaimed" != reclaimed ] || echo "Reclaimed stale worker-promotion admission stop"
+    ;;
   *) echo "Worker promotion could not establish scan admission ownership" >&2; exit 1 ;;
 esac
 
@@ -319,8 +337,22 @@ if current_image_id=$(docker inspect "$container" --format '{{.Image}}' 2>/dev/n
   prune_all=1
 else
   # A failed service restart can remove the container. Size and preserve the
-  # configured rollback image while bootstrapping its replacement.
-  current_image_size=$(docker image inspect "$old_image" --format '{{.Size}}')
+  # configured rollback image while bootstrapping its replacement. When that
+  # image is absent locally too, there is nothing to measure — fall back to
+  # the image-size floor so the disk check still carries a real budget
+  # (required_free = 3 x floor + 2 GiB; 26 GiB at the 8 GiB default). The
+  # floor is a policy value, not a measurement: tune it per VM via the
+  # LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES env var or the same key in the
+  # runtime config (env wins) to match the disk that actually exists.
+  if ! current_image_size=$(docker image inspect "$old_image" --format '{{.Size}}' 2>/dev/null); then
+    image_floor_bytes=${LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES:-$(sed -n 's/^LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES=//p' "$config" | head -n 1)}
+    image_floor_bytes=${image_floor_bytes:-8589934592}
+    case "$image_floor_bytes" in
+      *[!0-9]*|0) echo "LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES must be a positive integer" >&2; exit 1 ;;
+    esac
+    echo "No local rollback image found; sizing the disk preflight from the ${image_floor_bytes}-byte floor" >&2
+    current_image_size=$image_floor_bytes
+  fi
   prune_all=0
 fi
 required_free=$((current_image_size * 3 + 2147483648))
@@ -423,8 +455,6 @@ wait_healthy
 [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$expected_app" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$expected_engine" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
-promotion_step=checking-scan-readiness
-curl --fail --silent --show-error --max-time 10 https://app.lyrashieldai.com/api/ready/scans >/dev/null
 
 promotion_step=restoring-worker-units
 restore_timer
@@ -442,6 +472,8 @@ promotion_step=resuming-admission
 if [ "$admission_stop_owned" -eq 1 ]; then
   resume_admission
 fi
+promotion_step=checking-scan-readiness
+curl --fail --silent --show-error --max-time 10 https://app.lyrashieldai.com/api/ready/scans >/dev/null
 promotion_complete=1
 trap - EXIT HUP INT TERM
 cleanup_host_assets

@@ -91,6 +91,16 @@ const preflightEnvFile = [
   "",
 ].join("\n")
 
+const installPreflightSecretRefresher = (directory) => {
+  const refreshLog = path.join(directory, "secret-refresh.log")
+  writeFileSync(
+    path.join(directory, "lyrashield-refresh-secrets"),
+    '#!/bin/sh\nprintf "refresh-secrets\\n" >> "$REFRESH_LOG"\n',
+    { mode: 0o700 }
+  )
+  return refreshLog
+}
+
 // Parses the `docker run` line the stub recorded into the environment the
 // one-shot container would see: --env-file pairs first, then --env overrides.
 const preflightRunEnvironment = (dockerLog) => {
@@ -123,6 +133,8 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     const systemctlLog = path.join(directory, "systemctl.log")
     const runtimeConfig = path.join(directory, "worker-runtime.conf")
     const envFile = path.join(directory, "worker.env")
+    const refreshLog = installPreflightSecretRefresher(directory)
+    writeFileSync(systemctlLog, "")
     writeFileSync(path.join(directory, "docker"), preflightDockerStub, { mode: 0o700 })
     writeFileSync(
       path.join(directory, "systemctl"),
@@ -149,20 +161,20 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
           QUEUE_STATE: state,
           DOCKER_LOG: dockerLog,
           SYSTEMCTL_LOG: systemctlLog,
+          REFRESH_LOG: refreshLog,
           MOCK_LIVE_REDIS_URL: "rediss://default:other@redis.internal:6379",
           MOCK_LIVE_DATABASE_URL: "postgres://worker:other@postgres.internal:5432/lyrashield",
           LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
           LYRASHIELD_WORKER_ENV_FILE: envFile,
           LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
+          LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
         },
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       })
     assert.match(run(JSON.stringify(empty)), /Worker empty-queue preflight passed/)
-    assert.match(
-      readFileSync(systemctlLog, "utf8"),
-      /^restart lyrashield-worker-secrets\.service$/m
-    )
+    assert.equal(readFileSync(refreshLog, "utf8"), "refresh-secrets\n")
+    assert.equal(readFileSync(systemctlLog, "utf8"), "")
     const { env, tokens } = preflightRunEnvironment(dockerLog)
     assert.equal(env.TMPDIR, "/tmp")
     assert.ok(tokens.includes("/tmp:rw,nosuid,nodev,noexec,size=64m"))
@@ -204,6 +216,7 @@ test("worker preflight reports a stale worker environment without printing endpo
     const systemctlLog = path.join(directory, "systemctl.log")
     const runtimeConfig = path.join(directory, "worker-runtime.conf")
     const envFile = path.join(directory, "worker.env")
+    const refreshLog = installPreflightSecretRefresher(directory)
     writeFileSync(path.join(directory, "docker"), preflightDockerStub, { mode: 0o700 })
     writeFileSync(
       path.join(directory, "systemctl"),
@@ -230,11 +243,13 @@ test("worker preflight reports a stale worker environment without printing endpo
           QUEUE_STATE: JSON.stringify(empty),
           DOCKER_LOG: dockerLog,
           SYSTEMCTL_LOG: systemctlLog,
+          REFRESH_LOG: refreshLog,
           MOCK_LIVE_REDIS_URL: liveRedisUrl,
           MOCK_LIVE_DATABASE_URL: liveDatabaseUrl,
           LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
           LYRASHIELD_WORKER_ENV_FILE: envFile,
           LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
+          LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
         },
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
@@ -287,6 +302,7 @@ test("preflight environment loads @lyrashield/config in production and matches t
     const systemctlLog = path.join(directory, "systemctl.log")
     const runtimeConfig = path.join(directory, "worker-runtime.conf")
     const envFile = path.join(directory, "worker.env")
+    const refreshLog = installPreflightSecretRefresher(directory)
     writeFileSync(path.join(directory, "docker"), preflightDockerStub, { mode: 0o700 })
     writeFileSync(
       path.join(directory, "systemctl"),
@@ -312,11 +328,13 @@ test("preflight environment loads @lyrashield/config in production and matches t
         QUEUE_STATE: JSON.stringify(empty),
         DOCKER_LOG: dockerLog,
         SYSTEMCTL_LOG: systemctlLog,
+        REFRESH_LOG: refreshLog,
         MOCK_LIVE_REDIS_URL: "rediss://default:other@redis.internal:6379",
         MOCK_LIVE_DATABASE_URL: "postgres://worker:other@postgres.internal:5432/lyrashield",
         LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
         LYRASHIELD_WORKER_ENV_FILE: envFile,
         LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
+        LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
       },
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],

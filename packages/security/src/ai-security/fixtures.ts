@@ -556,7 +556,7 @@ export const AI_SECURITY_FIXTURES: FixtureCase[] = [
     ruleId: "AI-08.consumption-limits",
     expectedState: "NO_FINDING",
     file: tsFile("src/loop-safe.ts", AI_08_SAFE),
-    description: "LLM call has max_tokens, timeout, and the loop has an iteration cap.",
+    description: "LLM call has max_tokens, timeout and the loop has an iteration cap.",
   },
   {
     name: "AI-08 unsupported: Kotlin source",

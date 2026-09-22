@@ -11,6 +11,7 @@ interface ScanMeta {
   workflow: ScanWorkflow
   backend: "local" | "cloud"
   contractVersion: string | null
+  threatModelAvailable: boolean | null
   diffBase: string | null
   diffHead: string | null
 }
@@ -58,6 +59,25 @@ function ScanProgress({ scanId, onBack }: Props) {
           setStatus(event.type)
           setCancelling(false)
           if (event.type === "failed") setError(event.error)
+          if (event.type === "completed") {
+            void getScanDetail(scanId)
+              .then((detail) => {
+                if (disposed) return
+                detail.findings.forEach((finding) => seenFindings.add(finding.id))
+                setFindings(detail.findings)
+                setMeta({
+                  workflow: detail.workflow,
+                  backend: detail.backend,
+                  contractVersion: detail.contractVersion,
+                  threatModelAvailable: detail.threatModelAvailable,
+                  diffBase: detail.diffBase,
+                  diffHead: detail.diffHead,
+                })
+              })
+              .catch((cause) => {
+                if (!disposed) setError(String(cause))
+              })
+          }
           break
         case "error":
           setError(event.error)
@@ -81,12 +101,14 @@ function ScanProgress({ scanId, onBack }: Props) {
         events.forEach(({ event }) => applyEvent(event))
         const detail = await getScanDetail(scanId)
         if (disposed) return
-        detail.findings.forEach((finding) => applyEvent({ type: "finding", scanId, finding }))
+        detail.findings.forEach((finding) => seenFindings.add(finding.id))
+        setFindings(detail.findings)
         setStatus(detail.status)
         setMeta({
           workflow: detail.workflow,
           backend: detail.backend,
           contractVersion: detail.contractVersion,
+          threatModelAvailable: detail.threatModelAvailable,
           diffBase: detail.diffBase,
           diffHead: detail.diffHead,
         })
@@ -173,6 +195,15 @@ function ScanProgress({ scanId, onBack }: Props) {
                   ? "workflow unknown"
                   : "review target"}
               {meta.contractVersion ? ` · engine contract ${meta.contractVersion}` : ""}
+              {meta.backend === "local" && status === "completed"
+                ? ` · threat model ${
+                    meta.threatModelAvailable === null
+                      ? "not recorded"
+                      : meta.threatModelAvailable
+                        ? "available (engine-attested)"
+                        : "unavailable or incomplete"
+                  }`
+                : ""}
             </span>
           )}
         </div>
@@ -202,7 +233,7 @@ function ScanProgress({ scanId, onBack }: Props) {
           <h2 className="mb-3 text-sm font-medium text-foreground">Findings ({findings.length})</h2>
           {meta?.backend === "cloud" ? (
             <p className="text-sm text-muted-foreground">
-              Recorded scan submitted to LyraShield Cloud. Progress, evidence, and verification
+              Recorded scan submitted to LyraShield Cloud. Progress, evidence and verification
               states are tracked server-side — open the LyraShield dashboard to review them. Local
               findings are never fabricated for cloud scans.
             </p>
@@ -270,6 +301,33 @@ function ScanProgress({ scanId, onBack }: Props) {
                       HTTP exchange evidence: {f.httpExchangeIds.length} recorded exchange
                       {f.httpExchangeIds.length === 1 ? "" : "s"}
                     </p>
+                  )}
+                  {f.evidenceContext && (
+                    <div className="mt-2 space-y-1 border-l-2 border-border pl-2 text-xs text-muted-foreground">
+                      {f.evidenceContext.advisory_cvss &&
+                        typeof f.evidenceContext.advisory_cvss.score === "number" && (
+                          <p>
+                            Advisory CVSS {f.evidenceContext.advisory_cvss.score.toFixed(1)}
+                            {f.evidenceContext.advisory_cvss.vector &&
+                              ` · ${f.evidenceContext.advisory_cvss.vector}`}
+                          </p>
+                        )}
+                      {f.evidenceContext.contextual_cvss_reasoning && (
+                        <p>Context: {f.evidenceContext.contextual_cvss_reasoning}</p>
+                      )}
+                      {f.evidenceContext.evidence_warnings.map((warning, index) => (
+                        <p key={`${f.id}-warning-${index}`}>Evidence warning: {warning}</p>
+                      ))}
+                      {f.evidenceContext.update_history.map((revision, index) => (
+                        <p key={`${f.id}-revision-${index}`}>
+                          Revision {index + 1}:{" "}
+                          {Array.isArray(revision.fields)
+                            ? revision.fields.join(", ")
+                            : "fields unknown"}
+                          {revision.reason ? ` · ${revision.reason}` : ""}
+                        </p>
+                      ))}
+                    </div>
                   )}
                 </div>
               ))}

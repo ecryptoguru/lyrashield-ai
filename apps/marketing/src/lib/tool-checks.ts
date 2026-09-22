@@ -3,15 +3,15 @@ export const LAUNCH_CHECKLIST_VERSION = "vibe-launch-checklist/1.1.0"
 export const LAUNCH_CHECKS = [
   "Server-side authorization protects every sensitive action",
   "Tenant access and database policies are tested with two accounts",
-  "Secrets are absent from commits, browser bundles, and AI context",
+  "Secrets are absent from commits, browser bundles and AI context",
   "Input and model output are validated at every server boundary",
-  "Login, reset, upload, webhook, and AI endpoints have rate limits",
-  "Dependencies, lockfiles, and install scripts were independently reviewed",
-  "Public routes, previews, databases, and storage buckets were inventoried",
-  "Agents and MCP tools use least privilege, approvals, and sandbox boundaries",
-  "Logs, traces, analytics, and eval data exclude secrets and sensitive prompts",
+  "Login, reset, upload, webhook and AI endpoints have rate limits",
+  "Dependencies, lockfiles and install scripts were independently reviewed",
+  "Public routes, previews, databases and storage buckets were inventoried",
+  "Agents and MCP tools use least privilege, approvals and sandbox boundaries",
+  "Logs, traces, analytics and eval data exclude secrets and sensitive prompts",
   "Security-critical tests include abuse cases the coding agent did not author",
-  "Backups, monitoring, alerts, and an incident owner are documented",
+  "Backups, monitoring, alerts and an incident owner are documented",
 ] as const
 
 interface SecretPattern {

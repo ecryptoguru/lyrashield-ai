@@ -27,7 +27,7 @@ export default async function PlatformAdminScansPage({
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Scan operations"
-        description="Status and timing metadata only. Findings, source content, errors, tokens, and model costs are excluded."
+        description="Status and timing metadata only. Findings, source content, errors, tokens and model costs are excluded."
       />
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full min-w-5xl text-left text-sm">

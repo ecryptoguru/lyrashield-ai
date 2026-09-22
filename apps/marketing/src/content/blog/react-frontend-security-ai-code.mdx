@@ -1,6 +1,6 @@
 ---
 title: "Secure React frontends: do not trust the browser"
-description: "Use React's rendering protections correctly while keeping authorization, secrets, sensitive data, and side effects behind verified server boundaries."
+description: "Use React's rendering protections correctly while keeping authorization, secrets, sensitive data and side effects behind verified server boundaries."
 pubDate: 2026-07-17
 updatedDate: 2026-08-07
 author: lyrashield-team
@@ -12,18 +12,18 @@ draft: false
 heroImage: supply-chain-01
 faq:
   - q: "Does React escape JSX values?"
-    a: "React escapes ordinary values inserted into JSX text and attributes, which blocks many direct HTML-injection cases. That protection does not cover raw HTML sinks, unsafe URLs, third-party DOM manipulation, or authorization."
+    a: "React escapes ordinary values inserted into JSX text and attributes, which blocks many direct HTML-injection cases. That protection does not cover raw HTML sinks, unsafe URLs, third-party DOM manipulation or authorization."
   - q: "Is dangerouslySetInnerHTML always unsafe?"
-    a: "It is dangerous when the HTML is untrusted or sanitized with an unsuitable policy. If the feature genuinely requires HTML, sanitize with a maintained allowlist-based library, constrain allowed elements and attributes, and add browser defenses."
+    a: "It is dangerous when the HTML is untrusted or sanitized with an unsuitable policy. If the feature genuinely requires HTML, sanitize with a maintained allowlist-based library, constrain allowed elements and attributes and add browser defenses."
   - q: "Does hiding a React button prevent an API action?"
-    a: "No. Browser code and state are controlled by the user. The server must authenticate the caller, authorize the resource and action, validate input, and reject direct requests even when the interface never renders the button."
+    a: "No. Browser code and state are controlled by the user. The server must authenticate the caller, authorize the resource and action, validate input and reject direct requests even when the interface never renders the button."
 ---
 
-**Direct answer:** Treat all React state, props, storage, route guards, and outgoing requests as attacker-controlled. Keep secrets and sensitive decisions on a server, authorize every API action there, return only necessary data, use ordinary JSX for untrusted text, allow raw HTML only through a reviewed sanitizer policy, and verify security by calling APIs directly outside the interface.
+**Direct answer:** Treat all React state, props, storage, route guards and outgoing requests as attacker-controlled. Keep secrets and sensitive decisions on a server, authorize every API action there, return only necessary data, use ordinary JSX for untrusted text, allow raw HTML only through a reviewed sanitizer policy and verify security by calling APIs directly outside the interface.
 
-_React 19.2 common DOM, Server Function, and current React Server Components security guidance was reviewed against official documentation on July 17, 2026. The server examples are architectural patterns and must be adapted to the backend framework actually in use._
+_React 19.2 common DOM, Server Function and current React Server Components security guidance was reviewed against official documentation on July 17, 2026. The server examples are architectural patterns and must be adapted to the backend framework actually in use._
 
-React makes safe rendering easier, but it does not make the browser trusted. Users can edit state, call functions from developer tools, change network requests, read shipped JavaScript, and construct API calls without rendering the interface. A perfect component cannot compensate for a server that accepts another user's record ID.
+React makes safe rendering easier, but it does not make the browser trusted. Users can edit state, call functions from developer tools, change network requests, read shipped JavaScript and construct API calls without rendering the interface. A perfect component cannot compensate for a server that accepts another user's record ID.
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) separates presentation from enforcement. In a React app, the browser presents available actions. The server decides which actions are allowed.
 
@@ -31,14 +31,14 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates pre
 
 Put values into four groups:
 
-1. **Public configuration:** API origins, feature labels, and identifiers intentionally shipped to users.
-2. **Untrusted input:** form values, URL parameters, local storage, state, props derived from users, and API responses that contain user content.
+1. **Public configuration:** API origins, feature labels and identifiers intentionally shipped to users.
+2. **Untrusted input:** form values, URL parameters, local storage, state, props derived from users and API responses that contain user content.
 3. **Sensitive response data:** personal or tenant data that the server may return only after authorization.
-4. **Server secrets:** signing keys, provider tokens, database credentials, private encryption material, and administrative keys that must never enter the frontend build.
+4. **Server secrets:** signing keys, provider tokens, database credentials, private encryption material and administrative keys that must never enter the frontend build.
 
-Do not rely on an environment-variable name to create secrecy. Build tools expose client variables through different prefixes and APIs. If frontend code can read a value, assume users can recover it from the bundle, source map, runtime, or network.
+Do not rely on an environment-variable name to create secrecy. Build tools expose client variables through different prefixes and APIs. If frontend code can read a value, assume users can recover it from the bundle, source map, runtime or network.
 
-Treat client-side feature flags the same way. They can shape presentation, but they cannot protect an unreleased endpoint, paid capability, or administrative action.
+Treat client-side feature flags the same way. They can shape presentation, but they cannot protect an unreleased endpoint, paid capability or administrative action.
 
 ## A hidden admin control is still callable
 
@@ -54,13 +54,13 @@ function DeleteUserButton({ userId, isAdmin }) {
 }
 ```
 
-Hiding the button improves the interface. It does not protect the endpoint. A user can send the same request from the console, change `userId`, replay a captured call, or alter local state.
+Hiding the button improves the interface. It does not protect the endpoint. A user can send the same request from the console, change `userId`, replay a captured call or alter local state.
 
 AI-generated frontends often miss this because the prompt describes roles as visual behavior: "Admins see a delete button." The generated component fulfills that request. Unless the backend contract is also specified and tested, the security decision never leaves the browser.
 
 ## Make the server own the decision
 
-The server should derive identity from a verified session, parse runtime input, load authorization for the named workspace, and perform the action under that scope. TypeScript annotations do not validate a request at runtime.
+The server should derive identity from a verified session, parse runtime input, load authorization for the named workspace and perform the action under that scope. TypeScript annotations do not validate a request at runtime.
 
 ```ts
 import { z } from "zod"
@@ -96,11 +96,11 @@ export async function deleteUser(request: Request, input: unknown) {
 }
 ```
 
-This example adds runtime validation and binds the role lookup and mutation to one workspace, but it is not complete. `removeWorkspaceUser` must reject a target outside that same workspace and protect last-owner checks against concurrent changes. Real deletion may also require recent authentication, audit evidence, invitation cleanup, object ownership transfer, notification, and privacy retention rules. The key is that no browser flag or unscoped membership proves the action is allowed.
+This example adds runtime validation and binds the role lookup and mutation to one workspace, but it is not complete. `removeWorkspaceUser` must reject a target outside that same workspace and protect last-owner checks against concurrent changes. Real deletion may also require recent authentication, audit evidence, invitation cleanup, object ownership transfer, notification and privacy retention rules. The key is that no browser flag or unscoped membership proves the action is allowed.
 
 If the application uses React Server Functions, React's documentation makes the same point: arguments are untrusted and mutation authorization must occur inside each Server Function. Running code on the server changes where it executes, not whether the caller is allowed.
 
-React's current security advisory adds a separate dependency boundary. Vulnerable React Server Components packages allowed unauthenticated remote code execution, denial of service, or Server Function source exposure. For the React 19.2 release line, `react-server-dom-webpack`, `react-server-dom-parcel`, and `react-server-dom-turbopack` 19.2.4 contain the complete published fixes as of January 26, 2026. An app can be affected when its framework or bundler supports React Server Components even if the app defines no Server Function itself. Follow the framework-specific upgrade instructions and do not treat hosting-provider mitigations as a substitute for updating.
+React's current security advisory adds a separate dependency boundary. Vulnerable React Server Components packages allowed unauthenticated remote code execution, denial of service or Server Function source exposure. For the React 19.2 release line, `react-server-dom-webpack`, `react-server-dom-parcel` and `react-server-dom-turbopack` 19.2.4 contain the complete published fixes as of January 26, 2026. An app can be affected when its framework or bundler supports React Server Components even if the app defines no Server Function itself. Follow the framework-specific upgrade instructions and do not treat hosting-provider mitigations as a substitute for updating.
 
 ## Use JSX escaping without overstating it
 
@@ -121,7 +121,7 @@ Do not turn user content into HTML merely to preserve formatting. React warns th
 <div dangerouslySetInnerHTML={{ __html: article.body }} />
 ```
 
-If the product truly requires rich HTML, sanitize it before rendering with a maintained, allowlist-based sanitizer configured for the intended context. Keep the policy small, test encoded and nested payloads, and avoid allowing scriptable URLs, event handlers, risky SVG or MathML features, iframes, or style behavior unless there is a reviewed need.
+If the product truly requires rich HTML, sanitize it before rendering with a maintained, allowlist-based sanitizer configured for the intended context. Keep the policy small, test encoded and nested payloads and avoid allowing scriptable URLs, event handlers, risky SVG or MathML features, iframes or style behavior unless there is a reviewed need.
 
 ```tsx
 const safeHtml = sanitizer.sanitize(article.body, {
@@ -132,15 +132,15 @@ const safeHtml = sanitizer.sanitize(article.body, {
 return <div dangerouslySetInnerHTML={{ __html: safeHtml }} />
 ```
 
-The exact API varies by sanitizer. Do not copy this illustrative configuration without checking the library's current documentation. Sanitize again when content changes format or crosses into a different context such as an attribute, URL, CSS value, SVG, email, or PDF.
+The exact API varies by sanitizer. Do not copy this illustrative configuration without checking the library's current documentation. Sanitize again when content changes format or crosses into a different context such as an attribute, URL, CSS value, SVG, email or PDF.
 
 ## Review other browser injection paths
 
-JSX escaping does not validate a URL's scheme or destination. For user-supplied links, parse URLs, allow only required schemes, and decide whether external destinations need warning or `rel` protections. Never concatenate untrusted text into script, style, or raw markup.
+JSX escaping does not validate a URL's scheme or destination. For user-supplied links, parse URLs, allow only required schemes and decide whether external destinations need warning or `rel` protections. Never concatenate untrusted text into script, style or raw markup.
 
-Audit direct DOM APIs, markdown renderers, syntax highlighters, chart labels, rich-text editors, preview components, and third-party widgets. Libraries that manipulate the DOM outside React may introduce their own sinks.
+Audit direct DOM APIs, markdown renderers, syntax highlighters, chart labels, rich-text editors, preview components and third-party widgets. Libraries that manipulate the DOM outside React may introduce their own sinks.
 
-Use Content Security Policy as defense in depth. A nonce or hash-based policy can make injected scripts harder to execute, but it does not repair unsafe HTML, protect API authorization, or make a broad `unsafe-inline` policy useful. Start from the application's actual scripts and integrations rather than pasting an untested policy.
+Use Content Security Policy as defense in depth. A nonce or hash-based policy can make injected scripts harder to execute, but it does not repair unsafe HTML, protect API authorization or make a broad `unsafe-inline` policy useful. Start from the application's actual scripts and integrations rather than pasting an untested policy.
 
 The [XSS guide for AI apps that render Markdown](/blog/xss-ai-app-markdown-output) covers contexts and sanitization in more depth.
 
@@ -148,9 +148,9 @@ The [XSS guide for AI apps that render Markdown](/blog/xss-ai-app-markdown-outpu
 
 Frontend authorization mistakes are often data-minimization mistakes. If the server returns every user record and React filters the array by role, the data is already disclosed. Apply tenant and resource authorization in the query, then return a DTO with only the fields needed for the screen.
 
-Avoid storing access tokens or sensitive records in local storage when a safer session design is available. Any script running in the origin can read local storage. Do not put secrets or personal data in URL query parameters, analytics events, client logs, error-reporting breadcrumbs, or cached application state without a documented need.
+Avoid storing access tokens or sensitive records in local storage when a safer session design is available. Any script running in the origin can read local storage. Do not put secrets or personal data in URL query parameters, analytics events, client logs, error-reporting breadcrumbs or cached application state without a documented need.
 
-The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) can flag credential-like strings in text you provide. It cannot inspect a built React bundle, source maps, browser storage, network traffic, or deployed environment configuration.
+The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) can flag credential-like strings in text you provide. It cannot inspect a built React bundle, source maps, browser storage, network traffic or deployed environment configuration.
 
 ## Prove denial outside the interface
 
@@ -159,20 +159,20 @@ Use an authorized test environment and fake data. Keep Account A and Account B i
 1. Capture the request for each sensitive read or mutation.
 2. Send it signed out and expect denial.
 3. Send it as Account B with Account A's test identifier and expect denial.
-4. Change role values, owner IDs, prices, status fields, and hidden form fields in the request.
+4. Change role values, owner IDs, prices, status fields and hidden form fields in the request.
 5. Remove or downgrade a membership, then repeat with the existing page and session.
-6. Check malformed, oversized, duplicated, and replayed requests.
-7. Inspect responses, initial HTML, serialized state, bundles, source maps, browser storage, and logs for excessive data or secrets.
+6. Check malformed, oversized, duplicated and replayed requests.
+7. Inspect responses, initial HTML, serialized state, bundles, source maps, browser storage and logs for excessive data or secrets.
 
-Test rendering separately with harmless strings that contain markup characters, sanitized rich content, unusual URLs, and long input. Do not place live exploit payloads into shared production systems or content that other users will view.
+Test rendering separately with harmless strings that contain markup characters, sanitized rich content, unusual URLs and long input. Do not place live exploit payloads into shared production systems or content that other users will view.
 
-The [Next.js security guide](/blog/nextjs-ai-app-security) applies this model to Server Actions, Route Handlers, and Server Components. For another backend, preserve the same boundary while following that framework's session and routing documentation.
+The [Next.js security guide](/blog/nextjs-ai-app-security) applies this model to Server Actions, Route Handlers and Server Components. For another backend, preserve the same boundary while following that framework's session and routing documentation.
 
 ## Describe the result precisely
 
-A clean React review can show that selected components render input safely and selected APIs reject unauthorized test requests. It cannot prove that every third-party widget, dependency, server route, session configuration, CSP, or future build is safe.
+A clean React review can show that selected components render input safely and selected APIs reject unauthorized test requests. It cannot prove that every third-party widget, dependency, server route, session configuration, CSP or future build is safe.
 
-Record the frontend build, backend deployment, identities, endpoints, data fields, and negative-test results. Recheck after adding raw HTML, client storage, new API calls, role-dependent controls, data fields, third-party components, or build-time variables.
+Record the frontend build, backend deployment, identities, endpoints, data fields and negative-test results. Recheck after adding raw HTML, client storage, new API calls, role-dependent controls, data fields, third-party components or build-time variables.
 
 ## Sources
 

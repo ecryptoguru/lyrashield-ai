@@ -152,7 +152,7 @@ export function CreateScanSheet({
                 <span className="text-muted-foreground text-xs">Simple options: pick one</span>
               </div>
 
-              <div role="radiogroup" aria-label="Review type" className="grid grid-cols-1 gap-3">
+              <div role="radiogroup" aria-label="Scan type" className="grid grid-cols-1 gap-3">
                 {availableOptions.map((option) => {
                   const isSelected = selectedOption?.id === option.id
                   const isDisabled = !option.available
@@ -309,8 +309,8 @@ export function CreateScanSheet({
                   <legend className="px-1 text-xs font-medium">Supporting files (optional)</legend>
                   <p className="text-muted-foreground mb-2 text-xs leading-relaxed">
                     Selected files are recorded on the {RUN_SINGULAR.toLowerCase()}&apos;s immutable
-                    plan, verified against their stored checksums, and staged read-only. They are
-                    review inputs only — they can never change scope, checks, limits, or
+                    plan, verified against their stored checksums and staged read-only. They are
+                    review inputs only — they can never change scope, checks, limits or
                     authorization.
                   </p>
                   <ul className="max-h-40 space-y-1 overflow-y-auto">
@@ -489,8 +489,8 @@ export function CreateScanSheet({
                         <dt className="text-muted-foreground font-medium">Workflow</dt>
                         <dd>
                           {selectedOption.workflow === "REVIEW_CHANGES"
-                            ? "Review changes"
-                            : "Review target"}
+                            ? "Scan changes"
+                            : "Scan target"}
                         </dd>
                       </div>
                       <div>

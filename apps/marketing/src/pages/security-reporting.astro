@@ -3,7 +3,7 @@ import Base from "@layouts/Base.astro"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/security-reporting", origin).toString()
 const securityEmail = (import.meta.env.PUBLIC_SECURITY_EMAIL as string | undefined) || "security@lyrashieldai.com"
-const description = "How to report a suspected LyraShield AI security vulnerability: what to include, testing boundaries to respect, and what response to expect."
+const description = "How to report a suspected LyraShield AI security vulnerability: what to include, testing boundaries to respect and what response to expect."
 const title = "Security reporting | LyraShield AI"
 const jsonLd: unknown[] = [
   {
@@ -31,11 +31,11 @@ const jsonLd: unknown[] = [
     <p class="mt-6 text-lg leading-8 text-text-muted">Coordinated disclosure for LyraShield itself. Report privately using the steps below; please do not open a public issue for a suspected vulnerability.</p>
     <div class="prose prose-slate mt-12 max-w-none dark:prose-invert">
       <h2>Safe reporting</h2>
-      <p>Email <a href={`mailto:${securityEmail}`}>{securityEmail}</a> with a concise description, impact, reproduction steps, and a safe contact method. Do not include credentials, customer data, tokens, prompts, targets, findings, or report contents.</p>
+      <p>Email <a href={`mailto:${securityEmail}`}>{securityEmail}</a> with a concise description, impact, reproduction steps and a safe contact method. Do not include credentials, customer data, tokens, prompts, targets, findings or report contents.</p>
       <h2>Testing boundaries</h2>
-      <p>Only test systems you own or have explicit authorization to assess. Do not perform denial-of-service, social engineering, automated high-volume scanning, or destructive actions.</p>
+      <p>Only test systems you own or have explicit authorization to assess. Do not perform denial-of-service, social engineering, automated high-volume scanning or destructive actions.</p>
       <h2>Response</h2>
-      <p>Reports are acknowledged by a human and triaged by severity. LyraShield is in open beta: this page states no response-time commitment and runs no bounty programme, and we will tell you plainly if a report falls outside our scope.</p>
+      <p>Reports are acknowledged by a human and triaged by severity. LyraShield is in open beta: this page states no response-time commitment and runs no bounty programme and we will tell you plainly if a report falls outside our scope.</p>
       <h2>Machine-readable contact</h2>
       <p>This page is the policy referenced by <a href="/.well-known/security.txt">/.well-known/security.txt</a>, which carries the same contact address and an expiry date so automated disclosure tooling can verify the route is current. If that file is ever missing or expired, email <a href={`mailto:${securityEmail}`}>{securityEmail}</a> directly.</p>
       <h2>What is in scope</h2>

@@ -7,6 +7,7 @@ vi.mock("next/navigation", () => ({
 
 import { ScanDetailClient } from "./scan-detail-client"
 import type { FindingItem, ScanData } from "./scan-detail-types"
+import { getScanModeLabel } from "@/lib/enum-labels"
 
 const scan: ScanData = {
   id: "scan-1",
@@ -121,7 +122,10 @@ describe("scan detail — truthful scope and declared coverage", () => {
 
   it("renders the recorded workflow, depth, scope, limits, and attachments", () => {
     expect(plannedHtml).toContain("Scope and plan")
-    expect(plannedHtml).toContain("Review changes")
+    expect(plannedHtml).toContain("Scan changes")
+    // Depth renders through the scan-mode label map, not the raw enum value.
+    expect(plannedHtml).toContain(`>${getScanModeLabel("QUICK")}<`)
+    expect(plannedHtml).not.toContain(">QUICK<")
     expect(plannedHtml).toContain("Recorded diff")
     expect(plannedHtml).toContain("bbbbbbb") // truncated base revision
     expect(plannedHtml).toContain("Up to 15 minutes")

@@ -6,7 +6,7 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for GitHub Copilot CLI"
 const description =
-  "Connect LyraShield to GitHub Copilot CLI. Configure ~/.copilot/mcp-config.json with the stdio server, or use the remote HTTP endpoint in cloud environments."
+  "Connect LyraShield to GitHub Copilot CLI. Configure ~/.copilot/mcp-config.json with the stdio server or use the remote HTTP endpoint in cloud environments."
 const updatedDate = "2026-09-09"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
@@ -34,7 +34,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 2,
         name: "Add the lyrashield entry",
-        text: 'Add the mcpServers key with type "local", command "npx", and args ["-y","@lyrashield/mcp@0.2.8"]. Set LYRASHIELD_API_KEY in the env block.',
+        text: 'Add the mcpServers key with type "local", command "npx" and args ["-y","@lyrashield/mcp@0.2.8"]. Set LYRASHIELD_API_KEY in the env block.',
       },
       {
         "@type": "HowToStep",
@@ -59,19 +59,19 @@ const jsonLd: unknown[] = [
   <h1>GitHub Copilot CLI</h1>
   <p>
     GitHub Copilot CLI reads MCP server configuration from <code>~/.copilot/mcp-config.json</code>{" "}
-    (global), <code>.mcp.json</code> (project), or <code>.github/mcp.json</code> (project). You can
+    (global), <code>.mcp.json</code> (project) or <code>.github/mcp.json</code> (project). You can
     also manage servers with the <code>copilot mcp add</code> command.
   </p>
 
   <h2>Install with the CLI (fastest)</h2>
   <p>
     Run <code>npx lyrashield install copilot-cli</code> from your project root. It detects Copilot
-    CLI, writes the correct config automatically, and never inlines your API key into a file you
-    might commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    CLI, writes the correct config automatically and never inlines your API key into a file you
+    might commit. Add <code>--dry-run</code> first to preview the change with no write or run{" "}
     <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
   </p>
   <pre><code>npx lyrashield install copilot-cli</code></pre>
-  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+  <p>Prefer to see exactly what gets written or set it up without Node.js? Configure it by hand below.</p>
 
   <h2>Local stdio setup</h2>
   <p>

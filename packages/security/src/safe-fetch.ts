@@ -8,7 +8,7 @@ import { redactUrlForLogs, resolveScanUrlSafe, type HostResolver } from "./ssrf"
  *
  * The create-time `checkScanUrlSafe` guard in the API validates a target URL
  * when it is first registered. That is NOT sufficient at scan time: DNS can be
- * re-pointed after registration (rebinding), and a validated URL can 3xx-redirect
+ * re-pointed after registration (rebinding) and a validated URL can 3xx-redirect
  * to an internal/metadata endpoint. This helper re-validates the URL — and every
  * redirect hop — immediately before the request, so the worker never fetches a
  * host that resolves into a blocked range.
@@ -75,7 +75,7 @@ export const DEFAULT_MAX_BYTES = 5 * 1024 * 1024
 export type SafeFetchFailureReason =
   /** The URL (or a redirect hop) resolved into a blocked range — the guard working as intended. */
   | "ssrf_blocked"
-  /** DNS resolution did not complete before the timeout, or the caller aborted during it. */
+  /** DNS resolution did not complete before the timeout or the caller aborted during it. */
   | "dns_timeout"
   /** Transport-level failure: connection refused, TLS handshake error, socket timeout. */
   | "request_failed"
@@ -100,7 +100,7 @@ export type SafeFetchOutcome =
 export const SAFE_FETCH_REASON_TEXT: Record<SafeFetchFailureReason, string> = {
   ssrf_blocked: "blocked by the SSRF guard — the host resolved into a disallowed address range",
   dns_timeout: "DNS resolution did not complete before the timeout",
-  request_failed: "the connection failed (refused, TLS error, or socket timeout)",
+  request_failed: "the connection failed (refused, TLS error or socket timeout)",
   invalid_response: "the server returned a malformed response",
   redirect_no_location: "the server sent a redirect with no Location header",
   redirect_invalid_url: "the server redirected to an unparseable URL",
@@ -143,7 +143,7 @@ export async function safeFetch(
 /**
  * Same request semantics as {@link safeFetch}, but reports WHY it failed so the
  * caller can tell the operator whether the target was unreachable, blocked by
- * policy, or misbehaving.
+ * policy or misbehaving.
  */
 export async function safeFetchDetailed(
   rawUrl: string,
@@ -202,7 +202,7 @@ export async function safeFetchDetailed(
 
 /**
  * SSRF-safe single-hop fetch. Resolves and validates the URL, pins the
- * connection to the resolved addresses, and returns the raw (non-followed)
+ * connection to the resolved addresses and returns the raw (non-followed)
  * response. Used directly by the egress proxy and by {@link safeFetchDetailed}
  * for each redirect hop.
  *

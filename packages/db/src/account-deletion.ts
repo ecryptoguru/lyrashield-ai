@@ -355,6 +355,7 @@ export async function deleteUserAccount(
       const activeScanWorkspaces: AccountDeletionWorkspace[] = []
       const unsupportedArtifactWorkspaces: AccountDeletionWorkspace[] = []
       const evidenceUris: Array<{ workspaceId: string; storageUri: string }> = []
+      const attachmentUris: Array<{ workspaceId: string; storageUri: string }> = []
 
       // Use the exact scan-admission lock used by createScan(). This closes the
       // deletion/admission race without consulting or mutating BullMQ/Redis.
@@ -362,25 +363,31 @@ export async function deleteUserAccount(
         await lockWorkspaceScanAdmission(tx, workspace.id)
         await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspace.id}, true)`
 
-        const [activeScans, evidence, legacyReports, legacySarifScans] = await Promise.all([
-          tx.scan.count({
-            where: {
-              workspaceId: workspace.id,
-              deletedAt: null,
-              status: { in: ACTIVE_SCAN_STATUSES },
-            },
-          }),
-          tx.evidence.findMany({
-            where: { finding: { workspaceId: workspace.id } },
-            select: { storageUri: true, redactedStorageUri: true },
-          }),
-          tx.report.count({
-            where: { workspaceId: workspace.id, storageUri: { not: null }, deletedAt: null },
-          }),
-          tx.scan.count({
-            where: { workspaceId: workspace.id, sarifUri: { not: null }, deletedAt: null },
-          }),
-        ])
+        const [activeScans, evidence, legacyReports, legacySarifScans, attachments] =
+          await Promise.all([
+            tx.scan.count({
+              where: {
+                workspaceId: workspace.id,
+                deletedAt: null,
+                status: { in: ACTIVE_SCAN_STATUSES },
+              },
+            }),
+            tx.evidence.findMany({
+              where: { finding: { workspaceId: workspace.id } },
+              select: { storageUri: true, redactedStorageUri: true },
+            }),
+            tx.report.count({
+              where: { workspaceId: workspace.id, storageUri: { not: null }, deletedAt: null },
+            }),
+            tx.scan.count({
+              where: { workspaceId: workspace.id, sarifUri: { not: null }, deletedAt: null },
+            }),
+            // Raw read on this same transaction so the bound workspace GUC and
+            // the admission lock apply. Every status is collected — a
+            // soft-deleted row's object still exists until the outbox removes it.
+            tx.$queryRaw<Array<{ storageUri: string }>>`
+              SELECT "storageUri" FROM "ScanAttachment" WHERE "workspaceId" = ${workspace.id}`,
+          ])
 
         if (activeScans > 0) activeScanWorkspaces.push(workspace)
         if (legacyReports > 0 || legacySarifScans > 0) unsupportedArtifactWorkspaces.push(workspace)
@@ -389,6 +396,9 @@ export async function deleteUserAccount(
           for (const storageUri of [row.storageUri, row.redactedStorageUri]) {
             if (storageUri) evidenceUris.push({ workspaceId: workspace.id, storageUri })
           }
+        }
+        for (const row of attachments) {
+          attachmentUris.push({ workspaceId: workspace.id, storageUri: row.storageUri })
         }
       }
 
@@ -402,11 +412,27 @@ export async function deleteUserAccount(
       const uniqueEvidence = [
         ...new Map(evidenceUris.map((artifact) => [artifact.storageUri, artifact])).values(),
       ]
+      const uniqueAttachments = [
+        ...new Map(attachmentUris.map((artifact) => [artifact.storageUri, artifact])).values(),
+      ]
       const taskIds: string[] = []
       for (const artifact of uniqueEvidence) {
         await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${artifact.workspaceId}, true)`
         const rows = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT app.enqueue_artifact_deletion_task(
+          ${createId()}, ${artifact.workspaceId}, ${artifact.storageUri}
+        ) AS id`
+        const taskId = rows[0]?.id
+        if (!taskId) throw new Error("Artifact deletion task was not persisted")
+        taskIds.push(taskId)
+      }
+      // Attachment rows die with the workspace cascade below; their encrypted
+      // objects must not. The SCAN_ATTACHMENT kind keeps the outbox contract
+      // narrow while the drain removes the object durably.
+      for (const artifact of uniqueAttachments) {
+        await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${artifact.workspaceId}, true)`
+        const rows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT app.enqueue_scan_attachment_deletion_task(
           ${createId()}, ${artifact.workspaceId}, ${artifact.storageUri}
         ) AS id`
         const taskId = rows[0]?.id

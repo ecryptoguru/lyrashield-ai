@@ -1,6 +1,6 @@
 ---
 title: "JWT Validation Mistakes AI Tools Generate"
-description: "Validate JWT signatures, algorithms, issuers, audiences, time claims, and token types with a deployment-specific trust policy."
+description: "Validate JWT signatures, algorithms, issuers, audiences, time claims and token types with a deployment-specific trust policy."
 pubDate: 2026-07-17
 updatedDate: 2026-08-07
 author: lyrashield-team
@@ -12,7 +12,7 @@ draft: false
 heroImage: access-boundary-05
 faq:
   - q: "Does decoding a JWT verify it?"
-    a: "No. Base64URL decoding only reveals the header and claims. Acceptance requires cryptographic verification plus issuer, audience, time, and token-type checks, along with any session or revocation check the application's policy actually uses."
+    a: "No. Base64URL decoding only reveals the header and claims. Acceptance requires cryptographic verification plus issuer, audience, time and token-type checks, along with any session or revocation check the application's policy actually uses."
   - q: "Should an API accept alg none?"
     a: "A signed-token consumer should reject unsecured tokens and allow only the algorithms configured for that trust relationship. The token header must not choose an unapproved algorithm."
   - q: "Why validate both issuer and audience?"
@@ -21,9 +21,9 @@ faq:
     a: "Storage depends on the application threat model. Script-readable storage increases exposure to XSS, while cookies introduce CSRF considerations. Server validation is required regardless of storage."
 ---
 
-**Direct answer:** Accept a JWT only through a deployment-specific validation policy. Verify its signature with trusted key material, allow only expected algorithms, require the exact issuer and audience, enforce time claims, and apply rules for the intended token type. Decoding the header and payload is useful inspection, but it proves neither integrity nor session validity.
+**Direct answer:** Accept a JWT only through a deployment-specific validation policy. Verify its signature with trusted key material, allow only expected algorithms, require the exact issuer and audience, enforce time claims and apply rules for the intended token type. Decoding the header and payload is useful inspection, but it proves neither integrity nor session validity.
 
-A JWT is a compact container. Its claims may describe a user, audience, issuer, and expiry, but those strings are not trustworthy until the consumer verifies the token and decides it fits the expected use. A correctly signed token can still be wrong for your API.
+A JWT is a compact container. Its claims may describe a user, audience, issuer and expiry, but those strings are not trustworthy until the consumer verifies the token and decides it fits the expected use. A correctly signed token can still be wrong for your API.
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) treats token validation as one authentication boundary. Authorization still decides whether the validated principal may perform the requested action.
 
@@ -44,13 +44,13 @@ app.use((req, res, next) => {
 })
 ```
 
-Decoding Base64URL segments does not verify a signature. The caller controls the header and payload of an unverified token. Even when a library verifies some signature, a loose configuration may accept an unintended algorithm, issuer, audience, or token type.
+Decoding Base64URL segments does not verify a signature. The caller controls the header and payload of an unverified token. Even when a library verifies some signature, a loose configuration may accept an unintended algorithm, issuer, audience or token type.
 
-This bug hides behind friendly API names. `decode()` and `parse()` sound close to validation, and generated code often stops once it can read `sub`.
+This bug hides behind friendly API names. `decode()` and `parse()` sound close to validation and generated code often stops once it can read `sub`.
 
 ## Why generated validation is incomplete
 
-An AI tool can see the token structure but not the deployment trust relationship. It may not know which identity provider is authoritative, whether the API accepts access tokens or ID tokens, which client or service is the audience, or how key rotation works.
+An AI tool can see the token structure but not the deployment trust relationship. It may not know which identity provider is authoritative, whether the API accepts access tokens or ID tokens, which client or service is the audience or how key rotation works.
 
 Library defaults also vary. Some calls require an algorithm but do not require an issuer. Others validate `exp` but leave `aud` optional. Generated code may copy a short example that omits production configuration for clarity.
 
@@ -107,9 +107,9 @@ Validate the subject before using it as a database identifier. A valid `sub` is 
 
 For asymmetric signing, providers often publish a JSON Web Key Set. Fetch it only from the configured issuer relationship. Cache keys with bounded lifetimes and handle planned rotation without accepting keys from arbitrary URLs supplied in token headers.
 
-Treat `kid` as a selector within the trusted set, not a path, query, or remote location. A missing key should lead to a controlled refresh and then denial, not a fallback to skipping verification.
+Treat `kid` as a selector within the trusted set, not a path, query or remote location. A missing key should lead to a controlled refresh and then denial, not a fallback to skipping verification.
 
-Bound key-set retrieval like any other network dependency. Use the issuer's configured HTTPS location, response-size, and time limits, and a cache policy that can survive a short provider outage without trusting stale material forever. An attacker-controlled `jku`, `x5u`, or similar header must not redirect the verifier to an arbitrary key server. If the product supports such headers, pin them to the established trust relationship and library guidance.
+Bound key-set retrieval like any other network dependency. Use the issuer's configured HTTPS location, response-size and time limits and a cache policy that can survive a short provider outage without trusting stale material forever. An attacker-controlled `jku`, `x5u` or similar header must not redirect the verifier to an arbitrary key server. If the product supports such headers, pin them to the established trust relationship and library guidance.
 
 For symmetric algorithms, the verifier and issuer share a secret. Never use a public asymmetric key as an HMAC secret. Keep different token families on separate keys where practical so a token accepted in one context cannot cross into another.
 
@@ -128,15 +128,15 @@ Create known cases:
 7. An unapproved algorithm and an unsecured token fail.
 8. A rotated trusted key succeeds only after the controlled key-set refresh.
 
-Test error handling too. Return a generic authentication failure. Do not echo the token, claims, signing material, or detailed library exception into logs that broad audiences can read.
+Test error handling too. Return a generic authentication failure. Do not echo the token, claims, signing material or detailed library exception into logs that broad audiences can read.
 
-## Token storage, replay, and session state
+## Token storage, replay and session state
 
-JWT validation does not solve token theft. A bearer token can be replayed by whoever possesses it until it expires or the server rejects it through another mechanism. Use TLS, short lifetimes suited to the risk, careful logs, and a deliberate browser storage design.
+JWT validation does not solve token theft. A bearer token can be replayed by whoever possesses it until it expires or the server rejects it through another mechanism. Use TLS, short lifetimes suited to the risk, careful logs and a deliberate browser storage design.
 
-Server-side session state can support revocation, logout, device policy, or account disablement. A valid signature alone may not reflect those current decisions. Document whether the API checks a session record, token version, or revocation signal.
+Server-side session state can support revocation, logout, device policy or account disablement. A valid signature alone may not reflect those current decisions. Document whether the API checks a session record, token version or revocation signal.
 
-Refresh tokens need their own profile and storage rules. Do not accept one at a normal API endpoint merely because its signature is valid. Rotate or revoke them according to the provider contract, and test that an access-token validator rejects the refresh-token type.
+Refresh tokens need their own profile and storage rules. Do not accept one at a normal API endpoint merely because its signature is valid. Rotate or revoke them according to the provider contract and test that an access-token validator rejects the refresh-token type.
 
 The related [client-side auth guide](/blog/client-side-auth-not-security) explains why a browser role or decoded claim cannot be the decisive access-control layer.
 
@@ -144,7 +144,7 @@ The related [client-side auth guide](/blog/client-side-auth-not-security) explai
 
 The browser-local [JWT and session inspector](/tools/jwt-session-inspector) decodes a token you paste and points out claim signals. It does not upload the token.
 
-It does not possess your issuer's trusted keys, validate the signature, confirm audience policy, check current revocation, or prove that a server accepts or rejects the token. Treat its output as local inspection. Never paste a live production token into any tool unless the handling policy explicitly permits it.
+It does not possess your issuer's trusted keys, validate the signature, confirm audience policy, check current revocation or prove that a server accepts or rejects the token. Treat its output as local inspection. Never paste a live production token into any tool unless the handling policy explicitly permits it.
 
 Automated tests can exercise the configured profiles. They cannot prove that every deployed endpoint uses the right profile or that authorization after authentication is correct.
 

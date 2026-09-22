@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server"
-import { isScanWorkerAvailable } from "@lyrashield/integrations"
+import { assertScanWorkerAvailable, ScanWorkerUnavailableError } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const worker = await isScanWorkerAvailable()
-  if (!worker) logger.warn("Scan service readiness check failed", { worker: false })
+  let ready = true
+  try {
+    await assertScanWorkerAvailable()
+  } catch (error) {
+    if (!(error instanceof ScanWorkerUnavailableError)) throw error
+    ready = false
+    logger.warn("Scan service readiness check failed", { ready: false })
+  }
 
   return NextResponse.json(
-    { status: worker ? "ready" : "not_ready", checks: { worker } },
-    { status: worker ? 200 : 503, headers: { "Cache-Control": "no-store" } }
+    { status: ready ? "ready" : "not_ready", checks: { worker: ready } },
+    { status: ready ? 200 : 503, headers: { "Cache-Control": "no-store" } }
   )
 }

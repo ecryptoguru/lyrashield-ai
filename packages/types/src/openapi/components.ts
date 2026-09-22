@@ -12,7 +12,7 @@ export const securitySchemes = {
       "Keys are bound to a single workspace and must be supplied with `workspaceId` on every call. " +
       "Two scopes exist: `read` and `write`. A `read`-scoped key is only allowed for: " +
       "scan:view, finding:view, retest:view, schedule:view, report:download, audit:view, agent:view, notification:view. " +
-      "All other actions, including creating scans, findings updates, retests, schedules, reports, and targets, require `write`.",
+      "All other actions, including creating scans, findings updates, retests, schedules, reports and targets, require `write`.",
   },
 }
 
@@ -72,7 +72,7 @@ export const paginatedEnvelope = {
       items: {},
     },
     nextCursor: {
-      description: "Opaque cursor for the next page, or null on the last page",
+      description: "Opaque cursor for the next page or null on the last page",
       oneOf: [{ type: "string" as const }, { type: "null" as const }],
     },
     total: { type: "integer" as const, description: "Optional total count across all pages" },

@@ -201,11 +201,17 @@ export function buildEngineCommand(config: ScanConfig): EngineCommand {
       "--diff-head",
       source.revision
     )
-    if (isRemoteRepoRef(targetArg)) {
-      args.push("--repository-revision", source.revision)
-    }
   } else {
     args.push("--scope-mode", "full")
+  }
+  // A snapshot is just as immutable as a diff. The branch below is only a
+  // fetch hint; the recorded revision owns the checkout for every repo plan.
+  if (
+    executionPlan?.source?.revision &&
+    config.target.type === "REPO" &&
+    isRemoteRepoRef(targetArg)
+  ) {
+    args.push("--repository-revision", executionPlan.source.revision)
   }
 
   // API targets: the OpenAPI document is a second engine target — the engine

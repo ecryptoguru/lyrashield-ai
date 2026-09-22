@@ -50,7 +50,7 @@ export function AuthSplitLayout({
             </h2>
             <p className="text-muted-foreground mt-3 max-w-md text-sm leading-relaxed">
               Release assurance for AI-built apps. LyraShield scans your target, records findings
-              and their verification state, and stages approval-bound fixes to support your release
+              and their verification state and stages approval-bound fixes to support your release
               decision.
             </p>
           </div>

@@ -9,28 +9,28 @@ import { estimateRunMinutes } from "./estimator"
 export const SCAN_PRESETS = {
   RELEASE_CHECK: {
     label: "Release check",
-    description: "Fast, bounded review before you ship.",
+    description: "Fast, bounded scan before you ship.",
     hint: "Quick pass over the repository snapshot, its public surfaces and configs. Best for pre-release confidence.",
     goal: "LAUNCH_REVIEW",
     mode: "QUICK",
   },
   CODE_REVIEW: {
-    label: "Code review",
+    label: "Code scan",
     description: "Broader repository and dependency analysis.",
     hint: "Dependency and risky-pattern checks across the repository.",
     goal: "TEST_APP",
     mode: "STANDARD",
   },
   DEEP_REVIEW: {
-    label: "Deep security review",
-    description: "Deep cross-file review for complex or high-risk releases.",
+    label: "Deep security scan",
+    description: "Deep cross-file scan for complex or high-risk releases.",
     hint: "Cross-file taint and reachability analysis for high-risk changes.",
     goal: "FULL_PENTEST",
     mode: "DEEP",
   },
   REVIEW_CHANGES: {
-    label: "Review changes",
-    description: "Bounded review of an exact code diff between two revisions.",
+    label: "Scan changes",
+    description: "Bounded scan of an exact code diff between two revisions.",
     hint: "Analyzes only the recorded change set between an immutable base and head. Requires a base ref; the head defaults to the target branch.",
     goal: "CHECK_PR",
     mode: "QUICK",
@@ -54,13 +54,13 @@ const SCAN_PRESET_ORDER: ScanPresetId[] = [
   "WEEKLY_MONITOR",
 ]
 
-/** The default review for a repository target is the Standard-depth code
- * review — not the cheapest option — so a first scan has real coverage. */
+/** The default scan for a repository target is the Standard-depth code
+ * scan — not the cheapest option — so a first scan has real coverage. */
 const REPO_DEFAULT_PRESET: ScanPresetId = "CODE_REVIEW"
 
 /** Deterministic scanner families applicable to a repository target. */
 const REPO_APPLICABLE_CHECKS = [
-  "Engine code review",
+  "Engine code scan",
   "Secrets",
   "Dependency advisories",
   "Risky patterns (SAST)",
@@ -131,7 +131,7 @@ function repoOptions(): ManualScanOption[] {
       scopeSummary: isReviewChanges
         ? "Only the recorded diff between the resolved base and head revisions."
         : "The full repository snapshot at the pinned revision.",
-      limitsSummary: REPO_LIMITS[preset.mode] ?? "Bounded run",
+      limitsSummary: REPO_LIMITS[preset.mode] ?? "Bounded scan",
       applicableChecks: REPO_APPLICABLE_CHECKS,
       ...(isReviewChanges
         ? {
@@ -189,10 +189,10 @@ function urlOptions(targetType: UrlTargetType, hasApiSpec: boolean): ManualScanO
       workflow: "REVIEW_TARGET",
       scopeSummary: engineBacked
         ? "The live target origin through the scan-scoped relay."
-        : "The public surface of the target URL — no engine run.",
-      limitsSummary: URL_LIMITS[mode] ?? "Bounded run",
+        : "The public surface of the target URL — no engine scan.",
+      limitsSummary: URL_LIMITS[mode] ?? "Bounded scan",
       applicableChecks: engineBacked
-        ? ["Engine review", "Public surface checks"]
+        ? ["Engine scan", "Public surface checks"]
         : ["Public surface checks"],
       ...(engineBacked
         ? {

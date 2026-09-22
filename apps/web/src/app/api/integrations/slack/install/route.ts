@@ -4,11 +4,7 @@ import { env } from "@lyrashield/config"
 import { prisma, upsertConnectorConnection, ConnectorConnectionError } from "@lyrashield/db"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import {
-  exchangeSlackOAuthCode,
-  getSlackAuthorizeUrl,
-  SLACK_CONNECT_SCOPES,
-} from "@lyrashield/integrations"
+import { exchangeSlackOAuthCode, getSlackAuthorizeUrl } from "@lyrashield/integrations"
 import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
@@ -105,6 +101,21 @@ export async function GET(request: NextRequest) {
       throw new Error("Slack OAuth exchange returned no team id")
     }
 
+    // Fail closed: the grant must record the scopes the provider actually
+    // returned. A response that grants none (absent or blank `scope`) is
+    // rejected — substituting the requested list would fabricate a grant the
+    // provider never issued.
+    const grantedScopes = (exchange.scope ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (grantedScopes.length === 0) {
+      logger.warn("Slack OAuth exchange returned no granted scopes", { workspaceId })
+      const redirectUrl = new URL(returnPath, getAppOrigin(request))
+      redirectUrl.searchParams.set("slack", "missing_scopes")
+      return NextResponse.redirect(redirectUrl)
+    }
+
     // Seal the bot token into the encrypted evidence vault; only the storage
     // reference reaches the Integration row, and reads stay workspace-bound.
     const sealed = await uploadEncryptedArtifact({
@@ -114,13 +125,6 @@ export async function GET(request: NextRequest) {
       type: "slack-bot-token",
       content: JSON.stringify({ botToken: exchange.accessToken }),
     })
-
-    const grantedScopes = exchange.scope
-      ? exchange.scope
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : [...SLACK_CONNECT_SCOPES]
 
     const integration = await upsertConnectorConnection({
       workspaceId,

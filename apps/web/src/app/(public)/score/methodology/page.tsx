@@ -8,11 +8,11 @@ import { ThemeToggle } from "@/components/theme-toggle"
 export const metadata: Metadata = {
   title: "LyraShield Score methodology | LyraShield AI",
   description:
-    "How the LyraShield Score is computed from verified findings, retest-confirmed fixes, and accepted risk. Not a security guarantee.",
+    "How the LyraShield Score is computed from verified findings, retest-confirmed fixes and accepted risk. Not a security guarantee.",
   openGraph: {
     title: "LyraShield Score methodology",
     description:
-      "How the LyraShield Score is computed from verified findings, retest-confirmed fixes, and accepted risk.",
+      "How the LyraShield Score is computed from verified findings, retest-confirmed fixes and accepted risk.",
     type: "website",
     siteName: "LyraShield AI",
   },
@@ -47,8 +47,8 @@ export default function ScoreMethodologyPage() {
             severity or higher.
           </p>
           <p className="text-muted-foreground mt-4 leading-7">
-            Scores are deterministic, versioned, and limited to the stated scan scope. They are not
-            a security guarantee.
+            Scores are deterministic, versioned and limited to the stated scan scope. They are not a
+            security guarantee.
           </p>
         </Card>
       </div>

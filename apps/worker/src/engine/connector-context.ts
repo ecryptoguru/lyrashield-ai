@@ -36,6 +36,14 @@ export interface ScanConnectorInvocationParams {
   input: Record<string, unknown>
   /** Caller's idempotency key — replays return the recorded outcome. */
   idempotencyKey: string
+  /**
+   * The sponsor account's trusted `effectivePlan` for the service-side plan
+   * gate (Agency tier: LAUNCH_ASSURANCE/legacy AGENCY, plus ENTERPRISE).
+   * Resolve it from the billing account — e.g. the scan's
+   * sponsorAccountId/createdById through `resolveAccountBilling` — never
+   * `workspace.plan`. Absent fails closed inside the service.
+   */
+  sponsorEffectivePlan?: string
   fetchFn?: typeof fetch
 }
 
@@ -111,6 +119,7 @@ export async function invokeScanConnectorTool(
     input: params.input,
     idempotencyKey: params.idempotencyKey,
     scanId: params.scanId,
+    sponsorEffectivePlan: params.sponsorEffectivePlan,
     resourceOf: (input) => connectorToolResource(tool, input),
     capOutput: capConnectorOutput,
     resolveCredential: (connection) =>

@@ -286,6 +286,38 @@ describe("executeScanTarget relay lifecycle", () => {
     // No relay grant is minted for a repository Review Changes run.
     expect(mocks.mintScanRelayGrant).not.toHaveBeenCalled()
   })
+
+  it("uses a smaller recorded budget and engine ceiling for an ordinary repository plan", async () => {
+    const built = buildScanExecutionPlan({ targetType: "REPO", mode: "DEEP" })
+    const plan = {
+      ...built,
+      limits: {
+        ...built.limits,
+        maxBudgetUsd: 0.7,
+        maxDurationMs: 180_000,
+        maxEngineMs: 120_000,
+        scannerReserveMs: 60_000,
+      },
+    }
+    mocks.resolveEngineRuntimeBudgetMs.mockReturnValue(200_000)
+
+    const result = await executeScanTarget(
+      params({
+        target: { ...target, type: "REPO", repoFullName: "acme/app", url: null } as never,
+        urlEngineBacked: false,
+        executionPlan: plan,
+      })
+    )
+
+    expect(result).toMatchObject({ ok: true })
+    expect(mocks.runEngine).toHaveBeenCalledWith(
+      expect.objectContaining({ maxBudgetUsd: 0.7 }),
+      "scan-1",
+      120_000,
+      expect.anything(),
+      expect.anything()
+    )
+  })
 })
 
 describe("executeScanTarget authenticated staging beta", () => {

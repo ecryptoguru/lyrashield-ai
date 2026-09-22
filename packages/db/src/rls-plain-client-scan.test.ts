@@ -57,6 +57,7 @@ const FORCE_RLS_ACCESSORS = new Set([
   "report",
   "schedule",
   "scan",
+  "scanAttachment",
   "target",
   "ticket",
   "usageRecord",
@@ -309,6 +310,23 @@ describe("plain-client FORCE-RLS reads (v16 2.2 tripwire)", () => {
     ].join("\n")
     const offenders = scanSource(historicalBugShape)
     expect(offenders.join("\n")).toContain("prisma.webhookEvent.findMany")
+  })
+
+  it("catches a bare scanAttachment read with no RLS marker (v20 2.2)", () => {
+    // ScanAttachment joined FORCE-RLS with a permissive-when-unbound arm at
+    // first, so a marker-less plain read would silently cross tenants. The
+    // accessor must stay in FORCE_RLS_ACCESSORS forever — this fixture proves
+    // the scanner catches the exact omission shape before any such read ships.
+    const unboundRead = [
+      'import { prisma } from "./client"',
+      "",
+      "export async function listAllAttachments() {",
+      '  return prisma.scanAttachment.findMany({ where: { status: "ACTIVE" } })',
+      "}",
+      "",
+    ].join("\n")
+    const offenders = scanSource(unboundRead)
+    expect(offenders.join("\n")).toContain("prisma.scanAttachment.findMany")
   })
 
   it("the allowlist stays honest: every entry still exists on disk", () => {

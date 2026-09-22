@@ -1,6 +1,6 @@
 ---
 title: Amp MCP security workflow for agent scans
-description: Set up LyraShield AI with Amp via MCP to scan changed code, verify findings, and enforce a diff aware GitHub Action gate with SARIF.
+description: Set up LyraShield AI with Amp via MCP to scan changed code, verify findings and enforce a diff aware GitHub Action gate with SARIF.
 pubDate: "2026-07-30"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -10,22 +10,22 @@ faq:
   - q: "How do I add LyraShield MCP server to Amp?"
     a: "Run amp mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.8. Amp stores always-available local definitions in amp.mcpServers."
   - q: "Does Amp support remote MCP with bearer auth?"
-    a: "Yes. Use an Amp remote MCP definition with auth oauth, or use ${VAR_NAME} interpolation in a private amp.mcpServers entry."
+    a: "Yes. Use an Amp remote MCP definition with auth oauth or use ${VAR_NAME} interpolation in a private amp.mcpServers entry."
   - q: "Can I block auto merge if high findings remain?"
     a: "Yes. Set the GitHub Action to fail on high and require the security job in branch protection. SARIF upload keeps annotations visible."
   - q: "Where does Amp read MCP server config from?"
     a: "Amp reads local definitions from amp.mcpServers in user or workspace settings and can store remote definitions through ampcode.com."
 ---
 
-You can wire Amp directly to LyraShield AI via MCP to get target aware verification inside your agent loop. In this guide you will add the local stdio server using pinned npx -y @lyrashield/mcp@0.2.8 and the remote server at https://app.lyrashieldai.com/api/mcp with bearer auth, confirm tool listing, run a scoped scan for findings with recorded evidence states, and enforce a diff aware GitHub Action gate that uploads SARIF for code scanning.
+You can wire Amp directly to LyraShield AI via MCP to get target aware verification inside your agent loop. In this guide you will add the local stdio server using pinned npx -y @lyrashield/mcp@0.2.8 and the remote server at https://app.lyrashieldai.com/api/mcp with bearer auth, confirm tool listing, run a scoped scan for findings with recorded evidence states and enforce a diff aware GitHub Action gate that uploads SARIF for code scanning.
 
-Vibe coding with Amp is fast because the agent fills in routes, components, and API handlers from short prompts. Speed amplifies both delivery and risk, which is why early verification matters. A solid policy reference is the [vibe coding security guide](/blog/vibe-coding-security-guide) that outlines hygiene, review checkpoints, and supply chain controls. For category background, consult [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) to map common issues in generated front ends and APIs to concrete weakness types.
+Vibe coding with Amp is fast because the agent fills in routes, components and API handlers from short prompts. Speed amplifies both delivery and risk, which is why early verification matters. A solid policy reference is the [vibe coding security guide](/blog/vibe-coding-security-guide) that outlines hygiene, review checkpoints and supply chain controls. For category background, consult [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) to map common issues in generated front ends and APIs to concrete weakness types.
 
-LyraShield AI is designed to keep the loop of Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report inside MCP, so you do not leave the editor to get proof. That loop is intentionally human reviewed at the PR stage, which aligns with how most teams already ship. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
+LyraShield AI is designed to keep the loop of Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report inside MCP, so you do not leave the editor to get proof. That loop is intentionally human reviewed at the PR stage, which aligns with how most teams already ship. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
 
 ## 1. Prerequisites and project setup
 
-You need Node.js 24 or newer, Amp installed and logged in, Git, and a LyraShield OAuth login. The local MCP package reads LyraShield's credential store. Amp settings support `${VAR_NAME}` interpolation when a separate environment value is required.
+You need Node.js 24 or newer, Amp installed and logged in, Git and a LyraShield OAuth login. The local MCP package reads LyraShield's credential store. Amp settings support `${VAR_NAME}` interpolation when a separate environment value is required.
 
 LyraShield v1 scope is agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF. Current MCP tools scan, read findings, record fix proposals and queue retests. They do not edit code or open branches or pull requests, so remediation remains developer-controlled. Check [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for transport options and [Node.js docs](https://nodejs.org/en/docs) if you need to upgrade Node for stdio stability. Node 24 improves stdio reliability for long running MCP sessions, which matters when Amp keeps servers alive across tasks.
 
@@ -38,7 +38,7 @@ echo $LYRASHIELD_API_KEY | wc -c
 
 Keep a stack specific reference nearby like [Amp app security checklist](/blog/amp-app-security-checklist) for fix patterns while you build the workflow. That checklist translates a finding with a recorded evidence state into a concrete code change, such as stricter query binding or a dependency upgrade, without hunting through generic docs.
 
-Define your target naming convention early. LyraShield treats target as the unit of verification, for example staging amp app, production api, or a preview deployment id. A clear naming scheme avoids confusing local scans with production when you add both stdio and remote servers.
+Define your target naming convention early. LyraShield treats target as the unit of verification, for example staging amp app, production api or a preview deployment id. A clear naming scheme avoids confusing local scans with production when you add both stdio and remote servers.
 
 ## 2. Configure LyraShield MCP server in Amp
 
@@ -101,12 +101,12 @@ With tools confirmed, run a scoped scan without leaving the agent. Keep scope ti
 Prompt for Amp agent:
 Use lyrashield_scan_target for target staging-amp-app.
 Scope: src/app/api, src/components. Exclude tests.
-Return findings with their recorded evidence states, CWE, supporting evidence, file, line, and severity.
+Return findings with their recorded evidence states, CWE, supporting evidence, file, line and severity.
 If OWASP mapping exists, include URL from https://owasp.org/www-project-top-ten/.
 Store report id for later PR gate.
 ```
 
-A useful result should include finding id, severity, recorded evidence state, CWE, file path and line, evidence snippet, limitations, and suggested patch location. Prioritize independently verified findings when a separate receipt exists, while retaining detected and inconclusive items for triage. For definitions, read [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/).
+A useful result should include finding id, severity, recorded evidence state, CWE, file path and line, evidence snippet, limitations and suggested patch location. Prioritize independently verified findings when a separate receipt exists, while retaining detected and inconclusive items for triage. For definitions, read [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/).
 
 Keep the loop human reviewed. `lyrashield_record_fix_proposal` records the intended remediation; it does not edit code or open a branch. After a developer applies the change, `lyrashield_verify_fix` queues a retest whose outcome must be polled and reported with its evidence state.
 
@@ -138,7 +138,7 @@ jobs:
           fail_on_severity: HIGH
 ```
 
-Enable branch protection to require the security job before merge. The runner-local Action uploads advisory SARIF annotations for the changed files; it does not reproduce Amp's hosted finding IDs or evidence states. Use a separate recorded scan when you need retained evidence and retest semantics. For workflow reuse, see [GitHub Actions docs](https://docs.github.com/en/actions), and for protocol context see [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro).
+Enable branch protection to require the security job before merge. The runner-local Action uploads advisory SARIF annotations for the changed files; it does not reproduce Amp's hosted finding IDs or evidence states. Use a separate recorded scan when you need retained evidence and retest semantics. For workflow reuse, see [GitHub Actions docs](https://docs.github.com/en/actions) and for protocol context see [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro).
 
 ## 6. Add agent rules for consistent secure coding
 
@@ -148,7 +148,7 @@ Add a rules file that Amp reads on run, for example AGENT.md or .amp/rules.md in
 # Amp security rules
 
 - Before marking a feature done, call lyrashield_scan_target on changed scope.
-- Preserve each finding’s recorded evidence state, CWE, file location, and limitations.
+- Preserve each finding’s recorded evidence state, CWE, file location and limitations.
 - For high severity, call `lyrashield_record_fix_proposal` to record the intended remediation; require human review and developer-applied code changes.
 - On PRs, ensure the lyrashield security gate passed and SARIF uploaded.
 - Link findings to OWASP Top 10 and internal vibe coding security guide in the PR body.
@@ -162,10 +162,10 @@ This file encodes Target to Scan to Evidence State to Fix Proposal to Retest to 
 | Local dev    | Generates routes and API handlers from prompts | N/A                                                                   | Prompt log                   |
 | Inline check | Calls lyrashield_scan_target with tight scope  | Findings with recorded evidence states plus SCA plus secrets evidence | Finding ids with CWE         |
 | PR gate      | Pushes diff                                    | Diff aware scan plus SARIF plus fail on high                          | GitHub check and annotations |
-| Fix flow     | Records a reviewed remediation proposal        | No code, branch, or PR is created automatically                       | Retest reference and status  |
+| Fix flow     | Records a reviewed remediation proposal        | No code, branch or PR is created automatically                        | Retest reference and status  |
 
 ## Why pair Amp with LyraShield
 
-Amp gives you rapid generation with strong agent control, but rapid generation wants rapid verification. LyraShield contributes recorded evidence instead of speculative warnings, maps each item to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), and surfaces dependency insights via [OSV database](https://osv.dev/) patterns. Keeping that inside MCP avoids context switching and makes the core loop enforceable without leaving the agent. The v1 scope remains honest: agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, with broader automation on the roadmap but not billed as live today.
+Amp gives you rapid generation with strong agent control, but rapid generation wants rapid verification. LyraShield contributes recorded evidence instead of speculative warnings, maps each item to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) and surfaces dependency insights via [OSV database](https://osv.dev/) patterns. Keeping that inside MCP avoids context switching and makes the core loop enforceable without leaving the agent. The v1 scope remains honest: agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, with broader automation on the roadmap but not billed as live today.
 
 Wrap up by running [AI app security checklist](/tools/ai-app-security-checklist) on the candidate build and confirming your config matches [Amp integration guide](/docs/integrations/amp). When ready to evaluate managed verification, [create an account at LyraShield AI](https://lyrashieldai.com) and keep the PR gate as your source of truth.

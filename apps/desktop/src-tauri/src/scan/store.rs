@@ -17,6 +17,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "workflow and evidence projection columns",
         include_str!("../sql/002_workflow_evidence.sql"),
     ),
+    (
+        3,
+        "contextual finding evidence and threat model state",
+        include_str!("../sql/003_evidence_context.sql"),
+    ),
 ];
 const MIGRATION_TABLE: &str = "CREATE TABLE IF NOT EXISTS _sqlx_migrations (
     version BIGINT PRIMARY KEY,
@@ -388,7 +393,7 @@ pub async fn persist_finding(
     // authoritative tier is `verification_state` (always DETECTED locally).
     storage_for(app)
         .execute(
-            "INSERT INTO findings (id, scan_id, severity, title, description, file_path, line_number, status, verified, detected_at, verification_state, evidence_pending, counterevidence, confidence_rationale, fix_verification, http_exchange_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO findings (id, scan_id, severity, title, description, file_path, line_number, status, verified, detected_at, verification_state, evidence_pending, counterevidence, confidence_rationale, fix_verification, http_exchange_ids, evidence_context) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             vec![
                 finding.id.clone().into(),
                 scan_id.into(),
@@ -406,6 +411,10 @@ pub async fn persist_finding(
                 finding.confidence_rationale.clone().map(JsonValue::String).unwrap_or(JsonValue::Null),
                 finding.fix_verification.clone().map(JsonValue::String).unwrap_or(JsonValue::Null),
                 serde_json::to_string(&finding.http_exchange_ids)
+                    .map(JsonValue::String)
+                    .unwrap_or(JsonValue::Null),
+                finding.evidence_context.as_ref()
+                    .and_then(|context| serde_json::to_string(context).ok())
                     .map(JsonValue::String)
                     .unwrap_or(JsonValue::Null),
             ],
@@ -428,6 +437,19 @@ pub async fn set_scan_contract_version(
         .await
 }
 
+pub async fn set_scan_threat_model_available(
+    app: &AppHandle,
+    scan_id: &str,
+    available: bool,
+) -> Result<(), String> {
+    storage_for(app)
+        .execute(
+            "UPDATE scans SET threat_model_available = ? WHERE scan_id = ?",
+            vec![JsonValue::from(i64::from(available)), scan_id.into()],
+        )
+        .await
+}
+
 /// Merge richer engine evidence fields onto a persisted finding (matched by
 /// the run's finding id). Engine attestation only — verification_state stays
 /// DETECTED and evidence_pending is raised, never cleared, by this path.
@@ -439,7 +461,7 @@ pub async fn update_finding_evidence(
 ) -> Result<(), String> {
     storage_for(app)
         .execute(
-            "UPDATE findings SET evidence_pending = 1, counterevidence = COALESCE(?, counterevidence), confidence_rationale = COALESCE(?, confidence_rationale), fix_verification = COALESCE(?, fix_verification), http_exchange_ids = COALESCE(?, http_exchange_ids) WHERE scan_id = ? AND id = ?",
+            "UPDATE findings SET evidence_pending = 1, counterevidence = COALESCE(?, counterevidence), confidence_rationale = COALESCE(?, confidence_rationale), fix_verification = COALESCE(?, fix_verification), http_exchange_ids = COALESCE(?, http_exchange_ids), evidence_context = COALESCE(?, evidence_context) WHERE scan_id = ? AND id = ?",
             vec![
                 evidence
                     .counterevidence
@@ -461,6 +483,12 @@ pub async fn update_finding_evidence(
                     .clone()
                     .map(JsonValue::String)
                     .unwrap_or(JsonValue::Null),
+                evidence
+                    .evidence_context
+                    .as_ref()
+                    .and_then(|context| serde_json::to_string(context).ok())
+                    .map(JsonValue::String)
+                    .unwrap_or(JsonValue::Null),
                 scan_id.into(),
                 finding_id.into(),
             ],
@@ -475,6 +503,7 @@ pub struct FindingEvidenceUpdate {
     pub confidence_rationale: Option<String>,
     pub fix_verification: Option<String>,
     pub http_exchange_ids: Option<String>,
+    pub evidence_context: Option<FindingEvidenceContext>,
 }
 
 pub async fn set_finding_count(
@@ -678,7 +707,7 @@ pub async fn get_scan_detail(app: &AppHandle, scan_id: &str) -> Result<ScanDetai
     let store = storage_for(app);
     let rows = store
         .select(
-            "SELECT scan_id, target, mode, workflow, backend, contract_version, diff_base, diff_head, status, started_at, completed_at, finding_count FROM scans WHERE scan_id = ?",
+            "SELECT scan_id, target, mode, workflow, backend, contract_version, diff_base, diff_head, threat_model_available, status, started_at, completed_at, finding_count FROM scans WHERE scan_id = ?",
             vec![scan_id.into()],
         )
         .await?;
@@ -686,7 +715,7 @@ pub async fn get_scan_detail(app: &AppHandle, scan_id: &str) -> Result<ScanDetai
     let detail = row_to_detail(row)?;
     let finding_rows = store
         .select(
-            "SELECT id, severity, title, description, file_path, line_number, status, verified, detected_at, verification_state, evidence_pending, counterevidence, confidence_rationale, fix_verification, http_exchange_ids FROM findings WHERE scan_id = ?",
+            "SELECT id, severity, title, description, file_path, line_number, status, verified, detected_at, verification_state, evidence_pending, counterevidence, confidence_rationale, fix_verification, http_exchange_ids, evidence_context FROM findings WHERE scan_id = ?",
             vec![scan_id.into()],
         )
         .await?;
@@ -748,6 +777,10 @@ pub async fn get_scan_detail(app: &AppHandle, scan_id: &str) -> Result<ScanDetai
                 .and_then(|v| v.as_str())
                 .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
                 .unwrap_or_default(),
+            evidence_context: fr
+                .get("evidence_context")
+                .and_then(|v| v.as_str())
+                .and_then(|s| serde_json::from_str::<FindingEvidenceContext>(s).ok()),
             detected_at: get_string(&fr, "detected_at")?,
         });
     }
@@ -758,6 +791,7 @@ pub async fn get_scan_detail(app: &AppHandle, scan_id: &str) -> Result<ScanDetai
         workflow: detail.workflow,
         backend: detail.backend,
         contract_version: detail.contract_version,
+        threat_model_available: detail.threat_model_available,
         diff_base: detail.diff_base,
         diff_head: detail.diff_head,
         status: detail.status,
@@ -836,6 +870,10 @@ fn row_to_detail(row: &HashMap<String, JsonValue>) -> Result<ScanDetail, String>
             .unwrap_or_default(),
         backend: opt_string(row, "backend").unwrap_or_else(|| "local".to_string()),
         contract_version: opt_string(row, "contract_version"),
+        threat_model_available: row
+            .get("threat_model_available")
+            .and_then(|v| v.as_i64())
+            .map(|value| value != 0),
         diff_base: opt_string(row, "diff_base"),
         diff_head: opt_string(row, "diff_head"),
         status: stored_status(&get_string(row, "status")?),
@@ -1123,6 +1161,15 @@ mod tests {
             Sha384::digest(MIGRATIONS[0].2.as_bytes()).to_vec()
         );
         conn.execute("INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES ('existing','local','standard','completed','now')", []).unwrap();
+        conn.execute(
+            "UPDATE scans SET threat_model_available=1 WHERE scan_id='existing'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO findings (id,scan_id,severity,title,detected_at,evidence_context) VALUES ('context-1','existing','HIGH','Context','now',?)",
+            [r#"{"contextual_cvss_reasoning":"Remote reach","advisory_cvss":{"score":8.6},"evidence_warnings":["No admin session"],"update_history":[{"fields":["severity"]}]}"#],
+        ).unwrap();
         drop(conn);
         // Existing data and version bookkeeping survive repeat startup.
         for _ in 0..2 {
@@ -1142,6 +1189,16 @@ mod tests {
                     .unwrap(),
                 super::MIGRATIONS.len() as i64
             );
+            let (threat, context): (i64, String) = conn
+                .query_row(
+                    "SELECT s.threat_model_available, f.evidence_context FROM scans s JOIN findings f ON f.scan_id=s.scan_id WHERE f.id='context-1'",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(threat, 1);
+            let parsed: super::FindingEvidenceContext = serde_json::from_str(&context).unwrap();
+            assert_eq!(parsed.advisory_cvss.unwrap()["score"], 8.6);
         }
         let mut conn = open_database(&path).unwrap();
         let broken = [
@@ -1182,7 +1239,8 @@ mod tests {
         let next = [
             MIGRATIONS[0],
             MIGRATIONS[1],
-            (3, "next", "CREATE TABLE next_version (id INTEGER);"),
+            MIGRATIONS[2],
+            (4, "next", "CREATE TABLE next_version (id INTEGER);"),
         ];
         migrate_database(&mut conn, &next).unwrap();
         migrate_database(&mut conn, &next).unwrap();
@@ -1190,7 +1248,7 @@ mod tests {
             conn.query_row("SELECT count(*) FROM _sqlx_migrations", [], |row| row
                 .get::<_, i64>(0))
                 .unwrap(),
-            3
+            4
         );
     }
 
@@ -1304,6 +1362,19 @@ mod tests {
         assert_eq!(vstate, "DETECTED");
         assert_eq!(pending, 0);
         assert!(counter.is_none());
+
+        let (context, threat_available): (Option<String>, Option<i64>) = conn
+            .query_row(
+                "SELECT f.evidence_context, s.threat_model_available FROM findings f JOIN scans s ON s.scan_id=f.scan_id WHERE f.id='f1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert!(context.is_none(), "old evidence remains not-recorded");
+        assert!(
+            threat_available.is_none(),
+            "old threat state remains unknown"
+        );
 
         // And the new write path accepts the extended fields.
         conn.execute(

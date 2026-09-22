@@ -206,12 +206,12 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     kind: "api-key",
     title: "Authenticate",
     summary: usesRemoteOAuth
-      ? `Complete OAuth in ${agent.displayName}, select one workspace, and approve the requested access once.`
+      ? `Complete OAuth in ${agent.displayName}, select one workspace and approve the requested access once.`
       : "Sign in with the OAuth device flow so the CLI and local MCP server can use your selected workspace.",
     command: usesRemoteOAuth ? undefined : "lyrashield login --oauth",
     copyLabel: usesRemoteOAuth ? undefined : "Copy login command",
     note: usesRemoteOAuth
-      ? "Matching actions then run within your workspace role, connection scope, target access, and budget. Reconnect only after revocation, expiry, or a scope change."
+      ? "Matching actions then run within your workspace role, connection scope, target access and budget. Reconnect only after revocation, expiry or a scope change."
       : "Credentials are stored at ~/.lyrashield/credentials.json. For API-key-only clients, create an lsk_ key in Settings → API keys and run `lyrashield login` instead.",
   })
 

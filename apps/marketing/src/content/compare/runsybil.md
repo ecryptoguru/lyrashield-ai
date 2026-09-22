@@ -1,19 +1,19 @@
 ---
 title: "LyraShield vs RunSybil — release assurance compared"
-description: "How LyraShield AI compares to RunSybil for AI black-box pentest. Evidence model, verification approach, coverage framework, and deployment model differences."
+description: "How LyraShield AI compares to RunSybil for AI black-box pentest. Evidence model, verification approach, coverage framework and deployment model differences."
 competitor: "Runsybil"
 heading: "LyraShield AI vs Runsybil"
-disclaimer: 'Factual comparison. [RunSybil](https://www.runsybil.com/) is an AI-native offensive security platform whose "Sybil" agents reason like elite attackers — black-box first, mapping the attack surface, chaining vulnerabilities across code, APIs, cloud, and infrastructure, and validating exploitability continuously on every deployment. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports, and reviewed fix proposals. Both independently validate findings and run continuously. Neither replaces the other.'
+disclaimer: 'Factual comparison. [RunSybil](https://www.runsybil.com/) is an AI-native offensive security platform whose "Sybil" agents reason like elite attackers — black-box first, mapping the attack surface, chaining vulnerabilities across code, APIs, cloud and infrastructure and validating exploitability continuously on every deployment. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports and reviewed fix proposals. Both independently validate findings and run continuously. Neither replaces the other.'
 updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace RunSybil?"
-    a: "No. RunSybil is an AI-native black-box offensive platform whose Sybil agents reason like elite attackers without requiring source code, testing multi-tenant and business-logic flaws continuously on every deployment. LyraShield in open beta is source and MCP-aware release assurance for AI-built apps with SCA, secrets, evidence states, and reviewed fix proposals."
+    a: "No. RunSybil is an AI-native black-box offensive platform whose Sybil agents reason like elite attackers without requiring source code, testing multi-tenant and business-logic flaws continuously on every deployment. LyraShield in open beta is source and MCP-aware release assurance for AI-built apps with SCA, secrets, evidence states and reviewed fix proposals."
   - q: "Can I use RunSybil and LyraShield together?"
-    a: "Yes. Use RunSybil as the black-box validation layer that proves exploitability like an external attacker, then use LyraShield for the white-box release gate that records coverage receipts, evidence states, and retest-confirmed fixes. RunSybil serves as CTEM Phase 4 validation; LyraShield produces the immutable record for sign-off."
+    a: "Yes. Use RunSybil as the black-box validation layer that proves exploitability like an external attacker, then use LyraShield for the white-box release gate that records coverage receipts, evidence states and retest-confirmed fixes. RunSybil serves as CTEM Phase 4 validation; LyraShield produces the immutable record for sign-off."
   - q: "When should I choose RunSybil over LyraShield?"
-    a: "Choose RunSybil when you want hypothesis-driven offensive testing without handing over source, with cross-tenant access, privilege escalation, and transaction manipulation coverage, and PR-level feedback. Its black-box-first model genuinely mimics attacker intuition. Choose LyraShield when you need inside-the-agent checks via MCP and reviewed fix proposals."
+    a: "Choose RunSybil when you want hypothesis-driven offensive testing without handing over source, with cross-tenant access, privilege escalation and transaction manipulation coverage and PR-level feedback. Its black-box-first model genuinely mimics attacker intuition. Choose LyraShield when you need inside-the-agent checks via MCP and reviewed fix proposals."
 ---
 
 ## Core approach
@@ -66,7 +66,7 @@ faq:
 ### Use RunSybil when
 
 - You want black-box-first offensive testing that reasons like an attacker without needing source code
-- Your priority is continuous, hypothesis-driven exploit validation across code, APIs, cloud, and infrastructure
+- Your priority is continuous, hypothesis-driven exploit validation across code, APIs, cloud and infrastructure
 - You need multi-tenant and business-logic testing (cross-tenant access, privilege escalation, transaction manipulation)
 - You want PR-level security feedback on every deployment, replacing point-in-time pentests and bug bounties
 - You want a CTEM Phase 4 (Validation) engine that proves what your other tools found is actually exploitable
@@ -77,6 +77,6 @@ RunSybil automates attacker intuition black-box; LyraShield AI gates AI-built-ap
 
 ## Methodology and scope
 
-This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for its assurance model, and verify vendor details before a purchasing decision.
+This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
 
 For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Runsybil](/blog/runsybil-vs-lyrashield).

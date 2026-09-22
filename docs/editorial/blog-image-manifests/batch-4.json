@@ -31,7 +31,7 @@
     "prompt": "Text-free square cinematic technical artwork, an untrusted red instruction signal attempting to propagate across several separated agent and repository-rules planes while a hardened trust boundary isolates the privileged control path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Untrusted instructions crossing agent and rules planes while the control path remains isolated",
     "sourceHash": "sha256:a9b30153ef63291a96cebec1bd1b8cb468748e6e051a003ebf26d1128c0f06d2",
-    "cropNotes": "Keep several instruction planes, the propagation path, trust boundary, and isolated control path inside the central 60 percent; show no readable prompt or interface text",
+    "cropNotes": "Keep several instruction planes, the propagation path, trust boundary and isolated control path inside the central 60 percent; show no readable prompt or interface text",
     "usageCount": 3,
     "approved": true
   },
@@ -44,7 +44,7 @@
     "alt": "A protected data chamber separated from an external assistant path",
     "sourceHash": "sha256:d4e070a2021276fc97fbf54b6befd9aa7caeff2491ec9c18f8abb04c52b39b92",
     "cropNotes": "Keep the privacy boundary and both sides visible; avoid depicting real user data",
-    "usageCount": 2,
+    "usageCount": 3,
     "approved": true
   },
   {
@@ -52,10 +52,10 @@
     "imageId": "agent-security-04",
     "cluster": "agent-security",
     "concept": "Staged security gates binding exact approval to a privileged production action",
-    "prompt": "Text-free square cinematic technical artwork, a code or agent workflow crossing staged data, dependency, policy, and evidence gates before an exact approval lock at a separated production boundary, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "prompt": "Text-free square cinematic technical artwork, a code or agent workflow crossing staged data, dependency, policy and evidence gates before an exact approval lock at a separated production boundary, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A workflow crossing staged security gates and an exact approval lock before production",
     "sourceHash": "sha256:deb4f3a3e8738b1f2abc379ab633a2b7c16f5130912b02c9471b52188b47c4fb",
-    "cropNotes": "Keep the staged gates, exact approval lock, and separated production boundary inside the central 60 percent",
+    "cropNotes": "Keep the staged gates, exact approval lock and separated production boundary inside the central 60 percent",
     "usageCount": 3,
     "approved": true
   },
@@ -127,7 +127,7 @@
     "prompt": "Text-free square cinematic technical artwork, a sealed build artifact traveling from a source chamber through a controlled deployment corridor, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A sealed build artifact moving through a controlled deployment corridor",
     "sourceHash": "sha256:6bda72a9d9e8949a9f39df7ccf8552baa4685d56f9c56b5cd2d86bd7bad62e78",
-    "cropNotes": "Keep source, artifact, and destination aligned through the central safe area",
+    "cropNotes": "Keep source, artifact and destination aligned through the central safe area",
     "usageCount": 3,
     "approved": true
   },
@@ -151,7 +151,7 @@
     "prompt": "Text-free square cinematic technical artwork, an untrusted content stream crossing separate translucent encoding and browser-policy planes before a protected application surface, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Untrusted output crossing layered browser response controls",
     "sourceHash": "sha256:c6c80af88c70afc3c1a5c9139bfa3a887a42049f616703315677fd8266a54d9d",
-    "cropNotes": "Keep the input stream, both response-control planes, and protected application surface visible after landscape and portrait crops",
+    "cropNotes": "Keep the input stream, both response-control planes and protected application surface visible after landscape and portrait crops",
     "usageCount": 3,
     "approved": true
   },
@@ -159,9 +159,9 @@
     "slug": "fastapi-ai-generated-security",
     "imageId": "web-execution-04",
     "cluster": "web-execution",
-    "concept": "A server request or path corridor with input, authorization, and destination-boundary rechecks",
+    "concept": "A server request or path corridor with input, authorization and destination-boundary rechecks",
     "prompt": "Text-free square cinematic technical artwork, an untrusted server request or path corridor passing through gates for input validation and authorization before a destination-boundary chamber, with translucent checkpoint rings rechecking resolved destinations and redirects for request paths while sealed private and executable spaces remain off-path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "A server request or path corridor crossing input, authorization, and destination-boundary rechecks",
+    "alt": "A server request or path corridor crossing input, authorization and destination-boundary rechecks",
     "sourceHash": "sha256:0a5ab74215cb26b7119a1d70e84811c32b5b5c7149b8895ceac40b5c74aabd6a",
     "cropNotes": "Keep the input and authorization gates plus the destination-boundary checkpoint visible; retain a redirect recheck for request-path crops",
     "usageCount": 3,
@@ -175,7 +175,7 @@
     "prompt": "Text-free square cinematic technical artwork, a sealed build artifact traveling from a source chamber through a controlled deployment corridor, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A sealed build artifact moving through a controlled deployment corridor",
     "sourceHash": "sha256:6bda72a9d9e8949a9f39df7ccf8552baa4685d56f9c56b5cd2d86bd7bad62e78",
-    "cropNotes": "Keep source, artifact, and destination aligned through the central safe area",
+    "cropNotes": "Keep source, artifact and destination aligned through the central safe area",
     "usageCount": 3,
     "approved": true
   },

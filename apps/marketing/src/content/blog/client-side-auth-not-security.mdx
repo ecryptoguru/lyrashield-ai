@@ -18,9 +18,9 @@ faq:
     a: "It is useful interface behavior because ordinary users should not see actions they cannot take. It is not an enforcement control and must match a server-side authorization decision."
 ---
 
-**Direct answer:** Client-side authentication state can guide the interface, but it cannot enforce access to data or actions. Users control the browser, can change local state, and can call API endpoints without clicking your UI. Resolve the session on the server and authorize the requested action and resource before reading data or making any change.
+**Direct answer:** Client-side authentication state can guide the interface, but it cannot enforce access to data or actions. Users control the browser, can change local state and can call API endpoints without clicking your UI. Resolve the session on the server and authorize the requested action and resource before reading data or making any change.
 
-A frontend needs to know enough about the current user to render useful navigation. It may hide an admin link, redirect a signed-out visitor, or disable a button. Those are interface decisions. The server still receives requests from clients that can be modified, scripted, or replaced entirely.
+A frontend needs to know enough about the current user to render useful navigation. It may hide an admin link, redirect a signed-out visitor or disable a button. Those are interface decisions. The server still receives requests from clients that can be modified, scripted or replaced entirely.
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) separates authentication from authorization for this reason. A valid session identifies a caller. Each sensitive operation still needs a policy decision.
 
@@ -53,7 +53,7 @@ MITRE classifies this failure as client-side enforcement of server-side security
 
 AI-generated apps often begin with a complete-looking frontend and a thin data layer. A prompt such as "make this page admin only" naturally produces a route wrapper or conditional component. If the prompt does not describe the server policy, the API may remain unchanged.
 
-Framework examples reinforce the confusion. Route middleware and client hooks are visible, easy to demonstrate, and close to the page being built. Authorization rules may depend on a workspace membership table, an object owner, or a business state that the generator cannot see.
+Framework examples reinforce the confusion. Route middleware and client hooks are visible, easy to demonstrate and close to the page being built. Authorization rules may depend on a workspace membership table, an object owner or a business state that the generator cannot see.
 
 The result can look convincing during manual testing. An ordinary account never sees the admin control, so nobody clicks it. A direct request exposes the missing boundary.
 
@@ -76,7 +76,7 @@ Test several identities:
 - An ordinary member of another tenant
 - A role that is allowed to perform the action
 
-That list is a starting point, not a universal role model. Products with delegated access, support staff, or resource-specific sharing need corresponding cases.
+That list is a starting point, not a universal role model. Products with delegated access, support staff or resource-specific sharing need corresponding cases.
 
 ## Enforce authorization at the operation
 
@@ -104,7 +104,7 @@ app.delete("/api/workspaces/:id", requireSession, async (req, res) => {
 
 The frontend can call the same policy through a safe capability endpoint or use server-provided permissions to decide which buttons to render. That keeps the interface honest. The API must still repeat the check because client state can be stale or manipulated.
 
-State-dependent rules need an atomic boundary too. Suppose deletion is allowed only while the workspace is empty and the caller remains its owner. A policy check followed by a separate delete leaves time for membership or resource state to change. Enforce the relevant owner, version, or empty-state predicate inside the transaction that performs the mutation, then verify the affected-row count. If the predicate no longer matches, deny, or retry the decision from fresh state. A correct page guard cannot close this server-side race.
+State-dependent rules need an atomic boundary too. Suppose deletion is allowed only while the workspace is empty and the caller remains its owner. A policy check followed by a separate delete leaves time for membership or resource state to change. Enforce the relevant owner, version or empty-state predicate inside the transaction that performs the mutation, then verify the affected-row count. If the predicate no longer matches, deny or retry the decision from fresh state. A correct page guard cannot close this server-side race.
 
 Default deny helps when a new action appears. If no policy grants `workspace.delete`, the request fails. A rule that starts with broad access and lists exceptions tends to miss newly added paths.
 
@@ -112,11 +112,11 @@ Default deny helps when a new action appears. If no policy grants `workspace.del
 
 Server-rendered pages are not automatically authorized. A server component or loader that fetches protected data still needs a principal and resource policy. Rendering on the server changes execution location, not the need for a decision.
 
-Middleware can be useful, but path matching is fragile. Alternate HTTP methods, nested routers, API versions, background handlers, and direct service calls may bypass route middleware. Keep critical authorization close to the business operation or data access, and test every entry point.
+Middleware can be useful, but path matching is fragile. Alternate HTTP methods, nested routers, API versions, background handlers and direct service calls may bypass route middleware. Keep critical authorization close to the business operation or data access and test every entry point.
 
 Cached responses need the same care. If the cache key omits the tenant or principal scope, a correctly authorized request can populate data later returned to someone else. Static generation and edge caching deserve explicit review before they touch private pages.
 
-WebSockets, server actions, and RPC procedures are server operations too. A connection authenticated at startup still needs authorization for each subscribed channel or message type. A server action invoked from a hidden form still needs a policy check. Naming a function "internal" does not stop a client from reaching it if the framework exposes a transport route.
+WebSockets, server actions and RPC procedures are server operations too. A connection authenticated at startup still needs authorization for each subscribed channel or message type. A server action invoked from a hidden form still needs a policy check. Naming a function "internal" does not stop a client from reaching it if the framework exposes a transport route.
 
 Batch endpoints can hide a second mistake. The server may authorize the first selected record and then apply the change to every submitted ID. Check each resource or constrain the whole update query to the authorized tenant and verify that the affected row count matches the approved set.
 
@@ -124,9 +124,9 @@ Token storage is related but separate. Storing a bearer token in localStorage ca
 
 ## What automation can and cannot establish
 
-The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can prompt a team to identify its server enforcement points and negative tests. It cannot discover every endpoint, inspect a deployed session, or prove that policy calls occur before each operation.
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can prompt a team to identify its server enforcement points and negative tests. It cannot discover every endpoint, inspect a deployed session or prove that policy calls occur before each operation.
 
-Static analysis may flag a dangerous database call without a nearby check. Dynamic testing may show that an ordinary account receives a successful response. Custom policy correctness still requires product context: who may do what, to which resource, in which tenant, and under which business state.
+Static analysis may flag a dangerous database call without a nearby check. Dynamic testing may show that an ordinary account receives a successful response. Custom policy correctness still requires product context: who may do what, to which resource, in which tenant and under which business state.
 
 Keep frontend permission data intentionally narrow. The browser may need capability flags such as `canInviteMembers`, but it rarely needs the full policy document or sensitive reasons for a denial. Treat those flags as display hints and refresh them after role changes. The server remains authoritative when stale UI state disagrees.
 

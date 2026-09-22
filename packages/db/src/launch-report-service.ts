@@ -19,6 +19,7 @@
  * the checksum or leak into shared renderers.
  */
 
+import { timingSafeEqual } from "node:crypto"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { withWorkspaceRLS } from "./rls"
@@ -43,6 +44,8 @@ export interface LaunchReportResult {
   reportId: string
   payload: LaunchReportShareablePayload
 }
+
+export type ReleaseIdentityConfirmation = "MATCH" | "MISMATCH" | "UNAVAILABLE"
 
 /**
  * Generate a signed Launch Readiness Report for a target from its latest
@@ -302,5 +305,53 @@ export async function getSharedLaunchReport(
       return { ...payload, stale: true }
     }
     return payload
+  })
+}
+
+/**
+ * Confirm, but never disclose, the release identity bound to a shared report.
+ *
+ * The share token is the disclosure capability. Unknown, expired, revoked,
+ * cross-report, legacy, and checksum-mismatched requests deliberately collapse
+ * to UNAVAILABLE so this helper cannot be used to enumerate reports or stored
+ * release identities.
+ */
+export async function confirmSharedLaunchReportIdentity(input: {
+  reportId: string
+  token: string
+  reportChecksum: string
+  identity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string }
+}): Promise<ReleaseIdentityConfirmation> {
+  const { getReportByShareToken } = await import("./report-service")
+  const resolved = await getReportByShareToken(input.token)
+  if (!resolved?.shareExpiresAt || resolved.id !== input.reportId) return "UNAVAILABLE"
+
+  return withWorkspaceRLS(resolved.workspaceId, async (tx) => {
+    const report = await tx.report.findFirst({
+      where: {
+        id: input.reportId,
+        workspaceId: resolved.workspaceId,
+        type: "launch_readiness",
+        deletedAt: null,
+      },
+      select: { contentJson: true, provenanceJson: true },
+    })
+    if (!report) return "UNAVAILABLE"
+
+    const payload = report.contentJson as Partial<LaunchReportShareablePayload> | null
+    const provenance = parseLaunchReportProvenance(report.provenanceJson)
+    if (
+      payload?.reportChecksum !== input.reportChecksum ||
+      !provenance?.assessedIdentity ||
+      provenance.assessedIdentity.kind !== input.identity.kind
+    ) {
+      return "UNAVAILABLE"
+    }
+
+    const expected = Buffer.from(provenance.assessedIdentity.value.toLowerCase(), "utf8")
+    const supplied = Buffer.from(input.identity.value.toLowerCase(), "utf8")
+    return expected.length === supplied.length && timingSafeEqual(expected, supplied)
+      ? "MATCH"
+      : "MISMATCH"
   })
 }

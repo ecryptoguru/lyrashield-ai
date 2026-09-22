@@ -105,7 +105,7 @@ export default async function AffiliateLandingPage() {
               <h3 className="font-semibold">Get Approved</h3>
               <p className="text-sm text-muted-foreground">
                 Our team reviews your application. Once approved, you get access to your affiliate
-                dashboard, referral links, and promo codes.
+                dashboard, referral links and promo codes.
               </p>
             </div>
           </li>

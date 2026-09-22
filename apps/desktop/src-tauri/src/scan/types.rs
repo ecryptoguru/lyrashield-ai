@@ -159,6 +159,20 @@ pub struct ScanConfig {
 /// recorded observation — never VALIDATED or VERIFIED.
 pub const VERIFICATION_STATE_DETECTED: &str = "DETECTED";
 
+/// Engine-attested context retained as a bounded JSON projection. It is not
+/// local verification; old scans omit it rather than fabricating values.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FindingEvidenceContext {
+    #[serde(default)]
+    pub contextual_cvss_reasoning: Option<String>,
+    #[serde(default)]
+    pub advisory_cvss: Option<serde_json::Value>,
+    #[serde(default)]
+    pub evidence_warnings: Vec<String>,
+    #[serde(default)]
+    pub update_history: Vec<serde_json::Value>,
+}
+
 /// A single finding from the engine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
@@ -190,6 +204,8 @@ pub struct Finding {
     pub fix_verification: Option<String>,
     #[serde(default)]
     pub http_exchange_ids: Vec<String>,
+    #[serde(default)]
+    pub evidence_context: Option<FindingEvidenceContext>,
     pub detected_at: String,
 }
 
@@ -257,6 +273,9 @@ pub struct ScanDetail {
     pub backend: String,
     #[serde(default)]
     pub contract_version: Option<String>,
+    /// None means this older scan never recorded threat-artifact state.
+    #[serde(default)]
+    pub threat_model_available: Option<bool>,
     #[serde(default)]
     pub diff_base: Option<String>,
     #[serde(default)]

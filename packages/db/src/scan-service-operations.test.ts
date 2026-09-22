@@ -455,7 +455,16 @@ describe("listScans", () => {
 
   it("selects a narrow list projection and flattens findingCount", async () => {
     mockPrisma.scan.findMany.mockResolvedValue([
-      { id: "scan-1", status: "COMPLETED", _count: { findings: 3 }, target: null },
+      {
+        id: "scan-1",
+        status: "COMPLETED",
+        findingCandidates: [
+          { findingId: "finding-1" },
+          { findingId: "finding-2" },
+          { findingId: "finding-3" },
+        ],
+        target: null,
+      },
     ])
 
     const { items } = await listScans({ workspaceId: "ws-1" })
@@ -469,12 +478,13 @@ describe("listScans", () => {
     expect(args.select.providerCostUsd).toBeUndefined()
     expect(args.select.llmInputTokens).toBeUndefined()
 
-    // `_count` is flattened so API and SSR callers share one shape.
+    // Immutable per-scan candidate associations are flattened so a later scan
+    // cannot steal this scan's historical finding count.
     expect(items[0]!.findingCount).toBe(3)
-    expect("_count" in items[0]!).toBe(false)
+    expect("findingCandidates" in items[0]!).toBe(false)
   })
 
-  it("treats a missing _count as zero findings", async () => {
+  it("treats missing candidate associations as zero findings", async () => {
     mockPrisma.scan.findMany.mockResolvedValue([{ id: "scan-1", target: null }])
 
     const { items } = await listScans({ workspaceId: "ws-1" })

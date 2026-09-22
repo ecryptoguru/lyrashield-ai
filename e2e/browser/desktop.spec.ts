@@ -154,6 +154,10 @@ test("listener registration finishes before replay; stored detail restores fast 
   expect(replayCall?.resolvedListeners).toBeGreaterThanOrEqual(1)
   await expect(page.getByText("completed", { exact: true })).toBeVisible()
   await expect(page.getByText("Alpha", { exact: true })).toBeVisible()
+  await expect(page.getByText(/threat model available \(engine-attested\)/)).toBeVisible()
+  await expect(page.getByText(/Advisory CVSS 8\.6/)).toBeVisible()
+  await expect(page.getByText(/Evidence warning: No authenticated coverage/)).toBeVisible()
+  await expect(page.getByText(/Revision 1: severity/)).toBeVisible()
 })
 
 test("history reopens persisted findings and sync sends only explicit selections, preserving selection on entitlement retry", async ({

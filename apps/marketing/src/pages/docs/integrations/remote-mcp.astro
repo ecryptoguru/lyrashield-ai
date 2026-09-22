@@ -11,7 +11,7 @@ const updatedDate = "2026-09-09"
 const faqItems = [
   {
     q: "Can cloud editors run mutating LyraShield tools?",
-    a: "A browser-confirmed OAuth connection can run the workflows and targets granted at consent without another LyraShield review. LyraShield still checks the user's current workspace role, connection state, scope, target access, budget, expiry, and idempotency for every call. A mutating call authenticated with an API key receives connect_required. A delegated call outside the recorded grant is denied.",
+    a: "A browser-confirmed OAuth connection can run the workflows and targets granted at consent without another LyraShield review. LyraShield still checks the user's current workspace role, connection state, scope, target access, budget, expiry and idempotency for every call. A mutating call authenticated with an API key receives connect_required. A delegated call outside the recorded grant is denied.",
   },
   {
     q: "What is the difference between remote MCP and the GitHub Action?",
@@ -56,7 +56,7 @@ const jsonLd: unknown[] = [
 >
   <h1>Remote MCP endpoint</h1>
   <p>
-    Cloud-hosted editors — Lovable, Bolt.new (hosted), Replit, and v0 — cannot run local processes.
+    Cloud-hosted editors — Lovable, Bolt.new (hosted), Replit and v0 — cannot run local processes.
     Use the LyraShield remote Streamable-HTTP MCP endpoint to connect these editors to LyraShield
     tools.
   </p>
@@ -65,7 +65,7 @@ const jsonLd: unknown[] = [
     <strong>Connect once:</strong> During OAuth, select one workspace and grant the workflows you
     want the client to use. Matching actions then run without another LyraShield review. Each call
     still enforces the current workspace role, connection state, scope, target access, budget,
-    expiry, and idempotency.
+    expiry and idempotency.
   </div>
 
   <h2>Endpoint details</h2>
@@ -99,11 +99,11 @@ const jsonLd: unknown[] = [
   <h2>Authorization behavior</h2>
   <p>
     A browser-confirmed OAuth delegation records one workspace, allowed workflows, target scope,
-    scan profiles, and expiry. LyraShield revalidates that grant on every mutating call. A stable
+    scan profiles and expiry. LyraShield revalidates that grant on every mutating call. A stable
     idempotency key makes retries return the stored operation instead of repeating it.
   </p>
   <p>
-    Requests outside the recorded grant, expired, or revoked connections and lost workspace access
+    Requests outside the recorded grant, expired or revoked connections and lost workspace access
     never inherit delegated permission; out-of-grant delegated calls are denied. A mutating call
     authenticated with an API key receives a connect_required response pointing at OAuth connect.
     Historical exact-input approval records are not an active hosted authorization path. LyraShield-generated

@@ -213,7 +213,7 @@ export function ApiKeysSection({
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-muted-foreground text-sm">
-          Connect the LyraShield MCP server, CLI, or CI to this workspace. Keys are shown once at
+          Connect the LyraShield MCP server, CLI or CI to this workspace. Keys are shown once at
           creation and can be revoked at any time.
         </p>
 

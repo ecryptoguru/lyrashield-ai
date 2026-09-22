@@ -2,10 +2,10 @@
 
 ## `/api/v1` — additive-only
 
-The `/api/v1` surface is **additive-only**. We will not remove fields, rename paths, change the meaning of status codes, or narrow the set of allowed request shapes in a v1 route.
+The `/api/v1` surface is **additive-only**. We will not remove fields, rename paths, change the meaning of status codes or narrow the set of allowed request shapes in a v1 route.
 
 - New fields may be added to existing response envelopes.
-- New query parameters, headers, and optional request-body fields may be added.
+- New query parameters, headers and optional request-body fields may be added.
 - New v1 routes may be introduced.
 - Existing routes may return additional non-breaking status codes.
 
@@ -40,7 +40,7 @@ A breaking change is one that would:
 
 - Remove or rename an existing v1 path or HTTP method.
 - Remove a field from a response or make a previously optional field required.
-- Change the type, format, or meaning of an existing field.
+- Change the type, format or meaning of an existing field.
 - Remove a previously returned status code or change its semantics.
 - Tighten validation in a way that rejects previously valid requests.
 
@@ -48,7 +48,7 @@ When a breaking change is needed, it is introduced under a new `/api/v2` prefix.
 
 ## Deprecation window
 
-A v1 endpoint, field, or status code may be deprecated, but it will not be removed without:
+A v1 endpoint, field or status code may be deprecated, but it will not be removed without:
 
 - A minimum **90-day notice** from the date the deprecation is published.
 - Documentation in the OpenAPI spec (`/api/v1/openapi.json`) with `deprecated: true`.

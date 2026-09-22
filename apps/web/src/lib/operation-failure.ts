@@ -38,7 +38,7 @@ const ENTITLEMENT_CODES: Record<string, OperationFailurePresentation> = {
   DEEP_NOT_ALLOWED: {
     cause: "The current plan does not include deep reviews.",
     effect: "Deeper profiles stay unavailable; nothing was charged.",
-    recovery: "Choose an included review, or upgrade if you need deeper coverage.",
+    recovery: "Choose an included review or upgrade if you need deeper coverage.",
     recoveryHref: "/dashboard/scans?new=1",
   },
   WORKSPACE_NOT_FOUND: {
@@ -51,9 +51,9 @@ const ENTITLEMENT_CODES: Record<string, OperationFailurePresentation> = {
 
 const SCAN_CODES: Record<string, OperationFailurePresentation> = {
   SSRF_BLOCKED: {
-    cause: "That address points to an internal, private, or unresolvable host.",
+    cause: "That address points to an internal, private or unresolvable host.",
     effect: "LyraShield blocks targets that are not reachable public endpoints.",
-    recovery: "Use a public repository, URL, or API you own or are authorized to scan.",
+    recovery: "Use a public repository, URL or API you own or are authorized to scan.",
     recoveryHref: "/dashboard/targets",
   },
   TARGET_NOT_FOUND: {
@@ -147,12 +147,12 @@ export function presentOperationFailure(
         cause: "This installation is already connected to a different workspace.",
         effect: "An installation can only be linked to one workspace at a time.",
         recovery:
-          "Disconnect it there first, or install the app on a different account or organisation.",
+          "Disconnect it there first or install the app on a different account or organisation.",
         recoveryHref: "/dashboard/connections",
       }
     case "SSRF_BLOCKED":
       return {
-        cause: "That URL points to an internal, private, or unresolvable address.",
+        cause: "That URL points to an internal, private or unresolvable address.",
         effect: "The target was not created; the request was blocked before any fetch.",
         recovery: "Use a public target you own or are authorized to scan.",
         recoveryHref: "/dashboard/targets",
@@ -185,7 +185,7 @@ export function presentOperationFailure(
       return {
         cause: "The action could not be completed.",
         effect: "No automatic approval was created and no billable work was started.",
-        recovery: "Review the details and retry, or contact support if it persists.",
+        recovery: "Review the details and retry or contact support if it persists.",
       }
   }
 }

@@ -6,8 +6,29 @@ import {
   mergePolledScans,
   mergeResolvedOffPageScans,
   missingActiveScanIds,
+  nextActiveScanPollInterval,
   scanRecoveryHref,
 } from "./scans-client.utils"
+
+describe("active-scan poll backoff", () => {
+  // The backoff ramp must check the one-minute bound before the five-minute
+  // bound — otherwise the medium interval is unreachable and the list stays
+  // on the fast interval for five minutes before jumping straight to slow.
+  it.each([
+    [0, 10_000],
+    [90_000, 30_000],
+    [400_000, 60_000],
+  ])("elapsed %i ms schedules the next poll in %i ms", (elapsedMs, intervalMs) => {
+    expect(nextActiveScanPollInterval(elapsedMs)).toBe(intervalMs)
+  })
+
+  it("keeps the boundaries on the intended side of each phase", () => {
+    expect(nextActiveScanPollInterval(59_999)).toBe(10_000)
+    expect(nextActiveScanPollInterval(60_000)).toBe(30_000)
+    expect(nextActiveScanPollInterval(299_999)).toBe(30_000)
+    expect(nextActiveScanPollInterval(300_000)).toBe(60_000)
+  })
+})
 
 describe("scan polling", () => {
   it("updates the first page while preserving older paginated scans", () => {

@@ -1,3 +1,4 @@
+import { createId } from "@paralleldrive/cuid2"
 import type { ScanAttachment } from "./generated/prisma"
 import { withWorkspaceRLS } from "./rls"
 import {
@@ -211,6 +212,11 @@ export async function resolveScanAttachments(
  * Soft-delete an attachment. Returns the row's storage URI so the caller can
  * remove the encrypted object through the artifact deletion path. Already
  * deleted rows return null — idempotent.
+ *
+ * The durable outbox task is enqueued in this same transaction: the row and
+ * the retryable object-deletion task commit or roll back together, so a
+ * storage outage or process crash after commit can never leave an orphaned
+ * encrypted blob.
  */
 export async function softDeleteScanAttachment(
   workspaceId: string,
@@ -226,7 +232,13 @@ export async function softDeleteScanAttachment(
       where: { id: attachmentId },
       select: { storageUri: true },
     })
-    return row ? { storageUri: row.storageUri } : null
+    if (!row) return null
+    const enqueued = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT app.enqueue_scan_attachment_deletion_task(
+        ${createId()}, ${workspaceId}, ${row.storageUri}
+      ) AS id`
+    if (!enqueued[0]?.id) throw new Error("Attachment deletion task was not persisted")
+    return { storageUri: row.storageUri }
   })
 }
 

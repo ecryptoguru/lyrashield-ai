@@ -20,7 +20,7 @@ export default async function NotificationsPage() {
       <div>
         <PageHeader
           title="Notifications"
-          description="Scan alerts, finding warnings, and fix PR updates"
+          description="Scan alerts, finding warnings and fix PR updates"
         />
         <NoWorkspaceState
           icon={Bell}

@@ -1,6 +1,6 @@
 ---
 title: Windsurf MCP Security Workflow for AI Editors
-description: Review a legacy Windsurf MCP workflow, use the current Devin setup guide, and keep tool access, scan evidence, and retests scoped to your app.
+description: Review a legacy Windsurf MCP workflow, use the current Devin setup guide and keep tool access, scan evidence and retests scoped to your app.
 pubDate: "2026-07-30"
 updatedDate: 2026-09-12
 author: lyrashield-team
@@ -18,41 +18,41 @@ faq:
     a: No. The current supported Devin integration uses its MCP Marketplace UI. Legacy Windsurf paths and environment-variable syntax are not a Devin configuration contract.
 ---
 
-For an app developed in Windsurf, review the application's authorization, secrets, dependencies, and release evidence independently of the editor. For current LyraShield AI onboarding, use the Devin MCP Marketplace guide: connect the remote server with OAuth, verify tool discovery, and grant only the workflows and targets you intend to use.
+For an app developed in Windsurf, review the application's authorization, secrets, dependencies and release evidence independently of the editor. For current LyraShield AI onboarding, use the Devin MCP Marketplace guide: connect the remote server with OAuth, verify tool discovery and grant only the workflows and targets you intend to use.
 
-**Correction, September 12, 2026:** This URL retains the legacy Windsurf workflow for existing readers. The supported client registry now routes that integration to [Devin](/docs/integrations/devin). Earlier instructions presented the old JSON path, environment placeholder, and installer behavior as current. They are not a supported Devin setup. Existing heading links remain stable.
+**Correction, September 12, 2026:** This URL retains the legacy Windsurf workflow for existing readers. The supported client registry now routes that integration to [Devin](/docs/integrations/devin). Earlier instructions presented the old JSON path, environment placeholder and installer behavior as current. They are not a supported Devin setup. Existing heading links remain stable.
 
-The [vibe coding security guide](/blog/vibe-coding-security-guide) explains the application controls this workflow reviews. An editor connection alone cannot establish [OWASP Top 10](https://owasp.org/www-project-top-ten/) coverage. Tool discovery, an authorized scan, independent verification, and a retest are separate observations. The [Model Context Protocol overview](https://modelcontextprotocol.io/docs/getting-started/intro) describes the transport; it does not give an agent permission to act on a repository.
+The [vibe coding security guide](/blog/vibe-coding-security-guide) explains the application controls this workflow reviews. An editor connection alone cannot establish [OWASP Top 10](https://owasp.org/www-project-top-ten/) coverage. Tool discovery, an authorized scan, independent verification and a retest are separate observations. The [Model Context Protocol overview](https://modelcontextprotocol.io/docs/getting-started/intro) describes the transport; it does not give an agent permission to act on a repository.
 
 ## 1. Prerequisites and api key setup
 
-Use [the current Devin setup guide](/docs/integrations/devin) and [Devin's official MCP documentation](https://docs.devin.ai/work-with-devin/mcp). The hosted integration uses OAuth. Complete the browser flow, select the intended workspace, and review the requested access. Do not paste a bearer key into a conversation or replace a failed OAuth flow with a broadly privileged credential.
+Use [the current Devin setup guide](/docs/integrations/devin) and [Devin's official MCP documentation](https://docs.devin.ai/work-with-devin/mcp). The hosted integration uses OAuth. Complete the browser flow, select the intended workspace and review the requested access. Do not paste a bearer key into a conversation or replace a failed OAuth flow with a broadly privileged credential.
 
-Check the target before requesting a scan. A public URL, a repository, and a localhost address have different access requirements and coverage. A hosted service cannot infer how to reach your laptop from a localhost URL. Use a supported target you own or are authorized to assess, and retain the target identity with the result.
+Check the target before requesting a scan. A public URL, a repository and a localhost address have different access requirements and coverage. A hosted service cannot infer how to reach your laptop from a localhost URL. Use a supported target you own or are authorized to assess and retain the target identity with the result.
 
-Record the client version and chosen transport. Local stdio describes communication between the client and MCP process; it does not promise that subsequent tool operations stay offline. Check the documented data flow before exposing source code, secrets, or customer records to any tool.
+Record the client version and chosen transport. Local stdio describes communication between the client and MCP process; it does not promise that subsequent tool operations stay offline. Check the documented data flow before exposing source code, secrets or customer records to any tool.
 
 ## 2. Configure MCP server in windsurf config file
 
-This heading is retained for old inbound links. For current Devin setup, open **Settings → MCP Marketplace → Add Your Own**, choose **HTTP**, enter `https://app.lyrashieldai.com/api/mcp`, and select **OAuth**. Save the server and use **Test listing tools**. Devin's UI is the supported configuration surface; do not create the historical Windsurf JSON file to configure it.
+This heading is retained for old inbound links. For current Devin setup, open **Settings → MCP Marketplace → Add Your Own**, choose **HTTP**, enter `https://app.lyrashieldai.com/api/mcp` and select **OAuth**. Save the server and use **Test listing tools**. Devin's UI is the supported configuration surface; do not create the historical Windsurf JSON file to configure it.
 
-If you still use a legacy Windsurf installation, check that exact version's vendor documentation before editing its configuration. Do not assume that a project-local file, an environment placeholder from another editor, or an old installer identifier works. Prefer the maintained integration guide over a copied configuration fragment. Preserve existing server entries and keep credentials out of version control.
+If you still use a legacy Windsurf installation, check that exact version's vendor documentation before editing its configuration. Do not assume that a project-local file, an environment placeholder from another editor or an old installer identifier works. Prefer the maintained integration guide over a copied configuration fragment. Preserve existing server entries and keep credentials out of version control.
 
 The connection should grant only the required workspace and workflows. Read-only discovery can work while a mutation remains outside the grant. A denied write is a permission result, not a reason to disable approval checks. Reconnect with the intended scope only after the user decides that scope is appropriate.
 
 ## 3. Verify the connection inside windsurf
 
-For the supported Devin connection, first inspect **Test listing tools**. Then start a session and ask it to list the available LyraShield tools. A connection test establishes authentication and discovery at that moment. It does not prove that a scan ran, that a finding is valid, or that a write is authorized.
+For the supported Devin connection, first inspect **Test listing tools**. Then start a session and ask it to list the available LyraShield tools. A connection test establishes authentication and discovery at that moment. It does not prove that a scan ran, that a finding is valid or that a write is authorized.
 
 If authentication fails, inspect the connection state and use the browser sign-in flow again. If the server times out, check the endpoint and permitted network path. Keep diagnostics redacted. Do not run a stdio server as an ordinary shell command and expect it to print a successful handshake without an MCP client sending protocol messages.
 
-Start with a read-only operation and confirm the expected workspace. Before starting billable work, check target ownership, scan profile, eligibility, and budget in the application. Keep each attempt's returned scan identifier so a timeout does not lead to an accidental duplicate request. The [integration troubleshooting guide](/docs/integrations/troubleshooting) covers connection failures separately from scan failures.
+Start with a read-only operation and confirm the expected workspace. Before starting billable work, check target ownership, scan profile, eligibility and budget in the application. Keep each attempt's returned scan identifier so a timeout does not lead to an accidental duplicate request. The [integration troubleshooting guide](/docs/integrations/troubleshooting) covers connection failures separately from scan failures.
 
 ## 4. Run a security check inline while you code
 
-With MCP connected, prompt agent to scan current target before committing. Name the authorized target, supported scan profile, and expected evidence in the prompt. Ask for the returned scan identifier and terminal result; do not accept a prose claim that a scan ran.
+With MCP connected, prompt agent to scan current target before committing. Name the authorized target, supported scan profile and expected evidence in the prompt. Ask for the returned scan identifier and terminal result; do not accept a prose claim that a scan ran.
 
-Agent calls MCP tool and returns file, line, evidence snippet or reproduction notes, and remediation pointers that reference [OWASP Top 10](https://owasp.org/www-project-top-ten/). For injection it shows untrusted input flowing into query without validation. For secrets it shows detected key pattern in source. For supply chain it maps lock entries against [OSV database](https://osv.dev/).
+Agent calls MCP tool and returns file, line, evidence snippet or reproduction notes and remediation pointers that reference [OWASP Top 10](https://owasp.org/www-project-top-ten/). For injection it shows untrusted input flowing into query without validation. For secrets it shows detected key pattern in source. For supply chain it maps lock entries against [OSV database](https://osv.dev/).
 
 LyraShield preserves each finding's evidence state and supports a server-owned retest after the developer applies a fix. The MCP workflow can generate and record a fix proposal, but it does not create a branch or pull request. Poll the retest to a terminal state and include its outcome and scan reference in the PR. See [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for verifiable remediation and [CWE Top 25](https://cwe.mitre.org/top25/) for classification.
 
@@ -88,11 +88,11 @@ jobs:
           fail_on_severity: HIGH
 ```
 
-The runner-local Action needs no LyraShield API key. It emits and uploads SARIF but does not comment, open a branch, or create a recorded hosted finding. Use [Windsurf integration guide](/docs/integrations/windsurf) for authenticated MCP setup and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for build-integrity context.
+The runner-local Action needs no LyraShield API key. It emits and uploads SARIF but does not comment, open a branch or create a recorded hosted finding. Use [Windsurf integration guide](/docs/integrations/windsurf) for authenticated MCP setup and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for build-integrity context.
 
 ## 6. Add agent rules for continuous guardrails
 
-Keep a reviewed security checklist in the repository. Ask the active client to read it before making changes to user input, authorization, uploads, secrets, or external requests. Instructions guide the agent; they do not enforce permissions or prove a scan ran.
+Keep a reviewed security checklist in the repository. Ask the active client to read it before making changes to user input, authorization, uploads, secrets or external requests. Instructions guide the agent; they do not enforce permissions or prove a scan ran.
 
 Use the active client's documented instruction location. The [agent rules guide](/docs/integrations/agent-rules) distinguishes client formats. A historical Windsurf rules path is not a Devin configuration path.
 
@@ -114,10 +114,10 @@ Test the checklist on a disposable change and inspect the actual tool result. If
 
 Windsurf speeds AI development but can repeat patterns [OWASP Top 10](https://owasp.org/www-project-top-ten/) warns about such as trusting generated SQL or leaving debug endpoints enabled. LyraShield adds verification without changing UX, exposing scan and findings as native tools agent knows how to call.
 
-The current product ships MCP, bounded scans, findings, and evidence, approval-gated fix proposals, retests, reports, SCA, secrets, and the runner-local SARIF gate. The local Action is advisory and does not create hosted evidence states; use a recorded scan and retest when assurance evidence is required. Advisory dependency matches use [OSV](https://osv.dev/) data and still require resolved-version review.
+The current product ships MCP, bounded scans, findings and evidence, approval-gated fix proposals, retests, reports, SCA, secrets and the runner-local SARIF gate. The local Action is advisory and does not create hosted evidence states; use a recorded scan and retest when assurance evidence is required. Advisory dependency matches use [OSV](https://osv.dev/) data and still require resolved-version review.
 
 Local feedback plus CI gate creates defense in depth matching how AI apps evolve. For policy framing revisit [vibe coding security guide](/blog/vibe-coding-security-guide) and [NIST SSDF](https://csrc.nist.gov/projects/ssdf).
 
-Close loop by tracking findings as tasks, rerunning scans after fixes to confirm resolution, and ensuring SARIF appears in GitHub code scanning with file and line mapping. Run [AI app security checklist](/tools/ai-app-security-checklist) before launch to cover injection, auth, secrets, headers, and supply chain in one pass.
+Close loop by tracking findings as tasks, rerunning scans after fixes to confirm resolution and ensuring SARIF appears in GitHub code scanning with file and line mapping. Run [AI app security checklist](/tools/ai-app-security-checklist) before launch to cover injection, auth, secrets, headers and supply chain in one pass.
 
-When ready to centralize results across windsurf sessions and pull requests with dashboards and retention, [create an account at LyraShield AI](https://app.lyrashieldai.com/sign-up) in the open beta. LyraShield is designed to grow with your windsurf workflow, bringing findings with evidence states, proposals requiring review, and retest evidence into existing loop without claiming hands off merges.
+When ready to centralize results across windsurf sessions and pull requests with dashboards and retention, [create an account at LyraShield AI](https://app.lyrashieldai.com/sign-up) in the open beta. LyraShield is designed to grow with your windsurf workflow, bringing findings with evidence states, proposals requiring review and retest evidence into existing loop without claiming hands off merges.

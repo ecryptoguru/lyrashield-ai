@@ -9,7 +9,7 @@
 Trigger this runbook when **any** of the following occur:
 
 - The `LICENSE_SIGNING_PRIVATE_KEY` env var or Azure Key Vault secret is found
-  in a log, commit, artifact, or third-party system outside its intended store.
+  in a log, commit, artifact or third-party system outside its intended store.
 - An attacker demonstrates the ability to forge valid license signatures.
 - A Key Vault access audit shows unauthorized access to the signing key.
 - An insider with key access departs under adversarial circumstances.
@@ -102,7 +102,7 @@ Trigger this runbook when **any** of the following occur:
 3. **Send a notification email** to each affected customer via Brevo:
    - Subject: `Action required: Your LyraShield license key has been rotated`
    - Body: Explain that a security incident required key rotation, provide the
-     new license key, and link to re-activation instructions.
+     new license key and link to re-activation instructions.
    - Do NOT include the license file in the email — the user must re-activate
      to receive a freshly signed file.
 
@@ -113,10 +113,10 @@ Trigger this runbook when **any** of the following occur:
 ## Step 5 — Post-incident review
 
 1. **Document the timeline:** when the compromise was detected, when each step
-   was executed, and when the overlap window closed.
+   was executed and when the overlap window closed.
 
 2. **Conduct a root-cause analysis:** how was the key exposed? Was it an
-   insider, a misconfiguration, a CI/CD leak, or a Key Vault access control
+   insider, a misconfiguration, a CI/CD leak or a Key Vault access control
    failure?
 
 3. **Update access controls:**
@@ -131,7 +131,7 @@ Trigger this runbook when **any** of the following occur:
    - Confirm all affected customers have been notified and re-activated.
 
 5. **File an incident report** in the LyraShield documentation system with
-   the timeline, root cause, and remediation steps. Notify the founder.
+   the timeline, root cause and remediation steps. Notify the founder.
 
 ---
 

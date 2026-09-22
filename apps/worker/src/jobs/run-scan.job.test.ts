@@ -1570,6 +1570,31 @@ describe("processScanJob", () => {
     )
   })
 
+  it("keeps a queued snapshot inside its recorded wall-clock ceiling", async () => {
+    const built = buildScanExecutionPlan({ targetType: "REPO", mode: "SAFE" })
+    const plan = {
+      ...built,
+      limits: {
+        ...built.limits,
+        maxDurationMs: 5 * 60_000,
+        maxEngineMs: 3 * 60_000,
+        scannerReserveMs: 2 * 60_000,
+      },
+    }
+    mockStoredScanAuthority({
+      executionPlan: plan,
+      executionPlanHash: computeScanExecutionPlanHash(plan),
+    })
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(mockRepoTarget as never)
+
+    const result = await processScanJob(mockJob)
+    expect(result.status).toBe("completed")
+
+    const timeoutMs = vi.mocked(runEngine).mock.calls[0]?.[2]
+    expect(timeoutMs).toBeGreaterThan(0)
+    expect(timeoutMs).toBeLessThanOrEqual(3 * 60_000)
+  })
+
   it("applies the profile wall-clock budget as the engine timeout for a progressing Deep engine", async () => {
     mockStoredScanAuthority({ mode: "DEEP", policyId: "policy-deep" })
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({

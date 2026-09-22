@@ -88,7 +88,7 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
       eyebrow: "Get started",
       title: "Add your first target",
       description:
-        "Point LyraShield at a repository, app URL, or API. Targets are where every scan starts.",
+        "Point LyraShield at a repository, app URL or API. Targets are where every scan starts.",
       href: "/dashboard/targets",
       cta: "Add a target",
     }

@@ -10,7 +10,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/research", origin).toString()
 const title = "AI app security research | LyraShield AI"
 const description =
-  "What LyraShield AI plans to publish from anonymized scan data, how the sample is protected, and how to cite a statistic once one is published."
+  "What LyraShield AI plans to publish from anonymized scan data, how the sample is protected and how to cite a statistic once one is published."
 const updatedDate = "2026-08-07"
 
 const jsonLd: unknown[] = [
@@ -44,7 +44,7 @@ const jsonLd: unknown[] = [
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
         LyraShield AI plans to publish research from anonymized scan metadata. This page states what we
-        plan to publish, how the sample is collected and protected, and how a published statistic
+        plan to publish, how the sample is collected and protected and how a published statistic
         may be cited. It does not report results yet: no statistic appears here until the
         underlying sample is large enough to be meaningful.
       </p>
@@ -66,7 +66,7 @@ const jsonLd: unknown[] = [
         </div>
         <div data-reveal>
           <dt class="font-semibold text-text">Privacy protection</dt>
-          <dd class="mt-2 leading-7 text-text-muted">All data is anonymized before aggregation. No target names, repository URLs, finding payloads, user identities, IP addresses, or raw source code are retained for research purposes.</dd>
+          <dd class="mt-2 leading-7 text-text-muted">All data is anonymized before aggregation. No target names, repository URLs, finding payloads, user identities, IP addresses or raw source code are retained for research purposes.</dd>
         </div>
         <div data-reveal>
           <dt class="font-semibold text-text">Sample size</dt>
@@ -86,7 +86,7 @@ const jsonLd: unknown[] = [
           <span class="font-mono text-xs text-text-muted" aria-hidden="true">01</span>
           <div>
             <h3 class="font-semibold text-text">Most common vulnerability classes in AI-built apps</h3>
-            <p class="mt-2 leading-7 text-text-muted">Distribution of finding categories across the Vibe Security 50 controls. Which controls most frequently produce detected candidates, and which most frequently produce verified findings.</p>
+            <p class="mt-2 leading-7 text-text-muted">Distribution of finding categories across the Vibe Security 50 controls. Which controls most frequently produce detected candidates and which most frequently produce verified findings.</p>
           </div>
         </article>
         <article class="grid gap-3 py-7 md:grid-cols-[3rem_1fr] md:gap-6" data-reveal>
@@ -114,7 +114,7 @@ const jsonLd: unknown[] = [
           <span class="font-mono text-xs text-text-muted" aria-hidden="true">05</span>
           <div>
             <h3 class="font-semibold text-text">Scan mode comparison</h3>
-            <p class="mt-2 leading-7 text-text-muted">How do finding rates, coverage, and evidence-state distributions differ across scan modes? Are there control categories where deeper analysis consistently produces more verified findings?</p>
+            <p class="mt-2 leading-7 text-text-muted">How do finding rates, coverage and evidence-state distributions differ across scan modes? Are there control categories where deeper analysis consistently produces more verified findings?</p>
           </div>
         </article>
       </div>
@@ -125,7 +125,7 @@ const jsonLd: unknown[] = [
       <p class="mt-5 leading-7 text-text-muted" data-reveal>
         When statistics are published, each may be cited as: "LyraShield AI, [report name],
         lyrashieldai.com/research, [access date]." Every statistic will include its sample size,
-        control version, and collection period. Do not cite a statistic without including its
+        control version and collection period. Do not cite a statistic without including its
         stated limitations.
       </p>
     </section>

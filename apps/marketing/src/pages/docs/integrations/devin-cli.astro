@@ -6,7 +6,7 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for Devin CLI — Setup Guide"
 const description =
-  "Connect LyraShield to Devin CLI using its current dedicated MCP config files, local stdio, or remote HTTP with OAuth."
+  "Connect LyraShield to Devin CLI using its current dedicated MCP config files, local stdio or remote HTTP with OAuth."
 const updatedDate = "2026-09-19"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
@@ -67,11 +67,11 @@ const jsonLd: unknown[] = [
   <h2>Install with the CLI (fastest)</h2>
   <p>
     Run <code>npx lyrashield install devin-cli</code> from your project root. It detects Devin CLI,
-    writes the current dedicated config. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    writes the current dedicated config. Add <code>--dry-run</code> first to preview the change with no write or run{" "}
     <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
   </p>
   <pre><code>npx lyrashield install devin-cli</code></pre>
-  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+  <p>Prefer to see exactly what gets written or set it up without Node.js? Configure it by hand below.</p>
 
   <h2>Local stdio setup</h2>
   <p>
@@ -113,7 +113,7 @@ const jsonLd: unknown[] = [
   <h2>Review the app before release</h2>
   <p>
     After confirming the connection, use the <a href="/blog/devin-cli-app-security-checklist">Devin CLI app security checklist</a>
-    to review secrets, permissions, dependencies, and application tests. The <a href="/blog/devin-cli-mcp-security-workflow">Devin CLI MCP workflow</a>
+    to review secrets, permissions, dependencies and application tests. The <a href="/blog/devin-cli-mcp-security-workflow">Devin CLI MCP workflow</a>
     explains how scan results and retests fit that review. Connection success alone is not release evidence.
   </p>
 </DocsLayout>

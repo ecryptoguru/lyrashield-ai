@@ -77,7 +77,7 @@ export default async function ApprovalsPage() {
     <div>
       <PageHeader
         title="Activity"
-        description="What automated operations did, what needs recovery, and any legacy approvals that still require a decision."
+        description="What automated operations did, what needs recovery and any legacy approvals that still require a decision."
       />
 
       <ApprovalsClient

@@ -67,6 +67,7 @@ export type ConnectorDenialCode =
   | "CONNECTION_EXPIRED"
   | "TOOL_NOT_GRANTED"
   | "RESOURCE_OUT_OF_SCOPE"
+  | "PLAN_NOT_ELIGIBLE"
   | "CREDENTIAL_UNAVAILABLE"
   | "INPUT_INVALID"
   | "IDEMPOTENCY_CONFLICT"
@@ -133,6 +134,14 @@ export interface ConnectorInvocationParams {
     credential: ConnectorCredentialShape
     input: unknown
   }) => Promise<unknown>
+  /**
+   * The sponsor account's trusted `effectivePlan`, resolved server-side from
+   * the billing account (e.g. `resolveAccountBilling`) — NEVER
+   * `workspace.plan`, which is a denormalized cache and is not the billing
+   * authority. Evaluated by the PROVISIONAL plan gate in
+   * `invokeConnectorTool`; absent or unknown plans fail closed.
+   */
+  sponsorEffectivePlan?: string
   /**
    * Admission override for tests. Default evaluates the configured
    * outbound-connector admission policy (off / canary allowlist / public).
@@ -295,7 +304,18 @@ export function checkConnectorAuthorization(params: {
       reason: `Tool ${tool.name} is not granted on this connection`,
     }
   }
-  if (capabilities.scopes && !capabilities.scopes.includes(tool.requiredScope)) {
+  // Fail closed on the scope grant itself: a connection whose recorded
+  // capabilities are missing, non-object or carry no valid `scopes` list can
+  // never prove it holds the tool's required scope. `tools` and `resources`
+  // stay optional (absent = unconstrained) by contract; `scopes` is not.
+  if (!capabilities.scopes) {
+    return {
+      authorized: false,
+      code: "TOOL_NOT_GRANTED",
+      reason: `Connection records no granted-scope list; cannot verify ${tool.requiredScope} for ${tool.name}`,
+    }
+  }
+  if (!capabilities.scopes.includes(tool.requiredScope)) {
     return {
       authorized: false,
       code: "TOOL_NOT_GRANTED",
@@ -326,6 +346,7 @@ const RECEIPT_STATUS_BY_CODE: Partial<Record<ConnectorDenialCode, "BLOCKED" | "F
   CONNECTION_EXPIRED: "BLOCKED",
   TOOL_NOT_GRANTED: "BLOCKED",
   RESOURCE_OUT_OF_SCOPE: "BLOCKED",
+  PLAN_NOT_ELIGIBLE: "BLOCKED",
   CREDENTIAL_UNAVAILABLE: "FAILED",
   INPUT_INVALID: "FAILED",
   UPSTREAM_FAILED: "FAILED",
@@ -371,6 +392,19 @@ async function recordConnectorReceipt(
 }
 
 // ── Idempotent invocation ───────────────────────────────────────────────────
+
+/**
+ * Connector plan gate. Connector tools are limited to the Agency tier and
+ * Enterprise sponsors: LAUNCH_ASSURANCE is the self-serve Agency plan billing
+ * resolves (`effectivePlan === "LAUNCH_ASSURANCE"`), AGENCY covers legacy
+ * sponsor rows, and ENTERPRISE is contact-led. This is a policy constant, not
+ * pricing: do not edit it as part of plan or billing changes.
+ */
+export const CONNECTOR_ALLOWED_PLANS: readonly string[] = [
+  "AGENCY",
+  "LAUNCH_ASSURANCE",
+  "ENTERPRISE",
+]
 
 function defaultCapOutput(
   output: unknown,
@@ -438,6 +472,18 @@ export async function invokeConnectorTool(
       ok: false,
       code: "CONNECTOR_NOT_ALLOWLISTED",
       reason: "Outbound connectors are not enabled for this workspace",
+    }
+  }
+
+  // Plan gate: connector tool invocation is limited to the Agency tier and
+  // Enterprise sponsors. The caller supplies the sponsor account's trusted
+  // `effectivePlan`; an absent or unrecognized plan fails closed before any
+  // connection lookup or idempotent claim.
+  if (!CONNECTOR_ALLOWED_PLANS.includes(params.sponsorEffectivePlan ?? "")) {
+    return {
+      ok: false,
+      code: "PLAN_NOT_ELIGIBLE",
+      reason: "Connector tools require an Agency or Enterprise sponsor plan",
     }
   }
 

@@ -116,6 +116,17 @@ export interface Finding {
   confidenceRationale: string | null
   fixVerification: string | null
   httpExchangeIds: string[]
+  evidenceContext: {
+    contextual_cvss_reasoning: string | null
+    advisory_cvss: {
+      score: number
+      vector?: string
+      source?: string
+      metric_reasoning?: string
+    } | null
+    evidence_warnings: string[]
+    update_history: Array<{ timestamp?: string; fields?: string[]; reason?: string }>
+  } | null
   detectedAt: string
 }
 
@@ -150,6 +161,7 @@ export interface ScanDetail {
   workflow: ScanWorkflow
   backend: ScanBackend
   contractVersion: string | null
+  threatModelAvailable: boolean | null
   diffBase: string | null
   diffHead: string | null
   status: ScanStatus

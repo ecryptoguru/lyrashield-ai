@@ -164,7 +164,7 @@ export const VIBE_SECURITY_CONTROLS: readonly VibeSecurityControl[] = [
   },
   {
     rank: 26,
-    title: "Replay, race, and idempotency failures",
+    title: "Replay, race and idempotency failures",
     strategy: "engine",
     keywords: ["race condition", "replay attack", "idempotency", "double spend"],
   },
@@ -195,7 +195,7 @@ export const VIBE_SECURITY_CONTROLS: readonly VibeSecurityControl[] = [
   },
   {
     rank: 30,
-    title: "Public-by-default apps, buckets, and databases",
+    title: "Public-by-default apps, buckets and databases",
     strategy: "engine",
     keywords: ["public bucket", "public database", "publicly accessible", "anonymous access"],
   },
@@ -351,7 +351,7 @@ export function buildVibeSecurityInstruction(goal: string): string {
     "Assess each applicable control below. Report only evidence-backed findings; absence of evidence is not a vulnerability.",
     "Every reported finding must include the applicable numeric ranks in control_ids.",
     checklist,
-    `Controls ${evidenceControls.map((control) => control.rank).join(", ")} require separate deployment, operational, or accountable-human evidence and must not be inferred from source alone.`,
+    `Controls ${evidenceControls.map((control) => control.rank).join(", ")} require separate deployment, operational or accountable-human evidence and must not be inferred from source alone.`,
   ].join("\n")
 }
 
@@ -359,7 +359,7 @@ export function buildVibeSecurityInstruction(goal: string): string {
  * Instruction preamble for engine-backed live targets (WEB_APP/API).
  *
  * The control checklist is identical — controls are target-agnostic — but a
- * live deployment needs scope, safety, and evidence rules that a repository
+ * live deployment needs scope, safety and evidence rules that a repository
  * review does not. The relay enforces these at the network layer; this text
  * keeps the model honest inside it.
  */
@@ -376,15 +376,15 @@ export function buildUrlTargetInstruction(
   }
 ): string {
   const FOCUS_HINTS: Record<string, string> = {
-    auth: "Prioritize authentication and session surface: login/session flows, token handling, authorization boundaries, and account-recovery paths.",
+    auth: "Prioritize authentication and session surface: login/session flows, token handling, authorization boundaries and account-recovery paths.",
     payments:
-      "Prioritize payment and billing surface: checkout, refund, subscription, idempotency, and amount-handling paths.",
+      "Prioritize payment and billing surface: checkout, refund, subscription, idempotency and amount-handling paths.",
     llm_surface:
-      "Prioritize LLM/agent surface: prompt surfaces, tool calls, model-controlled output rendering, and context-flow boundaries.",
+      "Prioritize LLM/agent surface: prompt surfaces, tool calls, model-controlled output rendering and context-flow boundaries.",
     file_handling:
-      "Prioritize file handling: upload, download, parsing, storage, and path-traversal surface.",
+      "Prioritize file handling: upload, download, parsing, storage and path-traversal surface.",
     data_exposure:
-      "Prioritize data exposure: verbose errors, debug surfaces, leaked secrets in responses, and over-broad data returns.",
+      "Prioritize data exposure: verbose errors, debug surfaces, leaked secrets in responses and over-broad data returns.",
   }
   const base = buildVibeSecurityInstruction(goal)
   const lines = [
@@ -392,7 +392,7 @@ export function buildUrlTargetInstruction(
     "",
     "Live target posture:",
     `- Test only the verified scope: ${opts.host} and its subdomains. The relay denies anything outside it — treat denies as hard scope limits, never as retries.`,
-    "- This is a deployed system: prefer non-destructive, idempotent evidence. Do not bulk-submit forms, mass-create accounts, or trigger notification storms.",
+    "- This is a deployed system: prefer non-destructive, idempotent evidence. Do not bulk-submit forms, mass-create accounts or trigger notification storms.",
     "- Reproduce every finding and keep evidence excerpts minimal; redact secrets in transcripts.",
     "- Absence of a finding is meaningful only when the test actually ran — report coverage honestly in the run summary.",
   ]

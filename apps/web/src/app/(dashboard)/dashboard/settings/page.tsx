@@ -97,7 +97,7 @@ function WorkspaceSettingsLink({
       </CardHeader>
       <CardContent>
         <p className="text-muted-foreground text-sm leading-6">
-          Workspace access, automation, and connected services for{" "}
+          Workspace access, automation and connected services for{" "}
           <span className="text-foreground font-medium">{workspaceName}</span> live in workspace
           settings.
         </p>

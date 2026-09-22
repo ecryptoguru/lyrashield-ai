@@ -332,7 +332,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                     />
                     <p className="text-muted-foreground mt-1 text-xs">{describeCron(cron)}</p>
                   </FormField>
-                  <FormField label="Review depth" htmlFor="scan-preset">
+                  <FormField label="Scan depth" htmlFor="scan-preset">
                     <Select
                       id="scan-preset"
                       value={selectedOption?.id ?? ""}

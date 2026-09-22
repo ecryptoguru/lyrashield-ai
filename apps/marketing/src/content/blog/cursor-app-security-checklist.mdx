@@ -15,10 +15,10 @@ faq:
   - q: Do Cursor rules replace code review?
     a: No. Rules guide behavior but do not enforce security. Pair rules with dependency scanning, secret scanning and an external verification step.
   - q: Where does Cursor store MCP server config?
-    a: Cursor stores MCP servers in .cursor/mcp.json at the project root under mcpServers. Use the project file for the LyraShield entry so the team shares one server definition, and keep real keys in environment variables referenced by the env block, never as literals.
+    a: Cursor stores MCP servers in .cursor/mcp.json at the project root under mcpServers. Use the project file for the LyraShield entry so the team shares one server definition and keep real keys in environment variables referenced by the env block, never as literals.
 ---
 
-Cursor lets you ship fast but AI generated code can hide secrets, vulnerable packages and overly broad tool access. This checklist shows how to review Cursor rules, lock down .cursor/mcp.json with env var references, gate dependencies and secrets, and capture SARIF for release evidence. Pair it with LyraShield as release assurance for AI built apps. Start with our broader [vibe coding security guide](/blog/vibe-coding-security-guide) for baseline controls then apply the Cursor specific steps below.
+Cursor lets you ship fast but AI generated code can hide secrets, vulnerable packages and overly broad tool access. This checklist shows how to review Cursor rules, lock down .cursor/mcp.json with env var references, gate dependencies and secrets and capture SARIF for release evidence. Pair it with LyraShield as release assurance for AI built apps. Start with our broader [vibe coding security guide](/blog/vibe-coding-security-guide) for baseline controls then apply the Cursor specific steps below.
 
 ## Why cursor builds need a review
 
@@ -34,9 +34,9 @@ Cursor rules live in .cursor/rules and in Cursor settings. Treat them as securit
 
 Check that rules forbid risky behaviors: no direct production database writes, no copying secrets into code, no disabling auth checks for debugging and leaving it disabled. Require that generated API routes include input validation and auth middleware. Document the sources the agent may read, for example only src and docs, not .env or secrets folders.
 
-Pin your stack guidance in rules: specify allowed package registries, minimum Node version, and lockfile update policy. Cursor docs describe rules loading at [Cursor rules](https://cursor.com/docs/context/rules). Make rules explicit about shell usage: deny destructive shell patterns like rm recursive and require confirmation for database migrations.
+Pin your stack guidance in rules: specify allowed package registries, minimum Node version and lockfile update policy. Cursor docs describe rules loading at [Cursor rules](https://cursor.com/docs/context/rules). Make rules explicit about shell usage: deny destructive shell patterns like rm recursive and require confirmation for database migrations.
 
-Add a final rule: any change that touches auth, payments, or file upload must add a test and be flagged in the pull request description. That creates an audit trail for verification.
+Add a final rule: any change that touches auth, payments or file upload must add a test and be flagged in the pull request description. That creates an audit trail for verification.
 
 ## Lock down MCP config in .cursor/mcp.json
 
@@ -83,7 +83,7 @@ Cursor agent mode can read files, run commands and edit code. Scope that power.
 
 Set approval mode to require confirmation for shell commands, network calls and file writes outside src. Disable auto run for migrations and package installs on feature branches. Enable it only after tests pass in CI.
 
-Create an allow list for commands the agent may run: npm run lint, npm run test, npm run build. Deny curl with secrets, direct git push to main, or unscoped docker commands. Document these checks in your pull request template so reviewers know what to expect.
+Create an allow list for commands the agent may run: npm run lint, npm run test, npm run build. Deny curl with secrets, direct git push to main or unscoped docker commands. Document these checks in your pull request template so reviewers know what to expect.
 
 The Cursor docs cover terminal and tool approval at [Cursor tools](https://cursor.com/docs/agent/tools). Pair that with least privilege on your cloud provider: the developer token used for AI assisted work should not have production deploy rights. Use short lived credentials for staging and require human approval for production.
 
@@ -93,11 +93,11 @@ Log agent actions when possible. If Cursor generates a summary, paste it into th
 
 AI coding assistants often add packages to solve a task. That accelerates delivery but can introduce vulnerable or malicious dependencies.
 
-Run SCA on every pull request. OSV provides a broad vulnerability database at [OSV database](https://osv.dev). For Node projects, run npm audit or pnpm audit and require high severity advisories block merge. Record the baseline: if you must ship with a known advisory, document the exception, owner, and mitigation date.
+Run SCA on every pull request. OSV provides a broad vulnerability database at [OSV database](https://osv.dev). For Node projects, run npm audit or pnpm audit and require high severity advisories block merge. Record the baseline: if you must ship with a known advisory, document the exception, owner and mitigation date.
 
 For secrets, run gitleaks or similar and fail on new findings. Check .env.example for placeholder patterns only, never real values. Validate that no bearer tokens, private keys or lsk keys are committed. The docs on SARIF upload for secret scanning results are at [SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning).
 
-Add a pre commit hook that runs secret scanning locally, and enforce the same scan in CI. Require environment file changes include reviewer approval from security owner.
+Add a pre commit hook that runs secret scanning locally and enforce the same scan in CI. Require environment file changes include reviewer approval from security owner.
 
 ## Capture release evidence with SARIF
 
@@ -125,11 +125,11 @@ Capture screenshots or logs for manual checks that cannot be automated. A simple
 
 ## Why pair cursor with LyraShield
 
-LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.com. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
+LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.com. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP integration fits Cursor. Local stdio via npx -y @lyrashield/mcp@0.2.8 keeps tokens in env vars, and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
+MCP integration fits Cursor. Local stdio via npx -y @lyrashield/mcp@0.2.8 keeps tokens in env vars and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
 
-Status note: LyraShield is live in open beta with open registration. The scan pipeline, findings, and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. MCP and the runner-local GitHub Action are available now; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution and live paid activation are not enabled.
+Status note: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. MCP and the runner-local GitHub Action are available now; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution and live paid activation are not enabled.
 
 Pairing gives you a consistent loop across editors while Cursor handles fast iteration locally.
 
