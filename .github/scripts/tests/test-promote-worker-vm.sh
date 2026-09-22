@@ -22,6 +22,8 @@ write_mocks() {
     refresh-secrets.sh \
     refresh-egress.sh \
     capture-stop-provenance.sh \
+    trial-claim-backfill.sh \
+    backfill-clear-wrong-trial-claims.ts \
     lyrashield-worker.service \
     lyrashield-worker-secrets.service \
     lyrashield-worker-egress.service \
@@ -88,6 +90,10 @@ case "$command:$unit" in
   start:lyrashield-worker-egress-refresh.timer)
     printf 1 > "$MOCK_TIMER_ACTIVE" ;;
   restart:lyrashield-worker.service)
+    if [ "${MOCK_RESTART_FAIL:-0}" = 1 ]; then
+      echo "simulated worker restart failure" >&2
+      exit 1
+    fi
     printf 1 > "$MOCK_SERVICE_ACTIVE"
     printf 1 > "$MOCK_CONTAINER_PRESENT"
     if [ -n "${MOCK_REPLACEMENT_STOP:-}" ] && [ -s "$MOCK_ADMISSION_STOP" ]; then
@@ -215,6 +221,7 @@ run_case() {
   local old_image_present=${12:-1}
   local floor_bytes=${13:-}
   local floor_via=${14:-env}
+  local restart_fails=${15:-0}
   local floor_env=""
   if [ "$floor_via" = env ]; then
     floor_env=$floor_bytes
@@ -258,6 +265,7 @@ run_case() {
       MOCK_OLD_IMAGE_PRESENT="$old_image_present" \
       MOCK_FAIL_IMAGE_CHECK="$fail_image_check" \
       MOCK_REPLACEMENT_STOP="$replacement_stop" \
+      MOCK_RESTART_FAIL="$restart_fails" \
       LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES="$floor_env" \
       LYRASHIELD_WORKER_RUNTIME_CONFIG="$case_dir/runtime.conf" \
       LYRASHIELD_WORKER_ENV_FILE="$case_dir/worker.env" \
@@ -323,6 +331,8 @@ run_case() {
     [ -n "$restart_line" ] && [ -n "$claim_line" ] && [ -n "$queue_line" ]
     [ "$restart_line" -gt "$claim_line" ] && [ "$restart_line" -gt "$queue_line" ]
     [ -f "$case_dir/host/assets/worker-env.sh" ]
+    [ -x "$case_dir/host/libexec/lyrashield-trial-claim-backfill" ]
+    [ -f "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts" ]
     if [ "$name" = missing-rollback-image ]; then
       grep -Fq 'No local rollback image' <<< "$output"
     fi
@@ -330,6 +340,11 @@ run_case() {
       grep -Fq 'No local rollback image' <<< "$output"
       grep -Fq '2147483648-byte floor' <<< "$output"
     fi
+  else
+    # A failed first deployment must not strand a privileged maintenance
+    # runner or its source on the VM after host-asset rollback.
+    [ ! -e "$case_dir/host/libexec/lyrashield-trial-claim-backfill" ]
+    [ ! -e "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts" ]
   fi
   if [ -n "$replacement_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
@@ -370,6 +385,7 @@ run_case reclaims-stale-promotion-stop 1 1 1 success 1 '{"operator":"github-acti
 run_case preserves-newer-stop 1 1 1 success 1 '' 0 '{"operator":"on-call","reason":"new-incident"}'
 run_case resumes-owned-stop-on-rollback 1 1 1 failure 1 '' 1
 run_case preserves-existing-stop-on-rollback 1 1 1 failure 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}' 1
+run_case rolls-back-maintenance-assets 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 1
 run_case insufficient-disk 1 1 1 failure 1 '' 0 '' 1000
 
 preflight_dir="$tmp/preflight"

@@ -225,6 +225,16 @@ restore_host_assets() {
   install -m 0755 "$host_backup/refresh-secrets.sh" "$host_libexec_dir/lyrashield-refresh-secrets" || restore_failed=1
   install -m 0755 "$host_backup/refresh-egress.sh" "$host_libexec_dir/lyrashield-refresh-egress" || restore_failed=1
   install -m 0755 "$host_backup/capture-stop-provenance.sh" "$host_libexec_dir/lyrashield-capture-worker-stop-provenance" || restore_failed=1
+  if [ -f "$host_backup/trial-claim-backfill.sh" ]; then
+    install -m 0755 "$host_backup/trial-claim-backfill.sh" "$host_libexec_dir/lyrashield-trial-claim-backfill" || restore_failed=1
+  else
+    rm -f "$host_libexec_dir/lyrashield-trial-claim-backfill" || restore_failed=1
+  fi
+  if [ -f "$host_backup/backfill-clear-wrong-trial-claims.ts" ]; then
+    install -m 0644 "$host_backup/backfill-clear-wrong-trial-claims.ts" "$host_assets_dir/backfill-clear-wrong-trial-claims.ts" || restore_failed=1
+  else
+    rm -f "$host_assets_dir/backfill-clear-wrong-trial-claims.ts" || restore_failed=1
+  fi
   # worker-env.sh is absent from backups taken before it shipped; remove the
   # installed copy in that case so the old run-worker.sh never sees a partial
   # library pair.
@@ -398,6 +408,8 @@ for asset in \
   refresh-secrets.sh \
   refresh-egress.sh \
   capture-stop-provenance.sh \
+  trial-claim-backfill.sh \
+  backfill-clear-wrong-trial-claims.ts \
   lyrashield-worker.service \
   lyrashield-worker-secrets.service \
   lyrashield-worker-egress.service \
@@ -415,6 +427,12 @@ cp -p "$host_libexec_dir/lyrashield-run-worker" "$host_backup/run-worker.sh"
 cp -p "$host_libexec_dir/lyrashield-refresh-secrets" "$host_backup/refresh-secrets.sh"
 cp -p "$host_libexec_dir/lyrashield-refresh-egress" "$host_backup/refresh-egress.sh"
 cp -p "$host_libexec_dir/lyrashield-capture-worker-stop-provenance" "$host_backup/capture-stop-provenance.sh"
+if [ -f "$host_libexec_dir/lyrashield-trial-claim-backfill" ]; then
+  cp -p "$host_libexec_dir/lyrashield-trial-claim-backfill" "$host_backup/trial-claim-backfill.sh"
+fi
+if [ -f "$host_assets_dir/backfill-clear-wrong-trial-claims.ts" ]; then
+  cp -p "$host_assets_dir/backfill-clear-wrong-trial-claims.ts" "$host_backup/backfill-clear-wrong-trial-claims.ts"
+fi
 # worker-env.sh has no host copy before the first promotion that ships it.
 if [ -f "$host_assets_dir/worker-env.sh" ]; then
   cp -p "$host_assets_dir/worker-env.sh" "$host_backup/worker-env.sh"
@@ -431,6 +449,8 @@ install -m 0644 "$asset_stage/worker-env.sh" "$host_assets_dir/worker-env.sh"
 install -m 0755 "$asset_stage/refresh-secrets.sh" "$host_libexec_dir/lyrashield-refresh-secrets"
 install -m 0755 "$asset_stage/refresh-egress.sh" "$host_libexec_dir/lyrashield-refresh-egress"
 install -m 0755 "$asset_stage/capture-stop-provenance.sh" "$host_libexec_dir/lyrashield-capture-worker-stop-provenance"
+install -m 0755 "$asset_stage/trial-claim-backfill.sh" "$host_libexec_dir/lyrashield-trial-claim-backfill"
+install -m 0644 "$asset_stage/backfill-clear-wrong-trial-claims.ts" "$host_assets_dir/backfill-clear-wrong-trial-claims.ts"
 install -m 0644 "$asset_stage/lyrashield-worker.service" "$systemd_dir/lyrashield-worker.service"
 install -m 0644 "$asset_stage/lyrashield-worker-secrets.service" "$systemd_dir/lyrashield-worker-secrets.service"
 install -m 0644 "$asset_stage/lyrashield-worker-egress.service" "$systemd_dir/lyrashield-worker-egress.service"
