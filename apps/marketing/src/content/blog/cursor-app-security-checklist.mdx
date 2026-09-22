@@ -2,6 +2,7 @@
 title: Cursor app security checklist for AI built code
 description: Harden Cursor built apps before release with MCP config checks, rules hardening, secret scanning, dependency review and verified evidence.
 pubDate: "2026-07-30"
+updated: 2026-09-22
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -129,7 +130,7 @@ LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.c
 
 MCP integration fits Cursor. Local stdio via npx -y @lyrashield/mcp@0.2.8 keeps tokens in env vars and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
 
-Status note: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. MCP and the runner-local GitHub Action are available now; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution and live paid activation are not enabled.
+Status note: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. MCP and the runner-local GitHub Action are available now; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution is not enabled and self-serve checkout is live.
 
 Pairing gives you a consistent loop across editors while Cursor handles fast iteration locally.
 

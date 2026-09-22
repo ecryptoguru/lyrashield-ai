@@ -2,6 +2,7 @@
 title: MiMo Code app security checklist
 description: Secure a Xiaomi MiMo Code built app before launch with this evidence based checklist covering MCP config, permissions, secrets, dependencies and verification.
 pubDate: "2026-08-07"
+updated: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -60,4 +61,4 @@ Run a fresh, server owned check against the changed system after any fix. A manu
 
 MiMoCode gives you a fast coding loop with a flexible MCP model and that flexibility is exactly where release risk hides: a silently ignored root key, a plaintext key in a committed file or a tool grant that quietly widened what the agent can touch. LyraShield pairs with that loop by targeting the release, reviewing the real config, collecting independent evidence, proposing fixes that require review, retesting and reporting. It does not auto fix. Approval gated fix proposals stay proposals until a server generated patch is bound to an exact approval, so the boundary between detection and proof stays honest.
 
-LyraShield is live with open registration. [Create an account](https://lyrashieldai.com) to run a scan and use the [AI app security checklist](/tools/ai-app-security-checklist) to structure your pre launch review. For the MCP wiring details, see the [integrations documentation](/docs/integrations) and the [Claude Code security workflow](/blog/claude-code-security-workflow) for a parallel setup pattern.
+LyraShield is live with open registration. [Create an account](https://app.lyrashieldai.com/sign-up) to run a scan and use the [AI app security checklist](/tools/ai-app-security-checklist) to structure your pre launch review. For the MCP wiring details, see the [integrations documentation](/docs/integrations) and the [Claude Code security workflow](/blog/claude-code-security-workflow) for a parallel setup pattern.

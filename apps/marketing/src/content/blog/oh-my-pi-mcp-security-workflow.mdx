@@ -2,6 +2,7 @@
 title: Oh My Pi MCP security workflow
 description: "Set up LyraShield MCP in Oh My Pi step by step: CLI setup, manual config, verification, inline scan, GitHub Action diff gate and agent rules."
 pubDate: "2026-08-07"
+updated: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, supply-chain]
 draft: false
@@ -106,4 +107,4 @@ A short rule prevents the agent from treating a clean scan as a release verdict 
 
 Oh My Pi gives you a flexible coding agent with broad MCP discovery and that flexibility is where release risk hides: a stale config path that silently loads nothing, a discovered server that widens what the agent can touch or a committed token in a shared config. LyraShield pairs with that loop by targeting the release, reviewing the real config, collecting independent evidence, proposing fixes that require review, retesting and reporting. It does not auto fix. Approval gated fix proposals stay proposals until a server generated patch is bound to an exact approval.
 
-LyraShield is live with open registration. [Create an account](https://lyrashieldai.com) to run a scan and use the [AI app security checklist](/tools/ai-app-security-checklist) to structure your pre launch review. For a parallel setup, see the [Windsurf security workflow](/blog/windsurf-security-workflow).
+LyraShield is live with open registration. [Create an account](https://app.lyrashieldai.com/sign-up) to run a scan and use the [AI app security checklist](/tools/ai-app-security-checklist) to structure your pre launch review. For a parallel setup, see the [Windsurf security workflow](/blog/windsurf-security-workflow).

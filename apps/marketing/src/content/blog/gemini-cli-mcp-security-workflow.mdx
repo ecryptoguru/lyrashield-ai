@@ -2,6 +2,7 @@
 title: Gemini CLI MCP security workflow for AI apps
 description: Connect Gemini CLI to LyraShield MCP for bounded scans, evidence-state findings, reviewed fix proposals, retests and a diff-aware SARIF gate.
 pubDate: "2026-07-30"
+updated: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -152,7 +153,7 @@ This keeps Target to Scan to Evidence State to Fix Proposal to Retest to Assuran
 | command, args | How to launch MCP       | npx -y @lyrashield/mcp@0.2.8                           |
 | trust         | Auto run without prompt | false for security                                     |
 | includeTools  | Filter tools exposed    | scan, lyrashield_list_targets, lyrashield_get_findings |
-| env, $VAR     | Secret expansion        | LYRASHIELD_API_KEY, LYRASHIELD_MCP_URL                 |
+| env, $VAR     | Secret expansion        | LYRASHIELD_API_KEY, LYRASHIELD_API_URL                 |
 | mcp.allowed   | Policy allow list       | ["lyrashield", "lyrashield-remote"]                    |
 
 ## 7. Why pair Gemini CLI with LyraShield
@@ -161,4 +162,4 @@ Gemini CLI gives you terminal native agent workflows, LyraShield adds recorded s
 
 The value of a single transport across local and CI is consistency. The same MCP endpoint, the same `lsk_` key and the same tool surface mean a finding you reproduce in your terminal is the same finding that blocks a PR in GitHub. SARIF output standardizes severity and location data so reviewers see results in the security tab they already use for CodeQL.
 
-Start with local stdio MCP, verify tool listing, run a bounded scan on your next AI-scaffolded branch, record a reviewed fix proposal for one finding, apply the change yourself and poll the queued retest. Deepen coverage with the [AI app security checklist](/tools/ai-app-security-checklist) and [create an account at LyraShield AI](https://lyrashieldai.com).
+Start with local stdio MCP, verify tool listing, run a bounded scan on your next AI-scaffolded branch, record a reviewed fix proposal for one finding, apply the change yourself and poll the queued retest. Deepen coverage with the [AI app security checklist](/tools/ai-app-security-checklist) and [create an account at LyraShield AI](https://app.lyrashieldai.com/sign-up).

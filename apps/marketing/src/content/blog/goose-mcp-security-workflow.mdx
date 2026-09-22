@@ -2,6 +2,7 @@
 title: Connect Goose to LyraShield via MCP
 description: A step by step workflow to configure LyraShield MCP in the Block Goose agent using the CLI, verify the connection, run a scan and gate pull requests.
 pubDate: "2026-08-07"
+updated: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -32,7 +33,7 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates gen
 
 ## 1. Meet the prerequisites
 
-Install Node 24 or later, which the [Node.js release guide](https://nodejs.org/en/docs/) covers. Confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://lyrashieldai.com) if you do not have one, because the MCP server needs credentials to authenticate. Run npx lyrashield login to store your credentials in ~/.lyrashield/credentials.json, which is not committed to version control.
+Install Node 24 or later, which the [Node.js release guide](https://nodejs.org/en/docs/) covers. Confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) if you do not have one, because the MCP server needs credentials to authenticate. Run npx lyrashield login to store your credentials in ~/.lyrashield/credentials.json, which is not committed to version control.
 
 Goose does not use a rules file. Project specific instructions live in a .goosehints file in the project root, which is the main project level instruction source. Keep your credentials file outside the working tree and never paste a token directly into a config file the agent can read.
 
@@ -109,7 +110,7 @@ A hints file states intent. The approval gate enforces it. A prompt can be chang
 
 Goose accelerates implementation as the open source agent from Block. LyraShield AI provides release assurance through a loop of target, review, evidence, fix, retest and report. The platform separates detection from proof: it flags candidate issues and keeps them in a detected state until independent verification confirms the behavior. An immutable assurance record captures what was checked, when and with what result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
 
-As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request. [Create an account](https://lyrashieldai.com) to start or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Lovable app security checklist](/blog/lovable-app-security-checklist) covers a related tool if your team uses multiple agents.
+As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request. [Create an account](https://app.lyrashieldai.com/sign-up) to start or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Lovable app security checklist](/blog/lovable-app-security-checklist) covers a related tool if your team uses multiple agents.
 
 ---
 

@@ -2,6 +2,7 @@
 title: OpenCode MCP security workflow
 description: Connect OpenCode to LyraShield MCP for evidence-state findings and a diff-aware GitHub gate using opencode.json and a pinned local package.
 pubDate: "2026-07-30"
+updated: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -12,7 +13,7 @@ faq:
   - q: "Does OpenCode support remote MCP with Bearer?"
     a: "Yes. Use type remote with URL https://app.lyrashieldai.com/api/mcp and pass LYRASHIELD_API_KEY as Bearer via env. The same pattern is used in the GitHub Action."
   - q: "What matches LyraShield v1 scope?"
-    a: "Scans, SCA, secrets, findings and evidence, approval-gated fix proposals, retests, reports, billing, MCP and the local GitHub Action are implemented. Automatic server-generated Fix PR execution and live paid activation are not enabled."
+    a: "Scans, SCA, secrets, findings and evidence, approval-gated fix proposals, retests, reports, billing, MCP and the local GitHub Action are implemented. Automatic server-generated Fix PR execution is not enabled and self-serve checkout is live."
   - q: "Where does OpenCode read MCP config from?"
     a: "OpenCode reads named servers directly under the root mcp object in opencode.json. Local entries use type local, a command array and environment; remote entries use type remote, url and headers. Use OpenCode's {env:NAME} substitution for secrets."
 ---
@@ -148,4 +149,4 @@ The agent rules snippet matters because OpenCode loads rules from your rules dir
 
 OpenCode organizes agent work through declarative config; LyraShield adds findings with explicit evidence states. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification matters more as generation volume grows. The implemented product covers Target to Scan to Evidence State to approval-gated Fix Proposal to Retest to Report, plus SCA, secrets, MCP, billing and a runner-local SARIF Action. The Action is an advisory diff gate rather than a recorded hosted scan and automatic server-generated Fix PR execution is not enabled.
 
-To adopt this, add the MCP servers to `opencode.json`, verify the tool list, run a diff scan on your next feature branch, propose one Fix Proposal with a test and track retest results via SARIF. Then deepen coverage with the [AI app security checklist](/tools/ai-app-security-checklist) and [create an account at LyraShield AI](https://lyrashieldai.com) for engine execution updates.
+To adopt this, add the MCP servers to `opencode.json`, verify the tool list, run a diff scan on your next feature branch, propose one Fix Proposal with a test and track retest results via SARIF. Then deepen coverage with the [AI app security checklist](/tools/ai-app-security-checklist) and [create an account at LyraShield AI](https://app.lyrashieldai.com/sign-up) for engine execution updates.

@@ -2,6 +2,7 @@
 title: Connect Devin CLI to LyraShield via MCP
 description: A step by step workflow to configure LyraShield MCP in the Cognition Devin CLI agent using the CLI, verify the connection, run a scan and gate pull requests.
 pubDate: "2026-08-07"
+updated: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -32,7 +33,7 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates gen
 
 ## 1. Meet the prerequisites
 
-Install Node 24 or later for local stdio and confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://lyrashieldai.com) if you do not have one. A remote OAuth connection authenticates in Devin's browser flow and needs no local LyraShield CLI credential. For stdio, run `npx lyrashield login` to store local credentials outside the repository.
+Install Node 24 or later for local stdio and confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) if you do not have one. A remote OAuth connection authenticates in Devin's browser flow and needs no local LyraShield CLI credential. For stdio, run `npx lyrashield login` to store local credentials outside the repository.
 
 Devin CLI manages MCP servers with the devin mcp commands: add to register a server, login to authenticate, enable to turn a server on and disable to turn it off. Connected tools are namespaced as mcp\_\_name, so you can see which server a tool call came from. Keep your credentials file outside the working tree and never paste a token directly into a config file the agent can read.
 
@@ -104,4 +105,4 @@ A rules file states intent. The approval gate enforces it. A prompt can be chang
 
 Devin CLI accelerates implementation as a Cognition command line agent. LyraShield AI provides release assurance through a loop of target, review, evidence, fix, retest and report. The platform separates detection from proof: it flags candidate issues and keeps them in a detected state until independent verification confirms the behavior. An immutable assurance record captures what was checked, when and with what result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
 
-As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate and SARIF output. Fix proposals are approval gated and never unattended. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request. [Create an account](https://lyrashieldai.com) to start or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Windsurf security workflow](/blog/windsurf-security-workflow) covers a related tool if your team uses multiple agents.
+As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate and SARIF output. Fix proposals are approval gated and never unattended. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request. [Create an account](https://app.lyrashieldai.com/sign-up) to start or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Windsurf security workflow](/blog/windsurf-security-workflow) covers a related tool if your team uses multiple agents.

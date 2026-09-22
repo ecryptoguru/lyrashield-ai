@@ -2,6 +2,7 @@
 title: Hermes MCP workflow for security scans
 description: Integrate LyraShield AI with Hermes AI via YAML config to run bounded scans per target, preserve evidence states and enforce diff aware PR gating.
 pubDate: "2026-07-30"
+updated: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -187,4 +188,4 @@ This file encodes the loop of Target to Scan to Evidence State to Fix Proposal t
 
 Hermes gives you strong local capability and prompt control, but local generation still needs centralized policy. LyraShield records bounded findings with explicit evidence states, maps issues to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), explains dependency risk with context from [OSV](https://osv.dev/) and keeps the workflow inside MCP so you avoid switching to a separate UI. For Hermes users that value local control, this pairing preserves local execution for stdio while still giving you remote reporting via bearer auth when you need shared visibility.
 
-Finish by running [AI app security checklist](/tools/ai-app-security-checklist) on the release candidate and confirming your yaml matches [Hermes integration guide](/docs/integrations/hermes). When ready to evaluate managed verification, [create an account at LyraShield AI](https://lyrashieldai.com) and keep the PR gate as your source of truth.
+Finish by running [AI app security checklist](/tools/ai-app-security-checklist) on the release candidate and confirming your yaml matches [Hermes integration guide](/docs/integrations/hermes). When ready to evaluate managed verification, [create an account at LyraShield AI](https://app.lyrashieldai.com/sign-up) and keep the PR gate as your source of truth.

@@ -2,6 +2,7 @@
 title: Kilo Code MCP security workflow before you ship
 description: Configure LyraShield AI with Kilo Code via MCP to run bounded scans per target, preserve evidence states and enforce diff aware gating on pull requests.
 pubDate: "2026-07-30"
+updated: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -179,4 +180,4 @@ Store the file as .kilo/rules.md or kilo.md in your repo root so it travels with
 
 Kilo Code gives you fast scaffolding and agent controlled edits, but fast generation still needs bounded review. LyraShield records findings with explicit evidence states, maps each issue to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), checks dependencies using [OSV](https://osv.dev/) and keeps the loop inside MCP so you avoid context switching. The configured gate and SARIF output make triage visible where developers already work without claiming that every detection is independently verified.
 
-Close the loop with the working checklist: walk through [AI app security checklist](/tools/ai-app-security-checklist) on each release candidate and confirm your config matches [Kilo Code integration guide](/docs/integrations/kilo-code). When you are ready to evaluate managed scanning, [create an account at LyraShield AI](https://lyrashieldai.com) and keep the PR gate as your source of truth for verification.
+Close the loop with the working checklist: walk through [AI app security checklist](/tools/ai-app-security-checklist) on each release candidate and confirm your config matches [Kilo Code integration guide](/docs/integrations/kilo-code). When you are ready to evaluate managed scanning, [create an account at LyraShield AI](https://app.lyrashieldai.com/sign-up) and keep the PR gate as your source of truth for verification.
