@@ -2,6 +2,7 @@
 title: Secure a Codebuff Built App Before Launch
 description: A release review checklist for Codebuff apps covering data exposure, agent tools, secrets, dependencies and independent launch evidence before you ship.
 pubDate: "2026-08-07"
+updated: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -64,4 +65,4 @@ Run negative cases, not just the happy path. A test that confirms a feature work
 
 Codebuff accelerates implementation as an open source terminal agent. LyraShield AI provides release assurance for AI built apps through a loop of target, review, evidence, fix, retest and report. The platform separates detection from proof: it flags candidate issues and keeps them in a detected state until independent verification confirms the behavior. An immutable assurance record captures what was checked, when and with what result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
 
-As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request, which keeps the check fast enough to run on every push. [Create an account](https://lyrashieldai.com) to start a release review or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Claude Code security workflow](/blog/claude-code-security-workflow) covers a related terminal agent if your team uses multiple tools.
+As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request, which keeps the check fast enough to run on every push. [Create an account](https://app.lyrashieldai.com/sign-up) to start a release review or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Claude Code security workflow](/blog/claude-code-security-workflow) covers a related terminal agent if your team uses multiple tools.

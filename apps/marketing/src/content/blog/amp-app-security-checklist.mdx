@@ -2,6 +2,7 @@
 title: Amp App Security Checklist
 description: "Practical checklist for Amp: scope orbs, MCP servers, skills and CI gates before shipping AI-built code to production."
 pubDate: "2026-07-30"
+updated: 2026-09-22
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -133,10 +134,10 @@ Amp configuration deserves the same review discipline as application code. Use t
 
 Amp gives you orchestration across models, remote persistence via orbs and a clean extension model, ideal for shipping full features from a single prompt. LyraShield complements that with release assurance for AI-built apps that is agent-native, not bolt-on. The integration surface is minimal: MCP server via `npx -y @lyrashield/mcp@0.2.8` locally or `https://app.lyrashieldai.com/api/mcp` remotely using Bearer `lsk_` key, plus a GitHub Action that is diff-aware and SARIF-emitting for PR gating. That maps to the combination positioning, not a claim of exclusivity, many tools scan, LyraShield's focus is verified findings tied to evidence, fix, retest, report so AI-generated code does not reintroduce CWE-20/287/798 across sessions. Every finding produces an immutable assurance record and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-The platform is live in open beta with open registration; create an account at [lyrashieldai.com](https://lyrashieldai.com) for docs at [amp integration guide](/docs/integrations/amp) and hub at [integrations hub](/docs/integrations). If you are comparing Amp to [kilo-code-app-security-checklist](/blog/kilo-code-app-security-checklist) or [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist), the pattern holds: Amp owns generation, LyraShield owns verification and release evidence.
+The platform is live in open beta with open registration; create an account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) for docs at [amp integration guide](/docs/integrations/amp) and hub at [integrations hub](/docs/integrations). If you are comparing Amp to [kilo-code-app-security-checklist](/blog/kilo-code-app-security-checklist) or [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist), the pattern holds: Amp owns generation, LyraShield owns verification and release evidence.
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets and dependencies one more time.
 
 ## CTA
 
-Create an account at [lyrashieldai.com](https://lyrashieldai.com) for the Amp integration guide, the GitHub Action YAML and access to the verification flow.
+Create an account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) for the Amp integration guide, the GitHub Action YAML and access to the verification flow.

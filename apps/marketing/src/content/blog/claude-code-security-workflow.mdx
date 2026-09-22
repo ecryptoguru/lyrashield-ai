@@ -2,6 +2,7 @@
 title: Claude Code security workflow for AI built apps
 description: Secure Claude Code workflows with MCP scope checks, permission hardening, dependency gating and SARIF evidence for trustworthy releases.
 pubDate: "2026-07-30"
+updated: 2026-09-22
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -129,7 +130,7 @@ LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.c
 
 MCP integration fits Claude Code. Local stdio via npx -y @lyrashield/mcp@0.2.8 uses env var keys for project scope and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key with user or project scope. GitHub Action is diff aware and produces SARIF for code scanning so results appear in your pull request.
 
-Build honesty note: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
+Build honesty note: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution is not enabled; self-serve checkout is live.
 
 This pairing keeps Claude Code speed while preserving a consistent verification narrative across editors.
 

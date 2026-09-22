@@ -2,6 +2,7 @@
 title: Zed MCP security workflow for AI built apps
 description: Connect Zed to LyraShield AI over MCP for findings with explicit evidence states and a diff aware GitHub Action gate inside your existing editor flow.
 pubDate: "2026-07-30"
+updated: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -112,11 +113,11 @@ This keeps behavior consistent between human and agent edits. The rule avoids ph
 | Mode        | Transport                         | Best for             | Env key                                | URL                                  |
 | ----------- | --------------------------------- | -------------------- | -------------------------------------- | ------------------------------------ |
 | Local stdio | npx -y @lyrashield/mcp@0.2.8      | Local dev, offline   | LYRASHIELD_API_KEY                     | internal process                     |
-| Remote HTTP | streamable HTTP with Bearer lsk\_ | Team shared keys, CI | LYRASHIELD_API_KEY, LYRASHIELD_MCP_URL | https://app.lyrashieldai.com/api/mcp |
+| Remote HTTP | streamable HTTP with Bearer lsk\_ | Team shared keys, CI | LYRASHIELD_API_KEY, LYRASHIELD_API_URL | https://app.lyrashieldai.com/api/mcp |
 | Diff gate   | GitHub Action + SARIF             | PR enforcement       | LYRASHIELD_API_KEY secret              | https://app.lyrashieldai.com/api/mcp |
 
 ## 7. Why pair Zed with LyraShield
 
 Zed gives you speed and agent control, LyraShield adds verification and reporting that is designed to scale with AI built code. Pillar coverage from the [vibe coding security guide](/blog/vibe-coding-security-guide) explains why unverified scaffolding creates systemic risk across auth, injection and supply chain. Zed runs the tools, LyraShield provides the evidence trail from Target to Scan to Evidence State to Fix Proposal to Retest to Report. v1 is scoped to agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, so you can cover both code and dependencies without adding three separate scanners. Use the [Zed integration guide](/docs/integrations/zed) as the canonical config source and keep the loop explicit in pull request templates so reviewers see scan IDs and retest links.
 
-To put this into practice, run your first scan in Zed, triage one finding with an evidence state, propose a Fix Proposal with tests and confirm the SARIF report in GitHub code scanning. Then expand your checklist with the [AI app security checklist](/tools/ai-app-security-checklist) and [create an account at LyraShield AI](https://lyrashieldai.com) to track when Fix Proposal generation and full engine execution moves from designed to live. The pairing works because Zed minimizes friction between writing and checking, while LyraShield adds verification that generation skips.
+To put this into practice, run your first scan in Zed, triage one finding with an evidence state, propose a Fix Proposal with tests and confirm the SARIF report in GitHub code scanning. Then expand your checklist with the [AI app security checklist](/tools/ai-app-security-checklist) and [create an account at LyraShield AI](https://app.lyrashieldai.com/sign-up) to track when Fix Proposal generation and full engine execution moves from designed to live. The pairing works because Zed minimizes friction between writing and checking, while LyraShield adds verification that generation skips.

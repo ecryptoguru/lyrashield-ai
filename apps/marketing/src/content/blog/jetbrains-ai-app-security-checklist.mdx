@@ -2,6 +2,7 @@
 title: JetBrains AI app security checklist
 description: Secure JetBrains AI Assistant workflows with MCP hardening plus secrets scanning and verified review before every merge.
 pubDate: "2026-07-30"
+updated: 2026-09-22
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -105,7 +106,7 @@ Supply chain hygiene matters because AI generated code often pulls transitive de
 
 LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](https://lyrashieldai.com). Our core loop is target, review, evidence, fix, retest, report, built for teams shipping with JetBrains AI Assistant and other AI coding tools. We separate detection from proof: findings come with evidence you can verify and every result is an immutable assurance record tied to the exact commit and scan.
 
-The platform is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.8` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
+The platform is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.8` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution is not enabled; self-serve checkout is live.
 
 LyraShield sits after your JetBrains AI Assistant drafts and before merge, giving you verified findings instead of noisy rescans. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval and retest runs the same scanners on the fix commit to confirm remediation.
 
