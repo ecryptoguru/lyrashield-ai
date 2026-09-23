@@ -58,8 +58,8 @@ export async function resolveMyraRequest(
 }
 
 /**
- * Resolve the caller's active workspace: the `activeWorkspaceId` cookie is a
- * hint only — it is accepted only when a current active membership exists.
+ * Resolve the caller's active workspace. The cookie is a hint only; when it
+ * is absent or stale, use the same oldest active membership as the dashboard.
  */
 async function resolveActiveWorkspace(
   request: Request,
@@ -68,8 +68,16 @@ async function resolveActiveWorkspace(
   const { getWorkspaceMembership } = await import("@lyrashield/auth/server")
   const cookieHeader = request.headers.get("cookie") ?? ""
   const requested = /(?:^|;\s*)activeWorkspaceId=([^;]+)/.exec(cookieHeader)?.[1]
-  if (!requested) return null
-  const membership = await getWorkspaceMembership(requested, userId).catch(() => null)
-  if (!membership) return null
-  return { workspaceId: requested, role: membership.role }
+  if (requested) {
+    const membership = await getWorkspaceMembership(requested, userId).catch(() => null)
+    if (membership) return { workspaceId: requested, role: membership.role }
+  }
+  const { prisma } = await import("@lyrashield/db")
+  return prisma.workspaceMember
+    .findFirst({
+      where: { userId, status: "active" },
+      orderBy: { createdAt: "asc" },
+      select: { workspaceId: true, role: true },
+    })
+    .catch(() => null)
 }
