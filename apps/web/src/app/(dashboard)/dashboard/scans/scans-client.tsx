@@ -550,6 +550,22 @@ export function ScansClient({
     }
   }
 
+  function handleRetryScan(scan: ScanItem) {
+    const target = targets.find((item) => item.id === scan.target?.id)
+    if (!target) return
+    const options = getManualScanOptions({
+      type: target.type,
+      hasApiSpec: Boolean(target.apiSpecUrl),
+    })
+    const previousPreset = findRecoveryPreset(options, scan.goal, scan.mode)
+    setSelectedTarget(target.id)
+    choosePreset(previousPreset || getDefaultScanOptionId(options))
+    setModeResetNotice(
+      previousPreset ? null : "The previous review type is unavailable. Choose an available option."
+    )
+    setShowCreate(true)
+  }
+
   useActiveScansPolling({
     hasActiveScans,
     workspaceId,
@@ -688,6 +704,7 @@ export function ScansClient({
         hasTargets={targets.length > 0}
         onClearFilters={handleClearFilters}
         onShowCreate={() => setShowCreate(true)}
+        onRetryScan={handleRetryScan}
         cancelling={cancelling}
         removing={removing}
         onCancelScan={handleCancelScan}
