@@ -78,6 +78,23 @@ export function initMyraPanel() {
   const previousInert = new Map<HTMLElement, boolean>()
   let previousOverflow = ""
 
+  function positionChallengeHost() {
+    const host = document.querySelector<HTMLElement>("body > [data-myra-turnstile]")
+    if (!host) return
+    if (!open || panelEl.hidden) {
+      host.style.removeProperty("bottom")
+      host.style.removeProperty("left")
+      return
+    }
+    const panelRect = panelEl.getBoundingClientRect()
+    const formRect = formEl.getBoundingClientRect()
+    host.style.bottom = `${Math.max(8, window.innerHeight - formRect.top + 8)}px`
+    host.style.left = `${Math.max(16, panelRect.left + 16)}px`
+  }
+
+  window.addEventListener("resize", positionChallengeHost)
+  window.visualViewport?.addEventListener("resize", positionChallengeHost)
+
   function updateModal() {
     const modal = open && mobile.matches
     panelEl.setAttribute("aria-modal", String(modal))
@@ -188,6 +205,7 @@ export function initMyraPanel() {
     panelEl.hidden = false
     launcherEl.hidden = true
     launcherEl.setAttribute("aria-expanded", "true")
+    positionChallengeHost()
     updateModal()
     if (!bootstrapped) {
       bootstrapped = true
@@ -207,6 +225,7 @@ export function initMyraPanel() {
     panelEl.hidden = true
     launcherEl.hidden = false
     launcherEl.setAttribute("aria-expanded", "false")
+    positionChallengeHost()
     updateModal()
     ;(restoredFocus ?? launcherEl).focus()
     announce("Myra panel closed.")
