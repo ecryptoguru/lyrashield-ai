@@ -182,6 +182,27 @@ test("resizing an open desktop panel to mobile moves focus into the modal", asyn
   await expect(dialog.locator(":focus")).toHaveCount(1)
 })
 
+test("Turnstile challenge stays above Myra composer on desktop and mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await mockMyra(page, true, true)
+  await page.goto("/")
+  await page.getByRole("button", { name: "Ask Myra" }).click()
+
+  const challenge = page.locator("[data-myra-turnstile] button")
+  const form = page.locator("#myra-form")
+  await expect(challenge).toBeVisible()
+  const assertChallengeAboveComposer = async () => {
+    const [challengeBox, formBox] = await Promise.all([challenge.boundingBox(), form.boundingBox()])
+    expect(challengeBox).not.toBeNull()
+    expect(formBox).not.toBeNull()
+    expect(challengeBox!.y + challengeBox!.height).toBeLessThanOrEqual(formBox!.y)
+  }
+  await assertChallengeAboveComposer()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await assertChallengeAboveComposer()
+})
+
 test("reverse Tab from a Turnstile iframe stays inside the mobile dialog", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await mockMyra(page, false, true, false, true)
