@@ -255,8 +255,8 @@ describe("buildScanExecutionPlan", () => {
       profileId: "REPO_STANDARD",
       scope: "SNAPSHOT",
       limits: {
-        maxDurationMs: 900_000,
-        maxEngineMs: 720_000,
+        maxDurationMs: 1_380_000,
+        maxEngineMs: 1_200_000,
         scannerReserveMs: 180_000,
         maxBudgetUsd: 3.2,
       },
