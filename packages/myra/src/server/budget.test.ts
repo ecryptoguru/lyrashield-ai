@@ -193,7 +193,7 @@ describe.skipIf(!runtimeUrl || !runtime)("generation budget ledger", () => {
     expect(generate).toHaveBeenCalledTimes(1)
     const row = await runtime!.myraGenerationReservation.findUnique({ where: { traceId } })
     expect(row?.status).toBe("RESERVED")
-    expect(Number(row?.reservedUsd)).toBeCloseTo(maximumTurnCostUsd("fast"), 6)
+    expect(Number(row?.reservedUsd)).toBeCloseTo(maximumTurnCostUsd(), 6)
     expect(row?.actualUsd).toBeNull()
   })
 

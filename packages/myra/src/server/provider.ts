@@ -29,8 +29,6 @@ export interface ModelGenerateInput {
   system: string
   messages: ProviderMessage[]
   tools?: { name: string; description: string }[]
-  /** Retained task classification; all turns use one Luna deployment. */
-  tier?: "fast" | "deep"
   /** Deterministic context from the task loop. */
   context?: {
     intent?: string

@@ -41,8 +41,7 @@ export async function monthlyGenerationSpendUsd(): Promise<number> {
 }
 
 /** Conservative ceiling: bounded context/user/system input plus the 4k output cap. */
-export function maximumTurnCostUsd(tier: "fast" | "deep"): number {
-  void tier
+export function maximumTurnCostUsd(): number {
   // Cache writes cost more than uncached input; reserve the worst case.
   const cost =
     (30_000 * MYRA_LUNA_USD_PER_MILLION.cacheWriteInput +
