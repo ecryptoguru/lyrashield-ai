@@ -10,6 +10,8 @@ const entrySchema = z.object({
   content: z.string().min(1),
   sourceUrl: z.string().url(),
   sourceRef: z.string().min(1),
+  audience: z.enum(["PUBLIC", "RESTRICTED"]).default("PUBLIC"),
+  allowedRoles: z.array(z.string().min(1)).default([]),
 })
 const corpusSchema = z.object({
   version: z.string().min(1),
@@ -26,7 +28,8 @@ if (
   new Set(corpus.entries.map((entry) => entry.sourceId)).size !== corpus.entries.length ||
   corpus.entries.some((entry) => !isTrustedSourceUrl(entry.sourceUrl)) ||
   corpus.questions.some(
-    ([, sourceId]) => !corpus.entries.some((entry) => entry.sourceId === sourceId)
+    ([, sourceId]) =>
+      !corpus.entries.some((entry) => entry.sourceId === sourceId && entry.audience === "PUBLIC")
   )
 ) {
   throw new Error("Knowledge corpus has duplicate IDs, untrusted URLs, or dangling questions")
@@ -57,13 +60,11 @@ async function main(): Promise<void> {
       data: corpus.entries.map((entry) => ({
         ...entry,
         releaseId: release.id,
-        allowedRoles: [],
-        audience: "PUBLIC" as const,
         verifiedAt: new Date(),
       })),
     })
   })
-  console.log(`${corpus.version}: imported ${corpus.entries.length} approved public entries`)
+  console.log(`${corpus.version}: imported ${corpus.entries.length} approved entries`)
 }
 
 void main()

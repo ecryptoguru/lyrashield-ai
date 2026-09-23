@@ -20,6 +20,8 @@ const corpus = JSON.parse(
     content: string
     sourceUrl: string
     sourceRef: string
+    audience?: "PUBLIC" | "RESTRICTED"
+    allowedRoles?: string[]
   }>
   questions: Array<[string, string]>
 }
@@ -43,8 +45,8 @@ describe.skipIf(!runtime)("reviewed Myra corpus on PostgreSQL full-text search",
           ...entry,
           id: entryId(entry.sourceId),
           releaseId,
-          allowedRoles: [],
-          audience: "PUBLIC" as const,
+          allowedRoles: entry.allowedRoles ?? [],
+          audience: entry.audience ?? "PUBLIC",
         })),
         {
           id: entryId("restricted-decoy"),
@@ -84,5 +86,33 @@ describe.skipIf(!runtime)("reviewed Myra corpus on PostgreSQL full-text search",
       runtime!
     )
     expect(results.every((result) => result.entryId !== entryId("restricted-decoy"))).toBe(true)
+    const privateResults = await searchKnowledge(
+      anonymous,
+      "signed in account usage minutes subscription billing balance",
+      { limit: 10 },
+      runtime!
+    )
+    expect(
+      privateResults.every((result) => result.entryId !== entryId("account-usage-private"))
+    ).toBe(true)
+  })
+
+  it("retrieves the restricted account guide only for a signed-in principal", async () => {
+    const signedIn: MyraPrincipal = {
+      kind: "user",
+      accountId: `corpus-account-${suffix}`,
+      sessionId: `corpus-session-${suffix}`,
+      email: "corpus@example.test",
+      emailVerified: true,
+      workspaceId: null,
+      role: null,
+    }
+    const results = await searchKnowledge(
+      signedIn,
+      "signed in account usage minutes subscription billing balance",
+      { limit: 10 },
+      runtime!
+    )
+    expect(results.some((result) => result.entryId === entryId("account-usage-private"))).toBe(true)
   })
 })

@@ -97,6 +97,16 @@
       "content": "If Myra cannot ground an answer or a scan remains blocked, ask Myra to prepare a support case. Review the subject and summary before confirming; the case reference appears after submission. Do not paste credentials or unrelated private data into chat. The public support page also lists support and security-reporting contact paths. Use the helpful or not-helpful rating on an answer to give feedback.",
       "sourceUrl": "https://lyrashieldai.com/support",
       "sourceRef": "docs/user-guide.md §24"
+    },
+    {
+      "sourceId": "account-usage-private",
+      "topic": "signed in account usage minutes subscription billing balance",
+      "title": "Check your own account usage",
+      "content": "For a signed-in account, use the scoped account service or the Billing page to check current plan, agent-minutes and usage. Never ask a visitor to paste account identifiers, payment details or credentials into chat. If the account service is unavailable, say the balance cannot be confirmed and offer a support case.",
+      "sourceUrl": "https://app.lyrashieldai.com/dashboard/billing",
+      "sourceRef": "docs/user-guide.md §20.5",
+      "audience": "RESTRICTED",
+      "allowedRoles": []
     }
   ],
   "questions": [
