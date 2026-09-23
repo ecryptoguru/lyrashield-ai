@@ -115,4 +115,20 @@ describe.skipIf(!runtime)("reviewed Myra corpus on PostgreSQL full-text search",
     )
     expect(results.some((result) => result.entryId === entryId("account-usage-private"))).toBe(true)
   })
+
+  it("excludes entries from a rolled-back knowledge release", async () => {
+    await runtime!.myraKnowledgeRelease.update({
+      where: { id: releaseId },
+      data: { status: "rolled_back" },
+    })
+    try {
+      const results = await searchKnowledge(anonymous, "evidence states", { limit: 5 }, runtime!)
+      expect(results.every((result) => result.entryId !== entryId("evidence-states"))).toBe(true)
+    } finally {
+      await runtime!.myraKnowledgeRelease.update({
+        where: { id: releaseId },
+        data: { status: "active" },
+      })
+    }
+  })
 })
