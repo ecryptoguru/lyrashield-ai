@@ -3,7 +3,8 @@ export const GPT_56_PRICING_SOURCE =
   "https://azure.microsoft.com/en-us/blog/gpt-5-6-now-available-in-microsoft-foundry/#gpt-5-6-pricing-for-sol-terra-and-luna"
 export const GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000
 export const GPT_6_PRICING_EFFECTIVE_DATE = "2026-09-22"
-export const GPT_6_PRICING_SOURCE = "https://developers.openai.com/api/docs/models/gpt-6-sol"
+export const GPT_6_PRICING_SOURCE =
+  "https://azure.microsoft.com/en-us/blog/gpt-6-astra-sol-and-luna-for-production-agents-in-microsoft-foundry/"
 
 export const GPT_56_PRICING_USD_PER_MILLION = {
   "gpt-5.6-terra": { input: 2, cachedInput: 0.2, cacheWriteInput: 2.5, output: 12 },
