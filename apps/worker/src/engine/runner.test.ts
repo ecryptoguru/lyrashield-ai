@@ -378,54 +378,69 @@ describe("extractEngineFailureType", () => {
 describe("resolveEngineProfile", () => {
   const routingEnv = {
     LYRASHIELD_LLM: "azure/fallback",
-    LYRASHIELD_LUNA_LLM: "azure/gpt-5.6-luna",
-    LYRASHIELD_TERRA_LLM: "azure/gpt-5.6-terra",
+    LYRASHIELD_LUNA_LLM: "azure/gpt-6-luna",
+    LYRASHIELD_SOL_LLM: "azure/gpt-6-sol",
   }
 
   it.each(["SAFE", "QUICK", "STANDARD"])("routes %s to Luna at medium reasoning", (mode) => {
     expect(resolveEngineProfile(mode, routingEnv)).toEqual({
-      model: "azure/gpt-5.6-luna",
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
   })
 
-  it.each(["DEEP", "CUSTOM"])("routes %s to Terra/medium root with Luna/high delegate", (mode) => {
+  it.each(["DEEP", "CUSTOM"])("routes %s to Sol/medium root with Luna/high delegate", (mode) => {
     expect(resolveEngineProfile(mode, routingEnv)).toEqual({
-      model: "azure/gpt-5.6-terra",
+      model: "azure/gpt-6-sol",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "high",
     })
   })
 
   it("falls back to the existing model when a routed deployment is absent", () => {
-    expect(resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.6-luna" })).toEqual({
-      model: "azure/gpt-5.6-luna",
+    expect(resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-6-luna" })).toEqual({
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
   })
 
-  it("rejects non-GPT-5.6 deployments", () => {
+  it("fails closed when Deep lacks a distinct Sol root", () => {
+    expect(() => resolveEngineProfile("DEEP", { LYRASHIELD_LLM: "azure/gpt-6-luna" })).toThrow(
+      "LYRASHIELD_SOL_LLM"
+    )
+  })
+
+  it("rejects non-GPT-6 deployments", () => {
     expect(() => resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.5" })).toThrow(
-      "require a GPT-5.6"
+      "require a GPT-6"
     )
   })
 
   it("rejects GPT-5.6 Sol deployments", () => {
     expect(() => resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.6-sol" })).toThrow(
-      "Terra or Luna"
+      "Sol or Luna"
     )
   })
+
+  it.each(["evil/azure/gpt-6-luna", "azure/gpt-6-luna.evil"])(
+    "rejects a misleading provider route %s",
+    (model) => {
+      expect(() => resolveEngineProfile("SAFE", { LYRASHIELD_LLM: model })).toThrow(
+        "require a GPT-6"
+      )
+    }
+  )
 })
 
 describe("repository scan runtime configuration", () => {
   const runtimeEnv = {
-    LYRASHIELD_LUNA_LLM: "azure/gpt-5.6-luna",
-    LYRASHIELD_TERRA_LLM: "azure/gpt-5.6-terra",
+    LYRASHIELD_LUNA_LLM: "azure/gpt-6-luna",
+    LYRASHIELD_SOL_LLM: "azure/gpt-6-sol",
     AZURE_AI_API_KEY: "test-key",
     LYRASHIELD_ENGINE_SANDBOX_NETWORK: "lyrashield-sandbox",
   }
@@ -548,7 +563,7 @@ describe("buildEngineEnv", () => {
     original.LYRASHIELD_WEB_SEARCH_BUDGET_USD = process.env.LYRASHIELD_WEB_SEARCH_BUDGET_USD
     original.LYRASHIELD_PROMPT_CACHE_EXPLICIT = process.env.LYRASHIELD_PROMPT_CACHE_EXPLICIT
     original.LYRASHIELD_PROMPT_CACHE = process.env.LYRASHIELD_PROMPT_CACHE
-    process.env.LYRASHIELD_LLM = "azure/gpt-5.6-luna"
+    process.env.LYRASHIELD_LLM = "azure/gpt-6-luna"
     process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK = "lyrashield-sandbox"
     // Remove all web-search variables from the live environment so these tests
     // prove buildEngineEnv's own defaults/filtration, not the local .env.
@@ -579,9 +594,9 @@ describe("buildEngineEnv", () => {
     process.env.LYRASHIELD_WEB_SEARCH_API_KEY = "test-key"
 
     const engineEnv = buildEngineEnv({
-      model: "azure/gpt-5.6-luna",
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
 
@@ -599,9 +614,9 @@ describe("buildEngineEnv", () => {
     expect(process.env.LYRASHIELD_WEB_SEARCH_ENABLED).toBe("0")
 
     const engineEnv = buildEngineEnv({
-      model: "azure/gpt-5.6-luna",
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
 
@@ -613,9 +628,9 @@ describe("buildEngineEnv", () => {
   it("labels sandbox containers with the managed scan id", () => {
     const engineEnv = buildEngineEnv(
       {
-        model: "azure/gpt-5.6-luna",
+        model: "azure/gpt-6-luna",
         reasoningEffort: "medium",
-        delegateModel: "azure/gpt-5.6-luna",
+        delegateModel: "azure/gpt-6-luna",
         delegateReasoningEffort: "medium",
       },
       "scan-label"
@@ -627,9 +642,9 @@ describe("buildEngineEnv", () => {
 
   it("enables explicit GPT-5.6 prompt-cache reads and writes by default", () => {
     const engineEnv = buildEngineEnv({
-      model: "azure/gpt-5.6-luna",
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
 
@@ -639,9 +654,9 @@ describe("buildEngineEnv", () => {
 
   it("keeps engine checkouts on the worker's host-visible temporary root", () => {
     const engineEnv = buildEngineEnv({
-      model: "azure/gpt-5.6-luna",
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
 

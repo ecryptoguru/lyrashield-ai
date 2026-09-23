@@ -3,6 +3,7 @@ import {
   calculateGpt56CostUsd,
   calculateGpt56CostUsdFromBuckets,
   calculateGpt56CostUsdFromModelBuckets,
+  GPT_6_PRICING_USD_PER_MILLION,
   GPT_56_PRICING_USD_PER_MILLION,
 } from "./gpt56-pricing"
 
@@ -115,5 +116,37 @@ describe("GPT-5.6 official pricing", () => {
         outputTokens: 10,
       })
     ).toBeNull()
+  })
+})
+
+describe("GPT-6 published pricing", () => {
+  it("tracks Sol and Luna read/write rates separately", () => {
+    expect(GPT_6_PRICING_USD_PER_MILLION).toEqual({
+      "gpt-6-sol": { input: 2, cachedInput: 0.2, cacheWriteInput: 2.5, output: 10 },
+      "gpt-6-luna": { input: 0.1, cachedInput: 0.01, cacheWriteInput: 0.125, output: 0.5 },
+    })
+    expect(
+      calculateGpt56CostUsd("azure_ai/gpt-6-luna", {
+        inputTokens: 10_000,
+        cachedInputTokens: 2_000,
+        cacheWriteInputTokens: 3_000,
+        outputTokens: 1_000,
+      })
+    ).toBe(0.001395)
+  })
+
+  it("applies long-context multipliers to every bucket of the request", () => {
+    expect(
+      calculateGpt56CostUsdFromBuckets("azure_ai/gpt-6-sol", {
+        standardInputTokens: 0,
+        standardCachedInputTokens: 0,
+        standardCacheWriteInputTokens: 0,
+        standardOutputTokens: 0,
+        longInputTokens: 300_000,
+        longCachedInputTokens: 100_000,
+        longCacheWriteInputTokens: 100_000,
+        longOutputTokens: 2_000,
+      })
+    ).toBe(0.97)
   })
 })

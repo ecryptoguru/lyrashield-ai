@@ -889,6 +889,7 @@ function normalizeLlmUsage(value: unknown): Record<string, unknown> | undefined 
   const cacheWriteInputTokens =
     usageInteger(inputTokenDetails?.cache_write_tokens) ??
     directInteger("cache_write_input_tokens") ??
+    sumRequestUsageDetail(record.request_usage_entries, "cache_write_tokens") ??
     findUsageMetric(
       record,
       new Set(["cache_write_input_tokens", "cache_write_tokens"]),
@@ -984,7 +985,7 @@ export function mergeLlmUsage(
   for (const bucket of [...baseBuckets, ...overlayBuckets]) {
     if (typeof bucket !== "object" || bucket === null || Array.isArray(bucket)) return undefined
     const record = bucket as Record<string, unknown>
-    const model = boundedGpt56Model(record.model)?.trim()
+    const model = boundedPricedModel(record.model)?.trim()
     if (!model) return undefined
     const current = byModel.get(model) ?? ({} as Record<(typeof USAGE_BUCKET_KEYS)[number], number>)
     for (const key of USAGE_BUCKET_KEYS) {
@@ -1032,10 +1033,12 @@ function sumRequestUsageDetail(value: unknown, key: string): number | undefined 
   return total
 }
 
-function boundedGpt56Model(value: unknown): string | undefined {
+function boundedPricedModel(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length === 0 || value.length > 128) return undefined
   const normalized = value.toLowerCase().replaceAll("_", "-")
-  return /(?:^|[/.-])gpt-5\.6-(?:terra|luna)(?:$|[/.-])/.test(normalized) ? value : undefined
+  return /(?:^|[/.-])(?:gpt-5\.6-(?:terra|luna)|gpt-6-(?:sol|luna))(?:$|[/.-])/.test(normalized)
+    ? value
+    : undefined
 }
 
 function normalizeRequestUsageBuckets(value: unknown): Record<string, unknown> {
@@ -1059,10 +1062,12 @@ function normalizeRequestUsageBuckets(value: unknown): Record<string, unknown> {
     const record = entry as Record<string, unknown>
     const inputTokens = usageInteger(record.input_tokens)
     const outputTokens = usageInteger(record.output_tokens)
-    const cachedInputTokens = detailInteger(record.input_tokens_details, "cached_tokens") ?? 0
+    const model = boundedPricedModel(record.model)?.trim()
+    const isGpt6 = model ? /gpt-6-(?:sol|luna)$/i.test(model) : false
+    const cachedInputTokens =
+      detailInteger(record.input_tokens_details, "cached_tokens") ?? (isGpt6 ? undefined : 0)
     const cacheWriteInputTokens =
-      detailInteger(record.input_tokens_details, "cache_write_tokens") ?? 0
-    const model = boundedGpt56Model(record.model)?.trim()
+      detailInteger(record.input_tokens_details, "cache_write_tokens") ?? (isGpt6 ? undefined : 0)
     if (!model) everyEntryHasModel = false
     if (
       inputTokens === undefined ||
@@ -1116,7 +1121,7 @@ function normalizeModelUsageBuckets(value: unknown): Array<Record<string, unknow
   for (const bucket of value) {
     if (typeof bucket !== "object" || bucket === null || Array.isArray(bucket)) return undefined
     const record = bucket as Record<string, unknown>
-    const model = boundedGpt56Model(record.model)?.trim()
+    const model = boundedPricedModel(record.model)?.trim()
     if (!model) return undefined
     const entry: Record<string, unknown> = { model }
     for (const key of USAGE_BUCKET_KEYS) {

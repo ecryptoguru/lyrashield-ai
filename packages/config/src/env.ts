@@ -127,13 +127,13 @@ const envSchema = z
     // Scan Engine (Sprint 5+)
     LYRASHIELD_LLM: z.string().optional().or(z.literal("")),
     LYRASHIELD_LUNA_LLM: z.string().optional().or(z.literal("")),
-    LYRASHIELD_TERRA_LLM: z.string().optional().or(z.literal("")),
+    LYRASHIELD_SOL_LLM: z.string().optional().or(z.literal("")),
     LLM_API_KEY: z.string().optional().or(z.literal("")),
     LLM_API_BASE: z.string().optional().or(z.literal("")),
     LLM_API_VERSION: z.string().optional().or(z.literal("")),
     LYRASHIELD_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().optional(),
     LYRASHIELD_MAX_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
-    // GPT-5.6 explicit cache breakpoints. The engine ignores this for unsupported models.
+    // GPT-6 explicit cache breakpoints. The engine ignores this for unsupported models.
     LYRASHIELD_PROMPT_CACHE_EXPLICIT: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_PROMPT_CACHE: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
@@ -229,7 +229,7 @@ const envSchema = z
     AZURE_OPENAI_API_KEY: z.string().optional().or(z.literal("")),
     AZURE_OPENAI_ENDPOINT: z.string().optional().or(z.literal("")),
     AZURE_OPENAI_API_BASE: z.string().optional().or(z.literal("")),
-    // Azure AI project / serverless (e.g. azure_ai/gpt-5.6-terra)
+    // Azure AI project / serverless (e.g. azure_ai/gpt-6-sol)
     AZURE_AI_API_KEY: z.string().optional().or(z.literal("")),
     AZURE_AI_API_BASE: z.string().optional().or(z.literal("")),
     AZURE_API_VERSION: z.string().optional().or(z.literal("")),
