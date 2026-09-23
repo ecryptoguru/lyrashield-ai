@@ -1,8 +1,7 @@
 /**
  * Model provider boundary. MockProvider is deterministic — it composes
- * support answers from tool outputs with no network call. AzureProvider is a
- * guarded skeleton: it throws PROVIDER_ERROR unless generation is explicitly
- * enabled and configured. Provider output is untrusted — markdown is
+ * support answers from tool outputs with no network call. AzureProvider throws
+ * PROVIDER_ERROR unless generation is explicitly enabled and configured. Provider output is
  * sanitized before it becomes a component.
  *
  * Failure taxonomy matters to the budget ledger: ProviderDefiniteFailure
@@ -30,7 +29,7 @@ export interface ModelGenerateInput {
   system: string
   messages: ProviderMessage[]
   tools?: { name: string; description: string }[]
-  /** Two-tier routing: simple lookups → fast deployment, complex → deep. */
+  /** Retained task classification; all turns use one Luna deployment. */
   tier?: "fast" | "deep"
   /** Deterministic context from the task loop. */
   context?: {
@@ -45,7 +44,13 @@ export interface ModelGenerateOutput {
   text: string
   components?: MyraComponent[]
   toolCalls?: { name: string; input: Record<string, unknown> }[]
-  usage: { inTokens: number; outTokens: number; costUsd: number }
+  usage: {
+    inTokens: number
+    outTokens: number
+    costUsd: number
+    cachedInTokens?: number
+    cacheWriteInTokens?: number
+  }
 }
 
 export interface ModelProvider {
@@ -218,13 +223,10 @@ export class AzureProvider implements ModelProvider {
     }
     const endpoint = env.MYRA_AZURE_OPENAI_ENDPOINT
     const apiKey = env.MYRA_AZURE_OPENAI_API_KEY
-    const isDeep = input.tier === "deep"
-    const deployment =
-      (isDeep ? env.MYRA_MODEL_DEEP : env.MYRA_MODEL_FAST) ?? env.MYRA_AZURE_OPENAI_DEPLOYMENT
-    if (!endpoint || !apiKey || !deployment) {
+    const deployment = env.MYRA_MODEL
+    if (!endpoint || !apiKey || deployment !== "gpt-6-luna") {
       throw new ProviderDefiniteFailure("Generation provider is not configured.")
     }
-    const { inRate, outRate } = resolveCostRates(isDeep)
     const contextMessage = serializeModelContext(input.context)
     // v1 GA surface: works on both legacy `*.openai.azure.com` and Foundry
     // `*.services.ai.azure.com` endpoints — the deployment goes in the body's
@@ -240,6 +242,9 @@ export class AzureProvider implements ModelProvider {
           headers: { "content-type": "application/json", "api-key": apiKey },
           body: JSON.stringify({
             model: deployment,
+            // Short, variable support turns have no 1,024-token stable prefix.
+            // Explicit mode without breakpoints avoids paid cache writes.
+            prompt_cache_options: { mode: "explicit", ttl: "30m" },
             messages: [
               { role: "system", content: input.system },
               ...(contextMessage
@@ -275,18 +280,42 @@ export class AzureProvider implements ModelProvider {
     }
     const body = (await res.json()) as {
       choices?: { message?: { content?: string } }[]
-      usage?: { prompt_tokens?: number; completion_tokens?: number }
+      usage?: {
+        prompt_tokens?: number
+        completion_tokens?: number
+        prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number }
+      }
     }
     const text = body.choices?.[0]?.message?.content ?? ""
-    const inTokens = body.usage?.prompt_tokens ?? 0
-    const outTokens = body.usage?.completion_tokens ?? 0
-    // Cost is derived from per-tier per-1K rates so the monthly budget cap
-    // actually enforces on real usage — zero here would silently bypass it.
-    // Deep-tier rates fall back to the generic pair when unset.
-    const costUsd = (inTokens * inRate + outTokens * outRate) / 1000
+    const inTokens = body.usage?.prompt_tokens
+    const outTokens = body.usage?.completion_tokens
+    const cachedInTokens = body.usage?.prompt_tokens_details?.cached_tokens
+    const cacheWriteInTokens = body.usage?.prompt_tokens_details?.cache_write_tokens
+    if (
+      !text ||
+      ![inTokens, outTokens, cachedInTokens, cacheWriteInTokens].every(
+        (tokens) => Number.isSafeInteger(tokens) && (tokens ?? -1) >= 0
+      ) ||
+      cachedInTokens! + cacheWriteInTokens! > inTokens!
+    ) {
+      // The provider may have charged this response, so retain the reservation.
+      throw new ProviderTimeout("Generation provider returned incomplete usage.")
+    }
+    const costUsd = calculateLunaCostUsd(
+      inTokens!,
+      cachedInTokens!,
+      cacheWriteInTokens!,
+      outTokens!
+    )
     return {
       text,
-      usage: { inTokens, outTokens, costUsd },
+      usage: {
+        inTokens: inTokens!,
+        outTokens: outTokens!,
+        cachedInTokens,
+        cacheWriteInTokens,
+        costUsd,
+      },
     }
   }
 }
@@ -330,23 +359,30 @@ export function serializeModelContext(context: ModelGenerateInput["context"]): s
   })
 }
 
-function positiveRate(raw: string | undefined): number | null {
-  const value = Number(raw)
-  return Number.isFinite(value) && value > 0 ? value : null
-}
+export const MYRA_LUNA_USD_PER_MILLION = {
+  input: 0.1,
+  cachedInput: 0.01,
+  cacheWriteInput: 0.125,
+  output: 0.5,
+} as const
 
-export function resolveCostRates(isDeep: boolean): { inRate: number; outRate: number } {
-  const inRate = positiveRate(
-    (isDeep ? env.MYRA_DEEP_COST_PER_1K_INPUT_USD : undefined) || env.MYRA_COST_PER_1K_INPUT_USD
+export function calculateLunaCostUsd(
+  inputTokens: number,
+  cachedInputTokens: number,
+  cacheWriteInputTokens: number,
+  outputTokens: number
+): number {
+  const inputMultiplier = inputTokens > 272_000 ? 2 : 1
+  const outputMultiplier = inputMultiplier === 2 ? 1.5 : 1
+  const uncached = inputTokens - cachedInputTokens - cacheWriteInputTokens
+  return (
+    ((uncached * MYRA_LUNA_USD_PER_MILLION.input +
+      cachedInputTokens * MYRA_LUNA_USD_PER_MILLION.cachedInput +
+      cacheWriteInputTokens * MYRA_LUNA_USD_PER_MILLION.cacheWriteInput) *
+      inputMultiplier +
+      outputTokens * MYRA_LUNA_USD_PER_MILLION.output * outputMultiplier) /
+    1_000_000
   )
-  const outRate = positiveRate(
-    (isDeep ? env.MYRA_DEEP_COST_PER_1K_OUTPUT_USD : undefined) || env.MYRA_COST_PER_1K_OUTPUT_USD
-  )
-  if (inRate === null || outRate === null) {
-    // Thrown before any request could be sent — a definite failure.
-    throw new ProviderDefiniteFailure("Generation cost rates are not configured.")
-  }
-  return { inRate, outRate }
 }
 
 export function getProvider(): ModelProvider {

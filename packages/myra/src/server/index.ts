@@ -89,6 +89,7 @@ export {
 } from "./retention"
 export {
   handleMessage,
+  rateAssistantMessage,
   suggest,
   confirmProposal,
   cancelProposal,

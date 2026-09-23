@@ -36,6 +36,7 @@ const myraBaseEnv = {
   MYRA_PROVIDER: "mock",
   MYRA_AZURE_OPENAI_ENDPOINT: "",
   MYRA_AZURE_OPENAI_API_KEY: "",
+  MYRA_MODEL: "",
   MYRA_AZURE_OPENAI_DEPLOYMENT: "",
   MYRA_MODEL_FAST: "",
   MYRA_MODEL_DEEP: "",
@@ -161,5 +162,17 @@ describe("Myra production calendar guards", () => {
     })
     expect(mod.env.MYRA_CALENDAR_PROVIDER).toBe("mock")
     expect(mod.env.MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT).toBe("1")
+  })
+
+  it("requires the single approved Luna model for Azure generation", async () => {
+    const provider = {
+      MYRA_GENERATION_ENABLED: "1",
+      MYRA_PROVIDER: "azure",
+      MYRA_AZURE_OPENAI_ENDPOINT: "https://example.services.ai.azure.com",
+      MYRA_AZURE_OPENAI_API_KEY: "test-key",
+    }
+    await expectRejectedFor("MYRA_MODEL", { ...provider, MYRA_MODEL: "gpt-5.6-luna" })
+    const mod = await importEnv({ ...provider, MYRA_MODEL: "gpt-6-luna" })
+    expect(mod.env.MYRA_MODEL).toBe("gpt-6-luna")
   })
 })

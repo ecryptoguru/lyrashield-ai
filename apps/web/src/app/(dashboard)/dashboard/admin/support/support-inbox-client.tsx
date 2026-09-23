@@ -40,6 +40,13 @@ interface CaseRow {
   notificationState: string
 }
 
+interface NegativeFeedback {
+  id: string
+  conversationId: string
+  excerpt: string
+  ratedAt: string
+}
+
 function isUnread(row: CaseRow): boolean {
   if (row.status === "NEW") return true
   if (!row.lastUserReplyAt) return false
@@ -90,6 +97,7 @@ async function requestElevationNonce(action: string, code: string): Promise<stri
 export function SupportInbox() {
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "">("")
   const [rows, setRows] = useState<CaseRow[]>([])
+  const [negativeFeedback, setNegativeFeedback] = useState<NegativeFeedback[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
@@ -143,13 +151,20 @@ export function SupportInbox() {
       .then(async (res) => {
         if (!res.ok) await readError(res)
         const body = (await res.json()) as {
-          data?: CaseRow[] | { cases?: CaseRow[]; nextCursor?: string | null }
+          data?:
+            | CaseRow[]
+            | {
+                cases?: CaseRow[]
+                nextCursor?: string | null
+                negativeFeedback?: NegativeFeedback[]
+              }
         }
         if (controller.signal.aborted) return
         const data = body.data
         const page = Array.isArray(data) ? data : (data?.cases ?? [])
         setNextCursor(Array.isArray(data) ? null : (data?.nextCursor ?? null))
         setRows((prev) => (cursor ? [...prev, ...page] : page))
+        if (!cursor && !Array.isArray(data)) setNegativeFeedback(data?.negativeFeedback ?? [])
         setListError(null)
       })
       .catch((e) => {
@@ -434,6 +449,20 @@ export function SupportInbox() {
           >
             {loadingMore ? "Loading…" : "Load more"}
           </Button>
+        ) : null}
+
+        {negativeFeedback.length > 0 ? (
+          <section aria-label="Answers rated not helpful" className="space-y-2 pt-3">
+            <h2 className="text-sm font-semibold">Answers rated not helpful</h2>
+            {negativeFeedback.map((item) => (
+              <Card key={item.id} className="p-3 text-sm">
+                <p className="line-clamp-3 whitespace-pre-wrap">{item.excerpt}</p>
+                <p className="text-muted-foreground mt-2 font-mono text-xs">
+                  {item.conversationId} · {age(item.ratedAt)}
+                </p>
+              </Card>
+            ))}
+          </section>
         ) : null}
       </section>
 

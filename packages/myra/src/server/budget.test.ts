@@ -18,8 +18,8 @@ import { randomUUID } from "node:crypto"
 import { env } from "@lyrashield/config"
 import { Prisma, createBoundedPgAdapter } from "@lyrashield/db"
 import { PrismaClient } from "@lyrashield/db/src/generated/prisma"
-import type { MyraStreamEvent } from "../contracts"
-import { maximumTurnCostUsd } from "./budget"
+import { MYRA_LIMITS, type MyraStreamEvent } from "../contracts"
+import { maximumTurnCostUsd, monthlyBudgetCapUsd } from "./budget"
 import { err } from "./errors"
 import { runTaskLoop } from "./loop"
 import type { ModelProvider } from "./provider"
@@ -47,6 +47,16 @@ const ENV_KEYS = [
   "MYRA_COST_PER_1K_OUTPUT_USD",
 ] as const
 const mutableEnv = env as unknown as Record<(typeof ENV_KEYS)[number], string | undefined>
+
+it("never raises the Myra monthly cap above $50", () => {
+  const prior = mutableEnv.MYRA_MONTHLY_BUDGET_USD
+  try {
+    mutableEnv.MYRA_MONTHLY_BUDGET_USD = "500"
+    expect(monthlyBudgetCapUsd()).toBe(MYRA_LIMITS.monthlyBudgetUsd)
+  } finally {
+    mutableEnv.MYRA_MONTHLY_BUDGET_USD = prior
+  }
+})
 
 function firstOfMonth(): Date {
   const value = new Date()

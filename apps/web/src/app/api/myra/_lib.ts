@@ -12,7 +12,7 @@
  * convention used across apps/web; error codes come from MYRA_ERROR_CODES so
  * the shared client can key on them.
  */
-import { env, isMyraAllowedEmail, myraDashboardAllowed } from "@lyrashield/config"
+import { env, myraDashboardAllowed } from "@lyrashield/config"
 import {
   MYRA_ERROR_CODES,
   type MyraError,
@@ -36,26 +36,22 @@ export function myraDashboardEnabled(): boolean {
   return env.MYRA_DASHBOARD_ENABLED === "1"
 }
 
-// Mirrors PUBLIC_BOOKING_OPERATIONS in @lyrashield/myra/server's
-// assertWritesAllowed: the only ops an anonymous principal may write once
-// the account allowlist is set, and only while the public-booking flag is on.
+// Mirrors @lyrashield/myra/server's assertWritesAllowed.
 const PUBLIC_BOOKING_OPERATIONS: ReadonlySet<string> = new Set(["book_demo", "manage_own_demo"])
 
 export function myraWritesEnabled(principal?: MyraPrincipal, operationName?: string): boolean {
   if (env.MYRA_WRITES_ENABLED !== "1") return false
-  if (!env.MYRA_ALLOWED_EMAILS) return true
   if (principal?.kind === "anonymous") {
     // Coarse check when the operation is not yet known (e.g. the confirm
     // route before the proposal loads): the flag alone admits the route and
     // assertWritesAllowed rules on the operation inside.
-    if (!operationName) return env.MYRA_PUBLIC_BOOKING_ENABLED === "1"
-    return env.MYRA_PUBLIC_BOOKING_ENABLED === "1" && PUBLIC_BOOKING_OPERATIONS.has(operationName)
+    if (!operationName) return true
+    return (
+      operationName === "submit_support_case" ||
+      (env.MYRA_PUBLIC_BOOKING_ENABLED === "1" && PUBLIC_BOOKING_OPERATIONS.has(operationName))
+    )
   }
-  return (
-    principal?.kind === "user" &&
-    principal.emailVerified &&
-    isMyraAllowedEmail(principal.email, env.MYRA_ALLOWED_EMAILS)
-  )
+  return principal?.kind === "user" && principal.emailVerified
 }
 
 export function myraOperatorEnabled(): boolean {

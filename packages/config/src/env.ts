@@ -457,12 +457,8 @@ const envSchema = z
     // replace it without a contract change.
     MYRA_AZURE_OPENAI_ENDPOINT: z.string().url().optional().or(z.literal("")),
     MYRA_AZURE_OPENAI_API_KEY: z.string().optional().or(z.literal("")),
-    // Fallback chat deployment when MYRA_MODEL_FAST/DEEP are unset.
-    MYRA_AZURE_OPENAI_DEPLOYMENT: z.string().optional().or(z.literal("")),
-    // Model deployment names (Azure OpenAI/Foundry). Optional until generation
-    // is enabled; the service fails closed when unset.
-    MYRA_MODEL_FAST: z.string().optional().or(z.literal("")),
-    MYRA_MODEL_DEEP: z.string().optional().or(z.literal("")),
+    // One approved Azure generation deployment for all support turns.
+    MYRA_MODEL: z.string().optional().or(z.literal("")),
     MYRA_EMBED_MODEL: z.string().optional().or(z.literal("")),
     // Server-enforced monthly generation spend cap (USD). Optional; when set it
     // bounds model calls alongside the per-turn caps.
@@ -473,14 +469,6 @@ const envSchema = z
     MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT: z.enum(["0", "1"]).optional().default("0"),
     MYRA_MOCK_CALENDAR_PENDING_CONFERENCE: z.enum(["0", "1"]).optional().default("0"),
     MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT: z.enum(["0", "1"]).optional().default("0"),
-    // Per-1K-token USD rates for the configured deployments — the monthly
-    // budget cap derives real spend from usage tokens against these. The
-    // generic pair prices the fast tier; MYRA_DEEP_* overrides price the
-    // deep tier (falls back to the generic pair when unset).
-    MYRA_COST_PER_1K_INPUT_USD: z.string().optional().or(z.literal("")),
-    MYRA_COST_PER_1K_OUTPUT_USD: z.string().optional().or(z.literal("")),
-    MYRA_DEEP_COST_PER_1K_INPUT_USD: z.string().optional().or(z.literal("")),
-    MYRA_DEEP_COST_PER_1K_OUTPUT_USD: z.string().optional().or(z.literal("")),
     // Founder-only Google Calendar OAuth for ankit@lyrashieldai.com. Refresh
     // token storage is encrypted by the service layer; TOKEN_JSON is a
     // dev-only convenience for a full provider token blob.
@@ -704,27 +692,12 @@ const envSchema = z
           })
         }
       }
-      if (!val.MYRA_AZURE_OPENAI_DEPLOYMENT && (!val.MYRA_MODEL_FAST || !val.MYRA_MODEL_DEEP)) {
+      if (val.MYRA_MODEL !== "gpt-6-luna") {
         ctx.addIssue({
           code: "custom",
-          path: ["MYRA_AZURE_OPENAI_DEPLOYMENT"],
-          message:
-            "Set MYRA_AZURE_OPENAI_DEPLOYMENT or both MYRA_MODEL_FAST and MYRA_MODEL_DEEP when Azure Myra generation is enabled",
+          path: ["MYRA_MODEL"],
+          message: "MYRA_MODEL must be gpt-6-luna when Azure Myra generation is enabled",
         })
-      }
-      const requiredRates = [
-        ["MYRA_COST_PER_1K_INPUT_USD", val.MYRA_COST_PER_1K_INPUT_USD],
-        ["MYRA_COST_PER_1K_OUTPUT_USD", val.MYRA_COST_PER_1K_OUTPUT_USD],
-      ] as const
-      for (const [key, raw] of requiredRates) {
-        const rate = Number(raw)
-        if (!Number.isFinite(rate) || rate <= 0) {
-          ctx.addIssue({
-            code: "custom",
-            path: [key],
-            message: `${key} must be a positive number when Azure Myra generation is enabled`,
-          })
-        }
       }
     }
   })
@@ -735,13 +708,6 @@ const envSchema = z
   // build that carries these values is a genuine misconfiguration.
   .superRefine((val, ctx) => {
     if (val.NODE_ENV !== "production") return
-    if (val.MYRA_DASHBOARD_ENABLED === "1" && !val.MYRA_ALLOWED_EMAILS) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["MYRA_ALLOWED_EMAILS"],
-        message: "MYRA_ALLOWED_EMAILS is required when the production dashboard is enabled",
-      })
-    }
     const mockFaultSwitches = [
       ["MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT", val.MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT],
       ["MYRA_MOCK_CALENDAR_PENDING_CONFERENCE", val.MYRA_MOCK_CALENDAR_PENDING_CONFERENCE],
@@ -760,13 +726,6 @@ const envSchema = z
     const publicBookingOn = val.MYRA_PUBLIC_BOOKING_ENABLED === "1"
     if (!writesOn && !publicBookingOn) return
     const bookingGateReason = writesOn ? "MYRA_WRITES_ENABLED=1" : "MYRA_PUBLIC_BOOKING_ENABLED=1"
-    if (writesOn && !val.MYRA_ALLOWED_EMAILS) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["MYRA_ALLOWED_EMAILS"],
-        message: "MYRA_ALLOWED_EMAILS is required when production writes are enabled",
-      })
-    }
     if (val.MYRA_CALENDAR_PROVIDER !== "google") {
       ctx.addIssue({
         code: "custom",

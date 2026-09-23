@@ -355,6 +355,11 @@ jobs:
           MYRA_WRITES_ENABLED: ${{ vars.MYRA_WRITES_ENABLED || '0' }}
           MYRA_PUBLIC_BOOKING_ENABLED: ${{ vars.MYRA_PUBLIC_BOOKING_ENABLED || '0' }}
           MYRA_DASHBOARD_ENABLED: ${{ vars.MYRA_DASHBOARD_ENABLED || '0' }}
+          MYRA_GENERATION_ENABLED: ${{ vars.MYRA_GENERATION_ENABLED || '0' }}
+          MYRA_PROVIDER: ${{ vars.MYRA_PROVIDER || 'mock' }}
+          MYRA_MODEL: ${{ vars.MYRA_MODEL }}
+          MYRA_AZURE_OPENAI_ENDPOINT: ${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}
+          MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
           MYRA_ALLOWED_EMAILS: ${{ vars.MYRA_ALLOWED_EMAILS }}
           MYRA_CALENDAR_PROVIDER: ${{ vars.MYRA_CALENDAR_PROVIDER }}
           MYRA_GOOGLE_CLIENT_ID: ${{ vars.MYRA_GOOGLE_CLIENT_ID }}
@@ -1036,15 +1041,9 @@ jobs:
               "MYRA_PROVIDER=${{ vars.MYRA_PROVIDER || 'mock' }}" \
               "MYRA_CALENDAR_PROVIDER=${{ vars.MYRA_CALENDAR_PROVIDER }}" \
               "MYRA_AZURE_OPENAI_ENDPOINT=${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}" \
-              "MYRA_AZURE_OPENAI_DEPLOYMENT=${{ vars.MYRA_AZURE_OPENAI_DEPLOYMENT }}" \
-              "MYRA_MODEL_FAST=${{ vars.MYRA_MODEL_FAST }}" \
-              "MYRA_MODEL_DEEP=${{ vars.MYRA_MODEL_DEEP }}" \
+              "MYRA_MODEL=${{ vars.MYRA_MODEL }}" \
               "MYRA_EMBED_MODEL=${{ vars.MYRA_EMBED_MODEL }}" \
               "MYRA_MONTHLY_BUDGET_USD=${{ vars.MYRA_MONTHLY_BUDGET_USD }}" \
-              "MYRA_COST_PER_1K_INPUT_USD=${{ vars.MYRA_COST_PER_1K_INPUT_USD }}" \
-              "MYRA_COST_PER_1K_OUTPUT_USD=${{ vars.MYRA_COST_PER_1K_OUTPUT_USD }}" \
-              "MYRA_DEEP_COST_PER_1K_INPUT_USD=${{ vars.MYRA_DEEP_COST_PER_1K_INPUT_USD }}" \
-              "MYRA_DEEP_COST_PER_1K_OUTPUT_USD=${{ vars.MYRA_DEEP_COST_PER_1K_OUTPUT_USD }}" \
               "MYRA_GOOGLE_CLIENT_ID=${{ vars.MYRA_GOOGLE_CLIENT_ID }}" \
               "MYRA_GOOGLE_CALENDAR_ID=${{ vars.MYRA_GOOGLE_CALENDAR_ID }}" \
               "MYRA_SUPPORT_NOTIFY_EMAIL=${{ vars.MYRA_SUPPORT_NOTIFY_EMAIL || 'support@lyrashieldai.com' }}" \

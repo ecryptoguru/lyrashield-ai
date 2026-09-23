@@ -15,11 +15,13 @@ import { Prisma, getSystemPrisma } from "@lyrashield/db"
 import { env } from "@lyrashield/config"
 import { MYRA_LIMITS } from "../contracts"
 import { err } from "./errors"
-import { resolveCostRates } from "./provider"
+import { MYRA_LUNA_USD_PER_MILLION } from "./provider"
 
 export function monthlyBudgetCapUsd(): number {
   const override = Number(env.MYRA_MONTHLY_BUDGET_USD)
-  return Number.isFinite(override) && override > 0 ? override : MYRA_LIMITS.monthlyBudgetUsd
+  return Number.isFinite(override) && override > 0
+    ? Math.min(override, MYRA_LIMITS.monthlyBudgetUsd)
+    : MYRA_LIMITS.monthlyBudgetUsd
 }
 
 function currentMonthStart(): Date {
@@ -40,8 +42,12 @@ export async function monthlyGenerationSpendUsd(): Promise<number> {
 
 /** Conservative ceiling: bounded context/user/system input plus the 4k output cap. */
 export function maximumTurnCostUsd(tier: "fast" | "deep"): number {
-  const { inRate, outRate } = resolveCostRates(tier === "deep")
-  const cost = 30 * inRate + (MYRA_LIMITS.maxOutputTokensPerTurn / 1000) * outRate
+  void tier
+  // Cache writes cost more than uncached input; reserve the worst case.
+  const cost =
+    (30_000 * MYRA_LUNA_USD_PER_MILLION.cacheWriteInput +
+      MYRA_LIMITS.maxOutputTokensPerTurn * MYRA_LUNA_USD_PER_MILLION.output) /
+    1_000_000
   return Math.ceil(cost * 10_000) / 10_000
 }
 

@@ -32,13 +32,13 @@ describe("GET /api/myra/status", () => {
     expect(body).toEqual({ public: false, booking: false })
   })
 
-  it("reports booking:true only when writes are open and no allowlist narrows anonymous callers", async () => {
+  it("reports booking:true only with the explicit public-booking flag", async () => {
     env.MYRA_PUBLIC_ENABLED = "1"
     env.MYRA_WRITES_ENABLED = "1"
     let body = await (await GET(statusRequest())).json()
-    expect(body).toEqual({ public: true, booking: true })
+    expect(body).toEqual({ public: true, booking: false })
 
-    // An account allowlist closes anonymous booking even while writes stay on.
+    // The old account allowlist has no bearing on public booking.
     env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     body = await (await GET(statusRequest())).json()
     expect(body).toEqual({ public: true, booking: false })

@@ -15,6 +15,7 @@ const env = vi.hoisted(() => ({
 }))
 
 const proposalRecord = vi.hoisted(() => ({ value: null as unknown }))
+const messageUpdate = vi.hoisted(() => vi.fn(async () => ({ count: 1 })))
 
 vi.mock("@lyrashield/config", () => ({
   env,
@@ -25,7 +26,10 @@ vi.mock("@lyrashield/db", () => ({ prisma: {} }))
 vi.mock("@lyrashield/integrations", () => ({ sendNotification: vi.fn() }))
 vi.mock("./db", () => ({
   withOwnerScope: (_principal: unknown, run: (tx: unknown) => unknown) =>
-    run({ myraOperation: { findUnique: vi.fn(async () => proposalRecord.value) } }),
+    run({
+      myraOperation: { findUnique: vi.fn(async () => proposalRecord.value) },
+      myraMessage: { updateMany: messageUpdate },
+    }),
   ownerWhere: () => ({}),
   withTrustedScope: (_principal: unknown, run: (tx: unknown) => unknown) => run({}),
   MYRA_TRUSTED_MANAGE_TOKEN: "trusted-manage-token",
@@ -53,7 +57,29 @@ vi.mock("./tools/cases", () => ({
 vi.mock("./tools/registry", () => ({ runTool: vi.fn() }))
 vi.mock("../sanitize", () => ({ screenSecrets: (value: unknown) => value }))
 
-const { confirmProposal, handleMessage } = await import("./service")
+const { confirmProposal, handleMessage, rateAssistantMessage } = await import("./service")
+
+describe("Myra answer feedback", () => {
+  beforeEach(() => messageUpdate.mockReset().mockResolvedValue({ count: 1 }))
+
+  it("updates only a completed assistant message inside the owner's scope", async () => {
+    await expect(rateAssistantMessage(userCtx(), "msg-1", "not_helpful")).resolves.toEqual({
+      messageId: "msg-1",
+      rating: "not_helpful",
+    })
+    expect(messageUpdate).toHaveBeenCalledWith({
+      where: { id: "msg-1", role: "ASSISTANT", content: { not: "" } },
+      data: { helpful: false, ratedAt: expect.any(Date) },
+    })
+  })
+
+  it("does not disclose an unavailable or foreign message", async () => {
+    messageUpdate.mockResolvedValue({ count: 0 })
+    await expect(rateAssistantMessage(userCtx(), "foreign", "helpful")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    })
+  })
+})
 
 const anonymousCtx: ResolvedMyraRequest = {
   principal: { kind: "anonymous", publicSessionId: "ps-1" },
@@ -154,13 +180,13 @@ describe("Myra write gate on confirmProposal", () => {
     })
   })
 
-  it("still denies an anonymous submit_support_case confirm when public booking is on", async () => {
+  it("admits an anonymous support-case confirm for the executor's verified-email check", async () => {
     env.MYRA_WRITES_ENABLED = "1"
     env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     env.MYRA_PUBLIC_BOOKING_ENABLED = "1"
     proposalRecord.value = { ...proposalRecord.value, operationName: "submit_support_case" }
-    await expect(confirmProposal(anonymousCtx, "p1")).rejects.toMatchObject({
-      code: "WRITES_DISABLED",
+    await expect(confirmProposal(anonymousCtx, "p1")).resolves.toMatchObject({
+      status: "COMPLETED",
     })
   })
 })

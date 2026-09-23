@@ -11,24 +11,21 @@ vi.mock("next/navigation", () => ({
 describe("MyraPanel shell", () => {
   const html = renderToStaticMarkup(<MyraPanel />)
 
-  it("renders the mobile Help launcher and the labelled panel aside", () => {
-    expect(html).toContain(">Help</button>")
+  it("renders the Ask Myra launcher and the labelled support dialog", () => {
+    expect(html).toContain("Ask Myra</button>")
     expect(html).toContain('id="myra-dash-panel"')
     expect(html).toContain('aria-label="Myra support"')
     expect(html).toContain('aria-controls="myra-dash-panel"')
   })
 
-  it("keeps the Help launcher in the bottom-20 band the activity chip clears", () => {
-    // F5 regression: below lg the WebMCP activity chip stacks at bottom-32 —
-    // Help stays the stable bottom-20 anchor, right-aligned with the chip.
+  it("keeps the launcher above mobile navigation and clear of the activity chip", () => {
+    // Below lg the WebMCP activity chip is at bottom-32 on the opposite edge.
     expect(html).toContain("bottom-20")
-    expect(html).toContain("sm:right-6")
-    expect(html).toContain("lg:hidden")
+    expect(html).toContain("left-4")
+    expect(html).toContain("lg:bottom-6")
   })
 
-  it("is a complementary landmark at rest and a focus-managed dialog when the sheet opens", () => {
-    // Docked/SSR state: a complementary landmark, never a modal.
-    expect(html).toContain('role="complementary"')
+  it("is a focus-managed dialog when the sheet opens", () => {
     expect(html).not.toContain("aria-modal")
 
     // The modal behavior only exists after the launcher opens the sheet, so
@@ -37,7 +34,7 @@ describe("MyraPanel shell", () => {
     // focus returns to the launcher.
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const src = readFileSync(new URL("./myra-panel.tsx", import.meta.url), "utf8")
-    expect(src).toContain('role={isModal ? "dialog" : "complementary"}')
+    expect(src).toContain('role="dialog"')
     expect(src).toContain("aria-modal={isModal || undefined}")
     expect(src).toContain("mobileCloseRef.current?.focus()")
     expect(src).toContain('e.key === "Escape"')

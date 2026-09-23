@@ -19,15 +19,13 @@ export function isMyraAllowedEmail(email: string, allowlist: string): boolean {
 }
 
 /**
- * The single Myra dashboard admission rule: a verified email that is on the
- * account allowlist. Used by the dashboard layout (UI mount) and by
- * myraPrincipalEnabled (API gate) so both enforce identical semantics — an
- * unverified or unlisted account sees no Myra surface anywhere.
+ * The shared Myra dashboard admission rule. All verified accounts may use
+ * the interactive support surface; API and UI enforce the same condition.
  */
 export function myraDashboardAllowed(input: {
   email: string
   emailVerified: boolean
   allowlist: string
 }): boolean {
-  return input.emailVerified && isMyraAllowedEmail(input.email, input.allowlist)
+  return input.emailVerified
 }
