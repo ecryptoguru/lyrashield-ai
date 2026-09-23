@@ -17,9 +17,14 @@ const publicBookingEnabled = process.env.MYRA_PUBLIC_BOOKING_ENABLED === "1"
 const allowedEmails = (process.env.MYRA_ALLOWED_EMAILS ?? "").trim()
 const provider = (process.env.MYRA_CALENDAR_PROVIDER ?? "").trim()
 
+if (process.env.MYRA_PUBLIC_ENABLED === "1" && !process.env.TURNSTILE_SECRET_KEY) {
+  fail("Public Myra requires TURNSTILE_SECRET_KEY for anonymous session verification.")
+}
+
 if (process.env.MYRA_GENERATION_ENABLED === "1") {
   if (process.env.MYRA_PROVIDER !== "azure") fail("Myra generation requires the Azure provider.")
-  if (process.env.MYRA_MODEL !== "gpt-6-luna") fail("Myra generation requires MYRA_MODEL=gpt-6-luna.")
+  if (process.env.MYRA_MODEL !== "gpt-6-luna")
+    fail("Myra generation requires MYRA_MODEL=gpt-6-luna.")
   if (!process.env.MYRA_AZURE_OPENAI_ENDPOINT || !process.env.MYRA_AZURE_OPENAI_API_KEY) {
     fail("Myra generation requires its Azure endpoint and credential.")
   }
