@@ -384,6 +384,28 @@ const mockUrlTarget = {
 }
 
 describe("shouldRecordAgentMinutes", () => {
+  it("labels GPT-6 receipts with the published Azure rate card and open invoice check", async () => {
+    await persistEngineUsageCheckpoint({
+      scanId: "gpt6-pricing",
+      maxBudgetUsd: 1.2,
+      usageExpected: true,
+      llmUsage: { ...completeUsage, model: "azure_ai/gpt-6-luna" },
+    })
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "gpt6-pricing",
+      "llm_usage",
+      "info",
+      expect.any(String),
+      expect.objectContaining({
+        calculatedCostUsd: 0.00015,
+        costSource: "azure_published_rate_card",
+        pricingStatus: "azure_published_rates_invoice_unverified",
+        pricingSource:
+          "https://azure.microsoft.com/en-us/blog/gpt-6-astra-sol-and-luna-for-production-agents-in-microsoft-foundry/",
+      })
+    )
+  })
+
   it("retains known counters without reconciling an incomplete provider checkpoint", async () => {
     const result = await persistEngineUsageCheckpoint({
       scanId: "partial-triage",
