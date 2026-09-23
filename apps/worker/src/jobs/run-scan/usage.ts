@@ -272,8 +272,20 @@ export async function persistEngineUsageCheckpoint(params: {
     pricingMethod = "unavailable"
   }
 
+  const models =
+    usage.modelPricingBuckets?.map((bucket) => bucket.model) ??
+    (usage.singleModel ? [usage.singleModel] : [])
+  const isGpt6Usage =
+    models.length > 0 &&
+    models.every((model) => /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/.test(model.toLowerCase()))
+  const hasGpt6Usage = models.some((model) =>
+    /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/.test(model.toLowerCase())
+  )
+  const accountingComplete = hasGpt6Usage
+    ? llmUsage["accountingComplete"] === true && usage.modelPricingBuckets !== null
+    : llmUsage["accountingComplete"] !== false
   const costsMatch =
-    llmUsage["accountingComplete"] !== false &&
+    accountingComplete &&
     rateCardCostUsd !== null &&
     (usage.engineReportedCostUsd === null ||
       Math.abs(rateCardCostUsd - usage.engineReportedCostUsd) < 0.000001)
@@ -283,12 +295,6 @@ export async function persistEngineUsageCheckpoint(params: {
   // inventing a billable amount would not be.
   const billableCostUsd = costsMatch ? rateCardCostUsd : null
   const billedCostUsd = billableCostUsd === null ? null : Math.min(billableCostUsd, maxBudgetUsd)
-  const models =
-    usage.modelPricingBuckets?.map((bucket) => bucket.model) ??
-    (usage.singleModel ? [usage.singleModel] : [])
-  const isGpt6Usage =
-    models.length > 0 &&
-    models.every((model) => /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/.test(model.toLowerCase()))
   const costSource =
     rateCardCostUsd !== null && usage.engineReportedCostUsd !== null
       ? isGpt6Usage
@@ -301,18 +307,17 @@ export async function persistEngineUsageCheckpoint(params: {
         : usage.engineReportedCostUsd !== null
           ? "engine_reported_unreconciled"
           : "unavailable"
-  const reconciliationStatus =
-    llmUsage["accountingComplete"] === false
-      ? "incomplete_provider_receipts"
-      : modelMixUnpriceable
-        ? "model_mix_unpriceable"
-        : rateCardCostUsd === null
-          ? "unavailable"
-          : usage.engineReportedCostUsd === null
-            ? "rate_card_only"
-            : costsMatch
-              ? "matched"
-              : "mismatch"
+  const reconciliationStatus = !accountingComplete
+    ? "incomplete_provider_receipts"
+    : modelMixUnpriceable
+      ? "model_mix_unpriceable"
+      : rateCardCostUsd === null
+        ? "unavailable"
+        : usage.engineReportedCostUsd === null
+          ? "rate_card_only"
+          : costsMatch
+            ? "matched"
+            : "mismatch"
 
   try {
     await addScanEvent(scanId, "llm_usage", "info", "AI usage counters recorded", {
@@ -322,7 +327,7 @@ export async function persistEngineUsageCheckpoint(params: {
       billedCostUsd,
       costSource,
       reconciliationStatus,
-      accountingComplete: llmUsage["accountingComplete"] !== false,
+      accountingComplete,
       ...(rateCardCostUsd !== null
         ? {
             pricingEffectiveDate: isGpt6Usage
@@ -390,12 +395,11 @@ export async function persistEngineUsageCheckpoint(params: {
     ...(!usageExpected || costsMatch
       ? {}
       : {
-          reconciliationReason:
-            llmUsage["accountingComplete"] === false
-              ? "Some started provider requests have no final usage receipt"
-              : rateCardCostUsd === null
-                ? "Complete per-request model usage buckets were unavailable"
-                : "Engine-reported cost did not match the versioned rate-card calculation",
+          reconciliationReason: !accountingComplete
+            ? "Some started provider requests have no final usage receipt"
+            : rateCardCostUsd === null
+              ? "Complete per-request model usage buckets were unavailable"
+              : "Engine-reported cost did not match the versioned rate-card calculation",
         }),
   }
 }

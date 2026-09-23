@@ -1292,7 +1292,7 @@ export async function runEngine(
     }
   }
 
-  const cmd = buildEngineCommand(config)
+  const cmd = buildEngineCommand(config, timeoutMs)
   const profile = resolveEngineProfile(config.mode)
 
   const absWorkDir = resolve(cmd.workDir)

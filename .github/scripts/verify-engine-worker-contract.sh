@@ -51,7 +51,7 @@ if [[ ! -f "$engine_threat_fixture" || ! -f "$app_threat_fixture" ]] ||
 fi
 
 help="$(cd "$engine_checkout" && uv run lyrashield --help)"
-for flag in --non-interactive --target --scan-mode --instruction --max-budget-usd; do
+for flag in --non-interactive --target --scan-mode --instruction --max-budget-usd --runtime-budget-seconds; do
   if ! grep -Fq -- "$flag" <<< "$help"; then
     echo "Pinned engine is missing worker CLI flag: $flag" >&2
     exit 1

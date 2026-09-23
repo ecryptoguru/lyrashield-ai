@@ -38,6 +38,28 @@ const SAMPLE_VULN = {
 }
 
 describe("mergeLlmUsage", () => {
+  it("requires both GPT-6 phases to certify complete accounting", () => {
+    const phase = (complete: boolean) => ({
+      accountingComplete: complete,
+      request_count: 1,
+      input_tokens: 100,
+      cached_input_tokens: 0,
+      cache_write_input_tokens: 0,
+      output_tokens: 10,
+      total_tokens: 110,
+      request_usage_entries: [
+        {
+          model: "azure_ai/gpt-6-luna",
+          input_tokens: 100,
+          output_tokens: 10,
+          input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+        },
+      ],
+    })
+    expect(mergeLlmUsage(phase(true), phase(true))).toMatchObject({ accountingComplete: true })
+    expect(mergeLlmUsage(phase(true), phase(false))).toMatchObject({ accountingComplete: false })
+  })
+
   it("combines only complete per-request GPT-5.6 accounting buckets", () => {
     const usage = (input: number, output: number) => ({
       request_count: 1,
@@ -530,6 +552,7 @@ describe("output-parser", () => {
           run_id: "run-gpt6-complete",
           status: "completed",
           llm_usage: {
+            accounting_complete: true,
             requests: 1,
             input_tokens: 2000,
             output_tokens: 100,
@@ -545,6 +568,7 @@ describe("output-parser", () => {
         })
       )
       expect(complete?.llm_usage).toMatchObject({
+        accountingComplete: true,
         model_usage_buckets: [
           expect.objectContaining({
             model: "azure_ai/gpt-6-luna",
@@ -557,7 +581,9 @@ describe("output-parser", () => {
         JSON.stringify({
           run_id: "run-gpt6-incomplete",
           status: "completed",
+          model: "azure_ai/gpt-6-luna",
           llm_usage: {
+            accounting_complete: false,
             requests: 1,
             input_tokens: 2000,
             output_tokens: 100,
@@ -573,6 +599,10 @@ describe("output-parser", () => {
         })
       )
       expect(incomplete?.llm_usage).not.toHaveProperty("model_usage_buckets")
+      expect(incomplete?.llm_usage).toMatchObject({
+        model: "azure_ai/gpt-6-luna",
+        accountingComplete: false,
+      })
     })
 
     it("separates long-context request usage from standard request usage", () => {
