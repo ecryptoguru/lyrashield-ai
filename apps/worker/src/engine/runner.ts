@@ -232,10 +232,17 @@ export interface EngineProfile {
 
 function assertSupportedRepositoryModel(model: string | undefined): void {
   const normalizedModel = model?.toLowerCase().replaceAll("_", "-")
-  if (
-    normalizedModel &&
-    !/^(?:(?:openai|azure|azure-ai)(?:\/[^/]+)?\/)?gpt-6-(?:sol|luna)$/.test(normalizedModel)
-  ) {
+  if (!normalizedModel) return
+  const parts = normalizedModel.split("/")
+  const deployment = parts.pop()
+  const provider = parts.shift()
+  const validProvider =
+    parts.length === 0 && provider === undefined
+      ? true
+      : (provider === "openai" || provider === "azure" || provider === "azure-ai") &&
+        parts.length <= 1 &&
+        parts.every(Boolean)
+  if (!validProvider || (deployment !== "gpt-6-sol" && deployment !== "gpt-6-luna")) {
     throw new Error("LyraShield scans require a GPT-6 Sol or Luna deployment")
   }
 }
