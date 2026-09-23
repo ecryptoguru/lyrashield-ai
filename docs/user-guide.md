@@ -193,18 +193,18 @@ The authenticated dashboard exposes one-off review depths that depend on the sel
 
 ### Repository targets
 
-| User option          | Backend mode | Repository model route                       | Maximum duration |
-| -------------------- | ------------ | -------------------------------------------- | ---------------: |
-| Release Check        | QUICK        | GPT-5.6 Luna, medium                         |           15 min |
-| Code Review          | STANDARD     | GPT-5.6 Luna, medium                         |           15 min |
-| Deep Security Review | DEEP         | GPT-5.6 Terra/medium + Luna/high specialists |           45 min |
-| Weekly Monitor       | QUICK        | GPT-5.6 Luna, medium                         |           15 min |
+| User option          | Backend mode | Repository model route                   | Maximum duration |
+| -------------------- | ------------ | ---------------------------------------- | ---------------: |
+| Release Check        | QUICK        | GPT-6 Luna, medium                       |           15 min |
+| Code Review          | STANDARD     | GPT-6 Luna, medium                       |           23 min |
+| Deep Security Review | DEEP         | GPT-6 Sol/medium + Luna/high specialists |           45 min |
+| Weekly Monitor       | QUICK        | GPT-6 Luna, medium                       |           15 min |
 
-For an authorized repository target, Deep is the intrusive agentic pentest profile: it may execute and investigate code inside LyraShield's isolated sandbox. That authorization does not extend to attacking a deployed URL or API. URL/API Deep is a separate deterministic, non-mutating behavior profile described below.
+For an authorized repository target, Deep is the intrusive agentic pentest profile: it may execute and investigate code inside LyraShield's isolated sandbox. That authorization does not extend to attacking a deployed URL or API. URL/API Deep is a separate non-mutating, engine-backed behavior profile described below.
 
 ### Web App and API targets
 
-Web App and API targets use the pinned deterministic URL scanner. The external AI engine is not invoked for these targets. The available modes are:
+Web App and API Safe reviews use deterministic checks only. Standard and Deep also run the pinned AI engine against the verified target through a scan-scoped relay, with deterministic checks retained. The available modes are:
 
 | User option               | Target type | Backend mode | Requirements                          |
 | ------------------------- | ----------- | ------------ | ------------------------------------- |
@@ -215,7 +215,7 @@ Web App and API targets use the pinned deterministic URL scanner. The external A
 | Contract Review           | API         | STANDARD     | An OpenAPI document URL on the target |
 | Contract Behavior Review  | API         | DEEP         | An OpenAPI document URL on the target |
 
-These reviews are non-mutating. Surface and Expanded reviews use passive GET requests; Behavioral Surface Review and Contract Behavior Review may add bounded GET, HEAD, OPTIONS and CORS behavior probes within the selected profile. They do not authenticate, exploit, fuzz or enumerate arbitrary paths outside the configured scope. Contract and Contract Behavior reviews use the supplied OpenAPI document to bound the operations reviewed.
+These reviews are non-mutating. Safe Surface Reviews use passive GET requests; Standard and Deep may add bounded GET, HEAD, OPTIONS and CORS behavior probes within the selected profile through the verified-target relay. They do not authenticate, exploit, fuzz or enumerate arbitrary paths outside the configured scope. Contract and Contract Behavior reviews use the supplied OpenAPI document to bound the operations reviewed.
 
 For repository targets, `SAFE` resolves to `QUICK` and `CUSTOM` resolves to `DEEP`. For Web App and API targets, `QUICK` resolves to `SAFE` for compatibility, while `CUSTOM` is unsupported. These aliases do not create a fourth product capability. Durations are hard ceilings, not completion promises.
 
@@ -598,11 +598,11 @@ For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai
 
 The public marketing site, Lite Check, browser-local tools, methodology and content are live. The authenticated dashboard is open for registration; its dedicated BullMQ/engine worker remains a separate controlled full-scan boundary. Ordinary web requests use a restricted `NOBYPASSRLS` database role and repository scan admission fails closed when the worker heartbeat is absent. Production Standard scan `cmt9el7p7000001hdjnjo90wk` completed with Luna/medium-only routing, reconciled accounting, exact source identity, complete repository scanner-family receipts, 217/217 eligible AI App Security files scanned and a sealed manifest. Its 25 retained findings remain unverified. This target- and revision-scoped result is bounded runtime proof, not a security guarantee or universal coverage proof; an approved Deep/Terra run remains a separate gate.
 
-The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized Luna/Terra deployments, actionable Azure alerts and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
+The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized GPT-6 Luna/Sol deployments, actionable Azure alerts and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
 
 Billing, Local/Desktop licensing and the affiliate application/ledger are implemented. Razorpay Live is activated with the matching INR Cloud catalog and an enabled production webhook; Polar Live has its private Cloud/pack/Local catalog and lifecycle webhook. Historical Polar Sandbox and Razorpay Test Mode provider receipts are retained and their isolated deployment has been removed. No live checkout or payment was exercised. Production desktop distribution proof, payout API provisioning and the public affiliate opening remain controlled release gates.
 
-Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot and enterprise identity/deployment controls are not currently user features.
+Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Sol cascade, Security Copilot and enterprise identity/deployment controls are not currently user features.
 
 LyraShield does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework) or "adversarial robustness proven." Each requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate. See `docs/whitepaper.md` §9 for the claims boundary.
 
@@ -627,7 +627,7 @@ The private AI assurance workspace keeps operational evidence, an AI system prof
 - Check whether the target already has an active scan.
 - If the message says the scan service is unavailable, no scan was launched. Wait for the operator to restore worker readiness, then retry once.
 - During a scheduled egress pin change, an existing scan may continue while new admission fails closed. Do not start duplicate scans; wait for readiness to recover and confirm the original scan's terminal state first.
-- For repository scans, the operator should verify `/api/ready/scans`, Redis queue connectivity, the GPT-5.6 deployment, OpenAI/Azure credentials, sandbox image and evidence storage. For Azure Foundry, verify that the deployment passes the engine provider-contract baseline; leave programmatic tool calling disabled unless its explicit capability gate passes.
+- For repository scans, the operator should verify `/api/ready/scans`, Redis queue connectivity, the GPT-6 Luna/Sol deployments, Azure credentials, sandbox image and evidence storage. For Azure Foundry, verify that the deployment passes the engine provider-contract baseline; leave programmatic tool calling disabled unless its explicit capability gate passes.
 - Review the returned error and scan events. An enqueue race may create a visible `FAILED` scan with a retained queue event, but it will never remain silently queued or be replayed automatically.
 
 ### A scan has no findings

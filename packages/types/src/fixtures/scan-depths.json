@@ -30,8 +30,8 @@
       "label": "Code Review",
       "description": "Broader repository and dependency analysis.",
       "executionLimits": {
-        "maxDurationMinutes": 15,
-        "maxEngineMinutes": 12
+        "maxDurationMinutes": 23,
+        "maxEngineMinutes": 20
       },
       "queueReserve": {
         "scannerReserveMinutes": 3
