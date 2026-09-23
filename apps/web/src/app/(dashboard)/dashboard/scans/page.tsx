@@ -88,7 +88,7 @@ export default async function ScansPage({
   const limit = 25
   // Scan rows come from listScans so the SSR page and the /api/scans poll share
   // one query shape and one projection — they previously drifted apart.
-  const [targets, { items, nextCursor }] = await Promise.all([
+  const [listedTargets, { items, nextCursor }] = await Promise.all([
     prisma.target.findMany({
       where: { workspaceId, deletedAt: null },
       select: { id: true, name: true, type: true, url: true, apiSpecUrl: true, repoFullName: true },
@@ -104,6 +104,29 @@ export default async function ScansPage({
       limit,
     }),
   ])
+  // A recent scan can reference a target beyond the first 200 picker entries.
+  // Include those exact workspace-owned targets so Retry remains actionable.
+  const missingTargetIds = [
+    ...new Set(
+      [params.target, ...items.map((scan) => scan.target?.id)].filter((id): id is string =>
+        Boolean(id)
+      )
+    ),
+  ].filter((id) => !listedTargets.some((target) => target.id === id))
+  const retryTargets = missingTargetIds.length
+    ? await prisma.target.findMany({
+        where: { workspaceId, deletedAt: null, id: { in: missingTargetIds } },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          url: true,
+          apiSpecUrl: true,
+          repoFullName: true,
+        },
+      })
+    : []
+  const targets = [...listedTargets, ...retryTargets]
 
   // W2-07 invalidation: a stale target param (deleted target, workspace
   // switch) must not silently filter the list to nothing.
@@ -163,6 +186,7 @@ export default async function ScansPage({
         initialNextCursor={effectiveNextCursor}
         initialShowCreate={autoOpen}
         initialTargetId={recoveryTarget?.id}
+        initialRecoveryUnavailable={autoOpen && Boolean(params.target) && !recoveryTarget}
         initialGoal={params.goal}
         initialMode={params.mode}
         initialStateFilter={stateFilter}

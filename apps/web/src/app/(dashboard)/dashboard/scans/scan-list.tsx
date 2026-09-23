@@ -10,7 +10,6 @@ import { getGoalLabel, modeLabel } from "@/lib/labels"
 import { getScanPresentation, isActiveScan, type ScanStateFilter } from "@/lib/scan-presentation"
 import { RUN_PLURAL, RUN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
 import { safeApiErrorMessage } from "@/components/api-error-card"
-import { scanRecoveryHref } from "./scans-client.utils"
 import type { ScanItem } from "./scan-types"
 
 export function ScanList({
@@ -23,6 +22,7 @@ export function ScanList({
   hasTargets,
   onClearFilters,
   onShowCreate,
+  onRetryScan,
   cancelling,
   removing,
   onCancelScan,
@@ -38,6 +38,7 @@ export function ScanList({
   hasTargets: boolean
   onClearFilters: () => void
   onShowCreate: () => void
+  onRetryScan: (scan: ScanItem) => void
   cancelling: string | null
   removing: string | null
   onCancelScan: (scanId: string) => Promise<void>
@@ -157,18 +158,16 @@ export function ScanList({
                         />
                       ))}
                     {!active && needsAttention && scan.target && (
-                      <Link
-                        href={scanRecoveryHref({
-                          targetId: scan.target.id,
-                          goal: scan.goal,
-                          mode: scan.mode,
-                        })}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onRetryScan(scan)}
                         aria-label={`Retry setup for ${scan.target?.name ?? "scan"}`}
-                        className={buttonVariants({ variant: "outline", size: "sm" })}
                       >
                         <RotateCcw className="mr-1 h-4 w-4" aria-hidden="true" />
                         Retry
-                      </Link>
+                      </Button>
                     )}
                     {!active &&
                       !needsAttention &&
