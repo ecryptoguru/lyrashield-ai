@@ -70,6 +70,7 @@ export async function searchKnowledge(
            ts_rank("searchVector", websearch_to_tsquery('english', ${broadQuery})) AS rank
     FROM myra_knowledge_entries
     WHERE status = 'ACTIVE'
+      AND "releaseId" IN (SELECT id FROM myra_knowledge_releases WHERE status = 'active')
       AND ${audienceFilter}
       AND ${roleFilter}
       AND "searchVector" @@ websearch_to_tsquery('english', ${broadQuery})
@@ -115,7 +116,7 @@ export async function listReviewQueue(
   db: MyraDb = prisma
 ): Promise<{ id: string; title: string; topic: string; reviewAfter: Date | null }[]> {
   return db.myraKnowledgeEntry.findMany({
-    where: { status: "ACTIVE", reviewAfter: { lte: new Date() } },
+    where: { status: "ACTIVE", release: { status: "active" }, reviewAfter: { lte: new Date() } },
     orderBy: { reviewAfter: "asc" },
     take: Math.min(opts.limit ?? 50, 200),
     select: { id: true, title: true, topic: true, reviewAfter: true },

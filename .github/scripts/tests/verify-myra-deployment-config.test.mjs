@@ -9,6 +9,7 @@ const baseEnv = {
   MYRA_WRITES_ENABLED: "0",
   MYRA_PUBLIC_BOOKING_ENABLED: "0",
   MYRA_DASHBOARD_ENABLED: "0",
+  MYRA_PUBLIC_ENABLED: "0",
   MYRA_GENERATION_ENABLED: "0",
   MYRA_PROVIDER: "mock",
   MYRA_MODEL: "",
@@ -23,6 +24,7 @@ const baseEnv = {
   MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT: "",
   MYRA_MOCK_CALENDAR_PENDING_CONFERENCE: "",
   MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT: "",
+  TURNSTILE_SECRET_KEY: "",
 }
 
 const run = (env = {}) =>
@@ -63,6 +65,14 @@ test("allows all verified accounts without an email allowlist", () => {
   assert.match(run({ MYRA_DASHBOARD_ENABLED: "1" }), /valid/)
   assert.match(run({ ...googleEnv, MYRA_ALLOWED_EMAILS: "" }), /valid/)
   fails({ MYRA_ALLOWED_EMAILS: "not-an-email" }, "unique, valid")
+})
+
+test("requires Turnstile verification for public Myra", () => {
+  fails({ MYRA_PUBLIC_ENABLED: "1" }, "TURNSTILE_SECRET_KEY")
+  assert.match(
+    run({ MYRA_PUBLIC_ENABLED: "1", TURNSTILE_SECRET_KEY: "configured-secret" }),
+    /valid/
+  )
 })
 
 test("requires one exact Azure Luna deployment before enabling generation", () => {

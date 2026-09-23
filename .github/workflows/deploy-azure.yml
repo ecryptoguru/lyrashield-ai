@@ -360,6 +360,7 @@ jobs:
           MYRA_MODEL: ${{ vars.MYRA_MODEL }}
           MYRA_AZURE_OPENAI_ENDPOINT: ${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}
           MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
           MYRA_ALLOWED_EMAILS: ${{ vars.MYRA_ALLOWED_EMAILS }}
           MYRA_CALENDAR_PROVIDER: ${{ vars.MYRA_CALENDAR_PROVIDER }}
           MYRA_GOOGLE_CLIENT_ID: ${{ vars.MYRA_GOOGLE_CLIENT_ID }}
@@ -665,6 +666,7 @@ jobs:
       - name: Sync Myra secrets to app Container App
         env:
           MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
           MYRA_GOOGLE_CLIENT_SECRET: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET }}
           MYRA_GOOGLE_REFRESH_TOKEN: ${{ secrets.MYRA_GOOGLE_REFRESH_TOKEN }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -688,6 +690,7 @@ jobs:
             fi
           }
           set_myra_secret "myra-aoai-key" "$MYRA_AZURE_OPENAI_API_KEY"
+          set_myra_secret "turnstile-secret" "$TURNSTILE_SECRET_KEY"
           set_myra_secret "myra-g-secret" "$MYRA_GOOGLE_CLIENT_SECRET"
           set_myra_secret "myra-g-refresh" "$MYRA_GOOGLE_REFRESH_TOKEN"
 
@@ -895,6 +898,7 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
           MYRA_GOOGLE_CLIENT_SECRET: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET }}
           MYRA_GOOGLE_REFRESH_TOKEN: ${{ secrets.MYRA_GOOGLE_REFRESH_TOKEN }}
         run: |
@@ -912,6 +916,9 @@ jobs:
           MYRA_ENV=()
           if [ -n "${MYRA_AZURE_OPENAI_API_KEY}" ]; then
             MYRA_ENV+=("MYRA_AZURE_OPENAI_API_KEY=secretref:myra-aoai-key")
+          fi
+          if [ -n "${TURNSTILE_SECRET_KEY}" ]; then
+            MYRA_ENV+=("TURNSTILE_SECRET_KEY=secretref:turnstile-secret")
           fi
           if [ -n "${MYRA_GOOGLE_CLIENT_SECRET}" ]; then
             MYRA_ENV+=("MYRA_GOOGLE_CLIENT_SECRET=secretref:myra-g-secret")

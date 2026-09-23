@@ -292,11 +292,11 @@ export async function persistEngineUsageCheckpoint(params: {
   const costSource =
     rateCardCostUsd !== null && usage.engineReportedCostUsd !== null
       ? isGpt6Usage
-        ? "openai_reference_and_engine_reported"
+        ? "azure_published_rate_card_and_engine_reported"
         : "rate_card_and_engine_reported"
       : rateCardCostUsd !== null
         ? isGpt6Usage
-          ? "openai_reference_rate_card"
+          ? "azure_published_rate_card"
           : "azure_rate_card"
         : usage.engineReportedCostUsd !== null
           ? "engine_reported_unreconciled"
@@ -329,7 +329,7 @@ export async function persistEngineUsageCheckpoint(params: {
               ? GPT_6_PRICING_EFFECTIVE_DATE
               : GPT_56_PRICING_EFFECTIVE_DATE,
             pricingSource: isGpt6Usage ? GPT_6_PRICING_SOURCE : GPT_56_PRICING_SOURCE,
-            ...(isGpt6Usage ? { pricingStatus: "openai_reference_azure_unverified" } : {}),
+            ...(isGpt6Usage ? { pricingStatus: "azure_published_rates_invoice_unverified" } : {}),
           }
         : {}),
     })
