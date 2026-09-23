@@ -5,7 +5,7 @@
  * (route handlers) apply requirePlatformAdmin first.
  */
 import { randomUUID } from "node:crypto"
-import { env, isMyraAllowedEmail } from "@lyrashield/config"
+import { env } from "@lyrashield/config"
 import { prisma } from "@lyrashield/db"
 import { sendNotification } from "@lyrashield/integrations"
 import { MYRA_LIMITS } from "../contracts"
@@ -68,16 +68,12 @@ function assertWritesAllowed(ctx: ResolvedMyraRequest, operationName: string): v
   if (env.MYRA_WRITES_ENABLED !== "1") {
     throw err("WRITES_DISABLED", "Actions are temporarily disabled.")
   }
-  // An empty allowlist keeps the non-production shape where every principal
-  // may write; production always sets one when writes are on.
-  if (!env.MYRA_ALLOWED_EMAILS) return
   const principal = ctx.principal
   const allowed =
     principal.kind === "anonymous"
-      ? env.MYRA_PUBLIC_BOOKING_ENABLED === "1" && PUBLIC_BOOKING_OPERATIONS.has(operationName)
-      : principal.kind === "user" &&
-        principal.emailVerified &&
-        isMyraAllowedEmail(principal.email, env.MYRA_ALLOWED_EMAILS)
+      ? operationName === "submit_support_case" ||
+        (env.MYRA_PUBLIC_BOOKING_ENABLED === "1" && PUBLIC_BOOKING_OPERATIONS.has(operationName))
+      : principal.kind === "user" && principal.emailVerified
   if (!allowed) {
     throw err("WRITES_DISABLED", "Actions are temporarily disabled.")
   }
@@ -274,6 +270,23 @@ export async function* handleMessage(
       })
     ).catch(() => {})
   }
+}
+
+/** Rate one completed assistant answer inside the caller's existing RLS scope. */
+export async function rateAssistantMessage(
+  ctx: ResolvedMyraRequest,
+  messageId: string,
+  rating: "helpful" | "not_helpful"
+): Promise<{ messageId: string; rating: "helpful" | "not_helpful" }> {
+  if (ctx.principal.kind === "operator") throw err("FORBIDDEN", "Forbidden")
+  const updated = await withOwnerScope(ctx.principal, (tx) =>
+    tx.myraMessage.updateMany({
+      where: { id: messageId, role: "ASSISTANT", content: { not: "" } },
+      data: { helpful: rating === "helpful", ratedAt: new Date() },
+    })
+  )
+  if (updated.count !== 1) throw err("NOT_FOUND", "Answer not found.")
+  return { messageId, rating }
 }
 
 // ─── Proposal confirm/cancel (route-facing) ───────────────────────────────
@@ -596,6 +609,12 @@ export async function listOperatorCases(
   })
   const cases = rows.slice(0, take)
   const nextCursor = rows.length > take ? cases[cases.length - 1]!.id : null
+  const negativeFeedback = await db.myraMessage.findMany({
+    where: { helpful: false, role: "ASSISTANT" },
+    orderBy: [{ ratedAt: "desc" }, { id: "desc" }],
+    take: 20,
+    select: { id: true, conversationId: true, content: true, ratedAt: true },
+  })
   await auditEvent(
     "operator",
     {
@@ -606,7 +625,16 @@ export async function listOperatorCases(
     },
     db
   )
-  return { cases, nextCursor }
+  return {
+    cases,
+    nextCursor,
+    negativeFeedback: negativeFeedback.map((message) => ({
+      id: message.id,
+      conversationId: message.conversationId,
+      excerpt: message.content.slice(0, 300),
+      ratedAt: message.ratedAt,
+    })),
+  }
 }
 
 export async function getOperatorCase(operatorId: string, caseId: string, db: MyraDb = prisma) {

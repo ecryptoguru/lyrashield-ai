@@ -417,18 +417,12 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
       )
         ? ctx.routeContext
         : null
-    const tier = ["diagnostics", "flow_start", "flow_resume", "support_case", "evidence"].includes(
-      intent
-    )
-      ? "deep"
-      : "fast"
     if (reserves) {
-      await reserveGenerationBudget(traceId, maximumTurnCostUsd(tier))
+      await reserveGenerationBudget(traceId, maximumTurnCostUsd())
     }
     const generated = await provider.generate({
       system: systemPrompt(ctx),
       messages: [{ role: "user", content: sanitizeInstructionInput(text) }],
-      tier,
       context: {
         intent,
         toolOutputs: step.toolOutputs,

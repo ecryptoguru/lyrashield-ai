@@ -14,13 +14,17 @@ const fail = (message) => {
 
 const writesEnabled = process.env.MYRA_WRITES_ENABLED === "1"
 const publicBookingEnabled = process.env.MYRA_PUBLIC_BOOKING_ENABLED === "1"
-const dashboardEnabled = process.env.MYRA_DASHBOARD_ENABLED === "1"
 const allowedEmails = (process.env.MYRA_ALLOWED_EMAILS ?? "").trim()
 const provider = (process.env.MYRA_CALENDAR_PROVIDER ?? "").trim()
 
-if ((dashboardEnabled || writesEnabled) && !allowedEmails) {
-  fail("MYRA_ALLOWED_EMAILS is required when the Myra dashboard or writes are enabled.")
+if (process.env.MYRA_GENERATION_ENABLED === "1") {
+  if (process.env.MYRA_PROVIDER !== "azure") fail("Myra generation requires the Azure provider.")
+  if (process.env.MYRA_MODEL !== "gpt-6-luna") fail("Myra generation requires MYRA_MODEL=gpt-6-luna.")
+  if (!process.env.MYRA_AZURE_OPENAI_ENDPOINT || !process.env.MYRA_AZURE_OPENAI_API_KEY) {
+    fail("Myra generation requires its Azure endpoint and credential.")
+  }
 }
+
 if (allowedEmails) {
   const emails = allowedEmails.split(",").map((email) => email.trim().toLowerCase())
   if (

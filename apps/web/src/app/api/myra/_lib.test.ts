@@ -13,13 +13,12 @@ vi.mock("@lyrashield/config", () => ({
   env,
   isMyraAllowedEmail: (email: string, allowlist: string) =>
     allowlist.split(",").includes(email.trim().toLowerCase()),
-  myraDashboardAllowed: (input: { email: string; emailVerified: boolean; allowlist: string }) =>
-    input.emailVerified && input.allowlist.split(",").includes(input.email.trim().toLowerCase()),
+  myraDashboardAllowed: (input: { emailVerified: boolean }) => input.emailVerified,
 }))
 
 const { myraPrincipalEnabled, myraWritesEnabled } = await import("./_lib")
 
-describe("Myra account rollout gate", () => {
+describe("Myra verified-account gate", () => {
   beforeEach(() => {
     env.MYRA_DASHBOARD_ENABLED = "1"
     env.MYRA_WRITES_ENABLED = "1"
@@ -27,7 +26,7 @@ describe("Myra account rollout gate", () => {
     env.MYRA_PUBLIC_BOOKING_ENABLED = "0"
   })
 
-  it("admits only the verified allowlisted user", () => {
+  it("admits every verified user", () => {
     const ankit = {
       kind: "user" as const,
       accountId: "account-1",
@@ -39,7 +38,7 @@ describe("Myra account rollout gate", () => {
     }
     expect(myraPrincipalEnabled(ankit)).toBe(true)
     expect(myraWritesEnabled(ankit)).toBe(true)
-    expect(myraPrincipalEnabled({ ...ankit, email: "other@example.com" })).toBe(false)
+    expect(myraPrincipalEnabled({ ...ankit, email: "other@example.com" })).toBe(true)
     expect(myraWritesEnabled({ ...ankit, emailVerified: false })).toBe(false)
     expect(myraWritesEnabled()).toBe(false)
   })
@@ -60,11 +59,12 @@ describe("Myra account rollout gate", () => {
     expect(myraWritesEnabled(anonymous)).toBe(false)
   })
 
-  it("denies anonymous writes while an allowlist is set", () => {
+  it("permits verified-email support cases but not anonymous booking", () => {
     env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     const anonymous = { kind: "anonymous" as const, publicSessionId: "ps-1" }
-    expect(myraWritesEnabled(anonymous)).toBe(false)
+    expect(myraWritesEnabled(anonymous)).toBe(true)
     expect(myraWritesEnabled(anonymous, "book_demo")).toBe(false)
+    expect(myraWritesEnabled(anonymous, "submit_support_case")).toBe(true)
   })
 
   it("admits an anonymous principal only for public-booking operations when the flag is on", () => {
@@ -76,10 +76,10 @@ describe("Myra account rollout gate", () => {
     expect(myraWritesEnabled(anonymous)).toBe(true)
     expect(myraWritesEnabled(anonymous, "book_demo")).toBe(true)
     expect(myraWritesEnabled(anonymous, "manage_own_demo")).toBe(true)
-    // Every other operation keeps the deny — case replies and support cases
-    // never go public under the booking flag.
+    // Case replies remain denied; support cases require verified reply email
+    // in the executor, independent of booking admission.
     expect(myraWritesEnabled(anonymous, "send_case_reply")).toBe(false)
-    expect(myraWritesEnabled(anonymous, "submit_support_case")).toBe(false)
+    expect(myraWritesEnabled(anonymous, "submit_support_case")).toBe(true)
   })
 
   it("admits user writes when the allowlist is empty outside production", () => {
@@ -94,7 +94,6 @@ describe("Myra account rollout gate", () => {
       role: null,
     }
     expect(myraWritesEnabled(dev)).toBe(true)
-    // The dashboard gate stays closed without an allowlist entry regardless.
-    expect(myraPrincipalEnabled(dev)).toBe(false)
+    expect(myraPrincipalEnabled(dev)).toBe(true)
   })
 })

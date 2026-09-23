@@ -30,6 +30,9 @@ interface Turn {
   id: number
   userText: string
   parts: Part[]
+  assistantMessageId?: string
+  rating?: "helpful" | "not_helpful"
+  ratingPending?: boolean
   stopped?: boolean
   error?: string | null
   completedAction?: boolean
@@ -178,6 +181,7 @@ export function useMyraPanel(
           return
         case "done":
           setActivity(null)
+          updateTurn(turnId, (t) => ({ ...t, assistantMessageId: ev.messageId }))
           if (lastTraceRef.current) {
             const traceId = lastTraceRef.current
             updateTurn(turnId, (t) => ({
@@ -498,6 +502,21 @@ export function useMyraPanel(
     proposalStates,
   }
 
+  const rateAnswer = useCallback(
+    async (turnId: number, messageId: string, rating: "helpful" | "not_helpful") => {
+      updateTurn(turnId, (turn) => ({ ...turn, ratingPending: true }))
+      try {
+        await getClient().rateAnswer(messageId, rating)
+        updateTurn(turnId, (turn) => ({ ...turn, rating, ratingPending: false }))
+        announce("Thanks for the feedback.")
+      } catch {
+        updateTurn(turnId, (turn) => ({ ...turn, ratingPending: false }))
+        announce("Feedback could not be saved. Try again.")
+      }
+    },
+    [announce, getClient, updateTurn]
+  )
+
   return {
     turns,
     input,
@@ -517,5 +536,6 @@ export function useMyraPanel(
     pickSuggestion,
     submitCaseForm,
     componentContext,
+    rateAnswer,
   }
 }

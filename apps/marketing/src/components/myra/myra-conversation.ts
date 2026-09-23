@@ -203,6 +203,38 @@ export function createMyraConversation(options: {
           const host = turn.answerEl?.parentElement ?? turn.root
           add(host, el("p", "myra-trace", `trace ${lastTraceId}`))
         }
+        if (turn.answerBuf.trim()) {
+          const feedback = el("div", "myra-feedback")
+          add(feedback, el("span", "myra-meta", "Was this helpful?"))
+          const buttons = (["helpful", "not_helpful"] as const).map((rating) => {
+            const button = el(
+              "button",
+              "myra-btn",
+              rating === "helpful" ? "Yes" : "No"
+            ) as HTMLButtonElement
+            button.type = "button"
+            button.setAttribute("aria-pressed", "false")
+            button.addEventListener("click", () => {
+              for (const item of buttons) item.disabled = true
+              void client
+                .rateAnswer(ev.messageId, rating)
+                .then(() => {
+                  for (const item of buttons) {
+                    item.disabled = false
+                    item.setAttribute("aria-pressed", String(item === button))
+                  }
+                  announce("Thanks for the feedback.")
+                })
+                .catch(() => {
+                  for (const item of buttons) item.disabled = false
+                  announce("Feedback could not be saved. Try again.")
+                })
+            })
+            return button
+          })
+          add(feedback, ...buttons)
+          add(turn.root, feedback)
+        }
         announce("Myra finished responding.")
         return
       case "error":

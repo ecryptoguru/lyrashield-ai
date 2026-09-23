@@ -9,6 +9,11 @@ const baseEnv = {
   MYRA_WRITES_ENABLED: "0",
   MYRA_PUBLIC_BOOKING_ENABLED: "0",
   MYRA_DASHBOARD_ENABLED: "0",
+  MYRA_GENERATION_ENABLED: "0",
+  MYRA_PROVIDER: "mock",
+  MYRA_MODEL: "",
+  MYRA_AZURE_OPENAI_ENDPOINT: "",
+  MYRA_AZURE_OPENAI_API_KEY: "",
   MYRA_ALLOWED_EMAILS: "",
   MYRA_CALENDAR_PROVIDER: "mock",
   MYRA_GOOGLE_CLIENT_ID: "",
@@ -54,10 +59,26 @@ test("accepts the mock provider when writes are disabled", () => {
   assert.match(run(), /Myra deployment configuration is valid/)
 })
 
-test("requires an account allowlist when the dashboard or writes are enabled", () => {
-  fails({ MYRA_DASHBOARD_ENABLED: "1" }, "MYRA_ALLOWED_EMAILS")
-  fails({ ...googleEnv, MYRA_ALLOWED_EMAILS: "" }, "MYRA_ALLOWED_EMAILS")
+test("allows all verified accounts without an email allowlist", () => {
+  assert.match(run({ MYRA_DASHBOARD_ENABLED: "1" }), /valid/)
+  assert.match(run({ ...googleEnv, MYRA_ALLOWED_EMAILS: "" }), /valid/)
   fails({ MYRA_ALLOWED_EMAILS: "not-an-email" }, "unique, valid")
+})
+
+test("requires one exact Azure Luna deployment before enabling generation", () => {
+  const enabled = { MYRA_GENERATION_ENABLED: "1", MYRA_PROVIDER: "azure" }
+  fails(enabled, "MYRA_MODEL")
+  fails({ ...enabled, MYRA_MODEL: "gpt-5.6-luna" }, "MYRA_MODEL")
+  fails({ ...enabled, MYRA_MODEL: "gpt-6-luna" }, "Azure endpoint and credential")
+  assert.match(
+    run({
+      ...enabled,
+      MYRA_MODEL: "gpt-6-luna",
+      MYRA_AZURE_OPENAI_ENDPOINT: "https://example.openai.azure.com",
+      MYRA_AZURE_OPENAI_API_KEY: "secret",
+    }),
+    /valid/
+  )
 })
 
 test("rejects writes enabled against the mock calendar provider", () => {

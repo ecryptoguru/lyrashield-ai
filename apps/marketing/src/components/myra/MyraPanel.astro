@@ -8,13 +8,13 @@ import { MYRA_COPY } from "@lyrashield/myra"
   hidden
   aria-expanded="false"
   aria-controls="myra-panel"
-  class="fixed bottom-5 right-5 z-40 inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-bg-raised px-4 font-mono text-xs font-semibold tracking-[.12em] text-text shadow-lg hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+  class="fixed bottom-5 left-5 z-40 inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-bg-raised px-4 text-sm font-semibold text-text shadow-[0_12px_38px_-14px_rgba(0,0,0,.45)] transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:border-accent hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg motion-reduce:transform-none"
   style="margin-bottom: env(safe-area-inset-bottom)"
 >
   <svg aria-hidden="true" viewBox="0 0 16 16" class="size-4" fill="none" stroke="currentColor" stroke-width="1.5">
     <path d="M14 9.5a1.5 1.5 0 0 1-1.5 1.5H5l-3 3V3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5Z" stroke-linejoin="round" />
   </svg>
-  Help
+  Ask Myra
 </button>
 
 <!-- Keep the challenge host outside the hidden panel. A queued token attempt
@@ -28,7 +28,7 @@ import { MYRA_COPY } from "@lyrashield/myra"
   aria-label="Return to Myra support"
   class="fixed size-px overflow-hidden opacity-0"
 ></button>
-<div data-myra-turnstile class="fixed bottom-20 right-5 z-[60]"></div>
+<div data-myra-turnstile class="fixed bottom-20 left-5 z-[60]"></div>
 
 <section
   id="myra-panel"
@@ -36,19 +36,24 @@ import { MYRA_COPY } from "@lyrashield/myra"
   role="dialog"
   aria-modal="false"
   aria-label="Myra support"
-  class="fixed inset-0 z-50 flex flex-col bg-bg sm:inset-auto sm:bottom-6 sm:right-6 sm:z-40 sm:h-[min(560px,calc(100dvh-3rem))] sm:w-[min(400px,calc(100vw-2rem))] sm:rounded-xl sm:border sm:border-border sm:bg-bg-raised sm:shadow-lg"
+  class="fixed inset-0 z-50 flex flex-col bg-bg sm:inset-auto sm:bottom-6 sm:left-6 sm:z-40 sm:h-[min(620px,calc(100dvh-3rem))] sm:w-[min(420px,calc(100vw-2rem))] sm:overflow-hidden sm:rounded-2xl sm:border sm:border-border sm:bg-bg-raised sm:shadow-[0_28px_90px_-30px_rgba(0,0,0,.65)]"
 >
-  <header class="flex items-center gap-2 border-b border-border px-4 py-3" style="padding-top: max(0.75rem, env(safe-area-inset-top))">
-    <h2 class="font-mono text-xs font-semibold tracking-[.14em] text-text uppercase">
-      {MYRA_COPY.header}
-    </h2>
+  <header class="flex items-center gap-3 border-b border-border bg-bg-raised px-4 py-3" style="padding-top: max(0.875rem, env(safe-area-inset-top))">
+    <span aria-hidden="true" class="grid size-10 shrink-0 place-items-center rounded-xl border border-accent bg-accent-dim text-accent">
+      <svg viewBox="0 0 16 16" class="size-5" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 9.5a1.5 1.5 0 0 1-1.5 1.5H5l-3 3V3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5Z" stroke-linejoin="round" /></svg>
+    </span>
+    <div class="min-w-0">
+      <p class="font-mono text-[10px] font-semibold tracking-[.16em] text-text-muted uppercase">LyraShield support</p>
+      <h2 class="text-base font-semibold leading-5 tracking-tight text-text">{MYRA_COPY.header}</h2>
+    </div>
     <div class="ml-auto flex items-center gap-1">
       <button
         type="button"
         id="myra-talk"
+        aria-label={MYRA_COPY.talkToPerson}
         class="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        {MYRA_COPY.talkToPerson}
+        <span class="sm:hidden">Support</span><span class="hidden sm:inline">{MYRA_COPY.talkToPerson}</span>
       </button>
       <button
         type="button"
@@ -69,18 +74,19 @@ import { MYRA_COPY } from "@lyrashield/myra"
     id="myra-log"
     role="log"
     aria-label="Conversation with Myra"
-    class="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+    class="min-h-0 flex-1 overflow-y-auto px-4 py-5"
   >
-    <div id="myra-empty" class="myra-turn">
+    <div id="myra-empty" class="myra-turn rounded-xl border-l-[3px] border-accent bg-accent-dim/30 px-4 py-4">
       <div class="myra-msg myra-msg-assistant">
         <div class="myra-answer">
           <p class="myra-p">{MYRA_COPY.opener}</p>
+          <p class="myra-p mt-2 text-xs text-text-muted">I’ll use LyraShield guidance where I have it, and help you reach support when I don’t.</p>
         </div>
       </div>
       <div id="myra-starters" class="mt-3 flex flex-wrap gap-2" aria-label="Suggested starting points">
         <button type="button" data-myra-send="Compare plans" class="myra-chip-btn">Compare plans</button>
         <a href="/scan" class="myra-chip-btn">Try a free check</a>
-        <a href="/demo" class="myra-chip-btn">Book a demo</a>
+        <button type="button" data-myra-send="I need help from support" class="myra-chip-btn">Contact support</button>
       </div>
     </div>
   </div>
@@ -169,6 +175,16 @@ import { MYRA_COPY } from "@lyrashield/myra"
   #myra-panel[hidden],
   #myra-launcher[hidden] {
     display: none;
+  }
+
+  /* The mobile evidence tour uses the entire lower viewport for its active
+     explanation; lift support clear of it while that chapter is pinned. */
+  @media (max-width: 639px) {
+    body:has(.evidence-world.is-enhanced.is-pinned) #myra-launcher {
+      bottom: auto;
+      top: max(5rem, env(safe-area-inset-top));
+      margin-bottom: 0;
+    }
   }
 
   .myra-turn {
@@ -309,6 +325,19 @@ import { MYRA_COPY } from "@lyrashield/myra"
     flex-wrap: wrap;
     gap: 0.5rem;
     margin-top: 0.25rem;
+  }
+
+  .myra-feedback {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+
+  .myra-feedback .myra-btn[aria-pressed="true"] {
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   .myra-btn {

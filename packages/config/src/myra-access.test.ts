@@ -15,7 +15,7 @@ describe("Myra account allowlist", () => {
     expect(() => normalizeMyraAllowedEmails("a@example.com,A@example.com")).toThrow("unique, valid")
   })
 
-  it("gates the dashboard on a verified allowlisted email in one rule", () => {
+  it("gates the dashboard on verified email, not the old launch allowlist", () => {
     const allowlist = normalizeMyraAllowedEmails("ankit@lyrashieldai.com")
     expect(
       myraDashboardAllowed({
@@ -24,7 +24,7 @@ describe("Myra account allowlist", () => {
         allowlist,
       })
     ).toBe(true)
-    // An unverified email fails even when it is on the allowlist.
+    // An unverified email fails even when it is on the old allowlist.
     expect(
       myraDashboardAllowed({
         email: "ankit@lyrashieldai.com",
@@ -38,14 +38,14 @@ describe("Myra account allowlist", () => {
         emailVerified: true,
         allowlist,
       })
-    ).toBe(false)
+    ).toBe(true)
     expect(
       myraDashboardAllowed({
         email: "ankit@lyrashieldai.com",
         emailVerified: true,
         allowlist: "",
       })
-    ).toBe(false)
+    ).toBe(true)
   })
 
   it("is the single gate shared by the dashboard layout and the API principal gate", () => {
