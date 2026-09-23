@@ -198,7 +198,7 @@ describe.skipIf(!runtimeUrl || !runtime)("generation budget ledger", () => {
   })
 
   it("rejects with BUDGET_EXHAUSTED for a bound principal when settled spend fills the cap", async () => {
-    mutableEnv.MYRA_MONTHLY_BUDGET_USD = "0.05"
+    mutableEnv.MYRA_MONTHLY_BUDGET_USD = "0.025"
     const seedTraceId = `budget-seed-${suffix}`
     const traceId = `budget-cap-${suffix}`
     traceIds.push(seedTraceId, traceId)
