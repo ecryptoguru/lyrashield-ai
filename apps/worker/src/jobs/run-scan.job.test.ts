@@ -384,13 +384,14 @@ const mockUrlTarget = {
 }
 
 describe("shouldRecordAgentMinutes", () => {
-  it("labels GPT-6 receipts with the published Azure rate card and open invoice check", async () => {
-    await persistEngineUsageCheckpoint({
+  it("keeps GPT-6 costs unbilled until exact provider receipts are explicit", async () => {
+    const result = await persistEngineUsageCheckpoint({
       scanId: "gpt6-pricing",
       maxBudgetUsd: 1.2,
       usageExpected: true,
       llmUsage: { ...completeUsage, model: "azure_ai/gpt-6-luna" },
     })
+    expect(result).toMatchObject({ billedCostUsd: null, costReconciled: false })
     expect(addScanEvent).toHaveBeenCalledWith(
       "gpt6-pricing",
       "llm_usage",
@@ -398,12 +399,29 @@ describe("shouldRecordAgentMinutes", () => {
       expect.any(String),
       expect.objectContaining({
         calculatedCostUsd: 0.00015,
+        accountingComplete: false,
+        reconciliationStatus: "incomplete_provider_receipts",
         costSource: "azure_published_rate_card",
         pricingStatus: "azure_published_rates_invoice_unverified",
         pricingSource:
           "https://azure.microsoft.com/en-us/blog/gpt-6-astra-sol-and-luna-for-production-agents-in-microsoft-foundry/",
       })
     )
+  })
+
+  it("reconciles GPT-6 only with an explicit complete per-model receipt", async () => {
+    const result = await persistEngineUsageCheckpoint({
+      scanId: "gpt6-complete",
+      maxBudgetUsd: 1.2,
+      usageExpected: true,
+      llmUsage: {
+        ...completeUsage,
+        model: "azure_ai/gpt-6-luna",
+        accountingComplete: true,
+        model_usage_buckets: [{ ...completeUsage, model: "azure_ai/gpt-6-luna" }],
+      },
+    })
+    expect(result).toMatchObject({ billedCostUsd: 0.00015, costReconciled: true })
   })
 
   it("retains known counters without reconciling an incomplete provider checkpoint", async () => {

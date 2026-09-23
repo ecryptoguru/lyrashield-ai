@@ -918,6 +918,11 @@ function normalizeLlmUsage(value: unknown): Record<string, unknown> | undefined 
   const requestUsageBuckets = normalizeRequestUsageBuckets(record.request_usage_entries)
   const reportedModelUsageBuckets = normalizeModelUsageBuckets(record.model_usage_buckets)
   const normalized = {
+    ...(typeof record.accounting_complete === "boolean"
+      ? { accountingComplete: record.accounting_complete }
+      : typeof record.accountingComplete === "boolean"
+        ? { accountingComplete: record.accountingComplete }
+        : {}),
     ...(requestCount !== undefined ? { request_count: requestCount } : {}),
     ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
     ...(cachedInputTokens !== undefined ? { cached_input_tokens: cachedInputTokens } : {}),
@@ -969,6 +974,10 @@ export function mergeLlmUsage(
   if (!normalizedBase || !normalizedOverlay) return undefined
 
   const merged: Record<string, unknown> = {}
+  if ("accountingComplete" in normalizedBase || "accountingComplete" in normalizedOverlay) {
+    merged.accountingComplete =
+      normalizedBase.accountingComplete === true && normalizedOverlay.accountingComplete === true
+  }
   for (const key of USAGE_COUNTER_KEYS) {
     const baseValue = usageInteger(normalizedBase[key])
     const overlayValue = usageInteger(normalizedOverlay[key])
@@ -1389,6 +1398,14 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
         })
       : undefined
     const llmUsage = normalizeLlmUsage(record.llm_usage)
+    const routedModel = boundedPricedModel(record.model)
+    if (llmUsage && routedModel && /gpt-6-(?:sol|luna)$/i.test(routedModel)) {
+      // Keep the route visible when malformed request entries erased model buckets.
+      // This makes incomplete GPT-6 accounting explicit, never billable by fallback.
+      llmUsage.model = routedModel
+      llmUsage.accountingComplete =
+        llmUsage.accountingComplete === true && Array.isArray(llmUsage.model_usage_buckets)
+    }
     const promptBundleHash = boundedString(record.prompt_bundle_hash)
     const promptCache = promptCacheReceiptSchema.safeParse(record.prompt_cache)
     const delegateModel = boundedString(record.delegate_model)

@@ -45,6 +45,20 @@ describe("command-builder", () => {
   })
 
   describe("buildEngineCommand", () => {
+    it("passes a shorter engine deadline than the worker hard stop", () => {
+      const config = {
+        scanId: "scan-deadline",
+        goal: "VULNERABILITY_SCAN" as const,
+        mode: "STANDARD" as const,
+        target: REPO_TARGET,
+      }
+      const cmd = buildEngineCommand(config, 20 * 60_000)
+      const index = cmd.args.indexOf("--runtime-budget-seconds")
+      expect(cmd.args[index + 1]).toBe("1170")
+      expect(buildEngineCommand(config).args).not.toContain("--runtime-budget-seconds")
+      expect(buildEngineCommand(config, 1000).args).not.toContain("--runtime-budget-seconds")
+    })
+
     it("builds command for REPO target", () => {
       const cmd = buildEngineCommand({
         scanId: "scan-1",
