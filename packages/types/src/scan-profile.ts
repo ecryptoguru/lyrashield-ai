@@ -1,7 +1,7 @@
 import { getUrlScanProfile, type UrlScanMode } from "./url-scan-capabilities"
 
 export type RepositoryScanMode = "QUICK" | "STANDARD" | "DEEP"
-export type ScanProfileModelClass = "LUNA" | "TERRA" | "NONE"
+export type ScanProfileModelClass = "LUNA" | "SOL" | "NONE"
 
 export type ScanProfile = {
   id: string
@@ -47,9 +47,9 @@ const REPOSITORY_PROFILES: Record<RepositoryScanMode, ScanProfile> = {
     canonicalMode: "STANDARD",
     engineMode: "standard",
     maxBudgetUsd: 3.2,
-    maxDurationMinutes: 15,
+    maxDurationMinutes: 23,
     scannerReserveMinutes: 3,
-    maxEngineMinutes: 12,
+    maxEngineMinutes: 20,
     usesAi: true,
     modelClass: "LUNA",
     label: "Code Review",
@@ -65,7 +65,7 @@ const REPOSITORY_PROFILES: Record<RepositoryScanMode, ScanProfile> = {
     scannerReserveMinutes: 5,
     maxEngineMinutes: 40,
     usesAi: true,
-    modelClass: "TERRA",
+    modelClass: "SOL",
     label: "Deep Security Review",
     description: "Deep cross-file review for complex or high-risk releases.",
   },
@@ -166,12 +166,12 @@ export function resolveScanProfile(input: { targetType: string; mode: string }):
       maxDurationMinutes: engineBacked
         ? deep
           ? 45
-          : 15
+          : 23
         : Math.ceil(urlProfile.maxWallTimeMs / 60_000),
       scannerReserveMinutes: engineBacked ? (deep ? 5 : 3) : 0,
-      maxEngineMinutes: engineBacked ? (deep ? 40 : 12) : 0,
+      maxEngineMinutes: engineBacked ? (deep ? 40 : 20) : 0,
       usesAi: engineBacked,
-      modelClass: engineBacked ? (deep ? "TERRA" : "LUNA") : "NONE",
+      modelClass: engineBacked ? (deep ? "SOL" : "LUNA") : "NONE",
       label: engineBacked ? (deep ? "Deep Live Review" : "Engine Review") : urlProfile.label,
       description: engineBacked
         ? `${urlProfile.description} Engine-driven review of the verified target; deterministic surface checks run alongside.`

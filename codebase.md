@@ -235,7 +235,7 @@ Authorities:
 - `apps/worker/src/engine/command-builder.ts`: `resolveScanBudgetUsd()`.
 - `apps/worker/src/engine/gpt56-pricing.ts`: versioned rate card.
 
-Safe/Quick/Standard use Luna/medium. Deep/Custom use Terra/medium root plus Luna/high specialists. The fallback model remains mandatory and policy values may only lower caps. Private receipts preserve actual model, requests, token buckets, cache reads/writes, long-context usage, provider cost, billed cost, and reconciliation status.
+Safe/Quick/Standard use GPT-6 Luna/medium. Deep/Custom use GPT-6 Sol/medium root plus Luna/high specialists. The fallback model remains mandatory and policy values may only lower caps. Private receipts preserve actual model, requests, token buckets, cache reads/writes, long-context usage, provider cost, billed cost, and reconciliation status.
 
 Agent-minute wall time starts immediately before `runEngine()`. An engine-backed run is
 metered only after a scan-bound completed receipt or scan-bound affirmative provider usage proves
@@ -506,7 +506,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 | `apps/worker/src/jobs/run-scan/`                        | Scan lifecycle phases (authority, preparation, execution, settlement, finalization) |
 | `apps/worker/src/engine/runner.ts`                      | Bounded/cancellable engine subprocess                                               |
 | `apps/worker/src/engine/command-builder.ts`             | Engine arguments and budget policy                                                  |
-| `apps/worker/src/engine/gpt56-pricing.ts`               | Versioned GPT-5.6 rate card                                                         |
+| `apps/worker/src/engine/gpt56-pricing.ts`               | Versioned historical GPT-5.6 and active GPT-6 rate cards                            |
 | `apps/worker/src/engine/scanner-orchestrator.ts`        | Deterministic and engine result merge                                               |
 | `apps/worker/src/engine/result-integrity.ts`            | Manifest/candidate/receipt boundary                                                 |
 | `apps/worker/src/operations/verify-launch-assurance.ts` | Host-side dry-run-first launch-assurance orchestrator                               |

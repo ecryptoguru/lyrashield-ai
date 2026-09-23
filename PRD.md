@@ -96,7 +96,7 @@ Implemented in code:
   update expiry never disables the installed eligible build or local scans.
 - explicit revocation hard-stop and a user-confirmed signed updater pipeline.
 
-Local/self-hosted models are deferred because the engine currently requires GPT-5.6 Terra/Luna.
+Local/self-hosted models are deferred because the engine currently requires the GPT-6 Sol/Luna provider contract.
 
 ### Marketing and free tools
 
@@ -133,8 +133,8 @@ The passive Lite Scanner is separate from the BullMQ/engine repository pipeline.
 | Safe     | Luna       | Luna             | medium                        |        $1.20 |
 | Quick    | Luna       | Luna             | medium                        |        $1.20 |
 | Standard | Luna       | Luna             | medium                        |        $3.20 |
-| Deep     | Terra      | Luna             | medium root, high specialists |        $5.00 |
-| Custom   | Terra      | Luna             | medium root, high specialists |        $5.00 |
+| Deep     | Sol        | Luna             | medium root, high specialists |        $5.00 |
+| Custom   | Sol        | Luna             | medium root, high specialists |        $5.00 |
 
 Rules:
 
@@ -142,9 +142,9 @@ Rules:
 - `resolveScanBudgetUsd()` is the protected budget authority.
 - A positive workspace policy may lower but never raise the selected cap.
 - `LYRASHIELD_LLM` is a validated fallback, not a routing bypass.
-- Deep/Custom are deterministic two-tier profiles, not a Luna-to-Terra cascade.
+- Deep/Custom are deterministic two-tier profiles, not a Luna-to-Sol cascade.
 - Actual model, standard/long-context tokens, cache reads/writes, requests, and reconciled cost stay in the private ledger. Dashboard users see minutes, not provider spend.
-- URL/API Safe/Quick have zero AI budget. Standard selects Luna with a $3.20 provider cap; Deep/Custom select Terra-root/Luna-specialist routing with a $5 cap. These are source profile contracts, not completed live scan acceptance. The remote relay rejects opaque CONNECT tunnels; a sandbox-local TLS adapter converts HTTPS client traffic into inspectable requests using the installed sandbox CA. Composed local curl and Chromium navigation/fetch acceptance passed allowed requests and denied path/method/redirect requests without TLS bypass, including rejection of an invalid upstream certificate. Exact-image production deployment and a paid URL engine scan remain unverified.
+- URL/API Safe/Quick have zero AI budget. Standard selects GPT-6 Luna with a $3.20 provider cap; Deep/Custom select GPT-6 Sol-root/Luna-specialist routing with a $5 cap. These are source profile contracts, not completed live scan acceptance. The remote relay rejects opaque CONNECT tunnels; a sandbox-local TLS adapter converts HTTPS client traffic into inspectable requests using the installed sandbox CA. Composed local curl and Chromium navigation/fetch acceptance passed allowed requests and denied path/method/redirect requests without TLS bypass, including rejection of an invalid upstream certificate. Exact-image production deployment and a paid URL engine scan remain unverified.
 
 ### Standards evidence mapping
 

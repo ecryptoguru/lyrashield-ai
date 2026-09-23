@@ -504,12 +504,16 @@ describe("shouldRecordAgentMinutes", () => {
 })
 
 describe("resolveScanRuntimeBudgetMs", () => {
-  it.each(["SAFE", "QUICK", "STANDARD"] as const)(
+  it.each(["SAFE", "QUICK"] as const)(
     "caps %s scans at fifteen minutes even when the default policy is longer",
     (mode) => {
       expect(resolveScanRuntimeBudgetMs(mode, 60)).toBe(15 * 60 * 1000)
     }
   )
+
+  it("allows Standard enough time for GPT-6 while keeping a fixed ceiling", () => {
+    expect(resolveScanRuntimeBudgetMs("STANDARD", 60)).toBe(23 * 60 * 1000)
+  })
 
   it("caps deep scans at forty-five minutes", () => {
     expect(resolveScanRuntimeBudgetMs("DEEP", 60)).toBe(45 * 60 * 1000)
@@ -523,20 +527,20 @@ describe("resolveScanRuntimeBudgetMs", () => {
     // SAFE keeps the deterministic wall-clock profile budget.
     expect(resolveScanRuntimeBudgetMs("SAFE", 60, "WEB_APP")).toBe(1 * 60 * 1000)
     // STANDARD/DEEP URL are engine-backed at repository budgets.
-    expect(resolveScanRuntimeBudgetMs("STANDARD", 60, "WEB_APP")).toBe(15 * 60 * 1000)
+    expect(resolveScanRuntimeBudgetMs("STANDARD", 60, "WEB_APP")).toBe(23 * 60 * 1000)
     expect(resolveScanRuntimeBudgetMs("DEEP", 60, "WEB_APP")).toBe(45 * 60 * 1000)
   })
 })
 
 describe("resolveEngineRuntimeBudgetMs", () => {
   it("preserves the repository scanner reserve inside the total deadline", () => {
-    expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 15 * 60 * 1000, 0)).toBe(12 * 60 * 1000)
+    expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 23 * 60 * 1000, 0)).toBe(20 * 60 * 1000)
     expect(resolveEngineRuntimeBudgetMs("DEEP", "REPO", 45 * 60 * 1000, 0)).toBe(40 * 60 * 1000)
   })
 
   it("reduces the engine allowance when preflight consumed the total envelope", () => {
-    expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 15 * 60 * 1000, 5 * 60 * 1000)).toBe(
-      7 * 60 * 1000
+    expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 23 * 60 * 1000, 5 * 60 * 1000)).toBe(
+      15 * 60 * 1000
     )
   })
 })

@@ -72,13 +72,13 @@ const REPO_APPLICABLE_CHECKS = [
 
 const REPO_LIMITS: Record<string, string> = {
   QUICK: "Up to 15 minutes of engine time",
-  STANDARD: "Up to 15 minutes of engine time",
+  STANDARD: "Up to 20 minutes of engine time",
   DEEP: "Up to 45 minutes of engine time",
 }
 
 const URL_LIMITS: Record<string, string> = {
   SAFE: "Bounded deterministic checks only",
-  STANDARD: "Up to 15 minutes of engine time",
+  STANDARD: "Up to 20 minutes of engine time",
   DEEP: "Up to 45 minutes of engine time",
 }
 
@@ -147,10 +147,10 @@ function repoOptions(): ManualScanOption[] {
 // deterministic tier stays cheap.
 const URL_ESTIMATES: Record<string, { low: number; high: number }> = {
   WEB_APP_SAFE: { low: 1, high: 2 },
-  WEB_APP_STANDARD: { low: 8, high: 15 },
+  WEB_APP_STANDARD: { low: 12, high: 23 },
   WEB_APP_DEEP: { low: 25, high: 40 },
   API_SAFE: { low: 1, high: 2 },
-  API_STANDARD: { low: 8, high: 15 },
+  API_STANDARD: { low: 12, high: 23 },
   API_DEEP: { low: 25, high: 40 },
 }
 

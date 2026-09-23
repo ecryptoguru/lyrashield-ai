@@ -21,7 +21,8 @@ describe("resolveScanProfile", () => {
       id: "REPO_STANDARD",
       engineMode: "standard",
       maxBudgetUsd: 3.2,
-      maxDurationMinutes: 15,
+      maxDurationMinutes: 23,
+      maxEngineMinutes: 20,
     })
     expect(resolveScanProfile({ targetType: "REPO", mode: "DEEP" })).toMatchObject({
       id: "REPO_DEEP",
@@ -29,7 +30,7 @@ describe("resolveScanProfile", () => {
       maxBudgetUsd: 5,
       maxDurationMinutes: 45,
       scannerReserveMinutes: 5,
-      modelClass: "TERRA",
+      modelClass: "SOL",
     })
   })
 
@@ -50,7 +51,7 @@ describe("resolveScanProfile", () => {
       canonicalMode: "STANDARD",
       engineMode: "standard",
       maxBudgetUsd: 3.2,
-      maxEngineMinutes: 12,
+      maxEngineMinutes: 20,
       scannerReserveMinutes: 3,
       usesAi: true,
       modelClass: "LUNA",
@@ -64,7 +65,7 @@ describe("resolveScanProfile", () => {
       maxEngineMinutes: 40,
       scannerReserveMinutes: 5,
       usesAi: true,
-      modelClass: "TERRA",
+      modelClass: "SOL",
       label: "Deep Live Review",
     })
     // CUSTOM canonicalizes to DEEP, matching repository scans.
