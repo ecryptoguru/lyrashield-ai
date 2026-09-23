@@ -359,6 +359,8 @@ export function serializeModelContext(context: ModelGenerateInput["context"]): s
   })
 }
 
+// Azure Global Standard, published 2026-09-22:
+// https://azure.microsoft.com/en-us/blog/gpt-6-astra-sol-and-luna-for-production-agents-in-microsoft-foundry/
 export const MYRA_LUNA_USD_PER_MILLION = {
   input: 0.1,
   cachedInput: 0.01,
