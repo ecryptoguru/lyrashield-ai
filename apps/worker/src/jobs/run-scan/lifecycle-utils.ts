@@ -116,7 +116,7 @@ export function resolveEngineRuntimeBudgetMs(
 
 export function requireEngineModel(model: string | undefined): string {
   if (!model) {
-    throw new Error("A GPT-5.6 Terra or Luna deployment must be configured for engine-backed scans")
+    throw new Error("A GPT-6 Sol or Luna deployment must be configured for engine-backed scans")
   }
   return model
 }

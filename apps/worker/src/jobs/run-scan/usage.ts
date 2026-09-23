@@ -6,6 +6,8 @@ import {
   calculateGpt56CostUsd,
   calculateGpt56CostUsdFromBuckets,
   calculateGpt56CostUsdFromModelBuckets,
+  GPT_6_PRICING_EFFECTIVE_DATE,
+  GPT_6_PRICING_SOURCE,
   GPT_56_PRICING_EFFECTIVE_DATE,
   GPT_56_PRICING_SOURCE,
   type Gpt56ModelUsageBuckets,
@@ -224,9 +226,7 @@ export async function persistEngineUsageCheckpoint(params: {
       budgetExceeded: false,
       billedCostUsd: null,
       costReconciled: !usageExpected,
-      ...(usageExpected
-        ? { reconciliationReason: "Per-request GPT-5.6 usage was unavailable" }
-        : {}),
+      ...(usageExpected ? { reconciliationReason: "Per-request model usage was unavailable" } : {}),
     }
   }
 
@@ -234,7 +234,7 @@ export async function persistEngineUsageCheckpoint(params: {
   // Per-request buckets are the only way to price mixed-context scans
   // accurately. When they are unavailable, fall back to aggregate counters
   // only if the usage payload names a single model, so we do not misprice a
-  // Terra/Luna mix at the configured model rate.
+  // Sol/Luna mix at the configured model rate.
   const aggregateCostUsd =
     usage.inputTokens !== null &&
     usage.cachedInputTokens !== null &&
@@ -283,11 +283,21 @@ export async function persistEngineUsageCheckpoint(params: {
   // inventing a billable amount would not be.
   const billableCostUsd = costsMatch ? rateCardCostUsd : null
   const billedCostUsd = billableCostUsd === null ? null : Math.min(billableCostUsd, maxBudgetUsd)
+  const models =
+    usage.modelPricingBuckets?.map((bucket) => bucket.model) ??
+    (usage.singleModel ? [usage.singleModel] : [])
+  const isGpt6Usage =
+    models.length > 0 &&
+    models.every((model) => /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/.test(model.toLowerCase()))
   const costSource =
     rateCardCostUsd !== null && usage.engineReportedCostUsd !== null
-      ? "rate_card_and_engine_reported"
+      ? isGpt6Usage
+        ? "openai_reference_and_engine_reported"
+        : "rate_card_and_engine_reported"
       : rateCardCostUsd !== null
-        ? "azure_rate_card"
+        ? isGpt6Usage
+          ? "openai_reference_rate_card"
+          : "azure_rate_card"
         : usage.engineReportedCostUsd !== null
           ? "engine_reported_unreconciled"
           : "unavailable"
@@ -315,8 +325,11 @@ export async function persistEngineUsageCheckpoint(params: {
       accountingComplete: llmUsage["accountingComplete"] !== false,
       ...(rateCardCostUsd !== null
         ? {
-            pricingEffectiveDate: GPT_56_PRICING_EFFECTIVE_DATE,
-            pricingSource: GPT_56_PRICING_SOURCE,
+            pricingEffectiveDate: isGpt6Usage
+              ? GPT_6_PRICING_EFFECTIVE_DATE
+              : GPT_56_PRICING_EFFECTIVE_DATE,
+            pricingSource: isGpt6Usage ? GPT_6_PRICING_SOURCE : GPT_56_PRICING_SOURCE,
+            ...(isGpt6Usage ? { pricingStatus: "openai_reference_azure_unverified" } : {}),
           }
         : {}),
     })
@@ -381,8 +394,8 @@ export async function persistEngineUsageCheckpoint(params: {
             llmUsage["accountingComplete"] === false
               ? "Some started provider requests have no final usage receipt"
               : rateCardCostUsd === null
-                ? "Complete per-request GPT-5.6 usage buckets were unavailable"
-                : "Engine-reported cost did not match the GPT-5.6 rate-card calculation",
+                ? "Complete per-request model usage buckets were unavailable"
+                : "Engine-reported cost did not match the versioned rate-card calculation",
         }),
   }
 }
