@@ -515,7 +515,7 @@ describe("resolveEngineTerminalError runtime deadline mapping", () => {
     expect(result).toEqual({
       status: "FAILED",
       errorCategory: "ENGINE_RUNTIME_DEADLINE",
-      errorMessage: "Engine reached its runtime limit; partial findings preserved",
+      errorMessage: "Engine reached its runtime limit before filing any findings",
     })
   })
 

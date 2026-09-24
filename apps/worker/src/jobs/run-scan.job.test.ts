@@ -1505,7 +1505,7 @@ describe("processScanJob", () => {
       "FAILED",
       expect.objectContaining({
         errorCategory: "ENGINE_RUNTIME_DEADLINE",
-        errorMessage: "Engine reached its runtime limit; partial findings preserved",
+        errorMessage: "Engine reached its runtime limit before filing any findings",
       })
     )
     expect(recordAgentMinutes).not.toHaveBeenCalled()

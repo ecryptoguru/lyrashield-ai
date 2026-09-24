@@ -770,7 +770,9 @@ export async function resolveEngineTerminalError(params: {
       : stoppedForEngineError
         ? "Engine stopped after a model error; partial findings preserved"
         : stoppedForRuntimeDeadline
-          ? "Engine reached its runtime limit; partial findings preserved"
+          ? hasEngineFindings
+            ? "Engine reached its runtime limit; partial findings preserved"
+            : "Engine reached its runtime limit before filing any findings"
           : "Engine did not produce a completed, valid result receipt"
   // Content filter stops, engine errors and runtime-deadline truncations with
   // findings are PARTIAL: the engine produced results but did not complete its
