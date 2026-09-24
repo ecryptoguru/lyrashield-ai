@@ -116,6 +116,10 @@ function findForm() {
   return walk(render()).find((element) => element.type === "form")!
 }
 
+function findField(name: FieldName) {
+  return walk(render()).find((element) => element.props.name === name)!
+}
+
 function findSubmitButton() {
   return walk(render()).find(
     (element) => element.type === "button" && element.props.type === "submit"
@@ -204,10 +208,10 @@ describe("report verification form", () => {
   })
 
   it.each([
-    ["MATCH", "match"],
-    ["MISMATCH", "mismatch"],
-    ["UNAVAILABLE", "unavailable"],
-  ])("reports the %s identity outcome after verification", async (status, label) => {
+    ["MATCH", "the report is bound to the exact commit or digest you expected"],
+    ["MISMATCH", "the report is bound to a different commit or digest than you expected"],
+    ["UNAVAILABLE", "this report's release could not be confirmed from the link you provided"],
+  ])("explains the %s identity outcome in plain language", async (status, meaning) => {
     fetchMock.mockResolvedValue(
       verifyResponse({
         verified: true,
@@ -233,7 +237,8 @@ describe("report verification form", () => {
       }),
     })
     expect(resultText()).toContain("Signature valid")
-    expect(resultText()).toContain(`Release identity: ${label}`)
+    expect(resultText()).toContain(`Release identity: ${status.toLowerCase()}`)
+    expect(resultText()).toContain(meaning)
   })
 
   it("reads an artifact digest as an ARTIFACT_DIGEST release identity", async () => {
@@ -286,6 +291,7 @@ describe("report verification form", () => {
     })
 
     expect(resultText()).toContain("Signature invalid")
+    expect(resultText()).toContain("could not be confirmed")
     expect(resultText()).not.toContain("Signature valid")
   })
 
@@ -331,5 +337,18 @@ describe("report verification form", () => {
 
     expect(alertText()).toBe("Failed to fetch")
     expect(resultText()).toBe("")
+  })
+
+  it("hints the expected checksum and signature formats", () => {
+    expect(findField("reportChecksum").props.placeholder).toBe("64-character SHA-256 hex digest")
+    expect(findField("signature").props.placeholder).toBe(
+      "Base64 ed25519 signature, one line with no spaces"
+    )
+    expect(findField("reportChecksum").props.pattern).toBe("[A-Fa-f0-9]{64}")
+    expect(findField("signature").props.maxLength).toBe(512)
+
+    const html = renderHtml()
+    expect(html).toContain("64-character SHA-256 hex digest")
+    expect(html).toContain("Base64 ed25519 signature, one line with no spaces")
   })
 })

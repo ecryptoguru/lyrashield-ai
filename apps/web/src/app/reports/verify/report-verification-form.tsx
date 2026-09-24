@@ -19,6 +19,17 @@ function subscribeToNothing() {
 }
 
 /**
+ * Plain-language meaning for each release-identity outcome, shown beside the
+ * status after a verification. The sentence never restates the stored identity —
+ * the endpoint returns only the status.
+ */
+const RELEASE_IDENTITY_MEANINGS: Record<ReleaseIdentityStatus, string> = {
+  MATCH: "the report is bound to the exact commit or digest you expected",
+  MISMATCH: "the report is bound to a different commit or digest than you expected",
+  UNAVAILABLE: "this report's release could not be confirmed from the link you provided",
+}
+
+/**
  * React attaches onSubmit only once the client has hydrated. A submit before that
  * would otherwise fall back to the browser's default GET navigation, which copies
  * the shared report URL — including its 64-character share token — into the
@@ -117,6 +128,7 @@ export function ReportVerificationForm() {
             name="reportChecksum"
             required
             pattern="[A-Fa-f0-9]{64}"
+            placeholder="64-character SHA-256 hex digest"
             autoComplete="off"
             spellCheck={false}
           />
@@ -128,6 +140,7 @@ export function ReportVerificationForm() {
             name="signature"
             required
             maxLength={512}
+            placeholder="Base64 ed25519 signature, one line with no spaces"
             autoComplete="off"
             spellCheck={false}
           />
@@ -184,7 +197,8 @@ export function ReportVerificationForm() {
           </p>
           {result.releaseIdentity && (
             <p className="mt-2 text-muted-foreground">
-              Release identity: {result.releaseIdentity.status.toLowerCase().replace("_", " ")}.
+              Release identity: {result.releaseIdentity.status.toLowerCase()} —{" "}
+              {RELEASE_IDENTITY_MEANINGS[result.releaseIdentity.status]}.
             </p>
           )}
         </div>
