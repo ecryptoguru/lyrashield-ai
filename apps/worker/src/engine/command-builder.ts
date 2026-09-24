@@ -133,7 +133,10 @@ function validateInstruction(instruction: string | undefined): string | undefine
   return instruction
 }
 
-export function buildEngineCommand(config: ScanConfig): EngineCommand {
+export function buildEngineCommand(
+  config: ScanConfig,
+  timeoutMs: number | null = null
+): EngineCommand {
   const executable = resolveExecutable()
   const targetArg = resolveTargetArg(config.target)
   // Resolve through the target's own profile so URL/API modes normalize the
@@ -153,6 +156,10 @@ export function buildEngineCommand(config: ScanConfig): EngineCommand {
     "--scan-mode",
     scanMode,
   ]
+  // The engine gets time to finalize before the worker's independent hard stop.
+  if (timeoutMs !== null && Number.isFinite(timeoutMs) && timeoutMs > 31_000) {
+    args.push("--runtime-budget-seconds", String(Math.floor(timeoutMs / 1000) - 30))
+  }
 
   // Pin the declared kind so offline inference cannot misclassify a
   // non-suffixed Git remote as a web target (and vice versa). The flag applies
@@ -201,11 +208,17 @@ export function buildEngineCommand(config: ScanConfig): EngineCommand {
       "--diff-head",
       source.revision
     )
-    if (isRemoteRepoRef(targetArg)) {
-      args.push("--repository-revision", source.revision)
-    }
   } else {
     args.push("--scope-mode", "full")
+  }
+  // A snapshot is just as immutable as a diff. The branch below is only a
+  // fetch hint; the recorded revision owns the checkout for every repo plan.
+  if (
+    executionPlan?.source?.revision &&
+    config.target.type === "REPO" &&
+    isRemoteRepoRef(targetArg)
+  ) {
+    args.push("--repository-revision", executionPlan.source.revision)
   }
 
   // API targets: the OpenAPI document is a second engine target — the engine

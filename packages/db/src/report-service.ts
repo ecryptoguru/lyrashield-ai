@@ -353,7 +353,11 @@ export async function getShareableReport(
       if (scan) {
         const severityGroups = await tx.finding.groupBy({
           by: ["severity"],
-          where: { scanId: scan.id, workspaceId, deletedAt: null },
+          where: {
+            workspaceId,
+            deletedAt: null,
+            candidates: { some: { scanId: scan.id } },
+          },
           _count: { _all: true },
         })
 

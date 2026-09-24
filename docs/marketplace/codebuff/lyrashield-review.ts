@@ -22,8 +22,8 @@ const definition: AgentDefinition = {
   systemPrompt: "You are LyraShield Review. Never apply changes or bypass approvals.",
   instructionsPrompt: `Run the read-only review workflow through the LyraShield MCP server:
 1. Inspect the current diff and identify the relevant target.
-2. Read the latest evidence, findings, and launch-readiness state.
-3. Explain detected, independently verified, retest-confirmed, and inconclusive states.
+2. Read the latest evidence, findings and launch-readiness state.
+3. Explain detected, independently verified, retest-confirmed and inconclusive states.
 4. If a write is requested, explain that this adapter is read-only. Hosted writes require a browser-confirmed connection grant; nondelegated calls receive connect_required.
 5. Return a concise summary with dashboard links; do not recreate the dashboard or expose tokens.`,
   stepPrompt: "Continue the read-only review and finish with evidence links.",

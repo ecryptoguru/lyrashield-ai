@@ -1,8 +1,8 @@
 ---
 title: Hermes Agent App Security Checklist
-description: "Harden Hermes agent: config, skill supply chain, MCP tool filtering, mTLS, and CI gates for AI-built apps."
+description: "Harden Hermes agent: config, skill supply chain, MCP tool filtering, mTLS and CI gates for AI-built apps."
 pubDate: "2026-07-30"
-updatedDate: 2026-08-07
+updatedDate: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -15,14 +15,14 @@ faq:
   - q: "How do I add LyraShield to Hermes?"
     a: "Add mcp_servers.lyrashield with command npx -y @lyrashield/mcp@0.2.8 for stdio or url https://app.lyrashieldai.com/api/mcp with Bearer header for remote."
   - q: "Do self-improving skills create security risk?"
-    a: "Skills that write skills expand attack surface. Review skill diffs, pin versions, and require approval for skill creation."
+    a: "Skills that write skills expand attack surface. Review skill diffs, pin versions and require approval for skill creation."
 ---
 
 Hermes from Nous Research is a self-improving, runs-anywhere agent with model-agnostic backends and first-class MCP, so its config surface needs least-privilege controls. This checklist is the hardening path grounded in Hermes's real `~/.hermes/config.yaml` shape and the [Hermes integration docs](/docs/integrations/hermes). Start with the [vibe coding security guide](/blog/vibe-coding-security-guide) for the shared baseline, then apply the Hermes controls below.
 
-## 1. Pin config, secrets, and identity: `~/.hermes/config.yaml` + `.env` + `SOUL.md`
+## 1. Pin config, secrets and identity: `~/.hermes/config.yaml` + `.env` + `SOUL.md`
 
-Hermes stores non-secret settings in `~/.hermes/config.yaml`, secrets in `~/.hermes/.env`, OAuth in `auth.json`, identity in `SOUL.md`, and skills under `~/.hermes/skills/`. The catalog lives under `optional-mcps/`, disabled by default, Nous-approved. The live MCP reference confirms:
+Hermes stores non-secret settings in `~/.hermes/config.yaml`, secrets in `~/.hermes/.env`, OAuth in `auth.json`, identity in `SOUL.md` and skills under `~/.hermes/skills/`. The catalog lives under `optional-mcps/`, disabled by default, Nous-approved. The live MCP reference confirms:
 
 ```yaml
 mcp_servers:
@@ -54,11 +54,11 @@ Actions:
 
 ## 2. Scope self-improving skills: creation requires review, not auto-approval
 
-Hermes's USP is self-improving skills, agents that create sub-skills via `skill_manage`. That is recursive code generation with persistent memory. Without gating, a skill can add an MCP server, broaden `tools.include`, and grant itself `supports_parallel_tool_calls: true`.
+Hermes's USP is self-improving skills, agents that create sub-skills via `skill_manage`. That is recursive code generation with persistent memory. Without gating, a skill can add an MCP server, broaden `tools.include` and grant itself `supports_parallel_tool_calls: true`.
 
 Baseline:
 
-- Gate skill creation. Require explicit command or prompt approval, track `~/.hermes/skills/` in a review branch, and diff skill code like application code.
+- Gate skill creation. Require explicit command or prompt approval, track `~/.hermes/skills/` in a review branch and diff skill code like application code.
 - Pin skill versions. If a skill installs an MCP server from the catalog, pin the catalog entry and filter immediately.
 - Disable resource/prompt wrappers unless needed. Even if `resources: true`, Hermes only registers utility tools if the MCP session exposes them, but leaving them enabled widens exfiltration surface. Default to:
 
@@ -72,9 +72,9 @@ tools:
 
 This maps to OWASP LLM01 Prompt Injection and LLM08 Excessive Agency. A skill that self-expands authority is excessive agency by design.
 
-## 3. Filter MCP authority: allowlists, mTLS, timeouts, and lifecycle
+## 3. Filter MCP authority: allowlists, mTLS, timeouts and lifecycle
 
-Hermes MCP filtering is richer than most clients: `include` whitelists server-native tools, `exclude` blacklists, `enabled: false` retains but disables, `timeout` and `connect_timeout` bound calls, `idle_timeout_seconds` and `max_lifetime_seconds` recycle stdio servers, `supports_parallel_tool_calls` gates concurrency, and `ssl_verify`/`client_cert`/`client_key` enable private PKI.
+Hermes MCP filtering is richer than most clients: `include` whitelists server-native tools, `exclude` blacklists, `enabled: false` retains but disables, `timeout` and `connect_timeout` bound calls, `idle_timeout_seconds` and `max_lifetime_seconds` recycle stdio servers, `supports_parallel_tool_calls` gates concurrency and `ssl_verify`/`client_cert`/`client_key` enable private PKI.
 
 Fastest path: run `npx lyrashield init`, which detects Hermes and writes its MCP config for you. Verify with `npx lyrashield doctor`, then `npx lyrashield login` to store credentials in `~/.lyrashield/credentials.json` (nothing committed). The manual config below is what the CLI writes, kept for reference.
 
@@ -134,14 +134,14 @@ Actions:
 
 ## 5. Build verifiable release evidence, not just faster iteration
 
-Hermes can iterate quickly across backends, which magnifies the need for deterministic gates. AI-built code skews toward CWE-20, CWE-284 (Improper Access Control), and CWE-798 when agents copy `.env.example` into runtime.
+Hermes can iterate quickly across backends, which magnifies the need for deterministic gates. AI-built code skews toward CWE-20, CWE-284 (Improper Access Control) and CWE-798 when agents copy `.env.example` into runtime.
 
 Target PR gate:
 
 - SBOM check: generate CycloneDX for app + skills; see CycloneDX spec at [github.com/CycloneDX/specification](https://github.com/CycloneDX/specification) for component mapping.
 - License + secrets scan on `~/.hermes/skills/` diff and app repo diff. Hermes logs live under `logs/`, ensure CI does not upload them as artifacts with secrets.
 - SCA on lockfile changes agents introduce. Hermes skills that add dependencies must pass the same SCA gate as human contributors.
-- GitHub Action that is diff-aware and SARIF-emitting. LyraShield's shipped Action runs local secret and risky-pattern checks and uploads SARIF; the open-beta platform handles the separate evidence, fix-proposal, retest, and report loop.
+- GitHub Action that is diff-aware and SARIF-emitting. LyraShield's shipped Action runs local secret and risky-pattern checks and uploads SARIF; the open-beta platform handles the separate evidence, fix-proposal, retest and report loop.
 
 | #   | Control                          | Where to Check                                            | Risk If Skipped                                |
 | --- | -------------------------------- | --------------------------------------------------------- | ---------------------------------------------- |
@@ -154,16 +154,16 @@ Target PR gate:
 
 ## Why pair Hermes with LyraShield
 
-Treat Hermes configuration as code that deserves review before it gains access to repositories or credentials. The [OWASP Top 10](https://owasp.org/www-project-top-ten/) helps frame authorization and injection checks, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) covers hardcoded credential risk, and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) defines transport and tool contracts. None of these sources certifies a Hermes deployment. They provide a concrete review baseline for checking which skills can execute, where secrets resolve, and whether a release record captures the configuration revision and its limits. Recheck this boundary after changing a skill, backend, MCP server, or approval policy.
+Treat Hermes configuration as code that deserves review before it gains access to repositories or credentials. The [OWASP Top 10](https://owasp.org/www-project-top-ten/) helps frame authorization and injection checks, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) covers hardcoded credential risk and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) defines transport and tool contracts. None of these sources certifies a Hermes deployment. They provide a concrete review baseline for checking which skills can execute, where secrets resolve and whether a release record captures the configuration revision and its limits. Recheck this boundary after changing a skill, backend, MCP server or approval policy.
 
-Keep the evidence bounded to the reviewed scope: a successful configuration check does not establish runtime behavior for every future tool call. When a change expands access, record that expansion, name the reviewer, and require a fresh check before release with the same target boundary and clear recorded limitations.
+Keep the evidence bounded to the reviewed scope: a successful configuration check does not establish runtime behavior for every future tool call. When a change expands access, record that expansion, name the reviewer and require a fresh check before release with the same target boundary and clear recorded limitations.
 
-Hermes maximizes adaptability: skills that write skills, runs-anywhere backends, model-agnostic routing. LyraShield adds the counterpart: release assurance for AI-built apps with minimal new surface. The combination positioning matters, Hermes owns generation and orchestration, LyraShield owns `target, review, evidence, fix, retest, report` with SCA + secrets + agentic pentest feeding SARIF, not another chat loop. LyraShield separates detection from proof: recorded scans contribute to an assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
+Hermes maximizes adaptability: skills that write skills, runs-anywhere backends, model-agnostic routing. LyraShield adds the counterpart: release assurance for AI-built apps with minimal new surface. The combination positioning matters, Hermes owns generation and orchestration, LyraShield owns `target, review, evidence, fix, retest, report` with SCA + secrets + agentic pentest feeding SARIF, not another chat loop. LyraShield separates detection from proof: recorded scans contribute to an assurance record and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
 Integration is deliberately small: stdio via `npx -y @lyrashield/mcp@0.2.8` and remote Streamable HTTP at `https://app.lyrashieldai.com/api/mcp` with `lsk_` Bearer per [integrations hub](/docs/integrations). The target-to-report loop is available in the open beta and remains evidence-bounded for teams shipping AI-built code via Hermes alongside [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist) and [openclaw-app-security-checklist](/blog/openclaw-app-security-checklist).
 
-Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
+Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets and dependencies one more time.
 
 ## CTA
 
-Create an account at [lyrashieldai.com](https://lyrashieldai.com) for the Hermes integration template, SARIF-ready GitHub Action, and access to the verification flow.
+Create an account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) for the Hermes integration template, SARIF-ready GitHub Action and access to the verification flow.

@@ -1,0 +1,97 @@
+---
+slug: building-release-assurance-lessons-open-beta
+title: What Building Release Assurance Taught Me
+description: Honest founder notes on shipping LyraShield AI in open beta, why proving a finding beats flagging it and how we handle fix proposals.
+pubDate: 2026-09-23
+author: lyrashield-team
+tags: [vibe-coding-security, verification, web-security]
+draft: false
+heroImage: decision-operations-02
+faq:
+  - q: What is release assurance for AI built apps
+    a: Release assurance checks an app before you ship it, proving whether a finding is actually reachable and safe to fix, not just flagging patterns from static rules alone.
+  - q: Why are approval gated fix proposals safer than auto applied patches
+    a: Auto applied patches can break auth or data flows you did not intend to change. Proposals requiring review keep you in control and let you approve the diff before it lands.
+  - q: What is live in LyraShield AI today and what is next
+    a: As of August 2026 LyraShield is in open beta with open registration at lyrashieldai.com. Core scanning, MCP integration and GitHub Action are live. Deeper fix PR automation and billing are on our near term roadmap.
+  - q: How does LyraShield fit with the vibe coding security guide
+    a: The guide covers the common risks in vibe coded stacks. LyraShield adds a release check that verifies those risks in your actual build, with evidence you can review before launch.
+---
+
+Shipping a security tool for AI built apps taught me that detecting a finding is easy and proving it is hard and proving it is the only way to ship with confidence. This is my honest build log on LyraShield AI, what is live in open beta today, why we use proposals requiring review and what is still on our roadmap. See our [vibe coding security guide](/blog/vibe-coding-security-guide) for background on the risks.
+
+## The gap between flagging and proving
+
+When I started LyraShield AI at [lyrashieldai.com](https://lyrashieldai.com) I thought detection would be the hard part. It is not. Scanning for secrets or weak auth is table stakes. Every linter does it. The pain is what comes after.
+
+I watched vibe coders drown in maybe findings. A scanner yells hardcoded secret and points at an env example file that never ships. Or auth bypass and points at a route that is actually behind middleware. You cannot release with that noise.
+
+So we had to define release assurance differently. Not more flags. More proof.
+
+Early on we flagged [CWE 798 Use of Hard coded Credentials](https://cwe.mitre.org/data/definitions/798.html) and felt good, then we tested it on a real vibe coded app and the credential was in a test fixture. The founder did not care about the pattern. They cared about is this in my client bundle.
+
+Same with access control. Static analysis of middleware is not enough in vibe coded stacks. Auth is scattered. One AI prompt adds a check in the frontend, another forgets the server guard. [OWASP Top 10](https://owasp.org/www-project-top-ten/) still lists broken access control near the top and [CWE 287 Improper Authentication](https://cwe.mitre.org/data/definitions/287.html) shows how often the check is in the wrong place. We had to stop at pattern match and start tracing whether the check is enforced on the server path serving the data.
+
+That shift cost us weeks. Proving means you need route maps and a tiny runtime check, not just AST. But every founder told us the same thing. I dont need another scanner that tells me what might be wrong. I need to know what will break when I ship. That became our filter. If we cannot show evidence, we do not show the finding.
+
+If you want the raw list we verify before release, we keep it in our [AI app security checklist](/tools/ai-app-security-checklist). It is a working doc, not marketing.
+
+## Why proposals requiring review beat one click rewrites
+
+I was tempted to ship one click rewrites early. It demos well. One click and your app is secure. We tried it internally and it scared me.
+
+We auto patched a guard and broke login for existing users. The logic was right in isolation, add a session check here, but the app had a custom invite flow that needed that route public for ten minutes. The tool did not know product intent. No scanner can from code alone.
+
+That is why we never frame it as applied for you. We say proposals requiring review. Always. A proposal is a diff you can read, test and reject. It is not applied.
+
+I see why others market one click remediation. It converts. But in a vibe coded stack where one file is your DB and API and UI glued by AI, an auto rewrite can turn a security risk into an availability risk. You fixed a low leak and broke checkout.
+
+So we built the opposite habit. Every proposal comes with why we think it is reachable, what path or payload proved it and the minimal change. You decide.
+
+We also set a hard rule: no proposal touches auth or payments without a test note. If we cannot point to a test that checks the flow after the change, we do not propose it. I would rather ship nothing than a confident wrong fix.
+
+## Building the MCP and GitHub Action without leaking
+
+Two integrations mattered most: MCP and GitHub Action. Not because they are trendy, but because that is where vibe coders live. In the editor and in CI.
+
+Building the MCP server humbled me. I read the [model context protocol intro](https://modelcontextprotocol.io/docs/getting-started/intro) and thought this will be quick. It was not. Secrets leak through tool outputs before they leak through code. The [GitHub blog on reaching secret scanning inbox zero](https://github.blog/security/application-security/how-github-used-secret-scanning-to-reach-inbox-zero/) made that super clear. We had to design our tool so it never echoes a secret into chat context.
+
+Our MCP tool returns a redacted proof. Finding type, file, line, reachability, hint. No secret value. Ever. You can call it from Cursor or Claude Code and it does not dump a key into your agent history. That was a deliberate choice and it took an extra sprint to get right.
+
+The GitHub Action taught a different lesson. Founders do not want another dashboard. They want a check that fails the PR when something real is about to ship. So we built the Action to block on verified high severity only, not on every maybe. I borrowed the layering idea from [MDN web security docs](https://developer.mozilla.org/en-US/docs/Web/Security): enforce the critical ones in the path, warn on the rest.
+
+Config is boring on purpose. If you have a lyrashield.yaml we read it. If not, sane defaults. No org wide secret to start. That mattered in open beta. People try it in five minutes without handing us broad tokens.
+
+For the Cursor flow, we liked the habit in [Cursor security review checklist](/blog/cursor-app-security-checklist) because it shows pre commit proof plus CI gate. That pairing is what we use on our own repo. MCP for local proof, Action for release gate. See all ways to wire us in our [docs integrations hub](/docs/integrations).
+
+## The honesty rule that slows us down on purpose
+
+Building a security tool in public is awkward. The market rewards overclaim. Perfect scores on every badge. I am not doing that.
+
+Our honesty rule is simple. No invented stats. If we did not measure it on a real set, we do not put a number. No customer logos we cannot link. No only we language. Lots of good tools do parts of this well. We are focused on release assurance for vibe coded apps, which is narrow but painful. No fear language. We do not say you will get hacked. We say here is what we proved reachable in your build and here is the diff if you approve.
+
+That rule slows marketing. I have rewritten posts three times to cut a maybe overclaim. But it makes product better. When you cannot hide behind big claims, the proof has to be good.
+
+Vibe coders also do not say vulnerability management. They say can I ship this. So we stopped using auditor words in UI. We show can this route leak data, yes or no, with a snippet. Is this secret in the client bundle, yes or no, with the bundle path. Plain beats compliance speak for this audience.
+
+We also separate what is live from what is coming. Mixing those breaks trust. So we keep a simple built vs coming table in docs and I repeat it here. As of August 2026 LyraShield AI is in open beta with open registration at lyrashieldai.com. Core scanning, MCP integration and GitHub Action are live. Deeper fix PR automation and billing are on our near term roadmap and not yet live.
+
+## What is live today and what is still coming
+
+If you want to try it, you can sign up now at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up). Open registration is live.
+
+Here is the snapshot we share internally and externally:
+
+| Area     | What is live in open beta today                                                     | What is on near term roadmap                                           |
+| -------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Scanning | Secret reachability, auth enforcement checks, IDOR evidence, client bundle analysis | Wider framework adapters and deeper data flow tracking                 |
+| Editor   | MCP server with redacted proofs for Cursor and Claude Code                          | Inline proposal preview inside editor                                  |
+| CI       | GitHub Action that blocks PRs on verified high severity                             | Fix proposal hints inside Action logs with safe apply in CI            |
+| Fixes    | Proposals requiring review with evidence and minimal diff                           | One click proposal to PR branch after approval, only after your review |
+| Accounts | Open registration and individual projects                                           | Team roles and billing not yet live as of August 2026                  |
+
+If this resonates, start where we started. Run our [AI app security checklist](/tools/ai-app-security-checklist) on your next build, then run LyraShield AI from [lyrashieldai.com](https://app.lyrashieldai.com/sign-up). You will get a short report of what we could prove reachable and a proposal you can read before you merge.
+
+For the broader shape of risks in vibe coded apps, our [vibe coding security guide](/blog/vibe-coding-security-guide) is the pillar we update. For how we connect across tools, see our [docs integrations hub](/docs/integrations).
+
+I will keep this log honest. What we built, what broke and what we changed because of it. If you build with AI and you are tired of scanners that flag everything and prove nothing, try the open beta and tell me where proof is still thin.

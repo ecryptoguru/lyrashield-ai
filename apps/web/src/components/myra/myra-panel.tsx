@@ -1,23 +1,16 @@
 "use client"
 
 /**
- * Myra docked support panel for the dashboard (spec §3/§13).
+ * Myra support launcher and panel for the dashboard.
  *
  * Renders only allowlisted components; all model text passes through
  * sanitizeMarkdown and JSX escaping — no innerHTML anywhere. Same-origin
  * requests use the cookie session (apiBase ""); anonymous/public tokens never
  * apply on this surface.
  */
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
-import {
-  MessageCircleQuestion,
-  PanelRightClose,
-  PanelRightOpen,
-  Send,
-  Square,
-  X,
-} from "lucide-react"
+import { MessageCircleQuestion, Send, Square, X } from "lucide-react"
 import { isManifestRoute, MYRA_COPY, MYRA_LIMITS } from "@lyrashield/myra"
 import { Button, cn } from "@lyrashield/ui"
 import { MyraComponentView, MyraMarkdown, ProposalActions } from "./myra-presentation"
@@ -36,15 +29,8 @@ function routeContextFor(pathname: string, surface: "marketing" | "app"): string
 
 // ─── Panel ──────────────────────────────────────────────────────────────────
 
-const LG_MEDIA_QUERY = "(min-width: 1024px)"
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-
-function subscribeLgViewport(callback: () => void) {
-  const media = window.matchMedia(LG_MEDIA_QUERY)
-  media.addEventListener("change", callback)
-  return () => media.removeEventListener("change", callback)
-}
 
 export function MyraPanel({
   enabled = true,
@@ -59,20 +45,11 @@ export function MyraPanel({
   const pathname = usePathname()
   const routeContext = routeContextFor(pathname ?? "/", "app")
 
-  const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const mobileLauncherRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLElement | null>(null)
   const mobileCloseRef = useRef<HTMLButtonElement | null>(null)
-  // The sheet is modal only while it actually IS the full-screen overlay:
-  // below lg. Opening it and then widening past lg leaves the docked panel
-  // visible — a trapped/aria-modal state there would lie about the layout.
-  const isLgViewport = useSyncExternalStore(
-    subscribeLgViewport,
-    () => window.matchMedia(LG_MEDIA_QUERY).matches,
-    () => true
-  )
-  const isModal = mobileOpen && !isLgViewport
+  const isModal = mobileOpen
   const {
     turns,
     input,
@@ -92,6 +69,7 @@ export function MyraPanel({
     pickSuggestion,
     submitCaseForm,
     componentContext,
+    rateAnswer,
   } = useMyraPanel(routeContext, { email: accountEmail, name: accountName })
 
   const starters = [
@@ -149,10 +127,21 @@ export function MyraPanel({
 
   const body = (
     <>
-      <div className="flex items-center gap-2 border-b px-4 py-3">
-        <h2 className="font-mono text-xs font-semibold tracking-[0.14em] uppercase">
-          {MYRA_COPY.header}
-        </h2>
+      <div className="border-border/80 bg-card/95 flex items-center gap-3 border-b px-4 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
+        <span
+          aria-hidden="true"
+          className="bg-primary/10 text-primary grid size-10 shrink-0 place-items-center rounded-xl ring-1 ring-inset ring-current/15"
+        >
+          <MessageCircleQuestion className="size-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-muted-foreground font-mono text-[10px] font-semibold tracking-[0.16em] uppercase">
+            LyraShield support
+          </p>
+          <h2 className="text-foreground text-base font-semibold leading-5 tracking-tight">
+            {MYRA_COPY.header}
+          </h2>
+        </div>
         <div className="ml-auto flex items-center gap-1">
           <Button
             size="sm"
@@ -167,26 +156,14 @@ export function MyraPanel({
               })
             }}
           >
-            {MYRA_COPY.talkToPerson}
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="hidden size-9 lg:inline-flex"
-            aria-label={collapsed ? "Expand Myra panel" : "Collapse Myra panel"}
-            onClick={() => setCollapsed((c) => !c)}
-          >
-            {collapsed ? (
-              <PanelRightOpen className="size-4" aria-hidden="true" />
-            ) : (
-              <PanelRightClose className="size-4" aria-hidden="true" />
-            )}
+            <span className="sm:hidden">Support</span>
+            <span className="hidden sm:inline">{MYRA_COPY.talkToPerson}</span>
           </Button>
           <Button
             ref={mobileCloseRef}
             size="icon"
             variant="ghost"
-            className="size-9 lg:hidden"
+            className="size-9"
             aria-label="Close Myra"
             onClick={closeMobile}
           >
@@ -200,18 +177,21 @@ export function MyraPanel({
         role="log"
         aria-label="Conversation with Myra"
         aria-busy={streaming || undefined}
-        className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4"
+        className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5"
       >
         {turns.length === 0 && !caseForm ? (
-          <div>
-            <p className="text-sm leading-relaxed">{MYRA_COPY.opener}</p>
-            <div className="mt-3 flex flex-wrap gap-2" aria-label="Suggested starting points">
+          <div className="border-primary/20 bg-primary/[0.035] rounded-2xl border-l-[3px] px-4 py-4">
+            <p className="text-foreground text-sm leading-relaxed">{MYRA_COPY.opener}</p>
+            <p className="text-muted-foreground mt-2 text-xs leading-5">
+              I’ll use LyraShield guidance where I have it and help you reach support when I don’t.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2" aria-label="Suggested starting points">
               {starters.map((s) => (
                 <button
                   key={s.label}
                   type="button"
                   onClick={() => void send(s.send)}
-                  className="border-border focus-visible:ring-ring inline-flex min-h-11 items-center rounded-full border px-3.5 text-xs font-medium hover:border-current focus-visible:ring-2 focus-visible:outline-none"
+                  className="border-border bg-background focus-visible:ring-ring inline-flex min-h-11 items-center rounded-full border px-3.5 text-xs font-medium transition-colors hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:outline-none"
                 >
                   {s.label}
                 </button>
@@ -222,7 +202,7 @@ export function MyraPanel({
 
         {turns.map((turn) => (
           <div key={turn.id} className="space-y-2">
-            <div className="bg-accent ml-auto w-fit max-w-[85%] rounded-lg px-3 py-2">
+            <div className="bg-primary/10 ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm px-3.5 py-2.5">
               <p className="text-sm wrap-break-word whitespace-pre-wrap">{turn.userText}</p>
             </div>
             <div className="space-y-2">
@@ -263,6 +243,23 @@ export function MyraPanel({
                 <p className="text-destructive text-xs" role="alert">
                   {turn.error}
                 </p>
+              ) : null}
+              {turn.assistantMessageId && !turn.error ? (
+                <div className="flex items-center gap-2 text-xs" aria-label="Rate Myra's answer">
+                  <span className="text-muted-foreground">Was this helpful?</span>
+                  {(["helpful", "not_helpful"] as const).map((rating) => (
+                    <button
+                      key={rating}
+                      type="button"
+                      disabled={turn.ratingPending}
+                      aria-pressed={turn.rating === rating}
+                      onClick={() => void rateAnswer(turn.id, turn.assistantMessageId!, rating)}
+                      className="focus-visible:ring-ring min-h-11 rounded-md border px-2 focus-visible:ring-2"
+                    >
+                      {rating === "helpful" ? "Yes" : "No"}
+                    </button>
+                  ))}
+                </div>
               ) : null}
             </div>
           </div>
@@ -333,7 +330,7 @@ export function MyraPanel({
         </p>
       ) : null}
 
-      <div className="border-t p-3">
+      <div className="border-border/80 bg-card/95 border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="relative">
           <label htmlFor="myra-dash-input" className="sr-only">
             Message Myra
@@ -353,7 +350,7 @@ export function MyraPanel({
             aria-activedescendant={
               suggestActive >= 0 ? `myra-dash-suggest-${suggestActive}` : undefined
             }
-            className="border-input bg-background focus-visible:ring-ring w-full resize-none rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+            className="border-input bg-background focus-visible:ring-ring w-full resize-none rounded-xl border px-3 py-2.5 text-sm focus-visible:ring-2 focus-visible:outline-none"
           />
           {suggestions.length ? (
             <ul
@@ -413,7 +410,9 @@ export function MyraPanel({
 
   return (
     <>
-      {/* Mobile launcher — sits above the bottom nav, safe-area aware. */}
+      {/* Launcher sits above mobile navigation and the device safe area. On
+          desktop it moves to the bottom-right so it never covers the sidebar's
+          Sign out and theme controls in the bottom-left corner. */}
       <Button
         ref={mobileLauncherRef}
         type="button"
@@ -422,46 +421,26 @@ export function MyraPanel({
         aria-expanded={mobileOpen}
         aria-controls="myra-dash-panel"
         onClick={() => setMobileOpen(true)}
-        className="fixed right-4 bottom-20 z-40 gap-1.5 shadow-md sm:right-6 lg:hidden"
+        className="border-primary/20 bg-card text-foreground hover:border-primary fixed right-4 bottom-20 z-40 min-h-11 gap-2 rounded-full border px-4 shadow-[0_12px_38px_-14px_rgba(0,0,0,0.45)] transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:shadow-lg motion-reduce:transform-none sm:right-6 lg:right-6 lg:bottom-24 lg:left-auto"
         style={{ marginBottom: "env(safe-area-inset-bottom)" }}
       >
         <MessageCircleQuestion className="size-4" aria-hidden="true" />
-        Help
+        Ask Myra
       </Button>
 
-      {/*
-        One DOM tree, two presentations:
-          <lg  → hidden until the launcher opens it as a full-height fixed sheet
-          lg+  → docked beside content; collapses to a slim rail, never a bubble
-      */}
       <aside
         ref={panelRef}
         id="myra-dash-panel"
         aria-label="Myra support"
-        role={isModal ? "dialog" : "complementary"}
+        role="dialog"
         aria-modal={isModal || undefined}
-        className={cn(
-          "bg-background flex-col",
-          mobileOpen ? "fixed inset-0 z-50 flex" : "hidden",
-          "lg:sticky lg:top-0 lg:z-auto lg:flex lg:h-svh lg:shrink-0 lg:self-start lg:border-l",
-          collapsed ? "lg:w-14" : "lg:w-88 xl:w-96"
-        )}
+        className={
+          mobileOpen
+            ? "bg-background fixed inset-0 z-50 flex flex-col lg:inset-auto lg:bottom-6 lg:left-6 lg:h-[min(650px,calc(100dvh-3rem))] lg:w-[min(420px,calc(100vw-3rem))] lg:overflow-hidden lg:rounded-2xl lg:border lg:border-border/80 lg:shadow-[0_28px_90px_-30px_rgba(0,0,0,0.65)]"
+            : "hidden"
+        }
       >
-        {collapsed && !mobileOpen ? (
-          <button
-            type="button"
-            onClick={() => setCollapsed(false)}
-            aria-label="Expand Myra support panel"
-            className="focus-visible:ring-ring flex h-full w-full flex-col items-center gap-3 py-4 focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
-          >
-            <MessageCircleQuestion className="text-muted-foreground size-5" aria-hidden="true" />
-            <span className="text-muted-foreground font-mono text-[0.625rem] tracking-[0.2em] [writing-mode:vertical-rl]">
-              MYRA
-            </span>
-          </button>
-        ) : (
-          body
-        )}
+        {body}
       </aside>
     </>
   )

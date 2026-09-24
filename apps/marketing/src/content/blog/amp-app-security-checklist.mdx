@@ -1,8 +1,8 @@
 ---
 title: Amp App Security Checklist
-description: "Practical checklist for Amp: scope orbs, MCP servers, skills, and CI gates before shipping AI-built code to production."
+description: "Practical checklist for Amp: scope orbs, MCP servers, skills and CI gates before shipping AI-built code to production."
 pubDate: "2026-07-30"
-updatedDate: 2026-08-07
+updatedDate: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -18,13 +18,13 @@ faq:
     a: "CLI flags highest, then user/workspace amp.mcpServers, then skills. Override skill-provided servers in user config for security."
 ---
 
-If you build with Amp from Sourcegraph, you inherit multi-model orchestration, persistent orbs, and plugin extensibility, and each expands your attack surface if permissions and secrets are not scoped. This checklist hardens Amp before AI-built code reaches production. Start with the [vibe coding security guide](/blog/vibe-coding-security-guide) for the shared baseline, then apply the Amp controls below.
+If you build with Amp from Sourcegraph, you inherit multi-model orchestration, persistent orbs and plugin extensibility and each expands your attack surface if permissions and secrets are not scoped. This checklist hardens Amp before AI-built code reaches production. Start with the [vibe coding security guide](/blog/vibe-coding-security-guide) for the shared baseline, then apply the Amp controls below.
 
 Amp accelerates development through orbs and plugins, but each orb is a long-lived environment and each plugin is third-party code with tool access. Secure defaults and verifiable release gates prevent those capabilities from becoming persistence mechanisms.
 
-## 1. Pin configuration scope: global, workspace, and skills with explicit approval
+## 1. Pin configuration scope: global, workspace and skills with explicit approval
 
-Amp stores MCP servers in `amp.mcpServers` under `~/.config/amp/settings.json` (macOS/Linux) or `%APPDATA%\amp\settings.json` (Windows) for global, and `.amp/settings.json` for workspace. Live verified precedence is: CLI flags (`--mcp-config`) > user/workspace config > skills (only loaded if not configured above). Workspace MCP definitions in `.amp/settings.json` require explicit approval before running, this protects against repo-cloned malicious servers.
+Amp stores MCP servers in `amp.mcpServers` under `~/.config/amp/settings.json` (macOS/Linux) or `%APPDATA%\amp\settings.json` (Windows) for global and `.amp/settings.json` for workspace. Live verified precedence is: CLI flags (`--mcp-config`) > user/workspace config > skills (only loaded if not configured above). Workspace MCP definitions in `.amp/settings.json` require explicit approval before running, this protects against repo-cloned malicious servers.
 
 Actions:
 
@@ -34,7 +34,7 @@ Actions:
 
 ## 2. Scope orbs: ephemeral by default, secrets scoped to lifetime
 
-Amp's orbs, persistent remote execution environments, are a core USP. They also retain environment variables, authentication tokens, and file state across sessions.
+Amp's orbs, persistent remote execution environments, are a core USP. They also retain environment variables, authentication tokens and file state across sessions.
 
 Hardening:
 
@@ -44,7 +44,7 @@ Hardening:
 
 This maps to CWE-798 Hardcoded Credentials and CWE-522 Insufficiently Protected Credentials. The fix is process, not just tooling: document orb lifecycle in your runbook.
 
-## 3. Vet MCP transport, auth, and per-tool allowlisting
+## 3. Vet MCP transport, auth and per-tool allowlisting
 
 Amp supports `command`/`args`/`env` for local and `url`/`headers` for remote, with `$` env substitution and OAuth handling.
 
@@ -99,12 +99,12 @@ See also [kilo-code-app-security-checklist](/blog/kilo-code-app-security-checkli
 
 ## 4. Treat skills and plugins as supply chain
 
-Amp's plugin extensibility is powerful. A plugin can add tools that touch GitHub, Linear, Jira, and internal APIs. Each plugin install is an implicit trust.
+Amp's plugin extensibility is powerful. A plugin can add tools that touch GitHub, Linear, Jira and internal APIs. Each plugin install is an implicit trust.
 
 Baseline:
 
 - Inventory plugins and skills in git. If Amp loads skills from `.amp/skills/` or bundled `mcp.json`, track them.
-- Review third-party MCP servers the way you review npm dependencies: publisher, transport, scopes, and issue history.
+- Review third-party MCP servers the way you review npm dependencies: publisher, transport, scopes and issue history.
 - Sandbox untrusted skills. If a skill adds a Playwright or filesystem MCP server with broad `**/*` read, scope it to the specific project path, not `/`.
 
 ## 5. Build diff-aware release evidence before merge
@@ -115,7 +115,7 @@ Target state for Amp-built PRs:
 
 - GitHub Action that runs on diff, not full repo. The designed LyraShield Action plans diff-aware scanning: changed routes and `package-lock.json` diffs drive retargeting.
 - SARIF output for all security findings. Upload to GitHub code scanning so CWE/CVSS metadata is centralized, not in chat logs.
-- Mandatory human review for changes to `src/auth/**`, `src/**/auth.ts`, secrets handling, and migration files. Orbs can generate those, but humans must approve.
+- Mandatory human review for changes to `src/auth/**`, `src/**/auth.ts`, secrets handling and migration files. Orbs can generate those, but humans must approve.
 - Retest loop: after fix, automatic retest. This is the `retest` step in LyraShield's `target, review, evidence, fix, retest, report` loop, designed to prevent fix drift where an agent fixes one path and regresses another.
 
 | #   | Control                                       | Where                                       | What Breaks If Missed                                   |
@@ -129,14 +129,14 @@ Target state for Amp-built PRs:
 
 ## Why pair Amp with LyraShield
 
-Amp configuration deserves the same review discipline as application code. Use the [OWASP Top 10](https://owasp.org/www-project-top-ten/) to frame authorization and injection checks, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) when secrets may enter configuration, and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) to confirm transport and tool contracts. These sources do not certify an Amp setup. They give reviewers stable vocabulary for checking which tools can run, where credentials resolve, and whether a workflow retains enough evidence for a release decision. Record the configuration revision you reviewed, then retest after changing an orb, skill, MCP server, or approval boundary.
+Amp configuration deserves the same review discipline as application code. Use the [OWASP Top 10](https://owasp.org/www-project-top-ten/) to frame authorization and injection checks, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) when secrets may enter configuration and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) to confirm transport and tool contracts. These sources do not certify an Amp setup. They give reviewers stable vocabulary for checking which tools can run, where credentials resolve and whether a workflow retains enough evidence for a release decision. Record the configuration revision you reviewed, then retest after changing an orb, skill, MCP server or approval boundary.
 
-Amp gives you orchestration across models, remote persistence via orbs, and a clean extension model, ideal for shipping full features from a single prompt. LyraShield complements that with release assurance for AI-built apps that is agent-native, not bolt-on. The integration surface is minimal: MCP server via `npx -y @lyrashield/mcp@0.2.8` locally or `https://app.lyrashieldai.com/api/mcp` remotely using Bearer `lsk_` key, plus a GitHub Action that is diff-aware and SARIF-emitting for PR gating. That maps to the combination positioning, not a claim of exclusivity, many tools scan, LyraShield's focus is verified findings tied to evidence, fix, retest, report so AI-generated code does not reintroduce CWE-20/287/798 across sessions. Every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
+Amp gives you orchestration across models, remote persistence via orbs and a clean extension model, ideal for shipping full features from a single prompt. LyraShield complements that with release assurance for AI-built apps that is agent-native, not bolt-on. The integration surface is minimal: MCP server via `npx -y @lyrashield/mcp@0.2.8` locally or `https://app.lyrashieldai.com/api/mcp` remotely using Bearer `lsk_` key, plus a GitHub Action that is diff-aware and SARIF-emitting for PR gating. That maps to the combination positioning, not a claim of exclusivity, many tools scan, LyraShield's focus is verified findings tied to evidence, fix, retest, report so AI-generated code does not reintroduce CWE-20/287/798 across sessions. Every finding produces an immutable assurance record and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-The platform is live in open beta with open registration; create an account at [lyrashieldai.com](https://lyrashieldai.com) for docs at [amp integration guide](/docs/integrations/amp) and hub at [integrations hub](/docs/integrations). If you are comparing Amp to [kilo-code-app-security-checklist](/blog/kilo-code-app-security-checklist) or [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist), the pattern holds: Amp owns generation, LyraShield owns verification and release evidence.
+The platform is live in open beta with open registration; create an account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) for docs at [amp integration guide](/docs/integrations/amp) and hub at [integrations hub](/docs/integrations). If you are comparing Amp to [kilo-code-app-security-checklist](/blog/kilo-code-app-security-checklist) or [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist), the pattern holds: Amp owns generation, LyraShield owns verification and release evidence.
 
-Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
+Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets and dependencies one more time.
 
 ## CTA
 
-Create an account at [lyrashieldai.com](https://lyrashieldai.com) for the Amp integration guide, the GitHub Action YAML, and access to the verification flow.
+Create an account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) for the Amp integration guide, the GitHub Action YAML and access to the verification flow.

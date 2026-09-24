@@ -4,9 +4,13 @@ import BlogCard from "@components/BlogCard.astro"
 import { getCollection, getEntry } from "astro:content"
 import type { GetStaticPathsOptions } from "astro"
 import { categoryHref, getCategoriesWithCounts } from "../../lib/blog-categories"
+import { isNotAfterBuildDate } from "../../lib/blog-publishing"
 
 export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
-  const posts = await getCollection("blog", (entry) => !entry.data.draft)
+  const posts = await getCollection(
+    "blog",
+    (entry) => !entry.data.draft && isNotAfterBuildDate(entry.data)
+  )
   const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
   return paginate(sortedPosts, { pageSize: 10 })
 }
@@ -23,7 +27,7 @@ const title =
   page.currentPage === 1
     ? "AI App Security Resources | LyraShield AI"
     : `AI App Security Resources — Page ${page.currentPage} | LyraShield AI`
-const baseDescription = "Read LyraShield AI research and practical guidance on securing AI-built apps, interpreting security evidence, verifying findings, and retesting fixes."
+const baseDescription = "Read LyraShield AI research and practical guidance on securing AI-built apps, interpreting security evidence, verifying findings and retesting fixes."
 const description =
   page.currentPage === 1
     ? baseDescription
@@ -93,8 +97,8 @@ const jsonLd = [
           <p>Until the first founder-approved guides publish, start with the evidence methodology or use a focused browser-local check. Draft articles never enter the sitemap or RSS feed.</p>
         </div>
         <div class="blog-index__starting-points">
-          <a href="/methodology"><span>Evidence methodology</span><span>How scope, coverage, verification, retest state, and limitations are recorded.</span></a>
-          <a href="/tools"><span>Free security tools</span><span>Private checks for launch controls, headers, secrets, RLS, and sessions.</span></a>
+          <a href="/methodology"><span>Evidence methodology</span><span>How scope, coverage, verification, retest state and limitations are recorded.</span></a>
+          <a href="/tools"><span>Free security tools</span><span>Private checks for launch controls, headers, secrets, RLS and sessions.</span></a>
         </div>
       </section>
     )}

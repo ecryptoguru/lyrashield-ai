@@ -229,7 +229,7 @@ export async function addRules(
         format,
         action: "refused",
         reason: tracked
-          ? "file exists, is tracked by git, and is not gitignored; use --force to overwrite"
+          ? "file exists, is tracked by git and is not gitignored; use --force to overwrite"
           : "file exists with no managed LyraShield block; use --force to overwrite",
         sha: rule.sha,
       })

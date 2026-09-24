@@ -2543,6 +2543,8 @@ model MyraMessage {
   component      Json?
   taskRecord     Json?
   traceId        String?
+  helpful        Boolean?
+  ratedAt        DateTime?
   createdAt      DateTime        @default(now())
 
   conversation MyraConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

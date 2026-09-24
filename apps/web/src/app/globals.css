@@ -13,11 +13,11 @@
   --color-popover: oklch(1 0 0);
   --color-popover-foreground: oklch(0.18 0.02 270);
   /*
-   * DESIGN.md: "Single accent: cyan #54d6df (dark) / #087f78 (light). Purple/violet
+   * DESIGN.md: "Single accent: cyan #00bae6 (dark) / #087f78 (light). Purple/violet
    * hues are banned." This was oklch(0.48 0.16 245) — a royal blue — so every primary
    * button changed hue family when the theme switched.
    *
-   * Hue 188 is the documented accent's hue. The lightness is one step deeper than the
+   * Hue 188 is the documented light accent's hue. The lightness is one step deeper than the
    * #087f78 reference because the accent is also used as TEXT on its own tints
    * (`text-primary` on `bg-primary/10` in the active sidebar row and the plan badge):
    * at #087f78 those measure 4.10/4.20:1 and fail 4.5:1. oklch(0.51 0.095 188) = #00766f

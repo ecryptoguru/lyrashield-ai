@@ -96,7 +96,7 @@ Implemented in code:
   update expiry never disables the installed eligible build or local scans.
 - explicit revocation hard-stop and a user-confirmed signed updater pipeline.
 
-Local/self-hosted models are deferred because the engine currently requires GPT-5.6 Terra/Luna.
+Local/self-hosted models are deferred because the engine currently requires the GPT-6 Sol/Luna provider contract.
 
 ### Marketing and free tools
 
@@ -133,8 +133,8 @@ The passive Lite Scanner is separate from the BullMQ/engine repository pipeline.
 | Safe     | Luna       | Luna             | medium                        |        $1.20 |
 | Quick    | Luna       | Luna             | medium                        |        $1.20 |
 | Standard | Luna       | Luna             | medium                        |        $3.20 |
-| Deep     | Terra      | Luna             | medium root, high specialists |        $5.00 |
-| Custom   | Terra      | Luna             | medium root, high specialists |        $5.00 |
+| Deep     | Sol        | Luna             | medium root, high specialists |        $5.00 |
+| Custom   | Sol        | Luna             | medium root, high specialists |        $5.00 |
 
 Rules:
 
@@ -142,9 +142,9 @@ Rules:
 - `resolveScanBudgetUsd()` is the protected budget authority.
 - A positive workspace policy may lower but never raise the selected cap.
 - `LYRASHIELD_LLM` is a validated fallback, not a routing bypass.
-- Deep/Custom are deterministic two-tier profiles, not a Luna-to-Terra cascade.
+- Deep/Custom are deterministic two-tier profiles, not a Luna-to-Sol cascade.
 - Actual model, standard/long-context tokens, cache reads/writes, requests, and reconciled cost stay in the private ledger. Dashboard users see minutes, not provider spend.
-- URL/API Safe/Quick have zero AI budget. Standard selects Luna with a $3.20 provider cap; Deep/Custom select Terra-root/Luna-specialist routing with a $5 cap. These are source profile contracts, not completed live scan acceptance. The remote relay rejects opaque CONNECT tunnels; a sandbox-local TLS adapter converts HTTPS client traffic into inspectable requests using the installed sandbox CA. Composed local curl and Chromium navigation/fetch acceptance passed allowed requests and denied path/method/redirect requests without TLS bypass, including rejection of an invalid upstream certificate. Exact-image production deployment and a paid URL engine scan remain unverified.
+- URL/API Safe/Quick have zero AI budget. Standard selects GPT-6 Luna with a $3.20 provider cap; Deep/Custom select GPT-6 Sol-root/Luna-specialist routing with a $5 cap. These are source profile contracts, not completed live scan acceptance. The remote relay rejects opaque CONNECT tunnels; a sandbox-local TLS adapter converts HTTPS client traffic into inspectable requests using the installed sandbox CA. Composed local curl and Chromium navigation/fetch acceptance passed allowed requests and denied path/method/redirect requests without TLS bypass, including rejection of an invalid upstream certificate. Exact-image production deployment and a paid URL engine scan remain unverified.
 
 ### Standards evidence mapping
 
@@ -222,7 +222,7 @@ Repository jobs are admitted only while a live worker heartbeat exists. Queue/da
 
 ### Cloud plans
 
-Two product lines (WP1 repricing, founder-confirmed 2026-08-29, in code at `packages/pricing/src/plans.ts`):
+Two product lines (publishable schedule reaffirmed 2026-09-22; code authority is `packages/pricing/src/plans.ts`):
 
 **Line 1 — Scan** (find what's wrong):
 
@@ -254,7 +254,7 @@ Subscriptions, allowances, usage balances, packs, grace, and overage belong to t
 
 Cloud subscriptions, Local licenses, and minute packs are non-refundable except where required by law or for duplicate collection, unauthorized payment, or a confirmed payment error. Provider-confirmed reversals still revoke entitlements and claw back related commissions.
 
-Do not publish or change pricing without founder approval.
+This is the approved public launch schedule. Revisit it after sufficient paid utilization and conversion data exists; catalog or price changes still require founder approval.
 
 ### Local pricing
 
@@ -440,11 +440,14 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 ## 10. Founder decisions
 
 - Trademark clearance for LyraShield AI and `lyrashieldai.com`.
-- Public paid-launch timing and final publishable pricing.
 - Confirm the intended current public Cloud-admission posture and authorize bounded live checkout/refund proof per rail; Local admissions remain off.
-- Authorized provider/model and target for first controlled Deep/Terra scan.
-- Decide whether repository-level MCP/WebMCP scanner findings should remain visible on Trial and Starter. Current behavior intentionally keeps them available on every plan; a Pro+ entitlement would remove existing visibility and requires an explicit product decision.
-- Approve any public release-identity confirmation contract before implementation. Current public report verification does not disclose or confirm a stored commit or artifact identity; any future endpoint must avoid existence leaks and define token, expiry, revocation, rate-limit, and mismatch behavior.
+
+Decided 2026-09-22:
+
+- Publish the existing Cloud and minute-pack prices unchanged. This decision does not authorize a new live charge, cancellation, or refund.
+- Keep repository MCP/WebMCP findings visible on Trial and Starter; permissions and scan admission remain the control boundaries.
+- Use the current production Deep profile for controlled acceptance on the fixed OnboardingAI2 revision; exact execution evidence remains a separate gate.
+- Public release-identity confirmation is opt-in and capability-bound: a valid signed report plus its unexpired, unrevoked share token may confirm a caller-supplied commit or artifact digest as `MATCH`, `MISMATCH` or `UNAVAILABLE`. The API never returns the stored identity; unknown token, cross-report token, legacy provenance, checksum mismatch, expiry and revocation collapse to `UNAVAILABLE`; requests are rate-limited and non-cacheable.
 
 ## 11. Success measures
 

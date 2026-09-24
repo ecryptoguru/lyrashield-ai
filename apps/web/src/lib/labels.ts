@@ -4,11 +4,11 @@ const GOAL_OPTIONS = [
   {
     value: "CHECK_PR",
     label: "Check a PR",
-    description: "Review a pull request before merging.",
+    description: "Scan a pull request before merging.",
   },
   {
     value: "TEST_APP",
-    label: "Code review",
+    label: "Code scan",
     description: "Broader repository and dependency analysis.",
   },
   {
@@ -19,16 +19,16 @@ const GOAL_OPTIONS = [
   {
     value: "WEEKLY_MONITOR",
     label: "Weekly monitor",
-    description: "Set a recurring review goal.",
+    description: "Set a recurring scan goal.",
   },
   {
     value: "FULL_PENTEST",
-    label: "Deep security review",
-    description: "A thorough security review with evidence.",
+    label: "Deep security scan",
+    description: "A thorough security scan with evidence.",
   },
   {
     value: "COMPLIANCE_REVIEW",
-    label: "Compliance review",
+    label: "Compliance scan",
     description: "Map findings to compliance objectives.",
   },
 ] as const

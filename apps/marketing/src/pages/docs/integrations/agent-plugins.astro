@@ -5,7 +5,7 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield Agent Plugin — Coding Agent Setup"
 const description =
-  "Install the LyraShield Agent Plugin through each coding client's documented local, marketplace, or MCP activation path."
+  "Install the LyraShield Agent Plugin through each coding client's documented local, marketplace or MCP activation path."
 const updatedDate = "2026-09-09"
 
 // Kept in the same order as the launch-client table below.
@@ -45,11 +45,11 @@ const launchClients = [
 const faqItems = [
   {
     q: "What is the LyraShield Agent Plugin?",
-    a: "It is a portable package that carries the LyraShield MCP descriptor and security guidance. Each client still controls activation through its own documented local, marketplace, or MCP settings path.",
+    a: "It is a portable package that carries the LyraShield MCP descriptor and security guidance. Each client still controls activation through its own documented local, marketplace or MCP settings path.",
   },
   {
     q: "Which clients can install the Agent Plugin?",
-    a: "The package has descriptors for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro. Cursor accepts a local copy; Claude, Codex, and Copilot use marketplace registration; Kiro uses its MCP settings file. Other agents follow their own guide.",
+    a: "The package has descriptors for Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro. Cursor accepts a local copy; Claude, Codex and Copilot use marketplace registration; Kiro uses its MCP settings file. Other agents follow their own guide.",
   },
   {
     q: "Do I need to log in before installing the plugin?",
@@ -57,7 +57,7 @@ const faqItems = [
   },
   {
     q: "Does the plugin let the agent change my code on its own?",
-    a: "No. LyraShield findings and fixes are proposals requiring review before they land. A browser-confirmed OAuth delegation can run its recorded LyraShield workflows without repeated approval, but it remains limited by the user's current role, workspace, targets, profiles, budget, scope, and connection expiry. LyraShield never auto-merges a pull request.",
+    a: "No. LyraShield findings and fixes are proposals requiring review before they land. A browser-confirmed OAuth delegation can run its recorded LyraShield workflows without repeated approval, but it remains limited by the user's current role, workspace, targets, profiles, budget, scope and connection expiry. LyraShield never auto-merges a pull request.",
   },
   {
     q: "Why does VS Code use an MCP config file instead of the plugin?",
@@ -103,7 +103,7 @@ const jsonLd: unknown[] = [
       >Agent Plugins v1.0.0</a
     >{" "}
     format. One package bundles two things: the LyraShield MCP server, which gives your agent the
-    scan, finding, fix-plan, and verify tools, and a security skill that tells the agent when to
+    scan, finding, fix-plan and verify tools and a security skill that tells the agent when to
     reach for them. Each client still activates the package through its own supported path.
   </p>
 
@@ -128,7 +128,7 @@ npx lyrashield install &lt;agent&gt; --dry-run</code></pre>
   <h2>The five launch clients</h2>
   <p>
     The package contains client artifacts for these five clients. Every other agent LyraShield
-    supports uses the config-file, vendor-CLI, or guided-manual path in its own guide.
+    supports uses the config-file, vendor-CLI or guided-manual path in its own guide.
   </p>
   <table>
     <thead>
@@ -158,7 +158,7 @@ npx lyrashield install &lt;agent&gt; --dry-run</code></pre>
   <h2>What the skill adds</h2>
   <p>
     The MCP server alone gives an agent tools; the bundled skill gives it judgement about depth. It
-    maps a request like a pre-commit diff check to a quick bounded review, and a deep security
+    maps a request like a pre-commit diff check to a quick bounded review and a deep security
     review to the intrusive agentic mode that only runs inside the authorised isolated sandbox for a
     repository target. That keeps a routine check from silently becoming a long expensive scan.
   </p>
@@ -168,7 +168,7 @@ npx lyrashield install &lt;agent&gt; --dry-run</code></pre>
     Installing the plugin does not let an agent rewrite your code unattended. During remote OAuth,
     the user chooses one workspace and the requested workflows. Matching calls can then run without
     repeated LyraShield approval, while current role, target access, profile, budget, connection,
-    scope, expiry, and idempotency checks still apply. Mutating calls authenticated with an API key
+    scope, expiry and idempotency checks still apply. Mutating calls authenticated with an API key
     receive a connect_required response pointing at OAuth connect and out-of-grant delegated calls
     are denied. Historical <a href="/docs/approvals">exact-input approval records</a> are separate
     from active hosted delegation. Fixes and pull requests
@@ -192,7 +192,7 @@ npx lyrashield install &lt;agent&gt; --dry-run</code></pre>
 
   <div class="callout">
     <strong>Requirements:</strong> Node.js 24+ and a LyraShield account. LyraShield is live with
-    open registration in open beta, and some platform features remain on the near-term roadmap. Get
+    open registration in open beta and some platform features remain on the near-term roadmap. Get
     started at{" "}
     <a href="https://lyrashieldai.com" target="_blank" rel="noopener noreferrer">lyrashieldai.com</a
     >.

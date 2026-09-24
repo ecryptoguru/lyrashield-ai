@@ -164,6 +164,17 @@ export function createMyraClient(options: MyraClientOptions) {
       return res.json()
     },
 
+    async rateAnswer(messageId: string, rating: "helpful" | "not_helpful") {
+      const res = await fetchImpl(`${options.apiBase}/api/myra/feedback`, {
+        method: "POST",
+        credentials,
+        headers: headers({ accept: "application/json" }),
+        body: JSON.stringify({ messageId, rating }),
+      })
+      if (!res.ok) await readError(res)
+      return res.json()
+    },
+
     async clearMemory() {
       const res = await fetchImpl(`${options.apiBase}/api/myra/memory`, {
         method: "DELETE",

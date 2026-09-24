@@ -1,8 +1,8 @@
 ---
 title: Windsurf security workflow for AI generated apps
-description: Harden Windsurf MCP config, rules, dependencies, and secrets with SARIF evidence for secure AI assisted releases of your app.
+description: Harden Windsurf MCP config, rules, dependencies and secrets with SARIF evidence for secure AI assisted releases of your app.
 pubDate: "2026-07-30"
-updatedDate: 2026-08-07
+updatedDate: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -15,7 +15,7 @@ faq:
   - q: What SARIF should I keep for Windsurf builds?
     a: Keep SARIF from secret scanning and dependency scanning at minimum. Upload to GitHub code scanning on pull requests and on main for release evidence and trend tracking.
   - q: Where does Windsurf store MCP server config?
-    a: Windsurf stores MCP servers in mcp_config.json under mcpServers at the project or user level. Use project scope for the LyraShield entry so the team shares one definition, and keep the lsk_ key in an env reference rather than a literal in the committed file.
+    a: Windsurf stores MCP servers in mcp_config.json under mcpServers at the project or user level. Use project scope for the LyraShield entry so the team shares one definition and keep the lsk_ key in an env reference rather than a literal in the committed file.
 ---
 
 Windsurf with Cascade can edit many files and call external MCP tools quickly, so you must lock down MCP config, tighten project rules, gate dependencies and secrets and keep SARIF for every release. This workflow covers mcp_config.json with serverUrl, Cascade memories hardening and verifiable evidence. Pair it with LyraShield as release assurance for AI built apps. Baseline controls are in our [vibe coding security guide](/blog/vibe-coding-security-guide) with Windsurf specific checks below.
@@ -72,7 +72,7 @@ Windsurf respects project rules in .codeium/windsurf/memories, optional muserule
 
 Require these policy statements in your repo so generated code meets that bar from first commit:
 
-Auth is required on all API routes handling user data, sessions, or file access. No public bypass for local debugging remains after merge.
+Auth is required on all API routes handling user data, sessions or file access. No public bypass for local debugging remains after merge.
 
 Input validation uses explicit libraries like zod or valibot for Node stacks, with tests for failure paths.
 
@@ -90,9 +90,9 @@ Document the workflow in docs/contributing.md so new contributors know why rules
 
 Windsurf Cascade solves tasks by adding dependencies, which creates supply chain risk if auto acceptance is allowed.
 
-Run OSV checks at [OSV](https://osv.dev) and npm or pnpm audit in CI on every pull request, and block high severity vulnerabilities outright. Flag new packages with low weekly downloads, recent ownership change or install scripts that touch network or file system for manual review. Keep lockfile diffs readable by grouping dependency only commits separately from feature code.
+Run OSV checks at [OSV](https://osv.dev) and npm or pnpm audit in CI on every pull request and block high severity vulnerabilities outright. Flag new packages with low weekly downloads, recent ownership change or install scripts that touch network or file system for manual review. Keep lockfile diffs readable by grouping dependency only commits separately from feature code.
 
-For secrets, run a scanner such as gitleaks that can output SARIF and upload to GitHub code scanning. See [GitHub secret scanning SARIF](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) and upload guidance at [GitHub SARIF artifact](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github). Check env .example and mcp_config.json examples for accidental tokens, and check editor logs and chat exports if pasted into issues, since tokens often leak via pasted logs.
+For secrets, run a scanner such as gitleaks that can output SARIF and upload to GitHub code scanning. See [GitHub secret scanning SARIF](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) and upload guidance at [GitHub SARIF artifact](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github). Check env .example and mcp_config.json examples for accidental tokens and check editor logs and chat exports if pasted into issues, since tokens often leak via pasted logs.
 
 Enforce both local pre commit hooks and CI scans. Local hooks give early feedback while CI is the gate. Require security owner review for any env file change or new MCP server addition, so token handling always gets a second set of eyes.
 
@@ -122,11 +122,11 @@ Keep evidence for several releases so you can show trend, exception closure and 
 
 ## Why pair Windsurf with LyraShield
 
-LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
+LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP integration fits Windsurf. Local stdio via npx -y @lyrashield/mcp@0.2.8 runs with env var keys, and remote via serverUrl https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key from env. Diff aware GitHub Action and SARIF output surface verified findings in pull requests so review stays in context.
+MCP integration fits Windsurf. Local stdio via npx -y @lyrashield/mcp@0.2.8 runs with env var keys and remote via serverUrl https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key from env. Diff aware GitHub Action and SARIF output surface verified findings in pull requests so review stays in context.
 
-Build transparency: LyraShield is live in open beta with open registration. The scan pipeline, findings, and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Windsurf uses the supported config-file integration, and the runner-local Action provides an advisory SARIF gate. Production availability remains bounded by release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
+Build transparency: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. Windsurf uses the supported config-file integration and the runner-local Action provides an advisory SARIF gate. Production availability remains bounded by release gates; automatic server-generated Fix PR execution is not enabled; self-serve checkout is live.
 
 This pairing keeps Windsurf velocity while adding consistent verification across visual builders and IDE tools.
 
@@ -137,7 +137,7 @@ Before you ship a Windsurf built release, confirm gates.
 - mcp_config.json files contain no raw tokens and only needed servers are enabled.
 - Rules require auth and validation and forbid risky exec with untrusted input.
 - Dependency and secret scans passed and SARIF uploaded on pull request and main.
-- Auth, payment, or file upload changes include tests and reviewer.
+- Auth, payment or file upload changes include tests and reviewer.
 - Security evidence file updated per release tag with MCP list and date.
 
 Reuse the same evidence loop on every release with our [AI app security checklist tool](/tools/ai-app-security-checklist) and create an account at https://lyrashieldai.com to start building assurance records today. For related builder patterns see [V0 app security checklist](/blog/v0-app-security-checklist) and [Replit app security checklist](/blog/replit-app-security-checklist) to keep controls uniform.

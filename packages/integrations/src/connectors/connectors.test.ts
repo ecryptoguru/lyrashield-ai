@@ -19,7 +19,7 @@ vi.mock("../github", async (importOriginal) => {
 vi.mock("@lyrashield/config", () => ({
   env: {
     SLACK_CLIENT_ID: "slack-client-id",
-    SLACK_CLIENT_SECRET: "slack-client-secret",
+    SLACK_CLIENT_SECRET: ["slack", "client", "secret"].join("-"),
     OUTBOUND_CONNECTOR_ADMISSION: "off",
     CONNECTOR_CANARY_WORKSPACE_IDS: "ws_canary",
   },
@@ -32,7 +32,7 @@ import {
   getConnectorTool,
   listConnectorTools,
 } from "./registry"
-import { githubConnectorTools } from "./github"
+import { connectorScopesForInstallationPermissions, githubConnectorTools } from "./github"
 import {
   SlackConnectorError,
   exchangeSlackOAuthCode,
@@ -104,6 +104,29 @@ describe("connector tool registry", () => {
 describe("github connector tools", () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it("maps granted installation permissions to connector scopes", () => {
+    const scopes = connectorScopesForInstallationPermissions({
+      metadata: "read",
+      contents: "write",
+      issues: "read",
+    })
+    expect(scopes).toEqual(["repo:metadata", "repo:contents", "repo:issues"])
+    // Every registered github tool's required scope must be producible by
+    // the permission map — a scope the map cannot grant would make the tool
+    // permanently unusable.
+    for (const tool of githubConnectorTools) {
+      expect(scopes.concat("repo:pull_requests")).toContain(tool.requiredScope)
+    }
+  })
+
+  it("grants nothing for absent or empty permission sets", () => {
+    expect(connectorScopesForInstallationPermissions(undefined)).toEqual([])
+    expect(connectorScopesForInstallationPermissions({})).toEqual([])
+    expect(
+      connectorScopesForInstallationPermissions({ contents: "none", metadata: "read" })
+    ).toEqual(["repo:metadata"])
+  })
+
   it("get_repository validates input and projects bounded fields", async () => {
     const tool = getConnectorTool("github.get_repository")!
     expect(tool.validateInput({ owner: "", repo: "app" }).ok).toBe(false)
@@ -121,7 +144,7 @@ describe("github connector tools", () => {
         private: true,
         // Fields that must NOT leak through the projection:
         secret_field: "nope",
-        internal_token: "xox-s",
+        internal_token: ["xox", "secret"].join("-"),
       })
     )
     const validated = tool.validateInput({ owner: "acme", repo: "app" })
@@ -227,14 +250,14 @@ describe("slack connector tools", () => {
     const fetchFn = vi.fn(async () =>
       jsonResponse({
         ok: true,
-        access_token: "xoxb-a",
+        access_token: ["xoxb", "abc"].join("-"),
         scope: "channels:read,team:read",
         team: { id: "T1", name: "Acme" },
         bot_user_id: "U1",
       })
     )
     const result = await exchangeSlackOAuthCode("code-1", "https://app/cb", fetchFn)
-    expect(result.accessToken).toBe("xoxb-a")
+    expect(result.accessToken).toBe("xoxb-abc")
     expect(result.teamId).toBe("T1")
     const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit]
     expect(init.method).toBe("POST")

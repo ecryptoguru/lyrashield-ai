@@ -43,7 +43,7 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
 
   <h2>Add the server in OpenClaw</h2>
   <p>
-    In the Control UI, open <strong>Settings → MCP</strong>, add a server, and enter the values
+    In the Control UI, open <strong>Settings → MCP</strong>, add a server and enter the values
     below. Alternatively use <code>openclaw mcp add</code> for a local server or{" "}
     <code>openclaw mcp set</code> for a remote server.
   </p>
@@ -53,7 +53,7 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
   <h2>Remote OAuth alternative</h2>
   <p>
     OpenClaw's current MCP client also supports Streamable HTTP and OAuth. Save the remote
-    endpoint as a separate client-managed connection, complete <code>openclaw mcp login</code>,
+    endpoint as a separate client-managed connection, complete <code>openclaw mcp login</code>
     and use <code>openclaw mcp probe</code> to confirm a live tool list before switching from stdio.
   </p>
   <AgentSnippet agentId="openclaw" transport="remote-http" secondary />
@@ -79,7 +79,7 @@ Use the lyrashield MCP tools available in the tool registry.`}</code></pre>
   <h2>Verify the connection</h2>
   <p>
     Run <code>openclaw mcp doctor --probe</code> after saving. It checks the saved configuration,
-    connects to the server, and lists the available tools.
+    connects to the server and lists the available tools.
   </p>
 
   <div class="callout callout--warn">

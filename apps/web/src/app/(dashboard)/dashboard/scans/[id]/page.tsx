@@ -70,7 +70,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
   const [findings, manifestDetail, qualitySurface, scoreSnapshot, membership, planRow] =
     await Promise.all([
       prisma.finding.findMany({
-        where: { scanId: id, workspaceId, deletedAt: null },
+        where: { workspaceId, deletedAt: null, candidates: { some: { scanId: id } } },
         select: {
           id: true,
           title: true,

@@ -626,7 +626,6 @@ export type FindingQueryInput = z.infer<typeof FindingQuerySchema>
 export * from "./url-scan-capabilities"
 export * from "./scan-profile"
 export * from "./scan-execution-plan"
-export * from "./scan-attachments"
 export * from "./retest-profile"
 export * from "./plain-language"
 // The attachment module shipped in 5c1aa8a3 without a barrel export — the db

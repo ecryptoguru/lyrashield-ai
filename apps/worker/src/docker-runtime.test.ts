@@ -176,7 +176,12 @@ describe("worker Docker runtime", () => {
     expect(deployWorkflow).toContain(
       'bash .github/scripts/verify-engine-worker-contract.sh lyrashield-engine "$GITHUB_WORKSPACE"'
     )
-    expect(engineContractVerifier).toContain('merge-base --is-ancestor "$reviewed_app_sha" HEAD')
+    expect(engineContractVerifier).not.toContain(
+      'merge-base --is-ancestor "$reviewed_app_sha" HEAD'
+    )
+    expect(engineContractVerifier).toContain(
+      'git -C "$app_checkout" status --porcelain --untracked-files=no'
+    )
     expect(engineContractVerifier).toContain("uv run lyrashield --help")
     expect(engineContractVerifier).toContain('corepack pnpm exec vitest run "${contract_tests[@]}"')
     expect(deployWorkflow).toContain("Verify pushed worker image")

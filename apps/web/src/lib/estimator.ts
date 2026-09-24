@@ -4,7 +4,7 @@
 const MINUTES_BY_MODE: Record<string, { low: number; high: number }> = {
   SAFE: { low: 5, high: 15 },
   QUICK: { low: 5, high: 15 },
-  STANDARD: { low: 8, high: 15 },
+  STANDARD: { low: 12, high: 23 },
   DEEP: { low: 25, high: 40 },
   CUSTOM: { low: 20, high: 60 },
 }

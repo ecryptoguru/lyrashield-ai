@@ -6,6 +6,7 @@ import {
   mergePolledScans,
   mergeResolvedOffPageScans,
   missingActiveScanIds,
+  nextActiveScanPollInterval,
 } from "./scans-client.utils"
 import type { ScanItem } from "./scan-types"
 
@@ -46,17 +47,6 @@ export function useActiveScansPolling({
 
     const INITIAL_POLL_DELAY_MS = 10_000
     const VISIBILITY_POLL_DELAY_MS = 0
-    const POLL_FAST_INTERVAL_MS = 10_000
-    const POLL_MEDIUM_INTERVAL_MS = 30_000
-    const POLL_SLOW_INTERVAL_MS = 60_000
-    const POLL_MEDIUM_THRESHOLD_MS = 5 * 60_000
-    const POLL_SLOW_THRESHOLD_MS = 60_000
-
-    const nextInterval = (elapsedMs: number): number => {
-      if (elapsedMs < POLL_MEDIUM_THRESHOLD_MS) return POLL_FAST_INTERVAL_MS
-      if (elapsedMs < POLL_SLOW_THRESHOLD_MS) return POLL_MEDIUM_INTERVAL_MS
-      return POLL_SLOW_INTERVAL_MS
-    }
 
     const schedule = (delayMs: number) => {
       if (timeoutId !== undefined) window.clearTimeout(timeoutId)
@@ -126,7 +116,9 @@ export function useActiveScansPolling({
       } finally {
         inFlight = false
         if (!isAborted && !document.hidden) {
-          const delay = refreshOnVisible ? 0 : nextInterval(Date.now() - pollStartedAt)
+          const delay = refreshOnVisible
+            ? 0
+            : nextActiveScanPollInterval(Date.now() - pollStartedAt)
           refreshOnVisible = false
           schedule(delay)
         }

@@ -588,7 +588,11 @@ export const SCAN_LIST_SELECT = {
   target: {
     select: { id: true, name: true, type: true, url: true, apiSpecUrl: true, repoFullName: true },
   },
-  _count: { select: { findings: { where: { deletedAt: null } } } },
+  findingCandidates: {
+    where: { findingId: { not: null } },
+    distinct: "findingId",
+    select: { findingId: true },
+  },
 } as const
 
 export interface ScanListItem {
@@ -615,12 +619,14 @@ export interface ScanListItem {
   } | null
 }
 
-/** Flatten Prisma's `_count` into the `findingCount` the list surfaces render. */
+/** Flatten immutable candidate associations into the historical list count. */
 export function toScanListItem(
-  scan: Omit<ScanListItem, "findingCount"> & { _count?: { findings: number } | null }
+  scan: Omit<ScanListItem, "findingCount"> & {
+    findingCandidates?: Array<{ findingId: string | null }> | null
+  }
 ): ScanListItem {
-  const { _count, ...rest } = scan
-  return { ...rest, findingCount: _count?.findings ?? 0 }
+  const { findingCandidates, ...rest } = scan
+  return { ...rest, findingCount: findingCandidates?.length ?? 0 }
 }
 
 export async function listScans(params: ListScansParams): Promise<{

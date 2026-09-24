@@ -90,7 +90,7 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
           <span className="text-sm font-medium">Setup</span>
           <ol className="text-muted-foreground ml-5 list-decimal space-y-3 text-sm">
             <li className="leading-6">
-              Recommended: run the OAuth device login, select a workspace in your browser, and keep
+              Recommended: run the OAuth device login, select a workspace in your browser and keep
               the resulting read-only credentials local to this machine.
             </li>
             <li className="space-y-2 leading-6">
@@ -181,7 +181,7 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
         <p className="text-muted-foreground bg-muted/40 rounded-md border border-dashed px-3 py-2 text-xs leading-relaxed">
           For API-key-only clients or CI, create an <code>lsk_</code> key in Settings → API keys and
           run <code>lyrashield login</code>. For most agents the CLI writes the config file; Cline,
-          JetBrains, PiCode, OpenClaw, Hermes, Goose, and Aider print values to paste.
+          JetBrains, PiCode, OpenClaw, Hermes, Goose and Aider print values to paste.
         </p>
 
         <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">

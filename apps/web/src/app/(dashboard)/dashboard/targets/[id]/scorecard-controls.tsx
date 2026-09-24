@@ -122,7 +122,7 @@ export function ScorecardControls({
           <p>
             {confirmation === "publish"
               ? `This publishes your ${grade.replace("_PLUS", "+")} grade. No target or vulnerability details are included.`
-              : "Revoke this scorecard? Its public page, social cards, and badge will stop working."}
+              : "Revoke this scorecard? Its public page, social cards and badge will stop working."}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button

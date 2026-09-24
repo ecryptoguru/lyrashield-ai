@@ -14,8 +14,9 @@ function privateResponse(response: Response): Response {
 
 /**
  * Delete a workspace scan attachment. The row is soft-deleted first so it can
- * never be attached to a new scan; the stored encrypted object is then removed
- * best-effort — an object whose row is gone is unreachable either way.
+ * never be attached to a new scan; the same transaction enqueues a durable
+ * deletion task, so the stored encrypted object is removed best-effort here
+ * and retried by the artifact deletion outbox if that attempt fails.
  */
 async function del(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -35,8 +36,9 @@ async function del(request: Request, { params }: { params: Promise<{ id: string 
     try {
       await deleteEncryptedArtifact(removed.storageUri, workspaceId)
     } catch (storageErr) {
-      // The row is already deleted, so the object can never be attached again;
-      // a storage outage leaves an unreachable encrypted blob, not a live input.
+      // The row is already deleted and the durable deletion task was committed
+      // with it, so a storage outage leaves the outbox retrying rather than
+      // an orphaned encrypted blob.
       logger.error("Attachment object removal deferred after row deletion", {
         attachmentId: id,
         error: storageErr instanceof Error ? storageErr.message : String(storageErr),

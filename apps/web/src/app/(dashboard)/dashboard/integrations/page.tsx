@@ -76,7 +76,7 @@ export default async function IntegrationsPage({
           role="alert"
         >
           This GitHub installation is already connected to a different LyraShield workspace. An
-          installation can only be linked to one workspace at a time — disconnect it there first, or
+          installation can only be linked to one workspace at a time — disconnect it there first or
           install the app on a different GitHub account or organisation.
         </div>
       )}

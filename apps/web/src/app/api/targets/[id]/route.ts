@@ -123,7 +123,7 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
             error: {
               code: "SSRF_BLOCKED",
               message:
-                "This OpenAPI URL is not allowed (it targets an internal, private, or unresolvable address).",
+                "This OpenAPI URL is not allowed (it targets an internal, private or unresolvable address).",
             },
           },
           { status: 400 }

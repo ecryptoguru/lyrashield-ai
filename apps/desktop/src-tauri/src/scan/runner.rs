@@ -1,5 +1,6 @@
 use crate::scan::types::*;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -15,6 +16,8 @@ use tokio::process::{Child, Command};
 // per-line length, per-stream total bytes, and event count; an engine that
 // exceeds the budget is hostile or malfunctioning and gets killed.
 const MAX_STREAM_BYTES: usize = 32 * 1024 * 1024;
+// Match the worker's bounded threat-model reader; valid writer output can exceed 1 MiB.
+const MAX_THREAT_MODEL_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_LINE_BYTES: usize = 64 * 1024;
 const MAX_STREAM_EVENTS: usize = 50_000;
 
@@ -444,6 +447,167 @@ fn redact_credentials(line: &str) -> String {
     redacted
 }
 
+// P2-8: every engine-attested evidence field is untrusted output, so each is
+// bounded before it is stored — the same shape `bounded_evidence_context`
+// already applies to its fields. Oversize claims are omitted whole rather
+// than truncated into a fragment that could read as a complete claim; each
+// omission is recorded as a bounded evidence warning on the finding so a
+// dropped claim is never mistaken for an absent one.
+const MAX_EVIDENCE_TEXT_BYTES: usize = 10_000;
+const MAX_EVIDENCE_ITEMS: usize = 10;
+const MAX_EVIDENCE_JSON_BYTES: usize = 4_096;
+
+/// Bound one engine-attested text field: kept verbatim at or under
+/// MAX_EVIDENCE_TEXT_BYTES (`str::len` is UTF-8 bytes) or omitted whole past
+/// it. The omission is recorded in `warnings` so the stored finding never
+/// presents dropped evidence as absent.
+fn bound_evidence_text(
+    field: &'static str,
+    value: Option<String>,
+    warnings: &mut Vec<String>,
+) -> Option<String> {
+    match value {
+        Some(text) if text.len() > MAX_EVIDENCE_TEXT_BYTES => {
+            warnings.push(format!(
+                "{field} omitted — engine evidence exceeded the {MAX_EVIDENCE_TEXT_BYTES}-byte bound"
+            ));
+            None
+        }
+        other => other,
+    }
+}
+
+/// Bound one engine-attested JSON value by serialized size — the same
+/// 4,096-byte convention `update_history` entries get. Kept values store
+/// strings unquoted with everything else serialized, matching the prior
+/// `fix_verification` handling; explicit null reads as no claim.
+fn bound_evidence_json(
+    field: &'static str,
+    value: Option<&serde_json::Value>,
+    warnings: &mut Vec<String>,
+) -> Option<String> {
+    let value = value.filter(|v| !v.is_null())?;
+    let serialized = value.to_string();
+    if serialized.len() > MAX_EVIDENCE_JSON_BYTES {
+        warnings.push(format!(
+            "{field} omitted — engine evidence exceeded the {MAX_EVIDENCE_JSON_BYTES}-byte bound"
+        ));
+        return None;
+    }
+    Some(match value {
+        serde_json::Value::String(text) => text.clone(),
+        _ => serialized,
+    })
+}
+
+/// Bound the engine-attested exchange id list: at most MAX_EVIDENCE_ITEMS
+/// entries taken in first-seen order (the `evidence_warnings` convention)
+/// with each entry under the per-item byte cap. Excess or oversize entries
+/// are omitted; a single bounded warning records how many were dropped.
+fn bounded_http_exchange_ids(
+    value: Option<&serde_json::Value>,
+    warnings: &mut Vec<String>,
+) -> Vec<String> {
+    let Some(value) = value else {
+        return Vec::new();
+    };
+    if value.is_null() {
+        return Vec::new();
+    }
+    let Some(items) = value.as_array() else {
+        warnings.push("http_exchange_ids omitted — engine sent a non-list value".to_string());
+        return Vec::new();
+    };
+    let total = items.len();
+    let kept: Vec<String> = items
+        .iter()
+        .take(MAX_EVIDENCE_ITEMS)
+        .filter_map(|item| {
+            item.as_str()
+                .filter(|s| s.len() <= MAX_EVIDENCE_TEXT_BYTES)
+                .map(str::to_string)
+        })
+        .collect();
+    let omitted = total - kept.len();
+    if omitted > 0 {
+        warnings.push(format!(
+            "http_exchange_ids omitted {omitted} of {total} ids — bound is {MAX_EVIDENCE_ITEMS} ids of at most {MAX_EVIDENCE_TEXT_BYTES} bytes each"
+        ));
+    }
+    kept
+}
+
+/// Bound the contextual evidence block on a report. `evidence_warnings`
+/// carries the local omission warnings collected while bounding the flat
+/// fields — they lead the capped list so an engine-controlled flood of
+/// warnings cannot push the record of dropped evidence past the bound.
+fn bounded_evidence_context(
+    report: &serde_json::Map<String, serde_json::Value>,
+    mut evidence_warnings: Vec<String>,
+) -> Option<FindingEvidenceContext> {
+    let contextual_cvss_reasoning = report
+        .get("contextual_cvss_reasoning")
+        .and_then(|v| v.as_str())
+        .filter(|s| s.len() <= MAX_EVIDENCE_TEXT_BYTES)
+        .map(str::to_string);
+    let advisory_cvss = report.get("advisory_cvss").and_then(|value| {
+        let object = value.as_object()?;
+        let score = object.get("score")?.as_f64()?;
+        if !score.is_finite() || !(0.0..=10.0).contains(&score) {
+            return None;
+        }
+        let mut bounded = serde_json::Map::new();
+        bounded.insert("score".into(), serde_json::json!(score));
+        for (key, max) in [
+            ("vector", 256),
+            ("source", 256),
+            ("metric_reasoning", 4_096),
+        ] {
+            if let Some(text) = object
+                .get(key)
+                .and_then(|v| v.as_str())
+                .filter(|s| s.len() <= max)
+            {
+                bounded.insert(key.into(), serde_json::Value::String(text.into()));
+            }
+        }
+        Some(serde_json::Value::Object(bounded))
+    });
+    if let Some(items) = report.get("evidence_warnings").and_then(|v| v.as_array()) {
+        evidence_warnings.extend(items.iter().filter_map(|v| {
+            v.as_str()
+                .filter(|s| s.len() <= MAX_EVIDENCE_TEXT_BYTES)
+                .map(str::to_string)
+        }));
+        evidence_warnings.truncate(MAX_EVIDENCE_ITEMS);
+    }
+    let update_history: Vec<serde_json::Value> = report
+        .get("update_history")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .take(MAX_EVIDENCE_ITEMS)
+                .filter(|v| v.is_object() && v.to_string().len() <= MAX_EVIDENCE_JSON_BYTES)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    if contextual_cvss_reasoning.is_none()
+        && advisory_cvss.is_none()
+        && evidence_warnings.is_empty()
+        && update_history.is_empty()
+    {
+        return None;
+    }
+    Some(FindingEvidenceContext {
+        contextual_cvss_reasoning,
+        advisory_cvss,
+        evidence_warnings,
+        update_history,
+    })
+}
+
 fn parse_finding_line(line: &str) -> Option<Finding> {
     let trimmed = line.trim();
     if !trimmed.starts_with('{') {
@@ -470,34 +634,51 @@ fn parse_finding_line(line: &str) -> Option<Finding> {
         #[serde(default)]
         verified: Option<bool>,
         #[serde(default)]
-        counterevidence: Option<String>,
-        #[serde(default)]
-        confidence_rationale: Option<String>,
-        #[serde(default)]
-        fix_verification: Option<serde_json::Value>,
-        #[serde(default)]
-        http_exchange_ids: Option<Vec<String>>,
-        #[serde(default)]
         detected_at: Option<String>,
     }
-    let raw: RawFinding = serde_json::from_str(trimmed).ok()?;
+    let raw_value: serde_json::Value = serde_json::from_str(trimmed).ok()?;
+    let report = raw_value.as_object()?;
+    // Bound every engine-attested evidence field before it is stored the same
+    // way `bounded_evidence_context` bounds its block — oversize claims are
+    // omitted whole rather than truncated into a misleading fragment, with
+    // each omission recorded on the bounded evidence_warnings list.
+    let mut warnings = Vec::new();
+    let counterevidence = bound_evidence_text(
+        "counterevidence",
+        report
+            .get("counterevidence")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        &mut warnings,
+    );
+    let confidence_rationale = bound_evidence_text(
+        "confidence_rationale",
+        report
+            .get("confidence_rationale")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        &mut warnings,
+    );
+    let fix_verification = bound_evidence_json(
+        "fix_verification",
+        report.get("fix_verification"),
+        &mut warnings,
+    );
+    let http_exchange_ids =
+        bounded_http_exchange_ids(report.get("http_exchange_ids"), &mut warnings);
+    let evidence_context = bounded_evidence_context(report, warnings);
+    let raw: RawFinding = serde_json::from_value(raw_value).ok()?;
     let severity = raw.severity?;
     let title = raw.title?;
-    let http_exchange_ids = raw.http_exchange_ids.unwrap_or_default();
-    let fix_verification = raw.fix_verification.map(|v| {
-        if let Some(s) = v.as_str() {
-            s.to_string()
-        } else {
-            v.to_string()
-        }
-    });
-    // Engine-attested fields are recorded verbatim but stay pending: they are
-    // the filing agent's own claims, exported for review — never verification.
+    // Engine-attested fields are recorded but stay pending: they are the
+    // filing agent's own claims, exported for review — never verification.
+    // An omitted claim still raises the flag through its recorded warning.
     let evidence_pending = raw.verified.unwrap_or(false)
         || fix_verification.is_some()
-        || raw.counterevidence.is_some()
-        || raw.confidence_rationale.is_some()
-        || !http_exchange_ids.is_empty();
+        || counterevidence.is_some()
+        || confidence_rationale.is_some()
+        || !http_exchange_ids.is_empty()
+        || evidence_context.is_some();
     Some(Finding {
         id: raw.id.unwrap_or_else(|| format!("finding-{}", uuid_v4())),
         severity,
@@ -511,10 +692,11 @@ fn parse_finding_line(line: &str) -> Option<Finding> {
         verified: false,
         verification_state: VERIFICATION_STATE_DETECTED.to_string(),
         evidence_pending,
-        counterevidence: raw.counterevidence,
-        confidence_rationale: raw.confidence_rationale,
+        counterevidence,
+        confidence_rationale,
         fix_verification,
         http_exchange_ids,
+        evidence_context,
         detected_at: raw
             .detected_at
             .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
@@ -1023,6 +1205,49 @@ async fn persist_finding_row(app: &AppHandle, scan_id: &str, f: &Finding) -> Res
 /// `verification_state = DETECTED` and anything attested is marked
 /// `evidence_pending` for export — this path can never promote or clear
 /// verification state.
+fn has_bound_threat_model(run_dir: &std::path::Path, run: &serde_json::Value) -> bool {
+    let entry = &run["result_manifest"]["artifacts"]["threat_model.json"];
+    if entry["path"].as_str() != Some("threat_model.json") {
+        return false;
+    }
+    let Some(expected_bytes) = entry["bytes"].as_u64() else {
+        return false;
+    };
+    if expected_bytes > MAX_THREAT_MODEL_BYTES {
+        return false;
+    }
+    let path = run_dir.join("threat_model.json");
+    let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+        return false;
+    };
+    if !metadata.file_type().is_file() || metadata.len() != expected_bytes {
+        return false;
+    }
+    let Ok(bytes) = std::fs::read(&path) else {
+        return false;
+    };
+    let digest = format!("{:x}", Sha256::digest(&bytes));
+    if bytes.len() as u64 != expected_bytes || entry["sha256"].as_str() != Some(digest.as_str()) {
+        return false;
+    }
+    let Ok(document) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return false;
+    };
+    document["schema_version"].as_str() == Some("lyrashield-threat-model/1.0")
+        && document["run_id"] == run["run_id"]
+        && document.get("error").is_none()
+        && document["models"].as_array().is_some_and(|models| {
+            models.iter().any(|model| {
+                model["target"]
+                    .as_str()
+                    .is_some_and(|target| !target.trim().is_empty())
+                    && model["content"]
+                        .as_str()
+                        .is_some_and(|content| !content.trim().is_empty())
+            })
+        })
+}
+
 async fn project_engine_evidence(
     app: &AppHandle,
     run_workdir: &std::path::Path,
@@ -1032,25 +1257,34 @@ async fn project_engine_evidence(
     let run_dir = run_workdir.join("strix_runs").join(scan_id);
     let workdir = run_dir.clone();
     let scan_id_owned = scan_id.to_string();
-    let parsed = tokio::task::spawn_blocking(move || -> Option<(String, serde_json::Value)> {
-        let run_json: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(workdir.join("run.json")).ok()?).ok()?;
-        let schema_version = run_json
-            .get("schema_version")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())?;
-        let vulns: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(workdir.join("vulnerabilities.json")).unwrap_or_default(),
-        )
-        .unwrap_or(serde_json::Value::Null);
-        Some((schema_version, vulns))
-    })
+    let parsed = tokio::task::spawn_blocking(
+        move || -> Option<(String, serde_json::Value, Option<bool>)> {
+            let run_json: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(workdir.join("run.json")).ok()?)
+                    .ok()?;
+            let schema_version = run_json
+                .get("schema_version")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())?;
+            let threat_available =
+                (schema_version == "1.1").then(|| has_bound_threat_model(&workdir, &run_json));
+            let vulns: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(workdir.join("vulnerabilities.json")).unwrap_or_default(),
+            )
+            .unwrap_or(serde_json::Value::Null);
+            Some((schema_version, vulns, threat_available))
+        },
+    )
     .await;
-    let Ok(Some((schema_version, vulns))) = parsed else {
+    let Ok(Some((schema_version, vulns, threat_available))) = parsed else {
         return;
     };
     let _ =
         crate::scan::store::set_scan_contract_version(app, &scan_id_owned, &schema_version).await;
+    if let Some(available) = threat_available {
+        let _ = crate::scan::store::set_scan_threat_model_available(app, &scan_id_owned, available)
+            .await;
+    }
     let Some(reports) = vulns.as_array() else {
         return;
     };
@@ -1073,31 +1307,47 @@ async fn project_engine_evidence(
                 .map(|s| s.to_string())
                 .filter(|s| !s.is_empty())
         };
-        let fix_verification = report.get("fix_verification").map(|v| {
-            if let Some(s) = v.as_str() {
-                s.to_string()
-            } else {
-                v.to_string()
-            }
-        });
-        let http_exchange_ids = report
-            .get("http_exchange_ids")
-            .and_then(|v| serde_json::to_string(v).ok())
-            .filter(|s| s != "null" && s != "[]");
+        // The run artifacts carry the same untrusted engine attestations as
+        // stdout — bound them before the evidence update is stored, with
+        // omissions recorded on the bounded warning list.
+        let mut warnings = Vec::new();
+        let counterevidence = bound_evidence_text(
+            "counterevidence",
+            string_field("counterevidence"),
+            &mut warnings,
+        );
+        let confidence_rationale = bound_evidence_text(
+            "confidence_rationale",
+            string_field("confidence_rationale"),
+            &mut warnings,
+        );
+        let fix_verification = bound_evidence_json(
+            "fix_verification",
+            report.get("fix_verification"),
+            &mut warnings,
+        );
+        let http_ids = bounded_http_exchange_ids(report.get("http_exchange_ids"), &mut warnings);
+        let http_exchange_ids = if http_ids.is_empty() {
+            None
+        } else {
+            serde_json::to_string(&http_ids).ok()
+        };
         let engine_claimed = report
             .get("verified")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
         let update = crate::scan::store::FindingEvidenceUpdate {
-            counterevidence: string_field("counterevidence"),
-            confidence_rationale: string_field("confidence_rationale"),
+            counterevidence,
+            confidence_rationale,
             fix_verification,
             http_exchange_ids,
+            evidence_context: bounded_evidence_context(report, warnings),
         };
         if update.counterevidence.is_some()
             || update.confidence_rationale.is_some()
             || update.fix_verification.is_some()
             || update.http_exchange_ids.is_some()
+            || update.evidence_context.is_some()
             || engine_claimed
         {
             let _ = crate::scan::store::update_finding_evidence(
@@ -1613,6 +1863,75 @@ mod tests {
     }
 
     #[test]
+    fn engine_contextual_evidence_stays_structured_and_unverified() {
+        let finding = super::parse_finding_line(
+            r#"{"id":"vuln-3","severity":"high","title":"Z","contextual_cvss_reasoning":"Scope narrowed by authentication.","advisory_cvss":{"score":8.6,"vector":"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H"},"evidence_warnings":["No admin session"],"update_history":[{"timestamp":"2026-09-20T00:00:00Z","fields":["severity"],"reason":"Scope changed"}]}"#,
+        )
+        .expect("finding parses");
+        let context = finding.evidence_context.expect("context preserved");
+        assert_eq!(
+            context.contextual_cvss_reasoning.as_deref(),
+            Some("Scope narrowed by authentication.")
+        );
+        assert_eq!(context.advisory_cvss.unwrap()["score"], 8.6);
+        assert_eq!(context.evidence_warnings, vec!["No admin session"]);
+        assert_eq!(context.update_history.len(), 1);
+        assert!(!finding.verified);
+        assert_eq!(finding.verification_state, "DETECTED");
+    }
+
+    #[test]
+    fn threat_model_availability_requires_manifest_bound_writer_bytes() {
+        let run_dir = tempfile::tempdir().unwrap();
+        let bytes = include_bytes!(
+            "../../../../../apps/worker/src/engine/fixtures/run-json-1.1/threat_model.json"
+        );
+        std::fs::write(run_dir.path().join("threat_model.json"), bytes).unwrap();
+        let mut run = serde_json::json!({
+            "run_id": "fixture-run-1-1",
+            "result_manifest": {"artifacts": {"threat_model.json": {
+                "path": "threat_model.json",
+                "bytes": bytes.len(),
+                "sha256": format!("{:x}", sha2::Sha256::digest(bytes))
+            }}}
+        });
+        assert!(super::has_bound_threat_model(run_dir.path(), &run));
+        let mut large: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        let mut model = large["models"][0].clone();
+        model["content"] = serde_json::json!("a".repeat(64_000));
+        large["models"] = serde_json::json!(vec![model; 20]);
+        let large_bytes = serde_json::to_vec(&large).unwrap();
+        assert!(large_bytes.len() > 1_048_576);
+        std::fs::write(run_dir.path().join("threat_model.json"), &large_bytes).unwrap();
+        run["result_manifest"]["artifacts"]["threat_model.json"]["bytes"] =
+            serde_json::json!(large_bytes.len());
+        run["result_manifest"]["artifacts"]["threat_model.json"]["sha256"] =
+            serde_json::json!(format!("{:x}", sha2::Sha256::digest(&large_bytes)));
+        assert!(super::has_bound_threat_model(run_dir.path(), &run));
+        let mut errored: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        errored["models"] = serde_json::json!([]);
+        errored["error"] = serde_json::json!("threat model mirror unreadable");
+        let errored_bytes = serde_json::to_vec(&errored).unwrap();
+        std::fs::write(run_dir.path().join("threat_model.json"), &errored_bytes).unwrap();
+        run["result_manifest"]["artifacts"]["threat_model.json"]["bytes"] =
+            serde_json::json!(errored_bytes.len());
+        run["result_manifest"]["artifacts"]["threat_model.json"]["sha256"] =
+            serde_json::json!(format!("{:x}", sha2::Sha256::digest(&errored_bytes)));
+        assert!(!super::has_bound_threat_model(run_dir.path(), &run));
+        let mut blank: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        blank["models"][0]["content"] = serde_json::json!("  \n  ");
+        let blank_bytes = serde_json::to_vec(&blank).unwrap();
+        std::fs::write(run_dir.path().join("threat_model.json"), &blank_bytes).unwrap();
+        run["result_manifest"]["artifacts"]["threat_model.json"]["bytes"] =
+            serde_json::json!(blank_bytes.len());
+        run["result_manifest"]["artifacts"]["threat_model.json"]["sha256"] =
+            serde_json::json!(format!("{:x}", sha2::Sha256::digest(&blank_bytes)));
+        assert!(!super::has_bound_threat_model(run_dir.path(), &run));
+        std::fs::write(run_dir.path().join("threat_model.json"), b"changed").unwrap();
+        assert!(!super::has_bound_threat_model(run_dir.path(), &run));
+    }
+
+    #[test]
     fn workflow_tokens_match_the_shared_fixture() {
         let fixture = workflow_fixture();
         let workflows: Vec<&str> = fixture["workflows"]
@@ -1647,5 +1966,146 @@ mod tests {
             .collect();
         assert_eq!(tiers, ["DETECTED", "VALIDATED", "VERIFIED"]);
         assert_eq!(VERIFICATION_STATE_DETECTED, "DETECTED");
+    }
+
+    // P2-8 — engine-attested evidence fields are bounded before storage:
+    // text fields cap at 10_000 UTF-8 bytes, http_exchange_ids at 10 entries
+    // under the same per-item byte cap and JSON values at 4_096 serialized
+    // bytes. Oversize claims are omitted whole — never truncated into a
+    // fragment that could read as a complete claim — and each omission is
+    // recorded as a bounded warning on the finding's evidence context.
+
+    fn finding_line(fields: serde_json::Value) -> String {
+        let mut obj = serde_json::json!({"id": "vuln-b", "severity": "high", "title": "T"});
+        obj.as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        obj.to_string()
+    }
+
+    fn omission_warnings(finding: &Finding) -> Vec<String> {
+        finding
+            .evidence_context
+            .as_ref()
+            .map(|ctx| ctx.evidence_warnings.clone())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn oversize_counterevidence_is_omitted_with_a_recorded_warning() {
+        let line = finding_line(serde_json::json!({
+            "counterevidence": "a".repeat(1024 * 1024),
+        }));
+        let finding = super::parse_finding_line(&line).expect("finding parses");
+        // The 1 MiB claim never reaches the stored finding — and the
+        // omission is visible on the record so it is not mistaken for "the
+        // engine made no claim".
+        assert!(finding.counterevidence.is_none());
+        let warnings = omission_warnings(&finding);
+        assert!(
+            warnings.iter().any(|w| w.contains("counterevidence")),
+            "expected a counterevidence omission warning, got {warnings:?}"
+        );
+        assert!(finding.evidence_pending);
+    }
+
+    #[test]
+    fn evidence_text_fields_bound_at_utf8_bytes_not_chars() {
+        // Exactly at the byte limit — including multibyte text — is kept.
+        let line = finding_line(serde_json::json!({
+            "counterevidence": "é".repeat(5_000), // 10_000 bytes
+            "confidence_rationale": "b".repeat(10_000),
+        }));
+        let finding = super::parse_finding_line(&line).expect("finding parses");
+        assert_eq!(
+            finding.counterevidence.as_deref().map(str::len),
+            Some(10_000)
+        );
+        assert_eq!(
+            finding.confidence_rationale.as_deref().map(str::len),
+            Some(10_000)
+        );
+
+        // Past the limit the whole claim is omitted with a warning.
+        let line = finding_line(serde_json::json!({
+            "counterevidence": "é".repeat(5_001), // 10_002 bytes
+            "confidence_rationale": "b".repeat(10_001),
+        }));
+        let finding = super::parse_finding_line(&line).expect("finding parses");
+        assert!(finding.counterevidence.is_none());
+        assert!(finding.confidence_rationale.is_none());
+        let warnings = omission_warnings(&finding);
+        assert!(warnings.iter().any(|w| w.contains("counterevidence")));
+        assert!(warnings.iter().any(|w| w.contains("confidence_rationale")));
+    }
+
+    #[test]
+    fn http_exchange_ids_cap_at_ten_items() {
+        let ids: Vec<String> = (0..10).map(|i| format!("ex-{i}")).collect();
+        let line = finding_line(serde_json::json!({"http_exchange_ids": ids}));
+        let finding = super::parse_finding_line(&line).expect("finding parses");
+        assert_eq!(finding.http_exchange_ids.len(), 10);
+        assert!(omission_warnings(&finding).is_empty());
+
+        let ids: Vec<String> = (0..11).map(|i| format!("ex-{i}")).collect();
+        let line = finding_line(serde_json::json!({"http_exchange_ids": ids}));
+        let finding = super::parse_finding_line(&line).expect("finding parses");
+        assert_eq!(finding.http_exchange_ids.len(), 10);
+        assert!(finding.http_exchange_ids.iter().all(|id| !id.is_empty()));
+        let warnings = omission_warnings(&finding);
+        assert!(warnings.iter().any(|w| w.contains("http_exchange_ids")));
+    }
+
+    #[test]
+    fn http_exchange_ids_apply_the_per_item_byte_cap() {
+        let line = finding_line(serde_json::json!({
+            "http_exchange_ids": ["ok-1", "x".repeat(10_000), "ok-2"],
+        }));
+        let finding = super::parse_finding_line(&line).expect("finding parses");
+        assert_eq!(finding.http_exchange_ids.len(), 3);
+
+        let line = finding_line(serde_json::json!({
+            "http_exchange_ids": ["ok-1", "x".repeat(10_001), "ok-2"],
+        }));
+        let finding = super::parse_finding_line(&line).expect("finding parses");
+        assert_eq!(finding.http_exchange_ids, vec!["ok-1", "ok-2"]);
+        let warnings = omission_warnings(&finding);
+        assert!(warnings.iter().any(|w| w.contains("http_exchange_ids")));
+    }
+
+    #[test]
+    fn fix_verification_is_bounded_by_serialized_json_bytes() {
+        // Size the padding so the serialized value sits exactly on the
+        // 4_096-byte bound; one byte more must omit the whole claim.
+        let pad = 4_096 - r#"{"pad":""}"#.len();
+        let value = serde_json::json!({"pad": "p".repeat(pad)});
+        assert_eq!(value.to_string().len(), 4_096);
+        let line = finding_line(serde_json::json!({"fix_verification": value}));
+        let finding = super::parse_finding_line(&line).expect("finding parses");
+        let stored = finding.fix_verification.expect("at-bound value kept");
+        assert!(stored.len() <= 4_096);
+
+        let value = serde_json::json!({"pad": "p".repeat(pad + 1)});
+        assert_eq!(value.to_string().len(), 4_097);
+        let line = finding_line(serde_json::json!({"fix_verification": value}));
+        let finding = super::parse_finding_line(&line).expect("finding parses");
+        assert!(finding.fix_verification.is_none());
+        let warnings = omission_warnings(&finding);
+        assert!(warnings.iter().any(|w| w.contains("fix_verification")));
+    }
+
+    #[test]
+    fn omission_warnings_lead_a_bounded_warning_list() {
+        // An engine flooding its own evidence_warnings must not push the
+        // local record of dropped evidence past the list cap.
+        let engine_warnings: Vec<String> = (0..20).map(|i| format!("engine warning {i}")).collect();
+        let line = finding_line(serde_json::json!({
+            "counterevidence": "a".repeat(20_000),
+            "evidence_warnings": engine_warnings,
+        }));
+        let finding = super::parse_finding_line(&line).expect("finding parses");
+        let ctx = finding.evidence_context.expect("context recorded");
+        assert!(ctx.evidence_warnings.len() <= 10);
+        assert!(ctx.evidence_warnings[0].contains("counterevidence"));
     }
 }

@@ -28,7 +28,7 @@ describe("scan presets", () => {
 
   it("maps each review type to its user-facing duration range", () => {
     expect(getScanPresetEstimate("RELEASE_CHECK")).toEqual({ low: 5, high: 15 })
-    expect(getScanPresetEstimate("CODE_REVIEW")).toEqual({ low: 8, high: 15 })
+    expect(getScanPresetEstimate("CODE_REVIEW")).toEqual({ low: 12, high: 23 })
     expect(getScanPresetEstimate("DEEP_REVIEW")).toEqual({ low: 25, high: 40 })
     expect(getScanPresetEstimate("WEEKLY_MONITOR")).toEqual({ low: 5, high: 15 })
   })
@@ -106,7 +106,7 @@ describe("getManualScanOptions", () => {
       label: "Engine Review",
       mode: "STANDARD",
       goal: "TEST_APP",
-      estimate: { low: 8, high: 15 },
+      estimate: { low: 12, high: 23 },
       usesAi: true,
       available: true,
     })
@@ -156,7 +156,7 @@ describe("getManualScanOptions", () => {
       label: "Engine Contract Review",
       mode: "STANDARD",
       goal: "TEST_APP",
-      estimate: { low: 8, high: 15 },
+      estimate: { low: 12, high: 23 },
       usesAi: true,
       available: true,
     })

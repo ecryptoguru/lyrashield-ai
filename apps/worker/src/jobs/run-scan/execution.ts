@@ -182,9 +182,8 @@ export async function executeScanTarget(params: {
     }
   } else if (engineBacked) {
     maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd, target.type)
-    if (isAuthAssessment && executionPlan) {
-      // $5 internal ceiling is a hard cap for the beta — the workspace policy
-      // and mode defaults can only narrow it further.
+    if (executionPlan) {
+      // Current policy and mode defaults may narrow, never widen, a queued plan.
       maxBudgetUsd = Math.min(maxBudgetUsd, executionPlan.limits.maxBudgetUsd)
     }
     if (maxBudgetUsd <= 0) {
@@ -389,11 +388,8 @@ export async function executeScanTarget(params: {
 
       const engineTimeoutMsForGrant = Math.min(
         resolveEngineRuntimeBudgetMs(mode, target.type, scanRuntimeBudgetMs, elapsedScanMs()),
-        // The 12-minute engine budget inside the 15-minute total is a hard
-        // ceiling for the beta; the general resolver can only tighten it.
-        isAuthAssessment && executionPlan
-          ? executionPlan.limits.maxEngineMs
-          : Number.POSITIVE_INFINITY
+        // The recorded engine ceiling applies to every planned run.
+        executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
       )
       try {
         const specServerHosts =
@@ -534,10 +530,8 @@ export async function executeScanTarget(params: {
     // the model is healthy until its own wall-clock cap.
     const engineTimeoutMs = Math.min(
       resolveEngineRuntimeBudgetMs(mode, target.type, scanRuntimeBudgetMs, elapsedScanMs()),
-      // Beta hard cap: the engine can never exceed the recorded plan's budget.
-      isAuthAssessment && executionPlan
-        ? executionPlan.limits.maxEngineMs
-        : Number.POSITIVE_INFINITY
+      // The engine can never exceed the recorded plan's budget.
+      executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
     )
     if (engineTimeoutMs <= 0) {
       markGlobalScanTimeout()
@@ -705,7 +699,17 @@ export async function resolveEngineTerminalError(params: {
   const runRecord = engineResult.output.runRecord
   let engineTerminalError = priorError
 
-  if (!engineTerminalError && engineBacked && exitInterpretation.status === "FAILED") {
+  // A runtime-deadline truncation is decided by the run record, not the exit
+  // code: the engine exits 5 when it filed no findings, which the generic
+  // exit-code path would report as ENGINE_INCOMPLETE and lose the real cause.
+  const runtimeDeadlineRecorded = runRecord?.terminal_reason === "runtime_deadline"
+
+  if (
+    !engineTerminalError &&
+    engineBacked &&
+    !runtimeDeadlineRecorded &&
+    exitInterpretation.status === "FAILED"
+  ) {
     const stoppedForBudget = exitInterpretation.category === "BUDGET_EXCEEDED"
     engineTerminalError = {
       status: (stoppedForBudget ? "STOPPED_BUDGET" : "FAILED") as ScanTerminalError["status"],
@@ -748,6 +752,7 @@ export async function resolveEngineTerminalError(params: {
   const stoppedForBudget = runRecord?.terminal_reason === "budget_exceeded"
   const stoppedForContentFilter = runRecord?.terminal_reason === "content_filter_stopped"
   const stoppedForEngineError = runRecord?.terminal_reason === "engine_stopped"
+  const stoppedForRuntimeDeadline = runRecord?.terminal_reason === "runtime_deadline"
   const hasEngineFindings = (engineResult.output.vulnerabilities?.length ?? 0) > 0
   const errorCategory = stoppedForBudget
     ? "BUDGET_EXCEEDED"
@@ -755,22 +760,29 @@ export async function resolveEngineTerminalError(params: {
       ? "CONTENT_FILTER_STOPPED"
       : stoppedForEngineError
         ? "ENGINE_STOPPED"
-        : "ENGINE_INCOMPLETE"
+        : stoppedForRuntimeDeadline
+          ? "ENGINE_RUNTIME_DEADLINE"
+          : "ENGINE_INCOMPLETE"
   const errorMessage = stoppedForBudget
     ? "Protected run limit reached"
     : stoppedForContentFilter
       ? "Engine stopped after content filter blocked the model; partial findings preserved"
       : stoppedForEngineError
         ? "Engine stopped after a model error; partial findings preserved"
-        : "Engine did not produce a completed, valid result receipt"
-  // Content filter stops and engine errors with findings are PARTIAL:
-  // the engine produced results but did not complete its full scope.
-  // Reporting these as COMPLETED would promise "we looked, and this is
-  // what we found" when the run was actually truncated — false confidence
-  // in a security tool. Without findings, they fail.
+        : stoppedForRuntimeDeadline
+          ? hasEngineFindings
+            ? "Engine reached its runtime limit; partial findings preserved"
+            : "Engine reached its runtime limit before filing any findings"
+          : "Engine did not produce a completed, valid result receipt"
+  // Content filter stops, engine errors and runtime-deadline truncations with
+  // findings are PARTIAL: the engine produced results but did not complete its
+  // full scope. Reporting these as COMPLETED would promise "we looked, and this
+  // is what we found" when the run was actually truncated — false confidence in
+  // a security tool. Without findings, they fail.
   const terminalStatus: ScanTerminalError["status"] = stoppedForBudget
     ? "STOPPED_BUDGET"
-    : (stoppedForContentFilter || stoppedForEngineError) && hasEngineFindings
+    : (stoppedForContentFilter || stoppedForEngineError || stoppedForRuntimeDeadline) &&
+        hasEngineFindings
       ? "PARTIAL"
       : "FAILED"
   engineTerminalError = {
@@ -783,7 +795,9 @@ export async function resolveEngineTerminalError(params: {
       scanId,
       "engine_incomplete",
       "warning",
-      `Engine result incomplete; continuing with deterministic scanners`,
+      stoppedForRuntimeDeadline
+        ? "Engine reached its runtime limit; continuing with deterministic scanners"
+        : `Engine result incomplete; continuing with deterministic scanners`,
       { errorCategory }
     )
   } catch (eventErr) {

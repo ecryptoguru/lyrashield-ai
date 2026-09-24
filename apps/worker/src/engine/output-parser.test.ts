@@ -38,6 +38,28 @@ const SAMPLE_VULN = {
 }
 
 describe("mergeLlmUsage", () => {
+  it("requires both GPT-6 phases to certify complete accounting", () => {
+    const phase = (complete: boolean) => ({
+      accountingComplete: complete,
+      request_count: 1,
+      input_tokens: 100,
+      cached_input_tokens: 0,
+      cache_write_input_tokens: 0,
+      output_tokens: 10,
+      total_tokens: 110,
+      request_usage_entries: [
+        {
+          model: "azure_ai/gpt-6-luna",
+          input_tokens: 100,
+          output_tokens: 10,
+          input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+        },
+      ],
+    })
+    expect(mergeLlmUsage(phase(true), phase(true))).toMatchObject({ accountingComplete: true })
+    expect(mergeLlmUsage(phase(true), phase(false))).toMatchObject({ accountingComplete: false })
+  })
+
   it("combines only complete per-request GPT-5.6 accounting buckets", () => {
     const usage = (input: number, output: number) => ({
       request_count: 1,
@@ -390,7 +412,7 @@ describe("output-parser", () => {
       })
     })
 
-    it.each(["incomplete", "rate_limited"])(
+    it.each(["incomplete", "rate_limited", "runtime_deadline"])(
       "retains the %s terminal receipt from the engine",
       (terminalReason) => {
         expect(
@@ -410,6 +432,15 @@ describe("output-parser", () => {
         })
       }
     )
+
+    it("parses an older run record that carries no terminal reason at all", () => {
+      expect(
+        parseRunJson(JSON.stringify({ run_id: "run-legacy", status: "stopped" }))
+      ).toMatchObject({
+        run_id: "run-legacy",
+        status: "stopped",
+      })
+    })
 
     it("rejects usage values that cannot fit the exact database ledger", () => {
       const result = parseRunJson(
@@ -522,6 +553,65 @@ describe("output-parser", () => {
         standard_output_tokens: 63,
       })
       expect(result?.llm_usage).not.toHaveProperty("cache_write_input_tokens")
+    })
+
+    it("requires complete cache buckets to price GPT-6 requests", () => {
+      const complete = parseRunJson(
+        JSON.stringify({
+          run_id: "run-gpt6-complete",
+          status: "completed",
+          llm_usage: {
+            accounting_complete: true,
+            requests: 1,
+            input_tokens: 2000,
+            output_tokens: 100,
+            request_usage_entries: [
+              {
+                model: "azure_ai/gpt-6-luna",
+                input_tokens: 2000,
+                output_tokens: 100,
+                input_tokens_details: { cached_tokens: 1000, cache_write_tokens: 500 },
+              },
+            ],
+          },
+        })
+      )
+      expect(complete?.llm_usage).toMatchObject({
+        accountingComplete: true,
+        model_usage_buckets: [
+          expect.objectContaining({
+            model: "azure_ai/gpt-6-luna",
+            standard_cached_input_tokens: 1000,
+            standard_cache_write_input_tokens: 500,
+          }),
+        ],
+      })
+      const incomplete = parseRunJson(
+        JSON.stringify({
+          run_id: "run-gpt6-incomplete",
+          status: "completed",
+          model: "azure_ai/gpt-6-luna",
+          llm_usage: {
+            accounting_complete: false,
+            requests: 1,
+            input_tokens: 2000,
+            output_tokens: 100,
+            request_usage_entries: [
+              {
+                model: "azure_ai/gpt-6-luna",
+                input_tokens: 2000,
+                output_tokens: 100,
+                input_tokens_details: { cached_tokens: 1000 },
+              },
+            ],
+          },
+        })
+      )
+      expect(incomplete?.llm_usage).not.toHaveProperty("model_usage_buckets")
+      expect(incomplete?.llm_usage).toMatchObject({
+        model: "azure_ai/gpt-6-luna",
+        accountingComplete: false,
+      })
     })
 
     it("separates long-context request usage from standard request usage", () => {

@@ -7,8 +7,8 @@ Scope: topics 85 through 100
 ## Research rules
 
 - Every supporting article uses at least three authoritative references, including at least two primary or official sources.
-- All sources below are primary standards, official government publications, official project standards, or official vendor documentation. Vendor documentation supports only claims about that vendor.
-- A framework or score is not converted into a claim it does not make. NIST CSF is outcome-based, CVSS describes severity, EPSS estimates exploitation probability for published CVEs, and TLP communicates sharing boundaries.
+- All sources below are primary standards, official government publications, official project standards or official vendor documentation. Vendor documentation supports only claims about that vendor.
+- A framework or score is not converted into a claim it does not make. NIST CSF is outcome-based, CVSS describes severity, EPSS estimates exploitation probability for published CVEs and TLP communicates sharing boundaries.
 - Living documentation has an access date because its content can change. Dated standards retain both publication date and access date.
 - Legal examples are not jurisdiction-specific legal advice. The GDPR source supports the stated EU requirements only.
 
@@ -25,12 +25,12 @@ Scope: topics 85 through 100
 ### Claim map
 
 - Scheduled checks complement change-triggered checks because analysis capabilities and known vulnerabilities can change even when a repository is quiet: NIST SP 800-218 RV practices and GitHub scan-frequency guidance.
-- GitHub's default CodeQL workflow scans once a week in addition to event triggers, and the schedule can be configured: GitHub workflow configuration documentation.
+- GitHub's default CodeQL workflow scans once a week in addition to event triggers and the schedule can be configured: GitHub workflow configuration documentation.
 - Known exploitation should trigger reprioritization outside the normal cadence: CISA KEV catalog. Do not claim every KEV applies to the reader's application.
 
 ### Drafting cautions
 
-- Do not present weekly as a universal optimum. Cadence depends on exposure, release frequency, scanner type, change rate, and response capacity.
+- Do not present weekly as a universal optimum. Cadence depends on exposure, release frequency, scanner type, change rate and response capacity.
 - A successful scheduled run proves only that the configured checks ran against the configured target.
 
 ## 86. `critical-security-finding-response`
@@ -45,8 +45,8 @@ Scope: topics 85 through 100
 
 ### Claim map
 
-- Incident response should be integrated with risk management and should preserve detection, response, recovery, and improvement information: NIST SP 800-61 Rev. 3.
-- A response decision should consider exploitation status, technical impact, mission prevalence, and safety or public impact rather than severity alone: CISA SSVC.
+- Incident response should be integrated with risk management and should preserve detection, response, recovery and improvement information: NIST SP 800-61 Rev. 3.
+- A response decision should consider exploitation status, technical impact, mission prevalence and safety or public impact rather than severity alone: CISA SSVC.
 - Confirmed known exploitation is a strong urgency input, but the affected product and version still need applicability review: CISA KEV.
 
 ### Drafting cautions
@@ -67,7 +67,7 @@ Scope: topics 85 through 100
 ### Claim map
 
 - Secure development practices belong throughout the software life cycle, regardless of how code was authored: NIST SP 800-218.
-- AI systems and AI-enabled development should use secure design, development, deployment, and operation practices, including restrictions on actions and sensitive data sent to external services: NCSC guidance.
+- AI systems and AI-enabled development should use secure design, development, deployment and operation practices, including restrictions on actions and sensitive data sent to external services: NCSC guidance.
 - Generated code can be syntactically plausible but insecure and should be reviewed and tested: GitHub responsible-use documentation.
 
 ### Drafting cautions
@@ -87,9 +87,9 @@ Scope: topics 85 through 100
 
 ### Claim map
 
-- Security requirements, protected development environments, secure production, and vulnerability response should be planned as software moves through its life cycle: NIST SP 800-218.
+- Security requirements, protected development environments, secure production and vulnerability response should be planned as software moves through its life cycle: NIST SP 800-218.
 - ASVS supplies versioned technical verification requirements that can be selected according to application risk and assurance needs: OWASP ASVS 5.0.0.
-- Governance, identification, protection, detection, response, and recovery outcomes all matter once an application creates material organizational risk: NIST CSF 2.0.
+- Governance, identification, protection, detection, response and recovery outcomes all matter once an application creates material organizational risk: NIST CSF 2.0.
 
 ### Drafting cautions
 
@@ -109,15 +109,15 @@ Scope: topics 85 through 100
 
 ### Claim map
 
-- Privacy risk management starts with data processing, purposes, governance, and controls rather than a generic "private" label: NIST Privacy Framework.
-- OpenAI distinguishes individual products from business products and the API, and settings such as training opt-out and feedback can affect use: OpenAI data-use documentation. Recheck at publication because the page is living documentation.
-- GitHub content exclusion can prevent selected files from informing suggestions, chat, or code review for supported organization plans: GitHub documentation. Do not generalize the feature to every plan or feature.
+- Privacy risk management starts with data processing, purposes, governance and controls rather than a generic "private" label: NIST Privacy Framework.
+- OpenAI distinguishes individual products from business products and the API and settings such as training opt-out and feedback can affect use: OpenAI data-use documentation. Recheck at publication because the page is living documentation.
+- GitHub content exclusion can prevent selected files from informing suggestions, chat or code review for supported organization plans: GitHub documentation. Do not generalize the feature to every plan or feature.
 - Anthropic distinguishes consumer and commercial product handling and documents consumer opt-in and safety-review cases: Anthropic Privacy Center. Do not merge this with OpenAI or GitHub policy.
 
 ### Drafting cautions
 
 - Use a comparison table only if every row is checked against current official documentation immediately before publication.
-- "Not used for training" does not by itself establish zero retention, no human access, legal compliance, or authorization to submit the content.
+- "Not used for training" does not by itself establish zero retention, no human access, legal compliance or authorization to submit the content.
 
 ## 90. `review-ai-generated-pull-request`
 
@@ -131,8 +131,8 @@ Scope: topics 85 through 100
 
 ### Claim map
 
-- Reviewers should understand intent, inspect changed files, review dependency changes, and explicitly approve or request changes: GitHub PR review documentation.
-- Manual review is valuable for business logic, data flow, authorization, trust boundaries, and other context that automated tools can miss: OWASP Secure Code Review Cheat Sheet.
+- Reviewers should understand intent, inspect changed files, review dependency changes and explicitly approve or request changes: GitHub PR review documentation.
+- Manual review is valuable for business logic, data flow, authorization, trust boundaries and other context that automated tools can miss: OWASP Secure Code Review Cheat Sheet.
 - Code review and analysis should be risk-based, with review of human-readable code and executable forms where applicable: NIST SSDF PW practices.
 
 ### Drafting cautions
@@ -144,21 +144,21 @@ Scope: topics 85 through 100
 
 ### Sources
 
-| Source                                           | Authority                                                  | Published or updated                                                    | Exact URL                                                             |
-| ------------------------------------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Regulation (EU) 2016/679, Articles 5, 25, and 32 | Official Journal of the European Union, primary legal text | Adopted 27 April 2016; Official Journal 4 May 2016; accessed 2026-07-17 | https://eur-lex.europa.eu/eli/reg/2016/679/art_32/oj/eng              |
-| NIST Privacy Framework 1.0                       | NIST official framework, primary                           | January 2020; page updated 22 January 2024; accessed 2026-07-17         | https://www.nist.gov/privacy-framework/privacy-framework              |
-| NIST Cybersecurity Framework 2.0                 | NIST final publication, primary                            | 26 February 2024; accessed 2026-07-17                                   | https://www.nist.gov/publications/nist-cybersecurity-framework-csf-20 |
+| Source                                          | Authority                                                  | Published or updated                                                    | Exact URL                                                             |
+| ----------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Regulation (EU) 2016/679, Articles 5, 25 and 32 | Official Journal of the European Union, primary legal text | Adopted 27 April 2016; Official Journal 4 May 2016; accessed 2026-07-17 | https://eur-lex.europa.eu/eli/reg/2016/679/art_32/oj/eng              |
+| NIST Privacy Framework 1.0                      | NIST official framework, primary                           | January 2020; page updated 22 January 2024; accessed 2026-07-17         | https://www.nist.gov/privacy-framework/privacy-framework              |
+| NIST Cybersecurity Framework 2.0                | NIST final publication, primary                            | 26 February 2024; accessed 2026-07-17                                   | https://www.nist.gov/publications/nist-cybersecurity-framework-csf-20 |
 
 ### Claim map
 
 - GDPR Article 5 includes purpose limitation and data minimization; Article 25 addresses data protection by design and default; Article 32 requires risk-appropriate security of processing: official EU text.
-- Privacy risk is distinct from cybersecurity risk and can be managed with governance, data-processing awareness, control, communication, and protection activities: NIST Privacy Framework.
+- Privacy risk is distinct from cybersecurity risk and can be managed with governance, data-processing awareness, control, communication and protection activities: NIST Privacy Framework.
 - Cybersecurity governance and response outcomes complement privacy work but do not replace privacy analysis: NIST CSF 2.0 and NIST Privacy Framework.
 
 ### Drafting cautions
 
-- State that legal duties depend on jurisdiction, role, data, and processing context. Do not present the checklist as legal advice or GDPR compliance proof.
+- State that legal duties depend on jurisdiction, role, data and processing context. Do not present the checklist as legal advice or GDPR compliance proof.
 - Hashing or pseudonymization does not automatically make data anonymous.
 
 ## 92. `agency-client-app-security-review`
@@ -173,9 +173,9 @@ Scope: topics 85 through 100
 
 ### Claim map
 
-- SSDF provides a common vocabulary for producers, acquirers, and suppliers to communicate secure-development expectations: NIST SP 800-218.
+- SSDF provides a common vocabulary for producers, acquirers and suppliers to communicate secure-development expectations: NIST SP 800-218.
 - ASVS can be used to define technical security requirements and verification scope in procurement and delivery: OWASP ASVS.
-- SAMM provides an improvement model for governance, design, implementation, verification, and operations rather than a one-time product guarantee: OWASP SAMM.
+- SAMM provides an improvement model for governance, design, implementation, verification and operations rather than a one-time product guarantee: OWASP SAMM.
 
 ### Drafting cautions
 
@@ -201,7 +201,7 @@ Scope: topics 85 through 100
 ### Drafting cautions
 
 - Do not shame founders for limited staffing or imply one tool replaces expertise.
-- Escalation thresholds should be concrete: sensitive or regulated data, payment movement, privileged automation, multi-tenant access, and high availability impact.
+- Escalation thresholds should be concrete: sensitive or regulated data, payment movement, privileged automation, multi-tenant access and high availability impact.
 
 ## 94. `secure-ai-built-internal-tools`
 
@@ -216,12 +216,12 @@ Scope: topics 85 through 100
 ### Claim map
 
 - Network location or asset ownership should not grant implicit trust; authentication and authorization should be evaluated for resources: NIST SP 800-207.
-- Internal web applications still need server-enforced authentication, authorization, validation, session, logging, and configuration controls: OWASP ASVS.
-- Identity, devices, networks, applications, workloads, and data need coordinated maturity rather than one perimeter control: CISA Zero Trust Maturity Model.
+- Internal web applications still need server-enforced authentication, authorization, validation, session, logging and configuration controls: OWASP ASVS.
+- Identity, devices, networks, applications, workloads and data need coordinated maturity rather than one perimeter control: CISA Zero Trust Maturity Model.
 
 ### Drafting cautions
 
-- Do not prescribe a federal zero-trust program to a small internal tool. Translate the principles into managed identity, least privilege, and per-resource authorization.
+- Do not prescribe a federal zero-trust program to a small internal tool. Translate the principles into managed identity, least privilege and per-resource authorization.
 - "Behind the VPN" and "only employees know the URL" are deployment facts, not complete controls.
 
 ## 95. `secure-public-ai-api-endpoints`
@@ -236,9 +236,9 @@ Scope: topics 85 through 100
 
 ### Claim map
 
-- Public APIs need object and function authorization, authentication, resource controls, inventory, configuration, and safe handling of third-party API data: OWASP API Security Top 10 2023.
-- AI components that send data externally or trigger actions should have data controls, input checks, action restrictions, and fail-safes: NCSC guidance.
-- Technical verification should cover authentication, access control, validation, API behavior, files, cryptography, logging, and configuration according to scope: OWASP ASVS.
+- Public APIs need object and function authorization, authentication, resource controls, inventory, configuration and safe handling of third-party API data: OWASP API Security Top 10 2023.
+- AI components that send data externally or trigger actions should have data controls, input checks, action restrictions and fail-safes: NCSC guidance.
+- Technical verification should cover authentication, access control, validation, API behavior, files, cryptography, logging and configuration according to scope: OWASP ASVS.
 
 ### Drafting cautions
 
@@ -279,13 +279,13 @@ Scope: topics 85 through 100
 ### Claim map
 
 - Code complexity and analysis limits can make static tools struggle to distinguish weaknesses from safe code: NIST IR 8165.
-- SARIF supports explicit baseline states, fingerprints, and suppression records, enabling auditable result management: OASIS SARIF 2.1.0.
-- A dismissed alert should have a reviewed reason and optional contextual comment, and false-positive feedback may improve rules: GitHub documentation.
+- SARIF supports explicit baseline states, fingerprints and suppression records, enabling auditable result management: OASIS SARIF 2.1.0.
+- A dismissed alert should have a reviewed reason and optional contextual comment and false-positive feedback may improve rules: GitHub documentation.
 
 ### Drafting cautions
 
 - Reducing displayed alerts is not the same as improving precision. Broad exclusions can increase false negatives.
-- Confidence or a second model opinion does not independently verify a finding. Preserve the source, path, preconditions, and retest result.
+- Confidence or a second model opinion does not independently verify a finding. Preserve the source, path, preconditions and retest result.
 
 ## 98. `prioritize-security-findings`
 
@@ -300,7 +300,7 @@ Scope: topics 85 through 100
 
 ### Claim map
 
-- SSVC uses exploitation status, technical impact, mission prevalence, and safety or public impact to support action decisions: CISA SSVC.
+- SSVC uses exploitation status, technical impact, mission prevalence and safety or public impact to support action decisions: CISA SSVC.
 - KEV identifies vulnerabilities known to have been exploited and is an important threat input when the vulnerable product is actually present: CISA KEV.
 - CVSS Base score is system-agnostic severity; Threat and Environmental metrics improve local relevance: FIRST CVSS.
 - EPSS estimates the probability of exploitation activity for a published CVE in the next 30 days and is not a complete risk score: FIRST EPSS.
@@ -322,14 +322,14 @@ Scope: topics 85 through 100
 
 ### Claim map
 
-- TLP labels communicate permitted sharing boundaries, but TLP is not a licensing, encryption, or access-control system: FIRST TLP 2.0.
-- Incident information sharing should be planned within governance, communication, response, and recovery processes: NIST SP 800-61 Rev. 3.
-- Vulnerability communication should use defined channels, limit sensitive details to necessary recipients, and support coordinated handling: OWASP Vulnerability Disclosure Cheat Sheet.
+- TLP labels communicate permitted sharing boundaries, but TLP is not a licensing, encryption or access-control system: FIRST TLP 2.0.
+- Incident information sharing should be planned within governance, communication, response and recovery processes: NIST SP 800-61 Rev. 3.
+- Vulnerability communication should use defined channels, limit sensitive details to necessary recipients and support coordinated handling: OWASP Vulnerability Disclosure Cheat Sheet.
 
 ### Drafting cautions
 
-- Do not put full secrets, exploit-ready steps, private targets, personal data, or unnecessary architecture details in a public artifact.
-- A redacted report must retain scope, date, evidence state, and limitations so the remaining claims are not misleading.
+- Do not put full secrets, exploit-ready steps, private targets, personal data or unnecessary architecture details in a public artifact.
+- A redacted report must retain scope, date, evidence state and limitations so the remaining claims are not misleading.
 
 ## 100. `exposed-api-key-incident-response`
 
@@ -346,12 +346,12 @@ Scope: topics 85 through 100
 
 ### Claim map
 
-- Containment, evidence preservation, impact analysis, recovery, and lessons learned belong in one response process: NIST SP 800-61 Rev. 3.
+- Containment, evidence preservation, impact analysis, recovery and lessons learned belong in one response process: NIST SP 800-61 Rev. 3.
 - GitHub recommends immediately rotating an affected credential; rewriting history is secondary after revocation and may be unnecessary for containment: GitHub secret-scanning documentation.
-- AWS supports two active IAM user access keys for staged rotation, then deactivation, validation, and deletion of the old key: AWS documentation. This does not apply to every AWS credential type.
-- Google Cloud API-key rotation creates a new key with the old restrictions, requires application updates, and then deletes the old key; restrictions can reduce impact: Google Cloud documentation.
-- Stripe rotation can revoke immediately or use a provider-supported grace period of up to seven days, and request logs can help confirm migration: Stripe documentation. A compromised key with credible abuse may justify immediate expiry rather than overlap.
-- OpenAI instructs users who believe a key leaked to rotate it immediately, update production values, review usage, and contact support when needed: OpenAI documentation.
+- AWS supports two active IAM user access keys for staged rotation, then deactivation, validation and deletion of the old key: AWS documentation. This does not apply to every AWS credential type.
+- Google Cloud API-key rotation creates a new key with the old restrictions, requires application updates and then deletes the old key; restrictions can reduce impact: Google Cloud documentation.
+- Stripe rotation can revoke immediately or use a provider-supported grace period of up to seven days and request logs can help confirm migration: Stripe documentation. A compromised key with credible abuse may justify immediate expiry rather than overlap.
+- OpenAI instructs users who believe a key leaked to rotate it immediately, update production values, review usage and contact support when needed: OpenAI documentation.
 
 ### Provider-specific recovery matrix
 
@@ -365,13 +365,13 @@ Scope: topics 85 through 100
 ### Drafting cautions
 
 - Lead the public article with: restrict or revoke, replace, deploy, verify old denial, review misuse, clean up. Do not lead with Git-history rewriting.
-- Never tell readers to print, paste, hash, or submit a live key to a third-party checker. Examples must use unmistakably inert placeholders.
+- Never tell readers to print, paste, hash or submit a live key to a third-party checker. Examples must use unmistakably inert placeholders.
 - Provider consoles and policies change. Recheck every vendor step on the publication date and keep provider headings separate.
 
 ## Batch-wide research risks and final checks
 
 - Recheck all living vendor pages within 24 hours of publication, especially coding-assistant training and retention controls and API-key rotation behavior.
 - Confirm the current CISA KEV URL and availability in the external-link check. The catalog is dynamic, so articles should explain its role rather than quote a count.
-- Validate LyraShield-specific score, report, schedule, notification, scan, and retest claims against current code and `/methodology`. Do not infer a public product capability from roadmap language.
+- Validate LyraShield-specific score, report, schedule, notification, scan and retest claims against current code and `/methodology`. Do not infer a public product capability from roadmap language.
 - Keep source dates visible in article references. Do not fabricate a publication date for a living documentation page.
-- Preserve ASCII hyphens in final prose. Humanizer review must remove em dash and en dash characters, repeated template phrasing, generic conclusions, and manufactured urgency.
+- Preserve ASCII hyphens in final prose. Humanizer review must remove em dash and en dash characters, repeated template phrasing, generic conclusions and manufactured urgency.

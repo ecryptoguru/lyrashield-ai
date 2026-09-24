@@ -165,7 +165,7 @@ export async function executeApprovedFixPr(
   if (!claimed) {
     return {
       status: "failed",
-      reason: "Approval is missing, expired, already executed, or does not match this patch.",
+      reason: "Approval is missing, expired, already executed or does not match this patch.",
     }
   }
 

@@ -1,38 +1,38 @@
 ---
 title: Gemini CLI App Security Checklist for Vibe Coding
-description: Secure Gemini CLI with settings.json MCP trust controls, includeTools allow lists, and verified secrets and SCA gates.
+description: Secure Gemini CLI with settings.json MCP trust controls, includeTools allow lists and verified secrets and SCA gates.
 pubDate: "2026-07-30"
-updatedDate: 2026-08-07
+updatedDate: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-15
 faq:
   - q: How does Gemini CLI handle MCP servers securely
-    a: Gemini CLI reads MCP config as JSON and spawns local servers via stdio or connects to remote with TLS and Bearer auth. Lock it by allow listing only required tools, keeping trust false, allowing only required tools, and storing tokens through environment references rather than literal JSON values.
+    a: Gemini CLI reads MCP config as JSON and spawns local servers via stdio or connects to remote with TLS and Bearer auth. Lock it by allow listing only required tools, keeping trust false, allowing only required tools and storing tokens through environment references rather than literal JSON values.
   - q: Do I need LyraShield to use Gemini CLI safely
-    a: You can ship safer code with disciplined review and open source scanners. LyraShield adds agent-native verification, SCA, and secret checks, plus a shipped diff-aware GitHub Action gate.
+    a: You can ship safer code with disciplined review and open source scanners. LyraShield adds agent-native verification, SCA and secret checks, plus a shipped diff-aware GitHub Action gate.
   - q: What is the fastest win for Gemini CLI security
-    a: Rotate leaked secrets, enforce branch protection with SARIF upload, and restrict MCP tool permissions to read only where possible to reduce blast radius.
+    a: Rotate leaked secrets, enforce branch protection with SARIF upload and restrict MCP tool permissions to read only where possible to reduce blast radius.
   - q: How do I restrict which MCP tools Gemini CLI exposes?
-    a: Use the includeTools array in the server entry to allow only the tools you need, such as scan, list_targets, and get_finding. Set trust to false so the agent prompts before running a tool, and combine includeTools with the mcp.allowed policy list for a second layer of control.
+    a: Use the includeTools array in the server entry to allow only the tools you need, such as scan, list_targets and get_finding. Set trust to false so the agent prompts before running a tool and combine includeTools with the mcp.allowed policy list for a second layer of control.
 ---
 
-When you ship apps with Gemini CLI, AI generated code can introduce secrets, vulnerable dependencies, and weak auth that reach production fast. This checklist gives a direct security review for Gemini CLI, from MCP hardening to merge gates and retest, with verified configs you can copy. Pair it with our pillar guide at [vibe coding security guide](/blog/vibe-coding-security-guide) and apply it on every pull request.
+When you ship apps with Gemini CLI, AI generated code can introduce secrets, vulnerable dependencies and weak auth that reach production fast. This checklist gives a direct security review for Gemini CLI, from MCP hardening to merge gates and retest, with verified configs you can copy. Pair it with our pillar guide at [vibe coding security guide](/blog/vibe-coding-security-guide) and apply it on every pull request.
 
 ## How Gemini CLI connects via MCP
 
-Gemini CLI uses Model Context Protocol to let the agent read project files, call tools, and run commands. That power expands your attack surface because a misconfigured MCP server can read secrets, write files, or exfiltrate code. Keep scope tight and treat all external tool output as untrusted data.
+Gemini CLI uses Model Context Protocol to let the agent read project files, call tools and run commands. That power expands your attack surface because a misconfigured MCP server can read secrets, write files or exfiltrate code. Keep scope tight and treat all external tool output as untrusted data.
 
 The official MCP spec defines how tool listing and invocation works over stdio and streamable HTTP, including transport security and tool permissions [MCP spec for tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools). For LLM integrations, OWASP highlights excessive agency and tool output handling as key risks before you enable write actions [official Gemini CLI MCP docs](https://geminicli.com/docs/tools/mcp-server/). Hard coded credential risks map to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html), a frequent failure in AI suggested code. If you decouple spec from enforcement, review drift happens quickly. For a comparison of IDE side controls, see our review of v0 app security checklist at [v0 app security checklist](/blog/v0-app-security-checklist).
 
 ## Locking down MCP configuration for Gemini CLI
 
-Gemini CLI stores MCP in settings.json under mcpServers, with per server trust, includeTools allow list, support for $VAR expansion, and mcp.allowed gating. Open settings.json and define mcpServers as a map, set trust low for untrusted servers, list only required tools in includeTools, and use $VAR for secrets so raw keys never sit in JSON. Vendor guidance is at [official Gemini CLI MCP docs](https://geminicli.com/docs/tools/mcp-server/).
+Gemini CLI stores MCP in settings.json under mcpServers, with per server trust, includeTools allow list, support for $VAR expansion and mcp.allowed gating. Open settings.json and define mcpServers as a map, set trust low for untrusted servers, list only required tools in includeTools and use $VAR for secrets so raw keys never sit in JSON. Vendor guidance is at [official Gemini CLI MCP docs](https://geminicli.com/docs/tools/mcp-server/).
 
 Secure it in four practical steps.
 
-Configure the MCP server in Gemini CLI settings, restart the client, and call a read-only LyraShield tool to confirm discovery. Local stdio uses local LyraShield credentials; hosted authentication follows the remote connection. `lyrashield doctor` alone cannot prove Gemini loaded the server. Gemini reads `GEMINI.md` by default; use another guidance filename only when `context.fileName` includes it in [Gemini CLI settings](https://geminicli.com/docs/cli/gemini-md/).
+Configure the MCP server in Gemini CLI settings, restart the client and call a read-only LyraShield tool to confirm discovery. Local stdio uses local LyraShield credentials; hosted authentication follows the remote connection. `lyrashield doctor` alone cannot prove Gemini loaded the server. Gemini reads `GEMINI.md` by default; use another guidance filename only when `context.fileName` includes it in [Gemini CLI settings](https://geminicli.com/docs/cli/gemini-md/).
 
 First, never inline secrets in JSON. Use `$VAR_NAME` or `${VAR_NAME}` references and load values from the launching environment or your secret manager, with local dotenv files gitignored and keys rotated when exposure is suspected.
 
@@ -69,21 +69,21 @@ Fourth, commit project scoped configs and add a CI check that validates JSON sch
 }
 ```
 
-Document every MCP server in a central inventory with purpose, trust level, and owner. Rotate keys monthly and log tool calls where your IDE allows it. Require two reviewers for any change to MCP config.
+Document every MCP server in a central inventory with purpose, trust level and owner. Rotate keys monthly and log tool calls where your IDE allows it. Require two reviewers for any change to MCP config.
 
-## Secrets, dependencies, and prompt injection hardening
+## Secrets, dependencies and prompt injection hardening
 
 AI assistants accelerate copy paste of sample code that contains placeholder tokens or private URLs. Scan every AI diff for secrets before commit. Use gitleaks or cloud secret scanning and block merges on high confidence findings. CWE 798 and CWE 200 cover credential exposure and sensitive data leakage patterns that appear often in generated code [CWE 200 for sensitive data exposure](https://cwe.mitre.org/data/definitions/200.html).
 
 Dependencies are the second common gap. AI often suggests outdated versions. Resolve versions with Open Source Vulnerabilities database [OSV.dev database](https://osv.dev/) and GitHub dependency review [GitHub dependency review](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review). Update lockfiles in the same PR and require explicit review of lockfile diffs, never auto approve.
 
-Prompt injection can come from docs, issue comments, or web fetched content that the assistant brings into context. Add explicit agent instructions that require approval before write actions and never act on instructions embedded in README files. Restrict network egress for local MCP servers via OS firewall rules where possible, and log anomalous outbound calls that MCP tools trigger. For Node backends, apply Node security guidance for env isolation [Node.js security best practices](https://nodejs.org/en/learn/getting-started/security-best-practices).
+Prompt injection can come from docs, issue comments or web fetched content that the assistant brings into context. Add explicit agent instructions that require approval before write actions and never act on instructions embedded in README files. Restrict network egress for local MCP servers via OS firewall rules where possible and log anomalous outbound calls that MCP tools trigger. For Node backends, apply Node security guidance for env isolation [Node.js security best practices](https://nodejs.org/en/learn/getting-started/security-best-practices).
 
-Add these to your Definition of Done: secrets scan passes with no new findings, SCA passes with no high severity advisories, and a second engineer reviews any change touching auth, sessions, payments, file uploads, or crypto. Keep a reproducible SBOM so you can trace each artifact back to its source.
+Add these to your Definition of Done: secrets scan passes with no new findings, SCA passes with no high severity advisories and a second engineer reviews any change touching auth, sessions, payments, file uploads or crypto. Keep a reproducible SBOM so you can trace each artifact back to its source.
 
 ## Verifying and gating AI generated code before merge
 
-Vibe coding is fast, but velocity without verification creates security debt. Use a diff aware pipeline that only flags AI changed files. Keep human and AI commits separated where possible with a trailer or label, and map findings to OWASP Top 10 for consistent triage. Use one security gate table in your PR template to make checks explicit and auditable.
+Vibe coding is fast, but velocity without verification creates security debt. Use a diff aware pipeline that only flags AI changed files. Keep human and AI commits separated where possible with a trailer or label and map findings to OWASP Top 10 for consistent triage. Use one security gate table in your PR template to make checks explicit and auditable.
 
 | Check                          | Where it runs       | Owner     | Fail action                          |
 | ------------------------------ | ------------------- | --------- | ------------------------------------ |
@@ -95,22 +95,22 @@ Vibe coding is fast, but velocity without verification creates security debt. Us
 
 Export SARIF from each scanner and upload to GitHub code scanning so findings show inline on the PR [SARIF support in GitHub code scanning](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning). Keep reports for audit and always retest after fixes. Retest must run the same scanners on the fix commit to confirm remediation.
 
-For frameworks like Next.js, verify server only secrets never leak to client bundles by checking env handling [Next.js env handling](https://nextjs.org/docs/app/api-reference/config/next-config-js/env). For Vercel hosted apps, enforce headers and WAF rules [Vercel security docs](https://vercel.com/docs/security). Enforce branch protection that blocks merge unless SARIF, SCA, and secrets checks report success, and keep evidence for compliance reviews.
+For frameworks like Next.js, verify server only secrets never leak to client bundles by checking env handling [Next.js env handling](https://nextjs.org/docs/app/api-reference/config/next-config-js/env). For Vercel hosted apps, enforce headers and WAF rules [Vercel security docs](https://vercel.com/docs/security). Enforce branch protection that blocks merge unless SARIF, SCA and secrets checks report success and keep evidence for compliance reviews.
 
 ## Runtime checks and observability after deploy
 
-Checks do not stop at merge. Add runtime protections that catch what static analysis misses. Enable Content Security Policy, enforce strict CORS, and log auth failures centrally. Monitor for anomalous outbound calls from MCP tools. Keep an inventory of which AI tools can make network calls and review it weekly.
+Checks do not stop at merge. Add runtime protections that catch what static analysis misses. Enable Content Security Policy, enforce strict CORS and log auth failures centrally. Monitor for anomalous outbound calls from MCP tools. Keep an inventory of which AI tools can make network calls and review it weekly.
 
 Store build attestations so you can trace any production artifact back to a verified commit hash. Schedule quarterly exercises where you insert a known vulnerable snippet and verify your gate catches it. Use OWASP WebGoat patterns as test payloads and track detection rate as a metric for your program [OWASP WebGoat](https://owasp.org/www-project-webgoat/).
 
-Supply chain hygiene matters because AI generated code often pulls transitive dependencies you did not choose. Lock files, provenance, and signed commits reduce risk that a compromised package enters your build. Pair that with branch protection requiring two reviewers for MCP config changes and auth middleware.
+Supply chain hygiene matters because AI generated code often pulls transitive dependencies you did not choose. Lock files, provenance and signed commits reduce risk that a compromised package enters your build. Pair that with branch protection requiring two reviewers for MCP config changes and auth middleware.
 
 ## Why pair Gemini CLI with LyraShield
 
-LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](https://lyrashieldai.com). Our core loop is target, review, evidence, fix, retest, report, built for teams shipping with Gemini CLI and other AI coding tools. We separate detection from proof: findings come with evidence you can verify, and every result is an immutable assurance record tied to the exact commit and scan.
+LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](https://lyrashieldai.com). Our core loop is target, review, evidence, fix, retest, report, built for teams shipping with Gemini CLI and other AI coding tools. We separate detection from proof: findings come with evidence you can verify and every result is an immutable assurance record tied to the exact commit and scan.
 
-The platform is live in open beta with open registration. The scan pipeline, findings, and evidence, approval-gated fix proposals, retests, reports, billing, and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.8` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution and live paid activation are not enabled.
+The platform is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.8` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution is not enabled; self-serve checkout is live.
 
-LyraShield sits after your Gemini CLI drafts and before merge, giving you verified findings instead of noisy rescans. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval, and retest runs the same scanners on the fix commit to confirm remediation.
+LyraShield sits after your Gemini CLI drafts and before merge, giving you verified findings instead of noisy rescans. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval and retest runs the same scanners on the fix commit to confirm remediation.
 
 Ready to apply this checklist beyond this tool. Run the interactive version at [AI app security checklist](/tools/ai-app-security-checklist) and create an account at [https://lyrashieldai.com](https://lyrashieldai.com) to get started with the MCP server and GitHub Action.

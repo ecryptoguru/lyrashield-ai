@@ -6,6 +6,8 @@ import {
   calculateGpt56CostUsd,
   calculateGpt56CostUsdFromBuckets,
   calculateGpt56CostUsdFromModelBuckets,
+  GPT_6_PRICING_EFFECTIVE_DATE,
+  GPT_6_PRICING_SOURCE,
   GPT_56_PRICING_EFFECTIVE_DATE,
   GPT_56_PRICING_SOURCE,
   type Gpt56ModelUsageBuckets,
@@ -21,6 +23,27 @@ export function extractActualCostUsd(usage: Record<string, unknown> | undefined)
     }
   }
   return null
+}
+
+/**
+ * Bounded engine coverage receipt for a scan the engine truncated at its
+ * runtime deadline. The engine's findings are real but its scope was cut
+ * short, so the scan carries an explicit coverage gap rather than implying a
+ * complete pass.
+ */
+export function engineRuntimeDeadlineCoverageIssue(
+  runRecord: EngineRunRecord | null,
+  hasEngineFindings: boolean
+): ScannerCoverageIssue | null {
+  if (runRecord?.terminal_reason !== "runtime_deadline") return null
+  return {
+    scanner: "engine",
+    status: "bounded",
+    subject: "runtime-deadline",
+    reason: hasEngineFindings
+      ? "Engine reached its runtime limit; partial findings preserved"
+      : "Engine reached its runtime limit before filing any findings",
+  }
 }
 
 export function engineRoutingCoverageIssue(
@@ -224,9 +247,7 @@ export async function persistEngineUsageCheckpoint(params: {
       budgetExceeded: false,
       billedCostUsd: null,
       costReconciled: !usageExpected,
-      ...(usageExpected
-        ? { reconciliationReason: "Per-request GPT-5.6 usage was unavailable" }
-        : {}),
+      ...(usageExpected ? { reconciliationReason: "Per-request model usage was unavailable" } : {}),
     }
   }
 
@@ -234,7 +255,7 @@ export async function persistEngineUsageCheckpoint(params: {
   // Per-request buckets are the only way to price mixed-context scans
   // accurately. When they are unavailable, fall back to aggregate counters
   // only if the usage payload names a single model, so we do not misprice a
-  // Terra/Luna mix at the configured model rate.
+  // Sol/Luna mix at the configured model rate.
   const aggregateCostUsd =
     usage.inputTokens !== null &&
     usage.cachedInputTokens !== null &&
@@ -272,8 +293,20 @@ export async function persistEngineUsageCheckpoint(params: {
     pricingMethod = "unavailable"
   }
 
+  const models =
+    usage.modelPricingBuckets?.map((bucket) => bucket.model) ??
+    (usage.singleModel ? [usage.singleModel] : [])
+  const isGpt6Usage =
+    models.length > 0 &&
+    models.every((model) => /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/.test(model.toLowerCase()))
+  const hasGpt6Usage = models.some((model) =>
+    /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/.test(model.toLowerCase())
+  )
+  const accountingComplete = hasGpt6Usage
+    ? llmUsage["accountingComplete"] === true && usage.modelPricingBuckets !== null
+    : llmUsage["accountingComplete"] !== false
   const costsMatch =
-    llmUsage["accountingComplete"] !== false &&
+    accountingComplete &&
     rateCardCostUsd !== null &&
     (usage.engineReportedCostUsd === null ||
       Math.abs(rateCardCostUsd - usage.engineReportedCostUsd) < 0.000001)
@@ -285,24 +318,27 @@ export async function persistEngineUsageCheckpoint(params: {
   const billedCostUsd = billableCostUsd === null ? null : Math.min(billableCostUsd, maxBudgetUsd)
   const costSource =
     rateCardCostUsd !== null && usage.engineReportedCostUsd !== null
-      ? "rate_card_and_engine_reported"
+      ? isGpt6Usage
+        ? "azure_published_rate_card_and_engine_reported"
+        : "rate_card_and_engine_reported"
       : rateCardCostUsd !== null
-        ? "azure_rate_card"
+        ? isGpt6Usage
+          ? "azure_published_rate_card"
+          : "azure_rate_card"
         : usage.engineReportedCostUsd !== null
           ? "engine_reported_unreconciled"
           : "unavailable"
-  const reconciliationStatus =
-    llmUsage["accountingComplete"] === false
-      ? "incomplete_provider_receipts"
-      : modelMixUnpriceable
-        ? "model_mix_unpriceable"
-        : rateCardCostUsd === null
-          ? "unavailable"
-          : usage.engineReportedCostUsd === null
-            ? "rate_card_only"
-            : costsMatch
-              ? "matched"
-              : "mismatch"
+  const reconciliationStatus = !accountingComplete
+    ? "incomplete_provider_receipts"
+    : modelMixUnpriceable
+      ? "model_mix_unpriceable"
+      : rateCardCostUsd === null
+        ? "unavailable"
+        : usage.engineReportedCostUsd === null
+          ? "rate_card_only"
+          : costsMatch
+            ? "matched"
+            : "mismatch"
 
   try {
     await addScanEvent(scanId, "llm_usage", "info", "AI usage counters recorded", {
@@ -312,11 +348,14 @@ export async function persistEngineUsageCheckpoint(params: {
       billedCostUsd,
       costSource,
       reconciliationStatus,
-      accountingComplete: llmUsage["accountingComplete"] !== false,
+      accountingComplete,
       ...(rateCardCostUsd !== null
         ? {
-            pricingEffectiveDate: GPT_56_PRICING_EFFECTIVE_DATE,
-            pricingSource: GPT_56_PRICING_SOURCE,
+            pricingEffectiveDate: isGpt6Usage
+              ? GPT_6_PRICING_EFFECTIVE_DATE
+              : GPT_56_PRICING_EFFECTIVE_DATE,
+            pricingSource: isGpt6Usage ? GPT_6_PRICING_SOURCE : GPT_56_PRICING_SOURCE,
+            ...(isGpt6Usage ? { pricingStatus: "azure_published_rates_invoice_unverified" } : {}),
           }
         : {}),
     })
@@ -377,12 +416,11 @@ export async function persistEngineUsageCheckpoint(params: {
     ...(!usageExpected || costsMatch
       ? {}
       : {
-          reconciliationReason:
-            llmUsage["accountingComplete"] === false
-              ? "Some started provider requests have no final usage receipt"
-              : rateCardCostUsd === null
-                ? "Complete per-request GPT-5.6 usage buckets were unavailable"
-                : "Engine-reported cost did not match the GPT-5.6 rate-card calculation",
+          reconciliationReason: !accountingComplete
+            ? "Some started provider requests have no final usage receipt"
+            : rateCardCostUsd === null
+              ? "Complete per-request model usage buckets were unavailable"
+              : "Engine-reported cost did not match the versioned rate-card calculation",
         }),
   }
 }

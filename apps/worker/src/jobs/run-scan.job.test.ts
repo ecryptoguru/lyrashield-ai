@@ -384,6 +384,46 @@ const mockUrlTarget = {
 }
 
 describe("shouldRecordAgentMinutes", () => {
+  it("keeps GPT-6 costs unbilled until exact provider receipts are explicit", async () => {
+    const result = await persistEngineUsageCheckpoint({
+      scanId: "gpt6-pricing",
+      maxBudgetUsd: 1.2,
+      usageExpected: true,
+      llmUsage: { ...completeUsage, model: "azure_ai/gpt-6-luna" },
+    })
+    expect(result).toMatchObject({ billedCostUsd: null, costReconciled: false })
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "gpt6-pricing",
+      "llm_usage",
+      "info",
+      expect.any(String),
+      expect.objectContaining({
+        calculatedCostUsd: 0.00015,
+        accountingComplete: false,
+        reconciliationStatus: "incomplete_provider_receipts",
+        costSource: "azure_published_rate_card",
+        pricingStatus: "azure_published_rates_invoice_unverified",
+        pricingSource:
+          "https://azure.microsoft.com/en-us/blog/gpt-6-astra-sol-and-luna-for-production-agents-in-microsoft-foundry/",
+      })
+    )
+  })
+
+  it("reconciles GPT-6 only with an explicit complete per-model receipt", async () => {
+    const result = await persistEngineUsageCheckpoint({
+      scanId: "gpt6-complete",
+      maxBudgetUsd: 1.2,
+      usageExpected: true,
+      llmUsage: {
+        ...completeUsage,
+        model: "azure_ai/gpt-6-luna",
+        accountingComplete: true,
+        model_usage_buckets: [{ ...completeUsage, model: "azure_ai/gpt-6-luna" }],
+      },
+    })
+    expect(result).toMatchObject({ billedCostUsd: 0.00015, costReconciled: true })
+  })
+
   it("retains known counters without reconciling an incomplete provider checkpoint", async () => {
     const result = await persistEngineUsageCheckpoint({
       scanId: "partial-triage",
@@ -482,12 +522,16 @@ describe("shouldRecordAgentMinutes", () => {
 })
 
 describe("resolveScanRuntimeBudgetMs", () => {
-  it.each(["SAFE", "QUICK", "STANDARD"] as const)(
+  it.each(["SAFE", "QUICK"] as const)(
     "caps %s scans at fifteen minutes even when the default policy is longer",
     (mode) => {
       expect(resolveScanRuntimeBudgetMs(mode, 60)).toBe(15 * 60 * 1000)
     }
   )
+
+  it("allows Standard enough time for GPT-6 while keeping a fixed ceiling", () => {
+    expect(resolveScanRuntimeBudgetMs("STANDARD", 60)).toBe(23 * 60 * 1000)
+  })
 
   it("caps deep scans at forty-five minutes", () => {
     expect(resolveScanRuntimeBudgetMs("DEEP", 60)).toBe(45 * 60 * 1000)
@@ -501,20 +545,20 @@ describe("resolveScanRuntimeBudgetMs", () => {
     // SAFE keeps the deterministic wall-clock profile budget.
     expect(resolveScanRuntimeBudgetMs("SAFE", 60, "WEB_APP")).toBe(1 * 60 * 1000)
     // STANDARD/DEEP URL are engine-backed at repository budgets.
-    expect(resolveScanRuntimeBudgetMs("STANDARD", 60, "WEB_APP")).toBe(15 * 60 * 1000)
+    expect(resolveScanRuntimeBudgetMs("STANDARD", 60, "WEB_APP")).toBe(23 * 60 * 1000)
     expect(resolveScanRuntimeBudgetMs("DEEP", 60, "WEB_APP")).toBe(45 * 60 * 1000)
   })
 })
 
 describe("resolveEngineRuntimeBudgetMs", () => {
   it("preserves the repository scanner reserve inside the total deadline", () => {
-    expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 15 * 60 * 1000, 0)).toBe(12 * 60 * 1000)
+    expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 23 * 60 * 1000, 0)).toBe(20 * 60 * 1000)
     expect(resolveEngineRuntimeBudgetMs("DEEP", "REPO", 45 * 60 * 1000, 0)).toBe(40 * 60 * 1000)
   })
 
   it("reduces the engine allowance when preflight consumed the total envelope", () => {
-    expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 15 * 60 * 1000, 5 * 60 * 1000)).toBe(
-      7 * 60 * 1000
+    expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 23 * 60 * 1000, 5 * 60 * 1000)).toBe(
+      15 * 60 * 1000
     )
   })
 })
@@ -1388,6 +1432,92 @@ describe("processScanJob", () => {
     }
   )
 
+  it("preserves filed findings as PARTIAL when the engine hits its runtime deadline", async () => {
+    vi.mocked(runEngine).mockResolvedValueOnce({
+      exitCode: 2,
+      output: {
+        ingestionIssues: [],
+        vulnerabilities: [{ title: "Retained finding" }],
+        findingCount: 1,
+        findingsComplete: false,
+        summary: "Runtime deadline reached with findings",
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "stopped",
+          terminal_reason: "runtime_deadline",
+          llm_usage: completeUsage,
+        },
+      },
+    } as never)
+
+    await processScanJob(mockJob)
+
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "PARTIAL", expect.anything())
+    expect(recordAgentMinutes).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      expect.any(Number),
+      expect.objectContaining({ outcome: "partial" })
+    )
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalOutcome: expect.objectContaining({
+          status: "PARTIAL",
+          errorCategory: "ENGINE_RUNTIME_DEADLINE",
+          errorMessage: "Engine reached its runtime limit; partial findings preserved",
+        }),
+        coverageIssues: expect.arrayContaining([
+          expect.objectContaining({
+            scanner: "engine",
+            status: "bounded",
+            subject: "runtime-deadline",
+          }),
+        ]),
+      })
+    )
+  })
+
+  it("fails without findings when the engine hits its runtime deadline", async () => {
+    vi.mocked(runEngine).mockResolvedValueOnce({
+      exitCode: 5,
+      output: {
+        ingestionIssues: [],
+        vulnerabilities: [],
+        findingCount: 0,
+        findingsComplete: false,
+        summary: "Runtime deadline reached with no findings",
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "stopped",
+          terminal_reason: "runtime_deadline",
+          llm_usage: completeUsage,
+        },
+      },
+    } as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result).toMatchObject({ status: "failed", errorCategory: "ENGINE_RUNTIME_DEADLINE" })
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({
+        errorCategory: "ENGINE_RUNTIME_DEADLINE",
+        errorMessage: "Engine reached its runtime limit before filing any findings",
+      })
+    )
+    expect(recordAgentMinutes).not.toHaveBeenCalled()
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        coverageIssues: expect.arrayContaining([
+          expect.objectContaining({ scanner: "engine", status: "bounded" }),
+        ]),
+      })
+    )
+  })
+
   it("meters only engine wall time, excluding setup before invocation", async () => {
     const startedAt = new Date("2026-08-25T00:00:00.000Z")
     vi.useFakeTimers()
@@ -1568,6 +1698,31 @@ describe("processScanJob", () => {
       expect.any(Function),
       expect.any(Function)
     )
+  })
+
+  it("keeps a queued snapshot inside its recorded wall-clock ceiling", async () => {
+    const built = buildScanExecutionPlan({ targetType: "REPO", mode: "SAFE" })
+    const plan = {
+      ...built,
+      limits: {
+        ...built.limits,
+        maxDurationMs: 5 * 60_000,
+        maxEngineMs: 3 * 60_000,
+        scannerReserveMs: 2 * 60_000,
+      },
+    }
+    mockStoredScanAuthority({
+      executionPlan: plan,
+      executionPlanHash: computeScanExecutionPlanHash(plan),
+    })
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(mockRepoTarget as never)
+
+    const result = await processScanJob(mockJob)
+    expect(result.status).toBe("completed")
+
+    const timeoutMs = vi.mocked(runEngine).mock.calls[0]?.[2]
+    expect(timeoutMs).toBeGreaterThan(0)
+    expect(timeoutMs).toBeLessThanOrEqual(3 * 60_000)
   })
 
   it("applies the profile wall-clock budget as the engine timeout for a progressing Deep engine", async () => {

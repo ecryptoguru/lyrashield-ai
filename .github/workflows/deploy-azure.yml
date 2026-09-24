@@ -18,7 +18,7 @@ on:
         type: string
 
 concurrency:
-  group: deploy-azure-${{ github.ref }}
+  group: deploy-azure-${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
   cancel-in-progress: false
 
 permissions:
@@ -30,7 +30,7 @@ env:
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
   EGRESS_PROXY_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-egress-proxy
-  ENGINE_REVISION: 8fe5736c84288a48aa8cd584e96f54e068a70a85
+  ENGINE_REVISION: cfc31bda6994267f19d458cd1371ca139a67a771
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
@@ -137,7 +137,7 @@ jobs:
         run: bash .github/scripts/verify-engine-worker-contract.sh lyrashield-engine "$GITHUB_WORKSPACE"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -166,7 +166,7 @@ jobs:
 
       - name: Build and push web image
         id: build-web
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           target: runner
@@ -184,7 +184,7 @@ jobs:
 
       - name: Build and push worker image
         id: build-worker
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           target: worker
@@ -204,7 +204,7 @@ jobs:
 
       - name: Build and push egress-proxy image
         id: build-egress-proxy
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           target: egress-proxy
@@ -355,7 +355,12 @@ jobs:
           MYRA_WRITES_ENABLED: ${{ vars.MYRA_WRITES_ENABLED || '0' }}
           MYRA_PUBLIC_BOOKING_ENABLED: ${{ vars.MYRA_PUBLIC_BOOKING_ENABLED || '0' }}
           MYRA_DASHBOARD_ENABLED: ${{ vars.MYRA_DASHBOARD_ENABLED || '0' }}
-          MYRA_ALLOWED_EMAILS: ${{ vars.MYRA_ALLOWED_EMAILS }}
+          MYRA_GENERATION_ENABLED: ${{ vars.MYRA_GENERATION_ENABLED || '0' }}
+          MYRA_PROVIDER: ${{ vars.MYRA_PROVIDER || 'mock' }}
+          MYRA_MODEL: ${{ vars.MYRA_MODEL }}
+          MYRA_AZURE_OPENAI_ENDPOINT: ${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}
+          MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
           MYRA_CALENDAR_PROVIDER: ${{ vars.MYRA_CALENDAR_PROVIDER }}
           MYRA_GOOGLE_CLIENT_ID: ${{ vars.MYRA_GOOGLE_CLIENT_ID }}
           MYRA_GOOGLE_CLIENT_SECRET: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET }}
@@ -369,7 +374,7 @@ jobs:
         # v16 4.3: OIDC federated login — no stored client secret. The
         # workload identity (client id) must carry the same role assignments
         # the old service principal had.
-        uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
@@ -660,6 +665,7 @@ jobs:
       - name: Sync Myra secrets to app Container App
         env:
           MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
           MYRA_GOOGLE_CLIENT_SECRET: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET }}
           MYRA_GOOGLE_REFRESH_TOKEN: ${{ secrets.MYRA_GOOGLE_REFRESH_TOKEN }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -683,6 +689,7 @@ jobs:
             fi
           }
           set_myra_secret "myra-aoai-key" "$MYRA_AZURE_OPENAI_API_KEY"
+          set_myra_secret "turnstile-secret" "$TURNSTILE_SECRET_KEY"
           set_myra_secret "myra-g-secret" "$MYRA_GOOGLE_CLIENT_SECRET"
           set_myra_secret "myra-g-refresh" "$MYRA_GOOGLE_REFRESH_TOKEN"
 
@@ -890,6 +897,7 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
           MYRA_GOOGLE_CLIENT_SECRET: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET }}
           MYRA_GOOGLE_REFRESH_TOKEN: ${{ secrets.MYRA_GOOGLE_REFRESH_TOKEN }}
         run: |
@@ -907,6 +915,9 @@ jobs:
           MYRA_ENV=()
           if [ -n "${MYRA_AZURE_OPENAI_API_KEY}" ]; then
             MYRA_ENV+=("MYRA_AZURE_OPENAI_API_KEY=secretref:myra-aoai-key")
+          fi
+          if [ -n "${TURNSTILE_SECRET_KEY}" ]; then
+            MYRA_ENV+=("TURNSTILE_SECRET_KEY=secretref:turnstile-secret")
           fi
           if [ -n "${MYRA_GOOGLE_CLIENT_SECRET}" ]; then
             MYRA_ENV+=("MYRA_GOOGLE_CLIENT_SECRET=secretref:myra-g-secret")
@@ -1028,7 +1039,6 @@ jobs:
               "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret" \
               "MYRA_PUBLIC_ENABLED=${{ vars.MYRA_PUBLIC_ENABLED || '0' }}" \
               "MYRA_DASHBOARD_ENABLED=${{ vars.MYRA_DASHBOARD_ENABLED || '0' }}" \
-              "MYRA_ALLOWED_EMAILS=${{ vars.MYRA_ALLOWED_EMAILS }}" \
               "MYRA_OPERATOR_ENABLED=${{ vars.MYRA_OPERATOR_ENABLED || '0' }}" \
               "MYRA_WRITES_ENABLED=${{ vars.MYRA_WRITES_ENABLED || '0' }}" \
               "MYRA_PUBLIC_BOOKING_ENABLED=${{ vars.MYRA_PUBLIC_BOOKING_ENABLED || '0' }}" \
@@ -1036,15 +1046,9 @@ jobs:
               "MYRA_PROVIDER=${{ vars.MYRA_PROVIDER || 'mock' }}" \
               "MYRA_CALENDAR_PROVIDER=${{ vars.MYRA_CALENDAR_PROVIDER }}" \
               "MYRA_AZURE_OPENAI_ENDPOINT=${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}" \
-              "MYRA_AZURE_OPENAI_DEPLOYMENT=${{ vars.MYRA_AZURE_OPENAI_DEPLOYMENT }}" \
-              "MYRA_MODEL_FAST=${{ vars.MYRA_MODEL_FAST }}" \
-              "MYRA_MODEL_DEEP=${{ vars.MYRA_MODEL_DEEP }}" \
+              "MYRA_MODEL=${{ vars.MYRA_MODEL }}" \
               "MYRA_EMBED_MODEL=${{ vars.MYRA_EMBED_MODEL }}" \
               "MYRA_MONTHLY_BUDGET_USD=${{ vars.MYRA_MONTHLY_BUDGET_USD }}" \
-              "MYRA_COST_PER_1K_INPUT_USD=${{ vars.MYRA_COST_PER_1K_INPUT_USD }}" \
-              "MYRA_COST_PER_1K_OUTPUT_USD=${{ vars.MYRA_COST_PER_1K_OUTPUT_USD }}" \
-              "MYRA_DEEP_COST_PER_1K_INPUT_USD=${{ vars.MYRA_DEEP_COST_PER_1K_INPUT_USD }}" \
-              "MYRA_DEEP_COST_PER_1K_OUTPUT_USD=${{ vars.MYRA_DEEP_COST_PER_1K_OUTPUT_USD }}" \
               "MYRA_GOOGLE_CLIENT_ID=${{ vars.MYRA_GOOGLE_CLIENT_ID }}" \
               "MYRA_GOOGLE_CALENDAR_ID=${{ vars.MYRA_GOOGLE_CALENDAR_ID }}" \
               "MYRA_SUPPORT_NOTIFY_EMAIL=${{ vars.MYRA_SUPPORT_NOTIFY_EMAIL || 'support@lyrashieldai.com' }}" \

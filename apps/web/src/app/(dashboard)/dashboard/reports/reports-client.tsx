@@ -221,7 +221,7 @@ export function ReportsClient({
   }
 
   const handoffMessage = shareUrl
-    ? `Security review ready for your review. This private link expires in 30 days: ${shareUrl}`
+    ? `Security scan ready for your review. This private link expires in 30 days: ${shareUrl}`
     : ""
 
   return (

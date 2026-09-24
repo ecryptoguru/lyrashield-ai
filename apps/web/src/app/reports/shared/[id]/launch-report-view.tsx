@@ -58,8 +58,8 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
           role="status"
           className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
         >
-          This historical report is superseded, expired, or predates current applicability rules.
-          Ask the team to run a current gate assessment.
+          This historical report is superseded, expired or predates current applicability rules. Ask
+          the team to run a current gate assessment.
         </div>
       )}
 

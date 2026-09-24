@@ -1,5 +1,22 @@
 import { isActiveScan } from "@/lib/scan-presentation"
 
+// ── Active-scan poll backoff ────────────────────────────────────────────────
+// The list poller ramps down while scans stay active: every 10s for the
+// first minute, every 30s until five minutes in, then every 60s. The elapsed
+// bounds are checked smallest-first — evaluating the five-minute bound before
+// the one-minute bound makes the medium interval unreachable (P2-7).
+export const ACTIVE_SCAN_POLL_FAST_INTERVAL_MS = 10_000
+export const ACTIVE_SCAN_POLL_MEDIUM_INTERVAL_MS = 30_000
+export const ACTIVE_SCAN_POLL_SLOW_INTERVAL_MS = 60_000
+export const ACTIVE_SCAN_POLL_FAST_PHASE_MS = 60_000
+export const ACTIVE_SCAN_POLL_MEDIUM_PHASE_MS = 5 * 60_000
+
+export function nextActiveScanPollInterval(elapsedMs: number): number {
+  if (elapsedMs < ACTIVE_SCAN_POLL_FAST_PHASE_MS) return ACTIVE_SCAN_POLL_FAST_INTERVAL_MS
+  if (elapsedMs < ACTIVE_SCAN_POLL_MEDIUM_PHASE_MS) return ACTIVE_SCAN_POLL_MEDIUM_INTERVAL_MS
+  return ACTIVE_SCAN_POLL_SLOW_INTERVAL_MS
+}
+
 export function mergePolledScans<T extends { id: string; status: string }>(
   current: T[],
   refreshed: T[],

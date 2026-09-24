@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto"
 import { prisma } from "./client"
-import { Prisma } from "./generated/prisma"
 import type { Notification } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import {
@@ -23,10 +22,6 @@ export function computeNotificationDedupeKey(input: {
     .digest("hex")
 }
 
-function isUniqueConstraintError(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
-}
-
 export async function createNotification(params: {
   workspaceId: string
   userId?: string
@@ -44,21 +39,24 @@ export async function createNotification(params: {
     body: params.body,
     dedupeKey: params.dedupeKey,
   })
-  try {
-    const notification = await prisma.notification.create({
-      data: {
-        workspaceId: params.workspaceId,
-        ...(params.userId ? { userId: params.userId } : {}),
-        channel: params.channel,
-        type: params.type,
-        title: params.title,
-        body: params.body,
-        status: "pending",
-        dedupeKey,
-        ...(params.metadata ? { metadata: params.metadata } : {}),
-      },
-    })
+  const data = {
+    workspaceId: params.workspaceId,
+    ...(params.userId ? { userId: params.userId } : {}),
+    channel: params.channel,
+    type: params.type,
+    title: params.title,
+    body: params.body,
+    status: "pending",
+    dedupeKey,
+    ...(params.metadata ? { metadata: params.metadata } : {}),
+  }
+  const created = await prisma.notification.createMany({ data, skipDuplicates: true })
+  const notification = await prisma.notification.findUnique({
+    where: { channel_dedupeKey: { channel: params.channel, dedupeKey } },
+  })
+  if (!notification) throw new Error("Notification insert did not produce a durable row")
 
+  if (created.count === 1) {
     logger.info("Notification created", {
       workspaceId: params.workspaceId,
       notificationId: notification.id,
@@ -67,33 +65,24 @@ export async function createNotification(params: {
     })
 
     return notification
-  } catch (error) {
-    if (isUniqueConstraintError(error)) {
-      const existing = await prisma.notification.findFirst({
-        where: { channel: params.channel, dedupeKey },
-      })
-      if (existing) {
-        // retry path: refresh existing row with latest payload
-        const updated = await prisma.notification.update({
-          where: { id: existing.id },
-          data: {
-            title: params.title,
-            body: params.body,
-            ...(params.metadata ? { metadata: params.metadata } : {}),
-            ...(params.userId ? { userId: params.userId } : {}),
-          },
-        })
-        logger.info("Notification deduped (existing reused)", {
-          workspaceId: params.workspaceId,
-          notificationId: existing.id,
-          type: params.type,
-          channel: params.channel,
-        })
-        return updated
-      }
-    }
-    throw error
   }
+
+  const updated = await prisma.notification.update({
+    where: { id: notification.id },
+    data: {
+      title: params.title,
+      body: params.body,
+      ...(params.metadata ? { metadata: params.metadata } : {}),
+      ...(params.userId ? { userId: params.userId } : {}),
+    },
+  })
+  logger.info("Notification deduped (existing reused)", {
+    workspaceId: params.workspaceId,
+    notificationId: notification.id,
+    type: params.type,
+    channel: params.channel,
+  })
+  return updated
 }
 
 export async function getNotification(
@@ -277,58 +266,57 @@ export async function createAndSendNotification(params: {
       })
 
   for (const channel of channels) {
-    let notification: Notification | null = null
-    try {
-      notification = await prisma.notification.create({
-        data: {
-          workspaceId: params.workspaceId,
-          channel,
-          type: effectiveType,
-          title: effectiveTitle,
-          body: effectiveBody,
-          status: "pending",
-          dedupeKey,
-        },
-      })
+    const data = {
+      workspaceId: params.workspaceId,
+      channel,
+      type: effectiveType,
+      title: effectiveTitle,
+      body: effectiveBody,
+      status: "pending",
+      dedupeKey,
+    }
+    const created = await prisma.notification.createMany({ data, skipDuplicates: true })
+    let notification = await prisma.notification.findUnique({
+      where: { channel_dedupeKey: { channel, dedupeKey } },
+    })
+    if (!notification) throw new Error("Notification insert did not produce a durable row")
+
+    if (created.count === 1) {
       logger.info("Notification created", {
         workspaceId: params.workspaceId,
         notificationId: notification.id,
         type: params.type,
         channel,
       })
-    } catch (error) {
-      if (isUniqueConstraintError(error)) {
-        const existing = await prisma.notification.findFirst({
-          where: { channel, dedupeKey },
-        })
-        if (!existing) throw error
-        notification = existing
-        // Grouped digests accumulate their event receipts instead of
-        // overwriting, so earlier events in the window are not erased. The
-        // list stays bounded with an explicit overflow note.
-        if (grouped) {
-          await prisma.notification.update({
-            where: { id: existing.id },
+    } else {
+      // Grouped digests accumulate their event receipts instead of
+      // overwriting, so earlier events in the window are not erased. The
+      // list stays bounded with an explicit overflow note.
+      if (grouped) {
+        notification = await prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`notification:${channel}:${dedupeKey}`}, 0))`
+          const current = await tx.notification.findUnique({
+            where: { channel_dedupeKey: { channel, dedupeKey } },
+          })
+          if (!current) throw new Error("Notification disappeared during digest update")
+          return tx.notification.update({
+            where: { id: current.id },
             data: {
               body: appendDigestLine(
-                existing.body,
+                current.body,
                 `• ${params.title} — ${params.routineGroup!.detail}`
               ),
             },
           })
-        }
-        logger.info("Notification deduped (reusing delivery identity)", {
-          workspaceId: params.workspaceId,
-          notificationId: existing.id,
-          type: params.type,
-          channel,
         })
-      } else {
-        throw error
       }
+      logger.info("Notification deduped (reusing delivery identity)", {
+        workspaceId: params.workspaceId,
+        notificationId: notification.id,
+        type: params.type,
+        channel,
+      })
     }
-
-    if (!notification) continue
 
     const now = new Date()
     const claimed = await prisma.notification.updateMany({
@@ -360,7 +348,7 @@ export async function createAndSendNotification(params: {
       sent = await params.sendFn(channel, {
         type: effectiveType,
         title: effectiveTitle,
-        body: effectiveBody,
+        body: grouped ? notification.body : effectiveBody,
         workspaceName: params.workspaceName,
       })
     } catch (error) {

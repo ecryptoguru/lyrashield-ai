@@ -47,8 +47,8 @@ const copyButtonClass =
     </div>
 
     <div id="webmcp-paste-panel" role="tabpanel" aria-labelledby="webmcp-paste-tab" class="webmcp-input-panel mt-4 hidden">
-      <label class={labelClass} for="webmcp-paste">Paste HTML, Astro, TypeScript, or JavaScript</label>
-      <textarea id="webmcp-paste" rows={10} class={fieldClass} placeholder="<!-- paste a WebMCP tool definition, form, or header config -->"></textarea>
+      <label class={labelClass} for="webmcp-paste">Paste HTML, Astro, TypeScript or JavaScript</label>
+      <textarea id="webmcp-paste" rows={10} class={fieldClass} placeholder="<!-- paste a WebMCP tool definition, form or header config -->"></textarea>
       <p class={mutedText}>Pasted code is analyzed in your browser and is not uploaded.</p>
     </div>
 
@@ -82,7 +82,7 @@ const copyButtonClass =
 
   <div id="webmcp-panel-export" role="tabpanel" aria-labelledby="webmcp-tab-export" class={`${panelClass} hidden`}>
     <h3 class="text-lg font-semibold text-text">Export</h3>
-    <p class={mutedText}>Download the current result as JSON, Markdown, or SARIF. The export stays on your device.</p>
+    <p class={mutedText}>Download the current result as JSON, Markdown or SARIF. The export stays on your device.</p>
     <div class="mt-4 flex flex-wrap gap-3">
       <button id="webmcp-export-json" class={secondaryButtonClass} type="button">Export JSON</button>
       <button id="webmcp-export-md" class={secondaryButtonClass} type="button">Export Markdown</button>
@@ -386,7 +386,7 @@ const copyButtonClass =
     const note = document.createElement("p")
     note.className = "mt-4 text-sm text-text-muted"
     note.innerHTML =
-      'This is a local static check, not a security guarantee. For repository-wide review, retest, evidence, and reporting, <a href="https://app.lyrashieldai.com/sign-up?source=webmcp-security-checker" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">create an open-beta account</a>.'
+      'This is a local static check, not a security guarantee. For repository-wide review, retest, evidence and reporting, <a href="https://app.lyrashieldai.com/sign-up?source=webmcp-security-checker" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">create an open-beta account</a>.'
     wrap.appendChild(note)
 
     resultOutput.replaceChildren(wrap)

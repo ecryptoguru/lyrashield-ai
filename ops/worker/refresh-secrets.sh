@@ -88,7 +88,7 @@ write_secret NEXT_PUBLIC_APP_URL worker-next-public-app-url
 write_secret TRUSTED_PROXY_IP_HEADER worker-trusted-proxy-header
 write_secret LYRASHIELD_LLM worker-lyrashield-llm
 write_secret LYRASHIELD_LUNA_LLM worker-lyrashield-luna-llm
-write_secret LYRASHIELD_TERRA_LLM worker-lyrashield-terra-llm
+write_secret LYRASHIELD_SOL_LLM worker-lyrashield-sol-llm
 write_secret AZURE_AI_API_KEY worker-azure-ai-api-key
 write_secret AZURE_AI_API_BASE worker-azure-ai-api-base
 write_secret AZURE_API_VERSION worker-azure-api-version

@@ -61,7 +61,7 @@ export default async function AffiliateAssetsPage() {
     <div className="mx-auto max-w-4xl px-4 py-8">
       <PageHeader
         title="Marketing Assets"
-        description="Logos, banners, screenshots, email swipes, and brand guidelines."
+        description="Logos, banners, screenshots, email swipes and brand guidelines."
       />
 
       <section className="mt-6 space-y-8">
@@ -93,7 +93,7 @@ export default async function AffiliateAssetsPage() {
               </li>
               <li>
                 <strong>Logo usage:</strong> Maintain clear space around the logo equal to the
-                height of the shield mark. Never stretch, recolor, or add effects.
+                height of the shield mark. Never stretch, recolor or add effects.
               </li>
               <li>
                 <strong>Colors:</strong> Primary #0066FF, Dark #0A0A0A, Light #FAFAFA. Do not use
@@ -101,7 +101,7 @@ export default async function AffiliateAssetsPage() {
               </li>
               <li>
                 <strong>Tone:</strong> Evidence-backed, technical, honest. Avoid hyperbolic claims,
-                security guarantees, benchmark comparisons, fear-mongering (FUD), and &ldquo;only
+                security guarantees, benchmark comparisons, fear-mongering (FUD) and &ldquo;only
                 we&rdquo; / exclusivity claims. No accuracy, false-positive-rate or coverage numbers
                 unless founder-approved and measured.
               </li>

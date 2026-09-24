@@ -10,6 +10,37 @@ const STABLE_TAGS = new Set([
   "verification",
 ])
 
+// Every frontmatter key the blog collection schema declares in
+// src/content.config.ts, plus Astro's glob-loader reserved `slug` override.
+// Kept here so the validator fails on a key the schema would silently strip:
+// the v21 freshness pass wrote `updated:` where the schema reads
+// `updatedDate:`, Zod dropped the unknown key, and no "Updated" badge or
+// dateModified ever rendered. An unknown key is now a hard validation error
+// instead of a silent no-op.
+export const BLOG_FRONTMATTER_KEYS = Object.freeze([
+  "title",
+  "description",
+  "pubDate",
+  "updatedDate",
+  "author",
+  "tags",
+  "draft",
+  "heroImage",
+  "canonical",
+  "faq",
+  // Reserved by Astro's glob loader to override an entry id; not part of the
+  // collection schema but a valid frontmatter key.
+  "slug",
+])
+
+const BLOG_FRONTMATTER_KEY_SET = new Set(BLOG_FRONTMATTER_KEYS)
+
+/** Frontmatter keys that are neither schema fields nor a reserved loader key. */
+export function unknownFrontmatterKeys(data) {
+  if (!data || typeof data !== "object") return []
+  return Object.keys(data).filter((key) => !BLOG_FRONTMATTER_KEY_SET.has(key))
+}
+
 export const PROGRAM_RELEASES = Object.freeze([
   "authority",
   "batch-1",
@@ -22,12 +53,13 @@ export const PROGRAM_RELEASES = Object.freeze([
   "batch-8",
   "batch-9",
   "batch-10",
+  "batch-11",
 ])
 
 // Declarative corpus size. Bump these together with a release: drift in either
 // direction still fails, but the expected shape is stated once instead of being
 // spread across hardcoded literals in the distribution assertions below.
-export const PROGRAM_ARTICLE_COUNT = 161
+export const PROGRAM_ARTICLE_COUNT = 166
 
 export const IMAGE_CORPUS = Object.freeze({ authority: 1, shared: 74 })
 
@@ -468,6 +500,9 @@ export function validateArticle(article, programEntry, context = {}) {
 
   if (programEntry?.slug && slug !== programEntry.slug)
     errors.push("article slug does not match program")
+  for (const key of unknownFrontmatterKeys(data)) {
+    errors.push(`unknown frontmatter key: ${key}`)
+  }
   if (typeof data.title !== "string" || !data.title.trim()) errors.push("article title is required")
   else if (data.title.length > 70) errors.push("article title must be at most 70 characters")
   if (

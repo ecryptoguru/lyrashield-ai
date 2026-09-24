@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     const { licenseFile, licenseKey, licenseId } = parsed.data
 
     if (!licenseFile && !licenseKey && !licenseId) {
-      return apiError("VALIDATION_ERROR", "licenseFile, licenseKey, or licenseId is required", 400)
+      return apiError("VALIDATION_ERROR", "licenseFile, licenseKey or licenseId is required", 400)
     }
 
     // Identified licenses MUST present licenseId for revocation check — licenseFile alone skips revocation (fixed).

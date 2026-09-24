@@ -22,6 +22,7 @@ import {
   findRecoveryPreset,
   getReviewSetupGuidance,
   isBillingRecoveryCode,
+  scanRecoveryHref,
 } from "./scans-client.utils"
 import {
   isActiveScan,
@@ -58,6 +59,7 @@ interface ScansClientProps {
   initialNextCursor: string | null
   initialShowCreate?: boolean
   initialTargetId?: string
+  initialRecoveryUnavailable?: boolean
   initialGoal?: string
   initialMode?: string
   /** Server-parsed URL filter state — never re-read from window here. */
@@ -74,6 +76,7 @@ export function ScansClient({
   initialNextCursor,
   initialShowCreate = false,
   initialTargetId = "",
+  initialRecoveryUnavailable = false,
   initialGoal,
   initialMode,
   initialStateFilter = "ALL",
@@ -111,7 +114,9 @@ export function ScansClient({
   const [modeResetNotice, setModeResetNotice] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    initialRecoveryUnavailable ? "This target is no longer available. Choose another target." : null
+  )
   const [errorCode, setErrorCode] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
@@ -550,6 +555,36 @@ export function ScansClient({
     }
   }
 
+  function handleRetryScan(scan: ScanItem) {
+    const target = targets.find((item) => item.id === scan.target?.id)
+    if (!target) {
+      if (scan.target) {
+        window.location.assign(
+          scanRecoveryHref({ targetId: scan.target.id, goal: scan.goal, mode: scan.mode })
+        )
+      } else {
+        setError("This target is no longer available. Choose another target to run a new scan.")
+      }
+      return
+    }
+    const options = getManualScanOptions({
+      type: target.type,
+      hasApiSpec: Boolean(target.apiSpecUrl),
+    })
+    const previousPreset = findRecoveryPreset(options, scan.goal, scan.mode)
+    setSelectedTarget(target.id)
+    choosePreset(previousPreset || getDefaultScanOptionId(options))
+    setBaseRef("")
+    setHeadRef("")
+    setSelectedFocus(null)
+    setSelectedAttachments([])
+    setError(null)
+    setModeResetNotice(
+      previousPreset ? null : "The previous review type is unavailable. Choose an available option."
+    )
+    setShowCreate(true)
+  }
+
   useActiveScansPolling({
     hasActiveScans,
     workspaceId,
@@ -688,6 +723,7 @@ export function ScansClient({
         hasTargets={targets.length > 0}
         onClearFilters={handleClearFilters}
         onShowCreate={() => setShowCreate(true)}
+        onRetryScan={handleRetryScan}
         cancelling={cancelling}
         removing={removing}
         onCancelScan={handleCancelScan}

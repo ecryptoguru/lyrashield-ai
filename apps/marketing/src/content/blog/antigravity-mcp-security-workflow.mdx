@@ -1,7 +1,8 @@
 ---
 title: Connect Antigravity to LyraShield via MCP
-description: A step by step workflow to configure LyraShield MCP in Google Antigravity using the CLI, verify the connection, run a scan, and gate pull requests.
+description: A step by step workflow to configure LyraShield MCP in Google Antigravity using the CLI, verify the connection, run a scan and gate pull requests.
 pubDate: "2026-08-07"
+updatedDate: 2026-09-22
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -12,7 +13,7 @@ faq:
   - q: Does Antigravity support remote MCP servers
     a: Yes. Antigravity accepts remote servers with a serverUrl field. The url field is rejected, so if you paste a manual config, use serverUrl for the remote endpoint.
   - q: How do I verify the LyraShield connection works
-    a: Run npx lyrashield doctor after install. It checks that the config file is valid, the server entry is present, and your credentials resolve, then reports any gaps to fix before you run a scan.
+    a: Run npx lyrashield doctor after install. It checks that the config file is valid, the server entry is present and your credentials resolve, then reports any gaps to fix before you run a scan.
   - q: Can I gate pull requests with LyraShield in CI
     a: Yes. Add the LyraShield GitHub Action to your workflow with the diff aware gate so only changed code is scanned on each pull request. Output is SARIF, which GitHub renders in the security tab.
 ---
@@ -32,15 +33,15 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates gen
 
 ## 1. Meet the prerequisites
 
-Install Node 24 or later, which the [Node.js release guide](https://nodejs.org/en/docs/) covers. Confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://lyrashieldai.com) if you do not have one, because the MCP server needs credentials to authenticate. Run npx lyrashield login to store your credentials in ~/.lyrashield/credentials.json, which is not committed to version control.
+Install Node 24 or later, which the [Node.js release guide](https://nodejs.org/en/docs/) covers. Confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) if you do not have one, because the MCP server needs credentials to authenticate. Run npx lyrashield login to store your credentials in ~/.lyrashield/credentials.json, which is not committed to version control.
 
-If you are migrating from Gemini CLI, Antigravity reuses the same ~/.gemini/ path, so your existing MCP config carries forward. The install step below adds the LyraShield entry to that shared location. Keep your credentials file outside the working tree, and never paste a token directly into a config file the agent can read.
+If you are migrating from Gemini CLI, Antigravity reuses the same ~/.gemini/ path, so your existing MCP config carries forward. The install step below adds the LyraShield entry to that shared location. Keep your credentials file outside the working tree and never paste a token directly into a config file the agent can read.
 
 ## 2. Add the LyraShield MCP server
 
-Run npx lyrashield install antigravity. The CLI auto-detects your setup and writes the server entry to ~/.gemini/config/mcp_config.json for a shared scope or .agents/mcp_config.json for a project scope, both under a root mcpServers key. A remote server uses a serverUrl field, and the url field is rejected. Skills live in ~/.gemini/skills and rules live in GEMINI.md or AGENTS.md. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines the transport and tool exposure contract.
+Run npx lyrashield install antigravity. The CLI auto-detects your setup and writes the server entry to ~/.gemini/config/mcp_config.json for a shared scope or .agents/mcp_config.json for a project scope, both under a root mcpServers key. A remote server uses a serverUrl field and the url field is rejected. Skills live in ~/.gemini/skills and rules live in GEMINI.md or AGENTS.md. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines the transport and tool exposure contract.
 
-If the CLI is unavailable, add the entry manually. This is the manual path, and it is exactly what the CLI writes. For a remote server, set serverUrl to the LyraShield endpoint and include your Bearer token in the headers:
+If the CLI is unavailable, add the entry manually. This is the manual path and it is exactly what the CLI writes. For a remote server, set serverUrl to the LyraShield endpoint and include your Bearer token in the headers:
 
 ```
 {
@@ -68,15 +69,15 @@ For a local stdio server, use the package directly:
 
 ## 3. Verify the connection
 
-Run npx lyrashield doctor. It checks that the config file is valid, the server entry is present, and your credentials resolve. If any check fails, the doctor reports the gap and the fix, so you can correct it before running a scan. A green doctor result means Antigravity can reach the LyraShield server and authenticate.
+Run npx lyrashield doctor. It checks that the config file is valid, the server entry is present and your credentials resolve. If any check fails, the doctor reports the gap and the fix, so you can correct it before running a scan. A green doctor result means Antigravity can reach the LyraShield server and authenticate.
 
-Restart your Antigravity session after editing the config file so the agent loads the new server entry. Confirm the LyraShield tools appear in the session. If the tools are missing, check the serverUrl spelling, the Bearer token, and whether the config file is in the scope Antigravity reads. The doctor does not run a scan; it only confirms the wiring. If a check fails, the doctor names the file, the field, and the expected value, so you can fix the gap without reading the full config. Run the doctor again after each fix until every check is green, because a partial fix can leave the server reachable but unable to authenticate.
+Restart your Antigravity session after editing the config file so the agent loads the new server entry. Confirm the LyraShield tools appear in the session. If the tools are missing, check the serverUrl spelling, the Bearer token and whether the config file is in the scope Antigravity reads. The doctor does not run a scan; it only confirms the wiring. If a check fails, the doctor names the file, the field and the expected value, so you can fix the gap without reading the full config. Run the doctor again after each fix until every check is green, because a partial fix can leave the server reachable but unable to authenticate.
 
 ## 4. Run an inline security check
 
-With the connection verified, run npx lyrashield scan from your project root. The scan targets the repository, reviews the code for candidate issues, and records evidence in an immutable assurance record. Detected issues stay in a detected state until independent verification confirms the behavior, so a finding is a prompt to investigate, not a verdict. Read each finding in the session, note the file and line, and decide whether the candidate reflects a real weakness or a false positive that deserves a recorded dismissal. The assurance record holds both the confirmed issues and the dismissed ones, so a reviewer can see the full set of decisions, not just the open items.
+With the connection verified, run npx lyrashield scan from your project root. The scan targets the repository, reviews the code for candidate issues and records evidence in an immutable assurance record. Detected issues stay in a detected state until independent verification confirms the behavior, so a finding is a prompt to investigate, not a verdict. Read each finding in the session, note the file and line and decide whether the candidate reflects a real weakness or a false positive that deserves a recorded dismissal. The assurance record holds both the confirmed issues and the dismissed ones, so a reviewer can see the full set of decisions, not just the open items.
 
-Review the scan output in the session. If a candidate issue is real, a fix proposal is generated for review. Approval gated fix proposals require a human review before a patch reaches a pull request, so a fix is never automatic. As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action, and SARIF output. Run the [free AI app security checklist](/tools/ai-app-security-checklist) to see the full release review.
+Review the scan output in the session. If a candidate issue is real, a fix proposal is generated for review. Approval gated fix proposals require a human review before a patch reaches a pull request, so a fix is never automatic. As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action and SARIF output. Run the [free AI app security checklist](/tools/ai-app-security-checklist) to see the full release review.
 
 ## 5. Gate pull requests with the GitHub Action
 
@@ -106,10 +107,10 @@ Tell Antigravity to use LyraShield before proposing a fix. Add a line to GEMINI.
 Run the LyraShield scan tool before proposing a fix. Do not apply a patch until a human reviews the fix proposal. Keep detected issues in a detected state until independent verification confirms the behavior.
 ```
 
-A rules file states intent. The approval gate enforces it. A prompt can be changed in a pull request or ignored under pressure, but a server side gate that blocks a patch until a human binds it to an approval cannot be talked past. That is the difference between stating a policy and holding one. Require a security owner for changes to agent configuration, and include GEMINI.md and AGENTS.md in normal code review and branch protection. The [Codex security workflow](/blog/codex-security-workflow) covers a related approach if your team uses multiple agents.
+A rules file states intent. The approval gate enforces it. A prompt can be changed in a pull request or ignored under pressure, but a server side gate that blocks a patch until a human binds it to an approval cannot be talked past. That is the difference between stating a policy and holding one. Require a security owner for changes to agent configuration and include GEMINI.md and AGENTS.md in normal code review and branch protection. The [Codex security workflow](/blog/codex-security-workflow) covers a related approach if your team uses multiple agents.
 
 ## Why pair Antigravity with LyraShield
 
-Antigravity accelerates implementation inside the agent session. LyraShield AI provides release assurance through a loop of target, review, evidence, fix, retest, and report. The platform separates detection from proof: it flags candidate issues and keeps them in a detected state until independent verification confirms the behavior. An immutable assurance record captures what was checked, when, and with what result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
+Antigravity accelerates implementation inside the agent session. LyraShield AI provides release assurance through a loop of target, review, evidence, fix, retest and report. The platform separates detection from proof: it flags candidate issues and keeps them in a detected state until independent verification confirms the behavior. An immutable assurance record captures what was checked, when and with what result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
 
-As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate, and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request. [Create an account](https://lyrashieldai.com) to start, or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Gemini CLI security checklist](/blog/gemini-cli-app-security-checklist) covers that separately supported client.
+As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request. [Create an account](https://app.lyrashieldai.com/sign-up) to start or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Gemini CLI security checklist](/blog/gemini-cli-app-security-checklist) covers that separately supported client.

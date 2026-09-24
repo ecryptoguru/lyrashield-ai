@@ -61,7 +61,7 @@
     "jpeg": "/images/blog/library/access-boundary-06/hero.jpg",
     "og": "/images/blog/library/access-boundary-06/og.jpg",
     "socialPortrait": "/images/blog/library/access-boundary-06/social-portrait.jpg",
-    "alt": "A scoped identity and action path crossing rate, verification, and authorization checkpoints",
+    "alt": "A scoped identity and action path crossing rate, verification and authorization checkpoints",
     "width": 1600,
     "height": 900
   },
@@ -193,7 +193,7 @@
     "jpeg": "/images/blog/library/decision-operations-05/hero.jpg",
     "og": "/images/blog/library/decision-operations-05/og.jpg",
     "socialPortrait": "/images/blog/library/decision-operations-05/social-portrait.jpg",
-    "alt": "Structured evidence records linking scope, actors, actions, outcomes, severity, coverage, and release context",
+    "alt": "Structured evidence records linking scope, actors, actions, outcomes, severity, coverage and release context",
     "width": 1600,
     "height": 900
   },
@@ -325,7 +325,7 @@
     "jpeg": "/images/blog/library/verification-06/hero.jpg",
     "og": "/images/blog/library/verification-06/og.jpg",
     "socialPortrait": "/images/blog/library/verification-06/social-portrait.jpg",
-    "alt": "Distinct testing planes, evidence, coverage, and limitations assembled into a decision or report structure",
+    "alt": "Distinct testing planes, evidence, coverage and limitations assembled into a decision or report structure",
     "width": 1600,
     "height": 900
   },
@@ -358,7 +358,7 @@
     "jpeg": "/images/blog/library/web-execution-03/hero.jpg",
     "og": "/images/blog/library/web-execution-03/og.jpg",
     "socialPortrait": "/images/blog/library/web-execution-03/social-portrait.jpg",
-    "alt": "Client requests crossing origin, protected transport, and capacity gates",
+    "alt": "Client requests crossing origin, protected transport and capacity gates",
     "width": 1600,
     "height": 900
   },
@@ -369,7 +369,7 @@
     "jpeg": "/images/blog/library/web-execution-04/hero.jpg",
     "og": "/images/blog/library/web-execution-04/og.jpg",
     "socialPortrait": "/images/blog/library/web-execution-04/social-portrait.jpg",
-    "alt": "A server request or path corridor crossing input, authorization, and destination-boundary rechecks",
+    "alt": "A server request or path corridor crossing input, authorization and destination-boundary rechecks",
     "width": 1600,
     "height": 900
   },

@@ -18,10 +18,10 @@ import {
 // at least one pinned example — plus the unknown-value fallback each getter
 // promises.
 describe("enum labels", () => {
-  it("labels scan goals with the canonical review nouns", () => {
+  it("labels scan goals with the canonical scan nouns", () => {
     expect(getScanGoalLabel("LAUNCH_REVIEW")).toBe("Release check")
-    expect(getScanGoalLabel("SECURITY_REVIEW")).toBe("Security review")
-    expect(getScanGoalLabel("TEST_APP")).toBe("Code review")
+    expect(getScanGoalLabel("SECURITY_REVIEW")).toBe("Security scan")
+    expect(getScanGoalLabel("TEST_APP")).toBe("Code scan")
     expect(getScanGoalLabel("NOT_A_GOAL")).toBe("NOT_A_GOAL")
   })
 

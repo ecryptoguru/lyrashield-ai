@@ -18,12 +18,12 @@ const canonical = new URL("/about", origin).toString()
 const title = "About LyraShield AI — Release Assurance for AI-Built Apps"
 const description =
   "LyraShield AI is built by Ankit Das, an AI/ML engineer with 16+ years across Web3, AI and application security. The mission and the approach."
-const updatedDate = "2026-08-07"
+const updatedDate = "2026-09-20"
 
 const founder = {
   name: "Ankit Das",
   role: "Founder & CEO",
-  bio: "AI/ML engineer and 2x EthIndia prize winner with 16+ years of experience across Web3, AI, and application security. Ankit built LyraShield AI after processing 6.8 billion tokens across 2,728 AI coding sessions and realizing that the most-used tool in his own workflow wasn't a scaffolding tool or UI generator — it was a security review plugin. LyraShield AI is the product of that insight: AI can write code quickly, but most review processes haven't adapted.",
+  bio: "AI/ML engineer and 2x EthIndia prize winner with 16+ years of experience across Web3, AI and application security. Ankit built LyraShield AI after processing 6.8 billion tokens across 2,728 AI coding sessions and realizing that the most-used tool in his own workflow wasn't a scaffolding tool or UI generator — it was a security review plugin. LyraShield AI is the product of that insight: AI can write code quickly, but most review processes haven't adapted.",
   linkedin: "https://www.linkedin.com/in/defiankit/",
   github: "https://github.com/ecryptoguru",
   x: "https://x.com/defiankit",
@@ -41,7 +41,7 @@ const stats = [
   { value: "6.8B", label: "AI tokens processed", detail: "across 2,728 coding sessions" },
   { value: "232", label: "Security review runs", detail: "the most-used plugin in his AI workflow" },
   { value: "13h 4m", label: "Longest single session", detail: "evidence of building with AI daily" },
-  { value: "69", label: "Public repositories", detail: "Web3, AI, and security tooling" },
+  { value: "69", label: "Public repositories", detail: "Web3, AI and security tooling" },
 ]
 
 const jsonLd: unknown[] = [
@@ -109,10 +109,10 @@ const jsonLd: unknown[] = [
       </p>
       <p class="mt-4 leading-7 text-text-muted" data-reveal>
         Traditional security tools were built for human-written code with human review cadences.
-        AI-generated code changes the equation: code arrives faster, patterns are different, and
+        AI-generated code changes the equation: code arrives faster, patterns are different and
         the review bottleneck shifts from "who writes it" to "who verifies it." LyraShield AI was
         built to close that gap with a methodology that preserves evidence provenance, coverage
-        limits, and retest state as separate, inspectable facts.
+        limits and retest state as separate, inspectable facts.
       </p>
     </section>
 
@@ -120,7 +120,7 @@ const jsonLd: unknown[] = [
       <h2 id="mission-heading" class="text-2xl font-semibold text-text" data-reveal>Our mission</h2>
       <p class="mt-5 leading-7 text-text-muted" data-reveal>
         We do not claim that a clean scan proves an app is secure. We do not claim universal
-        coverage. We record what was checked, what was verified, and what remains uncertain —
+        coverage. We record what was checked, what was verified and what remains uncertain —
         then produce an immutable report that stakeholders can inspect. The Vibe Security 50
         framework defines 43 code/URL review controls and 7 that require operational or human evidence outside the scan,
         so you always know the boundary of what a scan can and cannot establish.
@@ -132,11 +132,11 @@ const jsonLd: unknown[] = [
       <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
         <div data-reveal>
           <dt class="font-semibold text-text">Evidence states</dt>
-          <dd class="mt-2 leading-7 text-text-muted">Every finding carries one of four states: detected candidate, independently verified, retest-confirmed, or inconclusive. A score never overrides these facts.</dd>
+          <dd class="mt-2 leading-7 text-text-muted">Every finding carries one of four states: detected candidate, independently verified, retest-confirmed or inconclusive. A score never overrides these facts.</dd>
         </div>
         <div data-reveal>
           <dt class="font-semibold text-text">Coverage receipts</dt>
-          <dd class="mt-2 leading-7 text-text-muted">The Vibe Security 50 framework records per-control coverage: completed, limited, skipped, or not-applicable. You know exactly what was and was not checked.</dd>
+          <dd class="mt-2 leading-7 text-text-muted">The Vibe Security 50 framework records per-control coverage: completed, limited, skipped or not-applicable. You know exactly what was and was not checked.</dd>
         </div>
         <div data-reveal>
           <dt class="font-semibold text-text">Deterministic retests</dt>
@@ -207,15 +207,15 @@ const jsonLd: unknown[] = [
       <ul class="mt-8 space-y-5" data-reveal-group>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">01</span>
-          <p class="leading-7 text-text-muted"><strong class="text-text">A clean scan is not a security guarantee.</strong> A score is an interpretation aid derived from evidence. It does not override the underlying findings, coverage limits, or retest receipts.</p>
+          <p class="leading-7 text-text-muted"><strong class="text-text">A clean scan is not a security guarantee.</strong> A score is an interpretation aid derived from evidence. It does not override the underlying findings, coverage limits or retest receipts.</p>
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">02</span>
-          <p class="leading-7 text-text-muted"><strong class="text-text">Coverage is a fact, not a feeling.</strong> Which checks completed, were limited, were skipped, or did not apply — including retained limitations — must be visible on every report.</p>
+          <p class="leading-7 text-text-muted"><strong class="text-text">Coverage is a fact, not a feeling.</strong> Which checks completed, were limited, were skipped or did not apply — including retained limitations — must be visible on every report.</p>
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">03</span>
-          <p class="leading-7 text-text-muted"><strong class="text-text">Evidence states are not interchangeable.</strong> Detected, independently verified, retest-confirmed, and inconclusive are separate states with distinct meanings. Scanner confidence alone never creates a verified state.</p>
+          <p class="leading-7 text-text-muted"><strong class="text-text">Evidence states are not interchangeable.</strong> Detected, independently verified, retest-confirmed and inconclusive are separate states with distinct meanings. Scanner confidence alone never creates a verified state.</p>
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">04</span>
@@ -223,7 +223,7 @@ const jsonLd: unknown[] = [
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">05</span>
-          <p class="leading-7 text-text-muted"><strong class="text-text">AI-built apps need AI-aware security.</strong> Agent rule injection, MCP misconfiguration, and prompt-injected code paths are real risks that traditional SAST tools were not designed to catch.</p>
+          <p class="leading-7 text-text-muted"><strong class="text-text">AI-built apps need AI-aware security.</strong> Agent rule injection, MCP misconfiguration and prompt-injected code paths are real risks that traditional SAST tools were not designed to catch.</p>
         </li>
       </ul>
     </section>

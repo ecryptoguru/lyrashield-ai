@@ -45,6 +45,15 @@ const PatchFindingSchema = z
     }
   })
 
+const AdvisoryCvssSchema = z
+  .object({
+    score: z.number().finite().min(0).max(10),
+    vector: z.string().max(256).optional(),
+    source: z.string().max(256).optional(),
+    metric_reasoning: z.string().max(8_000).optional(),
+  })
+  .strip()
+
 /**
  * Allowlisted projection of a finding's `claim_context` evidence artifact.
  * Every field is engine-declared — confidence, counterevidence, advisory
@@ -74,31 +83,35 @@ async function loadEvidenceInsights(findingId: string, workspaceId: string) {
   } catch {
     return null
   }
-  const strings = (key: string) =>
-    Array.isArray(parsed[key])
-      ? parsed[key].filter((v): v is string => typeof v === "string").slice(0, 25)
-      : undefined
+  const text = (key: string) => {
+    const value = parsed[key]
+    if (typeof value === "string") return value.slice(0, 64_000)
+    // Pre-contract records stored lists; keep them readable as paragraphs.
+    if (Array.isArray(value)) {
+      return value
+        .filter((item): item is string => typeof item === "string")
+        .slice(0, 25)
+        .join("\n")
+        .slice(0, 64_000)
+    }
+    return undefined
+  }
+  const evidenceWarnings = parsed.evidenceWarnings
+  const advisory = AdvisoryCvssSchema.safeParse(
+    typeof parsed.advisoryCvss === "number" ? { score: parsed.advisoryCvss } : parsed.advisoryCvss
+  )
   const insights = {
-    counterevidence: strings("counterevidence"),
-    evidenceWarnings: strings("evidenceWarnings"),
-    severityChangeConditions: strings("severityChangeConditions"),
-    assumptions: strings("assumptions"),
-    confidenceRationale:
-      typeof parsed.confidenceRationale === "string" ? parsed.confidenceRationale : undefined,
-    contextualCvssReasoning:
-      typeof parsed.contextualCvssReasoning === "string"
-        ? parsed.contextualCvssReasoning
-        : undefined,
-    advisoryCvss:
-      typeof parsed.advisoryCvss === "number" && Number.isFinite(parsed.advisoryCvss)
-        ? parsed.advisoryCvss
-        : undefined,
-    engineVerificationState:
-      typeof parsed.engineVerificationState === "string"
-        ? parsed.engineVerificationState
-        : undefined,
-    engineConfidence:
-      typeof parsed.engineConfidence === "string" ? parsed.engineConfidence : undefined,
+    counterevidence: text("counterevidence"),
+    evidenceWarnings: Array.isArray(evidenceWarnings)
+      ? evidenceWarnings.filter((item): item is string => typeof item === "string").slice(0, 25)
+      : undefined,
+    severityChangeConditions: text("severityChangeConditions"),
+    assumptions: text("assumptions"),
+    confidenceRationale: text("confidenceRationale"),
+    contextualCvssReasoning: text("contextualCvssReasoning"),
+    advisoryCvss: advisory.success ? advisory.data : undefined,
+    engineVerificationState: text("engineVerificationState"),
+    engineConfidence: text("engineConfidence"),
   }
   return Object.values(insights).some((v) => v !== undefined) ? insights : null
 }

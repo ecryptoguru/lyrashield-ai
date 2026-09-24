@@ -81,7 +81,7 @@ export const GUIDED_FLOWS: readonly FlowDefinition[] = [
       {
         id: "next_action",
         title: "Pick the next action",
-        instruction: "Depending on state: request a retest, review evidence, or escalate.",
+        instruction: "Depending on state: request a retest, review evidence or escalate.",
         ctaRoute: "/dashboard/findings",
       },
     ],

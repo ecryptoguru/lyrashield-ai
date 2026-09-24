@@ -49,6 +49,8 @@ export {
 } from "./verify"
 export { auditEvent, type MyraActorType, type AuditFields } from "./audit"
 export {
+  ANONYMOUS_POOL_SHARE,
+  POOL_WARNING_THRESHOLD,
   monthlyBudgetCapUsd,
   monthlyGenerationSpendUsd,
   maximumTurnCostUsd,
@@ -89,6 +91,7 @@ export {
 } from "./retention"
 export {
   handleMessage,
+  rateAssistantMessage,
   suggest,
   confirmProposal,
   cancelProposal,

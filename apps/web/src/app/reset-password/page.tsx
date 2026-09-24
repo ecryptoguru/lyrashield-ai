@@ -66,7 +66,7 @@ export default function ResetPasswordPage() {
                 aria-describedby="password-hint"
               />
               <p id="password-hint" className="text-muted-foreground mt-1.5 text-xs">
-                At least 8 characters. Use a mix of letters, numbers, and symbols for a stronger
+                At least 8 characters. Use a mix of letters, numbers and symbols for a stronger
                 password.
               </p>
             </FormField>

@@ -1,6 +1,6 @@
 /**
  * Write-gate coverage for confirmProposal (v19 fix 1.3): the validated
- * MYRA_WRITES_ENABLED / MYRA_ALLOWED_EMAILS gate is the only barrier between
+ * MYRA_WRITES_ENABLED / MYRA_PUBLIC_BOOKING_ENABLED gate is the only barrier between
  * a chat proposal and a real booking/case write. Everything below the gate —
  * the proposal row, the executor, the audit write — is mocked so each case
  * isolates exactly the gate decision.
@@ -10,22 +10,23 @@ import type { ResolvedMyraRequest } from "./context"
 
 const env = vi.hoisted(() => ({
   MYRA_WRITES_ENABLED: "0",
-  MYRA_ALLOWED_EMAILS: "",
   MYRA_PUBLIC_BOOKING_ENABLED: "0",
 }))
 
 const proposalRecord = vi.hoisted(() => ({ value: null as unknown }))
+const messageUpdate = vi.hoisted(() => vi.fn(async () => ({ count: 1 })))
 
 vi.mock("@lyrashield/config", () => ({
   env,
-  isMyraAllowedEmail: (email: string, allowlist: string) =>
-    allowlist.split(",").includes(email.trim().toLowerCase()),
 }))
 vi.mock("@lyrashield/db", () => ({ prisma: {} }))
 vi.mock("@lyrashield/integrations", () => ({ sendNotification: vi.fn() }))
 vi.mock("./db", () => ({
   withOwnerScope: (_principal: unknown, run: (tx: unknown) => unknown) =>
-    run({ myraOperation: { findUnique: vi.fn(async () => proposalRecord.value) } }),
+    run({
+      myraOperation: { findUnique: vi.fn(async () => proposalRecord.value) },
+      myraMessage: { updateMany: messageUpdate },
+    }),
   ownerWhere: () => ({}),
   withTrustedScope: (_principal: unknown, run: (tx: unknown) => unknown) => run({}),
   MYRA_TRUSTED_MANAGE_TOKEN: "trusted-manage-token",
@@ -53,7 +54,55 @@ vi.mock("./tools/cases", () => ({
 vi.mock("./tools/registry", () => ({ runTool: vi.fn() }))
 vi.mock("../sanitize", () => ({ screenSecrets: (value: unknown) => value }))
 
-const { confirmProposal, handleMessage } = await import("./service")
+const { confirmProposal, handleMessage, rateAssistantMessage } = await import("./service")
+
+describe("Myra answer feedback", () => {
+  beforeEach(() => messageUpdate.mockReset().mockResolvedValue({ count: 1 }))
+
+  it("updates only a completed assistant message inside the owner's scope", async () => {
+    await expect(rateAssistantMessage(userCtx(), "msg-1", "not_helpful")).resolves.toEqual({
+      messageId: "msg-1",
+      rating: "not_helpful",
+    })
+    expect(messageUpdate).toHaveBeenCalledWith({
+      where: { id: "msg-1", role: "ASSISTANT", content: { not: "" } },
+      data: { helpful: false, ratedAt: expect.any(Date) },
+    })
+  })
+
+  it("does not disclose an unavailable or foreign message", async () => {
+    messageUpdate.mockResolvedValue({ count: 0 })
+    await expect(rateAssistantMessage(userCtx(), "foreign", "helpful")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    })
+  })
+
+  it("refuses a platform operator outright", async () => {
+    const operator = {
+      principal: { kind: "operator", accountId: "op", sessionId: "s" },
+      workspaceId: null,
+      role: null,
+    } as ResolvedMyraRequest
+
+    await expect(rateAssistantMessage(operator, "msg-1", "helpful")).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    })
+    expect(messageUpdate).not.toHaveBeenCalled()
+  })
+
+  it("constrains the update to a non-empty ASSISTANT message", async () => {
+    // The where clause is the ownership and role boundary: another owner's
+    // row, a USER row and an empty row all fail it. A successful call must
+    // carry exactly that constraint.
+    await rateAssistantMessage(userCtx(), "msg-2", "helpful")
+
+    expect(messageUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ role: "ASSISTANT", content: { not: "" } }),
+      })
+    )
+  })
+})
 
 const anonymousCtx: ResolvedMyraRequest = {
   principal: { kind: "anonymous", publicSessionId: "ps-1" },
@@ -81,7 +130,6 @@ function userCtx(over: Record<string, unknown> = {}): ResolvedMyraRequest {
 describe("Myra write gate on confirmProposal", () => {
   beforeEach(() => {
     env.MYRA_WRITES_ENABLED = "0"
-    env.MYRA_ALLOWED_EMAILS = ""
     env.MYRA_PUBLIC_BOOKING_ENABLED = "0"
     proposalRecord.value = {
       id: "p1",
@@ -102,7 +150,6 @@ describe("Myra write gate on confirmProposal", () => {
 
   it("denies an anonymous book_demo confirm while an allowlist is set", async () => {
     env.MYRA_WRITES_ENABLED = "1"
-    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     await expect(confirmProposal(anonymousCtx, "p1")).rejects.toMatchObject({
       code: "WRITES_DISABLED",
     })
@@ -110,7 +157,6 @@ describe("Myra write gate on confirmProposal", () => {
 
   it("denies an allowlisted user whose email is not verified", async () => {
     env.MYRA_WRITES_ENABLED = "1"
-    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     await expect(confirmProposal(userCtx({ emailVerified: false }), "p1")).rejects.toMatchObject({
       code: "WRITES_DISABLED",
     })
@@ -118,7 +164,6 @@ describe("Myra write gate on confirmProposal", () => {
 
   it("admits the verified allowlisted user", async () => {
     env.MYRA_WRITES_ENABLED = "1"
-    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     await expect(confirmProposal(userCtx(), "p1")).resolves.toMatchObject({
       status: "COMPLETED",
     })
@@ -126,7 +171,6 @@ describe("Myra write gate on confirmProposal", () => {
 
   it("admits users when the allowlist is empty outside production", async () => {
     env.MYRA_WRITES_ENABLED = "1"
-    env.MYRA_ALLOWED_EMAILS = ""
     await expect(
       confirmProposal(userCtx({ email: "dev@example.com" }), "p1")
     ).resolves.toMatchObject({ status: "COMPLETED" })
@@ -137,7 +181,6 @@ describe("Myra write gate on confirmProposal", () => {
     // identity. The gate admits the operation; the executor re-runs
     // verifyAttendee inside confirm (mocked here).
     env.MYRA_WRITES_ENABLED = "1"
-    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     env.MYRA_PUBLIC_BOOKING_ENABLED = "1"
     await expect(confirmProposal(anonymousCtx, "p1")).resolves.toMatchObject({
       status: "COMPLETED",
@@ -146,7 +189,6 @@ describe("Myra write gate on confirmProposal", () => {
 
   it("admits an anonymous manage_own_demo confirm when public booking is on", async () => {
     env.MYRA_WRITES_ENABLED = "1"
-    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     env.MYRA_PUBLIC_BOOKING_ENABLED = "1"
     proposalRecord.value = { ...proposalRecord.value, operationName: "manage_own_demo" }
     await expect(confirmProposal(anonymousCtx, "p1")).resolves.toMatchObject({
@@ -154,13 +196,12 @@ describe("Myra write gate on confirmProposal", () => {
     })
   })
 
-  it("still denies an anonymous submit_support_case confirm when public booking is on", async () => {
+  it("admits an anonymous support-case confirm for the executor's verified-email check", async () => {
     env.MYRA_WRITES_ENABLED = "1"
-    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     env.MYRA_PUBLIC_BOOKING_ENABLED = "1"
     proposalRecord.value = { ...proposalRecord.value, operationName: "submit_support_case" }
-    await expect(confirmProposal(anonymousCtx, "p1")).rejects.toMatchObject({
-      code: "WRITES_DISABLED",
+    await expect(confirmProposal(anonymousCtx, "p1")).resolves.toMatchObject({
+      status: "COMPLETED",
     })
   })
 })

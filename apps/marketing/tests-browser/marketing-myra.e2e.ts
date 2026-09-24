@@ -107,7 +107,7 @@ test("mobile Myra contains focus and restores page interaction after close and r
   await mockMyra(page)
   await page.goto("/")
   await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 390)
-  const launcher = page.getByRole("button", { name: "Help" })
+  const launcher = page.getByRole("button", { name: "Ask Myra" })
   await launcher.click()
   const dialog = page.getByRole("dialog", { name: "Myra support" })
   await expect(dialog).toHaveAttribute("aria-modal", "true")
@@ -144,7 +144,7 @@ test("mobile Myra challenge stays outside the inert demo page", async ({ page })
       )
     )
   ).toBe(false)
-  await page.getByRole("button", { name: "Help" }).click()
+  await page.getByRole("button", { name: "Ask Myra" }).click()
   expect(
     await page.evaluate(() => {
       const panel = document.getElementById("myra-panel")
@@ -173,7 +173,7 @@ test("resizing an open desktop panel to mobile moves focus into the modal", asyn
   await page.setViewportSize({ width: 768, height: 1024 })
   await mockMyra(page)
   await page.goto("/")
-  await page.getByRole("button", { name: "Help" }).click()
+  await page.getByRole("button", { name: "Ask Myra" }).click()
   const dialog = page.getByRole("dialog", { name: "Myra support" })
   await expect(dialog).toHaveAttribute("aria-modal", "false")
   await page.locator("main a[href]").first().focus()
@@ -182,11 +182,32 @@ test("resizing an open desktop panel to mobile moves focus into the modal", asyn
   await expect(dialog.locator(":focus")).toHaveCount(1)
 })
 
+test("Turnstile challenge stays above Myra composer on desktop and mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await mockMyra(page, true, true)
+  await page.goto("/")
+  await page.getByRole("button", { name: "Ask Myra" }).click()
+
+  const challenge = page.locator("[data-myra-turnstile] button")
+  const form = page.locator("#myra-form")
+  await expect(challenge).toBeVisible()
+  const assertChallengeAboveComposer = async () => {
+    const [challengeBox, formBox] = await Promise.all([challenge.boundingBox(), form.boundingBox()])
+    expect(challengeBox).not.toBeNull()
+    expect(formBox).not.toBeNull()
+    expect(challengeBox!.y + challengeBox!.height).toBeLessThanOrEqual(formBox!.y)
+  }
+  await assertChallengeAboveComposer()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await assertChallengeAboveComposer()
+})
+
 test("reverse Tab from a Turnstile iframe stays inside the mobile dialog", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await mockMyra(page, false, true, false, true)
   await page.goto("/demo")
-  await page.getByRole("button", { name: "Help" }).click()
+  await page.getByRole("button", { name: "Ask Myra" }).click()
   const challenge = page
     .frameLocator("body > [data-myra-turnstile] iframe")
     .getByRole("button", { name: "Complete iframe challenge" })
@@ -247,8 +268,12 @@ test("open demo slots use the anonymous token without cookies", async ({ page })
 test("public support case verification omits browser cookies", async ({ page }) => {
   await mockMyra(page)
   await page.goto("/")
-  await page.getByRole("button", { name: "Help" }).click()
-  await page.getByRole("button", { name: "Talk to a person" }).click()
+  await page.getByRole("button", { name: "Ask Myra" }).click()
+  // The button's accessible name is its visible label, which is "Talk to a
+  // person" at sm+ and "Support" below it. The mobile project renders the
+  // short form, so match either rather than re-adding an aria-label that would
+  // break WCAG 2.5.3 (label in name).
+  await page.getByRole("button", { name: /^(Talk to a person|Support)$/ }).click()
   await page.getByRole("textbox", { name: "Case subject" }).fill("Need help with a scan")
   await page
     .getByRole("textbox", { name: "Case details" })

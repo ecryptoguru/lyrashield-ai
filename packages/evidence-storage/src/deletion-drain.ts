@@ -12,6 +12,14 @@ export interface ArtifactDeletionDrainResult {
   deadLettered: number
 }
 
+/**
+ * Every supported kind is an encrypted object under the same
+ * evidence/<workspaceId>/ store, so one deleter covers all of them. The task
+ * table's own CHECK constraint is the boundary for new kinds; anything the
+ * drain does not recognize stays retryable instead of being silently dropped.
+ */
+const SUPPORTED_DELETION_KINDS = new Set(["EVIDENCE", "SCAN_ATTACHMENT"])
+
 export async function drainArtifactDeletionTasksWith(
   deleteArtifact: (storageUri: string, workspaceId: string) => Promise<void>,
   options?: { taskIds?: readonly string[]; limit?: number }
@@ -30,7 +38,7 @@ export async function drainArtifactDeletionTasksWith(
     result.claimed++
 
     try {
-      if (task.kind !== "EVIDENCE") {
+      if (!SUPPORTED_DELETION_KINDS.has(task.kind)) {
         throw new Error(`Unsupported artifact deletion kind: ${task.kind}`)
       }
       await deleteArtifact(task.storageUri, task.workspaceId)

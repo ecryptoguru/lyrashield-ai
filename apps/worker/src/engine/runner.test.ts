@@ -1,8 +1,10 @@
 import { execFileSync } from "child_process"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { mkdtemp, mkdir, realpath, rm, symlink, utimes, writeFile } from "fs/promises"
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, utimes, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import { join } from "path"
+import { createHash } from "crypto"
+import { parseEngineOutput } from "./output-parser"
 
 vi.mock("@lyrashield/config", () => ({
   env: {
@@ -43,6 +45,7 @@ import {
   parseEngineProgressFingerprint,
   readEngineProgressFingerprint,
   readEngineSpendUsd,
+  readEngineOutput,
   createEngineStreamTail,
   appendEngineStreamTail,
   flushEngineStreamTail,
@@ -86,6 +89,167 @@ it("finds an upstream Strix output directory", async () => {
   cleanupPaths.push(workDir)
   const expected = await createRun(workDir, "strix_runs", "upstream", "run.json", new Date(1_000))
   await expect(findRunOutputDir(workDir)).resolves.toBe(expected)
+})
+
+it("reads the owned singular threat-model artifact before any legacy plural file", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-owned-evidence-"))
+  cleanupPaths.push(outputDir)
+  const canonical = JSON.stringify({
+    schema_version: "lyrashield-threat-model/1.0",
+    run_id: "scan-1",
+    models: [],
+  })
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_model.json"), canonical, "utf8")
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_models.json"), "{}", "utf8")
+  // Canonical evidence is bound to the producer's run manifest.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(
+    join(outputDir, "run.json"),
+    JSON.stringify({
+      schema_version: "1.1",
+      run_id: "scan-1",
+      result_manifest: {
+        schema_version: 1,
+        artifacts: {
+          "threat_model.json": {
+            path: "threat_model.json",
+            bytes: Buffer.byteLength(canonical),
+            sha256: createHash("sha256").update(canonical).digest("hex"),
+          },
+        },
+      },
+    })
+  )
+
+  const output = await readEngineOutput(outputDir)
+
+  expect(output.artifacts.threatModelsRaw).toBe(canonical)
+})
+
+/* eslint-disable security/detect-non-literal-fs-filename -- This test reads a fixed fixture and writes only to its own temporary directory. */
+it("round-trips an actual redacted engine writer artifact through the manifest-bound reader", async () => {
+  // Produced by build_threat_model_document + write_threat_model_artifact in
+  // lyrashield-engine; unlike synthetic models: [] fixtures, it exercises the
+  // writer's model-array, amendment, target-redaction and run binding shape.
+  const canonical = await readFile(
+    new URL("./fixtures/run-json-1.1/threat_model.json", import.meta.url),
+    "utf8"
+  )
+  const runRecord = JSON.parse(
+    await readFile(new URL("./fixtures/run-json-1.1/run.json", import.meta.url), "utf8")
+  )
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-writer-fixture-"))
+  cleanupPaths.push(outputDir)
+  await writeFile(join(outputDir, "threat_model.json"), canonical, "utf8")
+  await writeFile(
+    join(outputDir, "run.json"),
+    JSON.stringify({
+      ...runRecord,
+      result_manifest: {
+        schema_version: 1,
+        artifacts: {
+          "threat_model.json": {
+            path: "threat_model.json",
+            bytes: Buffer.byteLength(canonical),
+            sha256: createHash("sha256").update(canonical).digest("hex"),
+          },
+        },
+      },
+    })
+  )
+
+  const output = await readEngineOutput(outputDir)
+  const parsed = parseEngineOutput(output.vulnerabilitiesRaw, output.runJsonRaw, output.artifacts)
+  expect(output.artifacts.threatModelsRaw).toBe(canonical)
+  expect(parsed.threatModels?.models).toHaveLength(1)
+  expect(JSON.stringify(parsed.threatModels)).toContain("[SECRET]")
+  expect(JSON.stringify(parsed.threatModels)).not.toContain("sample-secret-123")
+})
+/* eslint-enable security/detect-non-literal-fs-filename */
+
+it("rejects an unbound canonical threat model without a 1.1 run receipt", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-unbound-evidence-"))
+  cleanupPaths.push(outputDir)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_model.json"), JSON.stringify({ models: [] }))
+  const output = await readEngineOutput(outputDir)
+  expect(output.artifacts.threatModelsRaw).toBeNull()
+})
+
+it("does not import a plural-only legacy artifact into a 1.1 run", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-plural-only-"))
+  cleanupPaths.push(outputDir)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "run.json"), JSON.stringify({ schema_version: "1.1" }))
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(
+    join(outputDir, "threat_models.json"),
+    JSON.stringify({ stale: { target: "other-run", content: "unbound" } })
+  )
+  const output = await readEngineOutput(outputDir)
+  expect(output.artifacts.threatModelsRaw).toBeUndefined()
+})
+
+it("retains the plural adapter for a pre-1.1 run", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-legacy-plural-"))
+  cleanupPaths.push(outputDir)
+  const legacy = JSON.stringify({ old: { target: "legacy", content: "context" } })
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "run.json"), JSON.stringify({ schema_version: "1.0" }))
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_models.json"), legacy)
+  const output = await readEngineOutput(outputDir)
+  expect(output.artifacts.threatModelsRaw).toBe(legacy)
+})
+
+it("rejects a threat model that is missing or differs from the run manifest", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-manifest-evidence-"))
+  cleanupPaths.push(outputDir)
+  const canonical = JSON.stringify({
+    schema_version: "lyrashield-threat-model/1.0",
+    run_id: "scan-1",
+    models: [],
+  })
+  const manifest = {
+    schema_version: 1,
+    artifacts: {
+      "threat_model.json": {
+        path: "threat_model.json",
+        bytes: Buffer.byteLength(canonical),
+        sha256: createHash("sha256").update(canonical).digest("hex"),
+      },
+    },
+  }
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(
+    join(outputDir, "run.json"),
+    JSON.stringify({ schema_version: "1.1", run_id: "scan-1", result_manifest: manifest })
+  )
+  // A stale pre-contract sibling must never fill a missing 1.1 artifact.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(
+    join(outputDir, "threat_models.json"),
+    JSON.stringify({ stale: { target: "other-run", content: "unbound" } })
+  )
+
+  const missing = await readEngineOutput(outputDir)
+  expect(missing.artifacts.threatModelsRaw).toBeNull()
+  expect(
+    parseEngineOutput(missing.vulnerabilitiesRaw, missing.runJsonRaw, missing.artifacts)
+      .ingestionIssues
+  ).toContain("threat_model.json unreadable or oversized — artifact ignored")
+
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_model.json"), canonical.replace("scan-1", "scan-2"))
+  const changed = await readEngineOutput(outputDir)
+  expect(changed.artifacts.threatModelsRaw).toBeNull()
+
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outputDir, "threat_model.json"), canonical)
+  const valid = await readEngineOutput(outputDir)
+  expect(valid.artifacts.threatModelsRaw).toBe(canonical)
 })
 
 it("selects the newest valid output across both layouts", async () => {
@@ -214,54 +378,69 @@ describe("extractEngineFailureType", () => {
 describe("resolveEngineProfile", () => {
   const routingEnv = {
     LYRASHIELD_LLM: "azure/fallback",
-    LYRASHIELD_LUNA_LLM: "azure/gpt-5.6-luna",
-    LYRASHIELD_TERRA_LLM: "azure/gpt-5.6-terra",
+    LYRASHIELD_LUNA_LLM: "azure/gpt-6-luna",
+    LYRASHIELD_SOL_LLM: "azure/gpt-6-sol",
   }
 
   it.each(["SAFE", "QUICK", "STANDARD"])("routes %s to Luna at medium reasoning", (mode) => {
     expect(resolveEngineProfile(mode, routingEnv)).toEqual({
-      model: "azure/gpt-5.6-luna",
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
   })
 
-  it.each(["DEEP", "CUSTOM"])("routes %s to Terra/medium root with Luna/high delegate", (mode) => {
+  it.each(["DEEP", "CUSTOM"])("routes %s to Sol/medium root with Luna/high delegate", (mode) => {
     expect(resolveEngineProfile(mode, routingEnv)).toEqual({
-      model: "azure/gpt-5.6-terra",
+      model: "azure/gpt-6-sol",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "high",
     })
   })
 
   it("falls back to the existing model when a routed deployment is absent", () => {
-    expect(resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.6-luna" })).toEqual({
-      model: "azure/gpt-5.6-luna",
+    expect(resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-6-luna" })).toEqual({
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
   })
 
-  it("rejects non-GPT-5.6 deployments", () => {
+  it("fails closed when Deep lacks a distinct Sol root", () => {
+    expect(() => resolveEngineProfile("DEEP", { LYRASHIELD_LLM: "azure/gpt-6-luna" })).toThrow(
+      "LYRASHIELD_SOL_LLM"
+    )
+  })
+
+  it("rejects non-GPT-6 deployments", () => {
     expect(() => resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.5" })).toThrow(
-      "require a GPT-5.6"
+      "require a GPT-6"
     )
   })
 
   it("rejects GPT-5.6 Sol deployments", () => {
     expect(() => resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.6-sol" })).toThrow(
-      "Terra or Luna"
+      "Sol or Luna"
     )
   })
+
+  it.each(["evil/azure/gpt-6-luna", "azure/gpt-6-luna.evil"])(
+    "rejects a misleading provider route %s",
+    (model) => {
+      expect(() => resolveEngineProfile("SAFE", { LYRASHIELD_LLM: model })).toThrow(
+        "require a GPT-6"
+      )
+    }
+  )
 })
 
 describe("repository scan runtime configuration", () => {
   const runtimeEnv = {
-    LYRASHIELD_LUNA_LLM: "azure/gpt-5.6-luna",
-    LYRASHIELD_TERRA_LLM: "azure/gpt-5.6-terra",
+    LYRASHIELD_LUNA_LLM: "azure/gpt-6-luna",
+    LYRASHIELD_SOL_LLM: "azure/gpt-6-sol",
     AZURE_AI_API_KEY: "test-key",
     LYRASHIELD_ENGINE_SANDBOX_NETWORK: "lyrashield-sandbox",
   }
@@ -384,7 +563,7 @@ describe("buildEngineEnv", () => {
     original.LYRASHIELD_WEB_SEARCH_BUDGET_USD = process.env.LYRASHIELD_WEB_SEARCH_BUDGET_USD
     original.LYRASHIELD_PROMPT_CACHE_EXPLICIT = process.env.LYRASHIELD_PROMPT_CACHE_EXPLICIT
     original.LYRASHIELD_PROMPT_CACHE = process.env.LYRASHIELD_PROMPT_CACHE
-    process.env.LYRASHIELD_LLM = "azure/gpt-5.6-luna"
+    process.env.LYRASHIELD_LLM = "azure/gpt-6-luna"
     process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK = "lyrashield-sandbox"
     // Remove all web-search variables from the live environment so these tests
     // prove buildEngineEnv's own defaults/filtration, not the local .env.
@@ -415,9 +594,9 @@ describe("buildEngineEnv", () => {
     process.env.LYRASHIELD_WEB_SEARCH_API_KEY = "test-key"
 
     const engineEnv = buildEngineEnv({
-      model: "azure/gpt-5.6-luna",
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
 
@@ -435,9 +614,9 @@ describe("buildEngineEnv", () => {
     expect(process.env.LYRASHIELD_WEB_SEARCH_ENABLED).toBe("0")
 
     const engineEnv = buildEngineEnv({
-      model: "azure/gpt-5.6-luna",
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
 
@@ -449,9 +628,9 @@ describe("buildEngineEnv", () => {
   it("labels sandbox containers with the managed scan id", () => {
     const engineEnv = buildEngineEnv(
       {
-        model: "azure/gpt-5.6-luna",
+        model: "azure/gpt-6-luna",
         reasoningEffort: "medium",
-        delegateModel: "azure/gpt-5.6-luna",
+        delegateModel: "azure/gpt-6-luna",
         delegateReasoningEffort: "medium",
       },
       "scan-label"
@@ -463,9 +642,9 @@ describe("buildEngineEnv", () => {
 
   it("enables explicit GPT-5.6 prompt-cache reads and writes by default", () => {
     const engineEnv = buildEngineEnv({
-      model: "azure/gpt-5.6-luna",
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
 
@@ -475,9 +654,9 @@ describe("buildEngineEnv", () => {
 
   it("keeps engine checkouts on the worker's host-visible temporary root", () => {
     const engineEnv = buildEngineEnv({
-      model: "azure/gpt-5.6-luna",
+      model: "azure/gpt-6-luna",
       reasoningEffort: "medium",
-      delegateModel: "azure/gpt-5.6-luna",
+      delegateModel: "azure/gpt-6-luna",
       delegateReasoningEffort: "medium",
     })
 

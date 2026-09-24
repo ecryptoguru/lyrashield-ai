@@ -95,7 +95,7 @@ export default async function LiteCheckPage({ params }: { params: Promise<{ toke
               </h1>
               <p className="text-muted-foreground mt-4 max-w-xl leading-7">
                 This card contains aggregate counters only. It does not publish the scanned URL,
-                matched values, headers, findings, or exploit detail.
+                matched values, headers, findings or exploit detail.
               </p>
             </div>
             <dl className="grid grid-cols-3 gap-3">
@@ -118,8 +118,8 @@ export default async function LiteCheckPage({ params }: { params: Promise<{ toke
             </dl>
           </div>
           <div className="text-muted-foreground mt-8 border-t pt-6 text-sm leading-6">
-            Surface-level and outside-only. Not the official LyraShield Score, not a full
-            assessment, and not a security guarantee.
+            Surface-level and outside-only. Not the official LyraShield Score, not a full assessment
+            and not a security guarantee.
           </div>
         </section>
 

@@ -35,6 +35,11 @@ export async function searchKnowledge(
   const limit = Math.min(Math.max(opts.limit ?? 5, 1), 10)
   const trimmed = query.trim().slice(0, 300)
   if (!trimmed) return []
+  // Keep exact web-search matches first, but let a few relevant terms recover
+  // support questions whose conversational wording makes an all-term query empty.
+  const terms = [...new Set(trimmed.match(/[a-z0-9]+/gi)?.map((word) => word.toLowerCase()) ?? [])]
+  const broadQuery = terms.slice(0, 16).join(" OR ")
+  if (!broadQuery) return []
 
   // Anonymous sees PUBLIC entries only. Authenticated users also see
   // RESTRICTED entries whose allowedRoles is empty or contains their role.
@@ -62,13 +67,14 @@ export async function searchKnowledge(
   >(Prisma.sql`
     SELECT id, title, "sourceUrl", topic,
            left(content, 400) AS snippet,
-           ts_rank("searchVector", websearch_to_tsquery('english', ${trimmed})) AS rank
+           ts_rank("searchVector", websearch_to_tsquery('english', ${broadQuery})) AS rank
     FROM myra_knowledge_entries
     WHERE status = 'ACTIVE'
+      AND "releaseId" IN (SELECT id FROM myra_knowledge_releases WHERE status = 'active')
       AND ${audienceFilter}
       AND ${roleFilter}
-      AND "searchVector" @@ websearch_to_tsquery('english', ${trimmed})
-    ORDER BY rank DESC
+      AND "searchVector" @@ websearch_to_tsquery('english', ${broadQuery})
+    ORDER BY ("searchVector" @@ websearch_to_tsquery('english', ${trimmed})) DESC, rank DESC
     LIMIT ${limit}
   `)
   return rows
@@ -110,7 +116,7 @@ export async function listReviewQueue(
   db: MyraDb = prisma
 ): Promise<{ id: string; title: string; topic: string; reviewAfter: Date | null }[]> {
   return db.myraKnowledgeEntry.findMany({
-    where: { status: "ACTIVE", reviewAfter: { lte: new Date() } },
+    where: { status: "ACTIVE", release: { status: "active" }, reviewAfter: { lte: new Date() } },
     orderBy: { reviewAfter: "asc" },
     take: Math.min(opts.limit ?? 50, 200),
     select: { id: true, title: true, topic: true, reviewAfter: true },

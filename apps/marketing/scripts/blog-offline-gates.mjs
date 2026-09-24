@@ -58,6 +58,17 @@ export const DEAD_URLS = Object.freeze({
   // native MCP called out as roadmap, so the link is simply gone rather than
   // repointed. Mapping it to the docs index would imply an MCP page exists.
   "https://aider.chat/docs/mcp/mcp.html": "https://aider.chat/docs/",
+
+  // Round 3: found by the live check-links pass for the batch-11 staged
+  // publish (PR #689). The OWASP race-condition page moved to the
+  // www-community /pages/ path, and the GitHub blog retired the secret-sprawl
+  // post in favor of the inbox-zero write-up covering the same program.
+  "https://owasp.org/www-community/vulnerabilities/Race_Condition":
+    "https://owasp.org/www-community/pages/vulnerabilities/race_conditions",
+  "https://github.blog/open-source/closing-down-the-attack-surface-how-github-mitigates-secret-sprawl/":
+    "https://github.blog/security/application-security/how-github-used-secret-scanning-to-reach-inbox-zero/",
+  "https://owasp.org/www-project-top-10-for-large-language-model-applications/2_0_vulns/LLM05_ImproperOutputHandling":
+    "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
 })
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")

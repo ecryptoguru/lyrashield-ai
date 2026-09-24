@@ -86,7 +86,7 @@ const clients = buildClients()
 export const agentOnboarding = {
   title: "Release assurance for coding agents",
   description:
-    "Give your coding agent evidence-backed checks, reviewable fix proposals, and a fresh retest before you ship.",
+    "Give your coding agent evidence-backed checks, reviewable fix proposals and a fresh retest before you ship.",
   commands: ["npx lyrashield login --oauth", "npx lyrashield init"],
   workflow: ["Target", "Review", "Evidence", "Fix proposal", "Retest", "Report"],
   safety: [

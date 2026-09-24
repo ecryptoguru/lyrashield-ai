@@ -1,4 +1,5 @@
 import { getCollection, type CollectionEntry } from "astro:content"
+import { isNotAfterBuildDate } from "./blog-publishing"
 
 /**
  * Blog category taxonomy.
@@ -38,35 +39,35 @@ export const BLOG_CATEGORIES: readonly BlogCategory[] = [
     id: "access-control",
     label: "Access Control",
     description:
-      "Authentication, authorization, row-level security, and sessions — keeping the wrong people away from the right data.",
+      "Authentication, authorization, row-level security and sessions — keeping the wrong people away from the right data.",
     eyebrow: "Identity & data boundaries",
   },
   {
     id: "web-security",
     label: "Web Security",
     description:
-      "Headers, CORS, injection, and the rest of the browser-facing attack surface of a modern web app.",
+      "Headers, CORS, injection and the rest of the browser-facing attack surface of a modern web app.",
     eyebrow: "Browser attack surface",
   },
   {
     id: "supply-chain",
     label: "Supply Chain",
     description:
-      "Dependencies, packages, CI/CD, and third-party services — securing the code you didn't write yourself.",
+      "Dependencies, packages, CI/CD and third-party services — securing the code you didn't write yourself.",
     eyebrow: "Dependencies & pipelines",
   },
   {
     id: "agent-security",
     label: "Agent Security",
     description:
-      "Permissions, prompt injection, sandboxing, and guardrails for coding agents and agent-native applications.",
+      "Permissions, prompt injection, sandboxing and guardrails for coding agents and agent-native applications.",
     eyebrow: "Autonomy & guardrails",
   },
   {
     id: "verification",
     label: "Verification",
     description:
-      "Checking that findings are real and fixes actually hold: evidence, retesting, and honest security claims.",
+      "Checking that findings are real and fixes actually hold: evidence, retesting and honest security claims.",
     eyebrow: "Evidence & retesting",
   },
 ]
@@ -85,9 +86,12 @@ export function categoryHref(id: CategoryId): string {
   return `/blog/tags/${id}`
 }
 
-/** All published (non-draft) posts, newest first. */
+/** All published (non-draft, not future-dated) posts, newest first. */
 async function getPublishedPosts(): Promise<BlogEntry[]> {
-  const posts = await getCollection("blog", (entry) => !entry.data.draft)
+  const posts = await getCollection(
+    "blog",
+    (entry) => !entry.data.draft && isNotAfterBuildDate(entry.data)
+  )
   return posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
 }
 

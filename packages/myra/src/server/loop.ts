@@ -417,18 +417,18 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
       )
         ? ctx.routeContext
         : null
-    const tier = ["diagnostics", "flow_start", "flow_resume", "support_case", "evidence"].includes(
-      intent
-    )
-      ? "deep"
-      : "fast"
     if (reserves) {
-      await reserveGenerationBudget(traceId, maximumTurnCostUsd(tier))
+      // Anonymous turns may spend only the signed-in-reserved share of the
+      // pool, so one IP cannot exhaust the month for paying customers. The
+      // share decision runs inside reserveGenerationBudget's advisory-lock
+      // transaction, atomic with the hold it authorizes.
+      await reserveGenerationBudget(traceId, maximumTurnCostUsd(), {
+        anonymous: ctx.principal.kind === "anonymous",
+      })
     }
     const generated = await provider.generate({
       system: systemPrompt(ctx),
       messages: [{ role: "user", content: sanitizeInstructionInput(text) }],
-      tier,
       context: {
         intent,
         toolOutputs: step.toolOutputs,

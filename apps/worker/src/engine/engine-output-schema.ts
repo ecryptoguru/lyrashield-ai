@@ -31,10 +31,10 @@ export const MAX_SCOPED_COVERAGE_ENTRIES = 500
 export const MAX_COVERAGE_GAPS = 50
 export const MAX_COVERAGE_PREVIOUS_OUTCOMES = 40
 export const MAX_COVERAGE_STRING_CHARS = 4096
-export const MAX_THREAT_MODELS = 8
+export const MAX_THREAT_MODELS = 20
 export const MAX_THREAT_MODEL_AMENDMENTS = 40
-export const MAX_THREAT_MODEL_CONTENT_CHARS = 512 * 1024
-export const MAX_THREAT_MODEL_AMENDMENT_CHARS = 64 * 1024
+export const MAX_THREAT_MODEL_CONTENT_CHARS = 64_000
+export const MAX_THREAT_MODEL_AMENDMENT_CHARS = 8_000
 export const MAX_HTTP_EXCHANGE_ENTRIES = 500
 // Reader-side slack over the writer's 4096-byte decoded body-sample budget —
 // redaction can alter length slightly, but an 8 KiB cap keeps a hostile
@@ -337,7 +337,7 @@ const threatModelAmendmentSchema = z
   .object({
     at: boundedString,
     by: boundedString,
-    content: z.string().min(1).max(MAX_THREAT_MODEL_AMENDMENT_CHARS),
+    content: z.string().max(MAX_THREAT_MODEL_AMENDMENT_CHARS),
   })
   .strip()
 
@@ -346,19 +346,29 @@ export const threatModelEntrySchema = z
     target: z.string().min(1).max(1024),
     written_at: boundedString,
     written_by: boundedString,
-    content: z.string().min(1).max(MAX_THREAT_MODEL_CONTENT_CHARS),
+    content: z.string().max(MAX_THREAT_MODEL_CONTENT_CHARS),
     amendments: z.array(threatModelAmendmentSchema).max(MAX_THREAT_MODEL_AMENDMENTS).optional(),
   })
   .strip()
 
 /**
- * threat_models.json — the engine's per-scan threat model document, keyed by
- * normalized target identity (upstream store shape) or wrapped with an
- * explicit schema_version. Stored verbatim-but-validated in encrypted
- * artifact storage; it is a declared model, never proof that the attack
- * paths it names were exercised.
+ * Canonical threat_model.json is the owned engine's versioned models array.
+ * Older plural fixtures used an upstream target-keyed record; they remain an
+ * explicitly named reader adapter, never a substitute for the owned writer.
  */
 export const threatModelsDocumentSchema = z.union([
+  z
+    .object({
+      schema_version: z.literal("lyrashield-threat-model/1.0"),
+      generated_at: boundedString,
+      run_id: boundedString,
+      run_name: boundedString.optional(),
+      models: z.array(threatModelEntrySchema).max(MAX_THREAT_MODELS),
+      note: boundedString.optional(),
+      truncated: z.boolean().optional(),
+      error: boundedString.optional(),
+    })
+    .strip(),
   z.record(z.string().max(1024), threatModelEntrySchema),
   z
     .object({
@@ -490,6 +500,16 @@ const sha256Hash = z
   .regex(/^[a-f0-9]{64}$/i, "Expected SHA-256 hex")
   .optional()
 
+export const promptCacheReceiptSchema = z
+  .object({
+    enabled: z.boolean(),
+    routing_enabled: z.boolean(),
+    routing: z.literal("stable-prompt-v2").nullable(),
+    mode: z.enum(["explicit", "implicit"]).nullable(),
+    ttl: z.literal("30m").nullable(),
+  })
+  .strip()
+
 export const engineRunRecordSchema = z
   .object({
     // Producer's run.json contract version (engine RUN_RECORD_SCHEMA_VERSION).
@@ -511,6 +531,8 @@ export const engineRunRecordSchema = z
       .optional(),
     engine_version: boundedString,
     prompt_bundle_hash: sha256Hash,
+    /** Bounded cache-routing posture emitted by the engine for this run. */
+    prompt_cache: promptCacheReceiptSchema.optional(),
     model: boundedString,
     reasoning_effort: boundedString,
     delegate_model: boundedString,
@@ -537,6 +559,10 @@ export const engineRunRecordSchema = z
         "rate_limited",
         "cancelled",
         "timed_out",
+        // The engine exhausted its trusted runtime allowance before the root
+        // agent called finish. Findings already filed are preserved as a
+        // partial result rather than dropped.
+        "runtime_deadline",
       ])
       .optional(),
     // ── run.json 1.1 run-level evidence stamps ─────────────────────────────

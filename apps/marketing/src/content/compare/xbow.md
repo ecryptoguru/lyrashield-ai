@@ -1,6 +1,6 @@
 ---
 title: "LyraShield vs XBOW — compared"
-description: "How LyraShield AI compares to XBOW for autonomous web-app pentest. Evidence states, coverage framework, deterministic retest, and deployment model differences."
+description: "How LyraShield AI compares to XBOW for autonomous web-app pentest. Evidence states, coverage framework, deterministic retest and deployment model differences."
 competitor: "XBOW"
 heading: "LyraShield AI vs XBOW"
 disclaimer: "Factual comparison. [XBOW](https://xbow.com/) by XBOW, Inc. is an autonomous offensive security platform that uses AI agents to continuously pentest applications and APIs, independently proving exploitability with working exploits before a finding reaches your team. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop that separates detection from proof and produces immutable assurance records with reviewed fix proposals. Both independently verify findings before surfacing them. Neither replaces the other — they optimize for different deliverables (XBOW: continuous exploit-proof; LyraShield AI: ship-ready assurance for AI-generated code)."
@@ -9,13 +9,13 @@ draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace XBOW?"
-    a: "No. XBOW is an autonomous offensive platform that proves exploitability with working exploits, decision logs, and complete case files at portfolio scale across apps and APIs. LyraShield in open beta is a focused release assurance loop for AI-built apps that separates detection from proof and adds SCA, secrets, and reviewed fix proposals with immutable reports."
+    a: "No. XBOW is an autonomous offensive platform that proves exploitability with working exploits, decision logs and complete case files at portfolio scale across apps and APIs. LyraShield in open beta is a focused release assurance loop for AI-built apps that separates detection from proof and adds SCA, secrets and reviewed fix proposals with immutable reports."
   - q: "Can I use XBOW and LyraShield together?"
-    a: "Yes. Teams often run XBOW for continuous autonomous pentesting across a broad estate, and add LyraShield for the per-build release gate. XBOW delivers exploit-proof case files; LyraShield delivers target, review, evidence, fix, retest, report with evidence states. Check XBOW’s current commercial terms with the vendor; LyraShield is live in open beta with open registration."
+    a: "Yes. Teams often run XBOW for continuous autonomous pentesting across a broad estate and add LyraShield for the per-build release gate. XBOW delivers exploit-proof case files; LyraShield delivers target, review, evidence, fix, retest, report with evidence states. Check XBOW’s current commercial terms with the vendor; LyraShield is live in open beta with open registration."
   - q: "When should I choose XBOW over LyraShield?"
-    a: "Choose XBOW when you need continuous, attacker-style validation across many apps and APIs, reproducible exploits for SOC 2, ISO 27001, PCI DSS, and NIS 2 evidence, and API-driven testing on every merge. Its strength is portfolio-scale proof. Choose LyraShield when the app is AI-built and the bottleneck is a defensible release decision with coverage receipts."
+    a: "Choose XBOW when you need continuous, attacker-style validation across many apps and APIs, reproducible exploits for SOC 2, ISO 27001, PCI DSS and NIS 2 evidence and API-driven testing on every merge. Its strength is portfolio-scale proof. Choose LyraShield when the app is AI-built and the bottleneck is a defensible release decision with coverage receipts."
   - q: "How does reporting differ between XBOW and LyraShield?"
-    a: "XBOW produces per-finding case files with chained paths, working exploits, and full decision logs ready for auditors. LyraShield produces an immutable assurance snapshot that aggregates coverage receipts per control, evidence states for each finding, retest outcomes, and limitations for the release decision. LyraShield's report is built for sign-off."
+    a: "XBOW produces per-finding case files with chained paths, working exploits and full decision logs ready for auditors. LyraShield produces an immutable assurance snapshot that aggregates coverage receipts per control, evidence states for each finding, retest outcomes and limitations for the release decision. LyraShield's report is built for sign-off."
 ---
 
 ## Core approach
@@ -78,6 +78,6 @@ Both tools independently prove findings rather than dumping detections. [Read ou
 
 ## Methodology and scope
 
-This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for its assurance model, and verify vendor details before a purchasing decision.
+This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
 
 For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs XBOW](/blog/xbow-vs-lyrashield).

@@ -66,6 +66,13 @@ describe("run.json 1.1 golden fixture", () => {
       schema_version: "1.1",
       run_id: "fixture-run-1-1",
       status: "completed",
+      prompt_cache: {
+        enabled: true,
+        routing_enabled: true,
+        routing: "stable-prompt-v2",
+        mode: "explicit",
+        ttl: "30m",
+      },
       report_artifacts_revision: 4,
       evidence_export: { status: "exported", exchanges: 2 },
     })
@@ -230,6 +237,102 @@ describe("run.json 1.1 golden fixture", () => {
     expect(doc.models["https://app.example.com"].amendments).toHaveLength(1)
   })
 
+  it("reads the owned engine threat_model.json models array", () => {
+    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), {
+      ...artifacts(),
+      threatModelsRaw: JSON.stringify({
+        schema_version: "lyrashield-threat-model/1.0",
+        generated_at: "2026-09-20 00:00:00 UTC",
+        run_id: "fixture-run-1-1",
+        run_name: "fixture",
+        models: [
+          {
+            target: "https://app.example.com",
+            written_at: "2026-09-20T00:00:00Z",
+            written_by: "recon",
+            content: "## Trust Boundaries\nPublic edge to app",
+            amendments: [],
+          },
+        ],
+        note: "Declared assumptions, not tested paths.",
+      }),
+    })
+
+    expect(result.threatModels?.schemaVersion).toBe("lyrashield-threat-model/1.0")
+    expect(result.threatModels?.models).toHaveLength(1)
+    const document = JSON.parse(result.threatModels!.document)
+    expect(document.models).toHaveLength(1)
+    expect(document.run_id).toBe("fixture-run-1-1")
+  })
+
+  it("redacts secret assignments in a legacy threat model before persistence", () => {
+    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), {
+      ...artifacts(),
+      threatModelsRaw: JSON.stringify({
+        "https://app.example.com": {
+          target: "https://app.example.com/?password=sample-secret-123",
+          written_at: "2026-09-20T00:00:00Z",
+          written_by: "password=sample-secret-123",
+          content: "password=sample-secret-123",
+          amendments: [{ at: "today", by: "recon", content: "Bearer sample-secret-123" }],
+        },
+      }),
+    })
+
+    expect(result.threatModels).not.toBeNull()
+    expect(JSON.stringify(result.threatModels)).not.toContain("sample-secret-123")
+  })
+
+  it("rejects a canonical threat model bound to another run", () => {
+    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), {
+      ...artifacts(),
+      threatModelsRaw: JSON.stringify({
+        schema_version: "lyrashield-threat-model/1.0",
+        generated_at: "2026-09-20 00:00:00 UTC",
+        run_id: "different-run",
+        models: [{ target: "https://app.example.com", content: "declared assumptions" }],
+      }),
+    })
+
+    expect(result.threatModels).toBeNull()
+    expect(result.ingestionIssues.some((issue) => issue.includes("run_id mismatch"))).toBe(true)
+  })
+
+  it("does not present a blank model as usable threat evidence", () => {
+    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), {
+      ...artifacts(),
+      threatModelsRaw: JSON.stringify({
+        schema_version: "lyrashield-threat-model/1.0",
+        generated_at: "2026-09-20 00:00:00 UTC",
+        run_id: "fixture-run-1-1",
+        models: [{ target: "https://app.example.com", content: "  \n  " }],
+      }),
+    })
+
+    expect(result.threatModels).toBeNull()
+    expect(result.ingestionIssues.some((issue) => issue.includes("no usable models"))).toBe(true)
+  })
+
+  it("rejects canonical threat evidence with an error or missing run binding", () => {
+    const document = {
+      schema_version: "lyrashield-threat-model/1.0",
+      generated_at: "2026-09-20 00:00:00 UTC",
+      run_id: "fixture-run-1-1",
+      models: [{ target: "https://app.example.com", content: "Declared boundary" }],
+    }
+    const errored = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), {
+      ...artifacts(),
+      threatModelsRaw: JSON.stringify({ ...document, error: "mirror unreadable" }),
+    })
+    expect(errored.threatModels).toBeNull()
+
+    const unbound = parseEngineOutput(V1_1_VULNS(), "{invalid", {
+      ...artifacts(),
+      threatModelsRaw: JSON.stringify(document),
+    })
+    expect(unbound.threatModels).toBeNull()
+  })
+
   it("parses the exchange export into the cited-id index and canonical artifact", () => {
     const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), artifacts())
     expect(result.httpExchangeExport?.exchangeCount).toBe(2)
@@ -305,7 +408,7 @@ describe("run.json 1.1 reader bounds and failure modes", () => {
     expect(result.threatModels).toBeNull()
     expect(result.httpExchangeExport).toBeNull()
     expect(result.ingestionIssues.some((i) => i.includes("coverage.json"))).toBe(true)
-    expect(result.ingestionIssues.some((i) => i.includes("threat_models.json"))).toBe(true)
+    expect(result.ingestionIssues.some((i) => i.includes("threat_model.json"))).toBe(true)
     expect(result.ingestionIssues.some((i) => i.includes("http_exchanges.json"))).toBe(true)
   })
 

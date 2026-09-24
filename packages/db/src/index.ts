@@ -300,8 +300,10 @@ export {
 } from "./launch-report-signing"
 export {
   generateLaunchReport,
+  confirmSharedLaunchReportIdentity,
   getLaunchReportDetail,
   getSharedLaunchReport,
+  type ReleaseIdentityConfirmation,
   type LaunchReportResult,
 } from "./launch-report-service"
 export {
@@ -491,6 +493,7 @@ export {
 } from "./agent-operation-service"
 export {
   CONNECTOR_PROVIDERS,
+  CONNECTOR_ALLOWED_PLANS,
   connectorPrincipal,
   isConnectorProvider,
   defaultConnectorAdmission,

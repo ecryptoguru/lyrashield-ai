@@ -30,7 +30,7 @@ export default async function TargetsPage({
       <div>
         <PageHeader
           title={TARGET_PLURAL}
-          description="Manage the apps, APIs, repositories, and infrastructure to scan."
+          description="Manage the apps, APIs, repositories and infrastructure to scan."
         />
         <NoWorkspaceState
           icon={Crosshair}

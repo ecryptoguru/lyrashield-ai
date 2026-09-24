@@ -27,6 +27,8 @@ vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { finding: { view: "finding:vi
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 const { GET } = await import("./route")
+const { prisma } = await import("@lyrashield/db")
+const { readEncryptedArtifact } = await import("@lyrashield/evidence-storage")
 
 describe("GET /api/findings/[id]", () => {
   beforeEach(() => {
@@ -93,5 +95,54 @@ describe("GET /api/findings/[id]", () => {
     expect(serialized).not.toContain("s3://")
     expect(serialized).not.toContain("evidence-bucket")
     expect(serialized).toContain("result-integrity-v3")
+  })
+
+  it("projects producer-shaped claim context without discarding text or CVSS structure", async () => {
+    getFinding.mockResolvedValue({
+      id: "finding-1",
+      title: "Issue",
+      severity: "HIGH",
+      category: "Application",
+      cwe: null,
+      recommendedFix: null,
+      evidence: [],
+    })
+    vi.mocked(prisma.evidence.findFirst).mockResolvedValue({
+      storageUri: "private://artifact",
+    } as never)
+    vi.mocked(readEncryptedArtifact).mockResolvedValue({
+      content: Buffer.from(
+        JSON.stringify({
+          counterevidence: "A WAF rule could block exploitation.",
+          assumptions: "The endpoint is internet-facing.",
+          severityChangeConditions: "Lower if access requires admin role.",
+          evidenceWarnings: ["No authenticated coverage"],
+          contextualCvssReasoning: "Unauthenticated remote reach.",
+          advisoryCvss: {
+            score: 8.6,
+            vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H",
+            source: "engine",
+            metric_reasoning: "Network attack vector",
+          },
+        })
+      ),
+    } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/findings/finding-1?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+    const body = await response.json()
+
+    expect(body.data.evidenceInsights).toMatchObject({
+      counterevidence: "A WAF rule could block exploitation.",
+      assumptions: "The endpoint is internet-facing.",
+      severityChangeConditions: "Lower if access requires admin role.",
+      advisoryCvss: {
+        score: 8.6,
+        vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H",
+        metric_reasoning: "Network attack vector",
+      },
+    })
   })
 })

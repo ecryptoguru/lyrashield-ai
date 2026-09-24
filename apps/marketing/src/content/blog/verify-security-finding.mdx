@@ -1,6 +1,6 @@
 ---
 title: "How to Verify a Security Finding"
-description: "Verify a vulnerability finding by checking scope, code paths, prerequisites, safe reproduction, impact, and independent evidence."
+description: "Verify a vulnerability finding by checking scope, code paths, prerequisites, safe reproduction, impact and independent evidence."
 pubDate: 2026-07-17
 updatedDate: 2026-08-07
 author: lyrashield-team
@@ -13,28 +13,28 @@ faq:
   - q: "Does high scanner confidence prove a finding?"
     a: "No. Confidence can help prioritize review, but it is metadata from the detector. Verification requires evidence that the claimed condition exists in the in-scope target under its stated prerequisites."
   - q: "Does reproduction require writing an exploit?"
-    a: "No. Prefer the least harmful test that distinguishes the claim, using synthetic data and an owned environment. A denied cross-account request, a controlled unit test, or a safe data-flow trace may be enough without weaponized code."
+    a: "No. Prefer the least harmful test that distinguishes the claim, using synthetic data and an owned environment. A denied cross-account request, a controlled unit test or a safe data-flow trace may be enough without weaponized code."
   - q: "Is severity the same as risk?"
-    a: "No. Technical severity, confidence, exploitability, and environmental risk answer different questions. Business context, exposure, assets, existing controls, and prerequisites affect prioritization without changing whether the underlying condition is real."
+    a: "No. Technical severity, confidence, exploitability and environmental risk answer different questions. Business context, exposure, assets, existing controls and prerequisites affect prioritization without changing whether the underlying condition is real."
   - q: "When should a finding remain unverified?"
-    a: "Keep it unverified when the target version is uncertain, the cited path cannot be inspected, required context is missing, safe reproduction is blocked, or the only support is the original detector, a confidence score, or another model's opinion."
+    a: "Keep it unverified when the target version is uncertain, the cited path cannot be inspected, required context is missing, safe reproduction is blocked or the only support is the original detector, a confidence score or another model's opinion."
 ---
 
-**Direct answer:** Confirm that the finding names the tested version and an in-scope component. Inspect the exact code or request path, identify its prerequisites, and reproduce the condition with minimum effect in an owned environment. Verify the asserted impact, then retain evidence from a method independent of the original assertion before labeling the finding independently verified.
+**Direct answer:** Confirm that the finding names the tested version and an in-scope component. Inspect the exact code or request path, identify its prerequisites and reproduce the condition with minimum effect in an owned environment. Verify the asserted impact, then retain evidence from a method independent of the original assertion before labeling the finding independently verified.
 
-A scanner alert is a claim. So is an AI review comment or a human note. The claim can be important before it is verified, but its severity label, confidence score, and polished explanation do not establish that the condition exists.
+A scanner alert is a claim. So is an AI review comment or a human note. The claim can be important before it is verified, but its severity label, confidence score and polished explanation do not establish that the condition exists.
 
-Verification turns the report into a decision the team can defend. It also prevents two costly errors: dismissing a real weakness because the first description was imperfect, and spending a release cycle fixing a path that does not exist. This evidence discipline is central to the [security guide for AI-built applications](/blog/vibe-coding-security-guide).
+Verification turns the report into a decision the team can defend. It also prevents two costly errors: dismissing a real weakness because the first description was imperfect and spending a release cycle fixing a path that does not exist. This evidence discipline is central to the [security guide for AI-built applications](/blog/vibe-coding-security-guide).
 
 ## Normalize the claim first
 
 Rewrite the report into a compact, testable statement:
 
-- target version, commit, image, or deployment;
-- in-scope service, route, package, or component;
+- target version, commit, image or deployment;
+- in-scope service, route, package or component;
 - weakness and claimed root cause;
 - exact source location or runtime path;
-- actor, access level, configuration, and other prerequisites;
+- actor, access level, configuration and other prerequisites;
 - asserted technical impact;
 - original detector and evidence;
 - known limitations.
@@ -45,11 +45,11 @@ Separate a weakness class from a product vulnerability. MITRE's [CWE FAQ](https:
 
 ## Confirm the target and path exist
 
-Check that the report refers to the version you are reviewing. Generated reports can cite deleted code, old dependencies, test fixtures, or files excluded from the build. A runtime report can hit a different deployment than the one named in the ticket.
+Check that the report refers to the version you are reviewing. Generated reports can cite deleted code, old dependencies, test fixtures or files excluded from the build. A runtime report can hit a different deployment than the one named in the ticket.
 
-Trace the cited code in context. Include middleware, framework defaults, database policies, feature flags, serializers, and downstream effects. For a runtime path, preserve the safe request shape, account role, and environment configuration. For a dependency, confirm the package and version in the resolved lockfile or installed artifact.
+Trace the cited code in context. Include middleware, framework defaults, database policies, feature flags, serializers and downstream effects. For a runtime path, preserve the safe request shape, account role and environment configuration. For a dependency, confirm the package and version in the resolved lockfile or installed artifact.
 
-Reject invented locations and APIs. If the named path is absent, determine whether the finding is stale, points to generated code, or describes a broader equivalent path. "Could not locate" is a useful result, but it is not automatically a false positive.
+Reject invented locations and APIs. If the named path is absent, determine whether the finding is stale, points to generated code or describes a broader equivalent path. "Could not locate" is a useful result, but it is not automatically a false positive.
 
 ## Identify what the original detector actually observed
 
@@ -78,7 +78,7 @@ Confidence ranks the detector's belief. Severity estimates technical characteris
 
 ## Reproduce with minimum effect
 
-Use an owned local, test, or explicitly authorized environment. Create synthetic users and records. Do not use customer data, real credentials, destructive actions, persistence, or broad scanning when a smaller test can answer the question.
+Use an owned local, test or explicitly authorized environment. Create synthetic users and records. Do not use customer data, real credentials, destructive actions, persistence or broad scanning when a smaller test can answer the question.
 
 For suspected cross-tenant access:
 
@@ -89,9 +89,9 @@ For suspected cross-tenant access:
 5. Verify denial and absence of sensitive response data.
 6. Confirm user B can still perform the intended action.
 
-For injection, a unit or integration test that proves attacker-controlled input reaches a dangerous sink may be enough. For a vulnerable dependency, confirm the affected version and relevant configuration, then assess whether the vulnerable feature is reachable without running public exploit code. For exposed secrets, rotate, or revoke the credential before any optional validation.
+For injection, a unit or integration test that proves attacker-controlled input reaches a dangerous sink may be enough. For a vulnerable dependency, confirm the affected version and relevant configuration, then assess whether the vulnerable feature is reachable without running public exploit code. For exposed secrets, rotate or revoke the credential before any optional validation.
 
-Record expected and actual results, target identity, time, tester, and limitations. Redact session values and personal data. OWASP's [Vulnerability Disclosure Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Vulnerability_Disclosure_Cheat_Sheet.html) supports giving recipients enough reproduction detail and evidence to understand a report without unnecessary harm.
+Record expected and actual results, target identity, time, tester and limitations. Redact session values and personal data. OWASP's [Vulnerability Disclosure Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Vulnerability_Disclosure_Cheat_Sheet.html) supports giving recipients enough reproduction detail and evidence to understand a report without unnecessary harm.
 
 ## Seek independent evidence
 
@@ -101,11 +101,11 @@ A deterministic integration test can independently support an AI-generated candi
 
 Running the same scanner again with the same rule can establish repeatability, but it does not remove the rule's original assumption. Asking a second model to agree with the first is still model-generated opinion. A high-confidence restatement is not a verification receipt.
 
-Sometimes safe independent evidence is unavailable. The environment may not exist, authorization may be missing, or the feature may depend on a third party. Keep the state detected but unverified and record the blocker. Do not force a binary result.
+Sometimes safe independent evidence is unavailable. The environment may not exist, authorization may be missing or the feature may depend on a third party. Keep the state detected but unverified and record the blocker. Do not force a binary result.
 
-## Separate severity, exploitability, and risk
+## Separate severity, exploitability and risk
 
-Once the condition is supported, assess its consequences. Technical severity, reachability, attacker prerequisites, asset value, exposure, and existing controls all matter, but they are not the same field.
+Once the condition is supported, assess its consequences. Technical severity, reachability, attacker prerequisites, asset value, exposure and existing controls all matter, but they are not the same field.
 
 FIRST's [CVSS FAQ](https://www.first.org/cvss/faq) explains that the base score reflects intrinsic characteristics and should be supplemented with threat and environmental information for prioritization. A high base score does not prove that your product contains the vulnerability. A low score does not make a verified tenant-data leak acceptable.
 
@@ -117,15 +117,15 @@ Useful states include:
 
 - **Detected, unverified:** a credible assertion exists, but independent evidence is not complete.
 - **Independently verified:** separate evidence supports the condition under recorded prerequisites.
-- **Blocked:** verification cannot proceed because a named dependency, environment, or authorization is missing.
+- **Blocked:** verification cannot proceed because a named dependency, environment or authorization is missing.
 - **Duplicate:** another finding covers the same root cause and affected scope.
 - **False positive:** evidence shows the asserted condition does not apply to the target, with rationale retained.
 
-Accepted risk is a treatment decision after the condition and context are understood. It is not a verification result. Likewise, remediation, and retesting happen after initial verification. Keep those stages separate so the record shows what was detected, what was proven, what changed, and what a fresh retest observed.
+Accepted risk is a treatment decision after the condition and context are understood. It is not a verification result. Likewise, remediation and retesting happen after initial verification. Keep those stages separate so the record shows what was detected, what was proven, what changed and what a fresh retest observed.
 
 The LyraShield AI [methodology](/methodology) uses exact evidence states. Confidence remains triage metadata. Independently verified requires a separate verification receipt. A clean deterministic retest with complete applicable originating coverage can be retest-confirmed, but that is not the same as independent verification. Incomplete or engine-only absence remains inconclusive under the repository contract.
 
-The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign owners for validation and retesting. It does not inspect a finding, run a reproduction, or issue verification evidence. For independent test design, continue with [security tests for AI-generated code](/blog/ai-generated-tests-security). For architecture context, use [human review and threat modeling](/blog/human-review-threat-model-vibe-coding).
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign owners for validation and retesting. It does not inspect a finding, run a reproduction or issue verification evidence. For independent test design, continue with [security tests for AI-generated code](/blog/ai-generated-tests-security). For architecture context, use [human review and threat modeling](/blog/human-review-threat-model-vibe-coding).
 
 ## Sources
 

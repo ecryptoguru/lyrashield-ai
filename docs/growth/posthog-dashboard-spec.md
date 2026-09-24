@@ -2,10 +2,10 @@
 
 Status: project `605869` connected; initial dashboard and assessment survey live.
 Do not count checkout-return events as successful payment.
-Use the existing single PostHog project, anonymous device IDs, DNT/GPC opt-out,
+Use the existing single PostHog project, anonymous device IDs, DNT/GPC opt-out
 and the event/property allowlists in `apps/web/src/lib/analytics.ts` and
 `apps/marketing/src/lib/posthog-privacy.ts`. Do not enable autocapture, session
-recording, `identify()`, raw target URLs, or account IDs in client events.
+recording, `identify()`, raw target URLs or account IDs in client events.
 Lite Check events send no target-derived properties — no domain hash, no
 finding categories and no finding severity — so no panel may break down or
 filter by them.
@@ -28,7 +28,7 @@ only; `outcome=success` is not payment or entitlement proof.
 
 The pinned [growth dashboard](https://us.posthog.com/project/605869/dashboard/2095018)
 currently has four verified panels: marketing CTA event rate, daily landing
-views and CTA clicks, site pageviews, and signup page visits. These counts
+views and CTA clicks, site pageviews and signup page visits. These counts
 include setup visits.
 Add the remaining product funnel panels only after their events arrive from
 real user flows; zero or missing events are not conversion evidence.
@@ -37,9 +37,9 @@ real user flows; zero or missing events are not conversion evidence.
 
 Use server-derived `AccountAcquisition`/User and BillingAccount data for
 all-method account creation, first valid assessment, active paid accounts,
-30-day cancellations, MRR/ARR, and second-release retention. Exclude platform
+30-day cancellations, MRR/ARR and second-release retention. Exclude platform
 administrators from paid-account aggregates, keep founder canary entitlement
-verification separate, and label INR MRR as published USD catalog equivalent.
+verification separate and label INR MRR as published USD catalog equivalent.
 Do not copy account IDs or billing rows into PostHog. Configure any external
 dashboard only after the code and migration are deployed and its data-source
 permissions are reviewed.
@@ -50,7 +50,7 @@ The project has a [one-time, two-question survey](https://us.posthog.com/project
 `/dashboard/scans/` results pages. Target the `#scan-results-ready` element,
 which appears only when a scan completes. It asks for a usefulness rating
 (1–5) and one improvement category. It has no free-text answer, account
-linkage, target URL, or finding detail. It was activated on 2026-09-14 after
+linkage, target URL or finding detail. It was activated on 2026-09-14 after
 release `274df8d1` deployed and live app event privacy was read back. DNT/GPC
 browsers must not initialize PostHog or see the prompt. An authenticated
 completed-scan display and response remain unverified. Survey responses are

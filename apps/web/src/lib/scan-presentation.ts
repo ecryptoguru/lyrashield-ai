@@ -287,7 +287,7 @@ function failedScanPresentation(errorCategory: string | null): ScanPresentation 
         label: "Supporting file unavailable",
         headline: "A supporting file could not be verified",
         description:
-          "An attachment recorded on the scan's plan was missing, deleted, or failed checksum verification. The scan did not run against different inputs. No assurance result was produced.",
+          "An attachment recorded on the scan's plan was missing, deleted or failed checksum verification. The scan did not run against different inputs. No assurance result was produced.",
         badgeVariant: "danger",
         assuranceAvailable: false,
         showFailureDetails: true,

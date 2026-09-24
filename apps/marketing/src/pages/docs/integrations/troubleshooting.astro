@@ -14,7 +14,7 @@ const agents = listAgents()
 const faqItems = [
   {
     q: "The MCP server connects but no tools appear",
-    a: "This usually means the package has not resolved via npx or the API key is missing or invalid. Check that LYRASHIELD_API_KEY is available to the launching process or credential store, that your key starts with lsk_, and that your network can reach the npm registry.",
+    a: "This usually means the package has not resolved via npx or the API key is missing or invalid. Check that LYRASHIELD_API_KEY is available to the launching process or credential store, that your key starts with lsk_ and that your network can reach the npm registry.",
   },
   {
     q: "VS Code does not show my MCP server",
@@ -42,7 +42,7 @@ const faqItems = [
   },
   {
     q: "The npx install fails with a package not found error",
-    a: "The @lyrashield/mcp package is published on npm. If npx -y @lyrashield/mcp@0.2.8 fails to resolve, check that you're on Node.js 24+, that your npm registry is set to the public registry (npm config get registry), and that a corporate proxy or mirror isn't blocking scoped packages.",
+    a: "The @lyrashield/mcp package is published on npm. If npx -y @lyrashield/mcp@0.2.8 fails to resolve, check that you're on Node.js 24+, that your npm registry is set to the public registry (npm config get registry) and that a corporate proxy or mirror isn't blocking scoped packages.",
   },
 ]
 
@@ -137,7 +137,7 @@ const jsonLd: unknown[] = [
   <ol>
     <li>
       Run <code>npx lyrashield doctor</code>. It reports your API key source, whether the API is
-      reachable, and for every detected agent whether LyraShield is configured at the correct root
+      reachable and for every detected agent whether LyraShield is configured at the correct root
       key — this covers most of the gotchas on this page in one command.
     </li>
     <li>
@@ -149,7 +149,7 @@ const jsonLd: unknown[] = [
     </li>
     <li>
       Check that the root config key matches your editor's spec (<code>mcpServers</code>,{" "}
-      <code>servers</code>, <code>mcp</code>, or <code>context_servers</code>).
+      <code>servers</code>, <code>mcp</code> or <code>context_servers</code>).
     </li>
     <li>
       Try running the server manually to see raw output: <code>
@@ -158,7 +158,7 @@ const jsonLd: unknown[] = [
     </li>
     <li>
       If the package fails to resolve, verify you are on Node.js 24+ and that your network can
-      reach the npm registry — a corporate proxy, firewall, or offline mirror is the usual cause.{" "}
+      reach the npm registry — a corporate proxy, firewall or offline mirror is the usual cause.{" "}
       <code>@lyrashield/mcp</code> is published and live on npm.
     </li>
   </ol>

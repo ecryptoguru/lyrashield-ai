@@ -10,6 +10,7 @@ import {
   engineVulnerabilitySchema,
   findingRevisionSchema,
   fixVerificationSchema,
+  promptCacheReceiptSchema,
   httpExchangeExportSchema,
   MAX_COVERAGE_GAPS,
   MAX_EVIDENCE_FIELD_CHARS,
@@ -188,6 +189,13 @@ export interface EngineRunRecord {
   scan_results?: Record<string, unknown>
   engine_version?: string
   prompt_bundle_hash?: string
+  prompt_cache?: {
+    enabled: boolean
+    routing_enabled: boolean
+    routing: "stable-prompt-v2" | null
+    mode: "explicit" | "implicit" | null
+    ttl: "30m" | null
+  }
   model?: string
   reasoning_effort?: string
   delegate_model?: string
@@ -296,7 +304,7 @@ export interface ParsedScanOutput {
   ingestionIssues: string[]
   /** Model-declared scoped coverage (coverage.json), never control outcomes. */
   scopedCoverage: ParsedEngineCoverage | null
-  /** Versioned scan-bound threat model document (threat_models.json). */
+  /** Versioned scan-bound threat model document (threat_model.json). */
   threatModels: ParsedThreatModels | null
   /** The scan's bounded proxy-exchange export (http_exchanges.json). */
   httpExchangeExport: ParsedHttpExchangeExport | null
@@ -881,6 +889,7 @@ function normalizeLlmUsage(value: unknown): Record<string, unknown> | undefined 
   const cacheWriteInputTokens =
     usageInteger(inputTokenDetails?.cache_write_tokens) ??
     directInteger("cache_write_input_tokens") ??
+    sumRequestUsageDetail(record.request_usage_entries, "cache_write_tokens") ??
     findUsageMetric(
       record,
       new Set(["cache_write_input_tokens", "cache_write_tokens"]),
@@ -909,6 +918,11 @@ function normalizeLlmUsage(value: unknown): Record<string, unknown> | undefined 
   const requestUsageBuckets = normalizeRequestUsageBuckets(record.request_usage_entries)
   const reportedModelUsageBuckets = normalizeModelUsageBuckets(record.model_usage_buckets)
   const normalized = {
+    ...(typeof record.accounting_complete === "boolean"
+      ? { accountingComplete: record.accounting_complete }
+      : typeof record.accountingComplete === "boolean"
+        ? { accountingComplete: record.accountingComplete }
+        : {}),
     ...(requestCount !== undefined ? { request_count: requestCount } : {}),
     ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
     ...(cachedInputTokens !== undefined ? { cached_input_tokens: cachedInputTokens } : {}),
@@ -960,6 +974,10 @@ export function mergeLlmUsage(
   if (!normalizedBase || !normalizedOverlay) return undefined
 
   const merged: Record<string, unknown> = {}
+  if ("accountingComplete" in normalizedBase || "accountingComplete" in normalizedOverlay) {
+    merged.accountingComplete =
+      normalizedBase.accountingComplete === true && normalizedOverlay.accountingComplete === true
+  }
   for (const key of USAGE_COUNTER_KEYS) {
     const baseValue = usageInteger(normalizedBase[key])
     const overlayValue = usageInteger(normalizedOverlay[key])
@@ -976,7 +994,7 @@ export function mergeLlmUsage(
   for (const bucket of [...baseBuckets, ...overlayBuckets]) {
     if (typeof bucket !== "object" || bucket === null || Array.isArray(bucket)) return undefined
     const record = bucket as Record<string, unknown>
-    const model = boundedGpt56Model(record.model)?.trim()
+    const model = boundedPricedModel(record.model)?.trim()
     if (!model) return undefined
     const current = byModel.get(model) ?? ({} as Record<(typeof USAGE_BUCKET_KEYS)[number], number>)
     for (const key of USAGE_BUCKET_KEYS) {
@@ -1024,10 +1042,12 @@ function sumRequestUsageDetail(value: unknown, key: string): number | undefined 
   return total
 }
 
-function boundedGpt56Model(value: unknown): string | undefined {
+function boundedPricedModel(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length === 0 || value.length > 128) return undefined
   const normalized = value.toLowerCase().replaceAll("_", "-")
-  return /(?:^|[/.-])gpt-5\.6-(?:terra|luna)(?:$|[/.-])/.test(normalized) ? value : undefined
+  return /(?:^|[/.-])(?:gpt-5\.6-(?:terra|luna)|gpt-6-(?:sol|luna))(?:$|[/.-])/.test(normalized)
+    ? value
+    : undefined
 }
 
 function normalizeRequestUsageBuckets(value: unknown): Record<string, unknown> {
@@ -1051,10 +1071,12 @@ function normalizeRequestUsageBuckets(value: unknown): Record<string, unknown> {
     const record = entry as Record<string, unknown>
     const inputTokens = usageInteger(record.input_tokens)
     const outputTokens = usageInteger(record.output_tokens)
-    const cachedInputTokens = detailInteger(record.input_tokens_details, "cached_tokens") ?? 0
+    const model = boundedPricedModel(record.model)?.trim()
+    const isGpt6 = model ? /gpt-6-(?:sol|luna)$/i.test(model) : false
+    const cachedInputTokens =
+      detailInteger(record.input_tokens_details, "cached_tokens") ?? (isGpt6 ? undefined : 0)
     const cacheWriteInputTokens =
-      detailInteger(record.input_tokens_details, "cache_write_tokens") ?? 0
-    const model = boundedGpt56Model(record.model)?.trim()
+      detailInteger(record.input_tokens_details, "cache_write_tokens") ?? (isGpt6 ? undefined : 0)
     if (!model) everyEntryHasModel = false
     if (
       inputTokens === undefined ||
@@ -1108,7 +1130,7 @@ function normalizeModelUsageBuckets(value: unknown): Array<Record<string, unknow
   for (const bucket of value) {
     if (typeof bucket !== "object" || bucket === null || Array.isArray(bucket)) return undefined
     const record = bucket as Record<string, unknown>
-    const model = boundedGpt56Model(record.model)?.trim()
+    const model = boundedPricedModel(record.model)?.trim()
     if (!model) return undefined
     const entry: Record<string, unknown> = { model }
     for (const key of USAGE_BUCKET_KEYS) {
@@ -1376,7 +1398,16 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
         })
       : undefined
     const llmUsage = normalizeLlmUsage(record.llm_usage)
+    const routedModel = boundedPricedModel(record.model)
+    if (llmUsage && routedModel && /gpt-6-(?:sol|luna)$/i.test(routedModel)) {
+      // Keep the route visible when malformed request entries erased model buckets.
+      // This makes incomplete GPT-6 accounting explicit, never billable by fallback.
+      llmUsage.model = routedModel
+      llmUsage.accountingComplete =
+        llmUsage.accountingComplete === true && Array.isArray(llmUsage.model_usage_buckets)
+    }
     const promptBundleHash = boundedString(record.prompt_bundle_hash)
+    const promptCache = promptCacheReceiptSchema.safeParse(record.prompt_cache)
     const delegateModel = boundedString(record.delegate_model)
     const delegateReasoningEffort = boundedString(record.delegate_reasoning_effort)
     const modelRoutingPolicy = boundedString(record.model_routing_policy)
@@ -1410,6 +1441,7 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
       ...(promptBundleHash && /^[a-f0-9]{64}$/i.test(promptBundleHash)
         ? { prompt_bundle_hash: promptBundleHash.toLowerCase() }
         : {}),
+      ...(promptCache.success ? { prompt_cache: promptCache.data } : {}),
       ...(boundedString(record.model) ? { model: boundedString(record.model) } : {}),
       ...(boundedString(record.reasoning_effort)
         ? { reasoning_effort: boundedString(record.reasoning_effort) }
@@ -1644,52 +1676,69 @@ function parseEngineCoverage(
   }
 }
 
+function redactThreatModelText(value: string): string {
+  return value
+    .replace(
+      /\b(password|passwd|pwd|api[_-]?key|secret|token|credential|authorization)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s"'<>]+)/gi,
+      "$1=[REDACTED]"
+    )
+    .replace(/\bBearer\s+[^\s"'<>]+/gi, "Bearer [REDACTED]")
+}
+
 /**
- * threat_models.json — the scan's threat model document, keyed by normalized
- * target identity. The artifact is stored verbatim-but-validated in encrypted
- * storage; it is a declared model, never proof its attack paths were tested.
+ * threat_model.json — the owned engine's models array. Older target-keyed
+ * documents are adapted by this reader; neither form proves paths were tested.
  */
 function parseThreatModels(
   raw: string | null | undefined,
-  issues?: string[]
+  issues?: string[],
+  runId?: string
 ): ParsedThreatModels | null {
   if (raw === undefined) return null
   if (raw === null) {
-    recordIngestionIssue(issues, "threat_models.json unreadable or oversized — artifact ignored")
+    recordIngestionIssue(issues, "threat_model.json unreadable or oversized — artifact ignored")
     return null
   }
   if (!raw.trim()) return null
-  const data = parseJsonArtifact(raw, "threat_models.json", issues)
+  const data = parseJsonArtifact(raw, "threat_model.json", issues)
   if (data === undefined) return null
   const parsed = threatModelsDocumentSchema.safeParse(data)
   if (!parsed.success) {
-    recordIngestionIssue(issues, "threat_models.json failed schema validation — artifact ignored")
-    logger.warn("Engine output: threat_models.json failed schema validation", {
+    recordIngestionIssue(issues, "threat_model.json failed schema validation — artifact ignored")
+    logger.warn("Engine output: threat_model.json failed schema validation", {
       errors: parsed.error.issues.map((issue) => issue.message).slice(0, 20),
     })
     return null
   }
   const doc = parsed.data
-  // The upstream store is a bare target→entry record; a wrapped document adds
-  // schema_version under a `models` key. A bare record CAN legitimately hold a
-  // model under the literal key "models" — distinguish by content: an entry
-  // has a `content` field, a wrapped record does not.
+  // Canonical owned output is an array. Older upstream documents were bare
+  // records or wrapped records; a bare record may contain a key named models.
   type ThreatModelEntry = z.infer<typeof threatModelEntrySchema>
   const maybeModels = (doc as { models?: unknown }).models
+  const isCanonical = Array.isArray(maybeModels)
+  if (isCanonical && Object.hasOwn(doc, "error")) {
+    recordIngestionIssue(issues, "threat_model.json reports a writer error — artifact ignored")
+    return null
+  }
+  if (isCanonical && (!runId || (doc as { run_id?: unknown }).run_id !== runId)) {
+    recordIngestionIssue(issues, "threat_model.json run_id mismatch — artifact ignored")
+    return null
+  }
   const isWrapped =
     typeof maybeModels === "object" &&
     maybeModels !== null &&
     !Array.isArray(maybeModels) &&
     !("content" in maybeModels)
   const schemaVersion =
-    isWrapped && (doc as { schema_version?: unknown }).schema_version !== undefined
+    (isCanonical || isWrapped) && (doc as { schema_version?: unknown }).schema_version !== undefined
       ? String((doc as { schema_version?: unknown }).schema_version)
       : undefined
-  const rawModels = (isWrapped ? maybeModels : doc) as Record<string, ThreatModelEntry>
+  const rawModels = (isCanonical || isWrapped ? maybeModels : doc) as
+    ThreatModelEntry[] | Record<string, ThreatModelEntry>
   const models: ParsedThreatModelEntry[] = []
   for (const [key, model] of Object.entries(rawModels)) {
     if (models.length >= MAX_THREAT_MODELS) {
-      recordIngestionIssue(issues, `threat_models.json: models truncated at ${MAX_THREAT_MODELS}`)
+      recordIngestionIssue(issues, `threat_model.json: models truncated at ${MAX_THREAT_MODELS}`)
       break
     }
     if (
@@ -1697,55 +1746,78 @@ function parseThreatModels(
       model === null ||
       Array.isArray(model) ||
       typeof (model as { target?: unknown }).target !== "string" ||
-      typeof (model as { content?: unknown }).content !== "string"
+      !model.target.trim() ||
+      typeof (model as { content?: unknown }).content !== "string" ||
+      !model.content.trim()
     ) {
       recordIngestionIssue(
         issues,
-        `threat_models.json: model ${key.slice(0, 64)} malformed — dropped`
+        `threat_model.json: model ${key.slice(0, 64)} malformed — dropped`
       )
       continue
     }
     models.push({
-      target: model.target,
-      ...(model.written_at ? { writtenAt: model.written_at } : {}),
-      ...(model.written_by ? { writtenBy: model.written_by } : {}),
-      content: model.content,
+      target: redactThreatModelText(model.target),
+      ...(model.written_at ? { writtenAt: redactThreatModelText(model.written_at) } : {}),
+      ...(model.written_by ? { writtenBy: redactThreatModelText(model.written_by) } : {}),
+      content: redactThreatModelText(model.content),
       ...(model.amendments?.length
         ? {
             amendments: model.amendments.map((amendment) => ({
-              ...(amendment.at ? { at: amendment.at } : {}),
-              ...(amendment.by ? { by: amendment.by } : {}),
-              content: amendment.content,
+              ...(amendment.at ? { at: redactThreatModelText(amendment.at) } : {}),
+              ...(amendment.by ? { by: redactThreatModelText(amendment.by) } : {}),
+              content: redactThreatModelText(amendment.content),
             })),
           }
         : {}),
     })
   }
-  if (models.length === 0) return null
+  if (models.length === 0) {
+    recordIngestionIssue(issues, "threat_model.json contains no usable models — artifact ignored")
+    return null
+  }
   // Persist the validated canonical document — not raw bytes — so nothing
   // outside the declared contract reaches encrypted storage.
+  const serializedModels = models.map((model) => ({
+    target: model.target,
+    ...(model.writtenAt ? { written_at: model.writtenAt } : {}),
+    ...(model.writtenBy ? { written_by: model.writtenBy } : {}),
+    content: model.content,
+    ...(model.amendments?.length
+      ? {
+          amendments: model.amendments.map((amendment) => ({
+            ...(amendment.at ? { at: amendment.at } : {}),
+            ...(amendment.by ? { by: amendment.by } : {}),
+            content: amendment.content,
+          })),
+        }
+      : {}),
+  }))
+  const canonical = isCanonical
+    ? (doc as {
+        generated_at: string
+        run_id: string
+        run_name?: string
+        note?: string
+        truncated?: boolean
+        error?: string
+      })
+    : null
   const document = JSON.stringify({
     schema_version: schemaVersion ?? "1.0",
-    models: Object.fromEntries(
-      models.map((model) => [
-        model.target,
-        {
-          target: model.target,
-          ...(model.writtenAt ? { written_at: model.writtenAt } : {}),
-          ...(model.writtenBy ? { written_by: model.writtenBy } : {}),
-          content: model.content,
-          ...(model.amendments?.length
-            ? {
-                amendments: model.amendments.map((amendment) => ({
-                  ...(amendment.at ? { at: amendment.at } : {}),
-                  ...(amendment.by ? { by: amendment.by } : {}),
-                  content: amendment.content,
-                })),
-              }
-            : {}),
-        },
-      ])
-    ),
+    ...(canonical
+      ? {
+          generated_at: redactThreatModelText(canonical.generated_at),
+          run_id: redactThreatModelText(canonical.run_id),
+          ...(canonical.run_name ? { run_name: redactThreatModelText(canonical.run_name) } : {}),
+          ...(canonical.note ? { note: redactThreatModelText(canonical.note) } : {}),
+          ...(canonical.truncated !== undefined ? { truncated: canonical.truncated } : {}),
+          ...(canonical.error ? { error: redactThreatModelText(canonical.error) } : {}),
+        }
+      : {}),
+    models: isCanonical
+      ? serializedModels
+      : Object.fromEntries(serializedModels.map((model) => [model.target, model])),
   })
   return {
     ...(schemaVersion ? { schemaVersion } : {}),
@@ -1829,7 +1901,11 @@ export function parseEngineOutput(
   const vulnerabilities = parsedVulnerabilities.vulnerabilities
   const runRecord = parseRunJson(runJsonRaw)
   const scopedCoverage = parseEngineCoverage(artifacts?.coverageRaw, ingestionIssues)
-  const threatModels = parseThreatModels(artifacts?.threatModelsRaw, ingestionIssues)
+  const threatModels = parseThreatModels(
+    artifacts?.threatModelsRaw,
+    ingestionIssues,
+    runRecord?.run_id
+  )
 
   const summary = runRecord?.status
     ? `Engine status: ${runRecord.status}. ${vulnerabilities.length} finding(s) reported.`

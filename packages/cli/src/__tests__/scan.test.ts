@@ -273,6 +273,28 @@ describe("handleScan", () => {
       expect(output.error).toHaveBeenCalledWith(expect.stringContaining("--scan-id"))
     })
   })
+
+  describe("attachments", () => {
+    it("rejects an empty --attachment id before submitting", async () => {
+      const output = makeOutput()
+      const code = await handleScan(["--target", "t-1", "--attachment", ""], output)
+      expect(code).toBe(2)
+      expect(output.error).toHaveBeenCalledWith(expect.stringContaining("--attachment"))
+      expect((await createClient()).request).not.toHaveBeenCalled()
+    })
+
+    it("rejects --attachment combined with --scan-id", async () => {
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify({ version: "2.1.0", runs: [] }))
+      const output = makeOutput()
+      const code = await handleScan(
+        ["--scan-id", "s-1", "--sarif", "report.sarif", "--attachment", "att-1"],
+        output
+      )
+      expect(code).toBe(2)
+      expect(output.error).toHaveBeenCalledWith(expect.stringContaining("--attachment"))
+      expect((await createClient()).request).not.toHaveBeenCalled()
+    })
+  })
 })
 
 describe("SARIF submission", () => {

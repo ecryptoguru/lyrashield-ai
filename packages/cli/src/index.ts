@@ -74,7 +74,7 @@ Commands:
   install <agent>      Configure a single agent
   uninstall <agent>    Remove LyraShield entry for a single agent
   project              Manage the default project
-  scan                 Start a security scan [--base <ref> --head <ref> for Review Changes]
+  scan                 Start a security scan [--base <ref> --head <ref> for Review Changes; --attachment <id> adds an already-uploaded attachment, repeatable]
   pr-scan              Start a PR-focused scan (alias for scan --goal CHECK_PR; --base/--head record a Review Changes run)
   status [scanId]      Show scan status
   quality <scanId>     Show the scan's measured evidence-quality surface

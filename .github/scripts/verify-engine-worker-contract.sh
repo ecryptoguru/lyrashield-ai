@@ -16,10 +16,8 @@ if ! [[ "$reviewed_app_sha" =~ ^[0-9a-f]{40}$ ]]; then
   echo "Engine worker-consumer pin is not an immutable commit SHA." >&2
   exit 2
 fi
-if ! git -C "$app_checkout" merge-base --is-ancestor "$reviewed_app_sha" HEAD; then
-  echo "Current app does not descend from engine-reviewed consumer $reviewed_app_sha." >&2
-  exit 2
-fi
+# Engine CI tests the pinned consumer; this invocation tests this exact app
+# checkout, which may be a squash merge of that reviewed consumer.
 # Verify the caller's committed tree without discarding local work. Tool setup
 # drift must be resolved explicitly before this check, never by restoring files.
 tracked_changes="$(git -C "$app_checkout" status --porcelain --untracked-files=no)"
@@ -44,8 +42,16 @@ for test_path in "${contract_tests[@]}"; do
   fi
 done
 
+engine_threat_fixture="$engine_checkout/tests/fixtures/threat_model_writer_1_1.json"
+app_threat_fixture="$app_checkout/apps/worker/src/engine/fixtures/run-json-1.1/threat_model.json"
+if [[ ! -f "$engine_threat_fixture" || ! -f "$app_threat_fixture" ]] ||
+   ! cmp -s "$engine_threat_fixture" "$app_threat_fixture"; then
+  echo "Engine writer and worker reader threat-model fixtures differ." >&2
+  exit 2
+fi
+
 help="$(cd "$engine_checkout" && uv run lyrashield --help)"
-for flag in --non-interactive --target --scan-mode --instruction --max-budget-usd; do
+for flag in --non-interactive --target --scan-mode --instruction --max-budget-usd --runtime-budget-seconds; do
   if ! grep -Fq -- "$flag" <<< "$help"; then
     echo "Pinned engine is missing worker CLI flag: $flag" >&2
     exit 1

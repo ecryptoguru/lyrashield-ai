@@ -170,7 +170,7 @@ export function RepoTargetForm({
           </div>
           <FormField label="Branch or tag (optional)" htmlFor="repo-ref">
             <p id="repo-ref-help" className="text-muted-foreground mb-1 text-xs">
-              Leave blank to use the default branch, or enter an exact branch or release tag such as
+              Leave blank to use the default branch or enter an exact branch or release tag such as
               v0.1.17.
             </p>
             <Input
@@ -287,7 +287,7 @@ export function UrlTargetForm({
         <FormField label="OpenAPI / Swagger URL" htmlFor="api-spec-url">
           <p className="text-muted-foreground mb-1 text-xs">
             Required for Contract and Contract Behavior reviews. Public HTTPS URL with no query,
-            fragment, or credentials.
+            fragment or credentials.
           </p>
           <Input
             id="api-spec-url"

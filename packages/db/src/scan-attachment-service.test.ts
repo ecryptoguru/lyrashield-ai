@@ -19,6 +19,7 @@ const mockTx = {
     count: vi.fn(),
     updateMany: vi.fn(),
   },
+  $queryRaw: vi.fn(),
 }
 
 import {
@@ -193,7 +194,10 @@ describe("createScanAttachmentRecord", () => {
 })
 
 describe("softDeleteScanAttachment", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockTx.$queryRaw.mockResolvedValue([{ id: "task-1" }])
+  })
 
   it("marks the row deleted and returns its storage URI", async () => {
     mockTx.scanAttachment.updateMany.mockResolvedValue({ count: 1 })
@@ -205,11 +209,17 @@ describe("softDeleteScanAttachment", () => {
         where: expect.objectContaining({ id: "att-1", workspaceId: "ws-1" }),
       })
     )
+    // The durable object-deletion task must commit with the soft delete so a
+    // later storage failure still has a retryable outbox row.
+    expect(mockTx.$queryRaw).toHaveBeenCalledTimes(1)
+    const template = mockTx.$queryRaw.mock.calls[0]?.[0] as unknown as string[]
+    expect(template.join("")).toContain("enqueue_scan_attachment_deletion_task")
   })
 
   it("returns null when nothing was deleted", async () => {
     mockTx.scanAttachment.updateMany.mockResolvedValue({ count: 0 })
     expect(await softDeleteScanAttachment("ws-1", "att-1")).toBeNull()
+    expect(mockTx.$queryRaw).not.toHaveBeenCalled()
   })
 })
 

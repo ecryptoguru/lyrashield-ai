@@ -75,7 +75,7 @@ function attachmentErrorResponse(error: unknown): Response | null {
   if (error instanceof ScanAttachmentError) {
     const status = error.code === "SCAN_ATTACHMENT_NOT_FOUND" ? 404 : 400
     return privateResponse(
-      apiError(error.code, "Attachment failed validation: unsupported type, name, or size", status)
+      apiError(error.code, "Attachment failed validation: unsupported type, name or size", status)
     )
   }
   return null
