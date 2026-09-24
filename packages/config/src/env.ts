@@ -415,8 +415,6 @@ const envSchema = z
     MYRA_PUBLIC_ENABLED: z.enum(["0", "1"]).optional().default("0"),
     // Dashboard surface + authenticated-user principals.
     MYRA_DASHBOARD_ENABLED: z.enum(["0", "1"]).optional().default("0"),
-    // Exact signed-in accounts admitted while the dashboard surface is in a
-    // controlled rollout. Empty denies all dashboard users.
     // Model generation inside the support workflow. Retrieval, suggestions and
     // human handoff stay available while this is off.
     MYRA_GENERATION_ENABLED: z.enum(["0", "1"]).optional().default("0"),
