@@ -8,7 +8,6 @@ import { randomBytes } from "node:crypto"
 import { MYRA_LIMITS } from "../contracts"
 import type { BookingRequest, MyraStreamEvent, MyraToolName, TaskRecord } from "../contracts"
 import {
-  assertAnonymousBudgetAvailable,
   maximumTurnCostUsd,
   releaseGenerationBudget,
   reserveGenerationBudget,
@@ -420,11 +419,12 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
         : null
     if (reserves) {
       // Anonymous turns may spend only the signed-in-reserved share of the
-      // pool, so one IP cannot exhaust the month for paying customers.
-      if (ctx.principal.kind === "anonymous") {
-        await assertAnonymousBudgetAvailable()
-      }
-      await reserveGenerationBudget(traceId, maximumTurnCostUsd())
+      // pool, so one IP cannot exhaust the month for paying customers. The
+      // share decision runs inside reserveGenerationBudget's advisory-lock
+      // transaction, atomic with the hold it authorizes.
+      await reserveGenerationBudget(traceId, maximumTurnCostUsd(), {
+        anonymous: ctx.principal.kind === "anonymous",
+      })
     }
     const generated = await provider.generate({
       system: systemPrompt(ctx),

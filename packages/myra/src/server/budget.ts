@@ -52,32 +52,6 @@ export const ANONYMOUS_POOL_SHARE = 0.7
 /** Fraction of the pool at which the operator warning fires, once per month. */
 export const POOL_WARNING_THRESHOLD = 0.8
 
-/**
- * Month-to-date committed spend — settled plus the holds still outstanding
- * across provider calls. The anonymous share must count holds too, or a burst
- * of concurrent anonymous turns each read the same pre-burst total.
- */
-async function committedSpendUsd(): Promise<number> {
-  const totals = await getSystemPrisma().myraGenerationReservation.aggregate({
-    where: { monthStart: currentMonthStart() },
-    _sum: { actualUsd: true, reservedUsd: true },
-  })
-  return Number(totals._sum.actualUsd ?? 0) + Number(totals._sum.reservedUsd ?? 0)
-}
-
-/**
- * Refuse an anonymous generation once the anonymous share of the pool is
- * spent. Checked before reserveGenerationBudget so the rejection carries the
- * budget error shape rather than the generic reservation failure.
- */
-export async function assertAnonymousBudgetAvailable(): Promise<void> {
-  const capUsd = monthlyBudgetCapUsd()
-  const spentUsd = await committedSpendUsd()
-  if (spentUsd >= capUsd * ANONYMOUS_POOL_SHARE) {
-    throw err("BUDGET_EXHAUSTED", "Myra is at its usage limit for now.")
-  }
-}
-
 /** Conservative ceiling: bounded context/user/system input plus the 4k output cap. */
 export function maximumTurnCostUsd(): number {
   // Cache writes cost more than uncached input; reserve the worst case.
@@ -88,7 +62,20 @@ export function maximumTurnCostUsd(): number {
   return Math.ceil(cost * 10_000) / 10_000
 }
 
-export async function reserveGenerationBudget(traceId: string, reservedUsd: number): Promise<void> {
+/**
+ * Reserve one generation turn against the monthly ledger.
+ *
+ * ``anonymous`` callers draw on only ANONYMOUS_POOL_SHARE of the pool. That
+ * decision is made INSIDE the advisory-lock transaction, from the same
+ * settled+reserved totals that gate the overall cap. Doing it out of the lock
+ * let concurrent anonymous turns each read the same pre-burst total and
+ * collectively overshoot the share before any of them was refused.
+ */
+export async function reserveGenerationBudget(
+  traceId: string,
+  reservedUsd: number,
+  opts: { anonymous?: boolean } = {}
+): Promise<void> {
   if (!Number.isFinite(reservedUsd) || reservedUsd <= 0) {
     throw err("PROVIDER_ERROR", "Generation cost rates are not configured.")
   }
@@ -110,6 +97,11 @@ export async function reserveGenerationBudget(traceId: string, reservedUsd: numb
     const reserved = Number(totals._sum.reservedUsd ?? 0)
     const committedBefore = settled + reserved
     const committedAfter = committedBefore + reservedUsd
+    // Anonymous share: checked under the lock, before the row is created, so
+    // simultaneous anonymous turns cannot collectively cross the line.
+    if (opts.anonymous && committedBefore >= capUsd * ANONYMOUS_POOL_SHARE) {
+      throw err("BUDGET_EXHAUSTED", "Myra is at its usage limit for now.")
+    }
     if (committedAfter > capUsd) {
       throw err("BUDGET_EXHAUSTED", "Myra is at its usage limit for now.")
     }
