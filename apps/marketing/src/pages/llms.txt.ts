@@ -10,6 +10,7 @@ const docsSources = import.meta.glob("./docs/**/*.astro", {
 }) as Record<string, string>
 import { tools } from "../lib/tools"
 import { categoryHref, getCategoriesWithCounts } from "../lib/blog-categories"
+import { BUILD_DATE, clampToBuildDate, isNotAfterBuildDate } from "../lib/blog-publishing"
 // Relative filesystem import on purpose, not "@lyrashield/security" — see the
 // identical note in vibe-security-50.astro. The package index re-exports the
 // SSRF/fetch helpers, which pull in undici and break the Cloudflare Worker
@@ -56,7 +57,10 @@ async function latestContentDate(): Promise<string> {
   const bump = (d: Date | undefined) => {
     if (d && !Number.isNaN(d.valueOf()) && d > latest) latest = d
   }
-  for (const post of await getCollection("blog", (e) => !e.data.draft)) {
+  for (const post of await getCollection(
+    "blog",
+    (e) => !e.data.draft && isNotAfterBuildDate(e.data)
+  )) {
     bump(post.data.updatedDate ?? post.data.pubDate)
   }
   for (const page of await getCollection("compare", (e) => !e.data.draft)) {
@@ -69,7 +73,10 @@ async function latestContentDate(): Promise<string> {
     )
     if (match) bump(new Date(match[1]!))
   }
-  return isoDay(latest)
+  // The content date can never claim a day after the build ran. A future-dated
+  // post is already excluded above, but this clamp also guards any source
+  // (a doc frontmatter, a tool entry) that carries a date ahead of the build.
+  return isoDay(clampToBuildDate(latest, BUILD_DATE))
 }
 
 const docsLinks = [
@@ -132,7 +139,10 @@ export const GET: APIRoute = async (context) => {
     "http://localhost:4321"
   const origin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
 
-  const posts = await getCollection("blog", (entry) => !entry.data.draft)
+  const posts = await getCollection(
+    "blog",
+    (entry) => !entry.data.draft && isNotAfterBuildDate(entry.data)
+  )
   const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
   const postRecords = await Promise.all(
     sortedPosts.map(async (post) => ({ post, image: await getEntry(post.data.heroImage) }))

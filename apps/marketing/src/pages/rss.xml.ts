@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro"
 import { getCollection } from "astro:content"
 import rss from "@astrojs/rss"
+import { isNotAfterBuildDate } from "../lib/blog-publishing"
 
 // This is build-derived content. Prerender it so the Worker does not rebuild
 // the blog collection on each feed request.
@@ -20,7 +21,10 @@ export const GET: APIRoute = async (context) => {
     "http://localhost:4321"
   const origin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
   const feedUrl = `${origin}/rss.xml`
-  const posts = await getCollection("blog", (entry) => !entry.data.draft)
+  const posts = await getCollection(
+    "blog",
+    (entry) => !entry.data.draft && isNotAfterBuildDate(entry.data)
+  )
   const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
 
   const items = sortedPosts.slice(0, 20).map((post) => ({

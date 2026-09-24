@@ -9,6 +9,7 @@ import sitemap from "@astrojs/sitemap"
 import tailwindcss from "@tailwindcss/vite"
 import { parseJsonc } from "./src/lib/jsonc"
 import { tools } from "./src/lib/tools"
+import { isFutureDated } from "./src/lib/blog-publishing"
 
 // Code-block palette. Astro's markdown pipeline (@astrojs/markdown-satteri →
 // shiki) defaults to the bundled `github-dark` theme, whose comment token
@@ -216,6 +217,44 @@ function contentLastmod() {
 const LASTMOD = contentLastmod()
 
 /**
+ * Blog posts whose pubDate is still in the future at build time. The Astro
+ * collection gate in src/lib/blog-publishing.ts keeps these out of the
+ * rendered listing, tag hubs and feeds, but @astrojs/sitemap enumerates
+ * prerendered routes itself and appends non-prerendered routes from the
+ * collection, so it needs the same cutoff applied here. A future-dated post
+ * returns absent until the first build on or after its pubDate.
+ */
+function futureDatedBlogPaths() {
+  const paths = new Set()
+  const blogDir = new URL("./src/content/blog/", import.meta.url)
+  let files = []
+  try {
+    files = readdirSync(blogDir)
+  } catch {
+    return paths
+  }
+  for (const file of files) {
+    if (!/\.(md|mdx)$/.test(file)) continue
+    let frontmatter = ""
+    try {
+      frontmatter = readFileSync(new URL(file, blogDir), "utf8").split(/^---\s*$/m)[1] || ""
+    } catch {
+      continue
+    }
+    const raw = (frontmatter.match(/^pubDate:\s*(.+)$/m)?.[1] || "")
+      .trim()
+      .replace(/^["']|["']$/g, "")
+    if (!raw) continue
+    const date = new Date(raw)
+    if (Number.isNaN(date.valueOf())) continue
+    if (isFutureDated({ pubDate: date })) paths.add(`/blog/${file.replace(/\.(md|mdx)$/, "")}`)
+  }
+  return paths
+}
+
+const FUTURE_DATED_BLOG_PATHS = futureDatedBlogPaths()
+
+/**
  * Blog hero images for the sitemap's image extension.
  *
  * Each post already references its 1600x900 hero in the page and in JSON-LD, so
@@ -397,6 +436,9 @@ export default defineConfig({
     sitemap({
       filter: (page) => {
         const pathname = new URL(page).pathname
+        // Future-dated posts are not published yet: hold them out of the
+        // sitemap exactly as the collection gate holds them out of the pages.
+        if (FUTURE_DATED_BLOG_PATHS.has(pathname.replace(/\/$/, ""))) return false
         return (
           pathname !== "/terms" &&
           pathname !== "/terms-of-sale" &&

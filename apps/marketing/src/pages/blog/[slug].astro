@@ -2,13 +2,14 @@
 import { getCollection, getEntry, render } from "astro:content"
 import BlogPost from "@layouts/BlogPost.astro"
 import { markdownWordCount, readingMinutes as calculateReadingMinutes } from "../../lib/blog-content"
+import { isNotAfterBuildDate } from "../../lib/blog-publishing"
 
 export async function getStaticPaths() {
   const posts = await getCollection("blog")
   const includeDrafts = import.meta.env.DEV
 
   return posts
-    .filter((post) => includeDrafts || !post.data.draft)
+    .filter((post) => isNotAfterBuildDate(post.data) && (includeDrafts || !post.data.draft))
     .map((post) => ({
       params: { slug: post.id },
       props: { post },
@@ -33,7 +34,10 @@ const wordCount = markdownWordCount(post.body ?? "")
 const readingMinutes = calculateReadingMinutes(post.body ?? "")
 
 // Related posts: tag-overlap scoring, ties broken by recency, top 3.
-const allPosts = await getCollection("blog", (entry) => !entry.data.draft)
+const allPosts = await getCollection(
+  "blog",
+  (entry) => !entry.data.draft && isNotAfterBuildDate(entry.data)
+)
 const relatedPosts = allPosts
   .filter((p) => p.id !== post.id)
   .map((p) => ({

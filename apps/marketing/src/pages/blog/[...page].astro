@@ -4,9 +4,13 @@ import BlogCard from "@components/BlogCard.astro"
 import { getCollection, getEntry } from "astro:content"
 import type { GetStaticPathsOptions } from "astro"
 import { categoryHref, getCategoriesWithCounts } from "../../lib/blog-categories"
+import { isNotAfterBuildDate } from "../../lib/blog-publishing"
 
 export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
-  const posts = await getCollection("blog", (entry) => !entry.data.draft)
+  const posts = await getCollection(
+    "blog",
+    (entry) => !entry.data.draft && isNotAfterBuildDate(entry.data)
+  )
   const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
   return paginate(sortedPosts, { pageSize: 10 })
 }
