@@ -104,8 +104,17 @@ case "$command:$unit" in
     exit 1 ;;
   reset-failed:lyrashield-worker.service) ;;
   daemon-reload:) ;;
+  status:*)
+    printf '%s\n' 'MOCK worker unit status' ;;
   *) echo "unexpected systemctl call: $command $unit" >&2; exit 1 ;;
 esac
+MOCK
+
+  cat > "$case_dir/bin/journalctl" <<'MOCK'
+#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$MOCK_JOURNALCTL_LOG"
+printf '%s\n' 'MOCK worker journal tail'
 MOCK
 
   cat > "$case_dir/bin/docker" <<'MOCK'
@@ -237,6 +246,7 @@ run_case() {
   printf '%s' "$existing_stop" > "$case_dir/admission-stop"
   : > "$case_dir/docker.log"
   : > "$case_dir/systemctl.log"
+  : > "$case_dir/journalctl.log"
   : > "$case_dir/order.log"
   printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$old_image" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
   if [ "$floor_via" = config ] && [ -n "$floor_bytes" ]; then
@@ -258,6 +268,7 @@ run_case() {
       MOCK_ADMISSION_STOP="$case_dir/admission-stop" \
       MOCK_DOCKER_LOG="$case_dir/docker.log" \
       MOCK_SYSTEMCTL_LOG="$case_dir/systemctl.log" \
+      MOCK_JOURNALCTL_LOG="$case_dir/journalctl.log" \
       MOCK_ORDER_LOG="$case_dir/order.log" \
       MOCK_IMAGE_ASSETS="$case_dir/image-assets" \
       MOCK_FREE_BYTES="$free_bytes" \
@@ -357,6 +368,23 @@ run_case() {
     grep -Fq 'Existing scan admission stop preserved' <<< "$output"
   else
     [ ! -s "$case_dir/admission-stop" ]
+  fi
+
+  if [ "$restart_fails" = 1 ]; then
+    # The restart failure must carry the unit's own state and journal tail into
+    # the CI log, and both must be captured before the rollback trap runs.
+    grep -Fq 'MOCK worker unit status' <<< "$output"
+    grep -Fq 'MOCK worker journal tail' <<< "$output"
+    grep -Fxq -- 'status --no-pager lyrashield-worker.service' "$case_dir/systemctl.log"
+    grep -Fxq -- '-u lyrashield-worker.service -n 50 --no-pager' "$case_dir/journalctl.log"
+    rollback_line=$(grep -Fn 'Worker promotion failed during:' <<< "$output" | head -n 1 | cut -d: -f1)
+    status_line=$(grep -Fn 'MOCK worker unit status' <<< "$output" | head -n 1 | cut -d: -f1)
+    journal_line=$(grep -Fn 'MOCK worker journal tail' <<< "$output" | head -n 1 | cut -d: -f1)
+    [ -n "$rollback_line" ] && [ -n "$status_line" ] && [ -n "$journal_line" ]
+    [ "$status_line" -lt "$rollback_line" ]
+    [ "$journal_line" -lt "$rollback_line" ]
+  else
+    [ ! -s "$case_dir/journalctl.log" ]
   fi
 }
 
