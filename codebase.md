@@ -235,7 +235,7 @@ Authorities:
 - `apps/worker/src/engine/command-builder.ts`: `resolveScanBudgetUsd()`.
 - `apps/worker/src/engine/gpt56-pricing.ts`: versioned rate card.
 
-Safe/Quick/Standard use GPT-6 Luna/medium. Deep/Custom use GPT-6 Sol/medium root plus Luna/high specialists. The fallback model remains mandatory and policy values may only lower caps. Private receipts preserve actual model, requests, token buckets, cache reads/writes, long-context usage, provider cost, billed cost, and reconciliation status.
+Safe/Quick/Standard use GPT-6 Luna/medium. Deep/Custom use GPT-6 Sol/medium root plus Luna/high specialists. The fallback model remains mandatory and policy values may only lower caps. Private receipts preserve actual model, requests, token buckets, cache reads/writes, long-context usage, provider cost, billed cost and reconciliation status.
 
 Agent-minute wall time starts immediately before `runEngine()`. An engine-backed run is
 metered only after a scan-bound completed receipt or scan-bound affirmative provider usage proves

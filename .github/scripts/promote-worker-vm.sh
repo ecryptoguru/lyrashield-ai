@@ -215,6 +215,16 @@ wait_healthy() {
   return 1
 }
 
+# A failed restart is where the CI log most needs the real cause. Capture the
+# unit's own state and the tail of its journal before the rollback trap replaces
+# the service, so the promotion failure carries systemd's evidence rather than a
+# pointer to a journal the rollback is about to rotate away. The unit log holds
+# no secrets.
+capture_worker_restart_diagnostics() {
+  systemctl status --no-pager "$service" || true
+  journalctl -u "$service" -n 50 --no-pager || true
+}
+
 restore_timer() {
   [ "$timer_was_active" -eq 0 ] || systemctl start "$timer"
 }
@@ -468,7 +478,16 @@ config_changed=1
 
 promotion_step=restarting-worker
 systemctl reset-failed "$service" || true
-systemctl restart "$service"
+# Capture the unit state and journal tail on a restart failure before the EXIT
+# trap rolls the service back: the rollback restarts the old digest and the
+# faulting unit's log would otherwise be lost to the CI reader. The captured
+# status is preserved so the rollback contract keeps the restart's exit code.
+restart_status=0
+systemctl restart "$service" || restart_status=$?
+if [ "$restart_status" -ne 0 ]; then
+  capture_worker_restart_diagnostics
+  exit "$restart_status"
+fi
 promotion_step=checking-restarted-worker
 wait_healthy
 [ "$(docker inspect "$container" --format '{{.Config.Image}}')" = "$target" ]

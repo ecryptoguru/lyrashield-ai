@@ -77,7 +77,7 @@ Claims boundary: this is bounded runtime/accounting evidence for one target and 
 - Trademark clearance.
 - Confirm intended current public Cloud-admission posture and authorize each live checkout/refund proof; Local admissions remain off.
 
-Decided on 2026-09-22: retain and publish the existing Cloud and minute-pack prices; keep repository MCP/WebMCP findings visible on Trial and Starter; use OnboardingAI2 at its fixed revision with the current production Deep profile for controlled acceptance; and permit capability-bound public release-identity confirmation that returns only `MATCH`, `MISMATCH`, or `UNAVAILABLE` without disclosing the stored identity. None of these decisions authorizes a new live charge, cancellation, or refund.
+Decided on 2026-09-22: retain and publish the existing Cloud and minute-pack prices; keep repository MCP/WebMCP findings visible on Trial and Starter; use OnboardingAI2 at its fixed revision with the current production Deep profile for controlled acceptance; and permit capability-bound public release-identity confirmation that returns only `MATCH`, `MISMATCH` or `UNAVAILABLE` without disclosing the stored identity. None of these decisions authorizes a new live charge, cancellation or refund.
 
 ## Non-negotiable implementation rules
 

@@ -447,7 +447,7 @@ Decided 2026-09-22:
 - Publish the existing Cloud and minute-pack prices unchanged. This decision does not authorize a new live charge, cancellation, or refund.
 - Keep repository MCP/WebMCP findings visible on Trial and Starter; permissions and scan admission remain the control boundaries.
 - Use the current production Deep profile for controlled acceptance on the fixed OnboardingAI2 revision; exact execution evidence remains a separate gate.
-- Public release-identity confirmation is opt-in and capability-bound: a valid signed report plus its unexpired, unrevoked share token may confirm a caller-supplied commit or artifact digest as `MATCH`, `MISMATCH`, or `UNAVAILABLE`. The API never returns the stored identity; unknown token, cross-report token, legacy provenance, checksum mismatch, expiry, and revocation collapse to `UNAVAILABLE`; requests are rate-limited and non-cacheable.
+- Public release-identity confirmation is opt-in and capability-bound: a valid signed report plus its unexpired, unrevoked share token may confirm a caller-supplied commit or artifact digest as `MATCH`, `MISMATCH` or `UNAVAILABLE`. The API never returns the stored identity; unknown token, cross-report token, legacy provenance, checksum mismatch, expiry and revocation collapse to `UNAVAILABLE`; requests are rate-limited and non-cacheable.
 
 ## 11. Success measures
 
