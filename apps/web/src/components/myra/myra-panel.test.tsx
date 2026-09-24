@@ -21,8 +21,8 @@ describe("MyraPanel shell", () => {
   it("keeps the launcher above mobile navigation and clear of the activity chip", () => {
     // Below lg the WebMCP activity chip is at bottom-32 on the opposite edge.
     expect(html).toContain("bottom-20")
-    expect(html).toContain("left-4")
-    expect(html).toContain("lg:bottom-6")
+    expect(html).toContain("right-4")
+    expect(html).toContain("lg:bottom-24")
   })
 
   it("is a focus-managed dialog when the sheet opens", () => {

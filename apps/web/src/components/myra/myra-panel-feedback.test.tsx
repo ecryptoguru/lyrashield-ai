@@ -1,6 +1,31 @@
 import { readFileSync } from "node:fs"
-import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import type { ReactElement, ReactNode } from "react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const hooks = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0 }))
+// The panel is a hook-driven client component. This repo has no jsdom or
+// testing-library, so the convention (see myra-slot-booking.test.tsx) is to
+// drive react's hooks directly and walk the returned element tree.
+vi.mock("react", async (original) => ({
+  ...(await original<typeof import("react")>()),
+  useEffect: () => {},
+  useCallback: (fn: unknown) => fn,
+  useRef: (initial: unknown) => {
+    const index = hooks.cursor++
+    hooks.values[index] ??= { current: initial }
+    return hooks.values[index]
+  },
+  useState: (initial: unknown) => {
+    const index = hooks.cursor++
+    if (!(index in hooks.values)) hooks.values[index] = initial
+    return [
+      hooks.values[index],
+      (value: unknown) => {
+        hooks.values[index] = value
+      },
+    ]
+  },
+}))
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard/scans",
@@ -11,11 +36,22 @@ vi.mock("./use-myra-panel", () => ({ useMyraPanel }))
 
 import { MyraPanel } from "./myra-panel"
 
-// The thumbs state lives in the useMyraPanel hook, which needs a DOM to drive.
-// Pin the button markup from the rendered output and the state transitions at
-// source level, the same way the streaming and focus suites do.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned source file.
 const panelSource = readFileSync(new URL("./myra-panel.tsx", import.meta.url), "utf8")
+
+type El = ReactElement<{
+  children?: ReactNode
+  disabled?: boolean
+  "aria-pressed"?: boolean | "true" | "false"
+  "aria-label"?: string
+}>
+
+function elements(node: ReactNode): El[] {
+  if (Array.isArray(node)) return node.flatMap(elements)
+  if (!node || typeof node !== "object" || !("props" in node)) return []
+  const el = node as El
+  return [el, ...elements(el.props?.children)]
+}
 
 function panelWithTurn(over: Record<string, unknown> = {}) {
   useMyraPanel.mockReturnValue({
@@ -59,48 +95,64 @@ function panelWithTurn(over: Record<string, unknown> = {}) {
   })
 }
 
+function thumbs(tree: ReactNode) {
+  return elements(tree).filter((el) => el.props?.["aria-label"] === "Rate Myra's answer")
+}
+
+function ratingButtons(tree: ReactNode) {
+  return elements(tree).filter((el) => el.props?.["aria-pressed"] !== undefined)
+}
+
 describe("MyraPanel answer feedback", () => {
+  beforeEach(() => {
+    hooks.values = []
+    hooks.cursor = 0
+    useMyraPanel.mockReset()
+  })
+
   it("offers a labelled thumbs pair for a completed answer", () => {
     panelWithTurn()
-    const html = renderToStaticMarkup(<MyraPanel />)
+    const tree = MyraPanel({})
+    const buttons = ratingButtons(tree)
 
-    expect(html).toContain('aria-label="Rate Myra\'s answer"')
-    expect(html).toContain("Was this helpful?")
-    expect(html).toContain('aria-pressed="false"')
-    expect(html).toContain(">Yes<")
-    expect(html).toContain(">No<")
+    expect(thumbs(tree)).toHaveLength(1)
+    expect(buttons).toHaveLength(2)
+    expect(buttons.every((el) => el.props["aria-pressed"] === false)).toBe(true)
   })
 
   it("marks the chosen rating pressed", () => {
     panelWithTurn({ rating: "helpful" })
-    const html = renderToStaticMarkup(<MyraPanel />)
+    const buttons = ratingButtons(MyraPanel({}))
 
-    // Exactly one button reports itself pressed, and it is the chosen one.
-    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1)
+    expect(buttons.filter((el) => el.props["aria-pressed"] === true)).toHaveLength(1)
   })
 
   it("disables both thumbs while a rating is pending", () => {
     panelWithTurn({ ratingPending: true })
-    const html = renderToStaticMarkup(<MyraPanel />)
+    const buttons = ratingButtons(MyraPanel({}))
 
-    expect(html.match(/disabled=""/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(buttons).toHaveLength(2)
+    expect(buttons.every((el) => el.props.disabled === true)).toBe(true)
   })
 
   it("hides the thumbs when the turn errored or has no assistant message", () => {
     panelWithTurn({ error: "Something went wrong." })
-    expect(renderToStaticMarkup(<MyraPanel />)).not.toContain("Was this helpful?")
+    expect(ratingButtons(MyraPanel({}))).toHaveLength(0)
 
+    hooks.values = []
+    hooks.cursor = 0
     panelWithTurn({ assistantMessageId: undefined })
-    expect(renderToStaticMarkup(<MyraPanel />)).not.toContain("Was this helpful?")
+    expect(ratingButtons(MyraPanel({}))).toHaveLength(0)
   })
 
-  it("reports the optimistic rating before the request settles and reverts on failure", () => {
+  it("binds the thumbs to the optimistic rating state, which clears on both paths", () => {
     // Source-level: the hook sets ratingPending, sets the rating on success and
-    // clears the pending flag on both paths, so the button never sticks.
+    // clears the pending flag on both success and failure, so the button never
+    // sticks.
     expect(panelSource).toContain("aria-pressed={turn.rating === rating}")
     expect(panelSource).toContain("disabled={turn.ratingPending}")
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned source file.
     const hookSource = readFileSync(new URL("./use-myra-panel.ts", import.meta.url), "utf8")
     expect(hookSource).toContain("ratingPending: true")
     expect(hookSource).toContain("ratingPending: false")

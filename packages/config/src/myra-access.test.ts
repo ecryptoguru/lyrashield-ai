@@ -25,7 +25,7 @@ describe("Myra dashboard admission", () => {
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       readFileSync(new URL(path, import.meta.url), "utf8")
     const files = [
-      "../env.ts",
+      "./env.ts",
       "../../../.env.example",
       "../../../apps/web/.env.example",
       "../../../.github/scripts/verify-myra-deployment-config.mjs",
