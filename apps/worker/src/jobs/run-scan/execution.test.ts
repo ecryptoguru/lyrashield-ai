@@ -526,13 +526,17 @@ describe("resolveEngineTerminalError runtime deadline mapping", () => {
         exitCode: 5,
         output: { vulnerabilities: [], runRecord: { terminal_reason: "incomplete" } },
       } as never,
-      exitInterpretation: { status: "FAILED", category: "ENGINE_INCOMPLETE", message: "x" },
+      exitInterpretation: {
+        status: "FAILED",
+        category: "ENGINE_INCOMPLETE",
+        message: "Engine ended without a completed scan receipt",
+      },
     })
 
     expect(result).toEqual({
       status: "FAILED",
       errorCategory: "ENGINE_INCOMPLETE",
-      errorMessage: "Engine did not produce a completed, valid result receipt",
+      errorMessage: "Engine ended without a completed scan receipt",
     })
   })
 })
