@@ -473,6 +473,7 @@ jobs:
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: |
           bash .github/scripts/tests/test-promote-worker-vm.sh
+          bash .github/scripts/tests/test-check-engine-revision-parity.sh
           bash .github/scripts/tests/test-configure-cloud-billing-admission.sh
           node --test .github/scripts/tests/parse-billing-receipt.test.mjs .github/scripts/tests/worker-preflight.test.mjs .github/scripts/tests/worker-contract-worktree.test.mjs
           sh ops/deployment/azure-vm-run-command.test.sh
@@ -570,6 +571,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Verify ENGINE_REVISION parity across release workflows
+        shell: bash
+        run: bash .github/scripts/check-engine-revision-parity.sh
 
       - name: Read pinned engine revision
         id: engine
