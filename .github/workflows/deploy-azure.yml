@@ -582,6 +582,7 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
         run: |
+          source .github/scripts/azure_secret_set.sh
           # Only the app Container App uploads evidence (control-evidence
           # artifacts); the scanner app does not and the worker VM receives the
           # key via Key Vault (ops/worker/refresh-secrets.sh).
@@ -605,8 +606,7 @@ jobs:
             if [ "$active_exists" = "1" ]; then
               echo "Immutable active evidence secret already exists; preserving it."
             elif [ "$active_exists" = "0" ]; then
-              timeout --foreground 180s az containerapp secret set \
-                --only-show-errors \
+              azure_containerapp_secret_set_retrying \
                 --name "$AZURE_APP_CONTAINER_APP_NAME" \
                 --resource-group "$AZURE_RESOURCE_GROUP" \
                 --secrets "${active_name}=${LYRASHIELD_EVIDENCE_KEK}" || {
@@ -620,8 +620,7 @@ jobs:
             if [ "$keyring_exists" = "1" ]; then
               echo "Immutable evidence keyring secret already exists; preserving it."
             elif [ "$keyring_exists" = "0" ]; then
-              timeout --foreground 180s az containerapp secret set \
-                --only-show-errors \
+              azure_containerapp_secret_set_retrying \
                 --name "$AZURE_APP_CONTAINER_APP_NAME" \
                 --resource-group "$AZURE_RESOURCE_GROUP" \
                 --secrets "${keyring_name}=${LYRASHIELD_EVIDENCE_KEK_KEYRING}" || {
@@ -643,11 +642,11 @@ jobs:
           if [ -z "$AZURE_APP_CONTAINER_APP_NAME" ]; then
             exit 0
           fi
+          source .github/scripts/azure_secret_set.sh
 
           vault_base="https://${AZURE_KEY_VAULT_NAME}.vault.azure.net/secrets"
 
-          timeout --foreground 180s az containerapp secret set \
-            --only-show-errors \
+          azure_containerapp_secret_set_retrying \
             --name "$AZURE_APP_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --secrets \
@@ -674,13 +673,13 @@ jobs:
           if [ -z "$AZURE_APP_CONTAINER_APP_NAME" ]; then
             exit 0
           fi
+          source .github/scripts/azure_secret_set.sh
           set_myra_secret() {
             local name="$1" value="$2"
             if [ -z "$value" ]; then
               return 0
             fi
-            if ! timeout --foreground 180s az containerapp secret set \
-              --only-show-errors \
+            if ! azure_containerapp_secret_set_retrying \
               --name "$AZURE_APP_CONTAINER_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --secrets "${name}=${value}"; then
@@ -707,10 +706,10 @@ jobs:
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
         run: |
+          source .github/scripts/azure_secret_set.sh
           sync_upstash_secrets() {
             local container_app="$1"
-            if ! timeout --foreground 180s az containerapp secret set \
-              --only-show-errors \
+            if ! azure_containerapp_secret_set_retrying \
               --name "$container_app" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --secrets "upstash-redis-rest-url=${UPSTASH_REDIS_REST_URL}" "upstash-redis-rest-token=${UPSTASH_REDIS_REST_TOKEN}"; then
@@ -732,10 +731,10 @@ jobs:
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
         run: |
+          source .github/scripts/azure_secret_set.sh
           sync_bullmq_secret() {
             local container_app="$1"
-            timeout --foreground 180s az containerapp secret set \
-              --only-show-errors \
+            azure_containerapp_secret_set_retrying \
               --name "$container_app" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --secrets "bullmq-redis-url=${BULLMQ_REDIS_URL}"
@@ -758,8 +757,8 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
         run: |
-          if ! timeout --foreground 180s az containerapp secret set \
-            --only-show-errors \
+          source .github/scripts/azure_secret_set.sh
+          if ! azure_containerapp_secret_set_retrying \
             --name "$AZURE_APP_CONTAINER_APP_NAME" \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --secrets \
@@ -851,6 +850,7 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
         run: |
+          source .github/scripts/azure_secret_set.sh
           if [ -z "${GITHUB_APP_ID}" ] || [ -z "${GITHUB_APP_SLUG}" ] || [ -z "${GITHUB_APP_PRIVATE_KEY}" ] || [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
             echo "Skipping GitHub App secret sync — not all secrets set (see verify step above)."
             exit 0
@@ -864,8 +864,7 @@ jobs:
           fi
           sync_github_app_secrets() {
             local container_app="$1"
-            if ! timeout --foreground 180s az containerapp secret set \
-              --only-show-errors \
+            if ! azure_containerapp_secret_set_retrying \
               --name "$container_app" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --secrets "github-app-id=${GITHUB_APP_ID}" "github-app-slug=${GITHUB_APP_SLUG}" "github-app-private-key=${GITHUB_APP_PRIVATE_KEY}" "github-webhook-secret=${GITHUB_WEBHOOK_SECRET}" "${OAUTH_SECRETS[@]}"
