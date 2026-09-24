@@ -1,16 +1,39 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useState, useSyncExternalStore, type FormEvent } from "react"
 import { Button, Card } from "@lyrashield/ui"
+
+type ReleaseIdentityStatus = "MATCH" | "MISMATCH" | "UNAVAILABLE"
 
 type VerificationResult = {
   verified: boolean
   signingKeyId: string | null
-  releaseIdentity?: { status: "MATCH" | "MISMATCH" | "UNAVAILABLE" }
+  releaseIdentity?: { status: ReleaseIdentityStatus }
 }
 
 const fieldClass =
   "mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+
+function subscribeToNothing() {
+  return () => {}
+}
+
+/**
+ * React attaches onSubmit only once the client has hydrated. A submit before that
+ * would otherwise fall back to the browser's default GET navigation, which copies
+ * the shared report URL — including its 64-character share token — into the
+ * address bar, the browser history and any upstream request log. P2-7 fixes that
+ * twice over: the form always posts (method="post" with an empty action, so no
+ * field can ever reach a query string) and the submit control stays disabled
+ * until hydration has happened.
+ */
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false
+  )
+}
 
 function parseSharedReportUrl(value: string): { reportId: string; shareToken: string } | null {
   try {
@@ -24,6 +47,7 @@ function parseSharedReportUrl(value: string): { reportId: string; shareToken: st
 }
 
 export function ReportVerificationForm() {
+  const hydrated = useHydrated()
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<VerificationResult | null>(null)
@@ -80,7 +104,12 @@ export function ReportVerificationForm() {
 
   return (
     <Card className="p-6">
-      <form className="space-y-5" onSubmit={submit}>
+      {/*
+        method="post" plus an empty action keeps every field out of the URL: the
+        empty action submits to this path, and a POST has no query string. The
+        React handler below still runs preventDefault and drives the fetch.
+      */}
+      <form className="space-y-5" method="post" action="" onSubmit={submit}>
         <label className="block text-sm font-medium">
           Report checksum
           <input
@@ -133,8 +162,8 @@ export function ReportVerificationForm() {
           </label>
         </fieldset>
 
-        <Button type="submit" disabled={pending}>
-          {pending ? "Verifying…" : "Verify report"}
+        <Button type="submit" disabled={pending || !hydrated}>
+          {pending ? "Verifying…" : hydrated ? "Verify report" : "Loading…"}
         </Button>
       </form>
 
