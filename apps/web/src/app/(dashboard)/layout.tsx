@@ -82,16 +82,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ? hasPermission(active.role as MemberRole, PERMISSIONS.billing.manage)
     : false
 
-  // Myra is default-off and admits only verified allowlisted accounts — the
-  // same rule myraPrincipalEnabled applies at the API layer. API-key/OAuth-
-  // delegated sessions never mount it: the chat surface is for the
-  // interactive browser session only.
+  // Myra is default-off and admits every verified account — the same rule
+  // myraPrincipalEnabled applies at the API layer. API-key/OAuth-delegated
+  // sessions never mount it: the chat surface is for the interactive browser
+  // session only.
   const myraDashboardEnabled =
     env.MYRA_DASHBOARD_ENABLED === "1" &&
     myraDashboardAllowed({
-      email: session.userEmail,
       emailVerified: session.emailVerified === true,
-      allowlist: env.MYRA_ALLOWED_EMAILS,
     }) &&
     !session.apiKey &&
     !session.oauth

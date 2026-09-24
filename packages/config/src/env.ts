@@ -1,6 +1,5 @@
 import { z } from "zod"
 import { APPROVED_PLATFORM_ADMIN_EMAILS, normalizePlatformAdminEmails } from "./platform-admin"
-import { normalizeMyraAllowedEmails } from "./myra-access"
 import { parseAuthAssessmentAllowlist } from "./auth-assessment"
 
 /**
@@ -416,23 +415,6 @@ const envSchema = z
     MYRA_PUBLIC_ENABLED: z.enum(["0", "1"]).optional().default("0"),
     // Dashboard surface + authenticated-user principals.
     MYRA_DASHBOARD_ENABLED: z.enum(["0", "1"]).optional().default("0"),
-    // Exact signed-in accounts admitted while the dashboard surface is in a
-    // controlled rollout. Empty denies all dashboard users.
-    MYRA_ALLOWED_EMAILS: z
-      .string()
-      .optional()
-      .default("")
-      .transform((value, context) => {
-        try {
-          return normalizeMyraAllowedEmails(value)
-        } catch (error) {
-          context.addIssue({
-            code: "custom",
-            message: error instanceof Error ? error.message : "Invalid Myra allowlist",
-          })
-          return z.NEVER
-        }
-      }),
     // Model generation inside the support workflow. Retrieval, suggestions and
     // human handoff stay available while this is off.
     MYRA_GENERATION_ENABLED: z.enum(["0", "1"]).optional().default("0"),

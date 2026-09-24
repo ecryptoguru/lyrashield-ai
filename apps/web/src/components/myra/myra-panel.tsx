@@ -183,7 +183,7 @@ export function MyraPanel({
           <div className="border-primary/20 bg-primary/[0.035] rounded-2xl border-l-[3px] px-4 py-4">
             <p className="text-foreground text-sm leading-relaxed">{MYRA_COPY.opener}</p>
             <p className="text-muted-foreground mt-2 text-xs leading-5">
-              I’ll use LyraShield guidance where I have it, and help you reach support when I don’t.
+              I’ll use LyraShield guidance where I have it and help you reach support when I don’t.
             </p>
             <div className="mt-4 flex flex-wrap gap-2" aria-label="Suggested starting points">
               {starters.map((s) => (
@@ -410,7 +410,9 @@ export function MyraPanel({
 
   return (
     <>
-      {/* Launcher sits above mobile navigation and the device safe area. */}
+      {/* Launcher sits above mobile navigation and the device safe area. On
+          desktop it moves to the bottom-right so it never covers the sidebar's
+          Sign out and theme controls in the bottom-left corner. */}
       <Button
         ref={mobileLauncherRef}
         type="button"
@@ -419,7 +421,7 @@ export function MyraPanel({
         aria-expanded={mobileOpen}
         aria-controls="myra-dash-panel"
         onClick={() => setMobileOpen(true)}
-        className="border-primary/20 bg-card text-foreground hover:border-primary fixed left-4 bottom-20 z-40 min-h-11 gap-2 rounded-full border px-4 shadow-[0_12px_38px_-14px_rgba(0,0,0,0.45)] transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:shadow-lg motion-reduce:transform-none sm:left-6 lg:bottom-6"
+        className="border-primary/20 bg-card text-foreground hover:border-primary fixed right-4 bottom-20 z-40 min-h-11 gap-2 rounded-full border px-4 shadow-[0_12px_38px_-14px_rgba(0,0,0,0.45)] transition-[border-color,transform,box-shadow] hover:-translate-y-0.5 hover:shadow-lg motion-reduce:transform-none sm:right-6 lg:right-6 lg:bottom-24 lg:left-auto"
         style={{ marginBottom: "env(safe-area-inset-bottom)" }}
       >
         <MessageCircleQuestion className="size-4" aria-hidden="true" />

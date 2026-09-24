@@ -15,7 +15,6 @@ const baseEnv = {
   MYRA_MODEL: "",
   MYRA_AZURE_OPENAI_ENDPOINT: "",
   MYRA_AZURE_OPENAI_API_KEY: "",
-  MYRA_ALLOWED_EMAILS: "",
   MYRA_CALENDAR_PROVIDER: "mock",
   MYRA_GOOGLE_CLIENT_ID: "",
   MYRA_GOOGLE_CLIENT_SECRET: "",
@@ -46,7 +45,6 @@ const fails = (env, message) => {
 
 const googleEnv = {
   MYRA_WRITES_ENABLED: "1",
-  MYRA_ALLOWED_EMAILS: "ankit@lyrashieldai.com",
   MYRA_CALENDAR_PROVIDER: "google",
   MYRA_GOOGLE_CLIENT_ID: "client-id",
   MYRA_GOOGLE_CLIENT_SECRET: "secret",
@@ -62,9 +60,10 @@ test("accepts the mock provider when writes are disabled", () => {
 })
 
 test("allows all verified accounts without an email allowlist", () => {
+  // An unset or blank allowlist is no longer meaningful: admission is the
+  // verified email alone. A blank value must still validate.
   assert.match(run({ MYRA_DASHBOARD_ENABLED: "1" }), /valid/)
-  assert.match(run({ ...googleEnv, MYRA_ALLOWED_EMAILS: "" }), /valid/)
-  fails({ MYRA_ALLOWED_EMAILS: "not-an-email" }, "unique, valid")
+  assert.match(run({ ...googleEnv, MYRA_DASHBOARD_ENABLED: "1" }), /valid/)
 })
 
 test("requires Turnstile verification for public Myra", () => {
@@ -105,7 +104,6 @@ test("accepts an unset provider while writes are off", () => {
   assert.match(
     run({
       MYRA_DASHBOARD_ENABLED: "1",
-      MYRA_ALLOWED_EMAILS: "ankit@lyrashieldai.com",
       MYRA_CALENDAR_PROVIDER: "",
     }),
     /Myra deployment configuration is valid/
@@ -142,7 +140,6 @@ test("applies the google calendar rule when only public booking is enabled", () 
   assert.match(
     run({
       ...publicBookingEnv,
-      MYRA_ALLOWED_EMAILS: "ankit@lyrashieldai.com",
       MYRA_CALENDAR_PROVIDER: "google",
       MYRA_GOOGLE_CLIENT_ID: "id",
       MYRA_GOOGLE_CLIENT_SECRET: "secret",

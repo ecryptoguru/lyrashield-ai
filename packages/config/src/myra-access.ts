@@ -1,31 +1,12 @@
-import { z } from "zod"
-
-const emailSchema = z.string().email()
-
-export function normalizeMyraAllowedEmails(value: string): string {
-  if (!value.trim()) return ""
-  const emails = value.split(",").map((email) => email.trim().toLowerCase())
-  if (
-    emails.some((email) => !emailSchema.safeParse(email).success) ||
-    new Set(emails).size !== emails.length
-  ) {
-    throw new Error("MYRA_ALLOWED_EMAILS must contain unique, valid email addresses")
-  }
-  return emails.join(",")
-}
-
-export function isMyraAllowedEmail(email: string, allowlist: string): boolean {
-  return allowlist.split(",").includes(email.trim().toLowerCase())
-}
-
 /**
  * The shared Myra dashboard admission rule. All verified accounts may use
  * the interactive support surface; API and UI enforce the same condition.
+ *
+ * The former MYRA_ALLOWED_EMAILS allowlist is gone (#768 opened Myra to every
+ * verified account and the list stopped gating anything). This function is the
+ * single place the rule lives, so the dashboard layout and the API layer
+ * cannot drift.
  */
-export function myraDashboardAllowed(input: {
-  email: string
-  emailVerified: boolean
-  allowlist: string
-}): boolean {
+export function myraDashboardAllowed(input: { emailVerified: boolean }): boolean {
   return input.emailVerified
 }

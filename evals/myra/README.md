@@ -129,8 +129,8 @@ coverage ≥ 20, ≥ 60 total and ≥ 12 in every required bucket.
 
 ## Knowledge retrieval gate
 
-`knowledge-v1.json` has 12 reviewed public support entries, one signed-in-only entry, and a 60-question public retrieval fixture. Do not add account data, internal procedures, unpublished prices, or restricted operator material.
+`knowledge-v1.json` has 12 reviewed public support entries, one signed-in-only entry and a 60-question public retrieval fixture. Do not add account data, internal procedures, unpublished prices or restricted operator material.
 
-The PostgreSQL test at `packages/myra/src/server/kb.corpus.test.ts` seeds a temporary release, requires at least 90% expected-source top-five retrieval, and checks that neither the signed-in entry nor a restricted decoy appears for an anonymous visitor. It runs when `RLS_RUNTIME_DATABASE_URL` is set; otherwise it skips. `packages/myra/scripts/import-knowledge.ts` is dry-run-only by default and requires an explicit approver to apply a reviewed release.
+The PostgreSQL test at `packages/myra/src/server/kb.corpus.test.ts` seeds a temporary release, requires at least 90% expected-source top-five retrieval and checks that neither the signed-in entry nor a restricted decoy appears for an anonymous visitor. It runs when `RLS_RUNTIME_DATABASE_URL` is set; otherwise it skips. `packages/myra/scripts/import-knowledge.ts` is dry-run-only by default and requires an explicit approver to apply a reviewed release.
 
 Keep lexical search unless this measured gate fails. If it does, investigate misses first, then consider role-filtered hybrid retrieval with the existing Azure `text-embedding-3-small` deployment and a full-text fallback.

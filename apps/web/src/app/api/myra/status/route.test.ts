@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const env = vi.hoisted(() => ({
   MYRA_PUBLIC_ENABLED: "0",
   MYRA_WRITES_ENABLED: "0",
-  MYRA_ALLOWED_EMAILS: "",
   MYRA_PUBLIC_BOOKING_ENABLED: "0",
 }))
 
@@ -21,7 +20,6 @@ describe("GET /api/myra/status", () => {
   beforeEach(() => {
     env.MYRA_PUBLIC_ENABLED = "0"
     env.MYRA_WRITES_ENABLED = "0"
-    env.MYRA_ALLOWED_EMAILS = ""
     env.MYRA_PUBLIC_BOOKING_ENABLED = "0"
     vi.stubEnv("NEXT_PUBLIC_MARKETING_URL", "https://lyrashieldai.com")
     return () => vi.unstubAllEnvs()
@@ -39,12 +37,10 @@ describe("GET /api/myra/status", () => {
     expect(body).toEqual({ public: true, booking: false })
 
     // The old account allowlist has no bearing on public booking.
-    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     body = await (await GET(statusRequest())).json()
     expect(body).toEqual({ public: true, booking: false })
 
     env.MYRA_WRITES_ENABLED = "0"
-    env.MYRA_ALLOWED_EMAILS = ""
     body = await (await GET(statusRequest())).json()
     expect(body).toEqual({ public: true, booking: false })
   })
@@ -53,7 +49,6 @@ describe("GET /api/myra/status", () => {
     // D1 ruled: public demo booking is wanted — the flag reopens the picker
     // on deployments that always set the account allowlist.
     env.MYRA_WRITES_ENABLED = "1"
-    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     let body = await (await GET(statusRequest())).json()
     expect(body).toEqual({ public: false, booking: false })
 

@@ -361,7 +361,6 @@ jobs:
           MYRA_AZURE_OPENAI_ENDPOINT: ${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}
           MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
-          MYRA_ALLOWED_EMAILS: ${{ vars.MYRA_ALLOWED_EMAILS }}
           MYRA_CALENDAR_PROVIDER: ${{ vars.MYRA_CALENDAR_PROVIDER }}
           MYRA_GOOGLE_CLIENT_ID: ${{ vars.MYRA_GOOGLE_CLIENT_ID }}
           MYRA_GOOGLE_CLIENT_SECRET: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET }}
@@ -1040,7 +1039,6 @@ jobs:
               "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret" \
               "MYRA_PUBLIC_ENABLED=${{ vars.MYRA_PUBLIC_ENABLED || '0' }}" \
               "MYRA_DASHBOARD_ENABLED=${{ vars.MYRA_DASHBOARD_ENABLED || '0' }}" \
-              "MYRA_ALLOWED_EMAILS=${{ vars.MYRA_ALLOWED_EMAILS }}" \
               "MYRA_OPERATOR_ENABLED=${{ vars.MYRA_OPERATOR_ENABLED || '0' }}" \
               "MYRA_WRITES_ENABLED=${{ vars.MYRA_WRITES_ENABLED || '0' }}" \
               "MYRA_PUBLIC_BOOKING_ENABLED=${{ vars.MYRA_PUBLIC_BOOKING_ENABLED || '0' }}" \

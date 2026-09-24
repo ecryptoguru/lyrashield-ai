@@ -266,4 +266,104 @@ describe.skipIf(!runtimeUrl || !runtime)("generation budget ledger", () => {
 
     expect(await monthlyGenerationSpendUsd()).toBeCloseTo(before + 0.03, 6)
   })
+
+  it("keeps an anonymous turn inside the signed-in share of the pool", async () => {
+    const { ANONYMOUS_POOL_SHARE, reserveGenerationBudget } = await import("./budget")
+    // Borrow the whole month with a settled row at exactly the anonymous
+    // ceiling, then prove an anonymous turn is refused while a signed-in one
+    // would still be admitted by the cap itself.
+    const committed = MYRA_LIMITS.monthlyBudgetUsd * ANONYMOUS_POOL_SHARE
+    const seedId = `budget-anon-share-${suffix}`
+    traceIds.push(seedId)
+    await runtime!.myraGenerationReservation.create({
+      data: {
+        traceId: seedId,
+        monthStart: firstOfMonth(),
+        reservedUsd: new Prisma.Decimal(0),
+        actualUsd: new Prisma.Decimal(committed),
+        status: "SETTLED",
+        settledAt: new Date(),
+      },
+    })
+
+    const anonTrace = `budget-anon-turn-${suffix}`
+    traceIds.push(anonTrace)
+    await expect(
+      reserveGenerationBudget(anonTrace, maximumTurnCostUsd(), { anonymous: true })
+    ).rejects.toMatchObject({ code: "BUDGET_EXHAUSTED" })
+    // No hold is left behind by a refused anonymous turn.
+    expect(
+      await runtime!.myraGenerationReservation.findUnique({ where: { traceId: anonTrace } })
+    ).toBeNull()
+
+    // A signed-in turn at the same point is still admitted by the cap itself:
+    // the share is what refuses the anonymous turn, not the cap.
+    const userTrace = `budget-user-turn-${suffix}`
+    traceIds.push(userTrace)
+    await expect(
+      reserveGenerationBudget(userTrace, maximumTurnCostUsd(), { anonymous: false })
+    ).resolves.toBeUndefined()
+  })
+
+  it("counts outstanding holds toward the anonymous share", async () => {
+    const { reserveGenerationBudget } = await import("./budget")
+    const seedId = `budget-anon-hold-${suffix}`
+    traceIds.push(seedId)
+    // A holds-only row must count, or concurrent anonymous turns each read the
+    // same pre-burst total and the share is bypassable.
+    await runtime!.myraGenerationReservation.create({
+      data: {
+        traceId: seedId,
+        monthStart: firstOfMonth(),
+        reservedUsd: new Prisma.Decimal(MYRA_LIMITS.monthlyBudgetUsd),
+        status: "RESERVED",
+      },
+    })
+
+    const traceId = `budget-anon-hold-turn-${suffix}`
+    traceIds.push(traceId)
+    await expect(
+      reserveGenerationBudget(traceId, maximumTurnCostUsd(), { anonymous: true })
+    ).rejects.toMatchObject({ code: "BUDGET_EXHAUSTED" })
+  })
+
+  it("enforces the anonymous share from inside the reservation lock", async () => {
+    const { ANONYMOUS_POOL_SHARE, reserveGenerationBudget } = await import("./budget")
+    // Seed a hold that leaves the pool just BELOW the anonymous ceiling, then
+    // fire a burst of concurrent anonymous turns. The share must be honoured
+    // across the whole burst: total committed spend (seed + the turns that got
+    // through) must not cross the ceiling by more than one turn's reservation.
+    const perTurn = maximumTurnCostUsd()
+    const ceiling = MYRA_LIMITS.monthlyBudgetUsd * ANONYMOUS_POOL_SHARE
+    const seedId = `budget-anon-race-seed-${suffix}`
+    traceIds.push(seedId)
+    await runtime!.myraGenerationReservation.create({
+      data: {
+        traceId: seedId,
+        monthStart: firstOfMonth(),
+        reservedUsd: new Prisma.Decimal(ceiling - perTurn * 3),
+        status: "RESERVED",
+      },
+    })
+
+    const burst = Array.from({ length: 8 }, (_, i) => `budget-anon-race-${suffix}-${i}`)
+    traceIds.push(...burst)
+    const results = await Promise.allSettled(
+      burst.map((id) => reserveGenerationBudget(id, perTurn, { anonymous: true }))
+    )
+    const admitted = results.filter((r) => r.status === "fulfilled").length
+
+    // Only the turns that fit under the ceiling may be admitted. If the check
+    // ran outside the lock, all 8 would read the same pre-burst total and be
+    // admitted together.
+    expect(admitted).toBeLessThanOrEqual(3)
+    expect(admitted).toBeGreaterThan(0)
+
+    const totals = await runtime!.myraGenerationReservation.aggregate({
+      where: { monthStart: firstOfMonth() },
+      _sum: { reservedUsd: true, actualUsd: true },
+    })
+    const committed = Number(totals._sum.actualUsd ?? 0) + Number(totals._sum.reservedUsd ?? 0)
+    expect(committed).toBeLessThanOrEqual(ceiling + perTurn)
+  })
 })

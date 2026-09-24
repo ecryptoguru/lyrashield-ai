@@ -40,6 +40,18 @@ export async function monthlyGenerationSpendUsd(): Promise<number> {
   return Number(totals._sum.actualUsd ?? 0)
 }
 
+/**
+ * Share of the monthly pool that signed-in callers keep for themselves.
+ * Anonymous visitors can spend the pool only up to this fraction, so one IP
+ * that clears Turnstile cannot exhaust the month and lock paying customers
+ * out of generation until the month rolls over. Availability, not cost: the
+ * total spend stays under the cap either way.
+ */
+export const ANONYMOUS_POOL_SHARE = 0.7
+
+/** Fraction of the pool at which the operator warning fires, once per month. */
+export const POOL_WARNING_THRESHOLD = 0.8
+
 /** Conservative ceiling: bounded context/user/system input plus the 4k output cap. */
 export function maximumTurnCostUsd(): number {
   // Cache writes cost more than uncached input; reserve the worst case.
@@ -50,7 +62,20 @@ export function maximumTurnCostUsd(): number {
   return Math.ceil(cost * 10_000) / 10_000
 }
 
-export async function reserveGenerationBudget(traceId: string, reservedUsd: number): Promise<void> {
+/**
+ * Reserve one generation turn against the monthly ledger.
+ *
+ * ``anonymous`` callers draw on only ANONYMOUS_POOL_SHARE of the pool. That
+ * decision is made INSIDE the advisory-lock transaction, from the same
+ * settled+reserved totals that gate the overall cap. Doing it out of the lock
+ * let concurrent anonymous turns each read the same pre-burst total and
+ * collectively overshoot the share before any of them was refused.
+ */
+export async function reserveGenerationBudget(
+  traceId: string,
+  reservedUsd: number,
+  opts: { anonymous?: boolean } = {}
+): Promise<void> {
   if (!Number.isFinite(reservedUsd) || reservedUsd <= 0) {
     throw err("PROVIDER_ERROR", "Generation cost rates are not configured.")
   }
@@ -70,12 +95,38 @@ export async function reserveGenerationBudget(traceId: string, reservedUsd: numb
     })
     const settled = Number(totals._sum.actualUsd ?? 0)
     const reserved = Number(totals._sum.reservedUsd ?? 0)
-    if (settled + reserved + reservedUsd > capUsd) {
+    const committedBefore = settled + reserved
+    const committedAfter = committedBefore + reservedUsd
+    // Anonymous share: checked under the lock, before the row is created, so
+    // simultaneous anonymous turns cannot collectively cross the line.
+    if (opts.anonymous && committedBefore >= capUsd * ANONYMOUS_POOL_SHARE) {
+      throw err("BUDGET_EXHAUSTED", "Myra is at its usage limit for now.")
+    }
+    if (committedAfter > capUsd) {
       throw err("BUDGET_EXHAUSTED", "Myra is at its usage limit for now.")
     }
     await tx.myraGenerationReservation.create({
       data: { traceId, monthStart, reservedUsd: new Prisma.Decimal(reservedUsd) },
     })
+    // Operator alert at 80 percent of the pool. The advisory lock above
+    // serializes reservations, so exactly one transaction observes the
+    // threshold being crossed within a month — this fires once per month
+    // without a new column or a migration.
+    const warningAt = capUsd * POOL_WARNING_THRESHOLD
+    if (committedBefore < warningAt && committedAfter >= warningAt) {
+      // This package has no logger dependency (dependency direction), so the
+      // operator-visible signal it can emit is a structured console warning.
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          message: "myra.generation_pool_near_cap",
+          monthStart: monthStart.toISOString(),
+          committedUsd: Math.round(committedAfter * 100) / 100,
+          capUsd,
+          threshold: POOL_WARNING_THRESHOLD,
+        })
+      )
+    }
   })
 }
 

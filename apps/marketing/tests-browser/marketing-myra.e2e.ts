@@ -269,7 +269,11 @@ test("public support case verification omits browser cookies", async ({ page }) 
   await mockMyra(page)
   await page.goto("/")
   await page.getByRole("button", { name: "Ask Myra" }).click()
-  await page.getByRole("button", { name: "Talk to a person" }).click()
+  // The button's accessible name is its visible label, which is "Talk to a
+  // person" at sm+ and "Support" below it. The mobile project renders the
+  // short form, so match either rather than re-adding an aria-label that would
+  // break WCAG 2.5.3 (label in name).
+  await page.getByRole("button", { name: /^(Talk to a person|Support)$/ }).click()
   await page.getByRole("textbox", { name: "Case subject" }).fill("Need help with a scan")
   await page
     .getByRole("textbox", { name: "Case details" })

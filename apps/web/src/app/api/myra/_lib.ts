@@ -69,9 +69,7 @@ export function myraPrincipalEnabled(principal: MyraPrincipal): boolean {
     return (
       myraDashboardEnabled() &&
       myraDashboardAllowed({
-        email: principal.email,
         emailVerified: principal.emailVerified,
-        allowlist: env.MYRA_ALLOWED_EMAILS,
       })
     )
   }

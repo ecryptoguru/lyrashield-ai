@@ -1,51 +1,11 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { isMyraAllowedEmail, myraDashboardAllowed, normalizeMyraAllowedEmails } from "./myra-access"
+import { myraDashboardAllowed } from "./myra-access"
 
-describe("Myra account allowlist", () => {
-  it("normalizes email casing and grants exact membership only", () => {
-    const allowlist = normalizeMyraAllowedEmails(" Ankit@LyraShieldAI.com ")
-    expect(allowlist).toBe("ankit@lyrashieldai.com")
-    expect(isMyraAllowedEmail("ANKIT@lyrashieldai.com", allowlist)).toBe(true)
-    expect(isMyraAllowedEmail("ecryptoguru@gmail.com", allowlist)).toBe(false)
-  })
-
-  it("rejects malformed and duplicate entries", () => {
-    expect(() => normalizeMyraAllowedEmails("not-an-email")).toThrow("unique, valid")
-    expect(() => normalizeMyraAllowedEmails("a@example.com,A@example.com")).toThrow("unique, valid")
-  })
-
-  it("gates the dashboard on verified email, not the old launch allowlist", () => {
-    const allowlist = normalizeMyraAllowedEmails("ankit@lyrashieldai.com")
-    expect(
-      myraDashboardAllowed({
-        email: "ankit@lyrashieldai.com",
-        emailVerified: true,
-        allowlist,
-      })
-    ).toBe(true)
-    // An unverified email fails even when it is on the old allowlist.
-    expect(
-      myraDashboardAllowed({
-        email: "ankit@lyrashieldai.com",
-        emailVerified: false,
-        allowlist,
-      })
-    ).toBe(false)
-    expect(
-      myraDashboardAllowed({
-        email: "other@example.com",
-        emailVerified: true,
-        allowlist,
-      })
-    ).toBe(true)
-    expect(
-      myraDashboardAllowed({
-        email: "ankit@lyrashieldai.com",
-        emailVerified: true,
-        allowlist: "",
-      })
-    ).toBe(true)
+describe("Myra dashboard admission", () => {
+  it("gates the dashboard on a verified email", () => {
+    expect(myraDashboardAllowed({ emailVerified: true })).toBe(true)
+    expect(myraDashboardAllowed({ emailVerified: false })).toBe(false)
   })
 
   it("is the single gate shared by the dashboard layout and the API principal gate", () => {
@@ -58,5 +18,29 @@ describe("Myra account allowlist", () => {
     expect(layout).toContain("myraDashboardAllowed")
     expect(layout).toContain("emailVerified")
     expect(lib).toContain("myraDashboardAllowed")
+  })
+
+  it("leaves no allowlist plumbing in the schema, examples or the deploy wiring", () => {
+    const read = (path: string) =>
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      readFileSync(new URL(path, import.meta.url), "utf8")
+    const files = [
+      "./env.ts",
+      "../../../.env.example",
+      "../../../apps/web/.env.example",
+      "../../../.github/scripts/verify-myra-deployment-config.mjs",
+      "../../../.github/workflows/deploy-azure.yml",
+      "../../../apps/web/src/app/(dashboard)/layout.tsx",
+      "../../../apps/web/src/app/api/myra/_lib.ts",
+      "./index.ts",
+    ]
+    for (const file of files) {
+      expect(read(file), `${file} must not reference MYRA_ALLOWED_EMAILS`).not.toContain(
+        "MYRA_ALLOWED_EMAILS"
+      )
+      expect(read(file), `${file} must not reference isMyraAllowedEmail`).not.toContain(
+        "isMyraAllowedEmail"
+      )
+    }
   })
 })

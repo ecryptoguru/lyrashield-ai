@@ -466,6 +466,13 @@ export async function checkAffiliateLinkRateLimit(affiliateId: string) {
 const MYRA_MESSAGE_MAX = readIntEnv("RATE_LIMIT_MYRA_MESSAGE_MAX", 20)
 const MYRA_SUGGEST_MAX = readIntEnv("RATE_LIMIT_MYRA_SUGGEST_MAX", 60)
 const MYRA_VERIFY_MAX = readIntEnv("RATE_LIMIT_MYRA_VERIFY_MAX", 5)
+// Per-principal DAILY generation caps. The minute bucket above bounds burst;
+// these bound the day, so one principal cannot hold a large share of the
+// shared monthly pool. Anonymous callers are capped tighter than signed-in
+// ones because a public session costs only a Turnstile solve.
+const MYRA_DAILY_ANONYMOUS_MAX = readIntEnv("RATE_LIMIT_MYRA_DAILY_ANONYMOUS_MAX", 40)
+const MYRA_DAILY_USER_MAX = readIntEnv("RATE_LIMIT_MYRA_DAILY_USER_MAX", 200)
+const DAY_MS = 86_400_000
 
 export type MyraRateLimitKind = "message" | "suggest" | "verify"
 
@@ -484,6 +491,20 @@ export async function checkMyraRateLimit(kind: MyraRateLimitKind, key: string) {
   const upstash = await checkUpstash(max, "60 s", identifier)
   if (upstash) return upstash
   return checkInMemory(identifier, max, WINDOW_MS)
+}
+
+/**
+ * Per-principal DAILY generation cap for Myra turns. Anonymous sessions get a
+ * tighter cap than signed-in users. Enforced in the message route before the
+ * turn starts, so it bounds how much of the shared monthly pool one principal
+ * can hold regardless of how quickly the minute bucket refills.
+ */
+export async function checkMyraDailyTurnLimit(kind: "anonymous" | "user", key: string) {
+  const max = kind === "anonymous" ? MYRA_DAILY_ANONYMOUS_MAX : MYRA_DAILY_USER_MAX
+  const identifier = `myra-daily:${kind}:${key}`
+  const upstash = await checkUpstash(max, "1 d", identifier)
+  if (upstash) return upstash
+  return checkInMemory(identifier, max, DAY_MS)
 }
 
 /**
