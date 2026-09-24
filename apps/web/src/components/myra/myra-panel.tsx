@@ -436,7 +436,12 @@ export function MyraPanel({
         aria-modal={isModal || undefined}
         className={
           mobileOpen
-            ? "bg-background fixed inset-0 z-50 flex flex-col lg:inset-auto lg:bottom-6 lg:left-6 lg:h-[min(650px,calc(100dvh-3rem))] lg:w-[min(420px,calc(100vw-3rem))] lg:overflow-hidden lg:rounded-2xl lg:border lg:border-border/80 lg:shadow-[0_28px_90px_-30px_rgba(0,0,0,0.65)]"
+            ? // `w-screen max-w-full` plus `overflow-hidden` pins the mobile sheet
+              // to the viewport. `inset-0` alone let long unbroken content (a wide
+              // table, a long URL in an answer) push the panel wider than the
+              // screen, which scrolled the whole page sideways instead of scrolling
+              // inside the message log. The log itself keeps overflow-y-auto.
+              "bg-background fixed inset-0 z-50 flex w-screen max-w-full flex-col overflow-hidden lg:inset-auto lg:bottom-6 lg:left-6 lg:h-[min(650px,calc(100dvh-3rem))] lg:w-[min(420px,calc(100vw-3rem))] lg:rounded-2xl lg:border lg:border-border/80 lg:shadow-[0_28px_90px_-30px_rgba(0,0,0,0.65)]"
             : "hidden"
         }
       >

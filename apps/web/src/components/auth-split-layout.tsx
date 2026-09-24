@@ -103,6 +103,45 @@ export function AuthSplitLayout({
           </div>
           {children}
           {footer}
+
+          {/*
+           * The marketing panel above is desktop-only, so on mobile the page had
+           * no route back to lyrashieldai.com — anyone who landed on sign-in from
+           * a link or a bookmark was stranded. Mirror the panel's three
+           * destinations here as a compact row. Rendered below md only; at md and
+           * up the panel already carries them and this row is hidden.
+           *
+           * Hits are ≥44px so they stay a comfortable touch target.
+           */}
+          <nav
+            aria-label="LyraShield links"
+            className="text-muted-foreground mt-8 flex flex-wrap items-center justify-center gap-x-4 md:hidden"
+          >
+            <Link
+              href={marketingUrl}
+              className="hover:text-foreground inline-flex min-h-11 items-center text-xs transition-colors"
+            >
+              {new URL(marketingUrl).host}
+            </Link>
+            <span aria-hidden="true" className="text-border">
+              ·
+            </span>
+            <Link
+              href={`${marketingUrl}/methodology`}
+              className="hover:text-foreground inline-flex min-h-11 items-center text-xs transition-colors"
+            >
+              Methodology
+            </Link>
+            <span aria-hidden="true" className="text-border">
+              ·
+            </span>
+            <Link
+              href={`${marketingUrl}/docs/integrations`}
+              className="hover:text-foreground inline-flex min-h-11 items-center text-xs transition-colors"
+            >
+              Docs
+            </Link>
+          </nav>
         </div>
       </div>
     </main>
