@@ -56,6 +56,7 @@ import {
 } from "./run-scan/lifecycle-utils"
 import {
   engineRoutingCoverageIssue,
+  engineRuntimeDeadlineCoverageIssue,
   extractActualCostUsd,
   extractUsageSummary,
   persistEngineUsageCheckpoint,
@@ -64,6 +65,7 @@ import {
 
 export {
   engineRoutingCoverageIssue,
+  engineRuntimeDeadlineCoverageIssue,
   extractActualCostUsd,
   extractUsageSummary,
   persistEngineUsageCheckpoint,
@@ -293,6 +295,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const runRecord = engineResult.output.runRecord
       const routingCoverageIssue =
         engineBacked && engineProfile ? engineRoutingCoverageIssue(engineProfile, runRecord) : null
+      const runtimeDeadlineCoverageIssue = engineRuntimeDeadlineCoverageIssue(
+        runRecord,
+        (engineResult.output.vulnerabilities?.length ?? 0) > 0
+      )
       const exitInterpretation = interpretExitCode(engineResult.exitCode)
       const cancelled = engineResult.cancelled === true
       const engineWorkObserved =
@@ -619,6 +625,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         orchestratorResult,
         coverageMatchedControlRanks: coverage.matchedControlRanks,
         routingCoverageIssue,
+        runtimeDeadlineCoverageIssue,
         deterministicCheckout,
         engineBacked,
         budgetExceeded,

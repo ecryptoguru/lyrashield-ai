@@ -29,6 +29,7 @@ const envSchema = z
     LYRASHIELD_MAX_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
     LYRASHIELD_PROMPT_CACHE_EXPLICIT: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_PROMPT_CACHE: z.enum(["0", "1"]).optional().default("1"),
+    LYRASHIELD_PROMPT_CACHE_ROUTING: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_EGRESS_PROXY_URL: z.string().url().optional().or(z.literal("")),
@@ -397,6 +398,14 @@ describe("Env Validation Schema", () => {
     const parsed = envSchema.parse(validEnv)
     expect(parsed.LYRASHIELD_PROMPT_CACHE_EXPLICIT).toBe("1")
     expect(parsed.LYRASHIELD_PROMPT_CACHE).toBe("1")
+  })
+
+  it("defaults GPT-6 prompt-cache routing on and lets an operator turn it off", () => {
+    expect(envSchema.parse(validEnv).LYRASHIELD_PROMPT_CACHE_ROUTING).toBe("1")
+    expect(
+      envSchema.parse({ ...validEnv, LYRASHIELD_PROMPT_CACHE_ROUTING: "0" })
+        .LYRASHIELD_PROMPT_CACHE_ROUTING
+    ).toBe("0")
   })
 })
 

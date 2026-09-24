@@ -45,6 +45,7 @@ export async function finalizeScanLifecycle(params: {
   orchestratorResult: Awaited<ReturnType<typeof runScannerOrchestrator>>
   coverageMatchedControlRanks: number[]
   routingCoverageIssue: ScannerCoverageIssue | null
+  runtimeDeadlineCoverageIssue?: ScannerCoverageIssue | null
   deterministicCheckout?: Awaited<ReturnType<typeof checkoutDeterministicRetest>>
   engineBacked: boolean
   budgetExceeded: boolean
@@ -73,6 +74,7 @@ export async function finalizeScanLifecycle(params: {
     orchestratorResult,
     coverageMatchedControlRanks,
     routingCoverageIssue,
+    runtimeDeadlineCoverageIssue,
     deterministicCheckout,
     engineBacked,
     budgetExceeded,
@@ -275,6 +277,7 @@ export async function finalizeScanLifecycle(params: {
         coverageIssues: [
           ...orchestratorResult.coverageIssues,
           ...(routingCoverageIssue ? [routingCoverageIssue] : []),
+          ...(runtimeDeadlineCoverageIssue ? [runtimeDeadlineCoverageIssue] : []),
         ],
         aiAppSecurityDiscovery: orchestratorResult.aiAppSecurityDiscovery,
         webMcpCoverage: orchestratorResult.webMcpCoverage,
