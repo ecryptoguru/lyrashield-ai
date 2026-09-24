@@ -122,12 +122,18 @@ export async function reserveGenerationBudget(traceId: string, reservedUsd: numb
     // without a new column or a migration.
     const warningAt = capUsd * POOL_WARNING_THRESHOLD
     if (committedBefore < warningAt && committedAfter >= warningAt) {
-      logger.warn("myra.generation_pool_near_cap", {
-        monthStart: monthStart.toISOString(),
-        committedUsd: Math.round(committedAfter * 100) / 100,
-        capUsd,
-        threshold: POOL_WARNING_THRESHOLD,
-      })
+      // This package has no logger dependency (dependency direction), so the
+      // operator-visible signal it can emit is a structured console warning.
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          message: "myra.generation_pool_near_cap",
+          monthStart: monthStart.toISOString(),
+          committedUsd: Math.round(committedAfter * 100) / 100,
+          capUsd,
+          threshold: POOL_WARNING_THRESHOLD,
+        })
+      )
     }
   })
 }
