@@ -13,6 +13,7 @@ import {
   checkExternalLinks,
   classifySource,
   parseArticle,
+  unknownFrontmatterKeys,
   validateArticle,
   validateArticleText,
   validateImageLibrary,
@@ -206,6 +207,45 @@ First paragraph.
     })
     expect((article.data as { faq?: unknown[] }).faq).toHaveLength(2)
     expect(article.body).toContain("## Safe verification")
+  })
+
+  it("rejects an unknown frontmatter key the schema would silently strip", () => {
+    // Regression: the v21 freshness pass wrote `updated:` where the collection
+    // schema reads `updatedDate:`. Zod dropped the unknown key so no Updated
+    // badge or dateModified ever rendered. A migrated article parses cleanly
+    // while the pre-fix key must now fail validation.
+    const migrated = parseArticle(`---
+title: "Freshness pass"
+description: "A long description that is deliberately valid for the article schema and validator."
+pubDate: 2026-09-22
+updatedDate: 2026-09-22
+tags: ["verification"]
+draft: false
+heroImage: decision-operations-01
+---
+`)
+    expect(unknownFrontmatterKeys(migrated.data)).toEqual([])
+
+    const legacy = parseArticle(`---
+title: "Freshness pass"
+description: "A long description that is deliberately valid for the article schema and validator."
+pubDate: 2026-09-22
+updated: 2026-09-22
+tags: ["verification"]
+draft: false
+heroImage: decision-operations-01
+---
+`)
+
+    expect(unknownFrontmatterKeys(legacy.data)).toEqual(["updated"])
+    // `slug` is an Astro glob-loader key, not a schema field, and stays allowed.
+    expect(unknownFrontmatterKeys({ ...migrated.data, slug: "freshness-pass" })).toEqual([])
+
+    const errors = validateArticle(
+      { slug: "freshness-pass", data: legacy.data, body: legacy.body },
+      { index: 2, slug: "freshness-pass", cluster: "Access", cta: "Pillar + RLS Checker" }
+    )
+    expect(errors).toContain("unknown frontmatter key: updated")
   })
 
   it("validates article structure, links, sources, and release dependencies", () => {

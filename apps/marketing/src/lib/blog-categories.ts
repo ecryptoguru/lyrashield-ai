@@ -1,4 +1,5 @@
 import { getCollection, type CollectionEntry } from "astro:content"
+import { isNotAfterBuildDate } from "./blog-publishing"
 
 /**
  * Blog category taxonomy.
@@ -85,9 +86,12 @@ export function categoryHref(id: CategoryId): string {
   return `/blog/tags/${id}`
 }
 
-/** All published (non-draft) posts, newest first. */
+/** All published (non-draft, not future-dated) posts, newest first. */
 async function getPublishedPosts(): Promise<BlogEntry[]> {
-  const posts = await getCollection("blog", (entry) => !entry.data.draft)
+  const posts = await getCollection(
+    "blog",
+    (entry) => !entry.data.draft && isNotAfterBuildDate(entry.data)
+  )
   return posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
 }
 

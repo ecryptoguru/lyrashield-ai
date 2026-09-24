@@ -7,9 +7,13 @@ import {
   categoryHref,
   getCategoriesWithCounts,
 } from "../../../lib/blog-categories"
+import { isNotAfterBuildDate } from "../../../lib/blog-publishing"
 
 export async function getStaticPaths() {
-  const posts = await getCollection("blog", (entry) => !entry.data.draft)
+  const posts = await getCollection(
+    "blog",
+    (entry) => !entry.data.draft && isNotAfterBuildDate(entry.data)
+  )
 
   // One hub page per category — every category renders even with zero posts,
   // so the index "Browse by category" cards never point at a missing page.

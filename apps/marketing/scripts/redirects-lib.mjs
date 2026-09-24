@@ -41,10 +41,43 @@ function topLevelPages() {
     .sort()
 }
 
-/** Blog post routes from the content collection filenames. */
+/**
+ * Read a post's frontmatter date and draft flag with Node builtins only. The
+ * sitemap holds back posts whose pubDate is after the build date (see
+ * src/lib/blog-publishing.ts); the route inventory must apply the same gate or
+ * it demands a route the sitemap is correct to omit.
+ */
+function postGates(name) {
+  let frontmatter = ""
+  try {
+    frontmatter = readFileUtf8(`src/content/blog/${name}`).split(/^---\s*$/m)[1] || ""
+  } catch {
+    return null
+  }
+  const draft = /^draft:\s*true\s*$/m.test(frontmatter)
+  const raw = (frontmatter.match(/^pubDate:\s*(.+)$/m)?.[1] || "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+  const date = raw ? new Date(raw) : null
+  return { draft, pubDate: date && !Number.isNaN(date.valueOf()) ? date : null }
+}
+
+/** True when a post is live at build time: not a draft and not future-dated. */
+function isPublishedNow(name) {
+  const gates = postGates(name)
+  if (!gates) return true
+  if (gates.draft) return false
+  // A post with no readable date stays in the inventory; the build's own
+  // content schema rejects that case before the gate ever runs.
+  if (!gates.pubDate) return true
+  return gates.pubDate.getTime() <= Date.now()
+}
+
+/** Blog post routes from the content collection filenames, future-dated posts excluded. */
 function blogPosts() {
   return listDir("src/content/blog")
     .filter((name) => /\.(md|mdx)$/.test(name))
+    .filter(isPublishedNow)
     .map((name) => `/blog/${name.replace(/\.(md|mdx)$/, "")}`)
     .sort()
 }
