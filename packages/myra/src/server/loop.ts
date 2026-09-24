@@ -419,6 +419,11 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
         ? ctx.routeContext
         : null
     if (reserves) {
+      // Anonymous turns may spend only the signed-in-reserved share of the
+      // pool, so one IP cannot exhaust the month for paying customers.
+      if (ctx.principal.kind === "anonymous") {
+        await assertAnonymousBudgetAvailable()
+      }
       await reserveGenerationBudget(traceId, maximumTurnCostUsd())
     }
     const generated = await provider.generate({
