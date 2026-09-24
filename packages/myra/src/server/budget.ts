@@ -13,7 +13,6 @@
  */
 import { Prisma, getSystemPrisma } from "@lyrashield/db"
 import { env } from "@lyrashield/config"
-import { logger } from "@lyrashield/logger"
 import { MYRA_LIMITS } from "../contracts"
 import { err } from "./errors"
 import { MYRA_LUNA_USD_PER_MILLION } from "./provider"
