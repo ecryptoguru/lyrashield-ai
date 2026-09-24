@@ -78,7 +78,7 @@ vi.mock("./auth-session", () => ({
 }))
 
 import { buildScanExecutionPlan } from "@lyrashield/types"
-import { executeScanTarget } from "./execution"
+import { executeScanTarget, resolveEngineTerminalError } from "./execution"
 
 const relayConfig = { url: "https://relay.internal", token: "t" } as never
 
@@ -462,5 +462,77 @@ describe("executeScanTarget authenticated staging beta", () => {
     // The minted grant is never registered; the engine never runs.
     expect(mocks.registerRelayGrant).not.toHaveBeenCalled()
     expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+})
+
+describe("resolveEngineTerminalError runtime deadline mapping", () => {
+  const base = {
+    scanId: "scan-1",
+    engineBacked: true,
+    deterministicRetest: false,
+    priorError: null,
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it("keeps filed findings as PARTIAL when the engine reports a runtime deadline", async () => {
+    const result = await resolveEngineTerminalError({
+      ...base,
+      engineResult: {
+        exitCode: 2,
+        output: {
+          vulnerabilities: [{ title: "finding" }],
+          runRecord: { terminal_reason: "runtime_deadline" },
+        },
+      } as never,
+      exitInterpretation: { status: "FAILED", category: "VULNERABILITIES_FOUND", message: "x" },
+    })
+
+    expect(result).toEqual({
+      status: "PARTIAL",
+      errorCategory: "ENGINE_RUNTIME_DEADLINE",
+      errorMessage: "Engine reached its runtime limit; partial findings preserved",
+    })
+  })
+
+  it("fails without findings when the engine reports a runtime deadline", async () => {
+    // The engine exits 5 when the deadline fires before any finding is filed;
+    // the run record, not the exit code, must decide the category.
+    const result = await resolveEngineTerminalError({
+      ...base,
+      engineResult: {
+        exitCode: 5,
+        output: {
+          vulnerabilities: [],
+          runRecord: { terminal_reason: "runtime_deadline" },
+        },
+      } as never,
+      exitInterpretation: { status: "FAILED", category: "ENGINE_INCOMPLETE", message: "x" },
+    })
+
+    expect(result).toEqual({
+      status: "FAILED",
+      errorCategory: "ENGINE_RUNTIME_DEADLINE",
+      errorMessage: "Engine reached its runtime limit; partial findings preserved",
+    })
+  })
+
+  it("leaves the generic incomplete path for a run record without the deadline reason", async () => {
+    const result = await resolveEngineTerminalError({
+      ...base,
+      engineResult: {
+        exitCode: 5,
+        output: { vulnerabilities: [], runRecord: { terminal_reason: "incomplete" } },
+      } as never,
+      exitInterpretation: { status: "FAILED", category: "ENGINE_INCOMPLETE", message: "x" },
+    })
+
+    expect(result).toEqual({
+      status: "FAILED",
+      errorCategory: "ENGINE_INCOMPLETE",
+      errorMessage: "Engine did not produce a completed, valid result receipt",
+    })
   })
 })

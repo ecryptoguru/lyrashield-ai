@@ -412,7 +412,7 @@ describe("output-parser", () => {
       })
     })
 
-    it.each(["incomplete", "rate_limited"])(
+    it.each(["incomplete", "rate_limited", "runtime_deadline"])(
       "retains the %s terminal receipt from the engine",
       (terminalReason) => {
         expect(
@@ -432,6 +432,15 @@ describe("output-parser", () => {
         })
       }
     )
+
+    it("parses an older run record that carries no terminal reason at all", () => {
+      expect(
+        parseRunJson(JSON.stringify({ run_id: "run-legacy", status: "stopped" }))
+      ).toMatchObject({
+        run_id: "run-legacy",
+        status: "stopped",
+      })
+    })
 
     it("rejects usage values that cannot fit the exact database ledger", () => {
       const result = parseRunJson(

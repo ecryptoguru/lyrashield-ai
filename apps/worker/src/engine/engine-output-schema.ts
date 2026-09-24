@@ -559,6 +559,10 @@ export const engineRunRecordSchema = z
         "rate_limited",
         "cancelled",
         "timed_out",
+        // The engine exhausted its trusted runtime allowance before the root
+        // agent called finish. Findings already filed are preserved as a
+        // partial result rather than dropped.
+        "runtime_deadline",
       ])
       .optional(),
     // ── run.json 1.1 run-level evidence stamps ─────────────────────────────

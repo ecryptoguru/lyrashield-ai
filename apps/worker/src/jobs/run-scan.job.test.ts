@@ -1432,6 +1432,92 @@ describe("processScanJob", () => {
     }
   )
 
+  it("preserves filed findings as PARTIAL when the engine hits its runtime deadline", async () => {
+    vi.mocked(runEngine).mockResolvedValueOnce({
+      exitCode: 2,
+      output: {
+        ingestionIssues: [],
+        vulnerabilities: [{ title: "Retained finding" }],
+        findingCount: 1,
+        findingsComplete: false,
+        summary: "Runtime deadline reached with findings",
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "stopped",
+          terminal_reason: "runtime_deadline",
+          llm_usage: completeUsage,
+        },
+      },
+    } as never)
+
+    await processScanJob(mockJob)
+
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "PARTIAL", expect.anything())
+    expect(recordAgentMinutes).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      expect.any(Number),
+      expect.objectContaining({ outcome: "partial" })
+    )
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalOutcome: expect.objectContaining({
+          status: "PARTIAL",
+          errorCategory: "ENGINE_RUNTIME_DEADLINE",
+          errorMessage: "Engine reached its runtime limit; partial findings preserved",
+        }),
+        coverageIssues: expect.arrayContaining([
+          expect.objectContaining({
+            scanner: "engine",
+            status: "bounded",
+            subject: "runtime-deadline",
+          }),
+        ]),
+      })
+    )
+  })
+
+  it("fails without findings when the engine hits its runtime deadline", async () => {
+    vi.mocked(runEngine).mockResolvedValueOnce({
+      exitCode: 5,
+      output: {
+        ingestionIssues: [],
+        vulnerabilities: [],
+        findingCount: 0,
+        findingsComplete: false,
+        summary: "Runtime deadline reached with no findings",
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "stopped",
+          terminal_reason: "runtime_deadline",
+          llm_usage: completeUsage,
+        },
+      },
+    } as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result).toMatchObject({ status: "failed", errorCategory: "ENGINE_RUNTIME_DEADLINE" })
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({
+        errorCategory: "ENGINE_RUNTIME_DEADLINE",
+        errorMessage: "Engine reached its runtime limit; partial findings preserved",
+      })
+    )
+    expect(recordAgentMinutes).not.toHaveBeenCalled()
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        coverageIssues: expect.arrayContaining([
+          expect.objectContaining({ scanner: "engine", status: "bounded" }),
+        ]),
+      })
+    )
+  })
+
   it("meters only engine wall time, excluding setup before invocation", async () => {
     const startedAt = new Date("2026-08-25T00:00:00.000Z")
     vi.useFakeTimers()

@@ -136,6 +136,10 @@ const envSchema = z
     // GPT-6 explicit cache breakpoints. The engine ignores this for unsupported models.
     LYRASHIELD_PROMPT_CACHE_EXPLICIT: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_PROMPT_CACHE: z.enum(["0", "1"]).optional().default("1"),
+    // GPT-6 prompt-cache routing. The LyraShield worker enables it by default
+    // for the admitted GPT-6 deployments; set "0" to turn it off after a
+    // provider smoke scan shows the deployment does not honor the routing key.
+    LYRASHIELD_PROMPT_CACHE_ROUTING: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_RUNTIME_BACKEND: z.enum(["docker"]).optional().or(z.literal("")),

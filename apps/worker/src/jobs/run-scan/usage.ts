@@ -25,6 +25,27 @@ export function extractActualCostUsd(usage: Record<string, unknown> | undefined)
   return null
 }
 
+/**
+ * Bounded engine coverage receipt for a scan the engine truncated at its
+ * runtime deadline. The engine's findings are real but its scope was cut
+ * short, so the scan carries an explicit coverage gap rather than implying a
+ * complete pass.
+ */
+export function engineRuntimeDeadlineCoverageIssue(
+  runRecord: EngineRunRecord | null,
+  hasEngineFindings: boolean
+): ScannerCoverageIssue | null {
+  if (runRecord?.terminal_reason !== "runtime_deadline") return null
+  return {
+    scanner: "engine",
+    status: "bounded",
+    subject: "runtime-deadline",
+    reason: hasEngineFindings
+      ? "Engine reached its runtime limit; partial findings preserved"
+      : "Engine reached its runtime limit before filing any findings",
+  }
+}
+
 export function engineRoutingCoverageIssue(
   profile: EngineProfile,
   runRecord: EngineRunRecord | null
