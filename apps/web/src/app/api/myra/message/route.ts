@@ -77,6 +77,14 @@ async function post(request: Request): Promise<Response> {
   const limit = await checkMyraRateLimit("message", myraRateLimitKey(resolved.principal))
   if (limit.limited) return myraRateLimited(request, limit.retryAfter)
 
+  // Per-principal daily cap on model-backed turns, ahead of the monthly pool
+  // reservation so one principal cannot hold a large share of the pool.
+  const daily = await checkMyraDailyTurnLimit(
+    resolved.principal.kind === "anonymous" ? "anonymous" : "user",
+    myraRateLimitKey(resolved.principal)
+  )
+  if (daily.limited) return myraRateLimited(request, daily.retryAfter)
+
   // MYRA_GENERATION_ENABLED is enforced inside handleMessage (the service
   // emits a GENERATION_DISABLED error event); the route passes through so
   // retrieval/handoff stays available during a generation outage.
