@@ -8,6 +8,7 @@ import { randomBytes } from "node:crypto"
 import { MYRA_LIMITS } from "../contracts"
 import type { BookingRequest, MyraStreamEvent, MyraToolName, TaskRecord } from "../contracts"
 import {
+  assertAnonymousBudgetAvailable,
   maximumTurnCostUsd,
   releaseGenerationBudget,
   reserveGenerationBudget,

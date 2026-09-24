@@ -13,6 +13,7 @@
  */
 import { Prisma, getSystemPrisma } from "@lyrashield/db"
 import { env } from "@lyrashield/config"
+import { logger } from "@lyrashield/logger"
 import { MYRA_LIMITS } from "../contracts"
 import { err } from "./errors"
 import { MYRA_LUNA_USD_PER_MILLION } from "./provider"
@@ -38,6 +39,44 @@ export async function monthlyGenerationSpendUsd(): Promise<number> {
     _sum: { actualUsd: true },
   })
   return Number(totals._sum.actualUsd ?? 0)
+}
+
+/**
+ * Share of the monthly pool that signed-in callers keep for themselves.
+ * Anonymous visitors can spend the pool only up to this fraction, so one IP
+ * that clears Turnstile cannot exhaust the month and lock paying customers
+ * out of generation until the month rolls over. Availability, not cost: the
+ * total spend stays under the cap either way.
+ */
+export const ANONYMOUS_POOL_SHARE = 0.7
+
+/** Fraction of the pool at which the operator warning fires, once per month. */
+export const POOL_WARNING_THRESHOLD = 0.8
+
+/**
+ * Month-to-date committed spend — settled plus the holds still outstanding
+ * across provider calls. The anonymous share must count holds too, or a burst
+ * of concurrent anonymous turns each read the same pre-burst total.
+ */
+async function committedSpendUsd(): Promise<number> {
+  const totals = await getSystemPrisma().myraGenerationReservation.aggregate({
+    where: { monthStart: currentMonthStart() },
+    _sum: { actualUsd: true, reservedUsd: true },
+  })
+  return Number(totals._sum.actualUsd ?? 0) + Number(totals._sum.reservedUsd ?? 0)
+}
+
+/**
+ * Refuse an anonymous generation once the anonymous share of the pool is
+ * spent. Checked before reserveGenerationBudget so the rejection carries the
+ * budget error shape rather than the generic reservation failure.
+ */
+export async function assertAnonymousBudgetAvailable(): Promise<void> {
+  const capUsd = monthlyBudgetCapUsd()
+  const spentUsd = await committedSpendUsd()
+  if (spentUsd >= capUsd * ANONYMOUS_POOL_SHARE) {
+    throw err("BUDGET_EXHAUSTED", "Myra is at its usage limit for now.")
+  }
 }
 
 /** Conservative ceiling: bounded context/user/system input plus the 4k output cap. */
@@ -70,12 +109,27 @@ export async function reserveGenerationBudget(traceId: string, reservedUsd: numb
     })
     const settled = Number(totals._sum.actualUsd ?? 0)
     const reserved = Number(totals._sum.reservedUsd ?? 0)
-    if (settled + reserved + reservedUsd > capUsd) {
+    const committedBefore = settled + reserved
+    const committedAfter = committedBefore + reservedUsd
+    if (committedAfter > capUsd) {
       throw err("BUDGET_EXHAUSTED", "Myra is at its usage limit for now.")
     }
     await tx.myraGenerationReservation.create({
       data: { traceId, monthStart, reservedUsd: new Prisma.Decimal(reservedUsd) },
     })
+    // Operator alert at 80 percent of the pool. The advisory lock above
+    // serializes reservations, so exactly one transaction observes the
+    // threshold being crossed within a month — this fires once per month
+    // without a new column or a migration.
+    const warningAt = capUsd * POOL_WARNING_THRESHOLD
+    if (committedBefore < warningAt && committedAfter >= warningAt) {
+      logger.warn("myra.generation_pool_near_cap", {
+        monthStart: monthStart.toISOString(),
+        committedUsd: Math.round(committedAfter * 100) / 100,
+        capUsd,
+        threshold: POOL_WARNING_THRESHOLD,
+      })
+    }
   })
 }
 

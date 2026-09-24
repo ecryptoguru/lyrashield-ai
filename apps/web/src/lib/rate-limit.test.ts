@@ -144,4 +144,30 @@ describe("Rate Limiter", () => {
       expect((await checkBillingWebhookRateLimit("provider-proof")).limited).toBe(true)
     })
   })
+
+  describe("checkMyraDailyTurnLimit (per principal, per day)", () => {
+    it("admits anonymous turns up to the tighter default and then blocks", async () => {
+      const { checkMyraDailyTurnLimit } = await import("./rate-limit")
+      const key = "ps-anon-a"
+      for (let i = 0; i < 40; i++) {
+        expect((await checkMyraDailyTurnLimit("anonymous", key)).limited).toBe(false)
+      }
+      expect((await checkMyraDailyTurnLimit("anonymous", key)).limited).toBe(true)
+    })
+
+    it("gives a signed-in principal a looser cap than an anonymous one", async () => {
+      const { checkMyraDailyTurnLimit } = await import("./rate-limit")
+      // The same key gets different ceilings by kind.
+      for (let i = 0; i < 40; i++) await checkMyraDailyTurnLimit("anonymous", "same-key")
+      expect((await checkMyraDailyTurnLimit("anonymous", "same-key")).limited).toBe(true)
+      expect((await checkMyraDailyTurnLimit("user", "same-key")).limited).toBe(false)
+    })
+
+    it("counts each principal separately", async () => {
+      const { checkMyraDailyTurnLimit } = await import("./rate-limit")
+      for (let i = 0; i < 40; i++) await checkMyraDailyTurnLimit("anonymous", "principal-a")
+      expect((await checkMyraDailyTurnLimit("anonymous", "principal-a")).limited).toBe(true)
+      expect((await checkMyraDailyTurnLimit("anonymous", "principal-b")).limited).toBe(false)
+    })
+  })
 })

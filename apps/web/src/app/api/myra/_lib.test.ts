@@ -5,14 +5,11 @@ const env = vi.hoisted(() => ({
   MYRA_PUBLIC_ENABLED: "0",
   MYRA_OPERATOR_ENABLED: "0",
   MYRA_WRITES_ENABLED: "1",
-  MYRA_ALLOWED_EMAILS: "ankit@lyrashieldai.com",
   MYRA_PUBLIC_BOOKING_ENABLED: "0",
 }))
 
 vi.mock("@lyrashield/config", () => ({
   env,
-  isMyraAllowedEmail: (email: string, allowlist: string) =>
-    allowlist.split(",").includes(email.trim().toLowerCase()),
   myraDashboardAllowed: (input: { emailVerified: boolean }) => input.emailVerified,
 }))
 
@@ -22,7 +19,6 @@ describe("Myra verified-account gate", () => {
   beforeEach(() => {
     env.MYRA_DASHBOARD_ENABLED = "1"
     env.MYRA_WRITES_ENABLED = "1"
-    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     env.MYRA_PUBLIC_BOOKING_ENABLED = "0"
   })
 
@@ -60,7 +56,6 @@ describe("Myra verified-account gate", () => {
   })
 
   it("permits verified-email support cases but not anonymous booking", () => {
-    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     const anonymous = { kind: "anonymous" as const, publicSessionId: "ps-1" }
     expect(myraWritesEnabled(anonymous)).toBe(true)
     expect(myraWritesEnabled(anonymous, "book_demo")).toBe(false)
@@ -68,7 +63,6 @@ describe("Myra verified-account gate", () => {
   })
 
   it("admits an anonymous principal only for public-booking operations when the flag is on", () => {
-    env.MYRA_ALLOWED_EMAILS = "ankit@lyrashieldai.com"
     env.MYRA_PUBLIC_BOOKING_ENABLED = "1"
     const anonymous = { kind: "anonymous" as const, publicSessionId: "ps-1" }
     // Coarse route check (operation unknown until the proposal loads) and the
@@ -82,8 +76,7 @@ describe("Myra verified-account gate", () => {
     expect(myraWritesEnabled(anonymous, "submit_support_case")).toBe(true)
   })
 
-  it("admits user writes when the allowlist is empty outside production", () => {
-    env.MYRA_ALLOWED_EMAILS = ""
+  it("admits user writes for a verified non-production account", () => {
     const dev = {
       kind: "user" as const,
       accountId: "account-2",

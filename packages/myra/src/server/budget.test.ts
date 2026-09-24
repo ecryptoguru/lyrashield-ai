@@ -266,4 +266,48 @@ describe.skipIf(!runtimeUrl || !runtime)("generation budget ledger", () => {
 
     expect(await monthlyGenerationSpendUsd()).toBeCloseTo(before + 0.03, 6)
   })
+
+  it("keeps an anonymous turn inside the signed-in share of the pool", async () => {
+    const { ANONYMOUS_POOL_SHARE, assertAnonymousBudgetAvailable } = await import("./budget")
+    // Borrow the whole month with a settled row at exactly the anonymous
+    // ceiling, then prove an anonymous turn is refused while a signed-in one
+    // would still be admitted by the cap itself.
+    const committed = MYRA_LIMITS.monthlyBudgetUsd * ANONYMOUS_POOL_SHARE
+    const traceId = `budget-anon-share-${suffix}`
+    traceIds.push(traceId)
+    await runtime!.myraGenerationReservation.create({
+      data: {
+        traceId,
+        monthStart: firstOfMonth(),
+        reservedUsd: new Prisma.Decimal(0),
+        actualUsd: new Prisma.Decimal(committed),
+        status: "SETTLED",
+        settledAt: new Date(),
+      },
+    })
+
+    await expect(assertAnonymousBudgetAvailable()).rejects.toMatchObject({
+      code: "BUDGET_EXHAUSTED",
+    })
+  })
+
+  it("counts outstanding holds toward the anonymous share", async () => {
+    const { assertAnonymousBudgetAvailable } = await import("./budget")
+    const traceId = `budget-anon-hold-${suffix}`
+    traceIds.push(traceId)
+    // A holds-only row must count, or concurrent anonymous turns each read the
+    // same pre-burst total and the share is bypassable.
+    await runtime!.myraGenerationReservation.create({
+      data: {
+        traceId,
+        monthStart: firstOfMonth(),
+        reservedUsd: new Prisma.Decimal(MYRA_LIMITS.monthlyBudgetUsd),
+        status: "RESERVED",
+      },
+    })
+
+    await expect(assertAnonymousBudgetAvailable()).rejects.toMatchObject({
+      code: "BUDGET_EXHAUSTED",
+    })
+  })
 })

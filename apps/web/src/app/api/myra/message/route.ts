@@ -14,7 +14,7 @@
 import { handleMessage, resolveMyraRequest } from "@lyrashield/myra/server"
 import { postMessageRequestSchema } from "@lyrashield/myra"
 import { assertSameOriginMutation, withApiRequest } from "@/lib/api-auth"
-import { checkMyraRateLimit } from "@/lib/rate-limit"
+import { checkMyraDailyTurnLimit, checkMyraRateLimit } from "@/lib/rate-limit"
 import {
   myraFail,
   myraNotFound,
