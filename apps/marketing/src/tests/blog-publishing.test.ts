@@ -129,7 +129,7 @@ describe("every blog collection consumer applies the shared gate", () => {
     // Founder ruling: gate future-dated posts in the build, never a cron. No
     // workflow may both run on a schedule and touch the marketing deploy,
     // which is what a fallback "publish the backlog" job would look like.
-    const workflowRoot = fileURLToPath(new URL("../../.github/workflows/", import.meta.url))
+    const workflowRoot = fileURLToPath(new URL("../../../../.github/workflows/", import.meta.url))
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned workflow directory.
     const files = readdirSync(workflowRoot).filter((name) => name.endsWith(".yml"))
     const scheduledMarketingDeploys = files.filter((name) => {
