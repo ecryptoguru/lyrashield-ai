@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "prisma": "7.9.1",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.23.1",

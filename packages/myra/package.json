@@ -21,7 +21,7 @@
     "@lyrashield/integrations": "workspace:*",
     "@lyrashield/pricing": "workspace:*",
     "@lyrashield/security": "workspace:*",
-    "zod": "^4.0.0"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
