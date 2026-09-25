@@ -516,13 +516,10 @@ export function FindingsClient({
       const params = parseFindingListParams(
         Object.fromEntries(new URLSearchParams(window.location.search))
       )
-      if (
-        params.filter === filter &&
-        params.sort === sortMode &&
-        params.target === targetFilter &&
-        params.q === query
-      )
+      if (params.filter === filter && params.target === targetFilter && params.q === query) {
+        if (params.sort !== sortMode) setSortMode(params.sort)
         return
+      }
       currentScopeRef.current = JSON.stringify({
         filter: params.filter,
         target: params.target,
