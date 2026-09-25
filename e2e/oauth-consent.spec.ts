@@ -60,7 +60,8 @@ test("OAuth consent discloses automatic access and recovers from errors on mobil
       allowedTargetIds: [],
       scopes: ["lyrashield.read", "lyrashield.write"],
     })
-    expect(body.allowedOperations).toHaveLength(5)
+    expect(body.allowedOperations).toHaveLength(6)
+    expect(body.allowedOperations).toContain("scan.cancel")
     expect(body.allowedProfiles).toEqual(["SAFE", "QUICK", "STANDARD", "DEEP", "CUSTOM"])
     await route.fulfill({
       status: 503,
