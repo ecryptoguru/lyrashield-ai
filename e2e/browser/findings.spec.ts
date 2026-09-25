@@ -90,6 +90,27 @@ test("target and Back keep URL, control and rows aligned", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Open finding/ })).toBeVisible()
 })
 
+test("Back through sort choices preserves loaded pages without refetching", async ({ page }) => {
+  const requests: string[] = []
+  await page.route("**/api/findings?**", (route) => {
+    requests.push(route.request().url())
+    return route.fulfill(pageOf("second", "Second finding"))
+  })
+  await page.goto("?findings&hasPages=1")
+  await page.getByRole("button", { name: "Load more" }).click()
+  await expect(page.getByRole("button", { name: /Second finding/ })).toBeVisible()
+  const sort = page.getByRole("combobox", { name: "Sort loaded results" })
+  await sort.selectOption("severity")
+  await sort.selectOption("newest")
+  await page.goBack()
+  await expect(sort).toHaveValue("severity")
+  await expect(page.getByRole("button", { name: /Second finding/ })).toBeVisible()
+  await page.goForward()
+  await expect(sort).toHaveValue("newest")
+  await expect(page.getByRole("button", { name: /Second finding/ })).toBeVisible()
+  expect(requests).toHaveLength(1)
+})
+
 test("failed current query can retry without resetting its filter", async ({ page }) => {
   let tries = 0
   await page.route("**/api/findings?**", (route) => {
