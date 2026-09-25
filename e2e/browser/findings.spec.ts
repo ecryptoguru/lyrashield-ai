@@ -306,3 +306,64 @@ test("WebMCP filter and Undo own the query while a saved page is restoring", asy
     expect(new URL(url).searchParams.get("q")).toBe("needle")
   }
 })
+
+test("canceling the current WebMCP filter clears stale rows and offers Retry", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool(tool: unknown) {
+          ;(window as typeof window & { reviewTool?: unknown }).reviewTool = tool
+        },
+      },
+    })
+  })
+  let releaseAll: (() => void) | undefined
+  let allRequests = 0
+  await page.route("**/api/findings?**", async (route) => {
+    const status = new URL(route.request().url()).searchParams.get("status")
+    if (status !== "OPEN") {
+      allRequests++
+      if (allRequests === 1)
+        await new Promise<void>((resolve) => {
+          releaseAll = resolve
+        })
+      await route.fulfill(pageOf("all", "All finding")).catch(() => {})
+      return
+    }
+    await route.fulfill(pageOf("open", "Fresh Open finding"))
+  })
+  await page.goto("?findings&hasPages=1")
+  await expect
+    .poll(() =>
+      page.evaluate(() => Boolean((window as typeof window & { reviewTool?: unknown }).reviewTool))
+    )
+    .toBe(true)
+  await page.evaluate(() => {
+    const state = window as typeof window & {
+      reviewTool?: { execute(input: unknown, options?: { signal: AbortSignal }): Promise<unknown> }
+      reviewAbort?: AbortController
+      reviewExecution?: Promise<unknown>
+    }
+    if (!state.reviewTool) throw new Error("review_findings was not registered")
+    state.reviewAbort = new AbortController()
+    state.reviewExecution = state.reviewTool.execute(
+      { filter: "ALL" },
+      { signal: state.reviewAbort.signal }
+    )
+  })
+  await expect.poll(() => Boolean(releaseAll)).toBe(true)
+  await page.evaluate(() =>
+    (window as typeof window & { reviewAbort?: AbortController }).reviewAbort?.abort()
+  )
+  releaseAll?.()
+  await expect(page.getByRole("button", { name: "All", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  )
+  await expect(page.getByRole("button", { name: /Initial finding/ })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0)
+  await expect(page.getByText(/Failed to load findings/)).toBeVisible()
+  await page.getByRole("button", { name: /Retry/i }).click()
+  await expect(page.getByRole("button", { name: /All finding/ })).toBeVisible()
+})

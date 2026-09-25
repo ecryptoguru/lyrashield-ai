@@ -385,9 +385,11 @@ export function FindingsClient({
         setNextCursor(res.nextCursor)
         return res.items
       } catch (error) {
-        if (generation === requestGenerationRef.current && !abort.signal.aborted) {
+        if (generation === requestGenerationRef.current) {
           loadedScopeRef.current = ""
+          pagesRef.current = []
           setFindings([])
+          setNextCursor(null)
           setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
         }
         throw error
