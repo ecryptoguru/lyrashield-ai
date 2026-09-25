@@ -15,6 +15,10 @@ import { describe, expect, it } from "vitest"
  * This guard pins the four sites that must stay in lockstep. A stray `lg:`
  * on any of them re-introduces the bug at 1024-1279px.
  */
+// The path is a module-relative constant, not caller input, so the
+// non-literal-fs-filename rule does not apply — same suppression the repo's
+// other source-reading tests use.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
 const header = readFileSync(new URL("../components/Header.astro", import.meta.url), "utf8")
 
 /** Strip comments so the explanatory prose about `lg:` is not matched. */
