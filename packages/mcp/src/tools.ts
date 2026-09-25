@@ -81,6 +81,15 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     idempotentHint: false,
     openWorldHint: true,
   },
+  lyrashield_cancel_scan: {
+    title: "Cancel a scan",
+    readOnlyHint: false,
+    destructiveHint: false,
+    // Repeating a cancel with the same idempotency key replays the recorded
+    // result; without one, a second call conflicts on the now-terminal scan.
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   lyrashield_explain_finding: {
     title: "Explain a finding",
     readOnlyHint: true,
@@ -174,6 +183,7 @@ async function apiCall(
     method === "POST" &&
     (sdkPath === "/scans" ||
       sdkPath === "/reports" ||
+      /\/scans\/[^/?]+$/.test(sdkPath) ||
       /\/findings\/[^/]+\/(retests|fix-proposals)$/.test(sdkPath))
   if (!recorded || !body) return client.request(method, sdkPath, body ? { body } : undefined)
   const { idempotencyKey, ...input } = body
@@ -443,6 +453,39 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
         const result: Record<string, unknown> = { action: "scan_triggered", scan: data }
         if (resolved.repository) result.repository = resolved.repository
         return makeToolResult(result)
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
+export function createCancelScanTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_cancel_scan",
+    mutating: true,
+    description:
+      "Request cancellation of a queued or running scan. Stops further engine work and billing shortly after the request lands; already-recorded findings are preserved. If the scan is already terminal or its finalization has started, the API returns a conflict — inspect the result with lyrashield_get_scan_status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", description: "Workspace ID" },
+        scanId: { type: "string", description: "Scan ID to cancel" },
+      },
+      required: ["workspaceId", "scanId"],
+    },
+    handler: async (args) => {
+      try {
+        const data = await apiCall(
+          context,
+          "POST",
+          `/api/scans/${encodeURIComponent(args.scanId as string)}`,
+          {
+            workspaceId: args.workspaceId,
+            idempotencyKey: args.idempotencyKey,
+          }
+        )
+        return makeToolResult({ action: "scan_cancel_requested", scan: data })
       } catch (err) {
         return makeErrorResult(err instanceof Error ? err.message : String(err))
       }
@@ -1137,6 +1180,7 @@ export function createAllTools(context: ToolHandlerContext): McpTool[] {
     createGetScanQualityTool(context),
     // Core
     createScanTargetTool(context),
+    createCancelScanTool(context),
     createGetFindingsTool(context),
     createGetLaunchReadinessTool(context),
     createCreateReportTool(context),

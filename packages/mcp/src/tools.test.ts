@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import {
   createScanTargetTool,
+  createCancelScanTool,
   createRunPrScanTool,
   createGetFindingsTool,
   createGetLaunchReadinessTool,
@@ -243,6 +244,62 @@ describe("createScanTargetTool", () => {
         authorizationRef: "authz_1",
       })
     })
+  })
+})
+
+describe("createCancelScanTool", () => {
+  it("posts to /api/scans/:id with the workspace in the body, never DELETE", async () => {
+    mockFetch.mockResolvedValueOnce(makeApiResponse({ id: "scan-1", status: "CANCELLED" }))
+    const tool = createCancelScanTool(context)
+    const result = await tool.handler({ workspaceId: "ws-1", scanId: "scan-1" })
+    expect(result.isError).toBeUndefined()
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("http://localhost:3000/api/v1/scans/scan-1")
+    expect(init.method).toBe("POST")
+    expect(JSON.parse(String(init.body))).toEqual({ workspaceId: "ws-1" })
+    const data = JSON.parse(result.content[0]!.text)
+    expect(data.action).toBe("scan_cancel_requested")
+    expect(data.scan.status).toBe("CANCELLED")
+  })
+
+  it("is registered as a mutating tool with annotations", async () => {
+    const { createAllTools } = await import("./tools")
+    const { MUTATING_TOOL_NAMES } = await import("./tool-policy")
+    const tools = createAllTools(context)
+    const cancel = tools.find((t) => t.name === "lyrashield_cancel_scan")
+    expect(cancel).toBeDefined()
+    expect(cancel!.mutating).toBe(true)
+    expect(MCP_TOOL_ANNOTATIONS["lyrashield_cancel_scan"]).toBeDefined()
+    expect(MUTATING_TOOL_NAMES).toContain("lyrashield_cancel_scan")
+  })
+
+  it("keeps the caller idempotency key in the header, hashed like other mutations", async () => {
+    mockFetch.mockResolvedValue(makeApiResponse({ id: "scan-1", status: "CANCELLED" }))
+    const tool = createCancelScanTool(context)
+    const input = { workspaceId: "ws-1", scanId: "scan-1", idempotencyKey: "cancel-me-once" }
+    await tool.handler(input)
+    await tool.handler(input)
+    const requests = mockFetch.mock.calls.map((call) => call[1] as RequestInit)
+    const first = new Headers(requests[0]!.headers).get("Idempotency-Key")
+    expect(first).toMatch(/^mcp:[a-f0-9]{64}$/)
+    expect(new Headers(requests[1]!.headers).get("Idempotency-Key")).toBe(first)
+    expect(JSON.parse(String(requests[0]!.body))).not.toHaveProperty("idempotencyKey")
+  })
+
+  it("returns the API conflict as an error result rather than throwing", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      headers: new Headers(),
+      json: async () => ({
+        success: false,
+        error: { code: "SCAN_ALREADY_FINISHED", message: "Scan already finished" },
+      }),
+    })
+    const tool = createCancelScanTool(context)
+    const result = await tool.handler({ workspaceId: "ws-1", scanId: "scan-1" })
+    expect(result.isError).toBe(true)
+    expect(result.content[0]!.text).toContain("Scan already finished")
   })
 })
 

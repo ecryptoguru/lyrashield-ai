@@ -39,6 +39,7 @@ Every API-backed tool calls the LyraShield REST API with a workspace API key or 
 | `lyrashield_create_pr_security_recap` | read  | Markdown recap for a PR comment                                                                         |
 | `lyrashield_check_diff`               | read  | Fast **advisory** heuristic pre-filter on a diff (not a scan)                                           |
 | `lyrashield_scan_target`              | write | Start a scan on a target                                                                                |
+| `lyrashield_cancel_scan`              | write | Request cancellation of a queued or running scan                                                        |
 | `lyrashield_run_pr_scan`              | write | Start a PR-focused (CHECK_PR) scan                                                                      |
 | `lyrashield_record_fix_proposal`      | write | Record a fix proposal on a finding                                                                      |
 | `lyrashield_verify_fix`               | write | Queue a retest to verify a fix                                                                          |
