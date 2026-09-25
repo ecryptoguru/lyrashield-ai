@@ -309,23 +309,6 @@ export function FindingsClient({
     return () => window.removeEventListener("pagehide", save)
   }, [workspaceId, filter, sortMode, targetFilter, query, findings, nextCursor, restoreReady])
 
-  const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
-    workspaceId,
-    findings,
-    nextCursor,
-    filter,
-    sortMode,
-    initialData,
-    initialNextCursor,
-    setFilter,
-    setSortMode,
-    setFindings,
-    setNextCursor,
-    setSelectedFinding,
-    setError,
-    updateQueryParams,
-  })
-
   const fetchFindings = useCallback(async (params: Record<string, string>, generation: number) => {
     if (generation !== requestGenerationRef.current) return
     const abort = new AbortController()
@@ -364,6 +347,71 @@ export function FindingsClient({
     setRestoreReady(true)
     return ++requestGenerationRef.current
   }, [])
+
+  const applyWebMcpFilter = useCallback(
+    async (newFilter: string, newSort: SortMode, externalSignal?: AbortSignal) => {
+      currentScopeRef.current = JSON.stringify({
+        filter: newFilter,
+        target: targetFilter,
+        q: query,
+      })
+      const generation = invalidateRequest()
+      setFilter(newFilter)
+      setSortMode(newSort)
+      updateQueryParams({ filter: newFilter, sort: newSort })
+      const abort = new AbortController()
+      requestAbortRef.current = abort
+      const onExternalAbort = () => abort.abort()
+      if (externalSignal?.aborted) abort.abort()
+      else externalSignal?.addEventListener("abort", onExternalAbort, { once: true })
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await apiGetPaginated<FindingListItem>(
+          "/api/findings",
+          {
+            workspaceId,
+            ...findingFilterToApiQuery(newFilter as FindingFilterValue),
+            ...(targetFilter ? { targetId: targetFilter } : {}),
+            ...(query ? { q: query } : {}),
+          },
+          { schema: findingsPaginatedSchema, signal: abort.signal }
+        )
+        if (abort.signal.aborted || generation !== requestGenerationRef.current)
+          throw new DOMException("Aborted", "AbortError")
+        pagesRef.current = [{ items: res.items, nextCursor: res.nextCursor }]
+        loadedScopeRef.current = currentScopeRef.current
+        setFindings(res.items)
+        setNextCursor(res.nextCursor)
+        return res.items
+      } catch (error) {
+        if (generation === requestGenerationRef.current && !abort.signal.aborted) {
+          loadedScopeRef.current = ""
+          setFindings([])
+          setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
+        }
+        throw error
+      } finally {
+        externalSignal?.removeEventListener("abort", onExternalAbort)
+        if (generation === requestGenerationRef.current) {
+          setLoading(false)
+          if (requestAbortRef.current === abort) requestAbortRef.current = null
+        }
+      }
+    },
+    [workspaceId, targetFilter, query, invalidateRequest, updateQueryParams]
+  )
+
+  const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
+    workspaceId,
+    findings,
+    filter,
+    sortMode,
+    setSortMode,
+    setSelectedFinding,
+    updateQueryParams,
+    applyFilter: applyWebMcpFilter,
+  })
 
   useEffect(
     () => () => {

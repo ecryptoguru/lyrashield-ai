@@ -238,3 +238,71 @@ test("a single saved page restores its scroll position", async ({ page }) => {
     )
     .toBe(180)
 })
+
+test("WebMCP filter and Undo own the query while a saved page is restoring", async ({ page }) => {
+  await page.addInitScript(
+    (savedFinding) => {
+      sessionStorage.setItem(
+        "lyrashield:findings-list:workspace-test:OPEN:priority:target-test:needle",
+        JSON.stringify({
+          version: 2,
+          pages: [
+            { items: [savedFinding], nextCursor: "cursor-1" },
+            { items: [savedFinding], nextCursor: null },
+          ],
+          scrollY: 0,
+        })
+      )
+      Object.defineProperty(document, "modelContext", {
+        configurable: true,
+        value: {
+          registerTool(tool: unknown) {
+            ;(window as typeof window & { reviewTool?: unknown }).reviewTool = tool
+          },
+        },
+      })
+    },
+    finding("initial", "Initial finding")
+  )
+  let releaseRestore: (() => void) | undefined
+  const requests: string[] = []
+  await page.route("**/api/findings?**", async (route) => {
+    const url = new URL(route.request().url())
+    requests.push(url.toString())
+    if (url.searchParams.get("cursor") === "cursor-1") {
+      await new Promise<void>((resolve) => {
+        releaseRestore = resolve
+      })
+      await route.fulfill(pageOf("stale", "Stale Open finding")).catch(() => {})
+      return
+    }
+    await route.fulfill(
+      url.searchParams.get("status") === "OPEN"
+        ? pageOf("open", "Fresh Open finding")
+        : pageOf("all", "All finding")
+    )
+  })
+  await page.goto("?findings&hasPages=1&target=target-test&q=needle")
+  await expect.poll(() => Boolean(releaseRestore)).toBe(true)
+  await page.evaluate(async () => {
+    const tool = (
+      window as typeof window & { reviewTool?: { execute(input: unknown): Promise<unknown> } }
+    ).reviewTool
+    if (!tool) throw new Error("review_findings was not registered")
+    await tool.execute({ filter: "ALL" })
+  })
+  await expect(page.getByRole("button", { name: /All finding/ })).toBeVisible()
+  releaseRestore?.()
+  await expect(page.getByRole("button", { name: /Stale Open finding/ })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "All", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  )
+  await page.getByRole("button", { name: "Undo" }).click()
+  await expect(page.getByRole("button", { name: /Fresh Open finding/ })).toBeVisible()
+  expect(requests.filter((url) => new URL(url).searchParams.has("cursor"))).toHaveLength(1)
+  for (const url of requests.filter((url) => !new URL(url).searchParams.has("cursor"))) {
+    expect(new URL(url).searchParams.get("targetId")).toBe("target-test")
+    expect(new URL(url).searchParams.get("q")).toBe("needle")
+  }
+})
