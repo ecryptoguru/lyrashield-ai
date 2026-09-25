@@ -151,3 +151,90 @@ test("failed page revalidation keeps fresh first-page results and a usable curso
   await expect(page.getByRole("button", { name: /Old second finding/ })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Load more" })).toBeEnabled()
 })
+
+test("restoration owns pagination until its saved page is revalidated", async ({ page }) => {
+  let releaseRestore: (() => void) | undefined
+  let pageLoads = 0
+  await page.route("**/api/findings?**", async (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor")
+    if (cursor === "cursor-1") {
+      pageLoads++
+      if (pageLoads === 2)
+        await new Promise<void>((resolve) => {
+          releaseRestore = resolve
+        })
+      await route
+        .fulfill({
+          ...pageOf("second", pageLoads === 1 ? "Old second" : "Fresh second"),
+          body: JSON.stringify({
+            success: true,
+            data: {
+              items: [finding("second", pageLoads === 1 ? "Old second" : "Fresh second")],
+              nextCursor: "cursor-2",
+            },
+          }),
+        })
+        .catch(() => {})
+      return
+    }
+    await route.fulfill(pageOf("third", "Third finding"))
+  })
+  await page.goto("?findings&hasPages=1")
+  await page.getByRole("button", { name: "Load more" }).click()
+  await expect(page.getByRole("button", { name: /Old second/ })).toBeVisible()
+  await page.reload()
+  await expect.poll(() => Boolean(releaseRestore)).toBe(true)
+  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0)
+  releaseRestore?.()
+  await expect(page.getByRole("button", { name: /Fresh second/ })).toHaveCount(1)
+  await page.getByRole("button", { name: "Load more" }).click()
+  await expect(page.getByRole("button", { name: /Third finding/ })).toHaveCount(1)
+  expect(pageLoads).toBe(2)
+})
+
+test("sorting while a page loads keeps one pagination owner", async ({ page }) => {
+  let releasePage: (() => void) | undefined
+  let pageLoads = 0
+  await page.route("**/api/findings?**", async (route) => {
+    pageLoads++
+    await new Promise<void>((resolve) => {
+      releasePage = resolve
+    })
+    await route.fulfill(pageOf("second", "Second finding")).catch(() => {})
+  })
+  await page.goto("?findings&hasPages=1")
+  await page.getByRole("button", { name: "Load more" }).click()
+  await expect.poll(() => Boolean(releasePage)).toBe(true)
+  await page.getByRole("combobox", { name: "Sort loaded results" }).selectOption("severity")
+  await expect(page.getByRole("button", { name: "Load more" })).toBeDisabled()
+  releasePage?.()
+  await expect(page.getByRole("button", { name: /Second finding/ })).toHaveCount(1)
+  expect(pageLoads).toBe(1)
+})
+
+test("a single saved page restores its scroll position", async ({ page }) => {
+  await page.addInitScript(
+    (savedFinding) => {
+      sessionStorage.setItem(
+        "lyrashield:findings-list:workspace-test:OPEN:priority::",
+        JSON.stringify({
+          version: 2,
+          pages: [{ items: [savedFinding], nextCursor: null }],
+          scrollY: 180,
+        })
+      )
+      const originalScrollTo = window.scrollTo.bind(window)
+      window.scrollTo = ((x: number, y: number) => {
+        ;(window as typeof window & { restoredScrollY?: number }).restoredScrollY = y
+        originalScrollTo(x, y)
+      }) as typeof window.scrollTo
+    },
+    finding("initial", "Initial finding")
+  )
+  await page.goto("?findings")
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as typeof window & { restoredScrollY?: number }).restoredScrollY)
+    )
+    .toBe(180)
+})

@@ -238,7 +238,18 @@ export function FindingsClient({
               q: initialQuery,
             })
           )
-          if (!stored || stored.pages.length < 2 || !initialNextCursor) return
+          if (!stored) return
+          const restoreScroll = () => {
+            if (stored.scrollY > 0)
+              requestAnimationFrame(() => {
+                if (!abort.signal.aborted && requestGenerationRef.current === 0)
+                  window.scrollTo(0, stored.scrollY)
+              })
+          }
+          if (stored.pages.length < 2 || !initialNextCursor) {
+            restoreScroll()
+            return
+          }
           const pages: FindingsListPage[] = [{ items: initialData, nextCursor: initialNextCursor }]
           let cursor: string | null = initialNextCursor
           for (let index = 1; index < stored.pages.length && cursor; index++) {
@@ -267,11 +278,7 @@ export function FindingsClient({
           pagesRef.current = pages
           setFindings(pages.flatMap((page) => page.items))
           setNextCursor(cursor)
-          if (stored.scrollY > 0)
-            requestAnimationFrame(() => {
-              if (!abort.signal.aborted && requestGenerationRef.current === 0)
-                window.scrollTo(0, stored.scrollY)
-            })
+          restoreScroll()
         } catch {
           if (!abort.signal.aborted) setRestoreError(true)
         } finally {
@@ -702,46 +709,43 @@ export function FindingsClient({
             )
           })}
 
-          <LoadMore
-            key={findingsContextKey(workspaceId, {
-              filter,
-              sort: sortMode,
-              target: targetFilter,
-              q: query,
-            })}
-            cursor={nextCursor}
-            onLoadMore={async (cursor) => {
-              const generation = requestGenerationRef.current
-              const abort = new AbortController()
-              loadMoreAbortRef.current = abort
-              const res = await apiGetPaginated<FindingListItem>(
-                `/api/findings`,
-                listQuery({ cursor }),
-                { schema: findingsPaginatedSchema, signal: abort.signal }
-              )
-              acceptLoadMoreRef.current =
-                generation === requestGenerationRef.current && !abort.signal.aborted
-              return { items: res.items, nextCursor: res.nextCursor }
-            }}
-            onItems={(items) => {
-              if (acceptLoadMoreRef.current) {
-                pendingItemsRef.current = items
-                setFindings((prev) => [...prev, ...items])
-              }
-            }}
-            onNextCursor={(cursor) => {
-              if (!acceptLoadMoreRef.current) return
-              if (pendingItemsRef.current) {
-                pagesRef.current = [
-                  ...pagesRef.current,
-                  { items: pendingItemsRef.current, nextCursor: cursor },
-                ]
-                pendingItemsRef.current = null
-              }
-              setNextCursor(cursor)
-              acceptLoadMoreRef.current = false
-            }}
-          />
+          {restoreReady && (
+            <LoadMore
+              key={JSON.stringify([workspaceId, filter, targetFilter, query])}
+              cursor={nextCursor}
+              onLoadMore={async (cursor) => {
+                const generation = requestGenerationRef.current
+                const abort = new AbortController()
+                loadMoreAbortRef.current = abort
+                const res = await apiGetPaginated<FindingListItem>(
+                  `/api/findings`,
+                  listQuery({ cursor }),
+                  { schema: findingsPaginatedSchema, signal: abort.signal }
+                )
+                acceptLoadMoreRef.current =
+                  generation === requestGenerationRef.current && !abort.signal.aborted
+                return { items: res.items, nextCursor: res.nextCursor }
+              }}
+              onItems={(items) => {
+                if (acceptLoadMoreRef.current) {
+                  pendingItemsRef.current = items
+                  setFindings((prev) => [...prev, ...items])
+                }
+              }}
+              onNextCursor={(cursor) => {
+                if (!acceptLoadMoreRef.current) return
+                if (pendingItemsRef.current) {
+                  pagesRef.current = [
+                    ...pagesRef.current,
+                    { items: pendingItemsRef.current, nextCursor: cursor },
+                  ]
+                  pendingItemsRef.current = null
+                }
+                setNextCursor(cursor)
+                acceptLoadMoreRef.current = false
+              }}
+            />
+          )}
         </div>
       )}
 
