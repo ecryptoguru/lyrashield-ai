@@ -173,7 +173,7 @@ export function checkCheckoutReadiness(env: EnvLike): ReadinessReport {
 
   notes.push(
     "Preflight does NOT prove a live charge, settlement, payout, tax handling, or " +
-      "payment-method coverage. Complete docs/checkout-verification.md for live evidence."
+      "payment-method coverage. Complete docs/operations.md (live checkout verification) for live evidence."
   )
 
   return { ok: checks.every((c) => c.ok), checks, notes }

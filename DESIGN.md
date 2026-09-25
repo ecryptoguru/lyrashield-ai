@@ -142,4 +142,4 @@ against the light background) on the light theme.
 - Do honor `prefers-reduced-motion` and DNT/GPC; don't animate critical CTAs.
 - Don't introduce purple/violet, glassmorphism-heavy layers or emoji in UI.
 - Don't change public copy claims (certification, guarantee, universal
-  coverage) — see `docs/claims-policy.md`.
+  coverage) — see `docs/policies.md`.

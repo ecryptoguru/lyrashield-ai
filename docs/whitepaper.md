@@ -76,6 +76,9 @@ The product is live in **open beta with open registration** at `https://app.lyra
 - One adaptive dashboard for every role: a state-derived next action, posture with exact evidence scope, compact metrics and progressive disclosure. Presentation never changes permissions, scan behavior or evidence semantics.
 - Billing (dual payment gateways), entitlements, usage metering, minute packs, grace, overage, checkout, portal and webhook processing.
 - Affiliate applications, attribution, commission ledger, fraud controls, payout ledger and partner dashboard.
+- Myra, an AI support agent on the marketing site and dashboard behind explicit feature flags: reviewed knowledge, chat with generation caps, and feedback capture.
+- Delegated outbound connectors (GitHub and Slack) with fail-closed admission and Agency-tier gating, managed through workspace APIs.
+- Scan attachments and a review-changes workflow with parity across API, SDK, CLI, MCP and desktop clients; release-identity confirmation for signed reports.
 
 ### 3.2 Local/Desktop
 
@@ -153,7 +156,7 @@ The free Lite Check returns a distinct result — never the official LyraShield 
 | `@lyrashield/mcp`    | MCP server over stdio and remote Streamable HTTP with hosted OAuth                                      |
 | Agent workflows      | 30 registry entries covering 26 preferred client workflows; some use the standalone CLI rather than MCP |
 | GitHub Action        | Account-less, diff-aware PR gate emitting SARIF, running on the user's runner                           |
-| Public API `/api/v1` | Additive-only contract with a 90-day deprecation policy (see `api-stability.md`)                        |
+| Public API `/api/v1` | Additive-only contract with a 90-day deprecation policy (see `policies.md`)                             |
 
 ## 7. Security and trust architecture (overview)
 
@@ -243,7 +246,7 @@ Phase 2 direction (enterprise governance) proceeds only after current launch gat
 
 Explicitly deferred: broad ASPM/attack-path platform, large speculative integration catalog, IaC/container/cloud-account scanning, local/self-hosted models and a human-validated pentest add-on.
 
-The verbatim Phase 2 planning archive is retained in git history; this section is the current direction overlay.
+A curated Phase 2 planning archive is retained at [`docs/Phase2.md`](./Phase2.md) (verbatim original in Git history); this section is the current direction overlay.
 
 ## 11. Success measures
 

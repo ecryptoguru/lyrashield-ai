@@ -227,7 +227,7 @@ LyraShield applies protected internal run limits automatically. The dashboard do
 2. Select **New Scan**.
 3. Choose a target.
 4. Choose a review depth that is available for that target type. Locked options explain why they are unavailable (for example, Contract Review requires an OpenAPI document on an API target).
-5. Review the selected workflow description.
+5. Review the selected workflow description. You may attach workspace evidence files to the scan; attachments are validated and resolved before billing or queue work, host paths are never accepted, and the CLI accepts a repeatable `--attachment` flag referencing uploaded attachment IDs.
 6. Select **Start Scan**.
 
 Only one active scan may run against the same target. Wait for it to finish or cancel it before starting another.
@@ -418,7 +418,7 @@ The **Integrations** page has two tabs:
 
 The current dashboard integration supports connecting the GitHub App, loading authorized repositories and creating repository targets. Installation identifiers are globally unique and provider ownership must be proven before a fresh callback can create a workspace integration.
 
-Other integration types exist in the internal schema and roadmap, but the current dashboard should not be read as offering active Slack, Jira, Linear, Teams, ServiceNow, SIEM or compliance-platform connections.
+Other integration types exist in the internal schema and roadmap, but the current dashboard should not be read as offering active Jira, Linear, Teams, ServiceNow, SIEM or compliance-platform connections. Delegated outbound connectors (GitHub and Slack) do exist as a gated API-level capability: they are limited to Agency-tier workspaces, admission is fail-closed (`off`/`canary`/`public` with a workspace allowlist), outputs are capped and connections are managed through workspace APIs — they are not yet a dashboard tab.
 
 ### 20.5 Billing and plans (Cloud Mode)
 
@@ -601,6 +601,8 @@ The public marketing site, Lite Check, browser-local tools, methodology and cont
 The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized GPT-6 Luna/Sol deployments, actionable Azure alerts and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
 
 Billing, Local/Desktop licensing and the affiliate application/ledger are implemented. Razorpay Live is activated with the matching INR Cloud catalog and an enabled production webhook; Polar Live has its private Cloud/pack/Local catalog and lifecycle webhook. Historical Polar Sandbox and Razorpay Test Mode provider receipts are retained and their isolated deployment has been removed. No live checkout or payment was exercised. Production desktop distribution proof, payout API provisioning and the public affiliate opening remain controlled release gates.
+
+Myra, the AI support agent, is live on the marketing site and dashboard behind explicit feature flags with session and daily caps; the reviewed knowledge base and feedback capture ship with it. Delegated outbound connectors (GitHub and Slack) are an Agency-tier, admission-gated capability managed through workspace APIs without a dashboard tab yet.
 
 Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Sol cascade, Security Copilot and enterprise identity/deployment controls are not currently user features.
 
