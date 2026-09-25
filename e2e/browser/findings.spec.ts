@@ -1,0 +1,108 @@
+import { expect, test } from "@playwright/test"
+
+function finding(id: string, title: string) {
+  return {
+    id,
+    title,
+    summary: title,
+    severity: "HIGH",
+    status: "OPEN",
+    verified: false,
+    verificationStatus: "NOT_VERIFIED",
+    confidence: "medium",
+    firstSeenAt: "2026-09-01T00:00:00.000Z",
+    lastSeenAt: "2026-09-01T00:00:00.000Z",
+  }
+}
+
+function pageOf(id: string, title: string) {
+  return {
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      success: true,
+      data: { items: [finding(id, title)], nextCursor: null },
+    }),
+  }
+}
+
+test("clearing search restores the current unfiltered page and URL", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const requests: string[] = []
+  await page.route("**/api/findings?**", (route) => {
+    requests.push(route.request().url())
+    const q = new URL(route.request().url()).searchParams.get("q")
+    return route.fulfill(
+      q ? pageOf("search", "Search finding") : pageOf("initial", "Initial finding")
+    )
+  })
+  await page.goto("?findings")
+  const search = page.getByRole("searchbox", { name: "Search findings" })
+  await search.fill("missing")
+  await expect(page).toHaveURL(/q=missing/)
+  await expect(page.getByRole("button", { name: /Search finding/ })).toBeVisible()
+  await search.fill("")
+  await expect(page).not.toHaveURL(/q=/)
+  await expect(page.getByRole("button", { name: /Initial finding/ })).toBeVisible()
+  expect(new URL(requests.at(-1)!).searchParams.has("q")).toBe(false)
+})
+
+test("returning to Open waits for its own response instead of accepting an old All response", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  let releaseAll: (() => void) | undefined
+  await page.route("**/api/findings?**", async (route) => {
+    const status = new URL(route.request().url()).searchParams.get("status")
+    if (!status) {
+      await new Promise<void>((resolve) => {
+        releaseAll = resolve
+      })
+      await route.fulfill(pageOf("all", "All finding")).catch(() => {})
+    } else {
+      await route.fulfill(pageOf("open", "Open finding"))
+    }
+  })
+  await page.goto("?findings")
+  await page.getByRole("button", { name: "All", exact: true }).click()
+  await expect.poll(() => Boolean(releaseAll)).toBe(true)
+  await page.getByRole("button", { name: "Open", exact: true }).click()
+  await expect(page.getByRole("button", { name: /Open finding/ })).toBeVisible()
+  releaseAll?.()
+  await expect(page.getByRole("button", { name: /Open finding/ })).toBeEnabled()
+  await expect(page.getByRole("button", { name: /All finding/ })).toHaveCount(0)
+  await expect(page).not.toHaveURL(/filter=ALL/)
+})
+
+test("target and Back keep URL, control and rows aligned", async ({ page }) => {
+  await page.route("**/api/findings?**", (route) => {
+    const target = new URL(route.request().url()).searchParams.get("targetId")
+    return route.fulfill(
+      target ? pageOf("target", "Target finding") : pageOf("open", "Open finding")
+    )
+  })
+  await page.goto("?findings")
+  await page.getByRole("combobox", { name: "Filter by target" }).selectOption("target-test")
+  await expect(page).toHaveURL(/target=target-test/)
+  await expect(page.getByRole("button", { name: /Target finding/ })).toBeVisible()
+  await page.goBack()
+  await expect(page.getByRole("combobox", { name: "Filter by target" })).toHaveValue("")
+  await expect(page.getByRole("button", { name: /Open finding/ })).toBeVisible()
+})
+
+test("failed current query can retry without resetting its filter", async ({ page }) => {
+  let tries = 0
+  await page.route("**/api/findings?**", (route) => {
+    tries++
+    return tries === 1 ? route.abort("failed") : route.fulfill(pageOf("retry", "Retried finding"))
+  })
+  await page.goto("?findings")
+  await page.getByRole("button", { name: "High", exact: true }).click()
+  await expect(page.getByText(/Failed to load findings/)).toBeVisible()
+  await page.getByRole("button", { name: /Retry/i }).click()
+  await expect(page.getByRole("button", { name: /Retried finding/ })).toBeVisible()
+  await expect(page.getByRole("button", { name: "High", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  )
+})

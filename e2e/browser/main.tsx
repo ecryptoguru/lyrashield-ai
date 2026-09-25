@@ -24,6 +24,10 @@ if (new URLSearchParams(location.search).get("myra") === "marketing") {
       setLastTraceId: () => {},
     }
   )
+} else if (new URLSearchParams(location.search).has("findings")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: FindingsHarness } = await import("./findings-harness")
+  root.render(<FindingsHarness />)
 } else if (new URLSearchParams(location.search).has("desktop")) {
   await import("../../apps/desktop/frontend/src/styles/globals.css")
   const { default: DesktopHarness } = await import("./desktop-harness")
