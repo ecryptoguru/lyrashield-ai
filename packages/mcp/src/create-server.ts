@@ -1,10 +1,16 @@
 import { createReadStream } from "node:fs"
 import { createInterface as createPrompt } from "node:readline/promises"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+import {
+  CallToolRequestSchema,
+  ErrorCode,
+  ListToolsRequestSchema,
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js"
 import { McpServer } from "./server"
 import type { ApprovalDecision, ApprovalGate, McpServerOptions } from "./server"
 import { logger } from "@lyrashield/logger"
+import { assertTaskCapableTool, toSdkTaskStore, type McpTaskBackend } from "./task-adapter"
 
 export const SERVER_NAME = "lyrashield-mcp"
 export const SERVER_TITLE = "LyraShield AI"
@@ -49,6 +55,15 @@ export interface CreateServerOptions {
   remoteApprovalContext?: RemoteApprovalContext
   /** The OAuth token is bound to a pre-authorized AgentConnection grant. */
   delegatedAuthorization?: boolean
+  /**
+   * Enable MCP tasks (protocol 2025-11-25). The backend owns task state —
+   * the hosted path binds it to the durable AgentOperation ledger; callers
+   * must not pass an ephemeral store on a transport that outlives it.
+   * When set, the server advertises `capabilities.tasks` and
+   * `execution.taskSupport: "optional"` on task-capable tools, and honors
+   * task augmentation on tools/call.
+   */
+  tasks?: { backend: McpTaskBackend }
 }
 
 /**
@@ -72,8 +87,24 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
       websiteUrl: SERVER_WEBSITE_URL,
     },
     {
-      capabilities: { tools: { listChanged: false } },
+      capabilities: {
+        tools: { listChanged: false },
+        ...(options.tasks
+          ? {
+              tasks: {
+                // Task creation is supported on tools/call; status listing and
+                // protocol cancellation route into the durable backend.
+                requests: { tools: { call: {} } },
+                list: {},
+                cancel: {},
+              },
+            }
+          : {}),
+      },
       instructions: SERVER_INSTRUCTIONS,
+      // Installing the store wires the SDK's tasks/get, tasks/result,
+      // tasks/list and tasks/cancel handlers against durable state.
+      ...(options.tasks ? { taskStore: toSdkTaskStore(options.tasks.backend) } : {}),
     }
   )
 
@@ -171,6 +202,7 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
   const engine = new McpServer({
     ...(options.allowMutations ? { allowMutations: true } : { approvalGate }),
     ...(options.toolContext ? { toolContext: options.toolContext } : {}),
+    ...(options.tasks ? { taskSupportEnabled: true } : {}),
   })
 
   server.setRequestHandler(ListToolsRequestSchema, () => ({
@@ -190,6 +222,28 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params
+
+    // Task-augmented execution (MCP protocol 2025-11-25). The tool still runs
+    // through the identical guard/validation/approval pipeline — the backend
+    // binds the durable record that single execution produced to a task id.
+    if (request.params.task !== undefined) {
+      if (!options.tasks) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          "This server does not support task-augmented execution."
+        )
+      }
+      assertTaskCapableTool(name)
+      const toolResult = await engine.callTool(name, (args ?? {}) as Record<string, unknown>)
+      const task = await options.tasks.backend.createTask({
+        toolName: name,
+        args: (args ?? {}) as Record<string, unknown>,
+        taskParams: { ttl: request.params.task.ttl },
+        toolResult,
+      })
+      return { task }
+    }
+
     const result = await engine.callTool(name, (args ?? {}) as Record<string, unknown>)
     return {
       content: result.content,
