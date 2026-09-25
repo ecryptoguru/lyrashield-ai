@@ -26,6 +26,7 @@ import { readOwnBookings } from "./tools/demo"
 import { sanitizeInstructionInput } from "@lyrashield/security"
 
 export interface LoopArgs {
+  signal?: AbortSignal
   ctx: MyraToolContext
   text: string
   routeContext?: string | null
@@ -276,6 +277,7 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
   const db = ctx.db
 
   yield { type: "ready", conversationId: ctx.conversationId ?? "", traceId }
+  if (args.signal?.aborted) return
 
   // Takeover guard — no generation while a person holds the conversation.
   if (ctx.conversationId) {
@@ -323,6 +325,7 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
   if (activity) yield { type: "activity", label: activity }
 
   const run = async (name: MyraToolName, input: unknown) => {
+    if (args.signal?.aborted) throw new ProviderDefiniteFailure("Turn stopped.")
     if (step.toolsUsed.length >= MYRA_LIMITS.maxToolStepsPerTurn) return null
     const result = await runTool(name, ctx, input)
     step.toolsUsed.push(name)
@@ -383,6 +386,7 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
   }
 
   // Emit tool-rendered components and proposals before the prose.
+  if (args.signal?.aborted) return
   for (const component of step.components) yield { type: "component", component }
   for (const proposal of step.proposals) {
     yield {
@@ -406,6 +410,7 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
   const reserves = provider.name === "azure"
   let releaseReservation = false
   try {
+    if (args.signal?.aborted) throw new ProviderDefiniteFailure("Turn stopped.")
     // The provider only receives a route context the caller's role may
     // actually see — a VIEWER on /dashboard/billing leaks nothing upstream.
     const safeRouteContext =
@@ -426,7 +431,9 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
         anonymous: ctx.principal.kind === "anonymous",
       })
     }
+    if (args.signal?.aborted) throw new ProviderDefiniteFailure("Turn stopped.")
     const generated = await provider.generate({
+      signal: args.signal,
       system: systemPrompt(ctx),
       messages: [{ role: "user", content: sanitizeInstructionInput(text) }],
       context: {
@@ -453,6 +460,7 @@ export async function* runTaskLoop(args: LoopArgs): AsyncGenerator<MyraStreamEve
       await releaseGenerationBudget(traceId).catch(() => {})
     }
   }
+  if (args.signal?.aborted) return
   if (verification) {
     answerText +=
       verification.name === "book_demo"

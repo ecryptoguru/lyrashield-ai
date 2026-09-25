@@ -88,15 +88,17 @@ async function post(request: Request): Promise<Response> {
   // MYRA_GENERATION_ENABLED is enforced inside handleMessage (the service
   // emits a GENERATION_DISABLED error event); the route passes through so
   // retrieval/handoff stays available during a generation outage.
-  const events = handleMessage(resolved, {
-    text: parsed.data.text,
-    conversationId: parsed.data.conversationId,
-    routeContext: parsed.data.routeContext,
-    surface: parsed.data.surface,
-    bookingRequest: parsed.data.bookingRequest,
-    sessionMemory: parsed.data.sessionMemory,
-  })
-  return myraSseResponse(request, events)
+  return myraSseResponse(request, (signal) =>
+    handleMessage(resolved, {
+      text: parsed.data.text,
+      conversationId: parsed.data.conversationId,
+      routeContext: parsed.data.routeContext,
+      surface: parsed.data.surface,
+      bookingRequest: parsed.data.bookingRequest,
+      sessionMemory: parsed.data.sessionMemory,
+      signal,
+    })
+  )
 }
 
 export const POST = withApiRequest(post)

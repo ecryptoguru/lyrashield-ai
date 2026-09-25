@@ -1,5 +1,5 @@
 import "./test-env"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { MyraPrincipal, MyraStreamEvent } from "../contracts"
 import { runTaskLoop } from "./loop"
 import { MockProvider } from "./provider"
@@ -84,6 +84,25 @@ const USER: MyraPrincipal = {
 const ANON: MyraPrincipal = { kind: "anonymous", publicSessionId: "pubsess_1" }
 
 describe("runTaskLoop structured booking request", () => {
+  it("starts no tools or provider work for an already stopped turn", async () => {
+    const abort = new AbortController()
+    abort.abort()
+    const { db, ops } = fakeDb()
+    const generate = vi.fn()
+    const events = await collect(
+      runTaskLoop({
+        ctx: toolCtx(ANON, db),
+        text: "Book a demo",
+        assistantMessageId: "stopped-msg",
+        traceId: "stopped-trace",
+        signal: abort.signal,
+        provider: { name: "mock", generate },
+      })
+    )
+    expect(ops).toHaveLength(0)
+    expect(generate).not.toHaveBeenCalled()
+    expect(events.map((event) => event.type)).toEqual(["ready"])
+  })
   it("drives book_demo directly without parsing name/email from text", async () => {
     const slotStart = nextOnGridSlotIso()
     const { db, ops } = fakeDb({ userEmail: "eval@example.com" })

@@ -283,35 +283,73 @@ function encodeEvent(event: MyraStreamEvent): Uint8Array {
  */
 export function myraSseResponse(
   request: Request,
-  events: AsyncIterable<MyraStreamEvent>
+  createEvents: (signal: AbortSignal) => AsyncIterable<MyraStreamEvent>
 ): Response {
   const encoder = new TextEncoder()
+  const abort = new AbortController()
+  let stopped = false
+  let heartbeat: ReturnType<typeof setInterval> | undefined
+  let iterator: AsyncIterator<MyraStreamEvent> | undefined
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined
+  const onRequestAbort = () => {
+    stop()
+    try {
+      controllerRef?.close()
+    } catch {
+      /* reader already canceled */
+    }
+  }
+  const stop = () => {
+    if (stopped) return
+    stopped = true
+    if (heartbeat) clearInterval(heartbeat)
+    abort.abort()
+    request.signal.removeEventListener("abort", onRequestAbort)
+    // A producer waiting on an upstream call may not return immediately.
+    void iterator?.return?.().catch(() => {})
+  }
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      controllerRef = controller
+      if (request.signal.aborted) {
+        stop()
+        controller.close()
+        return
+      }
+      request.signal.addEventListener("abort", onRequestAbort, { once: true })
       // Keepalive comment every 15s — long model calls otherwise risk idle
       // cutoffs at intermediary proxies.
-      const heartbeat = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(`: hb\n\n`))
-        } catch {
-          /* stream closed */
-        }
+      heartbeat = setInterval(() => {
+        if (!stopped)
+          try {
+            controller.enqueue(encoder.encode(`: hb\n\n`))
+          } catch {
+            /* stream closed */
+          }
       }, 15_000)
       try {
-        for await (const event of events) {
+        iterator = createEvents(abort.signal)[Symbol.asyncIterator]()
+        while (!stopped) {
+          const next = await iterator.next()
+          if (next.done || stopped) break
+          const event = next.value
           controller.enqueue(encodeEvent(event))
         }
       } catch (error) {
-        const mapped = myraErrorFromUnknown(error) ?? {
-          code: "INTERNAL_ERROR" as const,
-          message: MYRA_ERROR_MESSAGES.INTERNAL_ERROR,
+        if (!stopped) {
+          const mapped = myraErrorFromUnknown(error) ?? {
+            code: "INTERNAL_ERROR" as const,
+            message: MYRA_ERROR_MESSAGES.INTERNAL_ERROR,
+          }
+          controller.enqueue(encodeEvent({ type: "error", error: mapped }))
         }
-        controller.enqueue(encodeEvent({ type: "error", error: mapped }))
       } finally {
-        clearInterval(heartbeat)
-        controller.close()
+        const shouldClose = !stopped
+        stop()
+        if (shouldClose) controller.close()
       }
     },
+    cancel: stop,
   })
   return new Response(stream, {
     status: 200,

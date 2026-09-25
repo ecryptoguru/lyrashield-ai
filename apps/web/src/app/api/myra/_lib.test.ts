@@ -13,7 +13,58 @@ vi.mock("@lyrashield/config", () => ({
   myraDashboardAllowed: (input: { emailVerified: boolean }) => input.emailVerified,
 }))
 
-const { myraPrincipalEnabled, myraWritesEnabled } = await import("./_lib")
+const { myraPrincipalEnabled, myraWritesEnabled, myraSseResponse } = await import("./_lib")
+
+describe("Myra SSE cancellation", () => {
+  it("passes request abort to the producer and stops it", async () => {
+    const abort = new AbortController()
+    let producerSignal: AbortSignal | undefined
+    const response = myraSseResponse(
+      new Request("https://example.test", { signal: abort.signal }),
+      async function* (signal) {
+        producerSignal = signal
+        yield { type: "ready", conversationId: "conversation", traceId: "trace" } as const
+        await new Promise<void>((resolve) =>
+          signal.addEventListener("abort", () => resolve(), { once: true })
+        )
+      }
+    )
+    const reader = response.body!.getReader()
+    await reader.read()
+    abort.abort()
+    await vi.waitFor(() => expect(producerSignal?.aborted).toBe(true))
+    await reader.cancel()
+  })
+
+  it("passes reader cancellation to the producer", async () => {
+    let producerSignal: AbortSignal | undefined
+    const response = myraSseResponse(new Request("https://example.test"), async function* (signal) {
+      producerSignal = signal
+      yield { type: "ready", conversationId: "conversation", traceId: "trace" } as const
+      await new Promise<void>((resolve) =>
+        signal.addEventListener("abort", () => resolve(), { once: true })
+      )
+    })
+    const reader = response.body!.getReader()
+    await reader.read()
+    await reader.cancel()
+    expect(producerSignal?.aborted).toBe(true)
+  })
+
+  it("does not start a producer when the request was already aborted", async () => {
+    const abort = new AbortController()
+    abort.abort()
+    const producer = vi.fn(async function* () {
+      yield { type: "ready", conversationId: "conversation", traceId: "trace" } as const
+    })
+    const response = myraSseResponse(
+      new Request("https://example.test", { signal: abort.signal }),
+      producer
+    )
+    expect(producer).not.toHaveBeenCalled()
+    expect((await response.body!.getReader().read()).done).toBe(true)
+  })
+})
 
 describe("Myra verified-account gate", () => {
   beforeEach(() => {
