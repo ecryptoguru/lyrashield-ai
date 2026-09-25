@@ -10,7 +10,7 @@ are the explicit CI/headless fallback, not the default interactive setup.
 
 ## Protocol compatibility
 
-This release uses `@modelcontextprotocol/sdk` 1.30.0. Its latest stable protocol is `2025-11-25`; it also negotiates `2025-06-18`, `2025-03-26`, `2024-11-05` and `2024-10-07` for older clients.
+This release uses `@modelcontextprotocol/sdk` 1.30.1. Its latest stable protocol is `2025-11-25`; it also negotiates `2025-06-18`, `2025-03-26`, `2024-11-05` and `2024-10-07` for older clients. The published `2026-07-28` protocol revision is **not** supported: no stable SDK negotiates it as of 1.30.1, so it is neither advertised nor emulated — an `initialize` for it is answered with `2025-11-25` and post-initialization requests bearing the `2026-07-28` header are rejected with the supported-version list.
 
 - Server identity includes a title, description, website, version and usage instructions.
 - Every tool publishes an input schema, output schema, title, safety annotations and structured content.
@@ -191,10 +191,12 @@ Coding-agent hosts may impose their own tool permission dialogs. LyraShield cann
 ## Compatibility receipts
 
 - Package: `@lyrashield/mcp` 0.2.9; runtime: Node.js 24 or newer.
-- SDK lock: `@modelcontextprotocol/sdk` 1.30.0; stable protocol `2025-11-25`, with the older
+- SDK lock: `@modelcontextprotocol/sdk` 1.30.1; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
-- `pnpm --filter @lyrashield/mcp test` covers protocol negotiation, stdio/HTTP transport,
-  credentials, prompt-injection guards, schemas, structured results and approval policy.
+- `pnpm --filter @lyrashield/mcp test` covers protocol negotiation for every SDK-supported
+  version, fail-closed unknown-version and malformed-input handling, bounded request
+  bodies/batches, stdio/HTTP transport, credentials, prompt-injection guards, schemas,
+  structured results and approval policy — including a packed-tarball stdio handshake.
 - A stored OAuth credential is refreshed before the stdio server starts when it is expired or
   within the one-minute refresh window, including when `LYRASHIELD_API_URL` overrides the API
   origin; the rotated credential is atomically persisted. Environment credentials remain immutable
