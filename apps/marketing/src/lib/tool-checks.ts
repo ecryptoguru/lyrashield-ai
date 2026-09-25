@@ -33,8 +33,15 @@ const SECRET_PATTERNS: readonly SecretPattern[] = [
   { kind: "Private key", pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g },
   {
     kind: "Assigned credential",
+    // Rewritten to avoid a catastrophic-backtracking shape: the identifier-prefix,
+    // key and separator parts are independent alternatives with no nesting or
+    // ambiguous repetition, so the engine cannot blow up on a long line of word
+    // characters. `(?:^|[^A-Za-z0-9])` replaces `\b` because `_` is a word
+    // character — `\bpassword` cannot match `DB_PASSWORD`, the commonest env-var
+    // spelling. The optional quote sits before the separator, so a quoted JSON key
+    // (`"apiKey":`) matches too.
     pattern:
-      /(?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]+[_-])?(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|secret|password)["']?\s*[:=]\s*["']?([A-Za-z0-9._~+/=-]{16,})/gi,
+      /(?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]{1,32}[_-])?(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|secret|password)["']?\s{0,4}[:=]\s{0,4}["']?([A-Za-z0-9._~+/=-]{16,})/gi,
     valueGroup: 1,
   },
 ]
