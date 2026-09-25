@@ -76,6 +76,9 @@ The product is live in **open beta with open registration** at `https://app.lyra
 - One adaptive dashboard for every role: a state-derived next action, posture with exact evidence scope, compact metrics and progressive disclosure. Presentation never changes permissions, scan behavior or evidence semantics.
 - Billing (dual payment gateways), entitlements, usage metering, minute packs, grace, overage, checkout, portal and webhook processing.
 - Affiliate applications, attribution, commission ledger, fraud controls, payout ledger and partner dashboard.
+- Myra, an AI support agent on the marketing site and dashboard behind explicit feature flags: reviewed knowledge, chat with generation caps, and feedback capture.
+- Delegated outbound connectors (GitHub and Slack) with fail-closed admission and Agency-tier gating, managed through workspace APIs.
+- Scan attachments and a review-changes workflow with parity across API, SDK, CLI, MCP and desktop clients; release-identity confirmation for signed reports.
 
 ### 3.2 Local/Desktop
 

@@ -35,6 +35,7 @@ The following routes are part of the additive-only surface and will not be remov
 - `/api/reports/verify` — POST, verify a Launch Readiness Report signature by checksum
 - `/api/taxonomy/ai-built-failures` — GET, public versioned AI-Built Failure Taxonomy reference
 - `/api/badge/readiness/[reportId]` — GET, README badge reflecting a target's Launch Gate verdict (token-gated)
+- `/api/scans/[id]/quality` — GET, scan-quality surface for a completed scan (also exposed at `/api/v1/scans/[id]/quality`)
 
 Any change that would cause a correctly written v1 client to break must ship as `/api/v2`.
 

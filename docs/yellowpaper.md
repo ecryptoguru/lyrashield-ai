@@ -225,6 +225,8 @@ Threat model covered: license forgery and tampering (signature over exact payloa
 | AI assurance framework mapping | `ai-assurance-mapping/1.0.0`                | OWASP LLM readiness mapping     |
 | Lite Check payload             | versioned pattern + result contract         | `/scan`, signed cards           |
 | Affiliate terms                | `2026-08-18-v1`                             | Partner acceptance record       |
+| Scan workflows                 | `scan-workflows/1.0.0`                      | Scan lifecycle, clients         |
+| Scan quality                   | `lyrashield-scan-quality/1.0.0`             | Dashboard, /api/v1, CLI         |
 
 ## 10. Technical claims boundary
 
