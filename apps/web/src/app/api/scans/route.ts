@@ -22,20 +22,20 @@ import {
   MAX_CONCURRENT_WORKSPACE_SCANS,
   ScanExecutionPlanInputError,
   ScanStatusSchema,
-  resolveScanProfile,
-  resolveTargetScanMode,
 } from "@lyrashield/types"
 import { parseScanStateFilter, scanStateStatuses } from "@/lib/scan-presentation"
-import { normalizeDomainForProof } from "@lyrashield/security"
-import { env, evaluateAuthAssessmentAdmission } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { assertScanAllowed } from "@lyrashield/billing"
 import {
-  assertScanAllowed,
-  resolveAccountBilling,
-  resolveWorkspaceScanSponsor,
-} from "@lyrashield/billing"
+  authAssessmentAdmission,
+  findCurrentDomainProof,
+  findScanPolicy,
+  resolveCanonicalReviewMode,
+  resolveSponsorScanPlan,
+  resolveUrlReviewMode,
+} from "../../../lib/scan-admission"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
@@ -168,20 +168,15 @@ async function post(request: Request) {
     // actually does: engine-backed tiers (STANDARD/DEEP) require a verified
     // domain on paid plans, while the deterministic-only tier needs no proof —
     // it only fetches what a browser could.
-    let urlEngineBacked = false
-    if (target.type === "WEB_APP" || target.type === "API") {
-      const resolved = resolveTargetScanMode({
-        targetType: target.type,
-        mode: data.mode,
-        hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
-      })
-      if (!resolved.ok) {
-        return apiError(resolved.code, resolved.reason, 400)
-      }
-      urlEngineBacked =
-        resolved.profile !== null &&
-        resolveScanProfile({ targetType: target.type, mode: data.mode }).usesAi
+    const urlAdmission = resolveUrlReviewMode({
+      targetType: target.type,
+      mode: data.mode,
+      hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
+    })
+    if (!urlAdmission.ok) {
+      return apiError(urlAdmission.code, urlAdmission.reason, 400)
     }
+    const urlEngineBacked = urlAdmission.engineBacked
 
     // Browser-local tools never enter this route. An engine-backed remote
     // review does, so require one current workspace proof before the engine
@@ -190,13 +185,7 @@ async function post(request: Request) {
     // The gate follows the SPONSOR's effective plan — workspace.plan is a
     // display field under account-owned billing and must never decide this.
     if (target.type === "WEB_APP" || target.type === "API") {
-      const sponsor = await resolveWorkspaceScanSponsor(workspaceId, session.userId)
-      const sponsorBilling = sponsor?.agencyActive
-        ? null
-        : await resolveAccountBilling(session.userId)
-      const sponsorPlan = sponsor?.agencyActive
-        ? "LAUNCH_ASSURANCE"
-        : (sponsorBilling?.effectivePlan ?? "FREE")
+      const sponsorPlan = await resolveSponsorScanPlan(workspaceId, session.userId)
       if (sponsorPlan === "FREE" && !urlEngineBacked) {
         // Free tier's deterministic surface review could otherwise be used to
         // drive server-side fetches of arbitrary third-party sites. Bound it
@@ -212,19 +201,8 @@ async function post(request: Request) {
         }
       }
       if (sponsorPlan !== "FREE" && urlEngineBacked) {
-        const domain = target.url ? normalizeDomainForProof(target.url) : null
-        const proof = domain
-          ? await prisma.targetDomainVerification.findFirst({
-              where: {
-                workspaceId,
-                domain,
-                status: "VERIFIED",
-                expiresAt: { gt: new Date() },
-              },
-              select: { id: true },
-            })
-          : null
-        if (!proof) {
+        const { domain, verified } = await findCurrentDomainProof(workspaceId, target.url)
+        if (!verified) {
           return apiError(
             "DOMAIN_VERIFICATION_REQUIRED",
             "Verify control of this domain once to enable engine-backed reviews.",
@@ -241,20 +219,17 @@ async function post(request: Request) {
       }
     }
 
-    let canonicalMode = data.mode
-    if (target.type === "REPO" || target.type === "WEB_APP" || target.type === "API") {
-      try {
-        canonicalMode = resolveScanProfile({
-          targetType: target.type,
-          mode: data.mode,
-        }).canonicalMode
-      } catch (error) {
-        const code = error instanceof Error ? error.message : "TARGET_TYPE_UNSUPPORTED"
-        return apiError(code, "This review type is not available for the selected target.", 400)
-      }
-    } else if (target.type) {
-      return apiError("TARGET_TYPE_UNSUPPORTED", "This target cannot be reviewed yet.", 400)
+    const canonical = resolveCanonicalReviewMode({ targetType: target.type, mode: data.mode })
+    if (!canonical.ok) {
+      return apiError(
+        canonical.code,
+        canonical.code === "TARGET_TYPE_UNSUPPORTED"
+          ? "This target cannot be reviewed yet."
+          : "This review type is not available for the selected target.",
+        400
+      )
     }
+    const canonicalMode = canonical.canonicalMode
 
     // ─── Billing entitlement gate (Sprint 10, account-owned) ────────────
     // The sponsoring account pays: the caller's subscription/balance is
@@ -275,13 +250,7 @@ async function post(request: Request) {
       )
     }
 
-    const policy = await prisma.policy.findFirst({
-      where: data.policyId
-        ? { id: data.policyId, workspaceId, deletedAt: null }
-        : { workspaceId, name: "Default Policy", deletedAt: null },
-      orderBy: data.policyId ? undefined : { createdAt: "asc" },
-      select: { id: true, destructiveTestsAllowed: true },
-    })
+    const policy = await findScanPolicy(workspaceId, data.policyId)
     if (data.policyId && !policy) {
       return apiError("POLICY_NOT_FOUND", "Policy not found in this workspace", 404)
     }
@@ -410,12 +379,7 @@ async function post(request: Request) {
       // Gated staging beta — fail closed at every layer. BOTH the environment
       // flag and the explicit per-workspace/target allowlist must admit this
       // pair; absence of either keeps the workflow unavailable.
-      const betaAdmission = evaluateAuthAssessmentAdmission({
-        enabled: env.LYRASHIELD_AUTH_ASSESSMENT_ENABLED === "1",
-        allowlist: env.LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST,
-        workspaceId,
-        targetId: data.targetId,
-      })
+      const betaAdmission = authAssessmentAdmission(workspaceId, data.targetId)
       if (!betaAdmission.allowed) {
         return apiError(
           "SCAN_WORKFLOW_UNAVAILABLE",
