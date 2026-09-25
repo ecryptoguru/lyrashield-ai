@@ -13,12 +13,14 @@ test("mobile workspace sheet switches data, reaches Billing and signs out", asyn
   await page.getByLabel("Email").fill(email)
   await page.locator("#password").fill(password)
   await page.getByRole("button", { name: "Create account" }).click()
+  await expect(page).toHaveURL(/\/onboarding$/)
   await expect.poll(() => prisma.user.findUnique({ where: { email } })).not.toBeNull()
   await prisma.user.update({ where: { email }, data: { emailVerified: true } })
-  await page.request.post("/api/auth/sign-out", {
+  const signOutResponse = await page.request.post("/api/auth/sign-out", {
     data: {},
     headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
   })
+  await expect(signOutResponse).toBeOK()
   await page.goto("/sign-in")
   await page.getByLabel("Email").fill(email)
   await page.locator("#password").fill(password)

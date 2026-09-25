@@ -24,8 +24,13 @@ export function initMyraSuggestions(options: {
   let suggestTimer: number | undefined
   let suggestItems: Suggestion[] = []
   let suggestActive = -1
+  let suggestSeq = 0
 
   function hideSuggest() {
+    suggestSeq++
+    window.clearTimeout(suggestTimer)
+    suggestAbort?.abort()
+    suggestAbort = null
     suggestItems = []
     suggestActive = -1
     if (suggestEl) {
@@ -75,18 +80,19 @@ export function initMyraSuggestions(options: {
   }
 
   inputEl.addEventListener("input", () => {
-    window.clearTimeout(suggestTimer)
+    hideSuggest()
     const text = inputEl.value.trim()
     if (text.length < 2) {
-      hideSuggest()
       return
     }
     suggestTimer = window.setTimeout(() => {
-      suggestAbort?.abort()
-      suggestAbort = new AbortController()
+      const abort = new AbortController()
+      const requestSeq = suggestSeq
+      suggestAbort = abort
       client
-        .suggest(text.slice(0, 300), suggestAbort.signal)
+        .suggest(text.slice(0, 300), abort.signal)
         .then((res) => {
+          if (suggestSeq !== requestSeq || abort.signal.aborted) return
           const payload =
             res && typeof res === "object" && "data" in res
               ? (res as { data: { suggestions?: Suggestion[] } }).data

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 vi.mock("@lyrashield/config", () => ({
   env: { NEXT_PUBLIC_APP_URL: "http://localhost:3000" },
 }))
+vi.mock("../../../auth/src/server", () => ({ requirePermission: vi.fn() }))
 
 describe("CLI SARIF import route", () => {
   it("posts to a path served by the v1 API route table", async () => {

@@ -171,4 +171,41 @@ describe("AzureProvider", () => {
     // Retrying an ambiguous request could bill two generations.
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it("does not submit an already stopped request", async () => {
+    const abort = new AbortController()
+    abort.abort()
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+    await expect(
+      new AzureProvider().generate({
+        system: "system",
+        messages: [{ role: "user", content: "hello" }],
+        signal: abort.signal,
+      })
+    ).rejects.toBeInstanceOf(ProviderDefiniteFailure)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("aborts an in-flight fetch without classifying its usage as definite failure", async () => {
+    const abort = new AbortController()
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      await new Promise<void>((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("stopped", "AbortError")),
+          { once: true }
+        )
+      })
+      throw new Error("unreachable")
+    })
+    const result = new AzureProvider().generate({
+      system: "system",
+      messages: [{ role: "user", content: "hello" }],
+      signal: abort.signal,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    abort.abort()
+    await expect(result).rejects.toBeInstanceOf(ProviderTimeout)
+    expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
+  })
 })

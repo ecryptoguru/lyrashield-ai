@@ -113,9 +113,11 @@ export function createMyraConversation(options: {
         "myra-note myra-note-error",
         code === "PROPOSAL_EXPIRED"
           ? "That request expired — ask Myra to prepare it again."
-          : recoveredDraft
-            ? "Something went wrong before Myra replied. Your message is back in the composer."
-            : "Something went wrong. Try again or talk to a person."
+          : code === "STREAM_INTERRUPTED"
+            ? "The response ended early. Check the conversation before sending again; an action may still be processing."
+            : recoveredDraft
+              ? "Something went wrong before Myra replied. Your message is back in the composer."
+              : "Something went wrong. Try again or talk to a person."
       )
     )
   }
@@ -143,12 +145,14 @@ export function createMyraConversation(options: {
         }
         return
       case "component": {
+        const shouldScroll = nearBottom()
         const host = turn.answerEl?.parentElement ?? turn.root
         renderMyraComponent(ev.component, host, rendererContext)
-        scrollToBottom()
+        if (shouldScroll) scrollToBottom()
         return
       }
       case "proposal": {
+        const shouldScroll = nearBottom()
         if (turn.root.querySelector(`[data-proposal-id="${CSS.escape(ev.proposal.id)}"]`)) {
           announce("Myra prepared an action for you to confirm.")
           return
@@ -178,7 +182,7 @@ export function createMyraConversation(options: {
           rendererContext
         )
         add(turn.answerEl?.parentElement ?? turn.root, card)
-        scrollToBottom()
+        if (shouldScroll) scrollToBottom()
         announce("Myra prepared an action for you to confirm.")
         return
       }
@@ -277,6 +281,7 @@ export function createMyraConversation(options: {
           signal: abort.signal,
           bookingRequest,
         })) {
+          if (streamAbort !== abort || abort.signal.aborted) break
           received = true
           handleEvent(ev, turn)
         }
@@ -289,6 +294,7 @@ export function createMyraConversation(options: {
           clearMyraToken()
           continue
         }
+        if (streamAbort !== abort) break
         setActivity(null)
         const recoveredDraft = !received && !inputEl.value
         if (recoveredDraft) inputEl.value = trimmed
@@ -299,8 +305,10 @@ export function createMyraConversation(options: {
     }
 
     if (streamAbort === abort) streamAbort = null
-    setStreaming(false)
-    setActivity(null)
+    if (streamAbort === null && !abort.signal.aborted) {
+      setStreaming(false)
+      setActivity(null)
+    }
     if (turn.stopped) markStopped(turn)
   }
 

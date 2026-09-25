@@ -69,11 +69,12 @@ export function createMyraClient(options: MyraClientOptions) {
   }
 
   /** Parse an SSE body into validated stream events. Unknown events are dropped. */
-  async function* events(res: Response): AsyncGenerator<MyraStreamEvent> {
+  async function* events(res: Response, signal?: AbortSignal): AsyncGenerator<MyraStreamEvent> {
     if (!res.body) throw new MyraClientError("NO_STREAM", "Empty response body")
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ""
+    let terminal = false
     try {
       while (true) {
         const { done, value } = await reader.read()
@@ -88,11 +89,17 @@ export function createMyraClient(options: MyraClientOptions) {
           const raw = dataLine.slice(5).trim()
           try {
             const parsed = myraStreamEventSchema.safeParse(JSON.parse(raw))
-            if (parsed.success) yield parsed.data
+            if (parsed.success) {
+              if (parsed.data.type === "done" || parsed.data.type === "error") terminal = true
+              yield parsed.data
+            }
           } catch {
             /* malformed event frame — drop */
           }
         }
+      }
+      if (!terminal && !signal?.aborted) {
+        throw new MyraClientError("STREAM_INTERRUPTED", "The response ended before completion.")
       }
     } finally {
       reader.cancel().catch(() => {})
@@ -120,7 +127,7 @@ export function createMyraClient(options: MyraClientOptions) {
       if (!res.ok || !res.headers.get("content-type")?.includes("text/event-stream")) {
         await readError(res)
       }
-      yield* events(res)
+      yield* events(res, input.signal)
     },
 
     /** Type-ahead suggestions — retrieval only, never a model call. */

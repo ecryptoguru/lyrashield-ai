@@ -26,6 +26,7 @@ export interface ToolCallOutput {
 }
 
 export interface ModelGenerateInput {
+  signal?: AbortSignal
   system: string
   messages: ProviderMessage[]
   tools?: { name: string; description: string }[]
@@ -88,6 +89,7 @@ export class MockProvider implements ModelProvider {
   name = "mock"
 
   async generate(input: ModelGenerateInput): Promise<ModelGenerateOutput> {
+    if (input.signal?.aborted) throw new ProviderDefiniteFailure("Turn stopped.")
     const text = lastUserText(input.messages).toLowerCase()
     const outs = input.context?.toolOutputs ?? []
     const intent = input.context?.intent ?? classify(text)
@@ -216,6 +218,7 @@ export class AzureProvider implements ModelProvider {
   name = "azure"
 
   async generate(input: ModelGenerateInput): Promise<ModelGenerateOutput> {
+    if (input.signal?.aborted) throw new ProviderDefiniteFailure("Turn stopped.")
     if (env.MYRA_GENERATION_ENABLED !== "1") {
       throw new ProviderDefiniteFailure("Generation is disabled.")
     }
@@ -233,10 +236,18 @@ export class AzureProvider implements ModelProvider {
     const url = `${endpoint.replace(/\/$/, "")}/openai/v1/chat/completions`
     let res: Response | null = null
     for (let attempt = 0; attempt < 2; attempt++) {
+      if (input.signal?.aborted) {
+        // A previous 429/5xx may still have consumed tokens upstream.
+        throw attempt === 0
+          ? new ProviderDefiniteFailure("Turn stopped.")
+          : new ProviderTimeout("Generation provider request outcome is unknown.")
+      }
       try {
         res = await fetch(url, {
           method: "POST",
-          signal: AbortSignal.timeout(30_000),
+          signal: input.signal
+            ? AbortSignal.any([input.signal, AbortSignal.timeout(30_000)])
+            : AbortSignal.timeout(30_000),
           headers: { "content-type": "application/json", "api-key": apiKey },
           body: JSON.stringify({
             model: deployment,
@@ -271,7 +282,18 @@ export class AzureProvider implements ModelProvider {
         )
       }
       if (res && (res.ok || (res.status !== 429 && res.status < 500))) break
-      if (attempt === 0) await new Promise((r) => setTimeout(r, 1_000))
+      if (attempt === 0)
+        await new Promise<void>((resolve) => {
+          const onAbort = () => {
+            clearTimeout(timer)
+            resolve()
+          }
+          const timer = setTimeout(() => {
+            input.signal?.removeEventListener("abort", onAbort)
+            resolve()
+          }, 1_000)
+          input.signal?.addEventListener("abort", onAbort, { once: true })
+        })
     }
     if (!res?.ok) {
       throw new ProviderDefiniteFailure("Generation provider request failed.")

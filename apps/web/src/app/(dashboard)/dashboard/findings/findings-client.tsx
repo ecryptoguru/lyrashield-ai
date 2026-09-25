@@ -6,6 +6,7 @@ import {
   findingsContextKey,
   loadFindingsListContext,
   saveFindingsListContext,
+  type FindingsListPage,
 } from "./findings-list-context"
 import Link from "next/link"
 import { Bug, Shield, ChevronRight, CheckCircle2, XCircle, Calendar, SortDesc } from "lucide-react"
@@ -37,6 +38,7 @@ import { calculateFindingPriority, type FindingPriorityResult } from "@/lib/find
 import type { FindingStatus, TargetEnvironment } from "@lyrashield/types"
 import {
   findingFilterToApiQuery,
+  parseFindingListParams,
   type FindingFilter as FindingFilterValue,
 } from "@/lib/finding-list-params"
 import { SEVERITY_ICON, SEVERITY_COLOR, SEVERITY_ORDER } from "./finding-presentation"
@@ -119,11 +121,13 @@ export function FindingsClient({
         else params.delete("q")
       }
       const search = params.toString()
-      window.history.replaceState(
-        null,
-        "",
-        `${window.location.pathname}${search ? `?${search}` : ""}`
-      )
+      const nextUrl = `${window.location.pathname}${search ? `?${search}` : ""}`
+      if (nextUrl === `${window.location.pathname}${window.location.search}`) return
+      const method =
+        updates.filter !== undefined || updates.target !== undefined || updates.sort !== undefined
+          ? "pushState"
+          : "replaceState"
+      window.history[method](null, "", nextUrl)
     },
     []
   )
@@ -143,12 +147,32 @@ export function FindingsClient({
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [restoreError, setRestoreError] = useState(false)
+  const [restoreReady, setRestoreReady] = useState(false)
   // The row that opened the drawer, for focus restoration on close.
   const openerRef = useRef<HTMLElement | null>(null)
   const pushedFindingUrlRef = useRef(false)
   const rowRefs = useRef(new Map<string, HTMLButtonElement | null>())
   const requestGenerationRef = useRef(0)
+  const requestAbortRef = useRef<AbortController | null>(null)
+  const loadMoreAbortRef = useRef<AbortController | null>(null)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const acceptLoadMoreRef = useRef(false)
+  const pendingItemsRef = useRef<FindingListItem[] | null>(null)
+  const restoreAbortRef = useRef<AbortController | null>(null)
+  const pagesRef = useRef<FindingsListPage[]>([
+    { items: initialData, nextCursor: initialNextCursor },
+  ])
+  const initialScope = JSON.stringify({
+    filter: initialFilter,
+    target: initialTargetFilter,
+    q: initialQuery,
+  })
+  const loadedScopeRef = useRef(initialScope)
+  const currentScopeRef = useRef(initialScope)
+  useEffect(() => {
+    currentScopeRef.current = JSON.stringify({ filter, target: targetFilter, q: query })
+  }, [filter, targetFilter, query])
 
   /**
    * Drawer URL state: opening writes `finding=` (pushState, so Back returns to
@@ -198,88 +222,208 @@ export function FindingsClient({
 
   // Keep the drawer deep link on refresh. closeFinding removes it explicitly.
 
-  // W2-12 context restoration: the URL carries filter/sort/target/query, but
-  // pages loaded beyond the first server-rendered page and the scroll position
-  // only survive navigation through this session-scoped snapshot. The first
-  // client render still matches the server HTML; restoration is queued (not
-  // synchronous) so hydration stays clean and the save effect below never
-  // overwrites the snapshot with the bare first page.
-  const listContextRestoredRef = useRef(false)
+  // Server props own page one. Saved pages only tell us how many additional
+  // pages to re-fetch through fresh cursors before restoring scroll.
   useEffect(() => {
+    const abort = new AbortController()
+    restoreAbortRef.current = abort
     queueMicrotask(() => {
-      if (typeof window === "undefined") return
-      const current = { filter, sort: sortMode, target: targetFilter, q: query }
-      // The context key encodes filter/sort/target/query, so any stored
-      // snapshot under this key already matches the URL-derived list state.
-      const stored = loadFindingsListContext(findingsContextKey(workspaceId, current))
-      if (stored) {
-        setFindings(stored.rows)
-        setNextCursor(stored.nextCursor)
-        if (stored.scrollY > 0) requestAnimationFrame(() => window.scrollTo(0, stored.scrollY))
-      }
-      // The save effect below must not run until restoration has been
-      // attempted, otherwise the bare first page overwrites the snapshot.
-      listContextRestoredRef.current = true
+      void (async () => {
+        try {
+          const stored = loadFindingsListContext(
+            findingsContextKey(workspaceId, {
+              filter: initialFilter,
+              sort: initialSort,
+              target: initialTargetFilter,
+              q: initialQuery,
+            })
+          )
+          if (!stored) return
+          const restoreScroll = () => {
+            if (stored.scrollY > 0)
+              requestAnimationFrame(() => {
+                if (!abort.signal.aborted && requestGenerationRef.current === 0)
+                  window.scrollTo(0, stored.scrollY)
+              })
+          }
+          if (stored.pages.length < 2 || !initialNextCursor) {
+            restoreScroll()
+            return
+          }
+          const pages: FindingsListPage[] = [{ items: initialData, nextCursor: initialNextCursor }]
+          let cursor: string | null = initialNextCursor
+          for (let index = 1; index < stored.pages.length && cursor; index++) {
+            const result: FindingsListPage = await apiGetPaginated<FindingListItem>(
+              "/api/findings",
+              {
+                workspaceId,
+                ...findingFilterToApiQuery(initialFilter as FindingFilterValue),
+                ...(initialTargetFilter ? { targetId: initialTargetFilter } : {}),
+                ...(initialQuery ? { q: initialQuery } : {}),
+                cursor,
+              },
+              { schema: findingsPaginatedSchema, signal: abort.signal }
+            )
+            if (abort.signal.aborted || requestGenerationRef.current !== 0) return
+            if (!result.items.length) break
+            if (
+              pages.reduce((count, page) => count + page.items.length, 0) + result.items.length >
+              500
+            )
+              break
+            pages.push(result)
+            cursor = result.nextCursor
+          }
+          if (abort.signal.aborted || requestGenerationRef.current !== 0) return
+          pagesRef.current = pages
+          setFindings(pages.flatMap((page) => page.items))
+          setNextCursor(cursor)
+          restoreScroll()
+        } catch {
+          if (!abort.signal.aborted) setRestoreError(true)
+        } finally {
+          if (!abort.signal.aborted) setRestoreReady(true)
+        }
+      })()
     })
+    return () => abort.abort()
     // Restore once per mount with the URL-derived context.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Persist the loaded list (rows, cursor, scroll) for the current context so
-  // returning to Findings restores it. Skipped until the restore pass has run
-  // so the snapshot is never overwritten with the bare first page.
+  // Never save the previous query's rows under a newly selected query key.
   useEffect(() => {
-    if (!listContextRestoredRef.current || typeof window === "undefined") return
+    if (
+      !restoreReady ||
+      loadedScopeRef.current !== currentScopeRef.current ||
+      typeof window === "undefined"
+    )
+      return
     const save = () =>
       saveFindingsListContext(
         findingsContextKey(workspaceId, { filter, sort: sortMode, target: targetFilter, q: query }),
-        {
-          rows: findings,
-          nextCursor,
-          scrollY: window.scrollY,
-        }
+        { pages: pagesRef.current, scrollY: window.scrollY }
       )
     save()
     window.addEventListener("pagehide", save)
     return () => window.removeEventListener("pagehide", save)
-  }, [workspaceId, filter, sortMode, targetFilter, query, findings, nextCursor])
-
-  const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
-    workspaceId,
-    findings,
-    nextCursor,
-    filter,
-    sortMode,
-    initialData,
-    initialNextCursor,
-    setFilter,
-    setSortMode,
-    setFindings,
-    setNextCursor,
-    setSelectedFinding,
-    setError,
-    updateQueryParams,
-  })
+  }, [workspaceId, filter, sortMode, targetFilter, query, findings, nextCursor, restoreReady])
 
   const fetchFindings = useCallback(async (params: Record<string, string>, generation: number) => {
     if (generation !== requestGenerationRef.current) return
+    const abort = new AbortController()
+    requestAbortRef.current = abort
     setLoading(true)
     setError(null)
     try {
       const res = await apiGetPaginated<FindingListItem>(`/api/findings`, params, {
         schema: findingsPaginatedSchema,
+        signal: abort.signal,
       })
       if (generation !== requestGenerationRef.current) return
+      pagesRef.current = [{ items: res.items, nextCursor: res.nextCursor }]
+      loadedScopeRef.current = currentScopeRef.current
       setFindings(res.items)
       setNextCursor(res.nextCursor)
     } catch {
       if (generation !== requestGenerationRef.current) return
+      loadedScopeRef.current = ""
       setFindings([])
       setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
     } finally {
-      if (generation === requestGenerationRef.current) setLoading(false)
+      if (generation === requestGenerationRef.current) {
+        setLoading(false)
+        if (requestAbortRef.current === abort) requestAbortRef.current = null
+      }
     }
   }, [])
+
+  const invalidateRequest = useCallback(() => {
+    clearTimeout(searchTimerRef.current)
+    requestAbortRef.current?.abort()
+    loadMoreAbortRef.current?.abort()
+    restoreAbortRef.current?.abort()
+    requestAbortRef.current = null
+    setRestoreReady(true)
+    return ++requestGenerationRef.current
+  }, [])
+
+  const applyWebMcpFilter = useCallback(
+    async (newFilter: string, newSort: SortMode, externalSignal?: AbortSignal) => {
+      currentScopeRef.current = JSON.stringify({
+        filter: newFilter,
+        target: targetFilter,
+        q: query,
+      })
+      const generation = invalidateRequest()
+      setFilter(newFilter)
+      setSortMode(newSort)
+      updateQueryParams({ filter: newFilter, sort: newSort })
+      const abort = new AbortController()
+      requestAbortRef.current = abort
+      const onExternalAbort = () => abort.abort()
+      if (externalSignal?.aborted) abort.abort()
+      else externalSignal?.addEventListener("abort", onExternalAbort, { once: true })
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await apiGetPaginated<FindingListItem>(
+          "/api/findings",
+          {
+            workspaceId,
+            ...findingFilterToApiQuery(newFilter as FindingFilterValue),
+            ...(targetFilter ? { targetId: targetFilter } : {}),
+            ...(query ? { q: query } : {}),
+          },
+          { schema: findingsPaginatedSchema, signal: abort.signal }
+        )
+        if (abort.signal.aborted || generation !== requestGenerationRef.current)
+          throw new DOMException("Aborted", "AbortError")
+        pagesRef.current = [{ items: res.items, nextCursor: res.nextCursor }]
+        loadedScopeRef.current = currentScopeRef.current
+        setFindings(res.items)
+        setNextCursor(res.nextCursor)
+        return res.items
+      } catch (error) {
+        if (generation === requestGenerationRef.current) {
+          loadedScopeRef.current = ""
+          pagesRef.current = []
+          setFindings([])
+          setNextCursor(null)
+          setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
+        }
+        throw error
+      } finally {
+        externalSignal?.removeEventListener("abort", onExternalAbort)
+        if (generation === requestGenerationRef.current) {
+          setLoading(false)
+          if (requestAbortRef.current === abort) requestAbortRef.current = null
+        }
+      }
+    },
+    [workspaceId, targetFilter, query, invalidateRequest, updateQueryParams]
+  )
+
+  const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
+    workspaceId,
+    findings,
+    filter,
+    sortMode,
+    setSortMode,
+    setSelectedFinding,
+    updateQueryParams,
+    applyFilter: applyWebMcpFilter,
+  })
+
+  useEffect(
+    () => () => {
+      clearTimeout(searchTimerRef.current)
+      requestAbortRef.current?.abort()
+      loadMoreAbortRef.current?.abort()
+      restoreAbortRef.current?.abort()
+    },
+    []
+  )
 
   /** Combined query for the current filter/target/search state. */
   const listQuery = useCallback(
@@ -295,24 +439,14 @@ export function FindingsClient({
 
   const handleFilterChange = useCallback(
     async (newFilter: string) => {
-      const generation = ++requestGenerationRef.current
+      currentScopeRef.current = JSON.stringify({
+        filter: newFilter,
+        target: targetFilter,
+        q: query,
+      })
+      const generation = invalidateRequest()
       setFilter(newFilter)
       updateQueryParams({ filter: newFilter, sort: sortMode })
-      // Reset to the server-rendered page only when returning to the exact
-      // state the server delivered; otherwise fetch the new view. Compare the
-      // derived query objects field-wise — two freshly-allocated objects are
-      // never === equal, which previously made this branch unreachable and
-      // forced a refetch (discarding loaded pages) even when the filter
-      // matched the server render.
-      const sameDerivedQuery =
-        JSON.stringify(findingFilterToApiQuery(newFilter as FindingFilterValue)) ===
-        JSON.stringify(findingFilterToApiQuery(initialFilter as FindingFilterValue))
-      if (newFilter === initialFilter && !targetFilter && !query && sameDerivedQuery) {
-        setFindings(initialData)
-        setNextCursor(initialNextCursor)
-        setError(null)
-        return
-      }
       await fetchFindings(
         {
           workspaceId,
@@ -326,9 +460,7 @@ export function FindingsClient({
     [
       sortMode,
       updateQueryParams,
-      initialFilter,
-      initialData,
-      initialNextCursor,
+      invalidateRequest,
       targetFilter,
       query,
       fetchFindings,
@@ -338,7 +470,8 @@ export function FindingsClient({
 
   const handleTargetFilterChange = useCallback(
     async (value: string) => {
-      const generation = ++requestGenerationRef.current
+      currentScopeRef.current = JSON.stringify({ filter, target: value, q: query })
+      const generation = invalidateRequest()
       setTargetFilter(value)
       updateQueryParams({ target: value })
       await fetchFindings(
@@ -351,33 +484,68 @@ export function FindingsClient({
         generation
       )
     },
-    [updateQueryParams, fetchFindings, workspaceId, filter, query]
+    [updateQueryParams, fetchFindings, invalidateRequest, workspaceId, filter, query]
   )
 
-  // Bounded server-side search: debounced so typing does not spam the API.
+  // Only user edits schedule a search; hydration and Back/Forward fetch their
+  // already-parsed query directly. Filter changes cancel this timer.
+  const handleQueryChange = useCallback(
+    (value: string) => {
+      currentScopeRef.current = JSON.stringify({ filter, target: targetFilter, q: value })
+      const generation = invalidateRequest()
+      setQuery(value)
+      setLoading(true)
+      updateQueryParams({ q: value })
+      searchTimerRef.current = setTimeout(() => {
+        void fetchFindings(
+          {
+            workspaceId,
+            ...findingFilterToApiQuery(filter as FindingFilterValue),
+            ...(targetFilter ? { targetId: targetFilter } : {}),
+            ...(value ? { q: value } : {}),
+          },
+          generation
+        )
+      }, 300)
+    },
+    [filter, targetFilter, workspaceId, fetchFindings, invalidateRequest, updateQueryParams]
+  )
+
   useEffect(() => {
-    if (query === initialQuery) return
-    const generation = requestGenerationRef.current
-    const timer = window.setTimeout(() => {
-      updateQueryParams({ q: query })
+    const onPopState = () => {
+      const params = parseFindingListParams(
+        Object.fromEntries(new URLSearchParams(window.location.search))
+      )
+      if (
+        params.filter === filter &&
+        params.sort === sortMode &&
+        params.target === targetFilter &&
+        params.q === query
+      )
+        return
+      currentScopeRef.current = JSON.stringify({
+        filter: params.filter,
+        target: params.target,
+        q: params.q,
+      })
+      const generation = invalidateRequest()
+      setFilter(params.filter)
+      setSortMode(params.sort)
+      setTargetFilter(params.target)
+      setQuery(params.q)
       void fetchFindings(
         {
           workspaceId,
-          ...findingFilterToApiQuery(filter as FindingFilterValue),
-          ...(targetFilter ? { targetId: targetFilter } : {}),
-          ...(query ? { q: query } : {}),
+          ...findingFilterToApiQuery(params.filter),
+          ...(params.target ? { targetId: params.target } : {}),
+          ...(params.q ? { q: params.q } : {}),
         },
         generation
       )
-    }, 300)
-    return () => window.clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query])
-
-  const handleQueryChange = useCallback((value: string) => {
-    requestGenerationRef.current += 1
-    setQuery(value)
-  }, [])
+    }
+    window.addEventListener("popstate", onPopState)
+    return () => window.removeEventListener("popstate", onPopState)
+  }, [workspaceId, filter, sortMode, targetFilter, query, invalidateRequest, fetchFindings])
 
   // Client-side sort — priority first (the API-ranked page default), then
   // severity high-first, then newest. Each mode keeps its own tie-breakers so
@@ -494,7 +662,15 @@ export function FindingsClient({
       )}
 
       {error && (
-        <DashboardErrorCard message={error} onRetry={() => void handleFilterChange(filter)} />
+        <DashboardErrorCard
+          message={error}
+          onRetry={() => void fetchFindings(listQuery(), invalidateRequest())}
+        />
+      )}
+      {restoreError && (
+        <p role="status" className="text-muted-foreground mb-3 text-sm">
+          Could not restore additional results. Use Load more to continue from the current page.
+        </p>
       )}
 
       {loading && findings.length === 0 ? (
@@ -583,27 +759,43 @@ export function FindingsClient({
             )
           })}
 
-          <LoadMore
-            cursor={nextCursor}
-            onLoadMore={async (cursor) => {
-              const generation = requestGenerationRef.current
-              const res = await apiGetPaginated<FindingListItem>(
-                `/api/findings`,
-                listQuery({ cursor }),
-                { schema: findingsPaginatedSchema }
-              )
-              acceptLoadMoreRef.current = generation === requestGenerationRef.current
-              return { items: res.items, nextCursor: res.nextCursor }
-            }}
-            onItems={(items) => {
-              if (acceptLoadMoreRef.current) setFindings((prev) => [...prev, ...items])
-            }}
-            onNextCursor={(cursor) => {
-              if (!acceptLoadMoreRef.current) return
-              setNextCursor(cursor)
-              acceptLoadMoreRef.current = false
-            }}
-          />
+          {restoreReady && (
+            <LoadMore
+              key={JSON.stringify([workspaceId, filter, targetFilter, query])}
+              cursor={nextCursor}
+              onLoadMore={async (cursor) => {
+                const generation = requestGenerationRef.current
+                const abort = new AbortController()
+                loadMoreAbortRef.current = abort
+                const res = await apiGetPaginated<FindingListItem>(
+                  `/api/findings`,
+                  listQuery({ cursor }),
+                  { schema: findingsPaginatedSchema, signal: abort.signal }
+                )
+                acceptLoadMoreRef.current =
+                  generation === requestGenerationRef.current && !abort.signal.aborted
+                return { items: res.items, nextCursor: res.nextCursor }
+              }}
+              onItems={(items) => {
+                if (acceptLoadMoreRef.current) {
+                  pendingItemsRef.current = items
+                  setFindings((prev) => [...prev, ...items])
+                }
+              }}
+              onNextCursor={(cursor) => {
+                if (!acceptLoadMoreRef.current) return
+                if (pendingItemsRef.current) {
+                  pagesRef.current = [
+                    ...pagesRef.current,
+                    { items: pendingItemsRef.current, nextCursor: cursor },
+                  ]
+                  pendingItemsRef.current = null
+                }
+                setNextCursor(cursor)
+                acceptLoadMoreRef.current = false
+              }}
+            />
+          )}
         </div>
       )}
 
@@ -631,6 +823,10 @@ export function FindingsClient({
                     }),
                   }
                 : f
+            pagesRef.current = pagesRef.current.map((page) => ({
+              ...page,
+              items: page.items.map(reprioritize),
+            }))
             setFindings((prev) => prev.map(reprioritize))
             setSelectedFinding((prev) => (prev?.id === id ? reprioritize(prev) : prev))
           }}

@@ -115,12 +115,21 @@ pnpm dev
 For production-like local validation:
 
 ```bash
+pnpm --filter @lyrashield/sdk build
+pnpm --filter @lyrashield/mcp build
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
 git diff --check
 ```
+
+`pnpm test` includes PostgreSQL-backed RLS checks. Use a migrated, disposable local
+database for `DATABASE_URL` and a separate `NOSUPERUSER NOBYPASSRLS` role for
+`RLS_RUNTIME_DATABASE_URL`; the CI database setup in `.github/workflows/ci.yml`
+shows the required grants. The SDK and MCP builds above provide package entry
+points used by CLI and API tests in a fresh checkout. Never aim fixture suites
+at a development database containing user data or at production.
 
 The full worker requires a BullMQ-compatible Redis URL, private evidence storage, the controlled engine image/runtime, and Azure model configuration. It intentionally refuses scan admission if no live worker is registered.
 

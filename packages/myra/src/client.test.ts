@@ -56,9 +56,12 @@ describe("marketing public-token requests", () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: String(url), init })
       if (String(url).endsWith("/message")) {
-        return new Response('data: {"type":"done"}\n\n', {
-          headers: { "content-type": "text/event-stream" },
-        })
+        return new Response(
+          'data: {"type":"error","error":{"code":"INTERNAL_ERROR","message":"Failed"}}\n\n',
+          {
+            headers: { "content-type": "text/event-stream" },
+          }
+        )
       }
       return Response.json({ suggestions: [], data: {} })
     }) as typeof fetch
@@ -94,5 +97,57 @@ describe("marketing public-token requests", () => {
       expect(init?.credentials).toBe("omit")
       expect(new Headers(init?.headers).get("x-myra-session")).toBe("public-token")
     }
+  })
+})
+
+describe("Myra stream completion", () => {
+  function clientFor(chunks: string[]) {
+    const encoder = new TextEncoder()
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
+        controller.close()
+      },
+    })
+    return createMyraClient({
+      apiBase: "",
+      surface: "DASHBOARD",
+      fetchImpl: vi.fn(
+        async () => new Response(body, { headers: { "content-type": "text/event-stream" } })
+      ) as typeof fetch,
+    })
+  }
+
+  it("accepts a terminal frame split across chunks", async () => {
+    const client = clientFor([
+      'data: {"type":"do',
+      'ne","messageId":"m","taskRecord":{"intent":"help","toolsUsed":[],"outcome":"answered","unresolved":false}}\n\n',
+    ])
+    const events = []
+    for await (const event of client.sendMessage({ text: "hello" })) events.push(event)
+    expect(events.map((event) => event.type)).toEqual(["done"])
+  })
+
+  it.each([
+    ["empty", []],
+    ["token-only", ['data: {"type":"token","text":"partial"}\n\n']],
+    ["malformed", ["data: {bad}\n\n"]],
+  ])("rejects %s EOF as interrupted", async (_label, chunks) => {
+    const client = clientFor(chunks)
+    const consume = async () => {
+      for await (const event of client.sendMessage({ text: "hello" })) {
+        expect(event.type).toBe("token")
+      }
+    }
+    await expect(consume()).rejects.toMatchObject({ code: "STREAM_INTERRUPTED" })
+  })
+
+  it("accepts a terminal error event", async () => {
+    const client = clientFor([
+      'data: {"type":"error","error":{"code":"INTERNAL_ERROR","message":"Failed"}}\n\n',
+    ])
+    const events = []
+    for await (const event of client.sendMessage({ text: "hello" })) events.push(event)
+    expect(events.map((event) => event.type)).toEqual(["error"])
   })
 })

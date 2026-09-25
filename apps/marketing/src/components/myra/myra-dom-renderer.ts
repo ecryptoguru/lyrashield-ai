@@ -146,7 +146,39 @@ export function renderMyraProposalActions(
   const cancel = el("button", "myra-btn", "Cancel")
   cancel.type = "button"
   const state = el("p", "myra-note")
+  state.setAttribute("role", "status")
+  state.setAttribute("aria-live", "polite")
   state.hidden = true
+  const applyOutcome = (raw: unknown) => {
+    const result =
+      raw && typeof raw === "object" && "data" in raw
+        ? (raw as { data?: { status?: string } }).data
+        : (raw as { status?: string } | null)
+    const status = result?.status
+    const message =
+      status === "COMPLETED"
+        ? "Done."
+        : status === "CANCELED"
+          ? "Canceled before execution."
+          : status === "EXECUTING"
+            ? "Already processing. Check again later."
+            : status === "OUTCOME_UNKNOWN"
+              ? "Checking the outcome. Ask for help if it stays here."
+              : status === "FAILED"
+                ? "The action failed."
+                : status === "EXPIRED"
+                  ? "This action expired."
+                  : "The action outcome needs review."
+    state.hidden = false
+    state.textContent = message
+    if (status === "COMPLETED") {
+      state.classList.add("myra-note-ok")
+      context.markActionCompleted()
+    }
+    card.dataset.proposalState =
+      status === "COMPLETED" ? "confirmed" : status === "CANCELED" ? "cancelled" : "unresolved"
+    context.announce(message)
+  }
   confirm.addEventListener("click", () => {
     confirm.disabled = true
     cancel.disabled = true
@@ -154,32 +186,21 @@ export function renderMyraProposalActions(
     state.textContent = "Working…"
     context.client
       .confirmProposal(proposal.id)
-      .then((raw) => {
-        const result =
-          raw && typeof raw === "object" && "data" in raw
-            ? (raw as { data: { status?: unknown } }).data
-            : (raw as { status?: unknown })
-        state.textContent = "Done."
-        state.classList.add("myra-note-ok")
-        card.dataset.proposalState = "confirmed"
-        const status = result && "status" in result ? String(result.status) : ""
-        if (status === "COMPLETED") context.markActionCompleted()
-        if (status) state.textContent = `Done — ${status.toLowerCase().replace(/_/g, " ")}.`
-        context.announce("Action confirmed.")
-      })
+      .then(applyOutcome)
       .catch((err: MyraClientError | Error) => {
         confirm.disabled = false
         cancel.disabled = false
         const code = "code" in err ? err.code : ""
         if (code === "VERIFICATION_REQUIRED") {
-          renderVerifyStep(card, proposal, state, context)
+          renderVerifyStep(card, proposal, state, context, applyOutcome)
         } else {
           state.textContent =
             code === "PROPOSAL_EXPIRED"
               ? "That request expired — ask Myra to prepare it again."
               : code === "PROPOSAL_PAYLOAD_CHANGED"
-                ? "The details changed — review the new summary before confirming."
+                ? "The details changed. Ask Myra to prepare it again."
                 : "The action could not be completed. Try again or ask for a person."
+          confirm.focus()
         }
         context.announce("Action could not be confirmed.")
       })
@@ -187,14 +208,17 @@ export function renderMyraProposalActions(
   cancel.addEventListener("click", () => {
     confirm.disabled = true
     cancel.disabled = true
+    state.hidden = false
+    state.textContent = "Checking cancellation…"
     context.client
       .cancelProposal(proposal.id)
-      .catch(() => {})
-      .finally(() => {
-        state.hidden = false
-        state.textContent = "Canceled — nothing was executed."
-        card.dataset.proposalState = "cancelled"
-        context.announce("Action canceled.")
+      .then(applyOutcome)
+      .catch(() => {
+        confirm.disabled = false
+        cancel.disabled = false
+        state.textContent = "Cancellation could not be confirmed. Try again."
+        context.announce("Cancellation could not be confirmed.")
+        cancel.focus()
       })
   })
   add(row, confirm, cancel)
@@ -205,7 +229,8 @@ function renderVerifyStep(
   card: HTMLElement,
   proposal: ProposalRef,
   state: HTMLElement,
-  context: MyraDomRendererContext
+  context: MyraDomRendererContext,
+  applyOutcome: (raw: unknown) => void
 ) {
   state.textContent = "Confirm it's you — we'll email a short code."
   const row = el("div", "myra-verify")
@@ -259,6 +284,7 @@ function renderVerifyStep(
   })
   verify.addEventListener("click", () => {
     verify.disabled = true
+    let verified = false
     fetch(`${context.apiBase}/api/myra/identity/confirm`, {
       method: "POST",
       credentials: "omit",
@@ -271,16 +297,18 @@ function renderVerifyStep(
     })
       .then((res) => {
         if (!res.ok) throw new Error(String(res.status))
+        verified = true
         state.textContent = "Verified — confirming now."
-        return context.client.confirmProposal(proposal.id).then(() => {
-          state.textContent = "Done."
-          card.dataset.proposalState = "confirmed"
-          context.markActionCompleted()
-        })
+        return context.client.confirmProposal(proposal.id).then(applyOutcome)
       })
       .catch(() => {
-        verify.disabled = false
-        state.textContent = "That code did not work. Try again."
+        if (verified) {
+          state.textContent = "Action outcome could not be confirmed. Check before trying again."
+          context.announce("Action outcome could not be confirmed.")
+        } else {
+          verify.disabled = false
+          state.textContent = "That code did not work. Try again."
+        }
       })
   })
   add(row, email, send, code, verify)

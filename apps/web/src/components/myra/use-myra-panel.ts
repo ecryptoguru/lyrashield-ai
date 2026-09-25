@@ -81,6 +81,23 @@ export function useMyraPanel(
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const stoppedTurnRef = useRef<number | null>(null)
 
+  const invalidateSuggestions = useCallback(() => {
+    clearTimeout(suggestTimerRef.current)
+    suggestAbortRef.current?.abort()
+    suggestAbortRef.current = null
+    setSuggestions([])
+    setSuggestActive(-1)
+  }, [])
+
+  useEffect(
+    () => () => {
+      streamAbortRef.current?.abort()
+      suggestAbortRef.current?.abort()
+      clearTimeout(suggestTimerRef.current)
+    },
+    []
+  )
+
   const getClient = useCallback((): MyraClient => {
     clientRef.current = createMyraClient({
       apiBase: "",
@@ -94,7 +111,11 @@ export function useMyraPanel(
 
   const scrollLogToEnd = useCallback(() => {
     const node = logRef.current
-    if (node) node.scrollTop = node.scrollHeight
+    if (node && node.scrollHeight - node.scrollTop - node.clientHeight <= 80) {
+      requestAnimationFrame(() => {
+        node.scrollTop = node.scrollHeight
+      })
+    }
   }, [])
 
   const updateTurn = useCallback((id: number, fn: (t: Turn) => Turn) => {
@@ -211,8 +232,7 @@ export function useMyraPanel(
         announce("Myra is still answering — wait a moment or press Stop.")
         return
       }
-      setSuggestions([])
-      setSuggestActive(-1)
+      invalidateSuggestions()
       setInput("")
       const turnId = ++turnSeq.current
       setTurns((prev) => [...prev, { id: turnId, userText: text, parts: [] }])
@@ -229,6 +249,7 @@ export function useMyraPanel(
           signal: abort.signal,
           bookingRequest,
         })) {
+          if (streamAbortRef.current !== abort || abort.signal.aborted) break
           received = true
           handleEvent(ev, turnId)
         }
@@ -237,29 +258,34 @@ export function useMyraPanel(
           // Stopped by user — state was already marked in stopStream.
         } else {
           const code = (err as { code?: string }).code
+          if (streamAbortRef.current !== abort) return
           setActivity(null)
           if (!received) {
             // Send never reached the server — keep the draft rather than lose it.
-            setInput(text)
+            setInput((current) => current || text)
           }
           updateTurn(turnId, (t) => ({
             ...t,
             error:
               code === "PROPOSAL_EXPIRED"
                 ? "That request expired — ask Myra to prepare it again."
-                : !received
-                  ? "Something went wrong before Myra replied. Your message is back in the composer."
-                  : "Something went wrong. Try again or talk to a person.",
+                : code === "STREAM_INTERRUPTED"
+                  ? "The response ended early. Check the conversation before sending again; an action may still be processing."
+                  : !received
+                    ? "Something went wrong before Myra replied. Your message is back in the composer."
+                    : "Something went wrong. Try again or talk to a person.",
           }))
           announce("Message failed.")
         }
       } finally {
-        streamAbortRef.current = null
-        setStreaming(false)
-        setActivity(null)
+        if (streamAbortRef.current === abort) {
+          streamAbortRef.current = null
+          setStreaming(false)
+          setActivity(null)
+        }
       }
     },
-    [announce, getClient, handleEvent, updateTurn]
+    [announce, getClient, handleEvent, invalidateSuggestions, updateTurn]
   )
 
   const stopStream = useCallback(() => {
@@ -309,20 +335,27 @@ export function useMyraPanel(
           data?: { status?: string; result?: unknown; component?: MyraComponent }
         }
         const data = raw?.data ?? (raw as { status?: string; component?: MyraComponent })
-        setProposal(() => ({
-          state: "done",
-          statusText: data?.status
-            ? `Done — ${String(data.status).toLowerCase().replace(/_/g, " ")}.`
-            : "Done.",
-        }))
+        const status = data?.status
+        setProposal(() =>
+          status === "COMPLETED"
+            ? { state: "done", statusText: "Done." }
+            : status === "OUTCOME_UNKNOWN"
+              ? {
+                  state: "unknown",
+                  statusText: "Checking the outcome. Ask for help if it stays here.",
+                }
+              : status === "EXECUTING"
+                ? { state: "processing", statusText: "Already processing. Check again later." }
+                : { state: "closed", statusText: "The action outcome needs review." }
+        )
         if (data?.component) {
           updateTurn(turnId, (t) => ({
             ...t,
-            completedAction: t.completedAction || data.status === "COMPLETED",
+            completedAction: t.completedAction || status === "COMPLETED",
             parts: [...t.parts, { kind: "component", component: data.component! }],
           }))
         }
-        announce("Action confirmed.")
+        announce(status === "COMPLETED" ? "Action confirmed." : "Action outcome needs review.")
       } catch (err) {
         const code = (err as { code?: string }).code
         setProposal(() => ({
@@ -331,7 +364,7 @@ export function useMyraPanel(
             code === "PROPOSAL_EXPIRED"
               ? "That request expired — ask Myra to prepare it again."
               : code === "PROPOSAL_PAYLOAD_CHANGED"
-                ? "The details changed — review the new summary before confirming."
+                ? "The details changed. Ask Myra to prepare it again."
                 : code === "TAKEOVER_ACTIVE"
                   ? "A person is handling this conversation."
                   : "The action could not be completed. Try again or ask for a person.",
@@ -344,13 +377,47 @@ export function useMyraPanel(
 
   const cancelProposalAction = useCallback(
     async (proposalId: string) => {
+      setProposalStates((s) => ({ ...s, [proposalId]: { state: "canceling" } }))
       try {
-        await getClient().cancelProposal(proposalId)
+        const raw = (await getClient().cancelProposal(proposalId)) as {
+          data?: { status?: string }
+          status?: string
+        }
+        const status = raw?.data?.status ?? raw?.status
+        const next: { state: ProposalState; statusText?: string } =
+          status === "CANCELED"
+            ? { state: "cancelled" }
+            : status === "EXECUTING"
+              ? { state: "processing", statusText: "Already processing. Check again later." }
+              : status === "COMPLETED"
+                ? { state: "done", statusText: "Done." }
+                : status === "OUTCOME_UNKNOWN"
+                  ? {
+                      state: "unknown",
+                      statusText: "Checking the outcome. Ask for help if it stays here.",
+                    }
+                  : status === "FAILED"
+                    ? { state: "closed", statusText: "The action failed." }
+                    : status === "EXPIRED"
+                      ? { state: "closed", statusText: "This action expired." }
+                      : {
+                          state: "pending",
+                          statusText: "Cancellation could not be confirmed. Try again.",
+                        }
+        setProposalStates((s) => ({ ...s, [proposalId]: next }))
+        announce(
+          status === "CANCELED" ? "Action canceled." : (next.statusText ?? "Action state updated.")
+        )
       } catch {
-        /* cancellation failures still render the canceled state client-side */
+        setProposalStates((s) => ({
+          ...s,
+          [proposalId]: {
+            state: "pending",
+            statusText: "Cancellation could not be confirmed. Try again.",
+          },
+        }))
+        announce("Cancellation could not be confirmed.")
       }
-      setProposalStates((s) => ({ ...s, [proposalId]: { state: "cancelled" } }))
-      announce("Action canceled.")
     },
     [announce, getClient]
   )
@@ -359,19 +426,18 @@ export function useMyraPanel(
   const onInputChange = useCallback(
     (value: string) => {
       setInput(value)
-      clearTimeout(suggestTimerRef.current)
+      invalidateSuggestions()
       const text = value.trim()
       if (text.length < 2) {
-        setSuggestions([])
-        setSuggestActive(-1)
         return
       }
       suggestTimerRef.current = setTimeout(() => {
-        suggestAbortRef.current?.abort()
-        suggestAbortRef.current = new AbortController()
+        const abort = new AbortController()
+        suggestAbortRef.current = abort
         getClient()
-          .suggest(text.slice(0, 300), suggestAbortRef.current.signal)
+          .suggest(text.slice(0, 300), abort.signal)
           .then((res) => {
+            if (suggestAbortRef.current !== abort || abort.signal.aborted) return
             const payload =
               res && typeof res === "object" && "data" in res
                 ? (res as { data: { suggestions?: Suggestion[] } }).data
@@ -384,13 +450,12 @@ export function useMyraPanel(
           })
       }, 150)
     },
-    [getClient]
+    [getClient, invalidateSuggestions]
   )
 
   const pickSuggestion = useCallback(
     (s: Suggestion) => {
-      setSuggestions([])
-      setSuggestActive(-1)
+      invalidateSuggestions()
       const turnId = ++turnSeq.current
       setTurns((prev) => [
         ...prev,
@@ -416,7 +481,7 @@ export function useMyraPanel(
       ])
       announce("Instant answer shown.")
     },
-    [announce]
+    [announce, invalidateSuggestions]
   )
 
   const submitCaseForm = useCallback(() => {
@@ -457,8 +522,7 @@ export function useMyraPanel(
           return
         }
         if (e.key === "Escape") {
-          setSuggestions([])
-          setSuggestActive(-1)
+          invalidateSuggestions()
           return
         }
       }
@@ -469,7 +533,7 @@ export function useMyraPanel(
         void send(input)
       }
     },
-    [input, pickSuggestion, send, streaming, suggestActive, suggestions]
+    [input, invalidateSuggestions, pickSuggestion, send, streaming, suggestActive, suggestions]
   )
 
   const componentContext: MyraComponentContext = {

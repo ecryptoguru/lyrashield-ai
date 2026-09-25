@@ -40,6 +40,7 @@ import { runTool } from "./tools/registry"
 import type { MyraToolContext } from "./tools/types"
 
 export interface HandleMessageInput {
+  signal?: AbortSignal
   conversationId?: string
   text: string
   routeContext?: string
@@ -139,6 +140,7 @@ export async function* handleMessage(
   ctx: ResolvedMyraRequest,
   input: HandleMessageInput
 ): AsyncGenerator<MyraStreamEvent> {
+  if (input.signal?.aborted) return
   // The surface gates (MYRA_PUBLIC_ENABLED / MYRA_DASHBOARD_ENABLED) are
   // enforced upstream on the route; there is no separate env kill switch —
   // the unvalidated MYRA_DISABLED process.env read was removed (v18).
@@ -174,6 +176,7 @@ export async function* handleMessage(
 
   let conversation
   try {
+    if (input.signal?.aborted) return
     const clampedSurface = ctx.principal.kind === "user" ? input.surface : "MARKETING"
     conversation = input.conversationId
       ? await loadOwnedConversation(ctx, input.conversationId)
@@ -185,6 +188,7 @@ export async function* handleMessage(
   const conversationId = conversation.id
 
   // Persist the screened user message before any generation.
+  if (input.signal?.aborted) return
   await withOwnerScope(ctx.principal, (tx) =>
     tx.myraMessage.create({
       data: {
@@ -216,6 +220,7 @@ export async function* handleMessage(
     })
   ).catch(() => [] as { id: string }[])
   for (const booking of unknownBookings) {
+    if (input.signal?.aborted) break
     yield { type: "activity", label: "Checking whether your booking went through." }
     const res = await reconcileDemoBooking(booking.id).catch(() => null)
     if (res?.status === "CONFIRMED") {
@@ -239,6 +244,7 @@ export async function* handleMessage(
     unresolved: true,
   }
   try {
+    if (input.signal?.aborted) return
     for await (const event of runTaskLoop({
       ctx: toolCtx,
       text: screened,
@@ -247,6 +253,7 @@ export async function* handleMessage(
       sessionMemory: ctx.principal.kind === "anonymous" ? input.sessionMemory : undefined,
       assistantMessageId,
       traceId,
+      signal: input.signal,
     })) {
       if (event.type === "token") answerText += event.text
       if (event.type === "component") components.push(event.component)

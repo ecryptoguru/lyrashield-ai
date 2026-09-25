@@ -1,10 +1,41 @@
 import { createRoot } from "react-dom/client"
 
 const root = createRoot(document.getElementById("root")!)
-if (new URLSearchParams(location.search).has("desktop")) {
+if (new URLSearchParams(location.search).get("myra") === "marketing") {
+  const { createMyraClient } = await import("../../packages/myra/src/client")
+  const { renderMyraProposalActions } =
+    await import("../../apps/marketing/src/components/myra/myra-dom-renderer")
+  const card = document.createElement("section")
+  document.getElementById("root")!.append(card)
+  renderMyraProposalActions(
+    card,
+    {
+      id: "proposal-1",
+      title: "Myra proposal",
+      description: "Review this action",
+      confirmLabel: "Confirm action",
+    },
+    {
+      client: createMyraClient({ apiBase: "", surface: "MARKETING" }),
+      apiBase: "",
+      announce: () => {},
+      send: () => {},
+      markActionCompleted: () => {},
+      setLastTraceId: () => {},
+    }
+  )
+} else if (new URLSearchParams(location.search).has("findings")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: FindingsHarness } = await import("./findings-harness")
+  root.render(<FindingsHarness />)
+} else if (new URLSearchParams(location.search).has("desktop")) {
   await import("../../apps/desktop/frontend/src/styles/globals.css")
   const { default: DesktopHarness } = await import("./desktop-harness")
   root.render(<DesktopHarness />)
+} else if (new URLSearchParams(location.search).has("myra")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: MyraHarness } = await import("./myra-harness")
+  root.render(<MyraHarness />)
 } else {
   await import("../../apps/web/src/app/globals.css")
   const { SupportInbox } =

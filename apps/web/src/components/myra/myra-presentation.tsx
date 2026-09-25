@@ -13,7 +13,8 @@ import {
 import { Badge, Button } from "@lyrashield/ui"
 
 /** UI state for a proposal id, shared by every card bound to it. */
-export type ProposalState = "pending" | "working" | "done" | "cancelled"
+export type ProposalState =
+  "pending" | "working" | "canceling" | "processing" | "unknown" | "closed" | "done" | "cancelled"
 
 export interface MyraComponentContext {
   /** Attendee-step submit: sends the structured bookingRequest to Myra. */
@@ -563,20 +564,31 @@ export function ProposalActions({
   const state = context.proposalStates[proposalId] ?? { state: "pending" as ProposalState }
   if (state.state === "done") {
     return (
-      <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
+      <p role="status" className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
         {state.statusText ?? "Done."}
       </p>
     )
   }
   if (state.state === "cancelled") {
-    return <p className="text-muted-foreground mt-2 text-xs">Canceled — nothing was executed.</p>
+    return (
+      <p role="status" className="text-muted-foreground mt-2 text-xs">
+        Canceled before execution.
+      </p>
+    )
+  }
+  if (["processing", "unknown", "closed"].includes(state.state)) {
+    return (
+      <p role="status" className="text-muted-foreground mt-2 text-xs">
+        {state.statusText ?? "Check this action's current state."}
+      </p>
+    )
   }
   return (
     <div className="mt-2 flex flex-col gap-1.5">
       <div className="flex flex-wrap gap-2">
         <Button
           size="sm"
-          disabled={state.state === "working"}
+          disabled={state.state === "working" || state.state === "canceling"}
           onClick={() => context.onConfirm(proposalId)}
         >
           {state.state === "working" ? "Working…" : confirmLabel || "Confirm"}
@@ -585,9 +597,12 @@ export function ProposalActions({
           size="sm"
           variant="ghost"
           disabled={state.state === "working"}
-          onClick={() => context.onCancel(proposalId)}
+          aria-disabled={state.state === "canceling"}
+          onClick={() => {
+            if (state.state !== "canceling") context.onCancel(proposalId)
+          }}
         >
-          Cancel
+          {state.state === "canceling" ? "Canceling…" : "Cancel"}
         </Button>
       </div>
       {state.statusText ? (

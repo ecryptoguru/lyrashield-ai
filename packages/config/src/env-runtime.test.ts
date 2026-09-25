@@ -14,12 +14,22 @@ const requiredProductionEnv = {
 describe("runtime environment validation", () => {
   beforeEach(() => {
     vi.resetModules()
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith("MYRA_")) vi.stubEnv(key, undefined)
+    }
     for (const [key, value] of Object.entries(requiredProductionEnv)) vi.stubEnv(key, value)
     vi.stubEnv("LYRASHIELD_IMAGE", "")
     vi.stubEnv("LYRASHIELD_RUNTIME_BACKEND", "")
   })
 
   afterEach(() => vi.unstubAllEnvs())
+
+  it("starts each case without inherited Myra provider settings", () => {
+    expect(process.env.MYRA_GENERATION_ENABLED).toBeUndefined()
+    expect(process.env.MYRA_WRITES_ENABLED).toBeUndefined()
+    expect(process.env.MYRA_AZURE_OPENAI_ENDPOINT).toBeUndefined()
+    expect(process.env.MYRA_AZURE_OPENAI_API_KEY).toBeUndefined()
+  })
 
   it("allows the production web process to omit worker sandbox configuration", async () => {
     await expect(import("./env")).resolves.toBeDefined()
@@ -38,6 +48,8 @@ describe("runtime environment validation", () => {
     vi.stubEnv("MYRA_GENERATION_ENABLED", "1")
     vi.stubEnv("MYRA_PROVIDER", "azure")
     vi.stubEnv("MYRA_MODEL", "gpt-6-luna")
+    vi.stubEnv("MYRA_AZURE_OPENAI_ENDPOINT", "")
+    vi.stubEnv("MYRA_AZURE_OPENAI_API_KEY", "")
     await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
   })
 

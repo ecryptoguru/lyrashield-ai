@@ -16,6 +16,7 @@
  */
 import { createHash, randomBytes } from "node:crypto"
 import { prisma } from "@lyrashield/db"
+import { canonicalizeJson } from "@lyrashield/security/webmcp"
 import { MYRA_LIMITS } from "../contracts"
 import type { MyraOperationStatus, MyraPrincipal } from "../contracts"
 import { err } from "./errors"
@@ -73,7 +74,7 @@ export type OperationExecutor = (
 ) => Promise<ExecutorOutcome>
 
 export function hashOperationPayload(payload: unknown): string {
-  return createHash("sha256").update(JSON.stringify(payload)).digest("hex")
+  return `v2:${createHash("sha256").update(canonicalizeJson(payload)).digest("hex")}`
 }
 
 function newIdempotencyKey(): string {
@@ -202,6 +203,12 @@ export async function confirm(
         })
         throw err("PROPOSAL_EXPIRED", "This action expired. Ask Myra to prepare it again.")
       }
+      if (!proposal.inputHash.startsWith("v2:")) {
+        throw err(
+          "PROPOSAL_PAYLOAD_CHANGED",
+          "This action preview uses an older format. Ask Myra to prepare it again."
+        )
+      }
       if (proposal.inputHash !== hashOperationPayload(proposal.payload)) {
         throw err("PROPOSAL_PAYLOAD_CHANGED", "The confirmed details changed. Review again.")
       }
@@ -273,12 +280,17 @@ export async function cancel(
       if (!ownsProposal(ctx.principal, proposal)) {
         throw err("OWNERSHIP_MISMATCH", "This action belongs to a different session.")
       }
-      if (TERMINAL.has(proposal.status)) return { status: proposal.status }
-      await tx.myraOperation.update({
-        where: { id: proposalId },
+      if (TERMINAL.has(proposal.status) || proposal.status === "EXECUTING") {
+        return { status: proposal.status }
+      }
+      const changed = await tx.myraOperation.updateMany({
+        where: { id: proposalId, status: { in: ["DRAFT", "AWAITING_CONFIRMATION"] } },
         data: { status: "CANCELED" },
       })
-      return { status: "CANCELED" as MyraOperationStatus }
+      if (changed.count === 1) return { status: "CANCELED" }
+      const current = await tx.myraOperation.findUnique({ where: { id: proposalId } })
+      if (!current) throw err("NOT_FOUND", "Proposal not found.")
+      return { status: current.status }
     },
     db
   )

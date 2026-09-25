@@ -120,7 +120,34 @@ describe("ProposalActions", () => {
         context={{ ...context, proposalStates: { p2: { state: "cancelled" } } }}
       />
     )
-    expect(html).toContain("Canceled — nothing was executed.")
+    expect(html).toContain("Canceled before execution.")
     expect(html).not.toContain("<button")
+  })
+
+  it.each([
+    ["processing", "Already processing"],
+    ["unknown", "Checking the outcome"],
+  ] as const)("renders %s as an announced non-repeatable outcome", (state, message) => {
+    const html = renderToStaticMarkup(
+      <ProposalActions
+        proposalId="p3"
+        context={{ ...context, proposalStates: { p3: { state, statusText: message } } }}
+      />
+    )
+    expect(html).toContain(message)
+    expect(html).toContain('role="status"')
+    expect(html).not.toContain("<button")
+  })
+
+  it("disables both actions while cancellation is pending", () => {
+    const html = renderToStaticMarkup(
+      <ProposalActions
+        proposalId="p4"
+        context={{ ...context, proposalStates: { p4: { state: "canceling" } } }}
+      />
+    )
+    expect(html).toContain("Canceling…")
+    expect(html).toContain('aria-disabled="true"')
+    expect((html.match(/disabled=""/g) ?? []).length).toBe(1)
   })
 })

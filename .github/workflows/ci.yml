@@ -464,6 +464,7 @@ jobs:
           pnpm exec vitest run
           packages/billing/src/trial-integration.test.ts
           apps/web/src/app/api/workspaces/route-integration.test.ts
+          packages/myra/src/server/operations.runtime.test.ts
 
       - name: Test worker egress pin rotation
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
