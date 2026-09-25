@@ -17,23 +17,19 @@ Use this index to find the owning document and avoid duplicating current truth.
 ## Operational documents
 
 - [`user-guide.md`](./user-guide.md) — end-user workflows, options, permissions and limitations.
-- [`api-stability.md`](./api-stability.md) — public `/api/v1` compatibility and deprecation policy.
-- [`claims-policy.md`](./claims-policy.md) — public claims boundary, owner, review cadence and open evidence obligations.
-- [`license-key-compromise-runbook.md`](./license-key-compromise-runbook.md) — signing-key incident response.
-- [`trial-claim-backfill-runbook.md`](./trial-claim-backfill-runbook.md) — founder-run backfill that clears wrongly stamped trial claims.
-- [`payout-operations.md`](./payout-operations.md) — approved affiliate payout model and unresolved provider, bank and tax gates.
-- [`security-risk-register.md`](./security-risk-register.md) — active accepted security risks, owners, review dates and required follow-up.
-- [`threat-model-template.md`](./threat-model-template.md) — customer-declared AI system threat-model worksheet.
+- [`operations.md`](./operations.md) — founder/operator runbooks: live checkout verification, license signing-key compromise response, trial claim backfill and affiliate payout operations.
+- [`policies.md`](./policies.md) — public `/api/v1` stability and deprecation contract, public claims policy, accepted security-risk register and the customer threat-model worksheet.
+- [`myra-spec.md`](./myra-spec.md) — master implementation specification for the Myra support agent and demo booking.
 
 ## Retained directories
 
-- [`plans/`](./plans/) — live implementation briefs awaiting dispatch only; a plan is never current implementation truth. Executed plans are removed once absorbed or obsolete; git history is the recovery path.
 - [`editorial/`](./editorial/) — claim maps, briefs, research and image manifests consumed by marketing validators.
+- [`growth/`](./growth/) — analytics taxonomy, experiment ledger and PostHog dashboard spec.
 - [`marketplace/`](./marketplace/) — marketplace export source, licenses, validator and reviewer artifacts.
 
 ## Superseded material
 
-- `Phase2.md`, `product.md`, `monetization.md`, `claims-readiness.md`, `lite-scanner.md`, `vibe-security-50.md`, `webmcp-assurance.md`, `ai-assurance-framework-mapping.md`, `ai-safety-test-pack.md`, the superseded AI-assurance release checklist and the executed simplification/billing/launch-review plans were consolidated or retired on 2026-09-12. The completed 2026-09-11 security-review files are retained in Git at `ae7cabc5`; their four continuing accepted risks remain current in [`security-risk-register.md`](./security-risk-register.md). Verbatim historical content, including the Phase 2 archive and internal unit economics, is recoverable from Git history; `PRD.md` and `codebase.md` remain current truth.
+- `Phase2.md`, `product.md`, `monetization.md`, `claims-readiness.md`, `lite-scanner.md`, `vibe-security-50.md`, `webmcp-assurance.md`, `ai-assurance-framework-mapping.md`, `ai-safety-test-pack.md`, the superseded AI-assurance release checklist and the executed simplification/billing/launch-review plans were consolidated or retired on 2026-09-12. The completed 2026-09-11 security-review files are retained in Git at `ae7cabc5`; their four continuing accepted risks remain current in [`policies.md`](./policies.md#security-risk-register). Verbatim historical content, including the Phase 2 archive and internal unit economics, is recoverable from Git history; `PRD.md` and `codebase.md` remain current truth. The dated `plans/` directory, dated review ledgers and `superpowers/` working artifacts were retired on 2026-09-25; executed plans are never current truth and git history is the recovery path.
 
 ## Retention rule
 

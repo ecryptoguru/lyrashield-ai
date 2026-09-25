@@ -153,7 +153,7 @@ The free Lite Check returns a distinct result — never the official LyraShield 
 | `@lyrashield/mcp`    | MCP server over stdio and remote Streamable HTTP with hosted OAuth                                      |
 | Agent workflows      | 30 registry entries covering 26 preferred client workflows; some use the standalone CLI rather than MCP |
 | GitHub Action        | Account-less, diff-aware PR gate emitting SARIF, running on the user's runner                           |
-| Public API `/api/v1` | Additive-only contract with a 90-day deprecation policy (see `api-stability.md`)                        |
+| Public API `/api/v1` | Additive-only contract with a 90-day deprecation policy (see `policies.md`)                             |
 
 ## 7. Security and trust architecture (overview)
 

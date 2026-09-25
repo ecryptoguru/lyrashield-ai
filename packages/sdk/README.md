@@ -36,7 +36,7 @@ The client always prepends `/api/v1` to bare paths, so callers should pass paths
 
 - `packages/cli/README.md`
 - `packages/mcp/README.md`
-- `docs/api-stability.md`
+- `docs/policies.md` — including the `/api/v1` stability policy
 
 ### Durable request retries
 
