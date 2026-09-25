@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMCP runtime fixture: invalid input</title>
+  </head>
+  <body>
+    <h1>Invalid-input fixture</h1>
+    <p>
+      Registers a tool whose schema and handler both require
+      <code>{ "message": string, ≤64 chars }</code>. Active mode sends a malformed synthetic input
+      to confirm rejection is observable.
+    </p>
+    <script src="./instrument.js"></script>
+    <script>
+      registerFixtureTool(
+        {
+          name: "fixture_strict_echo",
+          title: "Strict echo",
+          description: "Echoes a short message; rejects malformed input",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              message: { type: "string", maxLength: 64, description: "Message" },
+            },
+            required: ["message"],
+          },
+          annotations: { readOnlyHint: true },
+          execute: async (input) => {
+            const message = input && input.message
+            if (typeof message !== "string" || message.length === 0 || message.length > 64) {
+              // Page-side validation mirrors inputSchema: the browser checks
+              // schema on the native dispatch path, but the fixture hook
+              // bypasses it, so the handler validates itself too.
+              throw new Error("input rejected: message must be a string of 1-64 chars")
+            }
+            return { echo: `synthetic:${message}` }
+          },
+        },
+        { exposedTo: ["self"] }
+      )
+    </script>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMCP runtime fixture: undeclared subresource (trap)</title>
+  </head>
+  <body>
+    <h1>Undeclared-subresource trap fixture</h1>
+    <p>
+      Deliberately attempts requests to origins that are NOT on the declared allowlist. The runtime
+      checker must block and record every attempt; a FAIL on the declared-origins check is the
+      expected, honest result.
+      <code>*.invalid</code> names are reserved and unroutable regardless.
+    </p>
+    <script>
+      window.__undeclaredAttempts = []
+      for (const url of [
+        "https://undeclared-a.invalid/ping",
+        "https://undeclared-b.invalid/track.gif",
+      ]) {
+        window.__undeclaredAttempts.push(url)
+        fetch(url, { mode: "no-cors" }).catch(() => {})
+        const img = new Image()
+        img.src = url
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMCP runtime fixture: no WebMCP (control)</title>
+  </head>
+  <body>
+    <h1>No-WebMCP control page</h1>
+    <p>
+      Control fixture: registers nothing. Performs one same-origin fetch to prove declared
+      same-origin subresources remain reachable while the origin allowlist is enforced.
+    </p>
+    <pre id="out">pending</pre>
+    <script>
+      window.__sameOriginFetchOk = null
+      fetch("./fixture-data.json")
+        .then((res) => res.json())
+        .then((data) => {
+          window.__sameOriginFetchOk = data && data.ok === true
+          document.getElementById("out").textContent = JSON.stringify(data)
+        })
+        .catch(() => {
+          window.__sameOriginFetchOk = false
+          document.getElementById("out").textContent = "fetch failed"
+        })
+    </script>
+  </body>
+</html>
