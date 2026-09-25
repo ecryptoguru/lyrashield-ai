@@ -6,7 +6,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 
-const exec = promisify(execFile)
+const runFile = promisify(execFile)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const kiro = JSON.parse(await readFile(path.join(root, ".mcp.kiro.json"), "utf8"))
 const spec = kiro.mcpServers?.lyrashield?.args?.[1]
@@ -29,7 +29,7 @@ if (!/^sha512-[A-Za-z0-9+/=]+$/.test(metadata.dist?.integrity ?? "")) {
 
 const directory = await mkdtemp(path.join(tmpdir(), "lyrashield-mcp-release-"))
 try {
-  const { stdout } = await exec(
+  const { stdout } = await runFile(
     "npm",
     [
       "pack",
