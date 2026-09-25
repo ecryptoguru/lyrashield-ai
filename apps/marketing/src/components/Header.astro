@@ -13,6 +13,16 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       <span>LyraShield AI</span>
       <span class="header-beta-badge rounded border border-accent/50 bg-accent-dim/40 px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-accent uppercase">Open beta</span>
     </a>
+    <!--
+      The full nav switches on at lg (1024px). It fits there only because the
+      scoped rule further down tightens the link padding and gaps inside the
+      lg-to-xl band: the row (logo, five nav items, theme toggle, Sign in, Get
+      started) is naturally ~1097px wide and needed ~1104px of viewport, so at
+      1024-1096px it overflowed the page by up to 73px (iPad landscape, small
+      laptops). Shrinking the link padding to 0.5rem and the gaps to 0.25rem
+      takes the row under 1024px, so the breakpoint can stay at lg and no width
+      loses its nav. Loosening that rule without re-measuring reintroduces it.
+    -->
     <nav aria-label="Main" class="flex shrink-0 items-center gap-1 sm:gap-2">
       <ul class="hidden shrink-0 items-center gap-1 whitespace-nowrap lg:flex lg:gap-2">
         <li>
@@ -338,6 +348,37 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
   .mobile-menu__resource:hover {
     background: var(--bg);
     color: var(--text);
+  }
+
+  /*
+   * The header row (logo, five nav items including two dropdowns, theme toggle,
+   * Sign in, Get started) is naturally ~1097px wide. The full nav switches on at
+   * lg (1024px), so between 1024px and ~1096px it overflowed the page — up to
+   * 73px at 1024x768, which is iPad landscape and small laptops. It was visible
+   * not as a scrollbar but as the right edge being cut: "Get started" rendered
+   * as "Get starte".
+   *
+   * Tighten the link padding and gaps inside the lg-to-xl band only, which takes
+   * the row under 1024px so the breakpoint can stay at lg and no width loses its
+   * nav. Measured: overflow 0 from 1024 through 1279; the desktop layout above
+   * xl is untouched.
+   *
+   * If these values are loosened, re-measure at 1024x768 before shipping.
+   */
+  @media (min-width: 1024px) and (max-width: 1279px) {
+    nav[aria-label="Main"] {
+      gap: 0.25rem;
+    }
+
+    nav[aria-label="Main"] > ul {
+      gap: 0.25rem;
+    }
+
+    nav[aria-label="Main"] > ul > li > a,
+    nav[aria-label="Main"] > ul > li > summary {
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
   }
 
   @media (max-height: 25rem) {
