@@ -37,6 +37,7 @@ const COMMANDS: Record<string, CommandThunk> = {
   scan: () => import("./commands/scan.js").then((m) => m.handleScan),
   "pr-scan": () => import("./commands/pr-scan.js").then((m) => m.handlePrScan),
   status: () => import("./commands/status.js").then((m) => m.handleStatus),
+  cancel: () => import("./commands/cancel.js").then((m) => m.handleCancel),
   quality: () => import("./commands/quality.js").then((m) => m.handleQuality),
   findings: () => import("./commands/findings.js").then((m) => m.handleFindings),
   explain: () => import("./commands/explain.js").then((m) => m.handleExplain),
@@ -74,9 +75,10 @@ Commands:
   install <agent>      Configure a single agent
   uninstall <agent>    Remove LyraShield entry for a single agent
   project              Manage the default project
-  scan                 Start a security scan [--base <ref> --head <ref> for Review Changes; --attachment <id> adds an already-uploaded attachment, repeatable]
-  pr-scan              Start a PR-focused scan (alias for scan --goal CHECK_PR; --base/--head record a Review Changes run)
-  status [scanId]      Show scan status
+  scan                 Start a security scan [--base <ref> --head <ref> for Review Changes; --attachment <id> adds an already-uploaded attachment, repeatable; --wait/--watch [--timeout <s>] [--poll-interval <s>] follows it to a terminal state]
+  pr-scan              Start a PR-focused scan (alias for scan --goal CHECK_PR; --base/--head record a Review Changes run; --wait/--watch supported)
+  status [scanId]      Show scan status [--operation <id>] [--watch [--timeout <s>] waits for a terminal state]
+  cancel <scanId>      Cancel a queued or running scan [--idempotency-key <key>]
   quality <scanId>     Show the scan's measured evidence-quality surface
   findings             List findings
   explain <findingId>  Explain a finding

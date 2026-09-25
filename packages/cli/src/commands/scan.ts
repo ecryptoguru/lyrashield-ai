@@ -4,14 +4,16 @@ import minimist from "minimist"
 import { readFile } from "fs/promises"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
+import { describeCliFailure } from "../failure.js"
 import type { Output } from "../output.js"
-import { parseRepoIdentifier, type ParsedRepo } from "@lyrashield/sdk"
+import { LyraShieldError, parseRepoIdentifier, type ParsedRepo } from "@lyrashield/sdk"
 import {
   findOrCreateRepoTarget,
   loadDefaultProject,
   resolveRepoFromPath,
   saveDefaultProject,
 } from "../projects.js"
+import { emitWaitProgress, parseWaitFlags, runOperationWait, runScanWait } from "../wait.js"
 
 const VALID_GOALS = [
   "CHECK_PR",
@@ -89,11 +91,18 @@ export async function handleScan(args: string[], output: Output): Promise<number
       "base",
       "head",
       "attachment",
+      "timeout",
+      "poll-interval",
     ],
-    boolean: ["watch", "auto"],
+    boolean: ["watch", "wait", "auto"],
     default: { goal: "TEST_APP", mode: "STANDARD" },
     alias: { t: "target", g: "goal", m: "mode" },
   })
+
+  // Wait flags are validated before anything is created or submitted — a bad
+  // --timeout must fail the run before a billable scan can be queued.
+  const waitFlags = parseWaitFlags(parsed, output)
+  if (!waitFlags) return 2
 
   const client = await createClient()
   const workspaceId = requireWorkspace(await getEffectiveCredentials())
@@ -120,9 +129,33 @@ export async function handleScan(args: string[], output: Output): Promise<number
     return 2
   }
 
+  // --scan-id addresses an EXISTING scan — it must never submit a new one.
+  // Reject every input that only makes sense when submitting a new scan.
+  const resumeScanId = parsed["scan-id"] as string | undefined
+  if (resumeScanId) {
+    const newScanOnly: Array<[string, unknown]> = [
+      ["--target", parsed.target],
+      ["--repo", parsed.repo],
+      ["--auto", parsed.auto === true],
+      ["--name", parsed.name],
+      ["--base", parsed.base],
+      ["--head", parsed.head],
+      ["a positional target", (parsed._ as string[])[0]],
+    ]
+    const offending = newScanOnly.find(([, value]) => value !== undefined && value !== false)
+    if (offending) {
+      output.error(
+        `--scan-id addresses an existing scan; ${offending[0]} only applies when submitting a new scan.`
+      )
+      return 2
+    }
+  }
+
   let sarifJson: unknown
-  if (parsed["scan-id"] && !sarifPath) {
-    output.error("--scan-id requires --sarif; it imports into an existing scan.")
+  if (resumeScanId && !sarifPath && !waitFlags.wait) {
+    output.error(
+      "--scan-id requires --sarif to import results into it, or --wait/--watch to resume watching it."
+    )
     return 2
   }
   if (sarifPath) {
@@ -185,26 +218,13 @@ export async function handleScan(args: string[], output: Output): Promise<number
     output.error("--head requires --base so the change set can be compared.")
     return 2
   }
-  if (parsed["scan-id"] && (baseRef || headRef)) {
-    output.error(
-      "--base/--head start a new Review Changes scan; they cannot combine with --scan-id."
-    )
-    return 2
-  }
 
-  // Fail before submitting. Warning after a successful POST and still exiting 0
-  // would tell a CI script the scan was followed to completion when it was not,
-  // and re-running would submit a second scan against the workspace budget.
-  if (parsed.watch) {
-    output.error(
-      "--watch is not implemented yet. Submit the scan without --watch, then poll it with: lyrashield status <scanId>"
-    )
-    return 2
-  }
-
-  const res = parsed["scan-id"]
-    ? { id: parsed["scan-id"] as string }
-    : ((await client.request("POST", "/scans", {
+  let res: { id: string; operationId?: string }
+  if (parsed["scan-id"]) {
+    res = { id: parsed["scan-id"] as string }
+  } else {
+    try {
+      res = (await client.request("POST", "/scans", {
         body: {
           workspaceId,
           targetId: resolved.targetId,
@@ -220,7 +240,54 @@ export async function handleScan(args: string[], output: Output): Promise<number
             : {}),
         },
         headers: { "Idempotency-Key": parsed["idempotency-key"] ?? crypto.randomUUID() },
-      })) as { id: string })
+      })) as { id: string; operationId?: string }
+    } catch (err) {
+      // Idempotent submission replay: the server returns 409 with the durable
+      // operation id when a same-key submission is in flight, failed, or its
+      // result needs inspection. NEVER auto-resubmit billable work — follow
+      // the operation (when waiting) or point at it (when not).
+      const operationId =
+        err instanceof LyraShieldError &&
+        err.status === 409 &&
+        typeof err.details?.operationId === "string"
+          ? err.details.operationId
+          : undefined
+      if (!operationId) throw err
+      const conflictMessage =
+        err instanceof Error ? err.message : "a submission conflict was recorded"
+      if (waitFlags.wait) {
+        emitWaitProgress(
+          output,
+          `Submission is already recorded as operation ${operationId} (${conflictMessage}) — ` +
+            `following it instead of submitting another scan`
+        )
+        return runOperationWait(client, output, {
+          operationId,
+          workspaceId,
+          ...(waitFlags.timeoutMs !== undefined ? { timeoutMs: waitFlags.timeoutMs } : {}),
+          ...(waitFlags.pollIntervalMs !== undefined
+            ? { pollIntervalMs: waitFlags.pollIntervalMs }
+            : {}),
+        })
+      }
+      output.error(
+        `${conflictMessage} Operation: ${operationId} — inspect with: lyrashield status --operation ${operationId} --watch`,
+        describeCliFailure(err).exitCode
+      )
+      return describeCliFailure(err).exitCode
+    }
+  }
+
+  // The scan id is durable the moment POST /scans accepts — say so on stderr
+  // immediately, with the resume hint, so a detached or interrupted run is
+  // never lost. Stdout stays reserved for the single final document.
+  if (!parsed["scan-id"]) {
+    emitWaitProgress(
+      output,
+      `Scan ${res.id} accepted — it keeps running on the server. ` +
+        `Track or resume with: lyrashield status ${res.id} --watch`
+    )
+  }
 
   if (resolved.isNew && resolved.repository) {
     output.log(`Resolved project ${resolved.repository} → target ${resolved.targetId}`)
@@ -247,6 +314,18 @@ export async function handleScan(args: string[], output: Output): Promise<number
       )
       return 2
     }
+  }
+
+  if (waitFlags.wait) {
+    return runScanWait(client, output, {
+      scanId: res.id,
+      workspaceId,
+      ...(waitFlags.timeoutMs !== undefined ? { timeoutMs: waitFlags.timeoutMs } : {}),
+      ...(waitFlags.pollIntervalMs !== undefined
+        ? { pollIntervalMs: waitFlags.pollIntervalMs }
+        : {}),
+      ...(res.operationId ? { operationId: res.operationId } : {}),
+    })
   }
 
   output.result(res)

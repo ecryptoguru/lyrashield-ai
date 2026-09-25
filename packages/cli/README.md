@@ -52,14 +52,16 @@ The default project is stored in `~/.lyrashield/project.json` (mode `0o600`). On
 
 ### Targets and scans
 
-- `scan [--target <targetId>] [--goal <goal>] [--mode <mode>] [--auto] [--repo <repo>]` — start a scan
+- `scan [--target <targetId>] [--goal <goal>] [--mode <mode>] [--auto] [--repo <repo>] [--wait|--watch] [--timeout <s>] [--poll-interval <s>]` — start a scan
   - Default mode is `STANDARD`; use `pr-scan` for a bounded `QUICK` pre-PR check. `SAFE` remains an accepted compatibility alias for repository targets.
   - Goals: `CHECK_PR`, `TEST_APP`, `LAUNCH_REVIEW`, `WEEKLY_MONITOR`, `FULL_PENTEST`, `COMPLIANCE_REVIEW`
   - Modes: `SAFE`, `QUICK`, `STANDARD`, `DEEP`, `CUSTOM`
   - With no target and no default project, pass `--auto` to detect the current git repo and create or reuse a target
   - Pass `--repo` as `owner/repo`, an HTTPS URL, or an SSH URL (e.g. `ecryptoguru/lyrashield-ai`, `https://github.com/ecryptoguru/lyrashield-ai.git`, `git@github.com:ecryptoguru/lyrashield-ai.git`)
-- `pr-scan [--auto] [--repo <owner/repo>] [--mode <mode>]` — shortcut for `scan --goal CHECK_PR --mode QUICK`
-- `status [scanId] [--watch]` — list scans or inspect one scan
+  - `--wait`/`--watch` polls the scan until a terminal state; `--timeout` bounds the wait in seconds (default 1800, max 86400) and `--poll-interval` sets seconds between polls (default 5, minimum 1). The scan id is printed to stderr immediately on acceptance; status transitions go to stderr while waiting, including in `--json` mode (stdout stays a single final document). `Ctrl+C` stops waiting only — the scan keeps running and the printed `status <id> --watch` command resumes it. A scan that ends other than `COMPLETED` exits `7`; the deadline exits `8`; `SIGINT` exits `130`. `COMPLETED` means execution finished — it is not a security verdict.
+- `pr-scan [--auto] [--repo <owner/repo>] [--mode <mode>] [--wait|--watch] [--timeout <s>]` — shortcut for `scan --goal CHECK_PR --mode QUICK`; supports the same wait flags
+- `status [scanId] [--operation <operationId>] [--watch|--wait] [--timeout <s>] [--poll-interval <s>]` — list scans or inspect one scan. `--watch` follows a scan to its terminal state; `--operation <id> --watch` waits on a durable submission operation and follows the recorded scan reference it produced, within the same timeout budget.
+- `cancel <scanId> [--idempotency-key <key>]` — request cancellation of a queued or running scan. If the scan is already terminal or finalizing (HTTP 409), the command re-reads and reports the true status: exit `0` when already `CANCELLED`, exit `1` otherwise.
 - `targets [--name ... --type ... --url ... --repo ...]` — list or create targets
 - `targets remove <targetId>` — soft-delete a target; its history is retained, it is hidden from readers and the plan cap slot is freed
 - `targets verify-domain <targetId> [--issue|--check]` — show domain-control status for a WEB_APP/API target in the configured workspace. `--issue` returns the DNS TXT host, value, and challenge expiry; publish that record, then use `--check`. Issuing replaces the previous token and verified status. The TXT value is returned only on issue; save it before exiting. All proof operations require target validation permission. Supports `--json`; invalid targets, permission failures, missing/expired proofs, and failed DNS checks exit nonzero. DNS control does not establish application security.
@@ -105,12 +107,15 @@ The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes on
 ## Exit codes
 
 - `0` — success
-- `1` — command failed, or `gate` found findings at/above the threshold; `gate --verdict` returns NOT_READY
+- `1` — command failed, or `gate` found findings at/above the threshold; `gate --verdict` returns NOT_READY; `cancel` returns it when the scan is already terminal or finalizing (the true status is reported)
 - `2` — usage or validation error; `gate --verdict` returns it on insufficient evidence or any error (fail-closed)
 - `3` — authentication or authorization error (HTTP 401/403)
 - `4` — network or other API error
 - `5` — rate limited (HTTP 429)
 - `6` — plan or agent-minute balance refusal (HTTP 402); prints "Plan or agent-minute balance does not allow this. Open Billing."
+- `7` — watched work ended without success: a scan reached a terminal state other than `COMPLETED` (`FAILED`, `CANCELLED`, `PARTIAL`, `STOPPED_BUDGET`, `TIMED_OUT`), or a watched operation ended `FAILED`/`CONFLICT`
+- `8` — `--wait`/`--watch` deadline elapsed before a terminal state; the scan keeps running and the printed `status <id> --watch` command resumes the wait
+- `130` — `SIGINT` (`Ctrl+C`) while waiting; the scan keeps running server-side and the recovery hint on stderr says how to resume or cancel
 
 ## Global flags
 
