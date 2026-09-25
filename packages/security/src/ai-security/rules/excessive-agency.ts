@@ -8,7 +8,22 @@ import type { AIScanFile, AISecuritySignal } from "../types"
 
 export const AI_05_RULE_ID = "AI-05.excessive-agency" as const
 
-const DESTRUCTIVE_NAMES = ["delete", "remove", "drop", "rm", "truncate", "overwrite", "destroy"]
+/**
+ * Destructive verbs, matched on a word-character boundary.
+ *
+ * A bare substring test was used before (`lower.includes("rm")`), which also
+ * matched `userMessage`, `perform`, `format`, `transform` and `terms` — so
+ * ordinary code was reported as "unbounded agent permissions". The rule runs per
+ * line rather than only over tool declarations, so the false-positive surface was
+ * very wide.
+ *
+ * Lookarounds are used instead of `\b` because `\b` fails when a name is glued to
+ * a separator: in `delete_file` the position after `delete` is followed by `_`,
+ * which is itself a word character, so `delete\b` would not match and the genuine
+ * case would be lost.
+ */
+const DESTRUCTIVE_NAME_PATTERN =
+  /(?<![A-Za-z0-9])(?:delete|remove|drop|rm|truncate|overwrite|destroy)(?![A-Za-z0-9])/i
 
 const AUTO_APPROVE_PATTERNS = [
   /autoApprove\s*:\s*true/i,
@@ -20,9 +35,7 @@ const AUTO_APPROVE_PATTERNS = [
 ]
 
 function hasDestructiveToolWithoutApproval(line: string): boolean {
-  const lower = line.toLowerCase()
-  const isDestructive = DESTRUCTIVE_NAMES.some((name) => lower.includes(name))
-  if (!isDestructive) return false
+  if (!DESTRUCTIVE_NAME_PATTERN.test(line)) return false
 
   const hasApproval = /requireApproval\s*:\s*true|require_approval\s*:\s*true/i.test(line)
   const hasAutoApprove = /autoApprove\s*:\s*true|auto_approve\s*:\s*true/i.test(line)

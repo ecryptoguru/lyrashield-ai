@@ -20,6 +20,42 @@ describe("browser-local security tool checks", () => {
     expect(JSON.stringify(findings)).not.toContain(secret)
   })
 
+  it("catches prefixed and quoted credential assignments", () => {
+    // The identifier prefix (`DB_`, `POSTGRES_`, `MYSQL_`) and a quoted JSON key
+    // both used to defeat this pattern: `\b` cannot sit between `_` and
+    // `password`, because `_` is itself a word character, and the optional quote
+    // was placed after the separator rather than before it. `.json` is an
+    // accepted file type on this tool, so JSON config was effectively unscannable.
+    const cases = [
+      ["DB_PASSWORD=hunter2hunter2hunter2", "hunter2hunter2hunter2"],
+      ["POSTGRES_PASSWORD=correcthorsebatteryst", "correcthorsebatteryst"],
+      ["MYSQL_PASSWORD=abcdefghijklmnopqrst", "abcdefghijklmnopqrst"],
+      ['{"db_password": "correcthorsebatterystaple"}', "correcthorsebatterystaple"],
+      ['{"apiKey": "verysecretvalue123456"}', "verysecretvalue123456"],
+    ]
+
+    for (const [text, secret] of cases) {
+      const findings = scanTextForSecrets(text)
+      expect(findings.length, `expected a finding for: ${text}`).toBeGreaterThan(0)
+      // The matched value must never be echoed back in full.
+      expect(JSON.stringify(findings), `leaked the value from: ${text}`).not.toContain(secret)
+    }
+  })
+
+  it("does not flag ordinary code or short values", () => {
+    // Guard against over-correcting the pattern above: these must stay clean.
+    const clean = [
+      "function transform(x){return x}",
+      "const userMessage = req.body.text;",
+      "if (password.length < 8) throw new Error('too short')",
+      "apiKey: short",
+      "The password field is validated.",
+    ]
+    for (const text of clean) {
+      expect(scanTextForSecrets(text), `false positive on: ${text}`).toEqual([])
+    }
+  })
+
   it("does not let comments satisfy the RLS checks", () => {
     expect(checkRlsSql("-- enable row level security\nselect 1;")).toContain(
       "No ENABLE ROW LEVEL SECURITY statement found outside comments or strings."

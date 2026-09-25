@@ -33,8 +33,17 @@ const SECRET_PATTERNS: readonly SecretPattern[] = [
   { kind: "Private key", pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g },
   {
     kind: "Assigned credential",
+    // Deliberately has no leading boundary assertion. `\b` cannot be used here:
+    // `_` is a word character, so `\bpassword` never matches `DB_PASSWORD` — the
+    // commonest env-var spelling, and the exact form this tool was missing. An
+    // explicit boundary group would work but reintroduces the nested-quantifier
+    // shape eslint flags as a ReDoS risk, and this pattern runs over pasted user
+    // content. Omitting the boundary is safe because the alternation only matches
+    // literal key words followed by a separator, so a longer identifier can only
+    // end in one of them (`DB_PASSWORD=`, `POSTGRES_PASSWORD=`) and still matches.
+    // The optional quote sits before the separator so a quoted JSON key matches.
     pattern:
-      /\b(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|password)\s*[:=]\s*["']?([A-Za-z0-9._~+/=-]{16,})/gi,
+      /(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|secret|password)["']?\s{0,4}[:=]\s{0,4}["']?([A-Za-z0-9._~+/=-]{16,})/gi,
     valueGroup: 1,
   },
 ]
