@@ -389,6 +389,8 @@ export async function requirePermission(
     const requiredOps: Partial<Record<string, string[]>> = {
       [PERMISSIONS.scan.create]: [CANONICAL_OPERATIONS.SCAN_CREATE],
       [PERMISSIONS.scan.cancel]: [CANONICAL_OPERATIONS.SCAN_CANCEL],
+      [PERMISSIONS.attachment.upload]: [CANONICAL_OPERATIONS.ATTACHMENT_UPLOAD],
+      [PERMISSIONS.attachment.delete]: [CANONICAL_OPERATIONS.ATTACHMENT_DELETE],
       [PERMISSIONS.retest.create]: [CANONICAL_OPERATIONS.RETEST_CREATE],
       [PERMISSIONS.fix.create]: [CANONICAL_OPERATIONS.FIX_PROPOSAL_CREATE],
       [PERMISSIONS.fix.createPr]: [CANONICAL_OPERATIONS.FIX_PR_CREATE],

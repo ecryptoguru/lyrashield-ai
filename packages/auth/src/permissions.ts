@@ -41,6 +41,12 @@ export const PERMISSIONS = {
     cancel: "scan:cancel",
     retry: "scan:retry",
   },
+  attachment: {
+    /** Dedicated bindings keep delegated grants precise: an attachment grant
+     * never doubles as scan.create, and a scan.create grant never uploads. */
+    upload: "attachment:upload",
+    delete: "attachment:delete",
+  },
   finding: {
     view: "finding:view",
     update: "finding:update",
@@ -325,6 +331,7 @@ export const OPERATIONAL_PERMISSIONS: readonly Permission[] = [
   ...Object.values(PERMISSIONS.project),
   ...Object.values(PERMISSIONS.target),
   ...Object.values(PERMISSIONS.scan),
+  ...Object.values(PERMISSIONS.attachment),
   ...Object.values(PERMISSIONS.finding),
   ...Object.values(PERMISSIONS.fix),
   ...Object.values(PERMISSIONS.retest),

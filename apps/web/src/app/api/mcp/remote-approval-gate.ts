@@ -20,6 +20,9 @@ const operationPermissions: Partial<Record<string, Permission>> = {
   "fix_proposal.create": PERMISSIONS.fix.create,
   "retest.create": PERMISSIONS.retest.create,
   "fix_pr.create": PERMISSIONS.fix.createPr,
+  "scan_attachment.list": PERMISSIONS.scan.view,
+  "scan_attachment.upload": PERMISSIONS.attachment.upload,
+  "scan_attachment.delete": PERMISSIONS.attachment.delete,
 }
 
 const approvalIdSchema = z.string().min(1).max(128).optional()
@@ -88,6 +91,25 @@ async function resolveDelegatedScope(
       })
     )
     return { targetId: finding.targetId ?? undefined, profile: scan?.mode }
+  }
+  if (typeof args.proposalId === "string") {
+    const proposalId = args.proposalId
+    const proposal = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.fixProposal.findFirst({
+        where: { id: proposalId, deletedAt: null, finding: { workspaceId, deletedAt: null } },
+        select: { findingId: true },
+      })
+    )
+    if (!proposal) return {}
+    const finding = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.finding.findFirst({
+        where: { id: proposal.findingId, workspaceId, deletedAt: null },
+        select: { targetId: true },
+      })
+    )
+    // fix_pr.create is non-billable: like cancellation, the gate must not
+    // resolve the scan's recorded mode into a profile check.
+    return { targetId: finding?.targetId ?? undefined }
   }
   if (typeof args.scanId === "string") {
     const scanId = args.scanId

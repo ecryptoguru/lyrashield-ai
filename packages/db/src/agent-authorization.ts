@@ -10,6 +10,8 @@ export const MUTATING_CANONICAL_OPERATIONS = new Set<CanonicalOperation>([
   CANONICAL_OPERATIONS.FIX_PROPOSAL_CREATE,
   CANONICAL_OPERATIONS.RETEST_CREATE,
   CANONICAL_OPERATIONS.FIX_PR_CREATE,
+  CANONICAL_OPERATIONS.ATTACHMENT_UPLOAD,
+  CANONICAL_OPERATIONS.ATTACHMENT_DELETE,
 ])
 
 export type { CanonicalOperation } from "@lyrashield/types"
@@ -168,6 +170,38 @@ export const TOOL_OPERATION_MAP: Record<string, ToolOperationDescriptor> = {
     mutating: true,
     // The caller supplies a scanId; the scan's target is resolved server-side,
     // so a target-scoped connection can only cancel scans on granted targets.
+    requiresTarget: false,
+    isBillable: false,
+  },
+
+  // Attachment + fix-PR tools (D2) — kept in their own block so other
+  // workstreams can extend this map without touching these entries.
+  lyrashield_list_scan_attachments: {
+    canonicalOperation: CANONICAL_OPERATIONS.ATTACHMENT_LIST,
+    mutating: false,
+    requiresTarget: false,
+    isBillable: false,
+  },
+  lyrashield_upload_scan_attachment: {
+    canonicalOperation: CANONICAL_OPERATIONS.ATTACHMENT_UPLOAD,
+    mutating: true,
+    // Workspace-scoped input evidence; there is no target binding to check —
+    // a delegated grant needs allTargets (the same bar report.create meets).
+    requiresTarget: false,
+    isBillable: false,
+  },
+  lyrashield_delete_scan_attachment: {
+    canonicalOperation: CANONICAL_OPERATIONS.ATTACHMENT_DELETE,
+    mutating: true,
+    requiresTarget: false,
+    isBillable: false,
+  },
+  lyrashield_request_fix_pr: {
+    canonicalOperation: CANONICAL_OPERATIONS.FIX_PR_CREATE,
+    mutating: true,
+    // The caller supplies a proposalId; the proposal's target is resolved
+    // server-side, so a target-scoped connection only opens fix PRs on
+    // granted targets.
     requiresTarget: false,
     isBillable: false,
   },

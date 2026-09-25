@@ -38,12 +38,16 @@ Every API-backed tool calls the LyraShield REST API with a workspace API key or 
 | `lyrashield_get_launch_readiness`     | read  | GO / GO_WITH_CONDITIONS / NO_GO verdict                                                                 |
 | `lyrashield_create_pr_security_recap` | read  | Markdown recap for a PR comment                                                                         |
 | `lyrashield_check_diff`               | read  | Fast **advisory** heuristic pre-filter on a diff (not a scan)                                           |
+| `lyrashield_list_scan_attachments`    | read  | List workspace scan attachments (id, filename, media type, size)                                        |
 | `lyrashield_scan_target`              | write | Start a scan on a target                                                                                |
 | `lyrashield_cancel_scan`              | write | Request cancellation of a queued or running scan                                                        |
 | `lyrashield_run_pr_scan`              | write | Start a PR-focused (CHECK_PR) scan                                                                      |
 | `lyrashield_record_fix_proposal`      | write | Record a fix proposal on a finding                                                                      |
 | `lyrashield_verify_fix`               | write | Queue a retest to verify a fix                                                                          |
 | `lyrashield_create_report`            | write | Generate a shareable report                                                                             |
+| `lyrashield_upload_scan_attachment`   | write | Upload text content (~100 KB cap here; 1 MiB via CLI/SDK) as scan input evidence                        |
+| `lyrashield_delete_scan_attachment`   | write | Delete a workspace scan attachment                                                                      |
+| `lyrashield_request_fix_pr`           | write | Request a fix pull request (approval-bound; never merged automatically)                                 |
 
 > `lyrashield_check_diff` is a lightweight local heuristic (obvious hardcoded secrets, `eval`, unsafe HTML, SQL concatenation) meant as a pre-PR pre-filter. It is **not** a scanner — run `lyrashield_run_pr_scan` for a bounded repository scan with findings, coverage receipts, evidence states and explicit limitations. Results are not automatically independently verified or exploit-validated.
 >
