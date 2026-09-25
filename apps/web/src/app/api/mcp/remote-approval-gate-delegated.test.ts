@@ -13,7 +13,10 @@ const failAgentOperationMock = vi.fn()
 const callToolMock = vi.fn()
 
 vi.mock("@lyrashield/db", () => ({
-  TOOL_OPERATION_MAP: { lyrashield_scan_target: { canonicalOperation: "scan.create" } },
+  TOOL_OPERATION_MAP: {
+    lyrashield_scan_target: { canonicalOperation: "scan.create" },
+    lyrashield_cancel_scan: { canonicalOperation: "scan.cancel" },
+  },
   createApproval: (...args: unknown[]) => createApprovalMock(...args),
   findPendingApprovalByHash: (...args: unknown[]) => findPendingApprovalByHashMock(...args),
   getApproval: vi.fn(),
@@ -28,17 +31,36 @@ vi.mock("@lyrashield/db", () => ({
   hashOperationInput: vi.fn().mockReturnValue("op-hash"),
   checkDelegatedOperationAuthorization: vi
     .fn()
-    .mockImplementation(({ operationName, connection }) => {
+    .mockImplementation(({ operationName, connection, targetId, profile }) => {
       if (
         connection?.allowedOperations?.includes("scan.create") &&
         operationName === "lyrashield_scan_target"
       ) {
         return { authorized: true, canonicalOperation: "scan.create" }
       }
+      if (
+        connection?.allowedOperations?.includes("scan.cancel") &&
+        operationName === "lyrashield_cancel_scan" &&
+        // Cancellation is non-billable: the gate must not resolve the scan's
+        // mode into a profile check, or a cancel-only grant could never pass.
+        profile === undefined &&
+        (connection?.allTargets || connection?.allowedTargetIds?.includes(targetId))
+      ) {
+        return { authorized: true, canonicalOperation: "scan.cancel" }
+      }
       return { authorized: false, code: "OPERATION_NOT_GRANTED", reason: "Operation not granted" }
     }),
   prisma: { finding: { findFirst: vi.fn() }, scan: { findFirst: vi.fn() } },
-  withWorkspaceRLS: vi.fn(),
+  withWorkspaceRLS: vi.fn((_workspaceId: string, fn: (tx: unknown) => unknown) =>
+    Promise.resolve(
+      fn({
+        finding: { findFirst: vi.fn().mockResolvedValue(null) },
+        scan: {
+          findFirst: vi.fn().mockResolvedValue({ targetId: "target-1", mode: "STANDARD" }),
+        },
+      })
+    )
+  ),
 }))
 
 vi.mock("@lyrashield/mcp", () => {
@@ -279,6 +301,93 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
       approved: false,
       reason: expect.stringContaining("Idempotency conflict"),
     })
+    expect(callToolMock).not.toHaveBeenCalled()
+  })
+
+  it("requires an explicit scan.cancel grant — a scan.create grant alone does not authorize cancel", async () => {
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      authorizationVersion: 1,
+      allowedOperations: ["scan.create"],
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["STANDARD"],
+      expiresAt: null,
+    }
+
+    const gate = makeRemoteApprovalGate({ apiKeyInfo, connection, toolContext })
+    const result = await gate("lyrashield_cancel_scan", {
+      workspaceId: "ws-1",
+      scanId: "scan-1",
+      idempotencyKey: "cancel-1",
+    })
+
+    expect(result.approved).toBe(false)
+    expect(result.reason).toContain("Update this connection's authorized workflows")
+    expect(claimOrGetAgentOperationMock).not.toHaveBeenCalled()
+    expect(callToolMock).not.toHaveBeenCalled()
+  })
+
+  it("claims a durable scan.cancel operation when the connection grants it — no profile grant needed", async () => {
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      authorizationVersion: 1,
+      allowedOperations: ["scan.cancel"],
+      // A least-privilege grant scoped to the scan's own target, with no
+      // billable profiles at all.
+      allowedTargetIds: ["target-1"],
+      allTargets: false,
+      allowedProfiles: [],
+      expiresAt: null,
+    }
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "NEW",
+      operation: { id: "op-cancel" },
+    })
+    callToolMock.mockResolvedValueOnce({
+      content: [{ type: "text", text: '{"action":"scan_cancel_requested"}' }],
+      structuredContent: { action: "scan_cancel_requested" },
+    })
+
+    const gate = makeRemoteApprovalGate({ apiKeyInfo, connection, toolContext })
+    const result = await gate("lyrashield_cancel_scan", {
+      workspaceId: "ws-1",
+      scanId: "scan-1",
+      idempotencyKey: "cancel-1",
+    })
+
+    expect(result.approved).toBe(true)
+    expect(requirePermissionMock).toHaveBeenCalledWith("ws-1", "scan:cancel")
+    expect(claimOrGetAgentOperationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ operationName: "scan.cancel", idempotencyKey: "cancel-1" })
+    )
+  })
+
+  it("requires an idempotency key for delegated scan cancellation", async () => {
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      authorizationVersion: 1,
+      allowedOperations: ["scan.cancel"],
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: [],
+      expiresAt: null,
+    }
+
+    const gate = makeRemoteApprovalGate({ apiKeyInfo, connection, toolContext })
+    const result = await gate("lyrashield_cancel_scan", {
+      workspaceId: "ws-1",
+      scanId: "scan-1",
+    })
+
+    expect(result).toMatchObject({ approved: false })
+    expect(result.reason).toContain("idempotencyKey")
     expect(callToolMock).not.toHaveBeenCalled()
   })
 
