@@ -41,6 +41,7 @@ test.describe("Affiliate lifecycle", () => {
     await page.getByLabel("Email").fill(affiliateEmail)
     await page.locator("#password").fill(password)
     await page.getByRole("button", { name: "Create account" }).click()
+    await expect(page).toHaveURL(/\/onboarding/)
     await expect
       .poll(() => prisma.user.findUnique({ where: { email: affiliateEmail } }))
       .not.toBeNull()
@@ -53,23 +54,21 @@ test.describe("Affiliate lifecycle", () => {
     // the (auth-gated) apply page. New signups land on /onboarding; sign out +
     // sign in + skip onboarding, matching the critical-flow pattern, so the
     // apply page does not redirect to /sign-in and the form renders.
-    await page.request
-      .post("/api/auth/sign-out", {
-        data: {},
-        headers: { Origin: "http://127.0.0.1:3100" },
-      })
-      .catch(() => {})
+    const signOutResponse = await page.request.post("/api/auth/sign-out", {
+      data: {},
+      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
+    })
+    await expect(signOutResponse).toBeOK()
     await page.goto("/sign-in")
     await page.getByLabel("Email").fill(affiliateEmail)
     await page.locator("#password").fill(password)
     await page.getByRole("button", { name: "Sign in" }).click()
     await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
-    await page.request
-      .patch("/api/onboarding", {
-        data: { skipped: true },
-        headers: { Origin: "http://127.0.0.1:3100" },
-      })
-      .catch(() => {})
+    const skipOnboarding = await page.request.patch("/api/onboarding", {
+      data: { skipped: true },
+      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
+    })
+    await expect(skipOnboarding).toBeOK()
 
     // 2. Apply to the affiliate program
     await page.goto("/affiliates/apply")
@@ -146,10 +145,11 @@ test.describe("Affiliate lifecycle", () => {
 
     // 5. Sign up as the referred user (with cookie from the click)
     // First sign out
-    await page.request.post("/api/auth/sign-out", {
+    const referredSignOut = await page.request.post("/api/auth/sign-out", {
       data: {},
-      headers: { Origin: "http://127.0.0.1:3100" },
+      headers: { Origin: "http://127.0.0.1:3100", "x-forwarded-for": forwardedFor },
     })
+    await expect(referredSignOut).toBeOK()
 
     await page.goto("/sign-up")
     await page.getByLabel("Name").fill("E2E Referred")
