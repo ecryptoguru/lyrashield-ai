@@ -403,6 +403,8 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 
 ## 9. Release status
 
+Cloud and Desktop release configuration selects engine `21ce6688b8bc39c88822a0e1792b9be08dca8a07`, including the GPT-6-only model boundary and Local scan integrity/viewer corrections. The engine/product contract is a required product merge check. Release acceptance still requires successful exact-SHA production promotion or signed Desktop publication; changing the source pin alone does not satisfy either gate.
+
 ### Complete
 
 - Open registration, authenticated app origin, marketing site, passive Lite Scanner, and public tools.

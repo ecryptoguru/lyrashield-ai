@@ -23,7 +23,12 @@ Repository ownership:
 
 Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not rename `@lyrashield/*` or `LYRASHIELD_*` without founder approval.
 
-## Current verified state — 2026-09-14
+## Release contract — 2026-09-25
+
+- Cloud and Desktop release workflows pin engine `21ce6688b8bc39c88822a0e1792b9be08dca8a07`, which includes the GPT-6-only model boundary and Local scan integrity/viewer fixes. A source pin does not establish a completed deployment or signed Desktop release; verify the exact release run separately.
+- Product `main` requires `SCA & Secret Scan`, `Lint, Typecheck, Test & Build` and `Pinned Engine / Worker Contract`, with strict up-to-date branch checks. Update the engine's reverse `.lyrashield-worker-pin` only to an exact merged product commit after compatibility verification.
+
+## Earlier verified runtime snapshot — 2026-09-14
 
 - PR #677 merged growth attribution and checkout-readiness work into main `9cde77d2`. It adds account-owned first-touch acquisition under forced RLS and user-delete cascade, DNT/GPC opt-out, corrected 30-day cancellation counting, and a read-only checkout configuration verifier. Main CI `34841775897` and production release `34842662910` passed on the merged SHA. The release applied migration `20260914000000_account_acquisition`, passed candidate and production smoke, and promoted worker digest `sha256:bf87b85d6fe93bfa4fa7178e0ec52f0b9dfefd6537663294e83e8fc2399b62da`; no live payment proof followed.
 - Direct Azure readback on 2026-09-14 found app `lyrashield-app--0000358`, scanner `lyrashield-scanner--0000333`, and egress proxy `lyrashield-egress-proxy--0000199` on `9cde77d2`, each at 100% traffic. Polar and Razorpay Cloud purchase admissions were both `public`, both Local admissions `off`, and the canary allowlist empty. Live `/api/ready/scans` returned `200` with worker ready. `docs/operations.md` §Live checkout verification is the controlled canary/live runbook. Refresh deployed flags before any action. The protected Cloud-admission workflow changes both providers together.
