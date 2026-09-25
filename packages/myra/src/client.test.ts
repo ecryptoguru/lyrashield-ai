@@ -135,8 +135,8 @@ describe("Myra stream completion", () => {
   ])("rejects %s EOF as interrupted", async (_label, chunks) => {
     const client = clientFor(chunks)
     const consume = async () => {
-      for await (const _event of client.sendMessage({ text: "hello" })) {
-        /* drain */
+      for await (const event of client.sendMessage({ text: "hello" })) {
+        expect(event.type).toBe("token")
       }
     }
     await expect(consume()).rejects.toMatchObject({ code: "STREAM_INTERRUPTED" })
