@@ -1,6 +1,6 @@
 # Client configuration receipts
 
-Checked 2026-09-19. These are documentation and local contract receipts, not authenticated client acceptance.
+Checked 2026-09-25. These are documentation and local contract receipts, not authenticated client acceptance.
 
 - npm read-only metadata reports `@lyrashield/mcp` version 0.2.8 as the current published package. This release candidate pins 0.2.9 and must not be distributed until that immutable version is published and its packed contents are checked. Deliberate release updates must update generator, registry, templates, validator and snapshots together.
 - [Kiro configuration](https://kiro.dev/docs/mcp/configuration/) specifies `.kiro/settings/mcp.json` for workspaces and `~/.kiro/settings/mcp.json` for users. Merge the exported stdio entry into one of these files; do not assume the staged plugin directory is discovered.

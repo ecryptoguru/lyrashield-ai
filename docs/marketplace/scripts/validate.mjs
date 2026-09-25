@@ -2,7 +2,7 @@ import { access, lstat, readFile, readdir } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { existsSync } from "node:fs"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import { runInNewContext } from "node:vm"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -36,8 +36,17 @@ assert(
   "manifest.publication.status is invalid"
 )
 if (process.argv.includes("--release")) {
-  assert(manifest.publication.status === "release-candidate", "release requires a release-candidate export")
+  assert(
+    manifest.publication.status === "release-candidate",
+    "release requires a release-candidate export"
+  )
   assert(manifest.publication.sourceClean === true, "release requires clean source provenance")
+}
+if (process.env.GITHUB_REF?.startsWith("refs/tags/v")) {
+  assert(
+    process.env.GITHUB_REF === `refs/tags/v${manifest.version}`,
+    "release tag version must match manifest.version"
+  )
 }
 assert(Array.isArray(manifest.generatedFiles), "manifest.generatedFiles must be an array")
 for (const relative of manifest.generatedFiles) {
@@ -126,14 +135,12 @@ const KEY_PATTERN = /lsk_[A-Za-z0-9]{8,}/
 const PRIVATE_KEY_PATTERN = /-----BEGIN (?:RSA )?PRIVATE KEY-----/
 const PEM_PATTERN = /-----BEGIN (?:CERTIFICATE|PRIVATE KEY|PUBLIC KEY)-----/
 const PROVIDER_TOKEN_PATTERN =
-  /(?:ghp_|gho_|github_pat_|sk-[A-Za-z0-9]{20,}|sk_live_[A-Za-z0-9]{20,})/
+  /(?:gh[po]_|github[_]pat_|sk-[A-Za-z0-9]{20,}|sk_live_[A-Za-z0-9]{20,})/
 async function scanSecrets(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     if (entry.name === ".git" || entry.name === "node_modules") continue
     const full = path.join(dir, entry.name)
     const rel = path.relative(root, full)
-    // Never flag the validator's own pattern definitions as leaked secrets.
-    if (rel === "scripts/validate.mjs") continue
     if (entry.isDirectory()) {
       await scanSecrets(full)
     } else {
@@ -148,6 +155,10 @@ async function scanSecrets(dir) {
         ".yml",
         ".yaml",
         ".toml",
+        ".rs",
+        ".jsonc",
+        ".svg",
+        ".lock",
         ".txt",
         "",
       ].includes(ext)
@@ -252,6 +263,35 @@ assert(rootEntries.includes("skills"), "root skills directory is missing")
 // resolve plugins through it. Keep it consistent with the root plugin manifest.
 const marketplace = await readJson(".claude-plugin/marketplace.json")
 const rootPlugin = await readJson("plugin.json")
+assert(/^\d+\.\d+\.\d+$/.test(rootPlugin.version), "plugin version must be semver")
+assert(manifest.version === rootPlugin.version, "manifest version must match plugin.json")
+assert(
+  manifest.generator?.version === rootPlugin.version,
+  "generator version must match plugin.json"
+)
+for (const file of [
+  ".claude-plugin/plugin.json",
+  ".codex-plugin/plugin.json",
+  ".cursor-plugin/plugin.json",
+  ".kiro-plugin/plugin.json",
+  "codex-plugin/.codex-plugin/plugin.json",
+  "gemini-extension.json",
+  "gemini-extension/gemini-extension.json",
+]) {
+  assert(
+    (await readJson(file)).version === rootPlugin.version,
+    `${file} version must match plugin.json`
+  )
+}
+assert(
+  codexMarketplaceEntry.version === rootPlugin.version,
+  "Codex marketplace version must match plugin.json"
+)
+assert(
+  (await readFile(path.join(root, "codex-plugin/skills/lyrashield/SKILL.md"), "utf8")) ===
+    (await readFile(path.join(root, "skills/lyrashield/SKILL.md"), "utf8")),
+  "installed Codex skill must match the root authorization contract"
+)
 assert(
   typeof marketplace.name === "string" && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(marketplace.name),
   "marketplace.name must be a non-empty kebab-case identifier"
@@ -299,6 +339,14 @@ for (const [artifact, [file, pattern, label]] of Object.entries({
     `manifest.artifactVersions.${artifact} (${versions[artifact]}) must match ${label} (${actual})`
   )
 }
+assert(
+  parseVersion(
+    await readFile(path.join(root, "zed-extension/Cargo.toml"), "utf8"),
+    /^version\s*=\s*"([^"]+)"/m,
+    "zed Cargo.toml"
+  ) === rootPlugin.version,
+  "Zed Cargo version must match plugin.json"
+)
 
 // The Gemini extension must exclude exactly the catalog-derived mutating tool
 // set recorded in the manifest by the exporter.
@@ -325,6 +373,11 @@ assert(
 )
 
 const expectedPackage = "@lyrashield/mcp@0.2.9"
+const kiro = (await readJson(".mcp.kiro.json")).mcpServers?.lyrashield
+assert(
+  kiro?.command === "npx" && JSON.stringify(kiro.args) === JSON.stringify(["-y", expectedPackage]),
+  "Kiro executable pin differs"
+)
 for (const file of [
   ".mcp.kiro.json",
   "gemini-extension.json",
@@ -409,6 +462,22 @@ for (const setting of [undefined, "", "  ", " demo-credential "]) {
   }
 }
 const codebuff = await readFile(path.join(root, "codebuff/lyrashield-review.ts"), "utf8")
+const { default: codebuffDefinition } = await import(
+  pathToFileURL(path.join(root, "codebuff/lyrashield-review.ts")).href
+)
+assert(codebuffDefinition.version === rootPlugin.version, "Codebuff version must match plugin.json")
+assert(
+  JSON.stringify(codebuffDefinition.mcpServers?.lyrashield?.args) ===
+    JSON.stringify(["-y", expectedPackage]),
+  "Codebuff executable pin differs"
+)
+const codebuffTools = codebuffDefinition.toolNames ?? []
+assert(
+  !codebuffTools.includes("run_terminal_command") &&
+    manifest.mutatingTools.every((name) => !codebuffTools.includes(`lyrashield/${name}`)) &&
+    codebuffTools.some((name) => name.startsWith("lyrashield/")),
+  "Codebuff must expose only the selected read-only MCP tools"
+)
 assert(
   !codebuff.includes("run_terminal_command"),
   "Read-only Codebuff agent must not run shell commands"
@@ -436,9 +505,11 @@ function connectionBoundaryIsIntact(text) {
   return approved && !contradicts
 }
 {
-  const approved = "Fixes are proposals. Authorized workflows execute within connection permissions; pull requests never auto-merge."
+  const approved =
+    "Fixes are proposals. Authorized workflows execute within connection permissions; pull requests never auto-merge."
   assert(connectionBoundaryIsIntact(approved), "self-test: approved statement must validate")
-  const drift = "Fixes are proposals. Authorized workflows are not limited by connection permissions; pull requests never auto-merge."
+  const drift =
+    "Fixes are proposals. Authorized workflows are not limited by connection permissions; pull requests never auto-merge."
   assert(
     !connectionBoundaryIsIntact(drift),
     "self-test: contradictory permission wording must fail validation"

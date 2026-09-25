@@ -1,6 +1,6 @@
 # LyraShield AI marketplace release source
 
-Current exported Agent Plugin version: `0.1.28`. Channel-specific listing versions and review
+Current exported Agent Plugin version: `0.1.29`. Channel-specific listing versions and review
 states below may lag this repository release.
 
 ## Install from this repository
@@ -39,7 +39,14 @@ decision instead, add this to `.claude/settings.json` or `.github/copilot/settin
 
 Neither marketplace path inlines a credential. Their remote MCP connection completes hosted OAuth
 inside the client. The Kiro stdio adapter is the path that reads
-`~/.lyrashield/credentials.json` after `lyrashield login --oauth`.
+`~/.lyrashield/credentials.json` after `npx -y lyrashield@0.2.11 login --oauth`.
+
+For local stdio clients (Kiro, Gemini CLI, Zed and Codebuff), use Node.js 24 and run the pinned
+CLI login command above before starting the client. Select one workspace in the browser. First
+call `lyrashield_list_workspaces`, then `lyrashield_list_targets` for an authorized target. If
+authorization expires or is revoked, repeat the CLI login and restart the client. Hosted HTTP
+clients complete OAuth inside their connection UI. Keep API keys in user-level settings, never a
+committed project file or agent prompt.
 
 LyraShield is not yet listed in a published VS Code plugin marketplace, so there is no one-click
 marketplace install for VS Code today. Install-from-source and the marketplace-by-URL paths above

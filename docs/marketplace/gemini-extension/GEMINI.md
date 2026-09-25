@@ -5,7 +5,7 @@ Connect with `lyrashield login --oauth` or provide `LYRASHIELD_API_KEY` for CI.
 Write-capable actions require an explicit OAuth `lyrashield.write` scope: one
 Connect consent authorizes the displayed workflows and matching calls then run
 within connection permissions using an idempotency key. Nondelegated hosted
-writes receive `connect_required`; local stdio approval is separate. Never ask a
+writes receive `connect_required`; local stdio instead uses credential-scoped REST authorization without a second approval prompt. Never ask a
 user to paste a token into a prompt.
 
 The extension is a community release artifact until the LyraShield AI publisher account

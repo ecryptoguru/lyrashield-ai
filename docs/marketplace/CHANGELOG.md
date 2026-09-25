@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.29
+
+- Verify the exact published MCP package and Zed build before a marketplace release.
+- Restrict Codebuff to read-only tools and enforce the installed plugin, versions and secret scans.
+- Complete local-client setup and recovery guidance.
+
+## 0.1.28
+
+- Pin MCP 0.2.9 for issuer-bound stored OAuth refresh, pending its verified publication.
+- Keep the exported client surfaces and authorization boundaries aligned.
+
 ## 0.1.27
 
 - Pin MCP 0.2.8 so clients label immutable report snapshot reuse accurately.

@@ -40,6 +40,19 @@ jobs:
       - name: Validate before releasing
         run: node scripts/validate.mjs --release
 
+      - name: Verify published MCP package
+        run: node scripts/verify-published-mcp.mjs
+
+      - name: Build Zed extension
+        run: |
+          rustup target add wasm32-wasip2
+          cargo fmt --manifest-path zed-extension/Cargo.toml --check
+          cargo build --manifest-path zed-extension/Cargo.toml --locked --release --target wasm32-wasip2
+
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Verify manifest version and generate checksums
         env:
           REQUESTED_VERSION: ${{ inputs.version }}

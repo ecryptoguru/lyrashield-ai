@@ -1,7 +1,7 @@
 ---
 name: lyrashield
 description: Review LyraShield release-assurance evidence through an OAuth-first MCP connection.
-version: 0.1.28
+version: 0.1.29
 license: MIT-0
 metadata:
   category: security
@@ -28,7 +28,7 @@ recreating dashboard UI or copying report contents into prompts.
 Write actions require OAuth `lyrashield.write`. New delegated connections authorize
 their workflows once through the Connect consent and then execute within connection
 permissions using an idempotency key. Nondelegated hosted writes receive
-`connect_required`; local stdio approval is separate. An API key is optional for read-only or CI use.
+`connect_required`; local stdio instead uses credential-scoped REST authorization without a second approval prompt. An API key is optional for read-only or CI use.
 
 Use `lyrashield_check_diff` to review changes and `lyrashield_verify_fix` to retest findings.
 Fixes are proposals. Authorized workflows execute within connection permissions; pull requests never auto-merge.
