@@ -140,6 +140,7 @@ test("admin enrollment, deny-by-default, TOTP sign-in, and console work end to e
   await page.getByRole("button", { name: "Sign in" }).click()
   await expect(page).toHaveURL(/\/two-factor$/)
   await page.getByLabel("Authenticator code").fill(totpFromUri(setupUri))
+  await expect(page.getByRole("button", { name: "Verify and continue" })).toBeEnabled()
   await page.getByRole("button", { name: "Verify and continue" }).click()
   await expect(page).toHaveURL(/\/dashboard$/)
   await expect(page.getByRole("link", { name: "Platform Admin" })).toBeVisible()

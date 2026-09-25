@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { AlertCircle } from "lucide-react"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
@@ -14,6 +14,13 @@ export default function TwoFactorPage() {
   const [code, setCode] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const codeRef = useRef<HTMLInputElement>(null)
+
+  // A code typed before hydration is visible in the input but misses React's change event.
+  useEffect(() => {
+    const existingCode = codeRef.current?.value ?? ""
+    if (existingCode) setCode(existingCode.replace(/\D/g, "").slice(0, 6))
+  }, [])
 
   async function verify(event: React.FormEvent) {
     event.preventDefault()
@@ -72,6 +79,7 @@ export default function TwoFactorPage() {
             >
               <Input
                 id="totp-code"
+                ref={codeRef}
                 value={code}
                 onChange={(event) =>
                   setCode(
