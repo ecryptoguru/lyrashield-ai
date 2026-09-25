@@ -398,4 +398,246 @@ describe("WebMCP registration", () => {
 
     cleanup()
   })
+
+  it("returns cleanly when the browser has no modelContext — the page stays functional", () => {
+    // Unsupported browser: document exists but document.modelContext does not.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(globalThis as any).document = {}
+    const store = createWebMcpReceiptStore()
+    const handler = vi.fn().mockResolvedValue({ ok: true })
+
+    let cleanup: (() => void) | undefined
+    expect(() => {
+      cleanup = registerWebMcpTool({
+        name: "no_modelcontext_tool",
+        title: "Unsupported",
+        description: "Registration must not throw on unsupported browsers.",
+        inputSchema: { properties: {} },
+        receiptStore: store,
+        classification: "read",
+        dataClass: "public",
+        untrustedContent: false,
+        uiChanged: false,
+        humanConfirmationRequired: false,
+        handler,
+      })
+    }).not.toThrow()
+
+    expect(registerTool).not.toHaveBeenCalled()
+    // Cleanup stays safe and releases the name for a later registration.
+    expect(() => cleanup?.()).not.toThrow()
+    let secondCleanup: (() => void) | undefined
+    expect(() => {
+      secondCleanup = registerWebMcpTool({
+        name: "no_modelcontext_tool",
+        title: "Unsupported",
+        description: "Re-registers after cleanup.",
+        inputSchema: { properties: {} },
+        receiptStore: store,
+        classification: "read",
+        dataClass: "public",
+        untrustedContent: false,
+        uiChanged: false,
+        humanConfirmationRequired: false,
+        handler,
+      })
+    }).not.toThrow()
+    secondCleanup?.()
+  })
+
+  it("unregisters a page-scoped tool on route/workspace change so it can re-register", () => {
+    const store = createWebMcpReceiptStore()
+    const options = (suffix: string) => ({
+      name: "review_scan_progress",
+      title: "Review scan progress",
+      description: `Page-scoped read for ${suffix}.`,
+      inputSchema: { properties: {} },
+      receiptStore: store,
+      classification: "read" as const,
+      dataClass: "workspace-summary" as const,
+      untrustedContent: false,
+      uiChanged: false,
+      humanConfirmationRequired: false,
+      handler: vi.fn().mockResolvedValue({ ok: true }),
+    })
+
+    const firstCleanup = registerWebMcpTool(options("workspace A"))
+    expect(registerTool).toHaveBeenCalledTimes(1)
+    const [, firstOptions] = registerTool.mock.calls[0]
+
+    // Navigating away (or switching workspace) runs the effect cleanup, which
+    // aborts the registration signal and frees the tool name.
+    firstCleanup()
+    expect(firstOptions.signal.aborted).toBe(true)
+
+    const secondCleanup = registerWebMcpTool(options("workspace B"))
+    expect(registerTool).toHaveBeenCalledTimes(2)
+    secondCleanup()
+  })
+
+  it("reports an uncertain outcome — never a completed cancel — when a durable mutation aborts", async () => {
+    const store = createWebMcpReceiptStore()
+    const handler = vi.fn(
+      () =>
+        new Promise<unknown>((resolve) => {
+          // The server round-trip is in flight; the result arrives after abort.
+          setTimeout(() => resolve({ started: true, scanId: "scan-1" }), 5)
+        })
+    )
+    const cleanup = registerWebMcpTool({
+      name: "request_security_scan",
+      title: "Request security scan",
+      description: "Durable mutation under test.",
+      inputSchema: { properties: {} },
+      receiptStore: store,
+      classification: "mutation-durable",
+      dataClass: "workspace-summary",
+      untrustedContent: false,
+      uiChanged: false,
+      durableMutation: true,
+      humanConfirmationRequired: false,
+      handler,
+    })
+
+    const tool = registerTool.mock.calls[0][0] as {
+      execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
+    }
+    const controller = new AbortController()
+    const resultPromise = tool.execute({}, { signal: controller.signal })
+    controller.abort()
+    const result = (await resultPromise) as {
+      ok: boolean
+      cancelled?: boolean
+      uncertain?: boolean
+      error?: string
+    }
+
+    // The call was cancelled — but the durable action's outcome is uncertain:
+    // the message must say so and must not claim the action was cancelled.
+    expect(result.ok).toBe(false)
+    expect(result.uncertain).toBe(true)
+    expect(result.error).toMatch(/uncertain/i)
+    expect(result.error).toMatch(/may (already )?(have|be)/i)
+    expect(result.error).toMatch(/poll|status|dashboard/i)
+    expect(result.error).not.toMatch(/action was cancelled|has been cancelled|was stopped/i)
+    // The receipt reflects the uncertainty rather than a clean "cancelled".
+    const receipt = store.getSnapshot().latest
+    expect(receipt?.status).toBe("cancelled")
+    expect(receipt?.summary).toMatch(/uncertain/i)
+
+    cleanup()
+  })
+
+  it("attaches sanitized references and a recovery href from receiptProjection", async () => {
+    const store = createWebMcpReceiptStore()
+    const handler = vi.fn().mockResolvedValue({ started: true, scanId: "scan-7" })
+    const cleanup = registerWebMcpTool<{ requestId: string }>({
+      name: "request_security_scan",
+      title: "Request security scan",
+      description: "Projection under test.",
+      inputSchema: {
+        required: ["requestId"],
+        properties: { requestId: { type: "string", description: "Idempotency id" } },
+      },
+      receiptStore: store,
+      classification: "mutation-durable",
+      dataClass: "workspace-summary",
+      untrustedContent: false,
+      uiChanged: false,
+      durableMutation: true,
+      humanConfirmationRequired: false,
+      receiptProjection: (result, input) => {
+        const r = result as { scanId?: string }
+        return {
+          references: {
+            requestId: input.requestId,
+            ...(r.scanId ? { scanId: r.scanId } : {}),
+            workspaceId: "must-be-dropped",
+          },
+          href: r.scanId ? `/dashboard/scans/${r.scanId}` : "/dashboard/scans",
+        }
+      },
+      handler,
+    })
+
+    const tool = registerTool.mock.calls[0][0] as {
+      execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
+    }
+    await tool.execute({ requestId: "req-42" }, { signal: new AbortController().signal })
+
+    const receipt = store.getSnapshot().latest
+    expect(receipt?.status).toBe("completed")
+    expect(receipt?.references).toEqual({ requestId: "req-42", scanId: "scan-7" })
+    expect(receipt?.href).toBe("/dashboard/scans/scan-7")
+
+    cleanup()
+  })
+
+  it("drops a projection href that is not a safe dashboard path", async () => {
+    const store = createWebMcpReceiptStore()
+    const handler = vi.fn().mockResolvedValue({ shareUrl: "/reports/shared/r1?token=abc" })
+    const cleanup = registerWebMcpTool({
+      name: "review_scan_report",
+      title: "Review scan report",
+      description: "Unsafe href under test.",
+      inputSchema: { properties: {} },
+      receiptStore: store,
+      classification: "read",
+      dataClass: "workspace-summary",
+      untrustedContent: false,
+      uiChanged: false,
+      humanConfirmationRequired: false,
+      receiptProjection: () => ({
+        references: { reportId: "r1" },
+        href: "/reports/shared/r1?token=abc",
+      }),
+      handler,
+    })
+
+    const tool = registerTool.mock.calls[0][0] as {
+      execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
+    }
+    await tool.execute({}, { signal: new AbortController().signal })
+
+    const receipt = store.getSnapshot().latest
+    expect(receipt?.references).toEqual({ reportId: "r1" })
+    expect(receipt?.href).toBeUndefined()
+
+    cleanup()
+  })
+
+  it("rejects caller-supplied principal and foreign resource ids on page tools", async () => {
+    const store = createWebMcpReceiptStore()
+    const handler = vi.fn().mockResolvedValue({ ok: true })
+    const cleanup = registerWebMcpTool({
+      name: "page_scoped_tool",
+      title: "Page tool",
+      description: "Rejects tenancy and foreign-resource inputs.",
+      inputSchema: {
+        properties: { scanId: { type: "string", description: "Visible scan id" } },
+      },
+      receiptStore: store,
+      classification: "read",
+      dataClass: "workspace-summary",
+      untrustedContent: false,
+      uiChanged: false,
+      humanConfirmationRequired: false,
+      forbiddenInputKeys: ["workspaceId", "workspace", "userId", "user", "targetId", "evidence"],
+      handler,
+    })
+
+    const tool = registerTool.mock.calls[0][0] as {
+      execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
+    }
+    for (const key of ["workspaceId", "workspace", "userId", "user", "targetId", "evidence"]) {
+      const result = (await tool.execute(
+        { [key]: "injected" },
+        { signal: new AbortController().signal }
+      )) as { ok: boolean; error?: string }
+      expect(result.ok).toBe(false)
+      expect(result.error).toContain(`"${key}"`)
+    }
+    expect(handler).not.toHaveBeenCalled()
+    cleanup()
+  })
 })

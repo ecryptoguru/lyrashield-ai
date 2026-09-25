@@ -31,6 +31,7 @@ import {
   getVerificationStatusLabel,
 } from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
+import { useScanDetailWebMcp } from "./scan-detail-webmcp"
 import { AiSecurityScoreCard } from "./ai-score-card"
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { track } from "@/lib/analytics"
@@ -90,6 +91,10 @@ export function ScanDetailClient({
   useEffect(() => {
     scanRef.current = scan
   }, [scan])
+
+  // Page-scoped agent read: `review_scan_progress` can only ever resolve the
+  // scan this page displays; workspace/scan identity is bound at registration.
+  useScanDetailWebMcp({ workspaceId: scan.workspaceId, scanId: scan.id })
   // Incremental event polling cursor: the id of the newest event already held
   // client-side. Each poll sends `eventsAfter` so the server returns only the
   // tail. A ref (not state) so the in-flight poll callback always reads the

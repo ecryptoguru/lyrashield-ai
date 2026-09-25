@@ -13,6 +13,12 @@ import {
 import { Badge, Button, Card } from "@lyrashield/ui"
 import { formatTime } from "@/lib/date-format"
 import { estimateRunMinutes, formatEstimate } from "@/lib/estimator"
+import {
+  deriveCurrentStage,
+  derivePhases,
+  humanizeScanStatus,
+  stripStagePrefix,
+} from "./scan-detail-utils"
 
 interface ScanEvent {
   id: string
@@ -23,99 +29,8 @@ interface ScanEvent {
   createdAt: string
 }
 
-/** Strip leading [stage] prefixes like "[preflight] Starting…" → "Starting…" */
-function stripStagePrefix(msg: string): string {
-  return msg.replace(/^\[[^\]]+\]\s*/, "")
-}
-
-/** Humanize a scan status string into a readable stage label. */
-function humanizeStatus(status: string): string {
-  switch (status) {
-    case "QUEUED":
-      return "Waiting to start"
-    case "PREFLIGHT":
-      return "Checking setup"
-    case "RUNNING":
-      return "Scanning"
-    case "VERIFYING":
-      return "Verifying evidence"
-    default:
-      return status.charAt(0) + status.slice(1).toLowerCase().replaceAll("_", " ")
-  }
-}
-
-/** Derive current stage label from the latest non-accounting event. */
-function deriveCurrentStage(status: string, events: ScanEvent[]): string {
-  if (events.length > 0) {
-    const latest = events[events.length - 1]!
-    const stripped = stripStagePrefix(latest.message)
-    if (stripped.length > 0) return stripped
-  }
-  return humanizeStatus(status)
-}
-
 export function buildScanAnnouncement(currentStage: string, findingsCount: number): string {
   return `${currentStage}. ${findingsCount} finding${findingsCount === 1 ? "" : "s"} detected so far.`
-}
-
-type StageState = "done" | "active" | "pending"
-
-interface Phase {
-  key: string
-  label: string
-  state: StageState
-}
-
-/**
- * Derive the ordered phase checklist from the scan status and event stream.
- * Only surfaces phases evidenced by the data — no fabrication.
- */
-function derivePhases(status: string, events: ScanEvent[]): Phase[] {
-  const stages = new Set(events.map((e) => e.stage.toLowerCase()))
-
-  const hasPreflight = stages.has("preflight") || status === "PREFLIGHT"
-  const hasRunning = stages.has("running") || status === "RUNNING" || status === "VERIFYING"
-  const hasVerifying = stages.has("verifying") || status === "VERIFYING"
-
-  const phases: Phase[] = []
-
-  if (hasPreflight) {
-    let state: StageState
-    if (status === "PREFLIGHT") {
-      state = "active"
-    } else if (hasRunning || hasVerifying) {
-      state = "done"
-    } else {
-      state = "pending"
-    }
-    phases.push({ key: "preflight", label: "Setup check", state })
-  }
-
-  if (hasRunning) {
-    let state: StageState
-    if (status === "RUNNING") {
-      state = "active"
-    } else if (status === "VERIFYING") {
-      state = "done"
-    } else if (hasPreflight && status === "PREFLIGHT") {
-      state = "pending"
-    } else {
-      state = "active"
-    }
-    phases.push({ key: "running", label: "Scanning", state })
-  }
-
-  if (hasVerifying) {
-    const state: StageState = status === "VERIFYING" ? "active" : "pending"
-    phases.push({ key: "verifying", label: "Verifying evidence", state })
-  }
-
-  // Fallback: if no phases derived (e.g. QUEUED with no events), show current status
-  if (phases.length === 0) {
-    phases.push({ key: status.toLowerCase(), label: humanizeStatus(status), state: "active" })
-  }
-
-  return phases
 }
 
 interface ScanInProgressProps {
@@ -198,7 +113,7 @@ export function ScanInProgress({
                   <span className="relative inline-flex h-3 w-3 rounded-full bg-teal-500" />
                 </span>
                 <p className="text-xs font-semibold tracking-widest text-teal-600 uppercase dark:text-teal-400">
-                  {humanizeStatus(status)}
+                  {humanizeScanStatus(status)}
                 </p>
               </div>
 

@@ -5,6 +5,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
 }))
 
+import { WebMcpReceiptProvider } from "@/components/webmcp/webmcp-receipt-provider"
 import { ScanDetailClient } from "./scan-detail-client"
 import type { FindingItem, ScanData } from "./scan-detail-types"
 import { getScanModeLabel } from "@/lib/enum-labels"
@@ -64,7 +65,25 @@ const finding: FindingItem = {
   createdAt: "2026-01-01T00:00:00.000Z",
 }
 
-const html = renderToString(<ScanDetailClient scan={scan} findings={[finding]} scorecard={null} />)
+function renderDetail(props: {
+  scan: ScanData
+  findings: FindingItem[]
+  scorecard?: React.ComponentProps<typeof ScanDetailClient>["scorecard"]
+}) {
+  // The dashboard layout guarantees the WebMCP receipt provider — render
+  // inside it, matching the component's real runtime contract.
+  return renderToString(
+    <WebMcpReceiptProvider>
+      <ScanDetailClient
+        scan={props.scan}
+        findings={props.findings}
+        scorecard={props.scorecard ?? null}
+      />
+    </WebMcpReceiptProvider>
+  )
+}
+
+const html = renderDetail({ scan, findings: [finding] })
 
 describe("scan detail badge labels", () => {
   it("humanises the coverage receipt status and control outcome badges", () => {
@@ -116,9 +135,7 @@ describe("scan detail — truthful scope and declared coverage", () => {
       ingestionWarnings: ["coverage.json exceeded the entry cap; tail dropped"],
     },
   }
-  const plannedHtml = renderToString(
-    <ScanDetailClient scan={plannedScan} findings={[]} scorecard={null} />
-  )
+  const plannedHtml = renderDetail({ scan: plannedScan, findings: [] })
 
   it("renders the recorded workflow, depth, scope, limits, and attachments", () => {
     expect(plannedHtml).toContain("Scope and plan")
@@ -152,18 +169,15 @@ describe("scan detail — truthful scope and declared coverage", () => {
   })
 
   it("names an attachment verification failure instead of a generic crash", () => {
-    const failedHtml = renderToString(
-      <ScanDetailClient
-        scan={{
-          ...scan,
-          status: "FAILED",
-          errorCategory: "SCAN_ATTACHMENT_UNAVAILABLE",
-          errorMessage: "A supporting file could not be verified",
-        }}
-        findings={[]}
-        scorecard={null}
-      />
-    )
+    const failedHtml = renderDetail({
+      scan: {
+        ...scan,
+        status: "FAILED",
+        errorCategory: "SCAN_ATTACHMENT_UNAVAILABLE",
+        errorMessage: "A supporting file could not be verified",
+      },
+      findings: [],
+    })
     expect(failedHtml).toContain("Supporting file unavailable")
     expect(failedHtml).not.toContain("Clean")
   })
