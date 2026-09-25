@@ -898,6 +898,9 @@ importers:
       '@lyrashield/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@lyrashield/security':
+        specifier: workspace:*
+        version: link:../security
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
