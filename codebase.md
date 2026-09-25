@@ -214,6 +214,8 @@ Alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved), `CAN
 
 ### Engine boundary
 
+Cloud and Desktop release workflows both pin engine `21ce6688b8bc39c88822a0e1792b9be08dca8a07`. Product branch protection requires the `Pinned Engine / Worker Contract` job alongside security and lint/typecheck/test/build. Engine CI separately tests its exact `.lyrashield-worker-pin` consumer; refresh that reverse pin after the reviewed product merge. Source compatibility, production promotion and signed Desktop publication remain separate gates.
+
 - Product code lives in engine `lyrashield/**` and `lyrashield_adapter/**`; upstream `strix/**` retains only hard-gated generic seams.
 - Stable upstream releases enter through reviewed PRs; never force-push or auto-resolve conflicts.
 - Worker builds engine from sibling repo using named Docker context.
