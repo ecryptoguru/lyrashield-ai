@@ -54,4 +54,19 @@ describe("hashOperationPayload", () => {
     expect(hashOperationPayload({ subject: "s", summary: "x" })).toBe(a)
     expect(hashOperationPayload({ subject: "s", summary: "y" })).not.toBe(a)
   })
+
+  it("hashes equivalent objects independently of key order", () => {
+    expect(hashOperationPayload({ slotStart: "x", attendee: { name: "A", email: "a@b.co" } })).toBe(
+      hashOperationPayload({ attendee: { email: "a@b.co", name: "A" }, slotStart: "x" })
+    )
+  })
+
+  it("keeps array order and changed values significant", () => {
+    expect(hashOperationPayload({ values: [1, 2] })).not.toBe(
+      hashOperationPayload({ values: [2, 1] })
+    )
+    expect(hashOperationPayload({ slotStart: "x" })).not.toBe(
+      hashOperationPayload({ slotStart: "y" })
+    )
+  })
 })

@@ -16,6 +16,7 @@
  */
 import { createHash, randomBytes } from "node:crypto"
 import { prisma } from "@lyrashield/db"
+import { canonicalizeJson } from "@lyrashield/security/webmcp"
 import { MYRA_LIMITS } from "../contracts"
 import type { MyraOperationStatus, MyraPrincipal } from "../contracts"
 import { err } from "./errors"
@@ -73,7 +74,7 @@ export type OperationExecutor = (
 ) => Promise<ExecutorOutcome>
 
 export function hashOperationPayload(payload: unknown): string {
-  return createHash("sha256").update(JSON.stringify(payload)).digest("hex")
+  return `v2:${createHash("sha256").update(canonicalizeJson(payload)).digest("hex")}`
 }
 
 function newIdempotencyKey(): string {
@@ -201,6 +202,12 @@ export async function confirm(
           data: { status: "EXPIRED" },
         })
         throw err("PROPOSAL_EXPIRED", "This action expired. Ask Myra to prepare it again.")
+      }
+      if (!proposal.inputHash.startsWith("v2:")) {
+        throw err(
+          "PROPOSAL_PAYLOAD_CHANGED",
+          "This action preview uses an older format. Ask Myra to prepare it again."
+        )
       }
       if (proposal.inputHash !== hashOperationPayload(proposal.payload)) {
         throw err("PROPOSAL_PAYLOAD_CHANGED", "The confirmed details changed. Review again.")

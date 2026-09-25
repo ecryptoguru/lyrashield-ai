@@ -97,7 +97,7 @@ async function resolveReplyDestination(
   return { replyEmail: email, verifiedAt: verified.consumedAt }
 }
 
-function toProposalSummary(
+export function toProposalSummary(
   proposal: { id: string; operationName: string; expiresAt: Date },
   title: string,
   description: string,
@@ -113,7 +113,11 @@ function toProposalSummary(
   }
 }
 
-function casePreview(proposal: ProposalSummary, payload: SubmitCasePayload, replyTo: string) {
+export function casePreview(
+  proposal: ProposalSummary,
+  payload: SubmitCasePayload,
+  replyTo: string
+) {
   return {
     type: "support_case_preview" as const,
     proposalId: proposal.id,

@@ -2636,7 +2636,7 @@ model MyraOperation {
   publicSessionId String?
   workspaceId     String?
   conversationId  String?
-  // SHA-256 of the exact confirmed payload; execution compares it again.
+  // Versioned canonical SHA-256 of the confirmed payload; execution compares it again.
   inputHash       String
   payload         Json
   idempotencyKey  String
