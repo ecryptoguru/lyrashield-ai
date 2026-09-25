@@ -27,9 +27,13 @@ Use this index to find the owning document and avoid duplicating current truth.
 - [`growth/`](./growth/) — analytics taxonomy, experiment ledger and PostHog dashboard spec.
 - [`marketplace/`](./marketplace/) — marketplace export source, licenses, validator and reviewer artifacts.
 
+## Historical archive
+
+- [`Phase2.md`](./Phase2.md) — Phase 2 roadmap and future archive: verbatim extraction from the pre-consolidation `PRD.md` plus the 2026-08-26 planning overlay. Historical reference only; `PRD.md` remains current truth. Retired on 2026-09-14 and revived unchanged on 2026-09-25.
+
 ## Superseded material
 
-- `Phase2.md`, `product.md`, `monetization.md`, `claims-readiness.md`, `lite-scanner.md`, `vibe-security-50.md`, `webmcp-assurance.md`, `ai-assurance-framework-mapping.md`, `ai-safety-test-pack.md`, the superseded AI-assurance release checklist and the executed simplification/billing/launch-review plans were consolidated or retired on 2026-09-12. The completed 2026-09-11 security-review files are retained in Git at `ae7cabc5`; their four continuing accepted risks remain current in [`policies.md`](./policies.md#security-risk-register). Verbatim historical content, including the Phase 2 archive and internal unit economics, is recoverable from Git history; `PRD.md` and `codebase.md` remain current truth. The dated `plans/` directory, dated review ledgers and `superpowers/` working artifacts were retired on 2026-09-25; executed plans are never current truth and git history is the recovery path.
+- `product.md`, `monetization.md`, `claims-readiness.md`, `lite-scanner.md`, `vibe-security-50.md`, `webmcp-assurance.md`, `ai-assurance-framework-mapping.md`, `ai-safety-test-pack.md`, the superseded AI-assurance release checklist and the executed simplification/billing/launch-review plans were consolidated or retired on 2026-09-12. The completed 2026-09-11 security-review files are retained in Git at `ae7cabc5`; their four continuing accepted risks remain current in [`policies.md`](./policies.md#security-risk-register). Verbatim historical content, including internal unit economics, is recoverable from Git history; `PRD.md` and `codebase.md` remain current truth. The dated `plans/` directory, dated review ledgers and `superpowers/` working artifacts were retired on 2026-09-25; executed plans are never current truth and git history is the recovery path.
 
 ## Retention rule
 
