@@ -34,7 +34,7 @@ const SECRET_PATTERNS: readonly SecretPattern[] = [
   {
     kind: "Assigned credential",
     pattern:
-      /\b(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|password)\s*[:=]\s*["']?([A-Za-z0-9._~+/=-]{16,})/gi,
+      /(?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]+[_-])?(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|secret|password)["']?\s*[:=]\s*["']?([A-Za-z0-9._~+/=-]{16,})/gi,
     valueGroup: 1,
   },
 ]
