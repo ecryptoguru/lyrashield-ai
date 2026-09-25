@@ -6,6 +6,7 @@ import {
   findingsContextKey,
   loadFindingsListContext,
   saveFindingsListContext,
+  type FindingsListPage,
 } from "./findings-list-context"
 import Link from "next/link"
 import { Bug, Shield, ChevronRight, CheckCircle2, XCircle, Calendar, SortDesc } from "lucide-react"
@@ -146,6 +147,8 @@ export function FindingsClient({
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [restoreError, setRestoreError] = useState(false)
+  const [restoreReady, setRestoreReady] = useState(false)
   // The row that opened the drawer, for focus restoration on close.
   const openerRef = useRef<HTMLElement | null>(null)
   const pushedFindingUrlRef = useRef(false)
@@ -155,6 +158,21 @@ export function FindingsClient({
   const loadMoreAbortRef = useRef<AbortController | null>(null)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const acceptLoadMoreRef = useRef(false)
+  const pendingItemsRef = useRef<FindingListItem[] | null>(null)
+  const restoreAbortRef = useRef<AbortController | null>(null)
+  const pagesRef = useRef<FindingsListPage[]>([
+    { items: initialData, nextCursor: initialNextCursor },
+  ])
+  const initialScope = JSON.stringify({
+    filter: initialFilter,
+    target: initialTargetFilter,
+    q: initialQuery,
+  })
+  const loadedScopeRef = useRef(initialScope)
+  const currentScopeRef = useRef(initialScope)
+  useEffect(() => {
+    currentScopeRef.current = JSON.stringify({ filter, target: targetFilter, q: query })
+  }, [filter, targetFilter, query])
 
   /**
    * Drawer URL state: opening writes `finding=` (pushState, so Back returns to
@@ -204,51 +222,85 @@ export function FindingsClient({
 
   // Keep the drawer deep link on refresh. closeFinding removes it explicitly.
 
-  // W2-12 context restoration: the URL carries filter/sort/target/query, but
-  // pages loaded beyond the first server-rendered page and the scroll position
-  // only survive navigation through this session-scoped snapshot. The first
-  // client render still matches the server HTML; restoration is queued (not
-  // synchronous) so hydration stays clean and the save effect below never
-  // overwrites the snapshot with the bare first page.
-  const listContextRestoredRef = useRef(false)
+  // Server props own page one. Saved pages only tell us how many additional
+  // pages to re-fetch through fresh cursors before restoring scroll.
   useEffect(() => {
+    const abort = new AbortController()
+    restoreAbortRef.current = abort
     queueMicrotask(() => {
-      if (typeof window === "undefined") return
-      const current = { filter, sort: sortMode, target: targetFilter, q: query }
-      // The context key encodes filter/sort/target/query, so any stored
-      // snapshot under this key already matches the URL-derived list state.
-      const stored = loadFindingsListContext(findingsContextKey(workspaceId, current))
-      if (stored) {
-        setFindings(stored.rows)
-        setNextCursor(stored.nextCursor)
-        if (stored.scrollY > 0) requestAnimationFrame(() => window.scrollTo(0, stored.scrollY))
-      }
-      // The save effect below must not run until restoration has been
-      // attempted, otherwise the bare first page overwrites the snapshot.
-      listContextRestoredRef.current = true
+      void (async () => {
+        try {
+          const stored = loadFindingsListContext(
+            findingsContextKey(workspaceId, {
+              filter: initialFilter,
+              sort: initialSort,
+              target: initialTargetFilter,
+              q: initialQuery,
+            })
+          )
+          if (!stored || stored.pages.length < 2 || !initialNextCursor) return
+          const pages: FindingsListPage[] = [{ items: initialData, nextCursor: initialNextCursor }]
+          let cursor: string | null = initialNextCursor
+          for (let index = 1; index < stored.pages.length && cursor; index++) {
+            const result: FindingsListPage = await apiGetPaginated<FindingListItem>(
+              "/api/findings",
+              {
+                workspaceId,
+                ...findingFilterToApiQuery(initialFilter as FindingFilterValue),
+                ...(initialTargetFilter ? { targetId: initialTargetFilter } : {}),
+                ...(initialQuery ? { q: initialQuery } : {}),
+                cursor,
+              },
+              { schema: findingsPaginatedSchema, signal: abort.signal }
+            )
+            if (abort.signal.aborted || requestGenerationRef.current !== 0) return
+            if (!result.items.length) break
+            if (
+              pages.reduce((count, page) => count + page.items.length, 0) + result.items.length >
+              500
+            )
+              break
+            pages.push(result)
+            cursor = result.nextCursor
+          }
+          if (abort.signal.aborted || requestGenerationRef.current !== 0) return
+          pagesRef.current = pages
+          setFindings(pages.flatMap((page) => page.items))
+          setNextCursor(cursor)
+          if (stored.scrollY > 0)
+            requestAnimationFrame(() => {
+              if (!abort.signal.aborted && requestGenerationRef.current === 0)
+                window.scrollTo(0, stored.scrollY)
+            })
+        } catch {
+          if (!abort.signal.aborted) setRestoreError(true)
+        } finally {
+          if (!abort.signal.aborted) setRestoreReady(true)
+        }
+      })()
     })
+    return () => abort.abort()
     // Restore once per mount with the URL-derived context.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Persist the loaded list (rows, cursor, scroll) for the current context so
-  // returning to Findings restores it. Skipped until the restore pass has run
-  // so the snapshot is never overwritten with the bare first page.
+  // Never save the previous query's rows under a newly selected query key.
   useEffect(() => {
-    if (!listContextRestoredRef.current || typeof window === "undefined") return
+    if (
+      !restoreReady ||
+      loadedScopeRef.current !== currentScopeRef.current ||
+      typeof window === "undefined"
+    )
+      return
     const save = () =>
       saveFindingsListContext(
         findingsContextKey(workspaceId, { filter, sort: sortMode, target: targetFilter, q: query }),
-        {
-          rows: findings,
-          nextCursor,
-          scrollY: window.scrollY,
-        }
+        { pages: pagesRef.current, scrollY: window.scrollY }
       )
     save()
     window.addEventListener("pagehide", save)
     return () => window.removeEventListener("pagehide", save)
-  }, [workspaceId, filter, sortMode, targetFilter, query, findings, nextCursor])
+  }, [workspaceId, filter, sortMode, targetFilter, query, findings, nextCursor, restoreReady])
 
   const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
     workspaceId,
@@ -279,10 +331,13 @@ export function FindingsClient({
         signal: abort.signal,
       })
       if (generation !== requestGenerationRef.current) return
+      pagesRef.current = [{ items: res.items, nextCursor: res.nextCursor }]
+      loadedScopeRef.current = currentScopeRef.current
       setFindings(res.items)
       setNextCursor(res.nextCursor)
     } catch {
       if (generation !== requestGenerationRef.current) return
+      loadedScopeRef.current = ""
       setFindings([])
       setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
     } finally {
@@ -297,7 +352,9 @@ export function FindingsClient({
     clearTimeout(searchTimerRef.current)
     requestAbortRef.current?.abort()
     loadMoreAbortRef.current?.abort()
+    restoreAbortRef.current?.abort()
     requestAbortRef.current = null
+    setRestoreReady(true)
     return ++requestGenerationRef.current
   }, [])
 
@@ -306,6 +363,7 @@ export function FindingsClient({
       clearTimeout(searchTimerRef.current)
       requestAbortRef.current?.abort()
       loadMoreAbortRef.current?.abort()
+      restoreAbortRef.current?.abort()
     },
     []
   )
@@ -324,6 +382,11 @@ export function FindingsClient({
 
   const handleFilterChange = useCallback(
     async (newFilter: string) => {
+      currentScopeRef.current = JSON.stringify({
+        filter: newFilter,
+        target: targetFilter,
+        q: query,
+      })
       const generation = invalidateRequest()
       setFilter(newFilter)
       updateQueryParams({ filter: newFilter, sort: sortMode })
@@ -350,6 +413,7 @@ export function FindingsClient({
 
   const handleTargetFilterChange = useCallback(
     async (value: string) => {
+      currentScopeRef.current = JSON.stringify({ filter, target: value, q: query })
       const generation = invalidateRequest()
       setTargetFilter(value)
       updateQueryParams({ target: value })
@@ -370,6 +434,7 @@ export function FindingsClient({
   // already-parsed query directly. Filter changes cancel this timer.
   const handleQueryChange = useCallback(
     (value: string) => {
+      currentScopeRef.current = JSON.stringify({ filter, target: targetFilter, q: value })
       const generation = invalidateRequest()
       setQuery(value)
       setLoading(true)
@@ -401,6 +466,11 @@ export function FindingsClient({
         params.q === query
       )
         return
+      currentScopeRef.current = JSON.stringify({
+        filter: params.filter,
+        target: params.target,
+        q: params.q,
+      })
       const generation = invalidateRequest()
       setFilter(params.filter)
       setSortMode(params.sort)
@@ -540,6 +610,11 @@ export function FindingsClient({
           onRetry={() => void fetchFindings(listQuery(), invalidateRequest())}
         />
       )}
+      {restoreError && (
+        <p role="status" className="text-muted-foreground mb-3 text-sm">
+          Could not restore additional results. Use Load more to continue from the current page.
+        </p>
+      )}
 
       {loading && findings.length === 0 ? (
         <div
@@ -649,10 +724,20 @@ export function FindingsClient({
               return { items: res.items, nextCursor: res.nextCursor }
             }}
             onItems={(items) => {
-              if (acceptLoadMoreRef.current) setFindings((prev) => [...prev, ...items])
+              if (acceptLoadMoreRef.current) {
+                pendingItemsRef.current = items
+                setFindings((prev) => [...prev, ...items])
+              }
             }}
             onNextCursor={(cursor) => {
               if (!acceptLoadMoreRef.current) return
+              if (pendingItemsRef.current) {
+                pagesRef.current = [
+                  ...pagesRef.current,
+                  { items: pendingItemsRef.current, nextCursor: cursor },
+                ]
+                pendingItemsRef.current = null
+              }
               setNextCursor(cursor)
               acceptLoadMoreRef.current = false
             }}
@@ -684,6 +769,10 @@ export function FindingsClient({
                     }),
                   }
                 : f
+            pagesRef.current = pagesRef.current.map((page) => ({
+              ...page,
+              items: page.items.map(reprioritize),
+            }))
             setFindings((prev) => prev.map(reprioritize))
             setSelectedFinding((prev) => (prev?.id === id ? reprioritize(prev) : prev))
           }}

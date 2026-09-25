@@ -21,22 +21,20 @@ describe("findings list context preservation contract", () => {
     expect(client).toContain('url.searchParams.set("finding", finding.id)')
   })
 
-  it("restores loaded pages and scroll position after mount, not during hydration", () => {
-    expect(client).toContain("loadFindingsListContext(findingsContextKey(workspaceId, current))")
+  it("revalidates saved pages and restores scroll after mount, not during hydration", () => {
+    expect(client).toContain("loadFindingsListContext(")
     expect(client).toContain("window.scrollTo(0, stored.scrollY)")
-    expect(client).toContain("listContextRestoredRef.current = true")
+    expect(client).toContain("setRestoreReady(true)")
   })
 
   it("persists the snapshot only after restoration and on pagehide", () => {
-    expect(client).toContain(
-      'if (!listContextRestoredRef.current || typeof window === "undefined") return'
-    )
+    expect(client).toContain("!restoreReady")
     expect(client).toContain('window.addEventListener("pagehide", save)')
   })
 
   it("bounds and guards the persisted snapshot", () => {
     expect(context).toContain("MAX_PERSISTED_ROWS = 500")
-    expect(context).toContain("rows.length > MAX_PERSISTED_ROWS) return null")
+    expect(context).toContain("count + page.items.length > MAX_PERSISTED_ROWS")
     expect(context).toContain("catch {")
     expect(context).toContain("sessionStorage.setItem")
   })

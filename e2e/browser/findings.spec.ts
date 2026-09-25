@@ -106,3 +106,48 @@ test("failed current query can retry without resetting its filter", async ({ pag
     "true"
   )
 })
+
+test("reload revalidates saved additional pages before showing them", async ({ page }) => {
+  let pageLoads = 0
+  await page.route("**/api/findings?**", (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor")
+    if (cursor === "cursor-1") {
+      pageLoads++
+      return route.fulfill(
+        pageOf("second", pageLoads === 1 ? "Old second finding" : "Fresh second finding")
+      )
+    }
+    return route.fulfill(pageOf("first", "Initial finding"))
+  })
+  await page.goto("?findings&hasPages=1")
+  await page.getByRole("button", { name: "Load more" }).click()
+  await expect(page.getByRole("button", { name: /Old second finding/ })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole("button", { name: /Fresh second finding/ })).toBeVisible()
+  await expect(page.getByRole("button", { name: /Old second finding/ })).toHaveCount(0)
+  expect(pageLoads).toBe(2)
+})
+
+test("failed page revalidation keeps fresh first-page results and a usable cursor", async ({
+  page,
+}) => {
+  let pageLoads = 0
+  await page.route("**/api/findings?**", (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor")
+    if (cursor === "cursor-1") {
+      pageLoads++
+      return pageLoads === 1
+        ? route.fulfill(pageOf("second", "Old second finding"))
+        : route.abort("failed")
+    }
+    return route.fulfill(pageOf("first", "Initial finding"))
+  })
+  await page.goto("?findings&hasPages=1")
+  await page.getByRole("button", { name: "Load more" }).click()
+  await expect(page.getByRole("button", { name: /Old second finding/ })).toBeVisible()
+  await page.reload()
+  await expect(page.getByText(/Could not restore additional results/)).toBeVisible()
+  await expect(page.getByRole("button", { name: /Initial finding/ })).toBeVisible()
+  await expect(page.getByRole("button", { name: /Old second finding/ })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Load more" })).toBeEnabled()
+})

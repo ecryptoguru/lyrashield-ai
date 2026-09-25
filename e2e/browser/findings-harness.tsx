@@ -20,13 +20,14 @@ export const initialFinding: FindingListItem = {
 
 export default function FindingsHarness() {
   const params = parseFindingListParams(Object.fromEntries(new URLSearchParams(location.search)))
+  const hasPages = new URLSearchParams(location.search).has("hasPages")
   return (
     <WebMcpReceiptProvider>
       <main>
         <FindingsClient
           workspaceId="workspace-test"
           initialData={[initialFinding]}
-          initialNextCursor={null}
+          initialNextCursor={hasPages ? "cursor-1" : null}
           initialFilter={params.filter}
           initialSort={params.sort}
           initialTargetFilter={params.target}

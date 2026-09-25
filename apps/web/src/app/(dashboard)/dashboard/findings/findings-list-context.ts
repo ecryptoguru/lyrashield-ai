@@ -1,23 +1,31 @@
+import { z } from "zod"
+import { findingListItemSchema } from "@/lib/api-schemas"
 import type { FindingListItem } from "./findings-client"
 
-/**
- * W2-12: findings list context preservation.
- *
- * The URL already carries filter/sort/target/query (server-parsed, so a fresh
- * load restores them). What the URL cannot carry is the pages the user loaded
- * beyond the first server-rendered page and their scroll position. This module
- * persists that per-session context so navigating away and back restores the
- * exact list state instead of collapsing to the first 25 rows.
- *
- * Storage is sessionStorage (per-tab, auto-cleared), best-effort, and bounded:
- * a corrupt or oversized payload is discarded rather than breaking the list.
- */
-
+/** Session-only navigation hint. Fresh server data remains authoritative. */
 const MAX_PERSISTED_ROWS = 500
+const pageSchema = z.object({
+  items: z.array(findingListItemSchema).min(1),
+  nextCursor: z.string().nullable(),
+})
+const snapshotSchema = z
+  .object({
+    version: z.literal(2),
+    pages: z.array(pageSchema).min(1),
+    scrollY: z.number().finite().nonnegative(),
+  })
+  .refine(
+    (value) =>
+      value.pages.reduce((count, page) => count + page.items.length, 0) <= MAX_PERSISTED_ROWS
+  )
+
+export interface FindingsListPage {
+  items: FindingListItem[]
+  nextCursor: string | null
+}
 
 export interface FindingsListContext {
-  rows: FindingListItem[]
-  nextCursor: string | null
+  pages: FindingsListPage[]
   scrollY: number
 }
 
@@ -38,14 +46,20 @@ export function sameListContext(
 export function saveFindingsListContext(key: string, context: FindingsListContext): void {
   if (typeof window === "undefined") return
   try {
-    const rows = context.rows.slice(0, MAX_PERSISTED_ROWS)
+    const pages: FindingsListPage[] = []
+    let count = 0
+    for (const page of context.pages) {
+      if (page.items.length === 0 || count + page.items.length > MAX_PERSISTED_ROWS) break
+      pages.push(page)
+      count += page.items.length
+    }
+    if (!pages.length) return
     window.sessionStorage.setItem(
       key,
-      JSON.stringify({ rows, nextCursor: context.nextCursor, scrollY: context.scrollY })
+      JSON.stringify({ version: 2, pages, scrollY: context.scrollY })
     )
   } catch {
-    // Storage may be unavailable (private mode, quota). Context loss is
-    // acceptable; the list falls back to the server-rendered first page.
+    // Session storage can be unavailable or full; live list data is unaffected.
   }
 }
 
@@ -54,20 +68,8 @@ export function loadFindingsListContext(key: string): FindingsListContext | null
   try {
     const raw = window.sessionStorage.getItem(key)
     if (!raw) return null
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed !== "object" || parsed === null) return null
-    const { rows, nextCursor, scrollY } = parsed as {
-      rows?: unknown
-      nextCursor?: unknown
-      scrollY?: unknown
-    }
-    if (!Array.isArray(rows) || rows.length === 0) return null
-    if (rows.length > MAX_PERSISTED_ROWS) return null
-    return {
-      rows: rows as FindingListItem[],
-      nextCursor: typeof nextCursor === "string" ? nextCursor : null,
-      scrollY: typeof scrollY === "number" ? scrollY : 0,
-    }
+    const parsed = snapshotSchema.safeParse(JSON.parse(raw))
+    return parsed.success ? { pages: parsed.data.pages, scrollY: parsed.data.scrollY } : null
   } catch {
     return null
   }
