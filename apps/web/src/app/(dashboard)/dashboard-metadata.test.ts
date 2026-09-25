@@ -1,6 +1,11 @@
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+// Metadata tests read the layout export; no browser session or OAuth setup is needed.
+vi.mock("../../../../../packages/auth/src/server", () => ({
+  getPlatformAdminNavigationState: vi.fn(),
+}))
 import { metadata as dashboardLayoutMetadata } from "./layout"
 
 /**

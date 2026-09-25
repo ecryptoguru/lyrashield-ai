@@ -1,4 +1,14 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
+
+// Export parity does not exercise auth. Avoid initializing OAuth/database resources.
+vi.mock("../../../../packages/auth/src/server", () => ({
+  auth: {},
+  assertBrowserSession: vi.fn(),
+  assertOAuthDelegatedScope: vi.fn(),
+  getSession: vi.fn(),
+  requirePermission: vi.fn(),
+  requireWorkspaceAccess: vi.fn(),
+}))
 
 // Each v1 route must re-export the same HTTP method handlers as its unversioned twin.
 
