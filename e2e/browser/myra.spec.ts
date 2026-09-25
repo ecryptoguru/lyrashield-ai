@@ -126,9 +126,68 @@ test("marketing keeps verification success distinct from a later confirmation fa
     .getByRole("textbox", { name: "Email for verification code" })
     .fill("owner@example.test")
   await page.getByRole("button", { name: "Email code" }).click()
-  await page.getByRole("textbox", { name: "Verification code" }).fill("123456")
+  await page.getByRole("textbox", { name: "Verification code", exact: true }).fill("123456")
   await page.getByRole("button", { name: "Verify & confirm" }).click()
   await expect(page.locator("section p[role=status]")).toContainText(
     "Action outcome could not be confirmed"
   )
+})
+
+test("dashboard keeps the second turn active when a stopped stream settles late", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("?myra=proposal")
+  await page.evaluate(() => {
+    const state = window as Window & { myraStreams?: ReadableStreamDefaultController<Uint8Array>[] }
+    state.myraStreams = []
+    window.fetch = (async (url: string | URL | Request) => {
+      if (String(url).endsWith("/api/myra/message")) {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            state.myraStreams!.push(controller)
+            controller.enqueue(
+              new TextEncoder().encode(
+                'data: {"type":"ready","conversationId":"c","traceId":"t"}\n\n'
+              )
+            )
+          },
+        })
+        return new Response(body, { headers: { "content-type": "text/event-stream" } })
+      }
+      return Response.json({ suggestions: [] })
+    }) as typeof fetch
+  })
+  const composer = page.getByRole("textbox", { name: "Myra message" })
+  await composer.fill("first")
+  await page.getByRole("button", { name: "Send message" }).click()
+  await expect(page.getByTestId("streaming")).toHaveText("true")
+  await page.getByRole("button", { name: "Stop message" }).click()
+  await composer.fill("second")
+  await page.getByRole("button", { name: "Send message" }).click()
+  await expect(page.getByTestId("streaming")).toHaveText("true")
+  await page.evaluate(() => {
+    ;(
+      window as Window & { myraStreams?: ReadableStreamDefaultController<Uint8Array>[] }
+    ).myraStreams![0]!.close()
+  })
+  await expect(page.getByTestId("streaming")).toHaveText("true")
+  await page.getByRole("button", { name: "Stop message" }).click()
+  await expect(page.getByTestId("streaming")).toHaveText("false")
+})
+
+test("dashboard explains a token-only stream interruption", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.route("**/api/myra/message", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: 'data: {"type":"ready","conversationId":"c","traceId":"t"}\n\ndata: {"type":"token","text":"partial"}\n\n',
+    })
+  )
+  await page.goto("?myra=proposal")
+  await page.getByRole("textbox", { name: "Myra message" }).fill("hello")
+  await page.getByRole("button", { name: "Send message" }).click()
+  await expect(page.getByRole("log")).toContainText("partial")
+  await expect(page.getByRole("alert")).toContainText("response ended early")
 })

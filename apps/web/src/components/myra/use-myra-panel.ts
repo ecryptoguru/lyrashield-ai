@@ -81,6 +81,23 @@ export function useMyraPanel(
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const stoppedTurnRef = useRef<number | null>(null)
 
+  const invalidateSuggestions = useCallback(() => {
+    clearTimeout(suggestTimerRef.current)
+    suggestAbortRef.current?.abort()
+    suggestAbortRef.current = null
+    setSuggestions([])
+    setSuggestActive(-1)
+  }, [])
+
+  useEffect(
+    () => () => {
+      streamAbortRef.current?.abort()
+      suggestAbortRef.current?.abort()
+      clearTimeout(suggestTimerRef.current)
+    },
+    []
+  )
+
   const getClient = useCallback((): MyraClient => {
     clientRef.current = createMyraClient({
       apiBase: "",
@@ -94,7 +111,11 @@ export function useMyraPanel(
 
   const scrollLogToEnd = useCallback(() => {
     const node = logRef.current
-    if (node) node.scrollTop = node.scrollHeight
+    if (node && node.scrollHeight - node.scrollTop - node.clientHeight <= 80) {
+      requestAnimationFrame(() => {
+        node.scrollTop = node.scrollHeight
+      })
+    }
   }, [])
 
   const updateTurn = useCallback((id: number, fn: (t: Turn) => Turn) => {
@@ -211,8 +232,7 @@ export function useMyraPanel(
         announce("Myra is still answering — wait a moment or press Stop.")
         return
       }
-      setSuggestions([])
-      setSuggestActive(-1)
+      invalidateSuggestions()
       setInput("")
       const turnId = ++turnSeq.current
       setTurns((prev) => [...prev, { id: turnId, userText: text, parts: [] }])
@@ -229,6 +249,7 @@ export function useMyraPanel(
           signal: abort.signal,
           bookingRequest,
         })) {
+          if (streamAbortRef.current !== abort || abort.signal.aborted) break
           received = true
           handleEvent(ev, turnId)
         }
@@ -237,29 +258,34 @@ export function useMyraPanel(
           // Stopped by user — state was already marked in stopStream.
         } else {
           const code = (err as { code?: string }).code
+          if (streamAbortRef.current !== abort) return
           setActivity(null)
           if (!received) {
             // Send never reached the server — keep the draft rather than lose it.
-            setInput(text)
+            setInput((current) => current || text)
           }
           updateTurn(turnId, (t) => ({
             ...t,
             error:
               code === "PROPOSAL_EXPIRED"
                 ? "That request expired — ask Myra to prepare it again."
-                : !received
-                  ? "Something went wrong before Myra replied. Your message is back in the composer."
-                  : "Something went wrong. Try again or talk to a person.",
+                : code === "STREAM_INTERRUPTED"
+                  ? "The response ended early. Check the conversation before sending again; an action may still be processing."
+                  : !received
+                    ? "Something went wrong before Myra replied. Your message is back in the composer."
+                    : "Something went wrong. Try again or talk to a person.",
           }))
           announce("Message failed.")
         }
       } finally {
-        streamAbortRef.current = null
-        setStreaming(false)
-        setActivity(null)
+        if (streamAbortRef.current === abort) {
+          streamAbortRef.current = null
+          setStreaming(false)
+          setActivity(null)
+        }
       }
     },
-    [announce, getClient, handleEvent, updateTurn]
+    [announce, getClient, handleEvent, invalidateSuggestions, updateTurn]
   )
 
   const stopStream = useCallback(() => {
@@ -400,19 +426,18 @@ export function useMyraPanel(
   const onInputChange = useCallback(
     (value: string) => {
       setInput(value)
-      clearTimeout(suggestTimerRef.current)
+      invalidateSuggestions()
       const text = value.trim()
       if (text.length < 2) {
-        setSuggestions([])
-        setSuggestActive(-1)
         return
       }
       suggestTimerRef.current = setTimeout(() => {
-        suggestAbortRef.current?.abort()
-        suggestAbortRef.current = new AbortController()
+        const abort = new AbortController()
+        suggestAbortRef.current = abort
         getClient()
-          .suggest(text.slice(0, 300), suggestAbortRef.current.signal)
+          .suggest(text.slice(0, 300), abort.signal)
           .then((res) => {
+            if (suggestAbortRef.current !== abort || abort.signal.aborted) return
             const payload =
               res && typeof res === "object" && "data" in res
                 ? (res as { data: { suggestions?: Suggestion[] } }).data
@@ -425,13 +450,12 @@ export function useMyraPanel(
           })
       }, 150)
     },
-    [getClient]
+    [getClient, invalidateSuggestions]
   )
 
   const pickSuggestion = useCallback(
     (s: Suggestion) => {
-      setSuggestions([])
-      setSuggestActive(-1)
+      invalidateSuggestions()
       const turnId = ++turnSeq.current
       setTurns((prev) => [
         ...prev,
@@ -457,7 +481,7 @@ export function useMyraPanel(
       ])
       announce("Instant answer shown.")
     },
-    [announce]
+    [announce, invalidateSuggestions]
   )
 
   const submitCaseForm = useCallback(() => {
@@ -498,8 +522,7 @@ export function useMyraPanel(
           return
         }
         if (e.key === "Escape") {
-          setSuggestions([])
-          setSuggestActive(-1)
+          invalidateSuggestions()
           return
         }
       }
@@ -510,7 +533,7 @@ export function useMyraPanel(
         void send(input)
       }
     },
-    [input, pickSuggestion, send, streaming, suggestActive, suggestions]
+    [input, invalidateSuggestions, pickSuggestion, send, streaming, suggestActive, suggestions]
   )
 
   const componentContext: MyraComponentContext = {
