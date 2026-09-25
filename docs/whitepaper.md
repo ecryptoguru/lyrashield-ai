@@ -243,7 +243,7 @@ Phase 2 direction (enterprise governance) proceeds only after current launch gat
 
 Explicitly deferred: broad ASPM/attack-path platform, large speculative integration catalog, IaC/container/cloud-account scanning, local/self-hosted models and a human-validated pentest add-on.
 
-The verbatim Phase 2 planning archive is retained in git history; this section is the current direction overlay.
+The verbatim Phase 2 planning archive is retained at [`docs/Phase2.md`](./Phase2.md); this section is the current direction overlay.
 
 ## 11. Success measures
 

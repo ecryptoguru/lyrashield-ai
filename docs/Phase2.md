@@ -2,6 +2,37 @@
 
 > Verbatim extraction from `PRD.md` at commit `69a72afcce5f28df976bbc72b08d7c4d67acfe83`, immediately before the 2026-08-21 consolidation. Wording, status labels, estimates, examples, and historical references below are preserved without summarization; current product and release truth remains in `PRD.md`.
 
+## Planning overlay — 2026-09-25
+
+This overlay records the current Phase 2 direction as of 2026-09-25 and supersedes the 2026-08-26 overlay below, which is retained unchanged as history, as is the archive beneath it. `PRD.md`, `AGENTS.md`, `docs/whitepaper.md` §10 and running code remain authoritative for current implementation and release status.
+
+### What changed since the 2026-08-26 overlay
+
+- The product remains in open beta with open registration; both Polar and Razorpay Cloud purchase admissions read back `public` on 2026-09-14, with both Local admissions `off`.
+- The two-line commercial schedule was published 2026-09-22 (Starter/Pro scan line plus Agency/Enterprise line; former Launch Assurance plan ID retained for billing compatibility).
+- Phase 2 preconditions are unchanged: the launch gates below are still open and no design-partner interview evidence has been retained.
+
+### Launch gates still open before Phase 2 (per `PRD.md` §9)
+
+1. Merge and deploy the scorecard canonical-origin fix, then repeat live canonical/OG readback.
+2. Retain longer-window Redis command/capacity evidence; provision RazorpayX and Payoneer payout API access plus the tax-form workflow.
+3. Triage the 25 findings from the accepted Standard scan and obtain independent verification where warranted.
+4. Select and authorize a controlled Deep/Terra target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
+5. Capture authenticated client-matrix receipts plus webmaster indexing and answer-engine citation observations.
+
+### Current Phase 2 direction (aligned with `docs/whitepaper.md` §10)
+
+Phase 2 (enterprise governance) proceeds only after the launch gates close and design-partner interviews validate demand:
+
+- **Pilot wedge:** OIDC enterprise sign-in, role-management over the existing permission model, workspace policy enforcement, an outbound-only private worker, audit export and evidence retention — proven with 2–3 design partners.
+- **Productized demand:** SCIM, SAML where demanded, customer-managed evidence storage and keys, retention/deletion controls, evidence-backed compliance mappings (no certification claim), data residency where contracted.
+- **Requested integrations:** one generic signed outbound webhook preferred over many narrow adapters; SIEM, Jira/Linear, release gates, CI/CD and identity directories as named customers require.
+- **Expansion branch (choose one):** customer VPC, self-hosting, MSP/MSSP operations or deeper scanner coverage — selected on validated demand.
+
+### Explicitly deferred
+
+Security Copilot sidebar and visual security plans/recaps; compliance-lite evidence packs; IaC, container, cloud-account and reachability scanning; local/self-hosted model support; a human-validated pentest add-on; a broad ASPM/attack-path platform; and a large speculative integration catalog.
+
 ## Planning overlay — 2026-08-26
 
 This section records the current Phase 2 direction without rewriting the historical archive below. `PRD.md`, `AGENTS.md`, running code, CI, and retained production evidence remain authoritative for current implementation and release status.

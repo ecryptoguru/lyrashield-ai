@@ -29,7 +29,7 @@ Use this index to find the owning document and avoid duplicating current truth.
 
 ## Historical archive
 
-- [`Phase2.md`](./Phase2.md) — Phase 2 roadmap and future archive: verbatim extraction from the pre-consolidation `PRD.md` plus the 2026-08-26 planning overlay. Historical reference only; `PRD.md` remains current truth. Retired on 2026-09-14 and revived unchanged on 2026-09-25.
+- [`Phase2.md`](./Phase2.md) — Phase 2 roadmap and future archive: verbatim extraction from the pre-consolidation `PRD.md` plus dated planning overlays (2026-08-26, 2026-09-25). The newest overlay records the current direction; `PRD.md` remains current truth. Retired on 2026-09-14 and revived on 2026-09-25.
 
 ## Superseded material
 
