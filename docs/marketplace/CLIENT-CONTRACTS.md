@@ -15,11 +15,11 @@ Local checks cover generated configuration, exact package/version parity, secret
 
 Verified 2026-09-26 against `pnpm pack` tarballs with `scripts/verify-agent-distribution.mjs --smoke` (all three receipts PASS). npm columns record `npm view` output observed 2026-09-26 — **refresh them at release time**; they lag the implementation versions while a release is in flight. Support-tier words follow the agent registry (`NATIVE`/`VERIFIED` require CLIENT_RUNTIME evidence these receipts are not; `COMPATIBLE`/`EXPERIMENTAL` entries carry documentation or package-conformance evidence). Evidence type "package-conformance + local receipt" means the packed artifact's manifest, files, secrets scan and local execution checks passed in this repository. These are package/config receipts, **not** live client acceptance.
 
-| Package                    | Implementation | npm latest (obs.) | Transport                                | Support tier wording                                                         | Evidence                            |
-| -------------------------- | -------------- | ----------------- | ---------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------- |
-| `lyrashield`               | 0.2.12         | 0.2.11            | cli                                      | Installer/driver for every registry tier                                     | package-conformance + local receipt |
-| `@lyrashield/mcp`          | 0.2.9          | 0.2.9             | stdio (hosted remote-http is app-served) | COMPATIBLE stdio/config clients; EXPERIMENTAL clients pending client-runtime | package-conformance + local receipt |
-| `@lyrashield/agent-plugin` | 0.1.29         | 0.1.27            | remote-http `mcp.json` + client shims    | Preferred for plugin-capable COMPATIBLE clients; Copilot stays EXPERIMENTAL  | package-conformance + local receipt |
+| Package | Implementation | npm latest (obs.) | Transport | Support tier wording | Evidence | Verified |
+| ------- | -------------- | ----------------- | --------- | -------------------- | -------- | -------- |
+| `lyrashield` | 0.2.12 | 0.2.11 | cli | Installer/driver for every registry tier | package-conformance + local receipt | 2026-09-26 |
+| `@lyrashield/mcp` | 0.2.9 | 0.2.9 | stdio (hosted remote-http is app-served) | COMPATIBLE stdio/config clients; EXPERIMENTAL clients pending client-runtime | package-conformance + local receipt | 2026-09-26 |
+| `@lyrashield/agent-plugin` | 0.1.29 | 0.1.27 | remote-http `mcp.json` + client shims | Preferred for plugin-capable COMPATIBLE clients; Copilot stays EXPERIMENTAL | package-conformance + local receipt | 2026-09-26 |
 
 Receipt detail kept locally (not committed): per-package sha256, file counts, bin inventory, the 15-tool `initialize` + `tools/list` result for `@lyrashield/mcp`, and CLI `--version`/`--help` exit-0 checks.
 
@@ -43,7 +43,6 @@ Per package (dir `packages/<dir>` / name `<name>`: `agent-plugin`/`@lyrashield/a
    ```
 
    Every receipt must print PASS. The verifier fails closed on unresolved `workspace:`/`link:`/`file:` ranges, missing `publishConfig.access` on scoped packages, forbidden content (`.env`, `credentials.json`, `node_modules`, private `apps/web`/`packages/db` sources, private-key/`lsk_` material) and missing `files`/`bin`/`main`/README targets. With `--smoke` it additionally runs the packed CLI `--version`/`--help` and performs a real stdio `initialize` + `tools/list` against the packed MCP server using a synthetic credential and an unroutable API URL. Smoke dependency resolution links workspace/node_modules copies offline; `npm install` inside an unpacked tarball is expected to fail because pnpm resolves `workspace:*` devDependency entries to local-only versions — consumers never install devDependencies, so this does not block publication.
-
 4. Publish manually: `cd packages/<dir> && pnpm publish` (`publishConfig.access: "public"` is already set in each manifest; pnpm resolves the workspace protocols and runs `prepublishOnly`). An npm account with publish rights and 2FA is required; pass `--otp <code>` when prompted.
 5. **After** publish, verify from a fresh project, not this repo:
 
