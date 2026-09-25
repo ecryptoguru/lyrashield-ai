@@ -86,7 +86,7 @@ against the remote endpoint receive `connect_required` instead.
 
 ## Version and release receipts
 
-- Package: `@lyrashield/agent-plugin` 0.1.28; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/agent-plugin` 0.1.29; runtime: Node.js 24 or newer.
 - Standard schema: Agent Plugins 1.0.0.
 - `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
   OAuth-first manifests, mutation exclusions, artifact versions and the public export boundary.
