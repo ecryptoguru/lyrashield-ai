@@ -280,12 +280,17 @@ export async function cancel(
       if (!ownsProposal(ctx.principal, proposal)) {
         throw err("OWNERSHIP_MISMATCH", "This action belongs to a different session.")
       }
-      if (TERMINAL.has(proposal.status)) return { status: proposal.status }
-      await tx.myraOperation.update({
-        where: { id: proposalId },
+      if (TERMINAL.has(proposal.status) || proposal.status === "EXECUTING") {
+        return { status: proposal.status }
+      }
+      const changed = await tx.myraOperation.updateMany({
+        where: { id: proposalId, status: { in: ["DRAFT", "AWAITING_CONFIRMATION"] } },
         data: { status: "CANCELED" },
       })
-      return { status: "CANCELED" as MyraOperationStatus }
+      if (changed.count === 1) return { status: "CANCELED" }
+      const current = await tx.myraOperation.findUnique({ where: { id: proposalId } })
+      if (!current) throw err("NOT_FOUND", "Proposal not found.")
+      return { status: current.status }
     },
     db
   )

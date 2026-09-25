@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { createBoundedPgAdapter, prisma } from "@lyrashield/db"
 import { PrismaClient } from "@lyrashield/db/src/generated/prisma"
-import { confirm, createProposal } from "./operations"
+import { cancel, confirm, createProposal } from "./operations"
 
 const runtimeUrl = process.env.RLS_RUNTIME_DATABASE_URL
 const systemUrl = process.env.DATABASE_SYSTEM_URL
@@ -125,5 +125,51 @@ describe.skipIf(!restrictedRun)("proposal integrity after PostgreSQL JSONB persi
       message: expect.stringMatching(/prepare.*again/i),
     })
     expect(executor).not.toHaveBeenCalled()
+  })
+
+  it("does not report cancellation after execution has started", async () => {
+    const proposal = await createProposal({ principal: user }, "book_demo", { slotStart: "x" })
+    operationIds.push(proposal.id)
+    let markStarted!: () => void
+    let release!: () => void
+    const started = new Promise<void>((resolve) => (markStarted = resolve))
+    const held = new Promise<void>((resolve) => (release = resolve))
+    const executor = vi.fn(async () => {
+      markStarted()
+      await held
+      return { result: { accepted: true } }
+    })
+    const confirming = confirm({ principal: user }, proposal.id, executor)
+    await started
+    expect(await cancel({ principal: user }, proposal.id)).toEqual({ status: "EXECUTING" })
+    release()
+    await expect(confirming).resolves.toMatchObject({ status: "COMPLETED" })
+    expect(await cancel({ principal: user }, proposal.id)).toEqual({ status: "COMPLETED" })
+    expect(executor).toHaveBeenCalledTimes(1)
+  })
+
+  it("lets cancellation win before execution claims the proposal", async () => {
+    const proposal = await createProposal({ principal: anonymous }, "book_demo", {
+      slotStart: "x",
+    })
+    operationIds.push(proposal.id)
+    expect(await cancel({ principal: anonymous }, proposal.id)).toEqual({ status: "CANCELED" })
+    expect(await cancel({ principal: anonymous }, proposal.id)).toEqual({ status: "CANCELED" })
+    const executor = vi.fn(async () => ({ result: { accepted: true } }))
+    await expect(confirm({ principal: anonymous }, proposal.id, executor)).rejects.toMatchObject({
+      code: "PROPOSAL_STATE_INVALID",
+    })
+    expect(executor).not.toHaveBeenCalled()
+  })
+
+  it("does not reveal or cancel a foreign owner's proposal", async () => {
+    const proposal = await createProposal({ principal: user }, "book_demo", { slotStart: "x" })
+    operationIds.push(proposal.id)
+    await expect(
+      cancel({ principal: { ...user, accountId: `${user.accountId}-other` } }, proposal.id)
+    ).rejects.toMatchObject({ code: expect.stringMatching(/NOT_FOUND|OWNERSHIP_MISMATCH/) })
+    expect(
+      (await system!.myraOperation.findUniqueOrThrow({ where: { id: proposal.id } })).status
+    ).toBe("AWAITING_CONFIRMATION")
   })
 })

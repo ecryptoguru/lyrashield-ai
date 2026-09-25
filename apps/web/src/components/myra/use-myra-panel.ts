@@ -309,20 +309,27 @@ export function useMyraPanel(
           data?: { status?: string; result?: unknown; component?: MyraComponent }
         }
         const data = raw?.data ?? (raw as { status?: string; component?: MyraComponent })
-        setProposal(() => ({
-          state: "done",
-          statusText: data?.status
-            ? `Done — ${String(data.status).toLowerCase().replace(/_/g, " ")}.`
-            : "Done.",
-        }))
+        const status = data?.status
+        setProposal(() =>
+          status === "COMPLETED"
+            ? { state: "done", statusText: "Done." }
+            : status === "OUTCOME_UNKNOWN"
+              ? {
+                  state: "unknown",
+                  statusText: "Checking the outcome. Ask for help if it stays here.",
+                }
+              : status === "EXECUTING"
+                ? { state: "processing", statusText: "Already processing. Check again later." }
+                : { state: "closed", statusText: "The action outcome needs review." }
+        )
         if (data?.component) {
           updateTurn(turnId, (t) => ({
             ...t,
-            completedAction: t.completedAction || data.status === "COMPLETED",
+            completedAction: t.completedAction || status === "COMPLETED",
             parts: [...t.parts, { kind: "component", component: data.component! }],
           }))
         }
-        announce("Action confirmed.")
+        announce(status === "COMPLETED" ? "Action confirmed." : "Action outcome needs review.")
       } catch (err) {
         const code = (err as { code?: string }).code
         setProposal(() => ({
@@ -331,7 +338,7 @@ export function useMyraPanel(
             code === "PROPOSAL_EXPIRED"
               ? "That request expired — ask Myra to prepare it again."
               : code === "PROPOSAL_PAYLOAD_CHANGED"
-                ? "The details changed — review the new summary before confirming."
+                ? "The details changed. Ask Myra to prepare it again."
                 : code === "TAKEOVER_ACTIVE"
                   ? "A person is handling this conversation."
                   : "The action could not be completed. Try again or ask for a person.",
@@ -344,13 +351,47 @@ export function useMyraPanel(
 
   const cancelProposalAction = useCallback(
     async (proposalId: string) => {
+      setProposalStates((s) => ({ ...s, [proposalId]: { state: "canceling" } }))
       try {
-        await getClient().cancelProposal(proposalId)
+        const raw = (await getClient().cancelProposal(proposalId)) as {
+          data?: { status?: string }
+          status?: string
+        }
+        const status = raw?.data?.status ?? raw?.status
+        const next: { state: ProposalState; statusText?: string } =
+          status === "CANCELED"
+            ? { state: "cancelled" }
+            : status === "EXECUTING"
+              ? { state: "processing", statusText: "Already processing. Check again later." }
+              : status === "COMPLETED"
+                ? { state: "done", statusText: "Done." }
+                : status === "OUTCOME_UNKNOWN"
+                  ? {
+                      state: "unknown",
+                      statusText: "Checking the outcome. Ask for help if it stays here.",
+                    }
+                  : status === "FAILED"
+                    ? { state: "closed", statusText: "The action failed." }
+                    : status === "EXPIRED"
+                      ? { state: "closed", statusText: "This action expired." }
+                      : {
+                          state: "pending",
+                          statusText: "Cancellation could not be confirmed. Try again.",
+                        }
+        setProposalStates((s) => ({ ...s, [proposalId]: next }))
+        announce(
+          status === "CANCELED" ? "Action canceled." : (next.statusText ?? "Action state updated.")
+        )
       } catch {
-        /* cancellation failures still render the canceled state client-side */
+        setProposalStates((s) => ({
+          ...s,
+          [proposalId]: {
+            state: "pending",
+            statusText: "Cancellation could not be confirmed. Try again.",
+          },
+        }))
+        announce("Cancellation could not be confirmed.")
       }
-      setProposalStates((s) => ({ ...s, [proposalId]: { state: "cancelled" } }))
-      announce("Action canceled.")
     },
     [announce, getClient]
   )
