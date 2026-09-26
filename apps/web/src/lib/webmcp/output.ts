@@ -188,3 +188,19 @@ export function wrapToolCancellation(maxChars = WEBMCP_BUDGETS.output): WebMcpSt
   const message = clampString("Tool execution was cancelled", maxChars)
   return { ok: false, cancelled: true, error: message }
 }
+
+const URLISH_PATTERN = /\b[a-zA-Z][a-zA-Z0-9+.-]{1,15}:\/\/[^\s"')]+/g
+
+/**
+ * Strip `scheme://…` URLs from text echoed into tool output — even when the
+ * URL is embedded inside engine- or user-emitted text (event messages,
+ * summaries). Tool results never carry evidence locations, signed URLs or
+ * storage URIs, so any `scheme://` sequence is replaced rather than risk
+ * forwarding one.
+ */
+export function redactEmbeddedUrls(text: string, maxLength?: number): string {
+  const cleaned = text.replace(URLISH_PATTERN, "[URL removed]")
+  return maxLength !== undefined && cleaned.length > maxLength
+    ? `${cleaned.slice(0, maxLength)}…`
+    : cleaned
+}

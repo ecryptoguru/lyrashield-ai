@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { WebMcpReceiptProvider } from "../../apps/web/src/components/webmcp/webmcp-receipt-provider"
 import { useActiveScansPolling } from "../../apps/web/src/app/(dashboard)/dashboard/scans/use-active-scans-polling"
 import { ScanDetailClient } from "../../apps/web/src/app/(dashboard)/dashboard/scans/[id]/scan-detail-client"
 import type { ScanItem } from "../../apps/web/src/app/(dashboard)/dashboard/scans/scan-types"
@@ -69,12 +70,14 @@ export default function PollingHarness() {
   return new URLSearchParams(location.search).get("polling") === "detail" ? (
     <>
       <button onClick={() => setDetailId("scan-b")}>Switch scan</button>
-      <ScanDetailClient
-        key={detailId}
-        scan={{ ...scan, id: detailId }}
-        findings={[]}
-        scorecard={null}
-      />
+      <WebMcpReceiptProvider>
+        <ScanDetailClient
+          key={detailId}
+          scan={{ ...scan, id: detailId }}
+          findings={[]}
+          scorecard={null}
+        />
+      </WebMcpReceiptProvider>
     </>
   ) : (
     <ListHarness />

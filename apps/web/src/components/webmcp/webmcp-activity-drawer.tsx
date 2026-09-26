@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
+import Link from "next/link"
 import { Activity, CheckCircle2, X, XCircle, AlertTriangle, Loader2, History } from "lucide-react"
 import { Button, Badge, Card } from "@lyrashield/ui"
 import { useWebMcpReceiptStore } from "./webmcp-receipt-provider"
@@ -201,6 +202,18 @@ export function WebMcpActivityDrawer() {
                           {DATA_CLASS_LABEL[receipt.dataClass]}
                           {receipt.humanConfirmationRequired && " · confirmation required"}
                         </p>
+                        {/* Recovery link: only sanitized in-dashboard paths ever
+                            land on a receipt (see safeDashboardHref), so this
+                            is always relative — never an external or
+                            evidence/share URL. */}
+                        {receipt.href && (
+                          <Link
+                            href={receipt.href}
+                            className="text-primary mt-1 inline-flex min-h-6 items-center text-xs font-medium hover:underline"
+                          >
+                            Open in dashboard
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </li>

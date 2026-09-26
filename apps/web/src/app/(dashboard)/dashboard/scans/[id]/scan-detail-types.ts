@@ -133,6 +133,8 @@ export interface ScanPollData {
   >
   /** Echoed when an incremental event window was applied to this response. */
   eventsCursorApplied?: string
+  /** The scan's place in the run queue while QUEUED (1-based + total waiting). */
+  queuePosition?: { position: number; waiting: number } | null
   resultManifest?: { checksum?: string | null } | null
   coverageReceipts?: Array<{
     scanner: string

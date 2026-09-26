@@ -114,7 +114,9 @@ export function CreateScanSheet({
         <SheetHeader className="border-b px-6 py-4 text-left">
           <SheetTitle>Start a {RUN_SINGULAR.toLowerCase()}</SheetTitle>
           <SheetDescription>
-            Choose a {TARGET_SINGULAR.toLowerCase()} and how thorough the review should be.
+            Choose a {TARGET_SINGULAR.toLowerCase()} and how thorough the review should be. Starting
+            a {RUN_SINGULAR.toLowerCase()} begins durable server-side work that may use the
+            sponsoring account&apos;s agent-minute allowance.
           </SheetDescription>
         </SheetHeader>
 
