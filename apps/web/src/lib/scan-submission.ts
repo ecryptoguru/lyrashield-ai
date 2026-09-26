@@ -86,7 +86,9 @@ export function readPendingScanSubmission(
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new Error("Saved scan recovery data is unreadable; inspect it before starting another scan.")
+    throw new Error(
+      "Saved scan recovery data is unreadable; inspect it before starting another scan."
+    )
   }
   const result = pendingSubmissionSchema.safeParse(parsed)
   if (
@@ -106,10 +108,12 @@ export function beginScanSubmission(
   payload: unknown,
   storage: ScanSubmissionStorage = getSessionStorage(),
   createIdempotencyKey: () => string = () => crypto.randomUUID()
-): { kind: "created" | "existing"; submission: PendingScanSubmission } | {
-  kind: "conflict"
-  submission: PendingScanSubmission
-} {
+):
+  | { kind: "created" | "existing"; submission: PendingScanSubmission }
+  | {
+      kind: "conflict"
+      submission: PendingScanSubmission
+    } {
   const requestIdentity = scanRequestIdentity(payload)
   const existing = readPendingScanSubmission(scope, storage)
   if (existing) {

@@ -26,7 +26,9 @@ describe.skipIf(!runtimeUrl || !databaseUrl)(
     beforeAll(async () => {
       if (!owner || !databaseUrl || !runtimeUrl) return
       if (new URL(databaseUrl).pathname !== new URL(runtimeUrl).pathname) {
-        throw new Error("DATABASE_URL and RLS_RUNTIME_DATABASE_URL must name the same disposable DB")
+        throw new Error(
+          "DATABASE_URL and RLS_RUNTIME_DATABASE_URL must name the same disposable DB"
+        )
       }
       const [column] = await owner.$queryRaw<Array<{ available: boolean }>>`
         SELECT EXISTS (

@@ -69,11 +69,18 @@ describe("recoverable scan submissions", () => {
     const storage = new MemoryStorage()
     beginScanSubmission(scope, payload, storage, () => firstKey)
 
-    const changed = beginScanSubmission(scope, { ...payload, goal: "AUDIT" }, storage, () => secondKey)
+    const changed = beginScanSubmission(
+      scope,
+      { ...payload, goal: "AUDIT" },
+      storage,
+      () => secondKey
+    )
     expect(changed).toMatchObject({ kind: "conflict", submission: { idempotencyKey: firstKey } })
 
     expect(clearPendingScanSubmission(scope, firstKey, storage)).toBe(true)
-    expect(beginScanSubmission(scope, { ...payload, goal: "AUDIT" }, storage, () => secondKey)).toMatchObject({
+    expect(
+      beginScanSubmission(scope, { ...payload, goal: "AUDIT" }, storage, () => secondKey)
+    ).toMatchObject({
       kind: "created",
       submission: { idempotencyKey: secondKey },
     })

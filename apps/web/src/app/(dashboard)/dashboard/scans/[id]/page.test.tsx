@@ -38,9 +38,9 @@ describe("scan detail workspace authorization", () => {
   it("does not load or disclose a scan outside the active workspace", async () => {
     getScanWithEvents.mockResolvedValue(null)
 
-    await expect(ScanDetailPage({ params: Promise.resolve({ id: "other-workspace-scan" }) })).rejects.toThrow(
-      "NEXT_NOT_FOUND"
-    )
+    await expect(
+      ScanDetailPage({ params: Promise.resolve({ id: "other-workspace-scan" }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND")
 
     expect(getScanWithEvents).toHaveBeenCalledWith("other-workspace-scan", "workspace-1")
     expect(prisma.finding.findMany).not.toHaveBeenCalled()
