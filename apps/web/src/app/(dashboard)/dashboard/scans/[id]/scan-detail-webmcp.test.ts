@@ -158,6 +158,25 @@ describe("buildScanProgressOutput", () => {
     expect(output.evidence?.ingestionWarnings).toBeNull()
     expect(output.evidence?.receiptsByStatus).toBeNull()
   })
+
+  it("never reports an active phase after a scan has ended", () => {
+    for (const status of ["FAILED", "CANCELLED", "TIMED_OUT", "PARTIAL", "STOPPED_BUDGET"]) {
+      const output = buildScanProgressOutput({
+        poll: pollData({ status, endedAt: "2026-01-01T00:05:00.000Z" }),
+        quality: null,
+      })
+      expect(output.steps).toEqual([
+        { label: "Setup check", state: "done" },
+        { label: "Scanning", state: "stopped" },
+      ])
+    }
+
+    const completed = buildScanProgressOutput({
+      poll: pollData({ status: "COMPLETED", endedAt: "2026-01-01T00:05:00.000Z" }),
+      quality: null,
+    })
+    expect(completed.steps.every((step) => step.state === "done")).toBe(true)
+  })
 })
 
 describe("review_scan_progress registration", () => {
