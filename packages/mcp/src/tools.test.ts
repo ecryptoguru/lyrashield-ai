@@ -5,6 +5,7 @@ import {
   createRunPrScanTool,
   createGetFindingsTool,
   createGetLaunchReadinessTool,
+  createGetScanEligibilityTool,
   createCreateReportTool,
   createPrSecurityRecapTool,
   type ToolHandlerContext,
@@ -544,5 +545,100 @@ describe("apiCall error handling", () => {
     expect(result.isError).toBe(true)
     const data = JSON.parse(result.content[0]!.text)
     expect(data.error).toBe("Permission denied")
+  })
+})
+
+describe("createGetScanEligibilityTool", () => {
+  it("issues GET /api/scans/eligibility with the normalized inputs", async () => {
+    mockFetch.mockResolvedValueOnce(makeApiResponse({ allowed: true, code: null }))
+    const tool = createGetScanEligibilityTool(context)
+    const result = await tool.handler({ workspaceId: "ws-1", targetId: "t-1" })
+
+    expect(result.isError).toBeUndefined()
+    const url = new URL(String(mockFetch.mock.calls[0]![0]))
+    expect(url.pathname).toBe("/api/v1/scans/eligibility")
+    expect(url.searchParams.get("workspaceId")).toBe("ws-1")
+    expect(url.searchParams.get("targetId")).toBe("t-1")
+    expect(url.searchParams.get("goal")).toBe("TEST_APP")
+    expect(url.searchParams.get("mode")).toBe("STANDARD")
+    const [, init] = mockFetch.mock.calls[0]! as [string, RequestInit]
+    expect((init.method ?? "GET").toUpperCase()).toBe("GET")
+    expect(init.body).toBeUndefined()
+  })
+
+  it("forwards the workflow contract verbatim like the scan tools", async () => {
+    mockFetch.mockResolvedValueOnce(makeApiResponse({ allowed: true }))
+    const tool = createGetScanEligibilityTool(context)
+    await tool.handler({
+      workspaceId: "ws-1",
+      targetId: "t-1",
+      goal: "CHECK_PR",
+      mode: "QUICK",
+      workflow: "REVIEW_CHANGES",
+      baseRef: "main",
+      headRef: "feature/42",
+      attachmentIds: ["att_1", "att_2"],
+    })
+
+    const url = new URL(String(mockFetch.mock.calls[0]![0]))
+    expect(url.searchParams.get("goal")).toBe("CHECK_PR")
+    expect(url.searchParams.get("mode")).toBe("QUICK")
+    expect(url.searchParams.get("workflow")).toBe("REVIEW_CHANGES")
+    expect(url.searchParams.get("baseRef")).toBe("main")
+    expect(url.searchParams.get("headRef")).toBe("feature/42")
+    expect(url.searchParams.getAll("attachmentIds")).toEqual(["att_1", "att_2"])
+  })
+
+  it("rejects invalid workflow inputs before any API call", async () => {
+    const tool = createGetScanEligibilityTool(context)
+    const badRef = await tool.handler({
+      workspaceId: "ws-1",
+      targetId: "t-1",
+      baseRef: "main",
+    })
+    expect(badRef.isError).toBe(true)
+    const noBase = await tool.handler({
+      workspaceId: "ws-1",
+      targetId: "t-1",
+      workflow: "REVIEW_CHANGES",
+    })
+    expect(noBase.isError).toBe(true)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it("returns an eligibility denial as a successful read, not a tool error", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeApiResponse({
+        allowed: false,
+        code: "NO_MINUTES_REMAINING",
+        message: "Your agent-minute balance is exhausted.",
+        plan: "FREE",
+        remainingMinutes: 0,
+        blockers: [
+          { code: "NO_MINUTES_REMAINING", message: "Your agent-minute balance is exhausted." },
+        ],
+      })
+    )
+    const tool = createGetScanEligibilityTool(context)
+    const result = await tool.handler({ workspaceId: "ws-1", targetId: "t-1" })
+
+    expect(result.isError).toBeUndefined()
+    const data = JSON.parse(result.content[0]!.text)
+    expect(data.allowed).toBe(false)
+    expect(data.code).toBe("NO_MINUTES_REMAINING")
+    expect(data.blockers[0].code).toBe("NO_MINUTES_REMAINING")
+  })
+
+  it("surfaces HTTP failures as tool errors", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+      headers: new Headers(),
+      json: async () => ({ error: { code: "TARGET_NOT_FOUND", message: "Target not found" } }),
+    })
+    const tool = createGetScanEligibilityTool(context)
+    const result = await tool.handler({ workspaceId: "ws-1", targetId: "missing" })
+    expect(result.isError).toBe(true)
   })
 })

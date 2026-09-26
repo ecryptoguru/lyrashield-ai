@@ -68,6 +68,12 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     destructiveHint: false,
     openWorldHint: false,
   },
+  lyrashield_get_scan_eligibility: {
+    title: "Check scan eligibility (advisory preflight)",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
   lyrashield_check_diff: {
     title: "Check a diff",
     readOnlyHint: true,
@@ -714,6 +720,77 @@ export function createGetScanStatusTool(context: ToolHandlerContext): McpTool {
   }
 }
 
+export function createGetScanEligibilityTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_get_scan_eligibility",
+    mutating: false,
+    description:
+      "Advisory read-only preflight for a security scan on a registered target: whether POST /api/scans would currently admit the requested review — same permission, plan, domain-proof and entitlement gates, evaluated with no trial, billing, scan or audit mutation. allowed:false is a successful read carrying the structured denial code/message/blockers, not a tool error. POST /api/scans re-checks authoritatively at creation; a pass here never guarantees admission. Inputs mirror lyrashield_scan_target (goal, mode, workflow fields); the workflow and attachment semantics match POST.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string" },
+        targetId: {
+          type: "string",
+          description: "An existing target id (lyrashield_list_targets).",
+        },
+        goal: {
+          type: "string",
+          enum: [
+            "CHECK_PR",
+            "TEST_APP",
+            "LAUNCH_REVIEW",
+            "WEEKLY_MONITOR",
+            "FULL_PENTEST",
+            "COMPLIANCE_REVIEW",
+          ],
+          description: "Review intent. Default TEST_APP.",
+        },
+        mode: {
+          type: "string",
+          enum: ["SAFE", "QUICK", "STANDARD", "DEEP", "CUSTOM"],
+          description:
+            "Review depth. QUICK is an alias for SAFE on URL targets; CUSTOM is an alias for DEEP on repository targets. Default STANDARD.",
+        },
+        ...WORKFLOW_INPUT_PROPERTIES,
+      },
+      required: ["workspaceId", "targetId"],
+    },
+    handler: async (args: Record<string, unknown>) => {
+      try {
+        if (typeof args.workspaceId !== "string" || !args.workspaceId) {
+          throw new Error("workspaceId is required")
+        }
+        if (typeof args.targetId !== "string" || !args.targetId) {
+          throw new Error("targetId is required")
+        }
+        const fields = workflowInputFields(args)
+        const workflow = fields.workflow as string | undefined
+        const baseRef = fields.baseRef as string | undefined
+        const headRef = fields.headRef as string | undefined
+        const attachmentIds = fields.attachmentIds as string[] | undefined
+        const authorizationRef = fields.authorizationRef as string | undefined
+        const params = new URLSearchParams()
+        params.set("workspaceId", args.workspaceId)
+        params.set("targetId", args.targetId)
+        params.set("goal", typeof args.goal === "string" && args.goal ? args.goal : "TEST_APP")
+        params.set("mode", typeof args.mode === "string" && args.mode ? args.mode : "STANDARD")
+        if (workflow) params.set("workflow", workflow)
+        if (baseRef) params.set("baseRef", baseRef)
+        if (headRef) params.set("headRef", headRef)
+        for (const id of attachmentIds ?? []) params.append("attachmentIds", id)
+        if (authorizationRef) params.set("authorizationRef", authorizationRef)
+        const data = await apiCall(context, "GET", `/api/scans/eligibility?${params}`)
+        return makeToolResult(data)
+      } catch (err) {
+        return makeErrorResult(
+          err instanceof Error ? err.message : "Failed to evaluate scan eligibility"
+        )
+      }
+    },
+  }
+}
+
 export function createGetScanQualityTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_get_scan_quality",
@@ -1178,6 +1255,7 @@ export function createAllTools(context: ToolHandlerContext): McpTool[] {
     createListTargetsTool(context),
     createGetScanStatusTool(context),
     createGetScanQualityTool(context),
+    createGetScanEligibilityTool(context),
     // Core
     createScanTargetTool(context),
     createCancelScanTool(context),
