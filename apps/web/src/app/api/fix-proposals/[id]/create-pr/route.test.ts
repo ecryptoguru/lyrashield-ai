@@ -4,6 +4,9 @@ const requirePermission = vi.fn()
 const getFixProposal = vi.fn()
 const readEncryptedArtifact = vi.fn()
 const requestFixPrApproval = vi.fn()
+const claimOrGetAgentOperation = vi.fn()
+const completeAgentOperation = vi.fn()
+const failAgentOperation = vi.fn()
 
 const prisma = {
   finding: { findFirst: vi.fn() },
@@ -20,7 +23,13 @@ vi.mock("@lyrashield/auth", () => ({
 vi.mock("@lyrashield/billing", () => ({
   resolveAccountBilling: vi.fn().mockResolvedValue({ effectivePlan: "PRO" }),
 }))
-vi.mock("@lyrashield/db", () => ({ getFixProposal, prisma }))
+vi.mock("@lyrashield/db", () => ({
+  getFixProposal,
+  prisma,
+  claimOrGetAgentOperation,
+  completeAgentOperation,
+  failAgentOperation,
+}))
 vi.mock("@lyrashield/evidence-storage", () => ({ readEncryptedArtifact }))
 vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
@@ -31,11 +40,14 @@ vi.mock("@/lib/fix-pr", () => ({ requestFixPrApproval }))
 
 const { POST } = await import("./route")
 
-function call(body: unknown = { workspaceId: "workspace-1" }) {
+function call(body: unknown = { workspaceId: "workspace-1" }, idempotencyKey?: string) {
   return POST(
     new Request("http://localhost/api/fix-proposals/proposal-1/create-pr", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+      },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: "proposal-1" }) }
@@ -203,5 +215,54 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
 
     expect(response.status).toBe(422)
     await expect(response.json()).resolves.toMatchObject({ error: { code: "PATCH_REJECTED" } })
+  })
+
+  it("replays a keyed approval request without creating another approval", async () => {
+    getFixProposal.mockResolvedValue({
+      id: "proposal-1",
+      findingId: "finding-1",
+      diffRef: "s3://bucket/evidence/workspace-1/patch.diff",
+    })
+    prisma.finding.findFirst.mockResolvedValue({
+      id: "finding-1",
+      targetId: "target-1",
+      implicatedFiles: ["src/a.ts"],
+      baseCommit: "abc123",
+      target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
+    })
+    readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ...") })
+    requestFixPrApproval.mockResolvedValue({
+      status: "pending_approval",
+      approvalId: "approval-1",
+      approvalUrl: "https://app.test/dashboard/approvals?approval=approval-1",
+    })
+    claimOrGetAgentOperation
+      .mockResolvedValueOnce({ status: "NEW", operation: { id: "operation-1" } })
+      .mockResolvedValueOnce({
+        status: "REPLAY",
+        operation: {
+          id: "operation-1",
+          result: {
+            status: "pending_approval",
+            approvalId: "approval-1",
+            approvalUrl: "https://app.test/dashboard/approvals?approval=approval-1",
+          },
+        },
+      })
+
+    const first = await call({ workspaceId: "workspace-1" }, "fix-pr-once")
+    const replay = await call({ workspaceId: "workspace-1" }, "fix-pr-once")
+
+    expect(first.status).toBe(200)
+    expect(await replay.json()).toEqual(await first.json())
+    expect(requestFixPrApproval).toHaveBeenCalledOnce()
+    expect(completeAgentOperation).toHaveBeenCalledOnce()
+    expect(claimOrGetAgentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        operationName: "fix.pr.request",
+        input: expect.objectContaining({ proposalId: "proposal-1", baseCommit: "abc123" }),
+      })
+    )
   })
 })

@@ -60,6 +60,19 @@ describe("durable REST operation execution", () => {
     expect(await replay.json()).toEqual(await created.json())
     expect(execute).toHaveBeenCalledTimes(1)
   })
+  it("records the approval id for a pending fix PR request", async () => {
+    vi.mocked(claimOrGetAgentOperation).mockResolvedValue({
+      status: "NEW",
+      operation: { id: "op" },
+    } as never)
+    await recordedOperation(request(), params, async () =>
+      apiSuccess({ status: "pending_approval", approvalId: "approval-1" })
+    )
+    expect(completeAgentOperation).toHaveBeenCalledWith("op", "ws", {
+      resultReference: "approval-1",
+      result: { status: "pending_approval", approvalId: "approval-1" },
+    })
+  })
   it("permits a fresh request only after confirmed non-submission", async () => {
     vi.mocked(claimOrGetAgentOperation).mockResolvedValue({
       status: "NEW",
