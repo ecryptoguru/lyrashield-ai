@@ -145,9 +145,9 @@ Owners must review each entry by its review date and record one of three outcome
 - **Status:** Accepted
 - **Owner:** `platform-eng`
 - **Review date:** 2026-10-11
-- **Affected area:** stdio client installers for `@lyrashield/mcp@0.2.9`
+- **Affected area:** stdio client installers for `@lyrashield/mcp@0.2.10`
 - **Risk:** Installers resolve package integrity from live npm registry metadata rather than a separately stored artifact hash.
-- **Current bounds:** The installer pins immutable npm version `0.2.9`; npm forbids republishing that version.
+- **Current bounds:** The installer pins exact npm version `0.2.10`; npm forbids republishing a version after release.
 - **Review action:** Confirm the distributed version and registry guarantees remain unchanged, then reassess hash pinning or vendoring.
 
 #### VERIFY-G-001 — Compare-page disclaimers render reviewed HTML

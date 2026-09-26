@@ -2,7 +2,7 @@
 
 Checked 2026-09-25. These are documentation and local contract receipts, not authenticated client acceptance.
 
-- Public npm metadata reports `@lyrashield/mcp@0.2.9` published. Its packed tarball matched the registry SHA-512 receipt, contained the stdio entrypoint, and answered MCP initialization plus `tools/list` with 15 tools using a synthetic credential and local-only API URL. Release validation repeats these checks. Deliberate release updates must update generator, registry, templates, validator and snapshots together.
+- Public npm metadata reports `@lyrashield/mcp@0.2.9` published. Its packed tarball matched the registry SHA-512 receipt, contained the stdio entrypoint, and answered MCP initialization plus `tools/list` with 15 tools using a synthetic credential and local-only API URL. Source `0.2.10` includes later MCP workflows and remains unpublished. Release validation repeats these checks. Deliberate release updates must update generator, registry, templates, validator and snapshots together.
 - [Kiro configuration](https://kiro.dev/docs/mcp/configuration/) specifies `.kiro/settings/mcp.json` for workspaces and `~/.kiro/settings/mcp.json` for users. Merge the exported stdio entry into one of these files; do not assume the staged plugin directory is discovered.
 - [Gemini extension configuration](https://geminicli.com/docs/extensions/reference/) documents environment filtering and `${extensionPath}`. The optional `GEMINI_LYRASHIELD_CRED` setting passes through a Node preload using [npx's Node options](https://docs.npmjs.com/cli/v11/using-npm/config#node-options). The preload removes empty credentials and inherited OAuth overrides while preserving `LYRASHIELD_API_URL`. Zed embeds the same normalization. Stored OAuth refreshes against its stored issuer; an explicit extension API key uses only the canonical Cloud HTTPS origin.
 - [Kilo configuration](https://kilo.ai/docs/automate/mcp/using-in-kilo-code) documents `mcp` entries with `type: local`, a command array and `environment`. The marketplace template uses `{env:LYRASHIELD_API_KEY}` instead of embedding a key.
@@ -18,10 +18,10 @@ Verified 2026-09-26 against `pnpm pack` tarballs with `scripts/verify-agent-dist
 | Package                    | Implementation | npm latest (obs.) | Transport                                | Support tier wording                                                         | Evidence                            | Verified   |
 | -------------------------- | -------------- | ----------------- | ---------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------- | ---------- |
 | `lyrashield`               | 0.2.12         | 0.2.11            | cli                                      | Installer/driver for every registry tier                                     | package-conformance + local receipt | 2026-09-26 |
-| `@lyrashield/mcp`          | 0.2.9          | 0.2.9             | stdio (hosted remote-http is app-served) | COMPATIBLE stdio/config clients; EXPERIMENTAL clients pending client-runtime | package-conformance + local receipt | 2026-09-26 |
+| `@lyrashield/mcp`          | 0.2.10         | 0.2.9             | stdio (hosted remote-http is app-served) | COMPATIBLE stdio/config clients; EXPERIMENTAL clients pending client-runtime | package-conformance + local receipt | 2026-09-26 |
 | `@lyrashield/agent-plugin` | 0.1.29         | 0.1.27            | remote-http `mcp.json` + client shims    | Preferred for plugin-capable COMPATIBLE clients; Copilot stays EXPERIMENTAL  | package-conformance + local receipt | 2026-09-26 |
 
-Receipt detail kept locally (not committed): per-package sha256, file counts, bin inventory, the 15-tool `initialize` + `tools/list` result for `@lyrashield/mcp`, and CLI `--version`/`--help` exit-0 checks.
+Receipt detail kept locally (not committed): per-package sha256, file counts, bin inventory, the 21-tool `initialize` + `tools/list` result for source `@lyrashield/mcp@0.2.10`, and CLI `--version`/`--help` exit-0 checks.
 
 ## npm release procedure (maintainer-authorized)
 

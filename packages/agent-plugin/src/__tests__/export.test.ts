@@ -388,8 +388,8 @@ describe("exported validator", () => {
     [
       "Codebuff executable pin with approved comment",
       "codebuff/lyrashield-review.ts",
-      'args: ["-y", "@lyrashield/mcp@0.2.9"]',
-      'args: ["-y", "@lyrashield/mcp@9.9.9"], // @lyrashield/mcp@0.2.9',
+      'args: ["-y", "@lyrashield/mcp@0.2.10"]',
+      'args: ["-y", "@lyrashield/mcp@9.9.9"], // @lyrashield/mcp@0.2.10',
     ],
   ])("rejects %s drift after hashes are refreshed", async (_label, file, before, after) => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
@@ -431,7 +431,7 @@ describe("exported validator", () => {
       '"command": "npx"',
       '"env": {"LYRASHIELD_API_URL":"https://app.lyrashieldai.com"}, "command": "npx"',
     ],
-    ["gemini-extension.json", "@lyrashield/mcp@0.2.9", "@lyrashield/mcp"],
+    ["gemini-extension.json", "@lyrashield/mcp@0.2.10", "@lyrashield/mcp"],
     ["codebuff/lyrashield-review.ts", '"read_files"', '"run_terminal_command", "read_files"'],
     ["openclaw/SKILL.md", "pull requests never auto-merge", "pull requests auto-merge"],
   ])("rejects unsafe distribution drift in %s", async (file, before, after) => {
