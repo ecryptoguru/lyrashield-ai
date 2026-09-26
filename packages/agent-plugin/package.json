@@ -37,7 +37,7 @@
   "devDependencies": {
     "@lyrashield/agent-rules": "workspace:*",
     "@lyrashield/mcp": "workspace:*",
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.13.6",
     "tsup": "^8.5.1",
     "tsx": "^4.23.12",
     "typescript": "^6.0.0",

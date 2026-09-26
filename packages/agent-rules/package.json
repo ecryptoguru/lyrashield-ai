@@ -34,7 +34,7 @@
     "@lyrashield/agent-registry": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.13.6",
     "tsup": "^8.5.1",
     "typescript": "6.0.3",
     "vitest": "^4.1.11"
