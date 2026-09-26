@@ -46,3 +46,34 @@ export {
 } from "./create-server"
 export { handleRemoteMcpRequest, type RemoteMcpOptions } from "./http-transport"
 export { MCP_PROTOCOL_SUPPORT } from "./protocol"
+export {
+  MCP_TASK_PROTOCOL_VERSION,
+  MCP_TASK_ID_PREFIX,
+  MCP_TASK_TTL_MS,
+  MCP_TASK_POLL_INTERVAL_MS,
+  TASK_CAPABLE_TOOLS,
+  assertTaskCapableTool,
+  serializeTaskId,
+  parseTaskId,
+  isTaskMappingExpired,
+  isTerminalTaskStatus,
+  mapScanStatusToTaskStatus,
+  operationMatchesPrincipal,
+  resolveTaskView,
+  scanRowToCallToolResult,
+  storedResultToCallToolResult,
+  buildTask,
+  extractScanIdFromOperation,
+  extractOperationIdFromToolResult,
+  extractScanIdFromToolResult,
+  toSdkTaskStore,
+  type McpTaskBackend,
+  type TaskOperationRecord,
+  type TaskScanRecord,
+  type TaskView,
+} from "./task-adapter"
+export { createLocalTaskBackend } from "./local-task-backend"
+// Re-export the SDK types the task surface is built on, so consumers
+// (apps/web) do not need a direct SDK dependency to implement a backend.
+export { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js"
+export type { Task, CallToolResult } from "@modelcontextprotocol/sdk/types.js"

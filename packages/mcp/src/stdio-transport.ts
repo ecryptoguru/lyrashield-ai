@@ -1,5 +1,6 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { createLyraShieldServer } from "./create-server"
+import { createLocalTaskBackend } from "./local-task-backend"
 import { resolveMcpCredentials } from "./credentials"
 import { logger } from "@lyrashield/logger"
 
@@ -24,13 +25,18 @@ const allowMutations = true
 
 async function main() {
   const { apiKey, apiUrl } = await resolveMcpCredentials()
+  const toolContext = {
+    apiBaseUrl: apiUrl,
+    apiKey,
+    getCredentials: resolveMcpCredentials,
+  }
   const { server, engine } = createLyraShieldServer({
     allowMutations,
-    toolContext: {
-      apiBaseUrl: apiUrl,
-      apiKey,
-      getCredentials: resolveMcpCredentials,
-    },
+    toolContext,
+    // Local tasks resolve through the REST operation/scan ledger — the
+    // process owns session lifetime, but the durable record stays server-side.
+    // Only listTasks is session-bound (no principal-scoped REST listing).
+    tasks: { backend: createLocalTaskBackend(toolContext) },
   })
   const transport = new StdioServerTransport()
   await server.connect(transport)

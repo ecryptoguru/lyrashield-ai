@@ -12,5 +12,7 @@ export const MCP_PROTOCOL_SUPPORT = Object.freeze({
   supported: Object.freeze([...SUPPORTED_PROTOCOL_VERSIONS]),
   serverDiscovery: false,
   listCacheMetadata: false,
-  durableTasks: false,
+  // Real MCP tasks (2025-11-25) bound to the durable AgentOperation ledger —
+  // advertised only on transports built with a task backend.
+  durableTasks: true,
 })
