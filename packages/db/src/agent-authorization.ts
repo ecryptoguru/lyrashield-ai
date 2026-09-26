@@ -79,6 +79,12 @@ export const TOOL_OPERATION_MAP: Record<string, ToolOperationDescriptor> = {
     requiresTarget: true,
     isBillable: false,
   },
+  lyrashield_get_scan_eligibility: {
+    canonicalOperation: CANONICAL_OPERATIONS.SCAN_ELIGIBILITY,
+    mutating: false,
+    requiresTarget: true,
+    isBillable: false,
+  },
   lyrashield_get_verdict: {
     canonicalOperation: CANONICAL_OPERATIONS.GATE_READ,
     mutating: false,

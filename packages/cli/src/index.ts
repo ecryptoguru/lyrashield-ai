@@ -35,6 +35,7 @@ const COMMANDS: Record<string, CommandThunk> = {
   install: () => import("./commands/install.js").then((m) => m.handleInstall),
   uninstall: () => import("./commands/uninstall.js").then((m) => m.handleUninstall),
   scan: () => import("./commands/scan.js").then((m) => m.handleScan),
+  preflight: () => import("./commands/preflight.js").then((m) => m.handlePreflight),
   "pr-scan": () => import("./commands/pr-scan.js").then((m) => m.handlePrScan),
   status: () => import("./commands/status.js").then((m) => m.handleStatus),
   cancel: () => import("./commands/cancel.js").then((m) => m.handleCancel),
@@ -77,6 +78,7 @@ Commands:
   uninstall <agent>    Remove LyraShield entry for a single agent
   project              Manage the default project
   scan                 Start a security scan [--base <ref> --head <ref> for Review Changes; --attachment <id> adds an already-uploaded attachment, repeatable; --wait/--watch [--timeout <s>] [--poll-interval <s>] follows it to a terminal state]
+  preflight            Advisory read-only check whether a scan would be admitted [--target <id> --goal <g> --mode <m> or --workflow REVIEW_CHANGES --base <ref> --head <ref>; exit 1 on denial]
   pr-scan              Start a PR-focused scan (alias for scan --goal CHECK_PR; --base/--head record a Review Changes run; --wait/--watch supported)
   status [scanId]      Show scan status [--operation <id>] [--watch [--timeout <s>] waits for a terminal state]
   cancel <scanId>      Cancel a queued or running scan [--idempotency-key <key>]

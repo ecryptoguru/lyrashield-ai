@@ -55,3 +55,34 @@ export type {
 } from "./types"
 
 export { WEBMCP_DETECTOR_VERSION } from "./types"
+
+export {
+  WEBMCP_RUNTIME_RECEIPT_VERSION,
+  WEBMCP_RUNTIME_CHECK_STATES,
+  WEBMCP_RUNTIME_CHECK_METHODS,
+  WEBMCP_RUNTIME_CHECK_IDS,
+  WebMcpRuntimeInputError,
+  WebMcpRuntimeReceiptSchema,
+  WebMcpRuntimeCheckSchema,
+  sanitizeOrigin,
+  isCanonicalOrigin,
+  validateWebMcpRuntimeReceipt,
+  createRuntimeReceipt,
+  appendRuntimeCheck,
+  recordRuntimeLimit,
+  finalizeRuntimeReceipt,
+  summarizeRuntimeReceipt,
+  hasRuntimeTargetIdentity,
+  buildTargetIdentityCheck,
+} from "./runtime-receipt"
+
+export type {
+  WebMcpRuntimeCheck,
+  WebMcpRuntimeCheckState,
+  WebMcpRuntimeCheckMethod,
+  WebMcpRuntimeReceipt,
+  WebMcpRuntimeReceiptValidation,
+  WebMcpRuntimeReceiptSummary,
+  WebMcpRuntimeOverallState,
+  WebMcpRuntimeTargetInput,
+} from "./runtime-receipt"

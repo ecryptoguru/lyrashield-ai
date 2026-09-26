@@ -59,13 +59,15 @@ The default project is stored in `~/.lyrashield/project.json` (mode `0o600`). On
   - With no target and no default project, pass `--auto` to detect the current git repo and create or reuse a target
   - Pass `--repo` as `owner/repo`, an HTTPS URL, or an SSH URL (e.g. `ecryptoguru/lyrashield-ai`, `https://github.com/ecryptoguru/lyrashield-ai.git`, `git@github.com:ecryptoguru/lyrashield-ai.git`)
   - `--wait`/`--watch` polls the scan until a terminal state; `--timeout` bounds the wait in seconds (default 1800, max 86400) and `--poll-interval` sets seconds between polls (default 5, minimum 1). The scan id is printed to stderr immediately on acceptance; status transitions go to stderr while waiting, including in `--json` mode (stdout stays a single final document). `Ctrl+C` stops waiting only — the scan keeps running and the printed `status <id> --watch` command resumes it. A scan that ends other than `COMPLETED` exits `7`; the deadline exits `8`; `SIGINT` exits `130`. `COMPLETED` means execution finished — it is not a security verdict.
+- `preflight [--target <targetId>] [--goal <goal>] [--mode <mode>] [--workspace <workspaceId>] [--workflow <workflow> --base <ref> --head <ref>] [--attachment <id>]` — advisory read-only check of whether `scan` would currently be admitted for the target. It evaluates the same permission, plan, domain-proof and entitlement gates server-side without starting a scan, claiming a trial, or consuming the free-URL allowance; the authoritative check still runs at scan creation. Exit `0` when allowed, exit `1` on an eligibility denial (`allowed:false` — a successful read), and the usual codes for usage (`2`), auth (`3`), network (`4`), rate-limit (`5`) and plan refusal (`6`). Supports `--json`; with no `--target`, the saved default project is used when it matches the workspace.
 - `pr-scan [--auto] [--repo <owner/repo>] [--mode <mode>] [--wait|--watch] [--timeout <s>]` — shortcut for `scan --goal CHECK_PR --mode QUICK`; supports the same wait flags
 - `status [scanId] [--operation <operationId>] [--watch|--wait] [--timeout <s>] [--poll-interval <s>]` — list scans or inspect one scan. `--watch` follows a scan to its terminal state; `--operation <id> --watch` waits on a durable submission operation and follows the recorded scan reference it produced, within the same timeout budget.
 - `cancel <scanId> [--idempotency-key <key>]` — request cancellation of a queued or running scan. If the scan is already terminal or finalizing (HTTP 409), the command re-reads and reports the true status: exit `0` when already `CANCELLED`, exit `1` otherwise.
+
 - `targets [--name ... --type ... --url ... --repo ...]` — list or create targets
 - `targets remove <targetId>` — soft-delete a target; its history is retained, it is hidden from readers and the plan cap slot is freed
 - `targets verify-domain <targetId> [--issue|--check]` — show domain-control status for a WEB_APP/API target in the configured workspace. `--issue` returns the DNS TXT host, value, and challenge expiry; publish that record, then use `--check`. Issuing replaces the previous token and verified status. The TXT value is returned only on issue; save it before exiting. All proof operations require target validation permission. Supports `--json`; invalid targets, permission failures, missing/expired proofs, and failed DNS checks exit nonzero. DNS control does not establish application security.
-- `readiness [--target <targetId>]` — get the launch-readiness gate result (`READY`, `NOT_READY` or `INSUFFICIENT_EVIDENCE`)
+- `readiness [--target <targetId>]` — workspace launch-readiness report: every gate target's state (`READY`, `NOT_READY` or `INSUFFICIENT_EVIDENCE`), findings rollup and optional release-identity check. For the enforceable single-target release gate use `gate --verdict --target <id>` (below).
 
 ### Scan mode guide
 
@@ -95,7 +97,7 @@ Deeper modes consume more compute and take longer. Choose the least intensive mo
 
 - `check-diff [--staged] [--base <ref>] [--head <ref>] [--sarif <file>]` — fast advisory diff check for obvious risky patterns; not a substitute for a full recorded scan
 - `gate [--fail-on HIGH|MEDIUM|LOW] [--staged] [--base <ref>] [--head <ref>] [--sarif <file>] [--target <targetId>]` — combine local diff patterns with that target's open findings and fail at the chosen severity threshold. Without `--target` (or a saved default project from `project use`), only the local diff checks gate the PR — never the whole workspace's findings.
-- `gate --verdict [--target <id>]` — return the launch-gate verdict for the target instead of the diff-severity gate, with exit code `0` (READY), `1` (NOT_READY), or `2` (insufficient evidence or error — fails closed).
+- `gate --verdict [--target <id>]` — return the target's versioned release-gate state instead of the diff-severity gate, with exit code `0` (READY), `1` (NOT_READY), or `2` (insufficient evidence or error — fails closed). This is the single-target gate, distinct from the workspace-wide `readiness` report above.
 
 The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes only. It rejects `DEEP` with directions to the hosted app, MCP server, or REST API instead of silently reducing coverage.
 
@@ -109,7 +111,7 @@ The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes on
 ## Exit codes
 
 - `0` — success
-- `1` — command failed, or `gate` found findings at/above the threshold; `gate --verdict` returns NOT_READY; `cancel` returns it when the scan is already terminal or finalizing (the true status is reported)
+- `1` — command failed, or `gate` found findings at/above the threshold; `gate --verdict` returns NOT_READY; `cancel` returns it when the scan is already terminal or finalizing (the true status is reported); `preflight` returns it when the eligibility read succeeds but the scan would be denied (`allowed:false`)
 - `2` — usage or validation error; `gate --verdict` returns it on insufficient evidence or any error (fail-closed)
 - `3` — authentication or authorization error (HTTP 401/403)
 - `4` — network or other API error
@@ -128,9 +130,12 @@ The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes on
 
 ## Environment
 
-- `LYRASHIELD_API_KEY` — required; the workspace API key (`lsk_...`)
+- `LYRASHIELD_API_KEY` — optional workspace API key (`lsk_...`); the CI/headless path. Not needed after `lyrashield login --oauth` (or `lyrashield login`) stores a credential in `~/.lyrashield/credentials.json` — either works.
+- `LYRASHIELD_OAUTH_ACCESS_TOKEN` — optional OAuth bearer alternative to an API key.
 - `LYRASHIELD_API_URL` — optional; defaults to `https://app.lyrashieldai.com`
 - `NO_COLOR=1` — optional; disables colored terminal output
+
+Environment credentials take precedence over the stored credentials file. With no environment credential, the CLI uses the stored OAuth/API-key credential; an explicit `LYRASHIELD_API_URL` override binds stored credentials only to a matching origin (see `lyrashield doctor` to diagnose resolution).
 
 ### Importing SARIF
 

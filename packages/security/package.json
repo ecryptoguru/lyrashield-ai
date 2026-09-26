@@ -20,6 +20,11 @@
       "import": "./src/domain-proof.ts",
       "default": "./src/domain-proof.ts"
     },
+    "./diff-advisory": {
+      "types": "./src/diff-advisory.ts",
+      "import": "./src/diff-advisory.ts",
+      "default": "./src/diff-advisory.ts"
+    },
     "./webmcp": {
       "types": "./src/webmcp/index.ts",
       "import": "./src/webmcp/index.ts",

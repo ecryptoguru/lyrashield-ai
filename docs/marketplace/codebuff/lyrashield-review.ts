@@ -27,6 +27,7 @@ const definition: AgentDefinition = {
     "lyrashield/lyrashield_list_targets",
     "lyrashield/lyrashield_get_scan_status",
     "lyrashield/lyrashield_get_scan_quality",
+    "lyrashield/lyrashield_get_scan_eligibility",
     "lyrashield/lyrashield_check_diff",
     "lyrashield/lyrashield_explain_finding",
     "lyrashield/lyrashield_generate_fix_plan",

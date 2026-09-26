@@ -196,7 +196,7 @@ runs:
         while IFS= read -r -d '' file; do
           [ -f "$file" ] || continue
           ADDED="$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" -- "$file" | grep -v '^+++' | sed -n 's/^+//p' || true)"
-          if grep -qiE '(password|secret|api_key|apikey|token)[[:space:]]*[=:][[:space:]]*["'"'"'][^"'"'"']{8,}["'"'"']' <<< "$ADDED"; then
+          if grep -qiE '(password|passwd|secret|api[_-]?key|token|bearer)[[:space:]]*[=:][[:space:]]*["'"'"'][^"'"'"']{8,}["'"'"']' <<< "$ADDED"; then
             add_result "hardcoded-secret" "warning" "Potential hardcoded secret in $file" "$file"; ISSUES=1; ISSUES_SEVERITY=$(bump_severity "$ISSUES_SEVERITY" "MEDIUM")
           fi
           if grep -qiE '(SELECT|INSERT|UPDATE|DELETE).*\+.*\$\{' <<< "$ADDED"; then

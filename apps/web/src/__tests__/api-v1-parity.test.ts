@@ -27,6 +27,12 @@ describe("/api/v1 parity", () => {
     expect(v1.POST).toBe(twin.POST)
   })
 
+  it("scans/eligibility (GET)", async () => {
+    const v1 = await import("../app/api/v1/scans/eligibility/route")
+    const twin = await import("../app/api/scans/eligibility/route")
+    expect(v1.GET).toBe(twin.GET)
+  })
+
   it("scans/[id] (GET, POST)", async () => {
     const v1 = await import("../app/api/v1/scans/[id]/route")
     const twin = await import("../app/api/scans/[id]/route")
