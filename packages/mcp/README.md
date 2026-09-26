@@ -26,7 +26,6 @@ See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior a
 
 Every API-backed tool calls the LyraShield REST API with a workspace API key or OAuth bearer; the local-only `lyrashield_check_diff` tool heuristically checks a caller-supplied `diff` string argument and needs neither. New write-scoped OAuth consent has one Connect action authorizing the displayed workflows for the workspace, including current and future targets and supported scan profiles. Matching hosted calls run without another LyraShield review and require an idempotency key. Read-only requests remain read-only; existing restricted connections are never silently expanded.
 
-
 | Tool                                  | Kind  | What it does                                                                                                      |
 | ------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------- |
 | `lyrashield_list_workspaces`          | read  | List workspaces this key can access                                                                               |
@@ -46,7 +45,6 @@ Every API-backed tool calls the LyraShield REST API with a workspace API key or 
 | `lyrashield_record_fix_proposal`      | write | Record a fix proposal on a finding                                                                                |
 | `lyrashield_verify_fix`               | write | Queue a retest to verify a fix                                                                                    |
 | `lyrashield_create_report`            | write | Generate a shareable report                                                                                       |
-
 
 > > `lyrashield_check_diff` is a lightweight local heuristic (obvious hardcoded secrets, `eval`, unsafe HTML, SQL concatenation, plus structural WebMCP checks when you pass optional `files: [{path, content}]` snapshots) meant as a pre-PR pre-filter. It is **not** a scanner — run `lyrashield_run_pr_scan` for a bounded repository scan with findings, coverage receipts, evidence states and explicit limitations. Its `coverage` field states exactly what was analyzed: only the supplied inputs, never the whole repository. Results are not automatically independently verified or exploit-validated.
 >
