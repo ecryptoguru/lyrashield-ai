@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMCP runtime fixture: human confirmation</title>
+  </head>
+  <body>
+    <h1>Human-confirmation fixture</h1>
+    <p>
+      Registers a tool documented as requiring explicit human confirmation before execution. The
+      runtime checker treats documentation as a claim, not enforcement: passive mode must never
+      execute it, and active mode may run it only when the operator explicitly allowlists the tool
+      name.
+    </p>
+    <script src="./instrument.js"></script>
+    <script>
+      window.__webmcpFixture.humanConfirm.push("fixture_delete_draft")
+
+      registerFixtureTool(
+        {
+          name: "fixture_delete_draft",
+          title: "Delete draft",
+          description:
+            "Deletes the local draft record. Requires explicit human confirmation before execution.",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              draftId: { type: "string", maxLength: 64, description: "Draft id" },
+            },
+            required: ["draftId"],
+          },
+          annotations: { readOnlyHint: false },
+          execute: async ({ draftId }) => {
+            if (typeof draftId !== "string" || draftId.length > 64) {
+              throw new Error("invalid draftId")
+            }
+            // Synthetic only: marks the draft deleted in-page, nothing else.
+            return { deleted: `synthetic-draft:${draftId}` }
+          },
+        },
+        { exposedTo: ["self"] }
+      )
+    </script>
+  </body>
+</html>
