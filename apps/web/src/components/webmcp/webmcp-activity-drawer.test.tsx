@@ -26,6 +26,8 @@ function Consumer() {
     durableMutation: false,
     humanConfirmationRequired: false,
     summary: "Test completed",
+    references: { scanId: "scan-1" },
+    href: "/dashboard/scans/scan-1",
   })
   return <div data-testid="consumer">consumer</div>
 }
@@ -40,6 +42,17 @@ describe("WebMcpActivityDrawer", () => {
     expect(html).toContain("Agent activity")
     expect(html).toContain("test_tool")
     expect(html).toContain("Done")
+  })
+
+  it("renders the receipt recovery link only for sanitized in-dashboard hrefs", () => {
+    // The expanded panel only mounts on interaction, so the link markup lives
+    // in source: it is conditional on `receipt.href`, which only ever holds a
+    // sanitized `/dashboard/...` path (see safeDashboardHref).
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const src = readFileSync(new URL("./webmcp-activity-drawer.tsx", import.meta.url), "utf8")
+    expect(src).toContain("receipt.href")
+    expect(src).toContain("href={receipt.href}")
+    expect(src).toContain("Open in dashboard")
   })
 
   it("stacks above the Myra Help launcher instead of sharing its band", () => {

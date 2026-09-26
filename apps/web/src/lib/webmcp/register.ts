@@ -16,6 +16,8 @@ import {
 import {
   createWebMcpReceiptStore,
   redactToolInputs,
+  safeDashboardHref,
+  sanitizeReceiptReferences,
   type WebMcpActivityReceipt,
   type WebMcpClassification,
   type WebMcpDataClass,
@@ -38,7 +40,7 @@ export interface WebMcpToolDefinition<TInput extends Record<string, unknown>> {
   handler: (input: TInput, options: { signal: AbortSignal }) => Promise<unknown>
 }
 
-interface WebMcpToolOptions<
+export interface WebMcpToolOptions<
   TInput extends Record<string, unknown>,
 > extends WebMcpToolDefinition<TInput> {
   receiptStore: WebMcpReceiptStore
@@ -50,10 +52,28 @@ interface WebMcpToolOptions<
   /** True only for tools that persist a server-side action (W3-07). */
   durableMutation?: boolean
   /** Keys that must never be accepted from the agent (e.g. workspaceId). */
-  forbiddenInputKeys?: string[]
+  forbiddenInputKeys?: readonly string[]
   /** Extra keys to remove from receipt inputs for privacy. */
-  sensitiveInputKeys?: string[]
+  sensitiveInputKeys?: readonly string[]
+  /**
+   * Optional projection of a successful result into receipt recovery fields:
+   * safe operation references (scan/operation/request ids) and an in-app
+   * `href`. Everything is sanitized — only `/dashboard/...` paths and
+   * non-sensitive string references survive.
+   */
+  receiptProjection?: (
+    result: unknown,
+    input: TInput
+  ) => { references?: Record<string, unknown>; href?: unknown } | null
 }
+
+/** A page tool's full registration options except the receipt store —
+ * the shape page-tool factories return and the hooks complete with their
+ * session store before registration. */
+export type WebMcpPageTool<TInput extends Record<string, unknown>> = Omit<
+  WebMcpToolOptions<TInput>,
+  "receiptStore"
+>
 
 /**
  * Register a page-scoped WebMCP tool with the browser's native `document.modelContext`.
@@ -81,6 +101,7 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
   humanConfirmationRequired,
   durableMutation = false,
   forbiddenInputKeys = [],
+  receiptProjection,
 }: WebMcpToolOptions<TInput>): () => void {
   const boundedName = enforceToolName(name)
   const boundedTitle = enforceToolTitle(title)
@@ -208,11 +229,25 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
           ? `${boundedName} completed`
           : `${boundedName} completed with an agent-visible issue`
 
-        receiptStore.update(receipt.id, {
+        const receiptPatch: Partial<WebMcpActivityReceipt> = {
           status: "completed",
           endedAt: new Date().toISOString(),
           summary,
-        })
+        }
+        try {
+          // Receipt extras are best-effort: a buggy projection must never
+          // fail the tool result itself.
+          const projection = receiptProjection?.(result, input)
+          if (projection) {
+            const references = sanitizeReceiptReferences(projection.references)
+            const href = safeDashboardHref(projection.href)
+            if (references) receiptPatch.references = references
+            if (href) receiptPatch.href = href
+          }
+        } catch {
+          // Intentionally ignored — see above.
+        }
+        receiptStore.update(receipt.id, receiptPatch)
 
         return boundOutputValue(output, WEBMCP_BUDGETS.output) as typeof output
       } catch (err) {
@@ -220,18 +255,26 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
           executionController.signal.aborted ||
           (err instanceof Error && err.name === "AbortError")
         ) {
+          // The tool *call* was cancelled — that part is true. For a durable
+          // mutation the underlying action may already have been accepted, so
+          // both the receipt summary and the agent-facing error must report an
+          // uncertain outcome ("poll status"), never a false claim that the
+          // action itself was cancelled.
           receiptStore.update(receipt.id, {
             status: "cancelled",
             endedAt: new Date().toISOString(),
-            summary: `${boundedName} cancelled`,
+            summary: durableMutation
+              ? `${boundedName} cancelled — outcome uncertain; the action may still be running`
+              : `${boundedName} cancelled`,
           })
           return boundOutputValue(
             {
               ...wrapToolCancellation(),
               ...(durableMutation
                 ? {
+                    uncertain: true,
                     error:
-                      "Stopped waiting. The server may already have accepted this action. Reuse the same request ID to inspect its outcome; do not start another action.",
+                      "Stopped waiting — outcome uncertain. The server may already have accepted this action and it may still be running. Poll its status or open it in the dashboard before retrying; do not start the same action twice.",
                   }
                 : {}),
             },

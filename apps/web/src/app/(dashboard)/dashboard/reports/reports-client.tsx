@@ -24,6 +24,7 @@ import {
   type ReportScanOption,
   type ReportType,
 } from "./reports-views"
+import { useReportsWebMcp } from "./reports-webmcp"
 
 export function ReportsClient({
   workspaceId,
@@ -65,6 +66,10 @@ export function ReportsClient({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, setState runs in promise callback
     void loadReports()
   }, [loadReports])
+
+  // Page-scoped agent read: `review_scan_report` resolves report ids against
+  // the page's own visible list; the workspace is bound at registration.
+  useReportsWebMcp({ workspaceId, reports })
 
   const [showCreateForm, setShowCreateForm] = useState(Boolean(initialScanId))
   const [reportTitle, setReportTitle] = useState("")
