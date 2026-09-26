@@ -1,11 +1,8 @@
 # Changelog
 
-## Unreleased
-
-- Pin MCP 0.2.10 so published clients can install the scan lifecycle, diff, attachment and fix-PR workflows added after MCP 0.2.9 was published.
-
 ## 0.1.29
 
+- Pin MCP 0.2.10 so published clients can install the scan lifecycle, diff, attachment and fix-PR workflows added after MCP 0.2.9 was published.
 - Verify the exact published MCP package and Zed build before a marketplace release.
 - Restrict Codebuff to read-only tools and enforce the installed plugin, versions and secret scans.
 - Complete local-client setup and recovery guidance.
