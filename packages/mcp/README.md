@@ -2,7 +2,7 @@
 
 The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an AI coding tool run bounded security scans, read findings with their recorded evidence states and drive the fix → verify loop against your LyraShield workspace — without leaving the editor.
 
-Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0). The server is also distributed as a portable Agent Plugin via [`@lyrashield/agent-plugin`](../agent-plugin/README.md) (Agent Plugins v1.0.0).
+Built on the official `@modelcontextprotocol/server` SDK. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0). The server is also distributed as a portable Agent Plugin via [`@lyrashield/agent-plugin`](../agent-plugin/README.md) (Agent Plugins v1.0.0).
 
 Use hosted OAuth when the client supports remote MCP authorization. For local stdio clients,
 run `lyrashield login --oauth` once and reuse the user-only credential store. Workspace API keys
@@ -10,28 +10,30 @@ are the explicit CI/headless fallback, not the default interactive setup.
 
 ## Protocol compatibility
 
-This release uses `@modelcontextprotocol/sdk` 1.30.0. Its latest stable protocol is `2025-11-25`; it also negotiates `2025-06-18`, `2025-03-26`, `2024-11-05` and `2024-10-07` for older clients.
+This source uses `@modelcontextprotocol/server` 2.1.0. It serves `2026-07-28` and negotiates `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05` and `2024-10-07` for older clients. The two newest versions have executable client exchange tests; the other legacy versions remain SDK-supported but lack separate LyraShield client-runtime receipts.
 
 - Server identity includes a title, description, website, version and usage instructions.
 - Every tool publishes an input schema, output schema, title, safety annotations and structured content.
-- Tool calls currently publish `execution.taskSupport: "forbidden"`. A returned LyraShield scan ID is a durable product job that clients poll with `lyrashield_get_scan_status`; it is not an MCP protocol task.
+- Tool calls retain `execution.taskSupport: "forbidden"` as a compatibility hint and the server advertises no MCP Tasks extension. A returned LyraShield scan ID is a durable product job that clients poll with `lyrashield_get_scan_status`; it is not an MCP protocol task.
 - Hosted responses use `Cache-Control: no-store` and vary on authorization and MCP protocol version. The server does not advertise unsupported MCP list-cache metadata.
 - Call arguments are validated against each tool's advertised `inputSchema` before execution; violations return a structured `Invalid tool arguments` error naming the offending fields.
 - Tool results are capped at 256 KiB serialized (`MCP_RESULT_MAX_BYTES`). Oversized text content and `structuredContent` are truncated with an explicit `[… truncated]` marker / `truncated: true` flag so a partial result is never mistaken for a complete one.
-- The hosted transport remains stateless and fail-closed. It does not advertise durable MCP Tasks because an in-memory task store would make serverless polling, cancellation and replay unreliable.
+- The hosted transport remains stateless and fail-closed. Modern MCP Tasks are not advertised until the official SDK supplies a compatible receiver and LyraShield binds task results to durable operations.
 
-See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior and unsupported draft gaps. Tool annotations are client hints only; the server always enforces prompt-injection checks and the connection's server-side authorization independently.
+See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior and unsupported extension gaps. Tool annotations are client hints only; the server always enforces prompt-injection checks and the connection's server-side authorization independently.
 
 ## What it can do
 
-Every API-backed tool calls the LyraShield REST API with a workspace API key or OAuth bearer; the local-only `lyrashield_check_diff` tool inspects the working tree directly and needs neither. New write-scoped OAuth consent has one Connect action authorizing the displayed workflows for the workspace, including current and future targets and supported scan profiles. Matching hosted calls run without another LyraShield review and require an idempotency key. Read-only requests remain read-only; existing restricted connections are never silently expanded.
+Every API-backed tool calls the LyraShield REST API with a workspace API key or OAuth bearer; `lyrashield_check_diff` analyzes only the diff and optional source snapshots the caller supplies, and needs neither credential nor repository access. New write-scoped OAuth consent authorizes the displayed workflows for the workspace, including current and future targets and supported scan profiles. Cancellation and workspace attachment access are separate, unchecked opt-ins. A read-only OAuth connection can opt into attachment metadata listing without gaining upload, deletion or scan permission. Matching hosted mutations run without another LyraShield review and require an idempotency key. Existing restricted connections are never silently expanded.
 
 | Tool                                  | Kind  | What it does                                                                                            |
 | ------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------- |
 | `lyrashield_list_workspaces`          | read  | List workspaces this key can access                                                                     |
 | `lyrashield_list_targets`             | read  | List targets (repos/apps/APIs) in a workspace                                                           |
 | `lyrashield_get_scan_status`          | read  | Status, timing and events for a scan                                                                    |
+| `lyrashield_get_scan_eligibility`     | read  | Advisory scan eligibility; submission still rechecks policy                                             |
 | `lyrashield_get_scan_quality`         | read  | Evidence-quality surface for a scan: verification tiers, coverage receipts and labeled heuristics       |
+| `lyrashield_list_scan_attachments`    | read  | List workspace attachment metadata with explicit attachment permission                                  |
 | `lyrashield_get_findings`             | read  | Paginated findings (default 50, max 100), filterable by target, scan, status, severity and verification |
 | `lyrashield_explain_finding`          | read  | Full detail + plain-language explanation of a finding                                                   |
 | `lyrashield_generate_fix_plan`        | read  | Assemble a remediation plan from a finding                                                              |
@@ -39,10 +41,14 @@ Every API-backed tool calls the LyraShield REST API with a workspace API key or 
 | `lyrashield_create_pr_security_recap` | read  | Markdown recap for a PR comment                                                                         |
 | `lyrashield_check_diff`               | read  | Fast **advisory** heuristic pre-filter on a diff (not a scan)                                           |
 | `lyrashield_scan_target`              | write | Start a scan on a target                                                                                |
+| `lyrashield_cancel_scan`              | write | Explicitly cancel a scan under a separate cancellation grant                                            |
+| `lyrashield_upload_scan_attachment`   | write | Upload bounded UTF-8 supporting text with a separate workspace attachment grant                         |
+| `lyrashield_delete_scan_attachment`   | write | Delete a workspace attachment under a separate grant                                                    |
 | `lyrashield_run_pr_scan`              | write | Start a PR-focused (CHECK_PR) scan                                                                      |
 | `lyrashield_record_fix_proposal`      | write | Record a fix proposal on a finding                                                                      |
 | `lyrashield_verify_fix`               | write | Queue a retest to verify a fix                                                                          |
 | `lyrashield_create_report`            | write | Generate a shareable report                                                                             |
+| `lyrashield_request_fix_pr`           | write | Request a server-generated, approval-bound fix PR from a stored proposal                                |
 
 > `lyrashield_check_diff` is a lightweight local heuristic (obvious hardcoded secrets, `eval`, unsafe HTML, SQL concatenation) meant as a pre-PR pre-filter. It is **not** a scanner — run `lyrashield_run_pr_scan` for a bounded repository scan with findings, coverage receipts, evidence states and explicit limitations. Results are not automatically independently verified or exploit-validated.
 >
@@ -190,7 +196,7 @@ Coding-agent hosts may impose their own tool permission dialogs. LyraShield cann
 
 ## Compatibility receipts
 
-- Package: `@lyrashield/mcp` 0.2.9; runtime: Node.js 24 or newer.
+- Package: `@lyrashield/mcp` 0.2.10; runtime: Node.js 24 or newer.
 - SDK lock: `@modelcontextprotocol/sdk` 1.30.0; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
 - `pnpm --filter @lyrashield/mcp test` covers protocol negotiation, stdio/HTTP transport,

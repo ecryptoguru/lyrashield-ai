@@ -1,14 +1,14 @@
 import { createReadStream } from "node:fs"
 import { createInterface as createPrompt } from "node:readline/promises"
-import { Server } from "@modelcontextprotocol/sdk/server/index.js"
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+import { Server } from "@modelcontextprotocol/server"
+import type { ListToolsResult } from "@modelcontextprotocol/server"
 import { McpServer } from "./server"
 import type { ApprovalDecision, ApprovalGate, McpServerOptions } from "./server"
 import { logger } from "@lyrashield/logger"
 
 export const SERVER_NAME = "lyrashield-mcp"
 export const SERVER_TITLE = "LyraShield AI"
-export const SERVER_VERSION = "0.2.9"
+export const SERVER_VERSION = "0.2.10"
 export const SERVER_DESCRIPTION =
   "Bounded security scans, recorded evidence states, fix proposals, retests and launch-readiness review."
 export const SERVER_WEBSITE_URL = "https://lyrashieldai.com"
@@ -173,7 +173,7 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
     ...(options.toolContext ? { toolContext: options.toolContext } : {}),
   })
 
-  server.setRequestHandler(ListToolsRequestSchema, () => ({
+  server.setRequestHandler("tools/list", () => ({
     tools: engine.listTools({
       // The remote endpoint no longer queues approvals: callers without a
       // delegated connection get connect_required, so approvalId is never a
@@ -185,10 +185,10 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
         !!options.delegatedAuthorization &&
         !!options.remoteApprovalGate &&
         !!options.remoteApprovalContext,
-    }),
+    }) as unknown as ListToolsResult["tools"],
   }))
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler("tools/call", async (request) => {
     const { name, arguments: args } = request.params
     const result = await engine.callTool(name, (args ?? {}) as Record<string, unknown>)
     return {

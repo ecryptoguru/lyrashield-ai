@@ -37,6 +37,7 @@ import { track } from "@/lib/analytics"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import { scanRecoveryHref } from "../scans-client.utils"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
+import { useScanProgressWebMcp } from "./scan-progress-webmcp"
 import type { CleanResultScorecard, FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
 import {
   EVENT_LEVEL_COLOR,
@@ -66,6 +67,7 @@ export function ScanDetailClient({
 }) {
   const router = useRouter()
   const [scan, setScan] = useState<ScanData>(initialScan)
+  useScanProgressWebMcp(initialScan.id, initialScan.workspaceId)
   const [currentFindings, setCurrentFindings] = useState<FindingItem[]>(findings)
   const [expandedEvents, setExpandedEvents] = useState(false)
   const [expandedFindings, setExpandedFindings] = useState<Set<string>>(new Set())

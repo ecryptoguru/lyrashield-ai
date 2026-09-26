@@ -3,11 +3,17 @@ import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import {
   LyraShieldClient,
+  deleteScanAttachment,
+  listScanAttachments,
+  getScanEligibility,
+  requestFixPr,
+  uploadScanAttachment,
   OperationStatusSchema,
   parseRepoIdentifier,
   type ParsedRepo,
 } from "@lyrashield/sdk"
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js"
+import { analyzeDiffAdvisory } from "@lyrashield/security/diff-advisory"
 
 const execFileAsync = promisify(execFile)
 
@@ -20,6 +26,46 @@ export type McpToolResult = {
 export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   lyrashield_scan_target: {
     title: "Run a LyraShield scan",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+  lyrashield_cancel_scan: {
+    title: "Cancel a LyraShield scan",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  lyrashield_list_scan_attachments: {
+    title: "List scan attachments",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  lyrashield_get_scan_eligibility: {
+    title: "Check scan eligibility",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  lyrashield_upload_scan_attachment: {
+    title: "Upload scan attachment",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  lyrashield_delete_scan_attachment: {
+    title: "Delete scan attachment",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  lyrashield_request_fix_pr: {
+    title: "Request a fix pull request",
     readOnlyHint: false,
     destructiveHint: false,
     idempotentHint: false,
@@ -134,6 +180,7 @@ export interface McpTool {
     type: "object"
     properties: Record<string, unknown>
     required?: string[]
+    additionalProperties?: boolean
   }
   handler: (args: Record<string, unknown>) => Promise<McpToolResult>
 }
@@ -450,6 +497,225 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
   }
 }
 
+export function createCancelScanTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_cancel_scan",
+    mutating: true,
+    description:
+      "Explicitly cancel an owned scan. Stopping a status poll does not cancel work. Hosted calls require a separate scan.cancel grant and stable idempotency key; a terminal or finalizing scan returns a conflict.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", minLength: 1, maxLength: 128 },
+        scanId: { type: "string", minLength: 1, maxLength: 128 },
+      },
+      required: ["workspaceId", "scanId"],
+    },
+    handler: async (args) => {
+      try {
+        const key = args.idempotencyKey
+        const scan = await getClient(context).request(
+          "POST",
+          `/scans/${encodeURIComponent(args.scanId as string)}`,
+          {
+            body: { workspaceId: args.workspaceId },
+            ...(typeof key === "string"
+              ? {
+                  headers: {
+                    "Idempotency-Key": `mcp:${createHash("sha256").update(key).digest("hex")}`,
+                  },
+                }
+              : {}),
+          }
+        )
+        return makeToolResult({ action: "scan_cancelled", scan })
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
+const MCP_ATTACHMENT_MAX_BYTES = 64 * 1024
+
+export function createListScanAttachmentsTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_list_scan_attachments",
+    mutating: false,
+    description:
+      "List workspace supporting scan attachment metadata. Content and storage paths are never returned. A connected client needs an explicit attachment.read grant.",
+    inputSchema: {
+      type: "object",
+      properties: { workspaceId: { type: "string", minLength: 1, maxLength: 128 } },
+      required: ["workspaceId"],
+    },
+    handler: async (args) => {
+      try {
+        const items = await listScanAttachments(getClient(context), args.workspaceId as string)
+        return makeToolResult({ items })
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
+export function createGetScanEligibilityTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_get_scan_eligibility",
+    mutating: false,
+    description:
+      "Advisory read-only scan preflight for a registered target and explicit goal/mode. It never reserves work or minutes; scan submission rechecks policy.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", minLength: 1, maxLength: 128 },
+        targetId: { type: "string", minLength: 1, maxLength: 128 },
+        goal: {
+          type: "string",
+          enum: [
+            "CHECK_PR",
+            "TEST_APP",
+            "LAUNCH_REVIEW",
+            "WEEKLY_MONITOR",
+            "FULL_PENTEST",
+            "COMPLIANCE_REVIEW",
+          ],
+        },
+        mode: { type: "string", enum: ["SAFE", "QUICK", "STANDARD", "DEEP", "CUSTOM"] },
+        ...WORKFLOW_INPUT_PROPERTIES,
+      },
+      required: ["workspaceId", "targetId", "goal", "mode"],
+    },
+    handler: async (args) => {
+      try {
+        const result = await getScanEligibility(getClient(context), {
+          workspaceId: args.workspaceId as string,
+          targetId: args.targetId as string,
+          goal: args.goal as string,
+          mode: args.mode as string,
+          ...workflowInputFields(args),
+        })
+        return makeToolResult(result)
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
+export function createUploadScanAttachmentTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_upload_scan_attachment",
+    mutating: true,
+    description:
+      "Upload an explicitly supplied UTF-8 text/Markdown/JSON/YAML supporting file (up to 64 KiB through MCP). No local paths, URLs, archives, or binary files. A connected client needs an explicit workspace-wide attachment.upload grant.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", minLength: 1, maxLength: 128 },
+        filename: { type: "string", minLength: 1, maxLength: 128 },
+        mediaType: { type: "string", minLength: 1, maxLength: 128 },
+        content: { type: "string", minLength: 1, maxLength: MCP_ATTACHMENT_MAX_BYTES },
+      },
+      required: ["workspaceId", "filename", "mediaType", "content"],
+    },
+    handler: async (args) => {
+      try {
+        if (typeof args.content !== "string") {
+          return makeErrorResult("Attachment content must be UTF-8 text.")
+        }
+        const content = new TextEncoder().encode(args.content as string)
+        if (content.byteLength > MCP_ATTACHMENT_MAX_BYTES) {
+          return makeErrorResult("Attachment exceeds the 64 KiB MCP upload limit; use the CLI.")
+        }
+        const key = args.idempotencyKey
+        const attachment = await uploadScanAttachment(getClient(context), {
+          workspaceId: args.workspaceId as string,
+          filename: args.filename as string,
+          mediaType: args.mediaType as string,
+          content,
+          ...(typeof key === "string"
+            ? { idempotencyKey: `mcp:${createHash("sha256").update(key).digest("hex")}` }
+            : {}),
+        })
+        return makeToolResult({ attachment })
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
+export function createDeleteScanAttachmentTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_delete_scan_attachment",
+    mutating: true,
+    description:
+      "Delete an owned workspace scan attachment by ID. A connected client needs an explicit workspace-wide attachment.delete grant.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", minLength: 1, maxLength: 128 },
+        attachmentId: { type: "string", minLength: 1, maxLength: 128 },
+      },
+      required: ["workspaceId", "attachmentId"],
+    },
+    handler: async (args) => {
+      try {
+        const key = args.idempotencyKey
+        const result = await deleteScanAttachment(getClient(context), args.attachmentId as string, {
+          workspaceId: args.workspaceId as string,
+          ...(typeof key === "string"
+            ? { idempotencyKey: `mcp:${createHash("sha256").update(key).digest("hex")}` }
+            : {}),
+        })
+        return makeToolResult(result)
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
+export function createRequestFixPrTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_request_fix_pr",
+    mutating: true,
+    description:
+      "Request a pull request from a stored, server-generated fix proposal. Only a proposal ID is accepted; the server binds target, patch and base revision. A pending approval is not an opened PR.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", minLength: 1, maxLength: 128 },
+        proposalId: { type: "string", minLength: 1, maxLength: 128 },
+      },
+      required: ["workspaceId", "proposalId"],
+    },
+    handler: async (args) => {
+      try {
+        if (
+          Object.keys(args).some(
+            (key) => !["workspaceId", "proposalId", "idempotencyKey", "approvalId"].includes(key)
+          )
+        ) {
+          return makeErrorResult("Only workspaceId and proposalId may define a fix PR request.")
+        }
+        const key = args.idempotencyKey
+        const result = await requestFixPr(getClient(context), args.proposalId as string, {
+          workspaceId: args.workspaceId as string,
+          ...(typeof key === "string"
+            ? { idempotencyKey: `mcp:${createHash("sha256").update(key).digest("hex")}` }
+            : {}),
+        })
+        return makeToolResult(result)
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
 export function createGetFindingsTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_get_findings",
@@ -707,35 +973,6 @@ export function createGetScanQualityTool(context: ToolHandlerContext): McpTool {
 // read-only helpers; a full recorded scan always runs server-side.
 // ---------------------------------------------------------------------------
 
-// High-signal, obviously-risky patterns for the local advisory diff check.
-// This is a fast heuristic pre-filter, NOT a scanner — real detection is the
-// full server-side scan. Kept deliberately small and honest.
-const DIFF_ADVISORY_PATTERNS: Array<{ id: string; label: string; re: RegExp }> = [
-  {
-    id: "hardcoded-secret",
-    label: "Possible hardcoded secret or API key",
-    re: /(?:api[_-]?key|secret|token|password|passwd|bearer)\s*[:=]\s*['"][^'"]{8,}['"]/i,
-  },
-  { id: "private-key", label: "Embedded private key", re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
-  {
-    id: "aws-key",
-    label: "Possible AWS access key id",
-    re: /AKIA[0-9A-Z]{16}/,
-  },
-  { id: "eval", label: "Use of eval()", re: /\beval\s*\(/ },
-  {
-    id: "dangerous-html",
-    label: "React dangerouslySetInnerHTML",
-    re: /dangerouslySetInnerHTML/,
-  },
-  {
-    id: "sql-concat",
-    label: "Possible SQL string concatenation",
-    re: /(?:SELECT|INSERT|UPDATE|DELETE)\b[^;]*?["'`]\s*\+\s*\w/i,
-  },
-  { id: "child-process", label: "Shell/child_process execution", re: /child_process|exec\s*\(/ },
-]
-
 /**
  * Creates the offline `lyrashield_check_diff` tool. The `context` parameter is
  * unused (no API call, no state change) but is kept for consistency with the
@@ -752,7 +989,19 @@ export function createCheckDiffTool(context: ToolHandlerContext): McpTool {
       properties: {
         diff: {
           type: "string",
-          description: "The unified diff or code snippet to check (added lines are most relevant).",
+          description:
+            "The unified diff or code snippet to check (added lines are most relevant). Max 1 MiB.",
+        },
+        files: {
+          type: "array",
+          description:
+            "Optional final source snapshots for WebMCP analysis; paths label supplied content only.",
+          maxItems: 500,
+          items: {
+            type: "object",
+            properties: { path: { type: "string" }, content: { type: "string" } },
+            required: ["path", "content"],
+          },
         },
       },
       required: ["diff"],
@@ -761,28 +1010,52 @@ export function createCheckDiffTool(context: ToolHandlerContext): McpTool {
       void context
       const diff = typeof args.diff === "string" ? args.diff : ""
       if (!diff.trim()) {
-        return makeToolResult({ advisory: [], note: "Empty diff — nothing to check." })
+        return makeToolResult({
+          advisory: [],
+          checked: 0,
+          coverage: { state: "INCOMPLETE", scope: "supplied-inputs", reasons: ["empty_diff"] },
+          note: "Empty diff — nothing to check.",
+        })
       }
-      const addedLines = diff
-        .split("\n")
-        .filter((l) => !l.startsWith("-") && !l.startsWith("@@"))
-        .map((l) => (l.startsWith("+") ? l.slice(1) : l))
-      const advisory: Array<{ id: string; label: string; line: string }> = []
-      for (const line of addedLines) {
-        for (const p of DIFF_ADVISORY_PATTERNS) {
-          if (p.re.test(line)) {
-            advisory.push({ id: p.id, label: p.label, line: line.trim().slice(0, 200) })
-          }
+      const files = args.files as Array<{ path: string; content: string }> | undefined
+      try {
+        const result = await analyzeDiffAdvisory({ diff, files })
+        const advisory = result.findings.map((finding) => ({
+          id:
+            finding.ruleId === "eval-exec" && /\beval\s*\(/.test(finding.sourceLine ?? "")
+              ? "eval"
+              : finding.ruleId,
+          label:
+            finding.ruleId === "hardcoded-secret"
+              ? "Possible hardcoded secret or API key"
+              : finding.ruleId === "eval-exec" && /\beval\s*\(/.test(finding.sourceLine ?? "")
+                ? "Use of eval()"
+                : finding.message,
+          line: finding.sourceLine ?? "",
+          ...(finding.file ? { file: finding.file } : {}),
+          ...(finding.line === undefined ? {} : { lineNumber: finding.line }),
+          severity: finding.severity,
+        }))
+        return makeToolResult({
+          advisory,
+          checked: result.checked,
+          coverage: result.coverage,
+          note:
+            result.coverage.state === "INCOMPLETE"
+              ? "Advisory coverage is incomplete. Run lyrashield_run_pr_scan for a recorded scan with coverage receipts."
+              : "Advisory findings are heuristic and may include false positives. Run lyrashield_run_pr_scan for a full recorded scan.",
+        })
+      } catch (error) {
+        return {
+          ...makeToolResult({
+            advisory: [],
+            checked: 0,
+            coverage: { state: "INCOMPLETE", scope: "supplied-inputs", reasons: ["invalid_input"] },
+            note: error instanceof Error ? error.message : "Invalid diff advisory input",
+          }),
+          isError: true,
         }
       }
-      return makeToolResult({
-        advisory,
-        checked: addedLines.length,
-        note:
-          advisory.length > 0
-            ? "Advisory findings are heuristic and may include false positives. Run lyrashield_run_pr_scan for a full recorded scan."
-            : "No high-signal patterns matched. This does not mean the diff is secure — run lyrashield_run_pr_scan for a full recorded scan.",
-      })
     },
   }
 }
@@ -1134,9 +1407,15 @@ export function createAllTools(context: ToolHandlerContext): McpTool[] {
     createListWorkspacesTool(context),
     createListTargetsTool(context),
     createGetScanStatusTool(context),
+    createGetScanEligibilityTool(context),
+    createListScanAttachmentsTool(context),
     createGetScanQualityTool(context),
     // Core
     createScanTargetTool(context),
+    createCancelScanTool(context),
+    createUploadScanAttachmentTool(context),
+    createDeleteScanAttachmentTool(context),
+    createRequestFixPrTool(context),
     createGetFindingsTool(context),
     createGetLaunchReadinessTool(context),
     createCreateReportTool(context),

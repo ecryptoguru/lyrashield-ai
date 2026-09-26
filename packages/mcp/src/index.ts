@@ -1,5 +1,11 @@
 export {
   createScanTargetTool,
+  createCancelScanTool,
+  createListScanAttachmentsTool,
+  createUploadScanAttachmentTool,
+  createDeleteScanAttachmentTool,
+  createGetScanEligibilityTool,
+  createRequestFixPrTool,
   createGetFindingsTool,
   createGetLaunchReadinessTool,
   createCreateReportTool,

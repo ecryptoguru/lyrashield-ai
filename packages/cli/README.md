@@ -1,4 +1,4 @@
-# LyraShield CLI 0.2.12
+# LyraShield CLI 0.2.13
 
 The `lyrashield` command-line interface installs, configures, and drives LyraShield scans from a terminal or CI pipeline.
 
@@ -59,6 +59,7 @@ The default project is stored in `~/.lyrashield/project.json` (mode `0o600`). On
   - With no target and no default project, pass `--auto` to detect the current git repo and create or reuse a target
   - Pass `--repo` as `owner/repo`, an HTTPS URL, or an SSH URL (e.g. `ecryptoguru/lyrashield-ai`, `https://github.com/ecryptoguru/lyrashield-ai.git`, `git@github.com:ecryptoguru/lyrashield-ai.git`)
 - `pr-scan [--auto] [--repo <owner/repo>] [--mode <mode>]` — shortcut for `scan --goal CHECK_PR --mode QUICK`
+- `preflight --target <targetId> [--goal <goal>] [--mode <mode>] [--workflow REVIEW_CHANGES --base <ref> --head <ref>] [--attachment <id>...]` — read-only advisory eligibility for an existing target. Exit `0` means currently allowed; exit `1` with the returned denial payload means currently blocked. A successful preflight reserves no minutes or worker capacity; `scan` rechecks at submission.
 - `status [scanId] [--watch]` — list scans or inspect one scan
 - `targets [--name ... --type ... --url ... --repo ...]` — list or create targets
 - `targets remove <targetId>` — soft-delete a target; its history is retained, it is hidden from readers and the plan cap slot is freed

@@ -14,9 +14,10 @@ describe("marketplace fixtures", () => {
     const names = agent.toolNames ?? []
     const mcpNames = names.filter((name) => name.startsWith("lyrashield/"))
     const tools = createAllTools({ apiBaseUrl: "", apiKey: "" })
-    expect(mcpNames).toHaveLength(tools.filter((tool) => !tool.mutating).length)
-    for (const tool of tools) {
-      expect(mcpNames.includes(`lyrashield/${tool.name}`)).toBe(!tool.mutating)
+    expect(mcpNames.length).toBeGreaterThan(0)
+    expect(new Set(mcpNames).size).toBe(mcpNames.length)
+    for (const name of mcpNames) {
+      expect(tools.find((tool) => `lyrashield/${tool.name}` === name)?.mutating).toBe(false)
     }
     expect(names).not.toContain("run_terminal_command")
   })
@@ -30,7 +31,7 @@ describe("marketplace fixtures", () => {
     const cline = JSON.parse(
       await readFile(path.join(marketplaceRoot, "cline", "submission.json"), "utf8")
     ) as Record<string, unknown>
-    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.29" })
+    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.30" })
     expect(gemini.mcpServers).toBeTruthy()
     expect(cline).toMatchObject({
       license: "Apache-2.0",

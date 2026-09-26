@@ -18,6 +18,7 @@ export interface WebMcpActivityReceipt {
   startedAt: string
   endedAt?: string
   summary: string
+  recoveryPath?: string
 }
 
 interface WebMcpReceiptStoreSnapshot {

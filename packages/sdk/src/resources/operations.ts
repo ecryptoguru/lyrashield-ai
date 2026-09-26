@@ -4,6 +4,7 @@ import type { LyraShieldClient } from "../client"
 /** Shared wire contract; clients render the server-owned recovery decision. */
 export const OperationStatusSchema = z.object({
   operationId: z.string().min(1),
+  operationName: z.string().min(1).optional(),
   status: z.enum(["PENDING", "EXECUTING", "COMPLETED", "FAILED", "CONFLICT"]),
   reasonCode: z.string().nullable(),
   resultLocation: z.string().nullable(),
@@ -16,10 +17,12 @@ export type OperationStatus = z.infer<typeof OperationStatusSchema>
 export function getOperationStatus(
   client: LyraShieldClient,
   id: string,
-  workspaceId = client.workspaceId
+  workspaceId = client.workspaceId,
+  signal?: AbortSignal
 ): Promise<OperationStatus> {
   const query = new URLSearchParams(workspaceId ? { workspaceId } : {})
   return client.request("GET", `/agent-operations/${encodeURIComponent(id)}?${query}`, {
+    signal,
     parse: (data) => OperationStatusSchema.parse(data),
   })
 }

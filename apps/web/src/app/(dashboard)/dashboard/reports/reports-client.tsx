@@ -8,6 +8,7 @@ import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import { track } from "@/lib/analytics"
+import { useReportsWebMcp } from "./reports-webmcp"
 import {
   reportScansPaginatedSchema,
   reportScanSchema,
@@ -35,6 +36,7 @@ export function ReportsClient({
   initialTargetId?: string
 }) {
   const [reports, setReports] = useState<ReportItem[]>([])
+  useReportsWebMcp(workspaceId, reports)
   const [loading, setLoading] = useState(true)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [shareUrl, setShareUrl] = useState<string | null>(null)

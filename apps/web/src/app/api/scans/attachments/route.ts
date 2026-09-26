@@ -9,8 +9,10 @@ import { deleteEncryptedArtifact, uploadEncryptedArtifact } from "@lyrashield/ev
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
+import { createHash } from "node:crypto"
 import { authErrorResponse } from "@/lib/api-auth"
 import { apiError, apiSuccess } from "@/lib/api-response"
+import { recordedOperation } from "@/lib/recorded-operation"
 import {
   SCAN_ATTACHMENT_MAX_BYTES,
   SCAN_ATTACHMENT_FILENAME_PATTERN,
@@ -89,7 +91,7 @@ async function post(request: Request) {
     }
 
     // Authenticate before reading the potentially large upload stream.
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scanAttachment.upload)
 
     const filename = filenameFromRequest(request)
     if (!SCAN_ATTACHMENT_FILENAME_PATTERN.test(filename)) {
@@ -115,50 +117,69 @@ async function post(request: Request) {
       )
     }
 
-    let stored: Awaited<ReturnType<typeof uploadEncryptedArtifact>> | null = null
-    try {
-      stored = await uploadEncryptedArtifact({
-        workspaceId,
-        ownerId: session.userId,
-        type: "scan-attachment",
-        namespace: "scan-attachments",
-        content,
-        contentType: mediaType,
-      })
-      const record = await createScanAttachmentRecord({
-        workspaceId,
-        filename,
-        mediaType,
-        byteLength: stored.byteLength,
-        checksum: stored.checksum,
-        storageUri: stored.storageUri,
-        encryptionKeyRef: stored.encryptionKeyRef,
-        createdById: session.userId,
-      })
-      await prisma.auditLog
-        .create({
-          data: {
-            workspaceId,
-            actorUserId: session.userId,
-            action: "scan.attachment_uploaded",
-            resourceType: "scan_attachment",
-            resourceId: record.id,
+    return privateResponse(
+      await recordedOperation(
+        request,
+        {
+          workspaceId,
+          operationName: "scan.attachment.upload",
+          input: {
+            filename,
+            mediaType,
+            checksum: createHash("sha256").update(content).digest("hex"),
           },
-        })
-        .catch((auditErr) =>
-          logger.warn("Failed to record attachment upload audit", {
-            error: auditErr instanceof Error ? auditErr.message : String(auditErr),
-          })
-        )
-      return privateResponse(apiSuccess(record, 201))
-    } catch (error) {
-      if (stored) {
-        await Promise.resolve(deleteEncryptedArtifact(stored.storageUri, workspaceId)).catch(() => {
-          logger.error("Failed to compensate attachment upload")
-        })
-      }
-      throw error
-    }
+          session,
+        },
+        async () => {
+          let stored: Awaited<ReturnType<typeof uploadEncryptedArtifact>> | null = null
+          try {
+            stored = await uploadEncryptedArtifact({
+              workspaceId,
+              ownerId: session.userId,
+              type: "scan-attachment",
+              namespace: "scan-attachments",
+              content,
+              contentType: mediaType,
+            })
+            const record = await createScanAttachmentRecord({
+              workspaceId,
+              filename,
+              mediaType,
+              byteLength: stored.byteLength,
+              checksum: stored.checksum,
+              storageUri: stored.storageUri,
+              encryptionKeyRef: stored.encryptionKeyRef,
+              createdById: session.userId,
+            })
+            await prisma.auditLog
+              .create({
+                data: {
+                  workspaceId,
+                  actorUserId: session.userId,
+                  action: "scan.attachment_uploaded",
+                  resourceType: "scan_attachment",
+                  resourceId: record.id,
+                },
+              })
+              .catch((auditErr) =>
+                logger.warn("Failed to record attachment upload audit", {
+                  error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+                })
+              )
+            return apiSuccess(record, 201)
+          } catch (error) {
+            if (stored) {
+              await Promise.resolve(deleteEncryptedArtifact(stored.storageUri, workspaceId)).catch(
+                () => {
+                  logger.error("Failed to compensate attachment upload")
+                }
+              )
+            }
+            throw error
+          }
+        }
+      )
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return privateResponse(authErr)
@@ -175,7 +196,7 @@ export async function GET(request: Request) {
     if (!workspaceId) {
       return privateResponse(apiError("MISSING_PARAM", "workspaceId is required", 400))
     }
-    await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    await requirePermission(workspaceId, PERMISSIONS.scanAttachment.read)
     const items = await listScanAttachments(workspaceId)
     return privateResponse(apiSuccess({ items }))
   } catch (error) {

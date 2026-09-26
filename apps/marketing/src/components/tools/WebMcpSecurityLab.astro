@@ -88,6 +88,7 @@ const copyButtonClass =
       <button id="webmcp-export-md" class={secondaryButtonClass} type="button">Export Markdown</button>
       <button id="webmcp-export-sarif" class={secondaryButtonClass} type="button">Export SARIF</button>
     </div>
+    <p class={`${mutedText} mt-4`}>Native-browser runtime checks are a separate, optional local test. Their receipt does not change static finding states. See the <a href="https://github.com/ecryptoguru/lyrashield-ai/blob/main/e2e/webmcp-runtime/README.md" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">runtime fixture guide</a>.</p>
     {/* Export payloads are long, unwrapped JSON/Markdown, so this scrolls
         horizontally on narrow viewports. tabindex="0" is what makes the scroll
         region reachable by keyboard (same treatment Astro/Shiki gives code

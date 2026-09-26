@@ -1,4 +1,6 @@
 export { WEBMCP_CONTROLS, WEBMCP_CONTROLS_BY_ID, WEBMCP_CONTROL_IDS } from "./controls"
+export { parseWebMcpRuntimeReceipt, webMcpRuntimeReceiptSchema } from "./runtime-receipt"
+export type { WebMcpRuntimeReceipt } from "./runtime-receipt"
 
 export {
   buildCanonicalInput,

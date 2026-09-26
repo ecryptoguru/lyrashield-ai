@@ -8,6 +8,7 @@ vi.mock("next/navigation", () => ({
 import { ScanDetailClient } from "./scan-detail-client"
 import type { FindingItem, ScanData } from "./scan-detail-types"
 import { getScanModeLabel } from "@/lib/enum-labels"
+import { WebMcpReceiptProvider } from "@/components/webmcp/webmcp-receipt-provider"
 
 const scan: ScanData = {
   id: "scan-1",
@@ -64,7 +65,11 @@ const finding: FindingItem = {
   createdAt: "2026-01-01T00:00:00.000Z",
 }
 
-const html = renderToString(<ScanDetailClient scan={scan} findings={[finding]} scorecard={null} />)
+const html = renderToString(
+  <WebMcpReceiptProvider>
+    <ScanDetailClient scan={scan} findings={[finding]} scorecard={null} />
+  </WebMcpReceiptProvider>
+)
 
 describe("scan detail badge labels", () => {
   it("humanises the coverage receipt status and control outcome badges", () => {
@@ -117,7 +122,9 @@ describe("scan detail — truthful scope and declared coverage", () => {
     },
   }
   const plannedHtml = renderToString(
-    <ScanDetailClient scan={plannedScan} findings={[]} scorecard={null} />
+    <WebMcpReceiptProvider>
+      <ScanDetailClient scan={plannedScan} findings={[]} scorecard={null} />
+    </WebMcpReceiptProvider>
   )
 
   it("renders the recorded workflow, depth, scope, limits, and attachments", () => {
@@ -153,16 +160,18 @@ describe("scan detail — truthful scope and declared coverage", () => {
 
   it("names an attachment verification failure instead of a generic crash", () => {
     const failedHtml = renderToString(
-      <ScanDetailClient
-        scan={{
-          ...scan,
-          status: "FAILED",
-          errorCategory: "SCAN_ATTACHMENT_UNAVAILABLE",
-          errorMessage: "A supporting file could not be verified",
-        }}
-        findings={[]}
-        scorecard={null}
-      />
+      <WebMcpReceiptProvider>
+        <ScanDetailClient
+          scan={{
+            ...scan,
+            status: "FAILED",
+            errorCategory: "SCAN_ATTACHMENT_UNAVAILABLE",
+            errorMessage: "A supporting file could not be verified",
+          }}
+          findings={[]}
+          scorecard={null}
+        />
+      </WebMcpReceiptProvider>
     )
     expect(failedHtml).toContain("Supporting file unavailable")
     expect(failedHtml).not.toContain("Clean")

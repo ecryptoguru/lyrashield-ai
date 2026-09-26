@@ -645,6 +645,30 @@ export function ScansClient({
         </div>
       </div>
 
+      <aside
+        className="text-muted-foreground mb-4 rounded-lg border p-3 text-sm"
+        aria-label="Agent scan actions"
+      >
+        <p>
+          A browser agent can prepare a scan for your confirmation or request a durable scan
+          directly. A requested scan may continue after you leave this page and may consume the
+          sponsoring account&apos;s allowance.
+        </p>
+        {selectedTargetDetails && selectedOption && (
+          <p className="mt-1" aria-live="polite">
+            Selected: {selectedTargetDetails.name} · {selectedOption.label}. Advisory eligibility:{" "}
+            {eligibility.status === "ready"
+              ? eligibility.eligibility.allowed
+                ? "available"
+                : (eligibility.eligibility.message ?? "unavailable")
+              : eligibility.status === "checking"
+                ? "checking"
+                : "not checked"}
+            .
+          </p>
+        )}
+      </aside>
+
       {error && (
         <div
           role="alert"

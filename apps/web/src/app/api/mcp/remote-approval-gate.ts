@@ -15,6 +15,9 @@ import { z } from "zod"
 
 const operationPermissions: Partial<Record<string, Permission>> = {
   "scan.create": PERMISSIONS.scan.create,
+  "scan.cancel": PERMISSIONS.scan.cancel,
+  "attachment.upload": PERMISSIONS.scanAttachment.upload,
+  "attachment.delete": PERMISSIONS.scanAttachment.delete,
   "report.create": PERMISSIONS.report.create,
   "fix_proposal.create": PERMISSIONS.fix.create,
   "retest.create": PERMISSIONS.retest.create,
@@ -87,6 +90,19 @@ async function resolveDelegatedScope(
     )
     return { targetId: finding.targetId ?? undefined, profile: scan?.mode }
   }
+  if (typeof args.proposalId === "string") {
+    const proposal = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.fixProposal.findFirst({
+        where: {
+          id: args.proposalId as string,
+          deletedAt: null,
+          finding: { workspaceId, deletedAt: null },
+        },
+        select: { finding: { select: { targetId: true } } },
+      })
+    )
+    return { targetId: proposal?.finding.targetId ?? undefined }
+  }
   if (typeof args.scanId === "string") {
     const scanId = args.scanId
     const scan = await withWorkspaceRLS(workspaceId, (tx) =>
@@ -128,6 +144,9 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
   return async (toolName, args) => {
     if (!scopes.includes("write") && !scopes.includes("lyrashield.write")) {
       return denied("This connection does not have write scope; mutating tools are refused.")
+    }
+    if (args.workspaceId !== workspaceId) {
+      return denied("Tool workspace does not match the authenticated connection.")
     }
 
     // Replay bypasses REST handlers, so recheck live membership and role before
@@ -235,13 +254,19 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
           return denied("Delegated tool execution failed")
         }
 
-        await completeAgentOperation(claim.operation.id, workspaceId, {
-          result: {
-            content: toolResult.content,
-            isError: toolResult.isError,
-            structuredContent: toolResult.structuredContent,
-          },
-        })
+        if (toolResult.isError) {
+          await failAgentOperation(claim.operation.id, workspaceId, {
+            error:
+              "Delegated tool returned an error; inspect its response and retry with a new key only after review.",
+          })
+        } else {
+          await completeAgentOperation(claim.operation.id, workspaceId, {
+            result: {
+              content: toolResult.content,
+              structuredContent: toolResult.structuredContent,
+            },
+          })
+        }
 
         return { approved: true, result: toolResult }
       }

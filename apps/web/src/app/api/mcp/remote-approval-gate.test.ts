@@ -85,6 +85,7 @@ describe("remote approval gate — connect-over-OAuth only", () => {
     const decision = await makeGate()("lyrashield_scan_target", {
       targetId: "t-1",
       approvalId: "ap-legacy",
+      workspaceId: "ws-1",
     })
 
     expect(decision.approved).toBe(false)

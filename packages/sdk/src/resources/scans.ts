@@ -40,6 +40,7 @@ export interface ScanInput {
 export interface GetScanOptions {
   workspaceId?: string
   etag?: string
+  signal?: AbortSignal
 }
 
 function buildScanParams(query: ScanQuery, client: LyraShieldClient): URLSearchParams {
@@ -93,10 +94,12 @@ export function getScan(
   if (opts?.etag) {
     return client.request("GET", path, {
       etag: opts.etag,
+      signal: opts.signal,
       parse: (data) => ScanSchema.parse(data),
     })
   }
   return client.request("GET", path, {
+    signal: opts?.signal,
     parse: (data) => ScanSchema.parse(data),
   })
 }

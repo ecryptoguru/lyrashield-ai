@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.30 (release candidate)
+
+- Pin the staged MCP 0.2.10 tool catalog and align generated client manifests.
+- Retain Codebuff's curated read-only tool list; new tools require separate client validation.
+
 ## 0.1.29
 
 - Verify the exact published MCP package and Zed build before a marketplace release.

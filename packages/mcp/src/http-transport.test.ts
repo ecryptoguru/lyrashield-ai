@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
-import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js"
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
+import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/server"
 import { handleRemoteMcpRequest } from "./http-transport"
+import { createAllTools } from "./tools"
 import type { ToolHandlerContext } from "./tools"
 
 vi.mock("@lyrashield/logger", () => ({
@@ -54,6 +56,21 @@ const INIT = {
 }
 
 describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
+  it("rejects an oversized hosted request before SDK parsing or tool execution", async () => {
+    const fetchFn = fetchStub()
+    const request = new Request("https://app.example.com/api/mcp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: "x".repeat(13 * 1024 * 1024 + 1),
+    })
+    const response = await handleRemoteMcpRequest(request, { toolContext: ctx(fetchFn) })
+    expect(response.status).toBe(413)
+    expect((await response.json()).error.message).toBe("MCP request body too large")
+    expect(fetchFn).not.toHaveBeenCalled()
+  }, 20_000)
   it("initializes and negotiates the protocol version", async () => {
     const res = await handleRemoteMcpRequest(mcpRequest(INIT), { toolContext: ctx(fetchStub()) })
     expect(res.status).toBe(200)
@@ -90,7 +107,7 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
 
   it("rejects unsupported protocol headers with the SDK-supported versions", async () => {
     const res = await handleRemoteMcpRequest(
-      mcpRequest({ jsonrpc: "2.0", id: 9, method: "tools/list", params: {} }, "2026-07-28"),
+      mcpRequest({ jsonrpc: "2.0", id: 9, method: "tools/list", params: {} }, "2024-01-01"),
       { toolContext: ctx(fetchStub()) }
     )
     const body = await readJson(res)
@@ -100,6 +117,48 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     expect((body.error as { message?: string })?.message).toContain(LATEST_PROTOCOL_VERSION)
   })
 
+  it("serves the 2026-07-28 discovery and tool exchange through the official client", async () => {
+    const fetchFn = fetchStub([{ id: "ws-1" }])
+    let modernCall: Request | undefined
+    const client = new Client(
+      { name: "protocol-test", version: "1" },
+      { versionNegotiation: { mode: { pin: "2026-07-28" } } }
+    )
+    const transport = new StreamableHTTPClientTransport(
+      new URL("https://app.example.com/api/mcp"),
+      {
+        fetch: (url, init) => {
+          const request = new Request(url, init)
+          if (request.headers.get("MCP-Method") === "tools/call") modernCall = request.clone()
+          return handleRemoteMcpRequest(request, { toolContext: ctx(fetchFn) })
+        },
+      }
+    )
+    try {
+      await client.connect(transport)
+      expect(client.getProtocolEra()).toBe("modern")
+      const tools = await client.listTools()
+      expect(tools.tools.map((tool) => tool.name)).toContain("lyrashield_list_workspaces")
+      const result = await client.callTool({ name: "lyrashield_list_workspaces", arguments: {} })
+      expect(result.isError).toBeFalsy()
+      expect(fetchFn).toHaveBeenCalledOnce()
+      const denied = await client.callTool({
+        name: "lyrashield_run_pr_scan",
+        arguments: { workspaceId: "ws-1", targetId: "t-1" },
+      })
+      expect(denied.isError).toBe(true)
+      expect(fetchFn).toHaveBeenCalledOnce()
+      expect(modernCall).toBeDefined()
+      const mismatched = modernCall!.clone()
+      mismatched.headers.set("MCP-Method", "tools/list")
+      const rejection = await handleRemoteMcpRequest(mismatched, { toolContext: ctx(fetchFn) })
+      expect(rejection.status).toBe(400)
+      expect(fetchFn).toHaveBeenCalledOnce()
+    } finally {
+      await client.close()
+    }
+  })
+
   it("lists all tools", async () => {
     const res = await handleRemoteMcpRequest(
       mcpRequest({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
@@ -107,7 +166,7 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     )
     const body = await readJson(res)
     const tools = (body.result as { tools?: Array<{ name: string }> })?.tools ?? []
-    expect(tools.length).toBe(15)
+    expect(tools.length).toBe(createAllTools(ctx(fetchStub())).length)
     expect(tools.map((t) => t.name)).toContain("lyrashield_run_pr_scan")
     expect(tools.map((t) => t.name)).toContain("lyrashield_get_scan_quality")
   })

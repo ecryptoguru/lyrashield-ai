@@ -1,9 +1,16 @@
-import { prisma } from "@lyrashield/db"
+import {
+  prisma,
+  resolveScanAttachments,
+  resolveAuthenticatedAssessmentAuthorization,
+  LiveAiSafetyError,
+  ScanAttachmentError,
+} from "@lyrashield/db"
 import type { ScanMode } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { normalizeDomainForProof } from "@lyrashield/security"
-import { CreateScanSchema, resolveScanProfile, resolveTargetScanMode } from "@lyrashield/types"
+import { CreateScanInputSchema, resolveScanProfile, resolveTargetScanMode } from "@lyrashield/types"
+import { env, evaluateAuthAssessmentAdmission } from "@lyrashield/config"
 import {
   evaluateScanEntitlement,
   isTrialAvailable,
@@ -20,12 +27,17 @@ import {
   clientIpFromRequest,
 } from "../../../../lib/rate-limit"
 
-const EligibilityQuerySchema = CreateScanSchema.pick({
-  workspaceId: true,
-  targetId: true,
-  goal: true,
-  mode: true,
-})
+const ELIGIBILITY_QUERY_KEYS = new Set([
+  "workspaceId",
+  "targetId",
+  "goal",
+  "mode",
+  "workflow",
+  "baseRef",
+  "headRef",
+  "attachmentId",
+  "authorizationRef",
+])
 
 /**
  * Eligibility payloads are workspace-sensitive (plan, remaining minutes), so
@@ -33,7 +45,15 @@ const EligibilityQuerySchema = CreateScanSchema.pick({
  */
 function eligibilityResponse(data: unknown, status = 200) {
   return NextResponse.json(
-    { success: true, data },
+    {
+      success: true,
+      data: {
+        version: "lyrashield-scan-eligibility/1.0.0",
+        advisory: true,
+        notEvaluated: ["futureCapacity", "workerAvailability", "sourceRevision"],
+        ...(data as Record<string, unknown>),
+      },
+    },
     { status, headers: { "Cache-Control": "private, no-store" } }
   )
 }
@@ -50,7 +70,20 @@ function eligibilityResponse(data: unknown, status = 200) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const parsed = EligibilityQuerySchema.safeParse(Object.fromEntries(searchParams))
+    if (
+      [...searchParams.keys()].some(
+        (key) =>
+          !ELIGIBILITY_QUERY_KEYS.has(key) ||
+          (key !== "attachmentId" && searchParams.getAll(key).length > 1)
+      )
+    ) {
+      return apiError("INVALID_PARAM", "Unknown or repeated query parameter", 400)
+    }
+    const attachmentIds = searchParams.getAll("attachmentId")
+    const parsed = CreateScanInputSchema.safeParse({
+      ...Object.fromEntries(searchParams),
+      ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
+    })
     if (!parsed.success) {
       return apiError(
         "INVALID_PARAM",
@@ -84,6 +117,109 @@ export async function GET(request: Request) {
     })
     if (!target) {
       return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+    }
+
+    assertOAuthDelegatedScope(session, targetId, mode)
+
+    if (attachmentIds.length > 0) {
+      try {
+        await resolveScanAttachments(workspaceId, [...new Set(attachmentIds)])
+      } catch (error) {
+        if (error instanceof ScanAttachmentError) {
+          return eligibilityResponse({
+            allowed: false,
+            code: error.code,
+            message: error.message,
+            plan: "UNKNOWN",
+            isTrial: false,
+            remainingMinutes: 0,
+          })
+        }
+        throw error
+      }
+    }
+
+    if (parsed.data.workflow === "REVIEW_CHANGES") {
+      if (target.type !== "REPO") {
+        return eligibilityResponse({
+          allowed: false,
+          code: "SCAN_PLAN_INVALID",
+          message: "Review Changes requires a repository target.",
+          plan: "UNKNOWN",
+          isTrial: false,
+          remainingMinutes: 0,
+        })
+      }
+      if (
+        !target.installationId ||
+        !(target.repoOwner ?? target.repoFullName?.split("/")[0]) ||
+        !(target.repoName ?? target.repoFullName?.split("/")[1])
+      ) {
+        return eligibilityResponse({
+          allowed: false,
+          code: "SCAN_SOURCE_UNAVAILABLE",
+          message: "Review Changes requires a repository connected through the GitHub App.",
+          plan: "UNKNOWN",
+          isTrial: false,
+          remainingMinutes: 0,
+        })
+      }
+    }
+
+    if (parsed.data.workflow === "AUTHENTICATED_ASSESSMENT") {
+      const betaAdmission = evaluateAuthAssessmentAdmission({
+        enabled: env.LYRASHIELD_AUTH_ASSESSMENT_ENABLED === "1",
+        allowlist: env.LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST,
+        workspaceId,
+        targetId,
+      })
+      if (!betaAdmission.allowed || (target.type !== "WEB_APP" && target.type !== "API")) {
+        return eligibilityResponse({
+          allowed: false,
+          code: betaAdmission.allowed ? "SCAN_PLAN_INVALID" : "SCAN_WORKFLOW_UNAVAILABLE",
+          message: betaAdmission.allowed
+            ? "Authenticated assessment requires a live web app or API target."
+            : "Authenticated assessment is not enabled for this workspace and target.",
+          plan: "UNKNOWN",
+          isTrial: false,
+          remainingMinutes: 0,
+        })
+      }
+      const policy = await prisma.policy.findFirst({
+        where: { workspaceId, name: "Default Policy", deletedAt: null },
+        orderBy: { createdAt: "asc" },
+        select: { destructiveTestsAllowed: true },
+      })
+      if (policy?.destructiveTestsAllowed) {
+        return eligibilityResponse({
+          allowed: false,
+          code: "SCAN_PLAN_DENIED",
+          message:
+            "The selected policy allows destructive tests, which the authenticated assessment forbids.",
+          plan: "UNKNOWN",
+          isTrial: false,
+          remainingMinutes: 0,
+        })
+      }
+      try {
+        await resolveAuthenticatedAssessmentAuthorization({
+          workspaceId,
+          targetId,
+          authorizationRef: parsed.data.authorizationRef!,
+        })
+      } catch (error) {
+        if (error instanceof LiveAiSafetyError) {
+          return eligibilityResponse({
+            allowed: false,
+            code: error.code,
+            message: "The recorded assessment authorization does not cover this target.",
+            plan: "UNKNOWN",
+            isTrial: false,
+            remainingMinutes: 0,
+          })
+        }
+        throw error
+      }
     }
 
     // Resolve the canonical review profile exactly as POST does, so the
@@ -227,6 +363,11 @@ export async function GET(request: Request) {
 
     return eligibilityResponse({
       allowed: entitlement.allowed,
+      profile: {
+        id: resolveScanProfile({ targetType: target.type, mode }).id,
+        canonicalMode,
+        scope: "expected",
+      },
       code: entitlement.allowed
         ? null
         : trialAvailable

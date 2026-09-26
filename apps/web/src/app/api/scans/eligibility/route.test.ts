@@ -5,11 +5,28 @@ vi.mock("@lyrashield/db", () => ({
     target: { findFirst: vi.fn() },
     workspace: { findUnique: vi.fn() },
     targetDomainVerification: { findFirst: vi.fn() },
+    policy: { findFirst: vi.fn() },
+  },
+  resolveScanAttachments: vi.fn(),
+  resolveAuthenticatedAssessmentAuthorization: vi.fn(),
+  ScanAttachmentError: class ScanAttachmentError extends Error {
+    constructor(
+      public code: string,
+      message: string
+    ) {
+      super(message)
+    }
+  },
+  LiveAiSafetyError: class LiveAiSafetyError extends Error {
+    constructor(public code: string) {
+      super(code)
+    }
   },
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: vi.fn(),
+  assertOAuthDelegatedScope: vi.fn(),
 }))
 
 vi.mock("@lyrashield/auth", () => ({
@@ -40,6 +57,11 @@ vi.mock("@lyrashield/logger", async () =>
   (await import("../../../../__tests__/mocks")).loggerModule()
 )
 
+vi.mock("@lyrashield/config", () => ({
+  env: { LYRASHIELD_AUTH_ASSESSMENT_ENABLED: "0", LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST: "" },
+  evaluateAuthAssessmentAdmission: vi.fn(() => ({ allowed: false })),
+}))
+
 vi.mock("../../../../lib/rate-limit", () => ({
   checkScanEligibilityRateLimit: vi.fn(async () => ({
     limited: false,
@@ -54,7 +76,7 @@ vi.mock("../../../../lib/rate-limit", () => ({
   clientIpFromRequest: () => "127.0.0.1",
 }))
 
-import { prisma } from "@lyrashield/db"
+import { prisma, resolveScanAttachments, ScanAttachmentError } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { evaluateScanEntitlement, isTrialAvailable } from "@lyrashield/billing"
 import { GET } from "./route"
@@ -96,6 +118,19 @@ describe("GET /api/scans/eligibility", () => {
     expect((await response.json()).error.code).toBe("INVALID_PARAM")
     expect(requirePermission).not.toHaveBeenCalled()
     expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+  })
+
+  it("rejects malformed Review Changes refs and repeated scalar inputs before reads", async () => {
+    const invalid = await GET(
+      request({ ...validQuery, workflow: "REVIEW_CHANGES", baseRef: "bad..ref" })
+    )
+    expect(invalid.status).toBe(400)
+
+    const repeatedUrl = new URL(request(validQuery).url)
+    repeatedUrl.searchParams.append("targetId", "target-2")
+    const repeated = await GET(new Request(repeatedUrl))
+    expect(repeated.status).toBe(400)
+    expect(requirePermission).not.toHaveBeenCalled()
   })
 
   it("checks the same workspace permission and target ownership as creation", async () => {
@@ -190,10 +225,13 @@ describe("GET /api/scans/eligibility", () => {
       mode: "QUICK",
       mutateOnTrialExpiry: false,
     })
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       success: true,
       data: {
+        version: "lyrashield-scan-eligibility/1.0.0",
+        advisory: true,
         allowed: true,
+        profile: { id: "REPO_QUICK", canonicalMode: "QUICK", scope: "expected" },
         code: null,
         message: null,
         plan: "PRO",
@@ -201,6 +239,53 @@ describe("GET /api/scans/eligibility", () => {
         remainingMinutes: 120,
       },
     })
+  })
+
+  it("validates workflow refs and attachment IDs before entitlement without mutating", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "REPO",
+      installationId: 4,
+      repoFullName: "owner/repo",
+    } as never)
+    const url = new URL(request(validQuery).url)
+    url.searchParams.set("workflow", "REVIEW_CHANGES")
+    url.searchParams.set("baseRef", "main")
+    url.searchParams.append("attachmentId", "attachment-1")
+    url.searchParams.append("attachmentId", "attachment-2")
+    const response = await GET(new Request(url))
+    expect(response.status).toBe(200)
+    expect((await response.json()).data.allowed).toBe(true)
+    expect(resolveScanAttachments).toHaveBeenCalledWith("ws-1", ["attachment-1", "attachment-2"])
+  })
+
+  it("reports cross-workspace attachment denial without disclosing ownership", async () => {
+    vi.mocked(resolveScanAttachments).mockRejectedValueOnce(
+      new ScanAttachmentError("SCAN_ATTACHMENT_NOT_FOUND", "Attachment not found in this workspace")
+    )
+    const url = new URL(request(validQuery).url)
+    url.searchParams.append("attachmentId", "other-attachment")
+    const response = await GET(new Request(url))
+    expect((await response.json()).data).toMatchObject({
+      allowed: false,
+      code: "SCAN_ATTACHMENT_NOT_FOUND",
+    })
+    expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+  })
+
+  it("reports the feature-gated assessment as unavailable without opening a session", async () => {
+    const response = await GET(
+      request({
+        ...validQuery,
+        workflow: "AUTHENTICATED_ASSESSMENT",
+        authorizationRef: "auth-1",
+      })
+    )
+    expect((await response.json()).data).toMatchObject({
+      allowed: false,
+      code: "SCAN_WORKFLOW_UNAVAILABLE",
+    })
+    expect(evaluateScanEntitlement).not.toHaveBeenCalled()
   })
 
   it("offers an unstarted free workspace its trial before an upgrade", async () => {

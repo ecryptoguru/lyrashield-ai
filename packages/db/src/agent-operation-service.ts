@@ -119,6 +119,16 @@ export async function claimOrGetAgentOperation(
   )
 
   if (existing) {
+    if (
+      principal.principalType === "OAUTH_CONNECTION" &&
+      params.authorizationVersion !== undefined &&
+      existing.authorizationVersion !== params.authorizationVersion
+    ) {
+      return {
+        status: "CONFLICT",
+        message: "Authorization changed since this operation was recorded",
+      }
+    }
     if (existing.inputHash === inputHash) {
       if (existing.status === "PENDING" || existing.status === "EXECUTING") {
         return { status: "IN_PROGRESS", operation: existing }
@@ -184,6 +194,17 @@ export async function claimOrGetAgentOperation(
           },
         })
       )
+      if (
+        raced &&
+        principal.principalType === "OAUTH_CONNECTION" &&
+        params.authorizationVersion !== undefined &&
+        raced.authorizationVersion !== params.authorizationVersion
+      ) {
+        return {
+          status: "CONFLICT",
+          message: "Authorization changed since this operation was recorded",
+        }
+      }
       if (raced && raced.inputHash === inputHash) {
         if (raced.status === "COMPLETED") return { status: "REPLAY", operation: raced }
         if (raced.status === "FAILED" || raced.status === "CONFLICT") {
@@ -304,6 +325,8 @@ export type OperationStatusState = "PENDING" | "EXECUTING" | "COMPLETED" | "FAIL
 export interface OperationStatusView {
   /** Stable operation identity, safe to share with the principal. */
   operationId: string
+  /** Canonical operation type, used to validate result-reference handling. */
+  operationName: string
   status: OperationStatusState
   /** Safe reason code; never raw provider or internal error text. */
   reasonCode: string | null
@@ -351,6 +374,7 @@ export function toOperationStatusView(operation: AgentOperation): OperationStatu
           : "wait"
   return {
     operationId: operation.id,
+    operationName: operation.operationName,
     status: operation.status,
     reasonCode: operation.error ? "OPERATION_FAILED" : null,
     resultLocation: operation.resultReference,

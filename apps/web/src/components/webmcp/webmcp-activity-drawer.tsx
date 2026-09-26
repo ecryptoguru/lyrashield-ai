@@ -6,6 +6,7 @@ import { Button, Badge, Card } from "@lyrashield/ui"
 import { useWebMcpReceiptStore } from "./webmcp-receipt-provider"
 import { cn } from "@lyrashield/ui"
 import type { WebMcpActivityReceipt } from "@/lib/webmcp/receipts"
+import Link from "next/link"
 
 const STATUS_CONFIG: Record<
   WebMcpActivityReceipt["status"],
@@ -197,6 +198,14 @@ export function WebMcpActivityDrawer() {
                         <p className="text-muted-foreground line-clamp-2 text-xs">
                           {receipt.summary}
                         </p>
+                        {receipt.recoveryPath && (
+                          <Link
+                            href={receipt.recoveryPath}
+                            className="text-primary mt-1 inline-block text-xs underline underline-offset-2"
+                          >
+                            Open scan
+                          </Link>
+                        )}
                         <p className="text-muted-foreground mt-1 text-xs">
                           {DATA_CLASS_LABEL[receipt.dataClass]}
                           {receipt.humanConfirmationRequired && " · confirmation required"}

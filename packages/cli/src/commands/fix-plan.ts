@@ -1,9 +1,31 @@
 import minimist from "minimist"
+import { requestFixPr } from "@lyrashield/sdk"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import type { Output } from "../output.js"
 
 export async function handleFixPlan(args: string[], output: Output): Promise<number> {
+  if (args[0] === "create-pr") {
+    const parsed = minimist(args.slice(1), { string: ["idempotency-key"] })
+    const [proposalId] = parsed._ as string[]
+    if (
+      !proposalId ||
+      parsed._.length !== 1 ||
+      (parsed["idempotency-key"] !== undefined && !parsed["idempotency-key"].trim())
+    ) {
+      output.error("usage: lyrashield fix-plan create-pr <proposalId> [--idempotency-key <key>]")
+      return 2
+    }
+    const workspaceId = requireWorkspace(await getEffectiveCredentials())
+    const client = await createClient()
+    output.result(
+      await requestFixPr(client, proposalId, {
+        workspaceId,
+        idempotencyKey: parsed["idempotency-key"],
+      })
+    )
+    return 0
+  }
   const workspaceId = requireWorkspace(await getEffectiveCredentials())
   const client = await createClient()
 

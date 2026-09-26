@@ -6,6 +6,7 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "@/lib/api-auth"
 import { apiError, apiSuccess } from "@/lib/api-response"
+import { recordedOperation } from "@/lib/recorded-operation"
 
 function privateResponse(response: Response): Response {
   response.headers.set("Cache-Control", "private, no-store")
@@ -25,26 +26,40 @@ async function del(request: Request, { params }: { params: Promise<{ id: string 
     if (!workspaceId) {
       return privateResponse(apiError("MISSING_PARAM", "workspaceId is required", 400))
     }
-    await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scanAttachment.delete)
 
-    const removed = await softDeleteScanAttachment(workspaceId, id)
-    if (!removed) {
-      return privateResponse(
-        apiError("SCAN_ATTACHMENT_NOT_FOUND", "Attachment not found in this workspace", 404)
+    return privateResponse(
+      await recordedOperation(
+        request,
+        {
+          workspaceId,
+          operationName: "scan.attachment.delete",
+          input: { id },
+          session,
+        },
+        async ({ confirmNotSubmitted }) => {
+          const removed = await softDeleteScanAttachment(workspaceId, id)
+          if (!removed) {
+            confirmNotSubmitted()
+            return apiError(
+              "SCAN_ATTACHMENT_NOT_FOUND",
+              "Attachment not found in this workspace",
+              404
+            )
+          }
+          try {
+            await deleteEncryptedArtifact(removed.storageUri, workspaceId)
+          } catch (storageErr) {
+            // The row and durable deletion task already committed together.
+            logger.error("Attachment object removal deferred after row deletion", {
+              attachmentId: id,
+              error: storageErr instanceof Error ? storageErr.message : String(storageErr),
+            })
+          }
+          return apiSuccess({ id, deleted: true })
+        }
       )
-    }
-    try {
-      await deleteEncryptedArtifact(removed.storageUri, workspaceId)
-    } catch (storageErr) {
-      // The row is already deleted and the durable deletion task was committed
-      // with it, so a storage outage leaves the outbox retrying rather than
-      // an orphaned encrypted blob.
-      logger.error("Attachment object removal deferred after row deletion", {
-        attachmentId: id,
-        error: storageErr instanceof Error ? storageErr.message : String(storageErr),
-      })
-    }
-    return privateResponse(apiSuccess({ id, deleted: true }))
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return privateResponse(authErr)

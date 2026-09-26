@@ -208,10 +208,21 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
           ? `${boundedName} completed`
           : `${boundedName} completed with an agent-visible issue`
 
+        const scanId =
+          durableMutation &&
+          result &&
+          typeof result === "object" &&
+          "scanId" in result &&
+          typeof result.scanId === "string" &&
+          /^[a-z0-9]{10,40}$/.test(result.scanId)
+            ? result.scanId
+            : null
+
         receiptStore.update(receipt.id, {
           status: "completed",
           endedAt: new Date().toISOString(),
           summary,
+          ...(scanId ? { recoveryPath: `/dashboard/scans/${scanId}` } : {}),
         })
 
         return boundOutputValue(output, WEBMCP_BUDGETS.output) as typeof output
@@ -223,7 +234,9 @@ export function registerWebMcpTool<TInput extends Record<string, unknown>>({
           receiptStore.update(receipt.id, {
             status: "cancelled",
             endedAt: new Date().toISOString(),
-            summary: `${boundedName} cancelled`,
+            summary: durableMutation
+              ? `${boundedName} stopped waiting; the server may have accepted it. Reuse the same request ID.`
+              : `${boundedName} cancelled`,
           })
           return boundOutputValue(
             {

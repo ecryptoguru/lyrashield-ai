@@ -87,6 +87,29 @@ export const ScanListSchema = z.object({
   nextCursor: z.string().nullable(),
 })
 
+/** Advisory eligibility only; the server repeats admission checks on POST. */
+export const ScanEligibilitySchema = z
+  .object({
+    version: z.literal("lyrashield-scan-eligibility/1.0.0").optional(),
+    advisory: z.literal(true).optional(),
+    allowed: z.boolean(),
+    code: z.string().nullable(),
+    message: z.string().nullable(),
+    plan: z.string(),
+    isTrial: z.boolean(),
+    remainingMinutes: z.number().nonnegative(),
+    notEvaluated: z.array(z.string()).optional(),
+    profile: z
+      .object({
+        id: z.string(),
+        canonicalMode: z.string(),
+        scope: z.literal("expected"),
+      })
+      .optional(),
+    remediation: z.object({ txtName: z.string().nullable(), verifyPath: z.string() }).optional(),
+  })
+  .passthrough()
+
 /**
  * The truthful quality surface for a scan (lyrashield-scan-quality/1.0.0):
  * `facts` are measured from stored evidence only, `estimates` are labeled

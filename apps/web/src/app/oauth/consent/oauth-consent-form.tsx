@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AUTOMATION_WORKFLOWS, ScanModeSchema } from "@lyrashield/types"
+import { AUTOMATION_WORKFLOWS, CANONICAL_OPERATIONS, ScanModeSchema } from "@lyrashield/types"
 
 type Workspace = { id: string; name: string }
 
@@ -23,6 +23,8 @@ export function OAuthConsentForm({
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [allowCancellation, setAllowCancellation] = useState(false)
+  const [allowAttachments, setAllowAttachments] = useState(false)
   const canAutomate = scope.split(" ").includes("lyrashield.write")
 
   async function submit(accept: boolean) {
@@ -40,7 +42,21 @@ export function OAuthConsentForm({
         if (!active.ok) throw new Error("That workspace is no longer available.")
 
         {
-          const ops = canAutomate ? AUTOMATION_WORKFLOWS.flatMap((wf) => [...wf.operations]) : []
+          const ops = canAutomate
+            ? [
+                ...AUTOMATION_WORKFLOWS.flatMap((wf) => [...wf.operations]),
+                ...(allowCancellation ? [CANONICAL_OPERATIONS.SCAN_CANCEL] : []),
+                ...(allowAttachments
+                  ? [
+                      CANONICAL_OPERATIONS.ATTACHMENT_READ,
+                      CANONICAL_OPERATIONS.ATTACHMENT_UPLOAD,
+                      CANONICAL_OPERATIONS.ATTACHMENT_DELETE,
+                    ]
+                  : []),
+              ]
+            : allowAttachments
+              ? [CANONICAL_OPERATIONS.ATTACHMENT_READ]
+              : []
 
           // The client identity sent to the API derives from the client id the
           // authorization request names — never a free-typed display string.
@@ -158,6 +174,52 @@ export function OAuthConsentForm({
             disconnect this integration at any time. Pull requests are never automatically merged.
           </p>
         </section>
+
+        {canAutomate ? (
+          <div className="mt-4 space-y-3">
+            <label className="flex min-h-11 items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={allowCancellation}
+                onChange={(event) => setAllowCancellation(event.target.checked)}
+                disabled={busy}
+                className="mt-1 size-4"
+              />
+              <span>
+                Also allow this integration to cancel running scans. This is separate from
+                permission to start scans and is off by default.
+              </span>
+            </label>
+            <label className="flex min-h-11 items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={allowAttachments}
+                onChange={(event) => setAllowAttachments(event.target.checked)}
+                disabled={busy}
+                className="mt-1 size-4"
+              />
+              <span>
+                Also allow this integration to list, upload and delete supporting scan attachments
+                across this workspace. Attachment access is off by default and applies beyond a
+                selected scan target.
+              </span>
+            </label>
+          </div>
+        ) : (
+          <label className="mt-4 flex min-h-11 items-start gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={allowAttachments}
+              onChange={(event) => setAllowAttachments(event.target.checked)}
+              disabled={busy}
+              className="mt-1 size-4"
+            />
+            <span>
+              Also allow this integration to list supporting scan attachment metadata across this
+              workspace. This is off by default; it does not allow uploads, deletion or scan work.
+            </span>
+          </label>
+        )}
 
         {error ? (
           <p className="text-destructive mt-4 text-sm" role="alert">

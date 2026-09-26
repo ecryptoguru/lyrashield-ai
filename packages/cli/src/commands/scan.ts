@@ -5,6 +5,7 @@ import { readFile } from "fs/promises"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import type { Output } from "../output.js"
+import { followScan, parseWaitTimeout } from "../scan-follow.js"
 import { parseRepoIdentifier, type ParsedRepo } from "@lyrashield/sdk"
 import {
   findOrCreateRepoTarget,
@@ -89,11 +90,19 @@ export async function handleScan(args: string[], output: Output): Promise<number
       "base",
       "head",
       "attachment",
+      "timeout",
     ],
-    boolean: ["watch", "auto"],
+    boolean: ["watch", "wait", "auto"],
     default: { goal: "TEST_APP", mode: "STANDARD" },
     alias: { t: "target", g: "goal", m: "mode" },
   })
+
+  const wait = parsed.watch || parsed.wait
+  const timeoutMs = parseWaitTimeout(parsed.timeout)
+  if (wait && timeoutMs === null) {
+    output.error("--timeout must be an integer from 1 to 86400 seconds")
+    return 2
+  }
 
   const client = await createClient()
   const workspaceId = requireWorkspace(await getEffectiveCredentials())
@@ -192,16 +201,6 @@ export async function handleScan(args: string[], output: Output): Promise<number
     return 2
   }
 
-  // Fail before submitting. Warning after a successful POST and still exiting 0
-  // would tell a CI script the scan was followed to completion when it was not,
-  // and re-running would submit a second scan against the workspace budget.
-  if (parsed.watch) {
-    output.error(
-      "--watch is not implemented yet. Submit the scan without --watch, then poll it with: lyrashield status <scanId>"
-    )
-    return 2
-  }
-
   const res = parsed["scan-id"]
     ? { id: parsed["scan-id"] as string }
     : ((await client.request("POST", "/scans", {
@@ -249,7 +248,10 @@ export async function handleScan(args: string[], output: Output): Promise<number
     }
   }
 
+  if (wait) {
+    process.stderr.write(`Scan accepted: ${res.id}; resume: lyrashield status ${res.id} --watch\n`)
+    return followScan(client, res.id, workspaceId, timeoutMs!, output)
+  }
   output.result(res)
-
   return 0
 }

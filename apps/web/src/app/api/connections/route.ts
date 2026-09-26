@@ -153,7 +153,7 @@ async function post(request: Request) {
     }
     if (
       !automating &&
-      (allowedOperations.length > 0 ||
+      (allowedOperations.some((operation) => operation !== CANONICAL_OPERATIONS.ATTACHMENT_READ) ||
         allowedTargetIds.length > 0 ||
         allTargets ||
         allowedProfiles.length > 0)

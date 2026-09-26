@@ -7,6 +7,8 @@ import { authErrorResponse, withCookieMutation } from "../../../../../lib/api-au
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
 import { requestFixPrApproval } from "@/lib/fix-pr"
 import { FixPrContextError, resolveFixPrRequest } from "@/lib/fix-pr-context"
+import { recordedOperation } from "@/lib/recorded-operation"
+import { diffChecksum } from "@lyrashield/fix"
 
 const CreatePRSchema = z.object({ workspaceId: z.string().min(1) }).strict()
 
@@ -29,13 +31,38 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
       : session.apiKey
         ? { kind: "api-key" as const, id: session.apiKey.keyId }
         : undefined
-    const outcome = await requestFixPrApproval(
-      { ...context, authorization },
-      env.NEXT_PUBLIC_APP_URL
+    return recordedOperation(
+      request,
+      {
+        workspaceId,
+        operationName: "fix.pr.request",
+        input: {
+          proposalId: id,
+          targetId: context.targetId,
+          baseCommit: context.baseCommit,
+          diffChecksum: diffChecksum(context.diff),
+        },
+        session,
+      },
+      async ({ confirmNotSubmitted }) => {
+        const outcome = await requestFixPrApproval(
+          { ...context, authorization },
+          env.NEXT_PUBLIC_APP_URL
+        )
+        if (outcome.status === "rejected") {
+          confirmNotSubmitted()
+          return apiError("PATCH_REJECTED", outcome.reason ?? "Patch failed validation", 422)
+        }
+        if (outcome.status === "failed") {
+          return apiError(
+            "FIX_PR_FAILED",
+            "Fix PR execution did not complete. Inspect the operation status before retrying.",
+            502
+          )
+        }
+        return apiSuccess(outcome)
+      }
     )
-    if (outcome.status === "rejected")
-      return apiError("PATCH_REJECTED", outcome.reason ?? "Patch failed validation", 422)
-    return apiSuccess(outcome)
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

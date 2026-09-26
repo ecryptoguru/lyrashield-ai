@@ -47,6 +47,30 @@ describe("WebMCP registration", () => {
     expect(options.signal.aborted).toBe(true)
   })
 
+  it("keeps the page usable without native WebMCP and releases the name on cleanup", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (globalThis as any).document.modelContext
+    const store = createWebMcpReceiptStore()
+    const definition = {
+      name: "optional_native_tool",
+      title: "Optional native",
+      description: "Read only.",
+      inputSchema: { properties: {} },
+      receiptStore: store,
+      classification: "read" as const,
+      dataClass: "workspace-summary" as const,
+      untrustedContent: false,
+      uiChanged: false,
+      humanConfirmationRequired: false,
+      handler: vi.fn().mockResolvedValue({ ok: true }),
+    }
+    const cleanup = registerWebMcpTool(definition)
+    expect(registerTool).not.toHaveBeenCalled()
+    cleanup()
+    const secondCleanup = registerWebMcpTool(definition)
+    secondCleanup()
+  })
+
   it("rejects duplicate active tool names", () => {
     const store = createWebMcpReceiptStore()
     const cleanup = registerWebMcpTool({
@@ -372,6 +396,65 @@ describe("WebMCP registration", () => {
 
     await expect(resultPromise).resolves.toMatchObject({ ok: false, cancelled: true })
     expect(store.getSnapshot().latest?.status).toBe("cancelled")
+    cleanup()
+  })
+
+  it("aborts an in-flight read when its page registration is cleaned up", async () => {
+    const store = createWebMcpReceiptStore()
+    let started = false
+    const cleanup = registerWebMcpTool({
+      name: "route_read_tool",
+      title: "Route read",
+      description: "Read this page.",
+      inputSchema: { properties: {} },
+      receiptStore: store,
+      classification: "read",
+      dataClass: "workspace-summary",
+      untrustedContent: false,
+      uiChanged: false,
+      humanConfirmationRequired: false,
+      handler: (_input, { signal }) =>
+        new Promise((resolve, reject) => {
+          started = true
+          signal.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true }
+          )
+        }),
+    })
+    const tool = registerTool.mock.calls[0][0] as { execute: (input: unknown) => Promise<unknown> }
+    const pending = tool.execute({})
+    expect(started).toBe(true)
+    cleanup()
+    await expect(pending).resolves.toMatchObject({ ok: false, cancelled: true })
+  })
+
+  it("retains only a safe scan recovery link for a completed durable action", async () => {
+    const store = createWebMcpReceiptStore()
+    const cleanup = registerWebMcpTool({
+      name: "recover_scan_tool",
+      title: "Recover scan",
+      description: "Test recovery.",
+      inputSchema: { properties: {} },
+      receiptStore: store,
+      classification: "mutation-durable",
+      dataClass: "workspace-summary",
+      untrustedContent: false,
+      uiChanged: false,
+      durableMutation: true,
+      humanConfirmationRequired: false,
+      handler: vi
+        .fn()
+        .mockResolvedValue({ scanId: "cmta574d50004fef1nbydufai", evidence: "secret" }),
+    })
+    const tool = registerTool.mock.calls[0][0] as {
+      execute: (input: unknown) => Promise<unknown>
+    }
+    await tool.execute({}) // Chrome's native API may omit execute options.
+    expect(store.getSnapshot().latest?.recoveryPath).toBe(
+      "/dashboard/scans/cmta574d50004fef1nbydufai"
+    )
     cleanup()
   })
 

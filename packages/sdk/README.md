@@ -24,6 +24,8 @@ const finding = await client.request("GET", "/findings/fnd_...")
 
 The client always prepends `/api/v1` to bare paths, so callers should pass paths like `/findings` instead of `/api/v1/findings`. If you accidentally pass an already-prefixed path such as `/api/v1/findings` or `/api/findings`, the client throws a `LyraShieldError` with `code: "INVALID_PATH"` before any network request is made.
 
+`getScanEligibility(client, input)` performs a read-only advisory check for an existing target. It returns denial codes as ordinary data (`allowed: false`) and does not reserve minutes or submit a scan. Submission repeats authorization and admission checks. Workflow refs and attachment IDs are bounded and encoded into the `/scans/eligibility` query; the response lists checks that were not evaluated, including future worker capacity and source-revision resolution.
+
 ## Main exports
 
 - `LyraShieldClient`, `LyraShieldClientOptions`, `RequestOptions`

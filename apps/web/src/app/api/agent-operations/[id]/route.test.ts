@@ -33,6 +33,7 @@ describe("operation status contract (W3-08)", () => {
     )
     expect(completed.recovery).toBe("none")
     expect(completed.resultLocation).toBe("scan-9")
+    expect(completed.operationName).toBe("scan.create")
 
     const failed = toOperationStatusView(
       operation({ status: "FAILED", error: "raw provider body" })

@@ -1,4 +1,4 @@
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
+import { serveStdio } from "@modelcontextprotocol/server/stdio"
 import { createLyraShieldServer } from "./create-server"
 import { resolveMcpCredentials } from "./credentials"
 import { logger } from "@lyrashield/logger"
@@ -24,18 +24,20 @@ const allowMutations = true
 
 async function main() {
   const { apiKey, apiUrl } = await resolveMcpCredentials()
-  const { server, engine } = createLyraShieldServer({
-    allowMutations,
-    toolContext: {
-      apiBaseUrl: apiUrl,
-      apiKey,
-      getCredentials: resolveMcpCredentials,
-    },
-  })
-  const transport = new StdioServerTransport()
-  await server.connect(transport)
+  const createServer = () =>
+    createLyraShieldServer({
+      allowMutations,
+      toolContext: {
+        apiBaseUrl: apiUrl,
+        apiKey,
+        getCredentials: resolveMcpCredentials,
+      },
+    })
+  serveStdio(() => createServer().server)
   logger.info("LyraShield MCP server connected (stdio, SDK)", {
-    tools: engine.listTools().map((t) => t.name),
+    tools: createServer()
+      .engine.listTools()
+      .map((t) => t.name),
     allowMutations,
   })
 }

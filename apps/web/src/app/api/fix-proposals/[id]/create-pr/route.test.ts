@@ -4,6 +4,9 @@ const requirePermission = vi.fn()
 const getFixProposal = vi.fn()
 const readEncryptedArtifact = vi.fn()
 const requestFixPrApproval = vi.fn()
+const claimOrGetAgentOperation = vi.fn()
+const completeAgentOperation = vi.fn()
+const failAgentOperation = vi.fn()
 
 const prisma = {
   finding: { findFirst: vi.fn() },
@@ -20,7 +23,13 @@ vi.mock("@lyrashield/auth", () => ({
 vi.mock("@lyrashield/billing", () => ({
   resolveAccountBilling: vi.fn().mockResolvedValue({ effectivePlan: "PRO" }),
 }))
-vi.mock("@lyrashield/db", () => ({ getFixProposal, prisma }))
+vi.mock("@lyrashield/db", () => ({
+  getFixProposal,
+  prisma,
+  claimOrGetAgentOperation,
+  completeAgentOperation,
+  failAgentOperation,
+}))
 vi.mock("@lyrashield/evidence-storage", () => ({ readEncryptedArtifact }))
 vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
@@ -31,11 +40,14 @@ vi.mock("@/lib/fix-pr", () => ({ requestFixPrApproval }))
 
 const { POST } = await import("./route")
 
-function call(body: unknown = { workspaceId: "workspace-1" }) {
+function call(body: unknown = { workspaceId: "workspace-1" }, idempotencyKey?: string) {
   return POST(
     new Request("http://localhost/api/fix-proposals/proposal-1/create-pr", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+      },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: "proposal-1" }) }
@@ -46,6 +58,7 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
+    failAgentOperation.mockResolvedValue({})
   })
 
   it.each([{ apiKey: { keyId: "key-1" } }, { oauth: { connectionId: "connection-1" } }])(
@@ -203,5 +216,105 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
 
     expect(response.status).toBe(422)
     await expect(response.json()).resolves.toMatchObject({ error: { code: "PATCH_REJECTED" } })
+  })
+
+  it("replays an approved request by principal without opening another PR", async () => {
+    getFixProposal.mockResolvedValue({
+      id: "proposal-1",
+      findingId: "finding-1",
+      diffRef: "s3://bucket/evidence/workspace-1/patch.diff",
+    })
+    prisma.finding.findFirst.mockResolvedValue({
+      id: "finding-1",
+      targetId: "target-1",
+      implicatedFiles: ["src/a.ts"],
+      baseCommit: "abc123",
+      target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
+    })
+    readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ...") })
+    prisma.workspace.findUnique.mockResolvedValue({ plan: "PRO" })
+    requestFixPrApproval.mockResolvedValue({
+      status: "pending_approval",
+      approvalId: "ap-1",
+      approvalUrl: "https://app.test/dashboard/approvals?approval=ap-1",
+    })
+    claimOrGetAgentOperation
+      .mockResolvedValueOnce({ status: "NEW", operation: { id: "op-1" } })
+      .mockResolvedValueOnce({
+        status: "REPLAY",
+        operation: {
+          id: "op-1",
+          result: {
+            status: "pending_approval",
+            approvalId: "ap-1",
+            approvalUrl: "https://app.test/dashboard/approvals?approval=ap-1",
+          },
+        },
+      })
+
+    expect((await call(undefined, "retry-1")).status).toBe(200)
+    const replay = await call(undefined, "retry-1")
+    expect(replay.status).toBe(200)
+    await expect(replay.json()).resolves.toMatchObject({
+      data: {
+        status: "pending_approval",
+        approvalId: "ap-1",
+        approvalUrl: "https://app.test/dashboard/approvals?approval=ap-1",
+        operationId: "op-1",
+      },
+    })
+    expect(requestFixPrApproval).toHaveBeenCalledOnce()
+    expect(completeAgentOperation).toHaveBeenCalledWith("op-1", "workspace-1", {
+      result: expect.objectContaining({ status: "pending_approval", approvalId: "ap-1" }),
+      resultReference: "https://app.test/dashboard/approvals?approval=ap-1",
+    })
+    expect(claimOrGetAgentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationName: "fix.pr.request",
+        input: expect.objectContaining({
+          proposalId: "proposal-1",
+          targetId: "target-1",
+          baseCommit: "abc123",
+          diffChecksum: expect.stringMatching(/^[0-9a-f]{64}$/),
+        }),
+      })
+    )
+  })
+
+  it("records failed execution as failed, never a completed replay", async () => {
+    getFixProposal.mockResolvedValue({
+      id: "proposal-1",
+      findingId: "finding-1",
+      diffRef: "s3://bucket/evidence/workspace-1/patch.diff",
+    })
+    prisma.finding.findFirst.mockResolvedValue({
+      id: "finding-1",
+      targetId: "target-1",
+      implicatedFiles: ["src/a.ts"],
+      baseCommit: "abc123",
+      target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
+    })
+    readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ...") })
+    prisma.workspace.findUnique.mockResolvedValue({ plan: "PRO" })
+    requestFixPrApproval.mockResolvedValue({ status: "failed", reason: "provider detail" })
+    claimOrGetAgentOperation
+      .mockResolvedValueOnce({ status: "NEW", operation: { id: "op-2" } })
+      .mockResolvedValueOnce({ status: "FAILED", operation: { id: "op-2" } })
+
+    const failed = await call(undefined, "retry-2")
+    expect(failed.status).toBe(502)
+    const failedBody = await failed.json()
+    expect(failedBody).toMatchObject({
+      error: { code: "FIX_PR_FAILED", details: { operationId: "op-2" } },
+    })
+    expect(JSON.stringify(failedBody)).not.toContain("provider detail")
+    expect(completeAgentOperation).not.toHaveBeenCalled()
+    expect(failAgentOperation).toHaveBeenCalledWith("op-2", "workspace-1", {
+      error: "OPERATION_OUTCOME_UNKNOWN",
+    })
+    const retry = await call(undefined, "retry-2")
+    expect(retry.status).toBe(409)
+    expect(requestFixPrApproval).toHaveBeenCalledOnce()
+    expect(JSON.stringify(await retry.json())).not.toContain("provider detail")
   })
 })

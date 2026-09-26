@@ -164,6 +164,89 @@ describe("API key bearer auth", () => {
 
     await expect(requirePermission("ws-1", "scan:create")).resolves.toBeTruthy()
   })
+
+  it("does not give read-scope keys workspace-wide attachment metadata", async () => {
+    withHeaders({ authorization: `Bearer ${RAW_KEY}` })
+    stubVerifiedKey({ scopes: ["read"] })
+    stubMembership("OWNER")
+    await expect(requirePermission("ws-1", "scan_attachment:read")).rejects.toThrow("FORBIDDEN")
+    stubVerifiedKey({ scopes: ["read", "write"] })
+    await expect(requirePermission("ws-1", "scan_attachment:read")).resolves.toBeTruthy()
+  })
+
+  it("does not give legacy OAuth bearers workspace-wide attachment metadata", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    stubVerifiedKey()
+    stubMembership("OWNER")
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+    })
+    await expect(requirePermission("ws-1", "scan_attachment:read")).rejects.toThrow("FORBIDDEN")
+  })
+
+  it("requires an explicit scan cancellation grant for connected OAuth clients", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    stubVerifiedKey()
+    stubMembership("OWNER")
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan.create"],
+    })
+    await expect(requirePermission("ws-1", "scan:cancel")).rejects.toThrow("FORBIDDEN")
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan.cancel"],
+    })
+    await expect(requirePermission("ws-1", "scan:cancel")).resolves.toBeTruthy()
+  })
+
+  it("does not inherit workspace attachment access from a scan grant", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    stubVerifiedKey()
+    stubMembership("OWNER")
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan.create"],
+    })
+    await expect(requirePermission("ws-1", "scan_attachment:read")).rejects.toThrow("FORBIDDEN")
+    await expect(requirePermission("ws-1", "scan_attachment:upload")).rejects.toThrow("FORBIDDEN")
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      allowedOperations: ["attachment.read", "attachment.upload"],
+    })
+    await expect(requirePermission("ws-1", "scan_attachment:read")).resolves.toBeTruthy()
+    await expect(requirePermission("ws-1", "scan_attachment:upload")).resolves.toBeTruthy()
+  })
+
+  it("permits explicitly granted attachment listing on read-only OAuth without mutation", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    stubVerifiedKey()
+    stubMembership("OWNER")
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read"],
+      connectionId: "conn-1",
+      allowedOperations: ["attachment.read"],
+    })
+    await expect(requirePermission("ws-1", "scan_attachment:read")).resolves.toBeTruthy()
+    await expect(requirePermission("ws-1", "scan_attachment:upload")).rejects.toThrow("FORBIDDEN")
+    await expect(requirePermission("ws-1", "scan_attachment:delete")).rejects.toThrow("FORBIDDEN")
+  })
 })
 
 describe("browser-only boundary (assertBrowserSession)", () => {

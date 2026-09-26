@@ -44,7 +44,7 @@ const VENDOR_COMMAND_ALLOWLIST = new Set(["claude", "amp"])
 // registry change alone can never widen what runs.
 const VENDOR_CLI_ARGV_ALLOWLIST: Record<string, readonly (readonly string[])[]> = {
   claude: [["mcp", "add"]],
-  amp: [["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.9"]],
+  amp: [["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.10"]],
 }
 
 function vendorArgvAllowed(command: string, args: readonly string[]): boolean {
@@ -76,7 +76,7 @@ URL:            ${endpoint}
 Authentication: ${authentication}`
   }
   const command = "npx"
-  const args = ["-y", "@lyrashield/mcp@0.2.9"]
+  const args = ["-y", "@lyrashield/mcp@0.2.10"]
   const env = opts.useCredentialStore
     ? {}
     : { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY", LYRASHIELD_API_URL: opts.apiUrl }

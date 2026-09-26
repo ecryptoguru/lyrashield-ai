@@ -5,6 +5,9 @@ const updateSessionMock = vi.fn()
 vi.mock("@lyrashield/db", () => ({
   CANONICAL_OPERATIONS: {
     SCAN_CREATE: "scan.create",
+    ATTACHMENT_READ: "attachment.read",
+    ATTACHMENT_UPLOAD: "attachment.upload",
+    ATTACHMENT_DELETE: "attachment.delete",
     REPORT_CREATE: "report.create",
     FIX_PROPOSAL_CREATE: "fix_proposal.create",
     RETEST_CREATE: "retest.create",
@@ -366,6 +369,52 @@ describe("POST /api/connections", () => {
       })
     )
     expect(res.status).toBe(400)
+    expect(createAgentConnection).not.toHaveBeenCalled()
+  })
+
+  it("allows an explicit attachment-list grant on a read-only connection without write scope", async () => {
+    vi.mocked(createAgentConnection).mockResolvedValue({ id: "conn-read-attachments" } as never)
+    const res = await POST(
+      new Request("http://localhost/api/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          clientType: "cursor",
+          oauthClientId: "client-cursor",
+          scopes: ["lyrashield.read"],
+          allowedOperations: ["attachment.read"],
+          consentState: "signed",
+        }),
+      })
+    )
+    expect(res.status).toBe(201)
+    expect(createAgentConnection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scopes: ["lyrashield.read"],
+        allowedOperations: ["attachment.read"],
+        allTargets: false,
+        allowedProfiles: [],
+      })
+    )
+  })
+
+  it("rejects attachment upload or delete grants on a read-only connection", async () => {
+    for (const operation of ["attachment.upload", "attachment.delete"]) {
+      const res = await POST(
+        new Request("http://localhost/api/connections", {
+          method: "POST",
+          body: JSON.stringify({
+            workspaceId: "ws-1",
+            clientType: "cursor",
+            oauthClientId: "client-cursor",
+            scopes: ["lyrashield.read"],
+            allowedOperations: ["attachment.read", operation],
+            consentState: "signed",
+          }),
+        })
+      )
+      expect(res.status).toBe(400)
+    }
     expect(createAgentConnection).not.toHaveBeenCalled()
   })
 

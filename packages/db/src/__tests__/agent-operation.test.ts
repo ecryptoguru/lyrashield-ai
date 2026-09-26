@@ -178,6 +178,25 @@ describe("WP-03 Agent Operation Durable Execution and Idempotency", () => {
 
     expect(result.status).toBe("CONFLICT")
   })
+
+  it("does not replay a completed operation after delegated authorization changes", async () => {
+    const input = { targetId: "target-A" }
+    vi.mocked(prisma.agentOperation.findUnique).mockResolvedValueOnce({
+      id: "op-old",
+      inputHash: hashOperationInput("scan.create", input),
+      authorizationVersion: 1,
+      status: "COMPLETED",
+    } as never)
+    const result = await claimOrGetAgentOperation({
+      workspaceId: "ws-1",
+      connectionId: "conn-1",
+      authorizationVersion: 2,
+      operationName: "scan.create",
+      idempotencyKey: "retry",
+      input,
+    })
+    expect(result.status).toBe("CONFLICT")
+  })
 })
 
 it("restricts operation status to its principal and current authorization version", async () => {

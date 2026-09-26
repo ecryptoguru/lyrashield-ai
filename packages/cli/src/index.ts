@@ -37,6 +37,9 @@ const COMMANDS: Record<string, CommandThunk> = {
   scan: () => import("./commands/scan.js").then((m) => m.handleScan),
   "pr-scan": () => import("./commands/pr-scan.js").then((m) => m.handlePrScan),
   status: () => import("./commands/status.js").then((m) => m.handleStatus),
+  cancel: () => import("./commands/cancel.js").then((m) => m.handleCancel),
+  preflight: () => import("./commands/preflight.js").then((m) => m.handlePreflight),
+  attachments: () => import("./commands/attachments.js").then((m) => m.handleAttachments),
   quality: () => import("./commands/quality.js").then((m) => m.handleQuality),
   findings: () => import("./commands/findings.js").then((m) => m.handleFindings),
   explain: () => import("./commands/explain.js").then((m) => m.handleExplain),
@@ -76,7 +79,10 @@ Commands:
   project              Manage the default project
   scan                 Start a security scan [--base <ref> --head <ref> for Review Changes; --attachment <id> adds an already-uploaded attachment, repeatable]
   pr-scan              Start a PR-focused scan (alias for scan --goal CHECK_PR; --base/--head record a Review Changes run)
-  status [scanId]      Show scan status
+  status [scanId]      Show scan or operation status [--watch --timeout <seconds>]
+  cancel <scanId>      Explicitly cancel an active scan
+  preflight            Check advisory scan eligibility without submitting work
+  attachments          List, upload, or remove scan input attachments
   quality <scanId>     Show the scan's measured evidence-quality surface
   findings             List findings
   explain <findingId>  Explain a finding

@@ -1,6 +1,16 @@
 import { execFileSync } from "child_process"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { mkdtemp, mkdir, readFile, realpath, rm, symlink, utimes, writeFile } from "fs/promises"
+import {
+  chmod,
+  mkdtemp,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from "fs/promises"
 import { tmpdir } from "os"
 import { join } from "path"
 import { createHash } from "crypto"
@@ -58,6 +68,7 @@ import {
   runEngine,
 } from "./runner"
 import { addScanEvent } from "@lyrashield/db"
+import { env } from "@lyrashield/config"
 
 const cleanupPaths: string[] = []
 
@@ -1071,6 +1082,61 @@ it("does not emit engine_start when cancellation already won", async () => {
   expect(result).toMatchObject({ exitCode: -1, cancelled: true })
   expect(addScanEvent).not.toHaveBeenCalled()
 })
+
+/* eslint-disable security/detect-non-literal-fs-filename -- Paths are confined to this test's private temporary directory. */
+it("terminates a running engine after cancellation and escalates an ignored SIGTERM", async () => {
+  const fixture = await mkdtemp(join(tmpdir(), "lyrashield-cancel-child-"))
+  const script = join(fixture, "engine.mjs")
+  const started = join(fixture, "started")
+  const signal = join(fixture, "signal")
+  const scanId = `cancel-child-${Date.now()}`
+  const workspace = join(process.cwd(), "lyrashield_runs", scanId)
+  cleanupPaths.push(fixture, workspace)
+  // The real process ignores SIGTERM; the worker must send SIGKILL after grace.
+  await writeFile(
+    script,
+    `#!/usr/bin/env node\nimport { writeFileSync } from 'node:fs'\nwriteFileSync(${JSON.stringify(started)}, 'ready')\nprocess.on('SIGTERM', () => writeFileSync(${JSON.stringify(signal)}, 'SIGTERM'))\nsetInterval(() => {}, 1000)\n`,
+    "utf8"
+  )
+  await chmod(script, 0o700)
+  const runtimeEnv = env as { LYRASHIELD_ENGINE_PATH: string }
+  const previousEnginePath = runtimeEnv.LYRASHIELD_ENGINE_PATH
+  const previousLuna = process.env.LYRASHIELD_LUNA_LLM
+  const previousNetwork = process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK
+  runtimeEnv.LYRASHIELD_ENGINE_PATH = script
+  process.env.LYRASHIELD_LUNA_LLM = "openai/gpt-6-luna"
+  process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK = "test-egress"
+  let cancelled = false
+  try {
+    const run = runEngine(
+      {
+        scanId,
+        goal: "TEST_APP",
+        mode: "SAFE",
+        target: { id: "target-1", type: "REPO", repoFullName: "acme/repo", name: "Repository" },
+      },
+      scanId,
+      30_000,
+      async () => cancelled
+    )
+    await vi.waitFor(async () => expect(await readFile(started, "utf8")).toBe("ready"), {
+      timeout: 5000,
+    })
+    cancelled = true
+    const result = await run
+    expect(result).toMatchObject({ exitCode: -1, cancelled: true, timedOut: false })
+    expect(await readFile(signal, "utf8")).toBe("SIGTERM")
+    expect(terminateActiveEngineProcesses()).toBe(0)
+  } finally {
+    runtimeEnv.LYRASHIELD_ENGINE_PATH = previousEnginePath
+    if (previousLuna === undefined) delete process.env.LYRASHIELD_LUNA_LLM
+    else process.env.LYRASHIELD_LUNA_LLM = previousLuna
+    if (previousNetwork === undefined) delete process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK
+    else process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK = previousNetwork
+    terminateActiveEngineProcesses()
+  }
+}, 12_000)
+/* eslint-enable security/detect-non-literal-fs-filename */
 
 it("refuses to clean a workspace outside the worker-owned run root", async () => {
   const outside = await mkdtemp(join(tmpdir(), "worker-cleanup-guard-"))

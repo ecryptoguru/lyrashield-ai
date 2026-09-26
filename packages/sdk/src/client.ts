@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { setTimeout as sleep } from "node:timers/promises"
 import { LyraShieldError, NotModified } from "./errors"
 
 export const VERSION = "0.1.0"
@@ -27,8 +28,11 @@ export interface LyraShieldClientOptions {
 
 export interface RequestOptions<T = unknown> {
   body?: unknown
+  /** Raw request bytes, mutually exclusive with JSON `body`. */
+  rawBody?: Uint8Array
   headers?: Record<string, string>
   etag?: string
+  signal?: AbortSignal
   /** Optional parser that validates `data` at runtime instead of casting it. */
   parse?: (data: unknown) => T
 }
@@ -98,23 +102,53 @@ export class LyraShieldClient {
     path: string,
     options?: RequestOptions<T>
   ): Promise<T | NotModified> {
+    if (options?.rawBody !== undefined && options.body !== undefined) {
+      throw new LyraShieldError({
+        status: 0,
+        code: "INVALID_REQUEST",
+        message: "body and rawBody cannot be combined",
+      })
+    }
+    if (options?.signal?.aborted) {
+      throw new LyraShieldError({
+        status: 0,
+        code: "REQUEST_ABORTED",
+        message: "Request cancelled",
+      })
+    }
     const url = this.buildUrl(path)
     const isIdempotent = IDEMPOTENT_METHODS.has(method.toUpperCase())
-    const body = options?.body != null ? JSON.stringify(options.body) : undefined
+    const body =
+      options?.rawBody !== undefined
+        ? new Uint8Array(options.rawBody)
+        : options?.body != null
+          ? JSON.stringify(options.body)
+          : undefined
 
     const headers: Record<string, string> = {
       "User-Agent": this.userAgent,
       Accept: "application/json",
     }
     const effectiveToken = await this.resolveToken()
+    if (options?.signal?.aborted) {
+      throw new LyraShieldError({
+        status: 0,
+        code: "REQUEST_ABORTED",
+        message: "Request cancelled",
+      })
+    }
     if (effectiveToken) headers["Authorization"] = `Bearer ${effectiveToken}`
-    if (body) headers["Content-Type"] = "application/json"
+    if (body !== undefined && options?.rawBody === undefined)
+      headers["Content-Type"] = "application/json"
     if (options?.etag) headers["If-None-Match"] = options.etag
     if (options?.headers) Object.assign(headers, options.headers)
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      const signal = options?.signal
+        ? AbortSignal.any([controller.signal, options.signal])
+        : controller.signal
       let lastStatus = 0
 
       try {
@@ -122,7 +156,7 @@ export class LyraShieldClient {
           method,
           headers,
           body,
-          signal: controller.signal,
+          signal,
         })
         lastStatus = res.status
 
@@ -158,7 +192,7 @@ export class LyraShieldClient {
           const delay = Math.min(baseDelay + jitter, MAX_RETRY_DELAY_MS)
           clearTimeout(timeout)
           await res.body?.cancel()
-          await new Promise((resolve) => setTimeout(resolve, delay))
+          await sleep(delay, undefined, { signal: options?.signal })
           continue
         }
 
@@ -191,6 +225,13 @@ export class LyraShieldClient {
       } catch (err) {
         if (err instanceof LyraShieldError) throw err
         if (err instanceof Error && err.name === "AbortError") {
+          if (options?.signal?.aborted) {
+            throw new LyraShieldError({
+              status: 0,
+              code: "REQUEST_ABORTED",
+              message: "Request cancelled",
+            })
+          }
           throw new LyraShieldError({
             status: 0,
             code: "REQUEST_TIMEOUT",

@@ -13,6 +13,9 @@ vi.mock("@lyrashield/db", () => ({
   getScanWithEvents: vi.fn(),
   cancelScan: vi.fn(),
   removeScan: vi.fn(),
+  claimOrGetAgentOperation: vi.fn(),
+  completeAgentOperation: vi.fn(),
+  failAgentOperation: vi.fn(),
   prisma: { auditLog: { create: vi.fn() } },
 }))
 
@@ -31,7 +34,14 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import { DELETE, GET, POST } from "./route"
-import { cancelScan, getScanWithEvents, prisma, removeScan } from "@lyrashield/db"
+import {
+  cancelScan,
+  claimOrGetAgentOperation,
+  completeAgentOperation,
+  getScanWithEvents,
+  prisma,
+  removeScan,
+} from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 
 const routeParams = { params: Promise.resolve({ id: "scan-1" }) }
@@ -121,6 +131,40 @@ describe("/api/scans/[id] workspace boundary", () => {
     await expect(response.json()).resolves.toMatchObject({
       data: { id: "scan-1", status: "CANCELLED" },
     })
+  })
+
+  it("replays a keyed cancellation after a lost response without a second cancel", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({ id: "scan-1", workspaceId: "ws-1" } as never)
+    vi.mocked(claimOrGetAgentOperation)
+      .mockResolvedValueOnce({ status: "NEW", operation: { id: "op-1" } } as never)
+      .mockResolvedValueOnce({
+        status: "REPLAY",
+        operation: { id: "op-1", result: { id: "scan-1", status: "CANCELLED" } },
+      } as never)
+    vi.mocked(cancelScan).mockResolvedValue({ id: "scan-1", status: "CANCELLED" } as never)
+    vi.mocked(completeAgentOperation).mockResolvedValue({} as never)
+
+    const request = () =>
+      new Request("http://localhost/api/scans/scan-1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "cancel-1" },
+        body: JSON.stringify({ workspaceId: "ws-1" }),
+      })
+    expect((await POST(request(), routeParams)).status).toBe(200)
+    const replay = await POST(request(), routeParams)
+    expect(replay.status).toBe(200)
+    await expect(replay.json()).resolves.toMatchObject({
+      data: { id: "scan-1", status: "CANCELLED", operationId: "op-1" },
+    })
+    expect(cancelScan).toHaveBeenCalledTimes(1)
+    expect(claimOrGetAgentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        operationName: "scan.cancel",
+        idempotencyKey: "cancel-1",
+        input: { id: "scan-1" },
+      })
+    )
   })
 
   it("returns a conflict when finalization already won", async () => {

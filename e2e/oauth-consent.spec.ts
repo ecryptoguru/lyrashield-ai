@@ -75,7 +75,10 @@ test("OAuth consent discloses automatic access and recovers from errors on mobil
     await expect(page.getByRole("heading", { name: "Connect Test Agent" })).toBeVisible()
     await page.getByLabel("Target Workspace").selectOption(workspaceId)
     await expect(page.getByText(/incur charges/)).toBeVisible()
-    await expect(page.getByRole("checkbox")).toHaveCount(0)
+    await expect(page.getByRole("checkbox")).toHaveCount(2)
+    for (const checkbox of await page.getByRole("checkbox").all()) {
+      await expect(checkbox).not.toBeChecked()
+    }
     await expect(page.getByRole("radio")).toHaveCount(0)
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       width

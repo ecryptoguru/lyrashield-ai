@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { execFile } from "node:child_process"
 import { discoverWebMcpTools } from "@lyrashield/security/webmcp/discover"
-import { runWebMcpDiffChecks } from "../diff-core.js"
+import { getChangedFileContent, runWebMcpDiffChecks } from "../diff-core.js"
 
 vi.mock("node:child_process", () => ({ execFile: vi.fn() }))
 vi.mock("@lyrashield/security/webmcp", () => ({
@@ -127,5 +127,19 @@ describe("runWebMcpDiffChecks coverage", () => {
 
     await expect(runWebMcpDiffChecks("base", "head")).resolves.toEqual([])
     expect(mockDiscover).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not substitute working-tree content when the selected ref lacks a file", async () => {
+    mockExecFile.mockImplementation(((_command, _args, _options, callback) => {
+      const done = callback as unknown as (
+        error: Error | null,
+        stdout: string,
+        stderr: string
+      ) => void
+      done(new Error("missing at ref"), "", "")
+      return {} as ReturnType<typeof execFile>
+    }) as typeof execFile)
+
+    await expect(getChangedFileContent("head", "package.json")).resolves.toBeUndefined()
   })
 })

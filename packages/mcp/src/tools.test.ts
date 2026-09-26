@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import {
   createScanTargetTool,
+  createCancelScanTool,
+  createListScanAttachmentsTool,
+  createUploadScanAttachmentTool,
+  createDeleteScanAttachmentTool,
+  createGetScanEligibilityTool,
+  createRequestFixPrTool,
   createRunPrScanTool,
   createGetFindingsTool,
   createGetLaunchReadinessTool,
@@ -51,6 +57,186 @@ describe("MCP safety metadata", () => {
       expect(typeof MCP_TOOL_ANNOTATIONS[tool.name]?.destructiveHint).toBe("boolean")
       expect(typeof MCP_TOOL_ANNOTATIONS[tool.name]?.openWorldHint).toBe("boolean")
     }
+  })
+})
+
+describe("createCancelScanTool", () => {
+  it("uses scan cancellation POST, never scan DELETE, and preserves terminal state", async () => {
+    mockFetch.mockResolvedValueOnce(makeApiResponse({ id: "scan-1", status: "CANCELLED" }))
+    const result = await createCancelScanTool(context).handler({
+      workspaceId: "ws-1",
+      scanId: "scan-1",
+      idempotencyKey: "same-cancellation",
+    })
+    expect(result.structuredContent).toEqual({
+      action: "scan_cancelled",
+      scan: { id: "scan-1", status: "CANCELLED" },
+    })
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3000/api/v1/scans/scan-1",
+      expect.objectContaining({ method: "POST" })
+    )
+    expect(JSON.parse(String((mockFetch.mock.calls[0]![1] as RequestInit).body))).toEqual({
+      workspaceId: "ws-1",
+    })
+    expect(
+      new Headers((mockFetch.mock.calls[0]![1] as RequestInit).headers).get("Idempotency-Key")
+    ).toMatch(/^mcp:[a-f0-9]{64}$/)
+  })
+
+  it("reports finalization conflicts without claiming cancellation", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      headers: new Headers(),
+      json: async () => ({
+        success: false,
+        error: { code: "SCAN_FINALIZATION_STARTED", message: "Scan finalization already started" },
+      }),
+    })
+    const result = await createCancelScanTool(context).handler({
+      workspaceId: "ws-1",
+      scanId: "scan-1",
+    })
+    expect(result.isError).toBe(true)
+    expect(result.structuredContent?.error).toContain("finalization")
+  })
+})
+
+describe("attachment and preflight tools", () => {
+  it("lists bounded metadata through the typed SDK", async () => {
+    mockFetch.mockResolvedValueOnce(makeApiResponse({ items: [] }))
+    const result = await createListScanAttachmentsTool(context).handler({ workspaceId: "ws-1" })
+    expect(result.structuredContent).toEqual({ items: [] })
+    expect(mockFetch.mock.calls[0]![0]).toBe(
+      "http://localhost:3000/api/v1/scans/attachments?workspaceId=ws-1"
+    )
+  })
+
+  it("uploads UTF-8 raw bytes with a stable replay key and does not echo content", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeApiResponse({
+        id: "att-1",
+        filename: "context.md",
+        mediaType: "text/markdown",
+        byteLength: 3,
+        checksum: "a".repeat(64),
+        createdAt: new Date().toISOString(),
+      })
+    )
+    const result = await createUploadScanAttachmentTool(context).handler({
+      workspaceId: "ws-1",
+      filename: "context.md",
+      mediaType: "text/markdown",
+      content: "abc",
+      idempotencyKey: "upload-1",
+    })
+    expect(result.isError).toBeUndefined()
+    expect(JSON.stringify(result)).not.toContain("abc")
+    const init = mockFetch.mock.calls[0]![1] as RequestInit
+    expect(init.method).toBe("POST")
+    expect(init.body).toBeInstanceOf(Uint8Array)
+    expect(new TextDecoder().decode(init.body as Uint8Array)).toBe("abc")
+    expect(new Headers(init.headers).get("Idempotency-Key")).toMatch(/^mcp:[a-f0-9]{64}$/)
+  })
+
+  it("rejects over-limit UTF-8 content before upload", async () => {
+    const result = await createUploadScanAttachmentTool(context).handler({
+      workspaceId: "ws-1",
+      filename: "context.md",
+      mediaType: "text/markdown",
+      content: "😀".repeat(17_000),
+    })
+    expect(result.isError).toBe(true)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it("rejects non-text upload content before reaching the API", async () => {
+    const result = await createUploadScanAttachmentTool(context).handler({
+      workspaceId: "ws-1",
+      filename: "context.md",
+      mediaType: "text/markdown",
+      content: { unexpected: true },
+    })
+    expect(result.isError).toBe(true)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it("deletes by attachment ID with a stable key", async () => {
+    mockFetch.mockResolvedValueOnce(makeApiResponse({ id: "att-1", deleted: true }))
+    const result = await createDeleteScanAttachmentTool(context).handler({
+      workspaceId: "ws-1",
+      attachmentId: "att-1",
+      idempotencyKey: "delete-1",
+    })
+    expect(result.structuredContent).toEqual({ id: "att-1", deleted: true })
+    expect(mockFetch.mock.calls[0]![0]).toBe(
+      "http://localhost:3000/api/v1/scans/attachments/att-1?workspaceId=ws-1"
+    )
+    expect((mockFetch.mock.calls[0]![1] as RequestInit).method).toBe("DELETE")
+  })
+
+  it("uses GET for advisory eligibility without submission", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeApiResponse({
+        version: "lyrashield-scan-eligibility/1.0.0",
+        allowed: true,
+        code: "ELIGIBLE",
+        message: "Ready",
+        plan: "STARTER",
+        isTrial: false,
+        remainingMinutes: 10,
+      })
+    )
+    const result = await createGetScanEligibilityTool(context).handler({
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      goal: "TEST_APP",
+      mode: "QUICK",
+    })
+    expect((mockFetch.mock.calls[0]![1] as RequestInit).method).toBe("GET")
+    expect(mockFetch.mock.calls[0]![0]).toContain("/scans/eligibility?")
+    expect(result.isError).toBeUndefined()
+  })
+})
+
+describe("createRequestFixPrTool", () => {
+  it("sends only proposal identity and reports pending approval truthfully", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeApiResponse({
+        status: "pending_approval",
+        approvalId: "approval-1",
+        approvalUrl: "https://app.example.com/approve",
+      })
+    )
+    const result = await createRequestFixPrTool(context).handler({
+      workspaceId: "ws-1",
+      proposalId: "proposal-1",
+      idempotencyKey: "fix-1",
+    })
+    expect(result.structuredContent).toMatchObject({ status: "pending_approval" })
+    expect(mockFetch.mock.calls[0]![0]).toBe(
+      "http://localhost:3000/api/v1/fix-proposals/proposal-1/create-pr"
+    )
+    const init = mockFetch.mock.calls[0]![1] as RequestInit
+    expect(JSON.parse(String(init.body))).toEqual({ workspaceId: "ws-1" })
+    expect(new Headers(init.headers).get("Idempotency-Key")).toMatch(/^mcp:[a-f0-9]{64}$/)
+  })
+
+  it("does not advertise caller patch or branch fields", () => {
+    const schema = createRequestFixPrTool(context).inputSchema
+    expect(schema.properties).not.toHaveProperty("patch")
+    expect(schema.properties).not.toHaveProperty("branch")
+  })
+
+  it("rejects caller-supplied patch fields without calling the API", async () => {
+    const result = await createRequestFixPrTool(context).handler({
+      workspaceId: "ws-1",
+      proposalId: "proposal-1",
+      patch: "untrusted diff",
+    })
+    expect(result.isError).toBe(true)
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })
 

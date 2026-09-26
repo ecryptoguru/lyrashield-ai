@@ -1,7 +1,35 @@
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
+import { createMcpHandler } from "@modelcontextprotocol/server"
 import { createLyraShieldServer } from "./create-server"
 import type { RemoteApprovalContext, RemoteApprovalGate } from "./create-server"
 import type { ToolHandlerContext } from "./tools"
+
+// Diffs and explicit source snapshots can be larger than attachment content.
+// The upload tool enforces its own 64 KiB content ceiling after this transport cap.
+const MAX_REMOTE_MCP_REQUEST_BYTES = 13 * 1024 * 1024
+
+async function requestWithinLimit(request: Request): Promise<boolean> {
+  if (request.method !== "POST") return true
+  const length = request.headers.get("content-length")
+  if (length !== null && (!/^\d+$/.test(length) || Number(length) > MAX_REMOTE_MCP_REQUEST_BYTES))
+    return false
+  const reader = request.clone().body?.getReader()
+  if (!reader) return true
+  let total = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) return true
+      total += value.byteLength
+      if (total > MAX_REMOTE_MCP_REQUEST_BYTES) {
+        void reader.cancel().catch(() => undefined)
+        void request.body?.cancel().catch(() => undefined)
+        return false
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
 
 /**
  * Remote (Streamable HTTP) MCP handler for the LyraShield app.
@@ -38,35 +66,29 @@ export async function handleRemoteMcpRequest(
   request: Request,
   options: RemoteMcpOptions
 ): Promise<Response> {
-  const approvalMode = options.remoteApprovalGate ? "remote-oob" : "deny"
-  const { server } = createLyraShieldServer({
-    toolContext: options.toolContext,
-    approvalMode,
-    ...(options.allowMutations ? { allowMutations: true } : {}),
-    ...(options.delegatedAuthorization ? { delegatedAuthorization: true } : {}),
-    ...(options.remoteApprovalContext && options.remoteApprovalGate
-      ? {
-          remoteApprovalContext: options.remoteApprovalContext,
-          remoteApprovalGate: options.remoteApprovalGate,
-        }
-      : {}),
-  })
-
-  // Stateless: no sessionIdGenerator. Each request is fully self-contained.
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-  })
-
-  await server.connect(transport)
-
-  // Release the per-request server/transport pair once the response stream has
-  // been fully delivered. Closing eagerly here would truncate the (possibly
-  // streamed / SSE) response body, so tie cleanup to transport close instead.
-  transport.onclose = () => {
-    void server.close().catch(() => {})
+  if (!(await requestWithinLimit(request))) {
+    return Response.json(
+      { jsonrpc: "2.0", error: { code: -32600, message: "MCP request body too large" }, id: null },
+      { status: 413, headers: { "Cache-Control": "no-store" } }
+    )
   }
-
-  const response = await transport.handleRequest(request)
+  const approvalMode = options.remoteApprovalGate ? "remote-oob" : "deny"
+  const handler = createMcpHandler(
+    () =>
+      createLyraShieldServer({
+        toolContext: options.toolContext,
+        approvalMode,
+        ...(options.allowMutations ? { allowMutations: true } : {}),
+        ...(options.delegatedAuthorization ? { delegatedAuthorization: true } : {}),
+        ...(options.remoteApprovalContext && options.remoteApprovalGate
+          ? {
+              remoteApprovalContext: options.remoteApprovalContext,
+              remoteApprovalGate: options.remoteApprovalGate,
+            }
+          : {}),
+      }).server
+  )
+  const response = await handler.fetch(request)
   // Responses contain workspace-scoped security data. Prevent browser/CDN
   // caching and keep auth/protocol variants distinct even when an intermediary
   // ignores endpoint configuration.

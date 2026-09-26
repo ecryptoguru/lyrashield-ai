@@ -62,9 +62,15 @@ export async function recordedOperation(
       return response
     }
     const envelope = (await response.clone().json()) as { data: Record<string, unknown> }
+    const resultReference = [
+      envelope.data.id,
+      envelope.data.approvalUrl,
+      envelope.data.prUrl,
+      envelope.data.approvalId,
+    ].find((value): value is string => typeof value === "string" && value.length > 0)
     await completeAgentOperation(operationId, params.workspaceId, {
       result: envelope.data,
-      resultReference: typeof envelope.data.id === "string" ? envelope.data.id : undefined,
+      resultReference,
     })
     completed = true
     return apiSuccess({ ...envelope.data, operationId }, response.status)

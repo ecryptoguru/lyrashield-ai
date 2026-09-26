@@ -474,21 +474,42 @@ export class PromptInjectionGuard {
   }
 
   checkToolCall(toolName: string, args: Record<string, unknown>): GuardResult {
+    if (toolName === "lyrashield_upload_scan_attachment") {
+      // Attachment content is inert evidence, not an instruction to the agent.
+      // Inspect only control fields here; schema and storage validate the bytes.
+      // Never copy content into diagnostics or a sanitized replacement payload.
+      const { content, ...controlArgs } = args
+      if (typeof content !== "string") {
+        return {
+          allowed: false,
+          reason: "Attachment content must be UTF-8 text",
+          detectedPatterns: [],
+        }
+      }
+      if (Buffer.byteLength(content, "utf8") > 64 * 1024) {
+        return {
+          allowed: false,
+          reason: "Attachment exceeds MCP upload limit",
+          detectedPatterns: [],
+        }
+      }
+      const result = this.check(JSON.stringify({ tool: toolName, args: controlArgs }))
+      return { ...result, sanitizedInput: undefined }
+    }
+    if (toolName === "lyrashield_check_diff") {
+      // Source text is inert data with its own byte limits. Check only path
+      // labels here, never interpret code as an instruction to the agent.
+      const files = Array.isArray(args.files)
+        ? args.files.slice(0, 501).map((file) => ({ path: file?.path }))
+        : args.files
+      const result = this.check(JSON.stringify({ tool: toolName, args: { files } }), {
+        maxInputLength: 100_000,
+        skipPatterns: new Set(["code_execution", "env_extraction"]),
+      })
+      return { ...result, sanitizedInput: undefined }
+    }
     const serialized = JSON.stringify({ tool: toolName, args })
-
-    // The check_diff tool receives raw PR diffs that routinely exceed the
-    // default 10000-char limit and legitimately contain code-execution and
-    // env-extraction patterns. Raise the limit and skip those pattern classes
-    // so the advisory scanner (which intentionally detects those patterns) sees
-    // the diff instead of being blocked by the injection guard.
-    const overrides =
-      toolName === "lyrashield_check_diff"
-        ? {
-            maxInputLength: 200000,
-            skipPatterns: new Set(["code_execution", "env_extraction"]),
-          }
-        : undefined
-    const result = this.check(serialized, overrides)
+    const result = this.check(serialized)
 
     if (result.allowed && result.sanitizedInput) {
       try {

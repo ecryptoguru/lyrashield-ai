@@ -68,6 +68,7 @@ export type PlatformAdminIdentity = AuthSession & {
  */
 const READ_SCOPE_PERMISSIONS: ReadonlySet<string> = new Set([
   "scan:view",
+  "scan_attachment:read",
   "finding:view",
   "retest:view",
   "notification:view",
@@ -384,10 +385,26 @@ export async function requirePermission(
     }
   }
 
+  // Workspace-wide attachment metadata is not inherited from scan:view or a
+  // target-scoped automation grant. Existing connections keep their old scope.
+  if (permission === PERMISSIONS.scanAttachment.read) {
+    if (session.apiKey && !session.apiKey.scopes.includes("write")) throw new Error("FORBIDDEN")
+    if (
+      session.oauth &&
+      (!session.oauth.connectionId ||
+        !session.oauth.allowedOperations?.includes(CANONICAL_OPERATIONS.ATTACHMENT_READ))
+    ) {
+      throw new Error("FORBIDDEN")
+    }
+  }
+
   // Delegated connection enforcement: mutating actions require delegated grant
   if (session.oauth?.connectionId && !READ_SCOPE_PERMISSIONS.has(permission)) {
     const requiredOps: Partial<Record<string, string[]>> = {
       [PERMISSIONS.scan.create]: [CANONICAL_OPERATIONS.SCAN_CREATE],
+      [PERMISSIONS.scan.cancel]: [CANONICAL_OPERATIONS.SCAN_CANCEL],
+      [PERMISSIONS.scanAttachment.upload]: [CANONICAL_OPERATIONS.ATTACHMENT_UPLOAD],
+      [PERMISSIONS.scanAttachment.delete]: [CANONICAL_OPERATIONS.ATTACHMENT_DELETE],
       [PERMISSIONS.retest.create]: [CANONICAL_OPERATIONS.RETEST_CREATE],
       [PERMISSIONS.fix.create]: [CANONICAL_OPERATIONS.FIX_PROPOSAL_CREATE],
       [PERMISSIONS.fix.createPr]: [CANONICAL_OPERATIONS.FIX_PR_CREATE],

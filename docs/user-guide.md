@@ -540,6 +540,8 @@ npx lyrashield gate                # CI-friendly diff-aware security gate
 
 Other commands mirror the dashboard and the MCP tools below: `scan`, `status`, `findings`, `explain <findingId>`, `fix-plan <findingId>`, `verify <findingId>`, `report`, `readiness`, `targets`, `targets remove <targetId>` (soft delete — history is retained and the plan cap slot is freed) and `rules add/remove/check <agent>` (writes or removes LyraShield's security policy in that agent's native rules format — `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc` and others — inside a checksummed block so re-running never clobbers your own edits to the surrounding file). `check-diff` is the same fast, local, **advisory** heuristic as the MCP tool of the same purpose — not a full recorded scan. Every command supports `--json` for scripting and `gate` exits non-zero when a finding at or above the configured severity is present, matching the GitHub Action's own gate semantics.
 
+The new `preflight` command checks eligibility and expected scope without starting work; the server checks again when a scan is submitted. `scan --wait` waits for a terminal result and `scan --watch` shows progress; `status --watch` can resume from a scan or recorded-operation ID. Interrupting the CLI stops local waiting, while `cancel <scanId>` explicitly requests cancellation of the active scan. Use `attachments` to list, upload, or remove bounded supporting text inputs. A fix-PR request is approval-bound and accepts no caller-supplied patch.
+
 **Project defaults** make scans one-command: `lyrashield project use` detects the current git repo, creates or reuses a repo target and saves it as the default project. `lyrashield scan` then starts a scan without `--target`. Switch projects with `lyrashield project switch <targetId>`, list them with `lyrashield project list` or clear with `lyrashield project clear`. To scan the current git repo instead of the saved default, pass `--auto`; to scan another repository, pass `--repo <owner/repo>`.
 
 **Review depth:** deeper modes consume more compute and take longer. Choose the least intensive mode that answers the question.
@@ -563,6 +565,9 @@ LyraShield exposes an MCP server for local editors and a hosted remote endpoint.
 - `lyrashield_list_workspaces` — list workspaces the credential can access;
 - `lyrashield_list_targets` — list targets in a workspace;
 - `lyrashield_get_scan_status` — status and events for a scan;
+- `lyrashield_get_scan_eligibility` — advisory preflight before submission; the scan endpoint rechecks admission;
+- `lyrashield_get_scan_quality` — versioned quality and evidence-scope summary;
+- `lyrashield_list_scan_attachments` — workspace attachment metadata, subject to an explicit connected OAuth grant for OAuth clients;
 - `lyrashield_get_findings` — list findings with target, scan, severity, status or verification filters; use the returned cursor to continue a bounded result page;
 - `lyrashield_explain_finding` — full detail and plain-language explanation of a finding;
 - `lyrashield_generate_fix_plan` — assemble a remediation plan from a finding;
@@ -573,6 +578,9 @@ LyraShield exposes an MCP server for local editors and a hosted remote endpoint.
 #### Write tools
 
 - `lyrashield_scan_target` — start a scan on a registered target. Pass `targetId` directly or pass `repo` (e.g. `ecryptoguru/lyrashield-ai`) to create or reuse a target; `auto: true` detects the current git repo only for local stdio MCP;
+- `lyrashield_cancel_scan` — explicitly cancel a running scan with a separate connected OAuth grant;
+- `lyrashield_upload_scan_attachment` and `lyrashield_delete_scan_attachment` — bounded attachment changes with separate connected OAuth grants;
+- `lyrashield_request_fix_pr` — request a PR from a stored, approval-bound fix proposal without supplying patch or branch content;
 - `lyrashield_run_pr_scan` — start a PR-focused (CHECK_PR) scan. It has the same `repo` support and local-stdio-only `auto` support, as `lyrashield_scan_target`;
 - `lyrashield_record_fix_proposal` — record a fix proposal on a finding;
 - `lyrashield_verify_fix` — queue a retest to verify a fix;
@@ -584,9 +592,9 @@ Mutating MCP tools follow one connection-grant model. A connected OAuth client r
 
 The remote HTTP transport supports workspace API keys and OAuth discovery through `/oauth/consent`. New write-scoped OAuth consent uses one Connect action, with an explicit disclosure of automatic workflows, all current and future workspace targets, supported profiles and potential usage charges. Hosted delegated mutations require a stable idempotency key; identical retries return the original result. Current membership, role, scope, expiry, target authorization and budget remain enforced. Existing restricted grants are not silently widened; reconnect when broader access is needed. The PENDING/approvalId cycle is retired on the remote path; a call carrying a legacy `approvalId` receives `connect_required`.
 
-Agent hosts may still show their own permission dialogs. WebMCP's `prepare_security_scan` tool only fills the dashboard form; it does not start a scan. These capabilities are distinct from hosted OAuth automation. Model-facing inputs continue through the prompt-injection guard.
+Agent hosts may still show their own permission dialogs. WebMCP's `prepare_security_scan` tool runs advisory preflight and fills the dashboard form; it does not start a scan. Dashboard WebMCP also exposes read-only progress and report access with visible activity. The optional native-browser fixture produces a bounded runtime receipt; an unavailable native API or unsupported cancellation check is `INCONCLUSIVE`, not a passing control. These capabilities are distinct from hosted OAuth automation. Model-facing inputs continue through the prompt-injection guard.
 
-The local MCP package uses MCP SDK `1.30` and requires Node 24 or newer. Client-specific install guides remain the authority for whether a client uses stdio, Streamable HTTP, OAuth discovery, a plugin, a config file or guided manual setup. A package test or generated fixture is not an authenticated receipt from every supported client.
+The source MCP release candidate uses the official SDK v2 server, supports `2026-07-28` and tested legacy protocol clients, and requires Node 24 or newer. MCP Tasks are not advertised because the SDK's modern receiver does not support them; recover scans by their durable scan or operation IDs. Client-specific install guides remain the authority for whether a client uses stdio, Streamable HTTP, OAuth discovery, a plugin, a config file or guided manual setup. A package test or generated fixture is not an authenticated receipt from every supported client. See `docs/agent-surfaces-completion.md` for publication and live-proof status.
 
 Use the same supported scan modes as the API: SAFE, QUICK, STANDARD, DEEP or CUSTOM. Dashboard users should normally prefer the named presets rather than raw modes.
 

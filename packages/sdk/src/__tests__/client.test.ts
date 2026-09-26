@@ -31,6 +31,38 @@ function mockResponse({
 }
 
 describe("LyraShieldClient", () => {
+  it("does not fetch when a caller has already cancelled", async () => {
+    const fetchFn = vi.fn()
+    const controller = new AbortController()
+    controller.abort()
+    const client = new LyraShieldClient({ apiKey: "synthetic", fetchFn: makeFetch(fetchFn) })
+    await expect(
+      client.request("GET", "/workspaces", { signal: controller.signal })
+    ).rejects.toMatchObject({
+      code: "REQUEST_ABORTED",
+    })
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it("stops an in-flight request on caller cancellation without reporting a timeout", async () => {
+    const controller = new AbortController()
+    const fetchFn = vi.fn(
+      (_url: unknown, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          ;(init.signal as AbortSignal).addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true }
+          )
+        })
+    )
+    const client = new LyraShieldClient({ apiKey: "synthetic", fetchFn: makeFetch(fetchFn) })
+    const pending = client.request("GET", "/workspaces", { signal: controller.signal })
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1))
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ code: "REQUEST_ABORTED" })
+  })
+
   it.each([200, 400])(
     "keeps the timeout active through a stalled %i response body",
     async (status) => {

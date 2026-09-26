@@ -12,7 +12,7 @@ const baseProps = {
 }
 
 describe("OAuthConsentForm", () => {
-  it("offers one connection action with automatic access and cost disclosure", () => {
+  it("offers automatic access and keeps scan cancellation opt-in", () => {
     const html = renderToStaticMarkup(
       <OAuthConsentForm {...baseProps} scope="lyrashield.read lyrashield.write" />
     )
@@ -20,7 +20,10 @@ describe("OAuthConsentForm", () => {
     expect(html).toContain("current and future targets")
     expect(html).toContain("incur charges")
     expect(html).not.toContain('type="radio"')
-    expect(html).not.toContain('type="checkbox"')
+    expect(html).toContain('type="checkbox"')
+    expect(html).toContain("cancel running scans")
+    expect(html).toContain("off by default")
+    expect(html).toContain("supporting scan attachments")
     expect(html).toContain("Connect LyraShield")
   })
 
@@ -29,5 +32,7 @@ describe("OAuthConsentForm", () => {
     expect(html).toContain("cannot make changes")
     expect(html).not.toContain("Automatic workspace access")
     expect(html).not.toContain('type="radio"')
+    expect(html).toContain('type="checkbox"')
+    expect(html).toContain("does not allow uploads, deletion or scan work")
   })
 })

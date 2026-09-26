@@ -6,6 +6,38 @@ import {
 } from "../agent-authorization"
 
 describe("WP-02 Agent Authorization and 14-tool Catalog", () => {
+  it("keeps cancellation outside existing scan creation grants", () => {
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      expiresAt: null,
+      allowedTargetIds: ["target-1"],
+      allowedOperations: [CANONICAL_OPERATIONS.SCAN_CREATE],
+      allowedProfiles: ["STANDARD"],
+    }
+    const input = {
+      connection,
+      workspaceId: "ws-1",
+      operationName: "lyrashield_cancel_scan",
+      targetId: "target-1",
+    }
+    expect(checkDelegatedOperationAuthorization(input)).toMatchObject({
+      authorized: false,
+      code: "OPERATION_NOT_GRANTED",
+    })
+    connection.allowedOperations.push(CANONICAL_OPERATIONS.SCAN_CANCEL)
+    expect(checkDelegatedOperationAuthorization(input)).toMatchObject({
+      authorized: true,
+      canonicalOperation: CANONICAL_OPERATIONS.SCAN_CANCEL,
+    })
+    expect(
+      checkDelegatedOperationAuthorization({ ...input, targetId: "foreign-target" })
+    ).toMatchObject({ authorized: false, code: "TARGET_NOT_GRANTED" })
+    expect(
+      checkDelegatedOperationAuthorization({ ...input, workspaceId: "foreign-workspace" })
+    ).toMatchObject({ authorized: false, code: "WORKSPACE_MISMATCH" })
+  })
   it("maps all 14 tools accurately to canonical operations and mutation classifications", () => {
     const mutatingTools = [
       "lyrashield_scan_target",
