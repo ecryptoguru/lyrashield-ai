@@ -181,9 +181,10 @@ test("admin enrollment, deny-by-default, TOTP sign-in, and console work end to e
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth
   )
   expect(hasHorizontalOverflow).toBe(false)
+  const anonymousPreferenceErrorMessage: string =
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
   const expectedAnonymousPreferenceErrors = browserErrors.filter(
-    (error) =>
-      error === "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    (error) => error === anonymousPreferenceErrorMessage
   )
   expect(expectedAnonymousPreferenceErrors).toHaveLength(anonymousPreferenceUnauthorizedResponses)
   expect(
