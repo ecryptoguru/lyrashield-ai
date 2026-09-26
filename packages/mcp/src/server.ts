@@ -158,7 +158,6 @@ export class McpServer {
         tool: name,
         reason: guardResult.reason,
         detectedPatterns: guardResult.detectedPatterns,
-        args,
       })
       const error = {
         error: "Tool call blocked by security guard",
