@@ -211,7 +211,6 @@ export const TOOL_OPERATION_MAP: Record<string, ToolOperationDescriptor> = {
     requiresTarget: false,
     isBillable: false,
   },
-
 }
 
 export type AuthorizationDenialReason =

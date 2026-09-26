@@ -20,7 +20,6 @@ vi.mock("@lyrashield/db", () => ({
     lyrashield_upload_scan_attachment: { canonicalOperation: "scan_attachment.upload" },
     lyrashield_delete_scan_attachment: { canonicalOperation: "scan_attachment.delete" },
     lyrashield_request_fix_pr: { canonicalOperation: "fix_pr.create" },
-
   },
   createApproval: (...args: unknown[]) => createApprovalMock(...args),
   findPendingApprovalByHash: (...args: unknown[]) => findPendingApprovalByHashMock(...args),

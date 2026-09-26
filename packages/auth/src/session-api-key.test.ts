@@ -334,7 +334,6 @@ describe("scorecard:publish via requirePermission", () => {
     await expect(requirePermission("ws-1", "attachment:upload")).rejects.toThrow("FORBIDDEN")
   })
 
-
   it("rejects a delegated connection even with write scope (no canonical operation)", async () => {
     withHeaders({ authorization: "Bearer oauth-token" })
     vi.mocked(verifyOAuthBearer).mockResolvedValue({
