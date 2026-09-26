@@ -13,7 +13,7 @@ Release candidate prepared from `origin/main` `0f87d24b` on branch `codex/agent-
 
 ## Release candidate artifacts
 
-Unpublished tarballs rebuilt and installed from this candidate are in `/tmp/lyrashield-agent-rc-final`; the exact-source smoke receipt is `receipt.json` there. SHA-256 values are CLI `bb8a83bb1559dd28ba76dd7cc4816e5d6e49eb4cf0888017764b7e74df47dbcd`, MCP `4d7165cf88a517dc0b2732f1e73e1d260df382b41dac5afa221881782dfee85d`, and plugin `82f525d27d1c34fa00ec36f65cdf87f18c36d1babef79da0bc132bb72ae3fec8`. The unpublished marketplace export is `/tmp/lyrashield-marketplace-rc.1gOJeU/export`; a separate marketplace review branch validates all 31 generated artifacts.
+Unpublished tarballs rebuilt and installed from this candidate are in `/tmp/lyrashield-agent-rc-final`; the exact-source smoke receipt is `receipt.json` there. SHA-256 values are CLI `bb8a83bb1559dd28ba76dd7cc4816e5d6e49eb4cf0888017764b7e74df47dbcd`, MCP `5e5d3fc4d0ade0269ecd269779045eb06f23501b017802f2a523e01c4157a834`, and plugin `82f525d27d1c34fa00ec36f65cdf87f18c36d1babef79da0bc132bb72ae3fec8`. The unpublished marketplace export is `/tmp/lyrashield-marketplace-rc.1gOJeU/export`; a separate marketplace review branch validates all 31 generated artifacts.
 
 The local native-browser fixture receipt is `/tmp/lyrashield-webmcp-fixture-receipt-6.json`, bound to fixture checksum `7855623be3f728d61ddd4c0e6853b050ca679c3c494428e8ff0e815f775f1d47`. It is localhost evidence, not an owned-staging or customer-origin receipt.
 
