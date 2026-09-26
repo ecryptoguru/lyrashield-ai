@@ -6,13 +6,14 @@ import {
 } from "../agent-authorization"
 
 describe("WP-02 Agent Authorization and 14-tool Catalog", () => {
-  it("maps all 14 tools accurately to canonical operations and mutation classifications", () => {
+  it("maps tools accurately to canonical operations and mutation classifications", () => {
     const mutatingTools = [
       "lyrashield_scan_target",
       "lyrashield_create_report",
       "lyrashield_create_fix_proposal",
       "lyrashield_request_retest",
       "lyrashield_create_fix_pr",
+      "lyrashield_cancel_scan",
     ]
 
     for (const tool of mutatingTools) {
@@ -194,6 +195,80 @@ describe("WP-02 Agent Authorization and 14-tool Catalog", () => {
 
     expect(result.authorized).toBe(false)
     expect(result.code).toBe("PROFILE_NOT_GRANTED")
+  })
+
+  it("requires an explicit scan.cancel grant — scan.create alone does not authorize cancel", () => {
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      expiresAt: null,
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedOperations: [CANONICAL_OPERATIONS.SCAN_CREATE],
+      allowedProfiles: ["STANDARD"],
+    }
+
+    // A scan-create grant does not imply cancel authority.
+    expect(
+      checkDelegatedOperationAuthorization({
+        connection,
+        workspaceId: "ws-1",
+        operationName: "lyrashield_cancel_scan",
+        targetId: "target-1",
+        profile: "STANDARD",
+      }).code
+    ).toBe("OPERATION_NOT_GRANTED")
+
+    // An explicit scan.cancel grant authorizes it.
+    const granted = {
+      ...connection,
+      allowedOperations: [CANONICAL_OPERATIONS.SCAN_CREATE, CANONICAL_OPERATIONS.SCAN_CANCEL],
+    }
+    expect(
+      checkDelegatedOperationAuthorization({
+        connection: granted,
+        workspaceId: "ws-1",
+        operationName: "lyrashield_cancel_scan",
+        targetId: "target-1",
+        profile: "STANDARD",
+      }).authorized
+    ).toBe(true)
+  })
+
+  it("authorizes scan.cancel on a granted target and denies a target outside the grant", () => {
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      expiresAt: null,
+      allowedTargetIds: ["target-1"],
+      allTargets: false,
+      allowedOperations: [CANONICAL_OPERATIONS.SCAN_CANCEL],
+      allowedProfiles: ["STANDARD"],
+    }
+
+    const allowed = checkDelegatedOperationAuthorization({
+      connection,
+      workspaceId: "ws-1",
+      operationName: "lyrashield_cancel_scan",
+      targetId: "target-1",
+      profile: "STANDARD",
+    })
+    expect(allowed).toMatchObject({
+      authorized: true,
+      canonicalOperation: CANONICAL_OPERATIONS.SCAN_CANCEL,
+    })
+
+    expect(
+      checkDelegatedOperationAuthorization({
+        connection,
+        workspaceId: "ws-1",
+        operationName: "lyrashield_cancel_scan",
+        targetId: "target-2",
+        profile: "STANDARD",
+      }).code
+    ).toBe("TARGET_NOT_GRANTED")
   })
 
   it("fails closed for empty mutation grants and at the exact expiry boundary", () => {

@@ -217,6 +217,27 @@ describe("LyraShieldClient", () => {
     }
   })
 
+  it("surfaces error.details (e.g. operationId on a 409) for programmatic recovery", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        ok: false,
+        status: 409,
+        statusText: "Conflict",
+        body: {
+          error: {
+            code: "OPERATION_IN_PROGRESS",
+            message: "An identical request is already in progress.",
+            details: { operationId: "op_123" },
+          },
+        },
+      })
+    )
+    const err = await client.request("GET", "/scans").catch((e) => e)
+    expect(err).toBeInstanceOf(LyraShieldError)
+    expect(err.code).toBe("OPERATION_IN_PROGRESS")
+    expect(err.details).toEqual({ operationId: "op_123" })
+  })
+
   it("falls back to status text when JSON body has no error message", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({
@@ -338,6 +359,119 @@ describe("LyraShieldClient", () => {
 
     const secondHeaders = fetchFn.mock.calls[1]![1].headers as Record<string, string>
     expect(secondHeaders.Authorization).toBeUndefined()
+  })
+
+  it("rejects with REQUEST_ABORTED before fetch when the caller signal is pre-aborted", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      client.request("GET", "/scans", { signal: controller.signal })
+    ).rejects.toMatchObject({ code: "REQUEST_ABORTED" })
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it("maps an in-flight caller abort to REQUEST_ABORTED, not REQUEST_TIMEOUT", async () => {
+    vi.useFakeTimers()
+    try {
+      const caller = new AbortController()
+      const fetchFn = vi.fn((_url: unknown, init: RequestInit) => {
+        const signal = init.signal as AbortSignal
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true }
+          )
+        })
+      })
+      const client = new LyraShieldClient({
+        apiKey: "k",
+        apiUrl: "http://localhost:3000",
+        fetchFn: makeFetch(fetchFn),
+      })
+      const outcome = client
+        .request("GET", "/scans", { signal: caller.signal })
+        .catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(1000)
+      caller.abort()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(await outcome).toMatchObject({ code: "REQUEST_ABORTED" })
+      expect(fetchFn).toHaveBeenCalledTimes(1)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("aborts the 429 retry sleep when the caller signal fires mid-backoff", async () => {
+    vi.useFakeTimers()
+    try {
+      const caller = new AbortController()
+      const fetchFn = vi.fn(async () =>
+        mockResponse({
+          ok: false,
+          status: 429,
+          statusText: "Too Many Requests",
+          headers: new Headers({ "retry-after": "30" }),
+          body: {},
+        })
+      )
+      const client = new LyraShieldClient({
+        apiKey: "k",
+        apiUrl: "http://localhost:3000",
+        fetchFn: makeFetch(fetchFn),
+      })
+      const outcome = client
+        .request("GET", "/scans", { signal: caller.signal })
+        .catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(fetchFn).toHaveBeenCalledTimes(1)
+      caller.abort()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(await outcome).toMatchObject({ code: "REQUEST_ABORTED" })
+      // No second attempt: the sleep rejected instead of resuming the loop.
+      expect(fetchFn).toHaveBeenCalledTimes(1)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("still maps the internal deadline to REQUEST_TIMEOUT when a caller signal is attached", async () => {
+    vi.useFakeTimers()
+    try {
+      const caller = new AbortController()
+      let signal: AbortSignal | undefined
+      const fetchFn = vi.fn(async (_url: unknown, init: RequestInit) => {
+        signal = init.signal as AbortSignal
+        return {
+          ...mockResponse({ status: 200 }),
+          json: () =>
+            new Promise((_resolve, reject) => {
+              signal!.addEventListener(
+                "abort",
+                () => reject(new DOMException("Aborted", "AbortError")),
+                { once: true }
+              )
+            }),
+        }
+      })
+      const client = new LyraShieldClient({
+        apiKey: "k",
+        apiUrl: "http://localhost:3000",
+        fetchFn: makeFetch(fetchFn),
+      })
+      const outcome = client
+        .request("GET", "/scans", { signal: caller.signal })
+        .catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(30000)
+      expect(signal?.aborted).toBe(true)
+      expect(caller.signal.aborted).toBe(false)
+      expect(await outcome).toMatchObject({ code: "REQUEST_TIMEOUT" })
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("retries on HTTP 401 once if getAccessToken provides a refreshed token", async () => {

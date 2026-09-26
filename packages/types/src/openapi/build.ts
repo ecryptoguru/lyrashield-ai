@@ -251,6 +251,46 @@ export function buildOpenApiSpec(): Record<string, unknown> {
           },
         },
       },
+      "/scans/eligibility": {
+        get: {
+          summary: "Advisory scan eligibility preflight",
+          description:
+            "Read-only advisory check: whether POST /scans would currently admit the requested review — same permission, plan, domain-proof and entitlement gates, evaluated without any trial, billing, scan or audit mutation. `allowed:false` is a successful read carrying a structured denial (`code`, `message`, `blockers`), not an error. POST /scans re-checks authoritatively at creation; a pass here never guarantees admission. `attachmentIds` is a repeated query parameter.",
+          parameters: [
+            workspaceIdParam,
+            { name: "targetId", in: "query", required: true, schema: { type: "string" } },
+            { name: "goal", in: "query", required: true, schema: ref("ScanGoal") },
+            { name: "mode", in: "query", required: true, schema: ref("ScanMode") },
+            {
+              name: "workflow",
+              in: "query",
+              required: false,
+              schema: {
+                type: "string",
+                enum: ["REVIEW_TARGET", "REVIEW_CHANGES", "AUTHENTICATED_ASSESSMENT"],
+              },
+            },
+            { name: "baseRef", in: "query", required: false, schema: { type: "string" } },
+            { name: "headRef", in: "query", required: false, schema: { type: "string" } },
+            {
+              name: "attachmentIds",
+              in: "query",
+              required: false,
+              schema: { type: "array", items: { type: "string" }, maxItems: 20 },
+            },
+            {
+              name: "authorizationRef",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            200: successResponse(genericItem, "Eligibility verdict"),
+            ...commonErrors,
+          },
+        },
+      },
       "/scans/{id}": {
         get: {
           summary: "Get a scan",

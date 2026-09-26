@@ -176,6 +176,29 @@ export const scanEligibilitySchema = z.object({
   plan: z.string(),
   isTrial: z.boolean(),
   remainingMinutes: z.number(),
+  // Advisory fields — absent when the server cannot derive them cheaply.
+  canonicalMode: z.string().nullable().optional(),
+  canonicalProfileId: z.string().nullable().optional(),
+  supportedModes: z
+    .array(
+      z.object({
+        id: z.string(),
+        label: z.string(),
+        goal: z.string(),
+        mode: z.string(),
+        workflow: z.string().optional(),
+        available: z.boolean().optional(),
+        disabledReason: z.string().nullable().optional(),
+        usesAi: z.boolean().nullable().optional(),
+        requiresRevisionInputs: z.boolean().optional(),
+        authorizationHint: z.string().nullable().optional(),
+      })
+    )
+    .optional(),
+  // EXPECTED coverage at admission — never completed coverage.
+  expectedScannerFamilies: z.array(z.string()).optional(),
+  blockers: z.array(z.object({ code: z.string(), message: z.string() })).optional(),
+  limitations: z.array(z.string()).optional(),
 })
 
 export const findingDetailItemsPaginatedSchema = paginatedResponseSchema(findingDetailItemSchema)

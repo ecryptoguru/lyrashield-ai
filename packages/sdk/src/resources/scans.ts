@@ -40,6 +40,8 @@ export interface ScanInput {
 export interface GetScanOptions {
   workspaceId?: string
   etag?: string
+  /** Caller abort signal — forwards to the underlying request. */
+  signal?: AbortSignal
 }
 
 function buildScanParams(query: ScanQuery, client: LyraShieldClient): URLSearchParams {
@@ -93,10 +95,12 @@ export function getScan(
   if (opts?.etag) {
     return client.request("GET", path, {
       etag: opts.etag,
+      signal: opts?.signal,
       parse: (data) => ScanSchema.parse(data),
     })
   }
   return client.request("GET", path, {
+    signal: opts?.signal,
     parse: (data) => ScanSchema.parse(data),
   })
 }
@@ -123,15 +127,30 @@ export function getScanQuality(
   })
 }
 
+export interface CancelScanOptions {
+  workspaceId?: string
+  /**
+   * Optional caller idempotency key, forwarded as the Idempotency-Key header.
+   * POST is not internally retried, so the key travels verbatim — the server
+   * decides whether it binds a durable operation record.
+   */
+  idempotencyKey?: string
+  /** Caller abort signal — forwards to the underlying request. */
+  signal?: AbortSignal
+}
+
 export function cancelScan(
   client: LyraShieldClient,
   id: string,
-  workspaceId?: string
+  options?: CancelScanOptions | string
 ): Promise<z.infer<typeof IdSchema>> {
-  const ws = workspaceId ?? client.workspaceId
+  const opts = typeof options === "string" ? { workspaceId: options } : options
+  const ws = opts?.workspaceId ?? client.workspaceId
   const body = ws ? { workspaceId: ws } : {}
   return client.request("POST", `/scans/${encodeURIComponent(id)}`, {
     body,
+    signal: opts?.signal,
+    headers: opts?.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : undefined,
     parse: (data) => IdSchema.parse(data),
   })
 }

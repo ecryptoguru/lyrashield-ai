@@ -9,6 +9,7 @@ export const CANONICAL_OPERATIONS = {
   SCAN_ELIGIBILITY: "scan.eligibility",
   GATE_READ: "gate.read",
   SCAN_CREATE: "scan.create",
+  SCAN_CANCEL: "scan.cancel",
   REPORT_CREATE: "report.create",
   FIX_PROPOSAL_CREATE: "fix_proposal.create",
   RETEST_CREATE: "retest.create",
@@ -23,6 +24,12 @@ export const AUTOMATION_WORKFLOWS = [
     label: "Run PR Scans & Security Audits",
     description: "Scan code changes and pull requests automatically within budget.",
     operations: [CANONICAL_OPERATIONS.SCAN_CREATE],
+  },
+  {
+    id: "cancel_scans",
+    label: "Cancel Running Scans",
+    description: "Stop queued or running scans in the workspace.",
+    operations: [CANONICAL_OPERATIONS.SCAN_CANCEL],
   },
   {
     id: "retests",

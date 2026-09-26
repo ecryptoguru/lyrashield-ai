@@ -241,6 +241,48 @@ describe("scorecard:publish via requirePermission", () => {
     await expect(requirePermission("ws-1", "scorecard:publish")).rejects.toThrow("FORBIDDEN")
   })
 
+  it("allows a delegated connection granted scan.cancel to cancel scans", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan.cancel"],
+    })
+    stubMembership("DEVELOPER")
+
+    await expect(requirePermission("ws-1", "scan:cancel")).resolves.toBeTruthy()
+  })
+
+  it("rejects scan:cancel for a delegated connection that granted only scan.create", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan.create"],
+    })
+    stubMembership("OWNER")
+
+    await expect(requirePermission("ws-1", "scan:cancel")).rejects.toThrow("FORBIDDEN")
+  })
+
+  it("rejects a read-scoped delegated connection for scan:cancel even when granted", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan.cancel"],
+    })
+    stubMembership("OWNER")
+
+    await expect(requirePermission("ws-1", "scan:cancel")).rejects.toThrow("FORBIDDEN")
+  })
+
   it("rejects a delegated connection even with write scope (no canonical operation)", async () => {
     withHeaders({ authorization: "Bearer oauth-token" })
     vi.mocked(verifyOAuthBearer).mockResolvedValue({

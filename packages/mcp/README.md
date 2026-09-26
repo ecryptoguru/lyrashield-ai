@@ -32,6 +32,7 @@ Every API-backed tool calls the LyraShield REST API with a workspace API key or 
 | `lyrashield_list_targets`             | read  | List targets (repos/apps/APIs) in a workspace                                                                     |
 | `lyrashield_get_scan_status`          | read  | Status, timing and events for a scan                                                                              |
 | `lyrashield_get_scan_quality`         | read  | Evidence-quality surface for a scan: verification tiers, coverage receipts and labeled heuristics                 |
+| `lyrashield_get_scan_eligibility`     | read  | Advisory preflight: whether a scan on a target would currently be admitted, with denial codes                     |
 | `lyrashield_get_findings`             | read  | Paginated findings (default 50, max 100), filterable by target, scan, status, severity and verification           |
 | `lyrashield_explain_finding`          | read  | Full detail + plain-language explanation of a finding                                                             |
 | `lyrashield_generate_fix_plan`        | read  | Assemble a remediation plan from a finding                                                                        |
@@ -39,12 +40,13 @@ Every API-backed tool calls the LyraShield REST API with a workspace API key or 
 | `lyrashield_create_pr_security_recap` | read  | Markdown recap for a PR comment                                                                                   |
 | `lyrashield_check_diff`               | read  | Fast **advisory** heuristic pre-filter on a diff (not a scan)                                                     |
 | `lyrashield_scan_target`              | write | Start a scan on a target                                                                                          |
+| `lyrashield_cancel_scan`              | write | Request cancellation of a queued or running scan                                                                  |
 | `lyrashield_run_pr_scan`              | write | Start a PR-focused (CHECK_PR) scan                                                                                |
 | `lyrashield_record_fix_proposal`      | write | Record a fix proposal on a finding                                                                                |
 | `lyrashield_verify_fix`               | write | Queue a retest to verify a fix                                                                                    |
 | `lyrashield_create_report`            | write | Generate a shareable report                                                                                       |
 
-> `lyrashield_check_diff` is a lightweight local heuristic (obvious hardcoded secrets, `eval`, unsafe HTML, SQL concatenation, plus structural WebMCP checks when you pass optional `files: [{path, content}]` snapshots) meant as a pre-PR pre-filter. It is **not** a scanner — run `lyrashield_run_pr_scan` for a bounded repository scan with findings, coverage receipts, evidence states and explicit limitations. Its `coverage` field states exactly what was analyzed: only the supplied inputs, never the whole repository. Results are not automatically independently verified or exploit-validated.
+> > `lyrashield_check_diff` is a lightweight local heuristic (obvious hardcoded secrets, `eval`, unsafe HTML, SQL concatenation, plus structural WebMCP checks when you pass optional `files: [{path, content}]` snapshots) meant as a pre-PR pre-filter. It is **not** a scanner — run `lyrashield_run_pr_scan` for a bounded repository scan with findings, coverage receipts, evidence states and explicit limitations. Its `coverage` field states exactly what was analyzed: only the supplied inputs, never the whole repository. Results are not automatically independently verified or exploit-validated.
 >
 > `lyrashield_scan_target` and `lyrashield_run_pr_scan` accept `targetId` directly or you can pass `repo` (e.g. `ecryptoguru/lyrashield-ai`, `https://github.com/ecryptoguru/lyrashield-ai.git` or `git@github.com:ecryptoguru/lyrashield-ai.git`) to create or reuse a target automatically. `auto: true` detects the current git repo only in the local stdio server; hosted MCP clients must pass `repo` or `targetId`.
 >
