@@ -13,6 +13,9 @@ vi.mock("@lyrashield/db", () => ({
   getScanWithEvents: vi.fn(),
   cancelScan: vi.fn(),
   removeScan: vi.fn(),
+  claimOrGetAgentOperation: vi.fn(),
+  completeAgentOperation: vi.fn(),
+  failAgentOperation: vi.fn(),
   prisma: { auditLog: { create: vi.fn() } },
 }))
 
@@ -31,7 +34,14 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import { DELETE, GET, POST } from "./route"
-import { cancelScan, getScanWithEvents, prisma, removeScan } from "@lyrashield/db"
+import {
+  cancelScan,
+  claimOrGetAgentOperation,
+  completeAgentOperation,
+  getScanWithEvents,
+  prisma,
+  removeScan,
+} from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 
 const routeParams = { params: Promise.resolve({ id: "scan-1" }) }
@@ -94,6 +104,45 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(response.status).toBe(200)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:cancel")
     expect(cancelScan).toHaveBeenCalledWith("scan-1", "ws-1")
+  })
+
+  it("replays a keyed cancellation without submitting it twice", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({ id: "scan-1", workspaceId: "ws-1" } as never)
+    vi.mocked(cancelScan).mockResolvedValue({
+      id: "scan-1",
+      status: "CANCELLED",
+      endedAt: new Date("2026-09-26T00:00:00.000Z"),
+    } as never)
+    vi.mocked(claimOrGetAgentOperation)
+      .mockResolvedValueOnce({ status: "NEW", operation: { id: "op-1" } } as never)
+      .mockResolvedValueOnce({
+        status: "REPLAY",
+        operation: {
+          id: "op-1",
+          result: { id: "scan-1", status: "CANCELLED", endedAt: "2026-09-26T00:00:00.000Z" },
+        },
+      } as never)
+    const request = () =>
+      new Request("http://localhost/api/scans/scan-1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "cancel-once" },
+        body: JSON.stringify({ workspaceId: "ws-1" }),
+      })
+
+    const first = await POST(request(), routeParams)
+    const replay = await POST(request(), routeParams)
+
+    expect(first.status).toBe(200)
+    expect(await replay.json()).toEqual(await first.json())
+    expect(cancelScan).toHaveBeenCalledOnce()
+    expect(completeAgentOperation).toHaveBeenCalledOnce()
+    expect(claimOrGetAgentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        operationName: "scan.cancel",
+        input: { id: "scan-1" },
+      })
+    )
   })
 
   it("allows cancellation while a scan is verifying", async () => {

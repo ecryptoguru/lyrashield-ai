@@ -11,6 +11,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { ScanIdSchema } from "@lyrashield/types"
 import { revalidateDashboardAggregates } from "../../../../lib/cache"
+import { recordedOperation } from "../../../../lib/recorded-operation"
 
 function scanEtag(scan: NonNullable<Awaited<ReturnType<typeof getScanWithEvents>>>): string {
   const events = scan.events ?? []
@@ -95,19 +96,36 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
   const { workspaceId } = parsed.data
 
   try {
-    await requirePermission(workspaceId, PERMISSIONS.scan.cancel)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.cancel)
     const scan = await getScanWithEvents(id, workspaceId)
     if (!scan) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
 
-    const cancelled = await cancelScan(id, workspaceId)
-    revalidateDashboardAggregates(workspaceId)
-    return apiSuccess({
-      id: cancelled.id,
-      status: cancelled.status,
-      endedAt: cancelled.endedAt,
-    })
+    return await recordedOperation(
+      request,
+      { workspaceId, operationName: "scan.cancel", input: { id }, session },
+      async ({ confirmNotSubmitted }) => {
+        let cancelled: Awaited<ReturnType<typeof cancelScan>>
+        try {
+          cancelled = await cancelScan(id, workspaceId)
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            (error.message.includes("terminal state") ||
+              error.message.includes("finalization already started"))
+          )
+            confirmNotSubmitted()
+          throw error
+        }
+        revalidateDashboardAggregates(workspaceId)
+        return apiSuccess({
+          id: cancelled.id,
+          status: cancelled.status,
+          endedAt: cancelled.endedAt,
+        })
+      }
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
