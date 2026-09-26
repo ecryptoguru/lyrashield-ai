@@ -264,7 +264,7 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     expect(res.status).toBe(200)
     expect(res.headers.get("mcp-session-id")).toBeNull()
     const body = await readJson(res)
-    expect((body.result as { tools?: unknown[] })?.tools?.length).toBe(15)
+    expect((body.result as { tools?: unknown[] })?.tools?.length).toBe(17)
   })
 
   it("rejects non-POST/GET/DELETE verbs with 405", async () => {
