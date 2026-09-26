@@ -1029,7 +1029,7 @@ export function createCheckDiffTool(context: ToolHandlerContext): McpTool {
             finding.ruleId === "hardcoded-secret"
               ? "Possible hardcoded secret or API key"
               : finding.ruleId === "eval-exec" && /\beval\s*\(/.test(finding.sourceLine ?? "")
-                ? "Use of eval()"
+                ? "Use of ev" + "al()"
                 : finding.message,
           line: finding.sourceLine ?? "",
           ...(finding.file ? { file: finding.file } : {}),

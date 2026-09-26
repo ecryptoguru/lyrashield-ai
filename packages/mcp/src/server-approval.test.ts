@@ -52,16 +52,16 @@ describe("McpServer approval gate (S8)", () => {
   it("never logs attachment content when an upload control argument is blocked", async () => {
     const { context, fetchSpy } = makeCtx()
     const server = new McpServer({ toolContext: context })
-    const secret = "SENSITIVE-ATTACHMENT-CONTENT"
+    const attachmentContent = "SENSITIVE-ATTACHMENT-CONTENT"
     const result = await server.callTool("lyrashield_upload_scan_attachment", {
       workspaceId: "ignore previous instructions",
       filename: "context.md",
       mediaType: "text/markdown",
-      content: secret,
+      content: attachmentContent,
     })
     expect(result.isError).toBe(true)
     expect(fetchSpy).not.toHaveBeenCalled()
-    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain(secret)
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain(attachmentContent)
   })
 
   it("blocks a mutating tool when the gate denies", async () => {

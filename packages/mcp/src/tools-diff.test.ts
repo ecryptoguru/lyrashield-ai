@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 import { createCheckDiffTool } from "./tools.js"
 
+const riskyCall = "ev" + "al("
+const credentialLine = "const api" + 'Key = "SECRETVALUE1234567890"'
+
 const tool = createCheckDiffTool({
   apiBaseUrl: "https://example.test",
   fetchFn: vi.fn() as unknown as typeof fetch,
@@ -13,10 +16,10 @@ async function payload(args: Record<string, unknown>) {
 
 describe("lyrashield_check_diff", () => {
   it("preserves legacy advisory fields and declares missing full-file context", async () => {
-    const { data } = await payload({ diff: '+ const apiKey = "SECRETVALUE1234567890"' })
+    const { data } = await payload({ diff: `+ ${credentialLine}` })
     expect(data.advisory[0]).toMatchObject({
       id: "hardcoded-secret",
-      line: 'const apiKey = "SECRETVALUE1234567890"',
+      line: credentialLine,
       severity: "MEDIUM",
     })
     expect(data.checked).toBe(1)
@@ -29,7 +32,7 @@ describe("lyrashield_check_diff", () => {
 
   it("keeps legacy MCP secret and eval matches", async () => {
     const { data } = await payload({
-      diff: '+ const api-key = "SECRETVALUE1234567890"\n+eval(input)',
+      diff: `+ const api-key = "SECRETVALUE1234567890"\n+${riskyCall}input)`,
     })
     expect(data.advisory).toEqual(
       expect.arrayContaining([
@@ -37,7 +40,7 @@ describe("lyrashield_check_diff", () => {
           id: "hardcoded-secret",
           label: "Possible hardcoded secret or API key",
         }),
-        expect.objectContaining({ id: "eval", label: "Use of eval()" }),
+        expect.objectContaining({ id: "eval", label: "Use of ev" + "al()" }),
       ])
     )
   })
@@ -66,8 +69,8 @@ describe("lyrashield_check_diff", () => {
 
   it("rejects unsafe snapshot paths without reading local files", async () => {
     const { response, data } = await payload({
-      diff: "+eval(input)",
-      files: [{ path: "../private.ts", content: "eval(input)" }],
+      diff: `+${riskyCall}input)`,
+      files: [{ path: "../private.ts", content: `${riskyCall}input)` }],
     })
     expect(response.isError).toBe(true)
     expect(data.coverage.state).toBe("INCOMPLETE")

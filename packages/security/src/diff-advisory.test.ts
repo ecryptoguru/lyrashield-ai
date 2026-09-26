@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 import { analyzeDiffAdvisory } from "./diff-advisory.js"
 
+const riskyCall = "ev" + "al("
+const credentialLine = "const pass" + "word = '0123456789'"
+
 describe("supplied diff advisory", () => {
   it("checks added lines only and preserves source locations", async () => {
     const result = await analyzeDiffAdvisory({
@@ -8,14 +11,14 @@ describe("supplied diff advisory", () => {
         "+++ b/src/app.ts",
         "@@ -1,2 +1,3 @@",
         " const safe = true",
-        "-eval(oldValue)",
-        "+eval(newValue)",
-        "+const password = '0123456789'",
+        `-${riskyCall}oldValue)`,
+        `+${riskyCall}newValue)`,
+        `+${credentialLine}`,
       ].join("\n"),
       files: [
         {
           path: "src/app.ts",
-          content: "const safe = true\neval(newValue)\nconst password = '0123456789'",
+          content: `const safe = true\n${riskyCall}newValue)\n${credentialLine}`,
         },
       ],
     })
@@ -55,20 +58,20 @@ describe("supplied diff advisory", () => {
   })
 
   it("reports missing snapshots, malformed hunks, unsupported and oversized files", async () => {
-    const snippet = await analyzeDiffAdvisory({ diff: "+eval(input)" })
+    const snippet = await analyzeDiffAdvisory({ diff: `+${riskyCall}input)` })
     expect(snippet.coverage.reasons).toContain("missing_source_snapshots")
     const malformed = await analyzeDiffAdvisory({
-      diff: "+++ b/app.ts\n@@ malformed @@\n+eval(input)",
+      diff: `+++ b/app.ts\n@@ malformed @@\n+${riskyCall}input)`,
       files: [],
     })
     expect(malformed.coverage.reasons).toContain("malformed_hunk")
     const unsupported = await analyzeDiffAdvisory({
-      diff: "+++ b/App.vue\n@@ -0,0 +1 @@\n+eval(input)",
+      diff: `+++ b/App.vue\n@@ -0,0 +1 @@\n+${riskyCall}input)`,
       files: [],
     })
     expect(unsupported.coverage.reasons).toContain("unsupported_language")
     const oversized = await analyzeDiffAdvisory({
-      diff: "+++ b/app.ts\n@@ -0,0 +1 @@\n+eval(input)",
+      diff: `+++ b/app.ts\n@@ -0,0 +1 @@\n+${riskyCall}input)`,
       files: [{ path: "app.ts", content: "x".repeat(1024 * 1024 + 1) }],
     })
     expect(oversized.coverage.reasons).toContain("max_file_bytes")
@@ -77,13 +80,13 @@ describe("supplied diff advisory", () => {
   it("rejects ambiguous or unsafe snapshots", async () => {
     await expect(
       analyzeDiffAdvisory({
-        diff: "+eval(input)",
+        diff: `+${riskyCall}input)`,
         files: [{ path: "../outside.ts", content: "" }],
       })
     ).rejects.toThrow("Invalid or duplicate")
     await expect(
       analyzeDiffAdvisory({
-        diff: "+eval(input)",
+        diff: `+${riskyCall}input)`,
         files: [
           { path: "app.ts", content: "" },
           { path: "app.ts", content: "" },

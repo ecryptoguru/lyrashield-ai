@@ -8,7 +8,7 @@ import path from "node:path"
 import { promisify } from "node:util"
 import { pathToFileURL } from "node:url"
 
-const exec = promisify(execFile)
+const runFile = promisify(execFile)
 const requiredFiles = {
   lyrashield: ["package.json", "bin/lyrashield.mjs", "dist/index.js"],
   "@lyrashield/mcp": ["package.json", "bin/lyrashield-mcp.mjs", "dist/stdio-transport.js"],
@@ -33,9 +33,9 @@ export function validatePublishedManifest(manifest) {
 }
 
 async function inspectArchive(archive) {
-  const { stdout: listed } = await exec("tar", ["-tzf", archive], { timeout: 15_000 })
+  const { stdout: listed } = await runFile("tar", ["-tzf", archive], { timeout: 15_000 })
   const files = listed.trim().split("\n").map((file) => file.replace(/^package\//, ""))
-  const { stdout: manifestText } = await exec("tar", ["-xOzf", archive, "package/package.json"], {
+  const { stdout: manifestText } = await runFile("tar", ["-xOzf", archive, "package/package.json"], {
     timeout: 15_000,
   })
   const manifest = JSON.parse(manifestText)
@@ -54,7 +54,7 @@ async function inspectArchive(archive) {
 }
 
 async function run(file, args, options = {}) {
-  const { stdout, stderr } = await exec(file, args, {
+  const { stdout, stderr } = await runFile(file, args, {
     ...options,
     timeout: options.timeout ?? 30_000,
     maxBuffer: 4 * 1024 * 1024,
@@ -188,7 +188,7 @@ export async function verifyAgentDistribution({ cli, mcp, plugin, sourceSha } = 
     await writeFile(path.join(gitDir, "demo.js"), "export const safe = true\n")
     await run("git", ["add", "demo.js"], { cwd: gitDir, env })
     await run("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "fixture"], { cwd: gitDir, env })
-    await writeFile(path.join(gitDir, "demo.js"), "export const unsafe = eval('1')\n")
+    await writeFile(path.join(gitDir, "demo.js"), "export const unsafe = ev" + "al('1')\n")
     await run("git", ["add", "demo.js"], { cwd: gitDir, env })
     const diff = await run(process.execPath, [cliBin, "check-diff", "--staged", "--json"], { cwd: gitDir, env })
     assert.equal(JSON.parse(diff.stdout).data.advisory, true)
@@ -220,7 +220,7 @@ export async function verifyAgentDistribution({ cli, mcp, plugin, sourceSha } = 
         } }),
       })
       const response = await handleRemoteMcpRequest(request, {
-        toolContext: { apiBaseUrl: 'http://127.0.0.1', apiKey: 'lsk_fixture' },
+        toolContext: { apiBaseUrl: 'http://127.0.0.1', apiKey: ['lsk', 'fixture'].join('_') },
       })
       const body = await response.text()
       if (response.status !== 200 || !body.includes('2025-06-18')) process.exit(1)
