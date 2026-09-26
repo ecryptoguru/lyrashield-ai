@@ -10,6 +10,21 @@
       "import": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./ssrf": {
+      "types": "./src/ssrf.ts",
+      "import": "./src/ssrf.ts",
+      "default": "./src/ssrf.ts"
+    },
+    "./safe-fetch": {
+      "types": "./src/safe-fetch.ts",
+      "import": "./src/safe-fetch.ts",
+      "default": "./src/safe-fetch.ts"
+    },
+    "./relay-grant": {
+      "types": "./src/relay-grant.ts",
+      "import": "./src/relay-grant.ts",
+      "default": "./src/relay-grant.ts"
+    },
     "./ai-security": {
       "types": "./src/ai-security/index.ts",
       "import": "./src/ai-security/index.ts",

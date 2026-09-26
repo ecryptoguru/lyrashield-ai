@@ -2,8 +2,8 @@ import { describe, expect, it, afterAll, beforeAll, vi } from "vitest"
 import { randomBytes } from "node:crypto"
 import { startProxy, type ProxyServer } from "./index"
 
-vi.mock("@lyrashield/security", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@lyrashield/security")>()
+vi.mock("@lyrashield/security/safe-fetch", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lyrashield/security/safe-fetch")>()
   return {
     ...actual,
     safeFetchOnce: vi.fn(

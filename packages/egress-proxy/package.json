@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node --input-type=module -e \"await import('./dist/index.js')\"",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0",
     "start": "node dist/index.js"

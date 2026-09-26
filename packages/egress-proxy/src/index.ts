@@ -3,7 +3,8 @@ import { timingSafeEqual } from "node:crypto"
 import { pathToFileURL } from "node:url"
 import { z } from "zod"
 import { logger } from "@lyrashield/logger"
-import { redactUrlForLogs, safeFetchOnce, type SafeFetchOutcome } from "@lyrashield/security"
+import { redactUrlForLogs } from "@lyrashield/security/ssrf"
+import { safeFetchOnce, type SafeFetchOutcome } from "@lyrashield/security/safe-fetch"
 import { createRelayHandler, type RelayDeps, type RelayHandler } from "./relay"
 
 const FetchRequestSchema = z

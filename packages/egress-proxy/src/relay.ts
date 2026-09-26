@@ -5,12 +5,11 @@ import { isIP, type LookupFunction } from "node:net"
 import dns from "node:dns/promises"
 import { Agent, request as undiciRequest } from "undici"
 import { logger } from "@lyrashield/logger"
+import { isBlockedIp, redactUrlForLogs } from "@lyrashield/security/ssrf"
 import {
-  isBlockedIp,
   MAX_RELAY_GRANT_TTL_MS,
   normalizeRelayHost,
   normalizeRelayPath,
-  redactUrlForLogs,
   relayHostAllowed,
   relayMethodAllowed,
   relayPathAllowed,
@@ -19,7 +18,7 @@ import {
   verifyRelayGrant,
   type RelayGrantScope,
   type RelaySessionBinding,
-} from "@lyrashield/security"
+} from "@lyrashield/security/relay-grant"
 
 /**
  * Scan-scoped forward relay.
