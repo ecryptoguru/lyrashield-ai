@@ -115,7 +115,7 @@ export function deriveCurrentStage(status: string, events: StageEvent[]): string
   return humanizeScanStatus(status)
 }
 
-export type ScanPhaseState = "done" | "active" | "pending"
+export type ScanPhaseState = "done" | "active" | "pending" | "stopped"
 
 export interface ScanPhase {
   key: string
@@ -170,6 +170,17 @@ export function derivePhases(status: string, events: StageEvent[]): ScanPhase[] 
   // Fallback: if no phases derived (e.g. QUEUED with no events), show current status
   if (phases.length === 0) {
     phases.push({ key: status.toLowerCase(), label: humanizeScanStatus(status), state: "active" })
+  }
+
+  if (status === "COMPLETED") {
+    return phases.map((phase) => ({ ...phase, state: "done" }))
+  }
+
+  if (["PARTIAL", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(status)) {
+    return phases.map((phase, index) => ({
+      ...phase,
+      state: index === phases.length - 1 ? "stopped" : "done",
+    }))
   }
 
   return phases
