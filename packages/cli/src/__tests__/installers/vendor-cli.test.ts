@@ -14,7 +14,7 @@ const API_KEY = "lsk_testkey123"
 // fixtures use the real registry argvs.
 const VENDOR_ARGV: Record<string, string[]> = {
   claude: ["mcp", "add"],
-  amp: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.9"],
+  amp: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.10"],
 }
 
 function fakeVendorAgent(command: string, args?: string[]): AgentEntry {

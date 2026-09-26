@@ -1,6 +1,6 @@
 # MCP protocol conformance
 
-Baseline: `@modelcontextprotocol/sdk` **1.30.1** and `@lyrashield/mcp` 0.2.9. The SDK
+Baseline: `@modelcontextprotocol/sdk` **1.30.1** and `@lyrashield/mcp` 0.2.10. The SDK
 floor is `^1.30.1` in `packages/mcp` and `packages/cli` (the CLI uses the SDK as an MCP
 client); `pnpm-lock.yaml` resolves `1.30.1` with integrity
 `sha512-H2HxLvC3HDNybePJaLdSrU1hhUK5iQw+WvV1b01myFyI7sdVGe1u/IPTE5D9fGCiJDVtgMV/lmFkQXLmQyIFYA==`.
@@ -34,7 +34,7 @@ Every claim below is executable; the cited test files are the evidence.
 | Guarantee                                                                                                                                                                                                                                                | Evidence                                                                                 |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `initialize` returns server metadata (name, title, version, description, website) and usage instructions                                                                                                                                                 | `src/create-server.test.ts`, `src/http-transport.test.ts`, `src/packed-stdio.test.ts`    |
-| `tools/list` returns all 15 tools, each with title, input/output JSON schemas, safety annotations and `execution.taskSupport: "forbidden"`                                                                                                               | `src/create-server.test.ts`, `src/http-transport.test.ts`, `src/packed-stdio.test.ts`    |
+| `tools/list` returns all 21 tools, each with title, input/output JSON schemas, safety annotations and `execution.taskSupport: "forbidden"`                                                                                                               | `src/create-server.test.ts`, `src/http-transport.test.ts`, `src/packed-stdio.test.ts`    |
 | `tools/call` runs read-only tools; mutating tools fail closed without an approval path (stateless HTTP denies by default; `allowMutations` is explicit opt-in only)                                                                                      | `src/http-transport.test.ts`, `src/create-server.test.ts`, `src/server-approval.test.ts` |
 | JSON-RPC batching is supported and bounded: a 2-message batch returns both answers; a batch over 100 messages is refused with HTTP 400 `-32600`; a batch containing `initialize` plus other messages is refused with HTTP 400 `-32600`                   | `src/http-transport.test.ts`                                                             |
 | Malformed JSON bodies and non-JSON-RPC payloads fail closed with HTTP 400 `-32700`; non-JSON `Content-Type` → 415; `Accept` missing either required media type → 406; request bodies over the 4 MiB SDK bound → 413; verbs outside POST/GET/DELETE → 405 | `src/http-transport.test.ts`                                                             |

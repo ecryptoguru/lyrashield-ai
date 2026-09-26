@@ -372,7 +372,7 @@ assert(
   "root gemini-extension.json excludeTools must equal the manifest-recorded mutating tool set"
 )
 
-const expectedPackage = "@lyrashield/mcp@0.2.9"
+const expectedPackage = "@lyrashield/mcp@0.2.10"
 const kiro = (await readJson(".mcp.kiro.json")).mcpServers?.lyrashield
 assert(
   kiro?.command === "npx" && JSON.stringify(kiro.args) === JSON.stringify(["-y", expectedPackage]),
@@ -393,7 +393,7 @@ for (const file of [
   )
   if (file.endsWith(".rs")) {
     assert(
-      text.includes('const PACKAGE_VERSION: &str = "0.2.9";'),
+      text.includes('const PACKAGE_VERSION: &str = "0.2.10";'),
       "Zed must pin the release-candidate MCP version"
     )
     assert(!text.includes("npm_package_latest_version"), "Zed must not install a floating release")

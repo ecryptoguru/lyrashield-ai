@@ -14,7 +14,7 @@ import { assertTaskCapableTool, toSdkTaskStore, type McpTaskBackend } from "./ta
 
 export const SERVER_NAME = "lyrashield-mcp"
 export const SERVER_TITLE = "LyraShield AI"
-export const SERVER_VERSION = "0.2.9"
+export const SERVER_VERSION = "0.2.10"
 export const SERVER_DESCRIPTION =
   "Bounded security scans, recorded evidence states, fix proposals, retests and launch-readiness review."
 export const SERVER_WEBSITE_URL = "https://lyrashieldai.com"
