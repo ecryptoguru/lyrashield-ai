@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { withCookieMutation } from "../../../../lib/api-auth"
 import {
   createScanAttachmentRecord,
@@ -11,7 +12,9 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "@/lib/api-auth"
 import { apiError, apiSuccess } from "@/lib/api-response"
+import { recordedOperation } from "@/lib/recorded-operation"
 import {
+  CANONICAL_OPERATIONS,
   SCAN_ATTACHMENT_MAX_BYTES,
   SCAN_ATTACHMENT_FILENAME_PATTERN,
   validateScanAttachmentUpload,
@@ -89,7 +92,7 @@ async function post(request: Request) {
     }
 
     // Authenticate before reading the potentially large upload stream.
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.attachment.upload)
 
     const filename = filenameFromRequest(request)
     if (!SCAN_ATTACHMENT_FILENAME_PATTERN.test(filename)) {
@@ -115,50 +118,75 @@ async function post(request: Request) {
       )
     }
 
-    let stored: Awaited<ReturnType<typeof uploadEncryptedArtifact>> | null = null
-    try {
-      stored = await uploadEncryptedArtifact({
-        workspaceId,
-        ownerId: session.userId,
-        type: "scan-attachment",
-        namespace: "scan-attachments",
-        content,
-        contentType: mediaType,
-      })
-      const record = await createScanAttachmentRecord({
-        workspaceId,
-        filename,
-        mediaType,
-        byteLength: stored.byteLength,
-        checksum: stored.checksum,
-        storageUri: stored.storageUri,
-        encryptionKeyRef: stored.encryptionKeyRef,
-        createdById: session.userId,
-      })
-      await prisma.auditLog
-        .create({
-          data: {
-            workspaceId,
-            actorUserId: session.userId,
-            action: "scan.attachment_uploaded",
-            resourceType: "scan_attachment",
-            resourceId: record.id,
-          },
-        })
-        .catch((auditErr) =>
-          logger.warn("Failed to record attachment upload audit", {
-            error: auditErr instanceof Error ? auditErr.message : String(auditErr),
-          })
-        )
-      return privateResponse(apiSuccess(record, 201))
-    } catch (error) {
-      if (stored) {
-        await Promise.resolve(deleteEncryptedArtifact(stored.storageUri, workspaceId)).catch(() => {
-          logger.error("Failed to compensate attachment upload")
-        })
-      }
-      throw error
-    }
+    // Idempotent boundary: an Idempotency-Key binds a durable operation to the
+    // canonical input — filename, media type and the content checksum only.
+    // Attachment bytes are never stored on the operation record. A same-key
+    // same-input retry replays the recorded result; same-key different input
+    // conflicts before any storage write.
+    const contentChecksum = createHash("sha256").update(content).digest("hex")
+    return privateResponse(
+      await recordedOperation(
+        request,
+        {
+          workspaceId,
+          operationName: CANONICAL_OPERATIONS.ATTACHMENT_UPLOAD,
+          input: { filename, mediaType, contentChecksum },
+          session,
+        },
+        async (outcome) => {
+          let stored: Awaited<ReturnType<typeof uploadEncryptedArtifact>> | null = null
+          try {
+            stored = await uploadEncryptedArtifact({
+              workspaceId,
+              ownerId: session.userId,
+              type: "scan-attachment",
+              namespace: "scan-attachments",
+              content,
+              contentType: mediaType,
+            })
+            const record = await createScanAttachmentRecord({
+              workspaceId,
+              filename,
+              mediaType,
+              byteLength: stored.byteLength,
+              checksum: stored.checksum,
+              storageUri: stored.storageUri,
+              encryptionKeyRef: stored.encryptionKeyRef,
+              createdById: session.userId,
+            })
+            await prisma.auditLog
+              .create({
+                data: {
+                  workspaceId,
+                  actorUserId: session.userId,
+                  action: "scan.attachment_uploaded",
+                  resourceType: "scan_attachment",
+                  resourceId: record.id,
+                },
+              })
+              .catch((auditErr) =>
+                logger.warn("Failed to record attachment upload audit", {
+                  error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+                })
+              )
+            return apiSuccess(record, 201)
+          } catch (error) {
+            // Every failure above happens before an attachment record commits
+            // (a partial storage object is compensated), so the operation
+            // honestly reports not-submitted and a fresh key may retry.
+            outcome.confirmNotSubmitted()
+            if (stored) {
+              await Promise.resolve(deleteEncryptedArtifact(stored.storageUri, workspaceId)).catch(
+                () => {
+                  logger.error("Failed to compensate attachment upload")
+                }
+              )
+            }
+            throw error
+          }
+        }
+      )
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return privateResponse(authErr)

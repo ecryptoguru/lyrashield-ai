@@ -8,12 +8,15 @@ export const CANONICAL_OPERATIONS = {
   REPORT_LIST: "report.list",
   SCAN_ELIGIBILITY: "scan.eligibility",
   GATE_READ: "gate.read",
+  ATTACHMENT_LIST: "scan_attachment.list",
   SCAN_CREATE: "scan.create",
   SCAN_CANCEL: "scan.cancel",
   REPORT_CREATE: "report.create",
   FIX_PROPOSAL_CREATE: "fix_proposal.create",
   RETEST_CREATE: "retest.create",
   FIX_PR_CREATE: "fix_pr.create",
+  ATTACHMENT_UPLOAD: "scan_attachment.upload",
+  ATTACHMENT_DELETE: "scan_attachment.delete",
 } as const
 
 export type CanonicalOperation = (typeof CANONICAL_OPERATIONS)[keyof typeof CANONICAL_OPERATIONS]
@@ -54,5 +57,15 @@ export const AUTOMATION_WORKFLOWS = [
     label: "Create Fix Pull Requests",
     description: "Create approval-bound pull requests for authorized findings.",
     operations: [CANONICAL_OPERATIONS.FIX_PR_CREATE],
+  },
+  {
+    id: "attachments",
+    label: "Manage Scan Attachments",
+    description: "Upload, list and delete workspace input-evidence attachments for scans.",
+    operations: [
+      CANONICAL_OPERATIONS.ATTACHMENT_LIST,
+      CANONICAL_OPERATIONS.ATTACHMENT_UPLOAD,
+      CANONICAL_OPERATIONS.ATTACHMENT_DELETE,
+    ],
   },
 ] as const

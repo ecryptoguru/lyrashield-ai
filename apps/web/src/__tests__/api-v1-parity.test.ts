@@ -40,6 +40,25 @@ describe("/api/v1 parity", () => {
     expect(v1.POST).toBe(twin.POST)
   })
 
+  it("scans/attachments (GET, POST)", async () => {
+    const v1 = await import("../app/api/v1/scans/attachments/route")
+    const twin = await import("../app/api/scans/attachments/route")
+    expect(v1.GET).toBe(twin.GET)
+    expect(v1.POST).toBe(twin.POST)
+  })
+
+  it("scans/attachments/[id] (DELETE)", async () => {
+    const v1 = await import("../app/api/v1/scans/attachments/[id]/route")
+    const twin = await import("../app/api/scans/attachments/[id]/route")
+    expect(v1.DELETE).toBe(twin.DELETE)
+  })
+
+  it("agent-operations/[id] (GET)", async () => {
+    const v1 = await import("../app/api/v1/agent-operations/[id]/route")
+    const twin = await import("../app/api/agent-operations/[id]/route")
+    expect(v1.GET).toBe(twin.GET)
+  })
+
   it("findings (GET)", async () => {
     const v1 = await import("../app/api/v1/findings/route")
     const twin = await import("../app/api/findings/route")

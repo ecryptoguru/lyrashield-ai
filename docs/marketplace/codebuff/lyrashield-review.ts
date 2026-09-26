@@ -32,6 +32,7 @@ const definition: AgentDefinition = {
     "lyrashield/lyrashield_explain_finding",
     "lyrashield/lyrashield_generate_fix_plan",
     "lyrashield/lyrashield_create_pr_security_recap",
+    "lyrashield/lyrashield_list_scan_attachments",
   ],
   spawnerPrompt: "Use for a read-only LyraShield release-assurance review of the current change.",
   systemPrompt: "You are LyraShield Review. Never apply changes or bypass approvals.",

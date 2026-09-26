@@ -481,14 +481,25 @@ export class PromptInjectionGuard {
     // env-extraction patterns. Raise the limit and skip those pattern classes
     // so the advisory scanner (which intentionally detects those patterns) sees
     // the diff instead of being blocked by the injection guard.
-    const overrides =
-      toolName === "lyrashield_check_diff"
-        ? {
-            maxInputLength: 200000,
-            skipPatterns: new Set(["code_execution", "env_extraction"]),
-          }
-        : undefined
-    const result = this.check(serialized, overrides)
+    const TOOL_ARG_OVERRIDES: Record<
+      string,
+      { maxInputLength?: number; skipPatterns?: Set<string> }
+    > = {
+      lyrashield_check_diff: {
+        maxInputLength: 200000,
+        skipPatterns: new Set(["code_execution", "env_extraction"]),
+      },
+      // Attachment uploads carry model-authored text evidence (bounded to
+      // ~100 KB of content by the tool schema — larger files go through the
+      // CLI/SDK/REST 1 MiB surface). Unlike check_diff diffs this content is
+      // authored by the model itself, so every injection pattern still
+      // applies; only the serialized-size cap is raised to the existing
+      // check_diff tier.
+      lyrashield_upload_scan_attachment: {
+        maxInputLength: 200000,
+      },
+    }
+    const result = this.check(serialized, TOOL_ARG_OVERRIDES[toolName])
 
     if (result.allowed && result.sanitizedInput) {
       try {

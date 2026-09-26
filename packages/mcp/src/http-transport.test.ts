@@ -264,7 +264,7 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     expect(res.status).toBe(200)
     expect(res.headers.get("mcp-session-id")).toBeNull()
     const body = await readJson(res)
-    expect((body.result as { tools?: unknown[] })?.tools?.length).toBe(17)
+    expect((body.result as { tools?: unknown[] })?.tools?.length).toBe(21)
   })
 
   it("rejects non-POST/GET/DELETE verbs with 405", async () => {
@@ -283,10 +283,12 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     )
     const body = await readJson(res)
     const tools = (body.result as { tools?: Array<{ name: string }> })?.tools ?? []
-    expect(tools.length).toBe(17)
+    expect(tools.length).toBe(21)
     expect(tools.map((t) => t.name)).toContain("lyrashield_run_pr_scan")
     expect(tools.map((t) => t.name)).toContain("lyrashield_get_scan_quality")
     expect(tools.map((t) => t.name)).toContain("lyrashield_get_scan_eligibility")
+    expect(tools.map((t) => t.name)).toContain("lyrashield_upload_scan_attachment")
+    expect(tools.map((t) => t.name)).toContain("lyrashield_request_fix_pr")
   })
 
   it("runs a read-only tool", async () => {

@@ -8,7 +8,12 @@ import {
   withWorkspaceRLS,
   TOOL_OPERATION_MAP,
 } from "@lyrashield/db"
-import { McpServer, type McpToolResult, type RemoteApprovalGate } from "@lyrashield/mcp"
+import {
+  McpServer,
+  extractScanIdFromToolResult,
+  type McpToolResult,
+  type RemoteApprovalGate,
+} from "@lyrashield/mcp"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { z } from "zod"
@@ -20,6 +25,9 @@ const operationPermissions: Partial<Record<string, Permission>> = {
   "fix_proposal.create": PERMISSIONS.fix.create,
   "retest.create": PERMISSIONS.retest.create,
   "fix_pr.create": PERMISSIONS.fix.createPr,
+  "scan_attachment.list": PERMISSIONS.scan.view,
+  "scan_attachment.upload": PERMISSIONS.attachment.upload,
+  "scan_attachment.delete": PERMISSIONS.attachment.delete,
 }
 
 const approvalIdSchema = z.string().min(1).max(128).optional()
@@ -61,6 +69,30 @@ function stripControlArgs(args: Record<string, unknown>): Record<string, unknown
   return rest
 }
 
+/**
+ * Stamp the durable operation id onto a returned tool result so the MCP task
+ * layer can bind a task id to this exact ledger row. Text payloads that hold
+ * the same JSON document are rewritten consistently; other content is left
+ * as-is. Applied to every approved return path — fresh execution, replay and
+ * in-progress — so the binding is identical however the result was produced.
+ */
+function withOperationId(result: McpToolResult, operationId: string): McpToolResult {
+  const structuredContent = { ...(result.structuredContent ?? {}), operationId }
+  const content = result.content.map((item) => {
+    if (item.type !== "text") return item
+    try {
+      const parsed: unknown = JSON.parse(item.text)
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { ...item, text: JSON.stringify({ ...(parsed as object), operationId }, null, 2) }
+      }
+    } catch {
+      // Non-JSON text content — leave it verbatim.
+    }
+    return item
+  })
+  return { ...result, content, structuredContent }
+}
+
 async function resolveDelegatedScope(
   workspaceId: string,
   toolName: string,
@@ -88,6 +120,25 @@ async function resolveDelegatedScope(
       })
     )
     return { targetId: finding.targetId ?? undefined, profile: scan?.mode }
+  }
+  if (typeof args.proposalId === "string") {
+    const proposalId = args.proposalId
+    const proposal = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.fixProposal.findFirst({
+        where: { id: proposalId, deletedAt: null, finding: { workspaceId, deletedAt: null } },
+        select: { findingId: true },
+      })
+    )
+    if (!proposal) return {}
+    const finding = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.finding.findFirst({
+        where: { id: proposal.findingId, workspaceId, deletedAt: null },
+        select: { targetId: true },
+      })
+    )
+    // fix_pr.create is non-billable: like cancellation, the gate must not
+    // resolve the scan's recorded mode into a profile check.
+    return { targetId: finding?.targetId ?? undefined }
   }
   if (typeof args.scanId === "string") {
     const scanId = args.scanId
@@ -193,7 +244,10 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
           }
           return {
             approved: true,
-            result: claim.operation.result as unknown as McpToolResult,
+            result: withOperationId(
+              claim.operation.result as unknown as McpToolResult,
+              claim.operation.id
+            ),
           }
         }
 
@@ -243,15 +297,20 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
           return denied("Delegated tool execution failed")
         }
 
+        const stampedResult = withOperationId(toolResult, claim.operation.id)
         await completeAgentOperation(claim.operation.id, workspaceId, {
+          // Point the ledger row at the durable scan when the tool produced
+          // one — task recovery resolves the scan via this reference without
+          // ever re-executing the tool.
+          resultReference: extractScanIdFromToolResult(toolResult) ?? undefined,
           result: {
-            content: toolResult.content,
-            isError: toolResult.isError,
-            structuredContent: toolResult.structuredContent,
+            content: stampedResult.content,
+            isError: stampedResult.isError,
+            structuredContent: stampedResult.structuredContent,
           },
         })
 
-        return { approved: true, result: toolResult }
+        return { approved: true, result: stampedResult }
       }
 
       return denied(

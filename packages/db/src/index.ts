@@ -484,6 +484,7 @@ export {
   toOperationStatusView,
   hashOperationInput,
   listRecentAgentOperations,
+  listAgentOperationsForTasks,
   resolveOperationPrincipal,
   type AgentOperationListItem,
   type ClaimAgentOperationParams,

@@ -14,6 +14,9 @@ describe("WP-02 Agent Authorization and 14-tool Catalog", () => {
       "lyrashield_request_retest",
       "lyrashield_create_fix_pr",
       "lyrashield_cancel_scan",
+      "lyrashield_upload_scan_attachment",
+      "lyrashield_delete_scan_attachment",
+      "lyrashield_request_fix_pr",
     ]
 
     for (const tool of mutatingTools) {
@@ -31,6 +34,7 @@ describe("WP-02 Agent Authorization and 14-tool Catalog", () => {
       "lyrashield_get_reports",
       "lyrashield_check_eligibility",
       "lyrashield_get_verdict",
+      "lyrashield_list_scan_attachments",
     ]
 
     for (const tool of readTools) {
@@ -269,6 +273,118 @@ describe("WP-02 Agent Authorization and 14-tool Catalog", () => {
         profile: "STANDARD",
       }).code
     ).toBe("TARGET_NOT_GRANTED")
+  })
+
+  it("attachment upload/delete require their own grants — scan.create is not widened into them", () => {
+    const base = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      expiresAt: null,
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["STANDARD"],
+    }
+
+    // A scan.create-only (pre-existing) grant never uploads or deletes.
+    const legacy = { ...base, allowedOperations: [CANONICAL_OPERATIONS.SCAN_CREATE] }
+    for (const tool of ["lyrashield_upload_scan_attachment", "lyrashield_delete_scan_attachment"]) {
+      expect(
+        checkDelegatedOperationAuthorization({
+          connection: legacy,
+          workspaceId: "ws-1",
+          operationName: tool,
+        }).code
+      ).toBe("OPERATION_NOT_GRANTED")
+    }
+
+    // Explicit attachment grants authorize, each mapped to its canonical op.
+    const upload = { ...base, allowedOperations: [CANONICAL_OPERATIONS.ATTACHMENT_UPLOAD] }
+    expect(
+      checkDelegatedOperationAuthorization({
+        connection: upload,
+        workspaceId: "ws-1",
+        operationName: "lyrashield_upload_scan_attachment",
+      })
+    ).toMatchObject({
+      authorized: true,
+      canonicalOperation: CANONICAL_OPERATIONS.ATTACHMENT_UPLOAD,
+    })
+    expect(
+      checkDelegatedOperationAuthorization({
+        connection: upload,
+        workspaceId: "ws-1",
+        operationName: "lyrashield_delete_scan_attachment",
+      }).code
+    ).toBe("OPERATION_NOT_GRANTED")
+
+    const deleter = { ...base, allowedOperations: [CANONICAL_OPERATIONS.ATTACHMENT_DELETE] }
+    expect(
+      checkDelegatedOperationAuthorization({
+        connection: deleter,
+        workspaceId: "ws-1",
+        operationName: "lyrashield_delete_scan_attachment",
+      })
+    ).toMatchObject({
+      authorized: true,
+      canonicalOperation: CANONICAL_OPERATIONS.ATTACHMENT_DELETE,
+    })
+  })
+
+  it("lyrashield_request_fix_pr maps to fix_pr.create and honors target-scoped grants", () => {
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      expiresAt: null,
+      allowedTargetIds: ["target-1"],
+      allTargets: false,
+      allowedOperations: [CANONICAL_OPERATIONS.FIX_PR_CREATE],
+      allowedProfiles: ["STANDARD"],
+    }
+
+    expect(
+      checkDelegatedOperationAuthorization({
+        connection,
+        workspaceId: "ws-1",
+        operationName: "lyrashield_request_fix_pr",
+        targetId: "target-1",
+      })
+    ).toMatchObject({
+      authorized: true,
+      canonicalOperation: CANONICAL_OPERATIONS.FIX_PR_CREATE,
+    })
+
+    // A proposal on a non-granted target (resolved server-side to target-2)
+    // must not pass a target-scoped grant.
+    expect(
+      checkDelegatedOperationAuthorization({
+        connection,
+        workspaceId: "ws-1",
+        operationName: "lyrashield_request_fix_pr",
+        targetId: "target-2",
+      }).code
+    ).toBe("TARGET_NOT_GRANTED")
+  })
+
+  it("lyrashield_list_scan_attachments is read-only and needs no mutation grant", () => {
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      expiresAt: null,
+      allowedTargetIds: [],
+      allTargets: false,
+      allowedOperations: [],
+      allowedProfiles: [],
+    }
+    expect(
+      checkDelegatedOperationAuthorization({
+        connection,
+        workspaceId: "ws-1",
+        operationName: "lyrashield_list_scan_attachments",
+      }).authorized
+    ).toBe(true)
   })
 
   it("fails closed for empty mutation grants and at the exact expiry boundary", () => {

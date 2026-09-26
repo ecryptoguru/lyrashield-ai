@@ -1,8 +1,9 @@
 import { verifyApiKey } from "@lyrashield/db"
-import { handleRemoteMcpRequest } from "@lyrashield/mcp"
+import { handleRemoteMcpRequest, MCP_TASK_PROTOCOL_VERSION } from "@lyrashield/mcp"
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { makeRemoteApprovalGate } from "./remote-approval-gate"
+import { makeHostedMcpTaskBackend } from "@/lib/mcp-tasks"
 import { verifyOAuthBearer } from "@lyrashield/auth/server"
 
 /**
@@ -103,6 +104,30 @@ async function authenticate(request: Request): Promise<RemoteAuthInfo | null> {
   }
 }
 
+/**
+ * The negotiated MCP protocol version for this request: the
+ * MCP-Protocol-Version header on post-initialize calls, or the
+ * protocolVersion inside an initialize body (the transport negotiates from
+ * it). Tasks are only offered on 2025-11-25+ — every older client keeps the
+ * immediate tools/call semantics.
+ */
+function negotiatedProtocolVersion(header: string | null, body: string): string | undefined {
+  if (header) return header
+  try {
+    const message: unknown = JSON.parse(body)
+    const init = Array.isArray(message)
+      ? message.find((m) => m?.method === "initialize")
+      : (message as { method?: string })?.method === "initialize"
+        ? message
+        : undefined
+    const version = (init as { params?: { protocolVersion?: unknown } } | undefined)?.params
+      ?.protocolVersion
+    return typeof version === "string" ? version : undefined
+  } catch {
+    return undefined
+  }
+}
+
 async function handle(request: Request): Promise<Response> {
   try {
     const authInfo = await authenticate(request)
@@ -114,7 +139,33 @@ async function handle(request: Request): Promise<Response> {
       allowAutoDetect: false,
     }
 
-    return await handleRemoteMcpRequest(request, {
+    // Read the body once so the initialize params can drive the protocol gate;
+    // the transport receives a re-materialized request carrying the same body.
+    let mcpRequest = request
+    let bodyText = ""
+    if (request.method === "POST") {
+      bodyText = await request.text()
+      mcpRequest = new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body: bodyText,
+      })
+    }
+    const protocolVersion = negotiatedProtocolVersion(
+      request.headers.get("mcp-protocol-version"),
+      bodyText
+    )
+
+    // Tasks are only advertised where they are honest: a task-semantics
+    // protocol AND a delegated OAuth connection — the binding is
+    // connection-principal-scoped, so API-key/legacy bearers never see them.
+    const tasksEnabled =
+      protocolVersion !== undefined &&
+      protocolVersion >= MCP_TASK_PROTOCOL_VERSION &&
+      authInfo.kind === "oauth" &&
+      authInfo.connection !== undefined
+
+    return await handleRemoteMcpRequest(mcpRequest, {
       toolContext,
       // Remote mutations run only inside a connected OAuth client's delegated
       // grant. Every other credential is gated to a single connect_required
@@ -131,6 +182,16 @@ async function handle(request: Request): Promise<Response> {
         connection: authInfo.connection,
         toolContext,
       }),
+      ...(tasksEnabled && authInfo.connection
+        ? {
+            tasks: {
+              backend: makeHostedMcpTaskBackend({
+                workspaceId: authInfo.workspaceId,
+                connection: authInfo.connection,
+              }),
+            },
+          }
+        : {}),
     })
   } catch (err) {
     logger.error("Remote MCP request failed", {

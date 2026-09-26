@@ -474,6 +474,47 @@ describe("LyraShieldClient", () => {
     }
   })
 
+  it("sends rawBody bytes verbatim with the caller's content-type, never JSON", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ body: { success: true, data: { ok: true } } }))
+    const bytes = new TextEncoder().encode('attachment-body\nwith a quote " and unicode λ')
+    await client.request("POST", "/scans/attachments", {
+      rawBody: bytes,
+      headers: { "content-type": "text/plain" },
+    })
+    const init = mockFetch.mock.calls[0]![1] as RequestInit
+    expect(init.body).toBe(bytes)
+    const headers = init.headers as Record<string, string>
+    expect(headers["content-type"]).toBe("text/plain")
+    expect(headers["Content-Type"]).toBeUndefined()
+  })
+
+  it("does not auto-set application/json for rawBody even without a caller content-type", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ body: { success: true, data: { ok: true } } }))
+    await client.request("POST", "/scans/attachments", { rawBody: new Uint8Array([1, 2, 3]) })
+    const headers = (mockFetch.mock.calls[0]![1] as RequestInit).headers as Record<string, string>
+    expect(headers["Content-Type"]).toBeUndefined()
+    expect(headers["content-type"]).toBeUndefined()
+  })
+
+  it("throws before fetch when body and rawBody are both provided", async () => {
+    await expect(
+      client.request("POST", "/scans", { body: { a: 1 }, rawBody: new Uint8Array([1]) })
+    ).rejects.toMatchObject({ code: "INVALID_REQUEST" })
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it("rawBody honors a pre-aborted caller signal without fetching", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      client.request("POST", "/scans/attachments", {
+        rawBody: new Uint8Array([1]),
+        signal: controller.signal,
+      })
+    ).rejects.toMatchObject({ code: "REQUEST_ABORTED" })
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
   it("retries on HTTP 401 once if getAccessToken provides a refreshed token", async () => {
     let callCount = 0
     const getAccessToken = vi.fn().mockImplementation(async () => {

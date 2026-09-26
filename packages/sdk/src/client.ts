@@ -27,6 +27,12 @@ export interface LyraShieldClientOptions {
 
 export interface RequestOptions<T = unknown> {
   body?: unknown
+  /**
+   * Raw request bytes, mutually exclusive with `body`. Sent to fetch verbatim
+   * — never JSON.stringify — and no `Content-Type: application/json` header is
+   * auto-set; the caller supplies the payload's media type via `headers`.
+   */
+  rawBody?: Uint8Array
   headers?: Record<string, string>
   etag?: string
   /**
@@ -134,10 +140,18 @@ export class LyraShieldClient {
   ): Promise<T | NotModified> {
     const callerSignal = options?.signal
     if (callerSignal?.aborted) throw callerAbortError()
+    if (options?.body != null && options?.rawBody != null) {
+      throw new LyraShieldError({
+        status: 0,
+        code: "INVALID_REQUEST",
+        message: "RequestOptions.body and RequestOptions.rawBody are mutually exclusive",
+      })
+    }
 
     const url = this.buildUrl(path)
     const isIdempotent = IDEMPOTENT_METHODS.has(method.toUpperCase())
-    const body = options?.body != null ? JSON.stringify(options.body) : undefined
+    const body =
+      options?.rawBody ?? (options?.body != null ? JSON.stringify(options.body) : undefined)
 
     const headers: Record<string, string> = {
       "User-Agent": this.userAgent,
@@ -145,7 +159,7 @@ export class LyraShieldClient {
     }
     const effectiveToken = await this.resolveToken()
     if (effectiveToken) headers["Authorization"] = `Bearer ${effectiveToken}`
-    if (body) headers["Content-Type"] = "application/json"
+    if (options?.body != null) headers["Content-Type"] = "application/json"
     if (options?.etag) headers["If-None-Match"] = options.etag
     if (options?.headers) Object.assign(headers, options.headers)
 

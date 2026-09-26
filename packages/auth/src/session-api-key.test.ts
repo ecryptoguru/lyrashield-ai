@@ -283,6 +283,57 @@ describe("scorecard:publish via requirePermission", () => {
     await expect(requirePermission("ws-1", "scan:cancel")).rejects.toThrow("FORBIDDEN")
   })
 
+  it("allows a delegated connection granted scan_attachment.upload to upload attachments", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan_attachment.upload"],
+    })
+    stubMembership("DEVELOPER")
+
+    await expect(requirePermission("ws-1", "attachment:upload")).resolves.toBeTruthy()
+  })
+
+  it("rejects attachment:upload for a delegated connection that granted only scan.create", async () => {
+    // Old grants must never widen into the new attachment operations.
+    withHeaders({ authorization: "Bearer oauth-token" })
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan.create"],
+    })
+    stubMembership("OWNER")
+
+    await expect(requirePermission("ws-1", "attachment:upload")).rejects.toThrow("FORBIDDEN")
+  })
+
+  it("rejects a read-scoped delegated connection for attachment:delete even when granted", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan_attachment.delete"],
+    })
+    stubMembership("OWNER")
+
+    await expect(requirePermission("ws-1", "attachment:delete")).rejects.toThrow("FORBIDDEN")
+  })
+
+  it("rejects attachment:upload for a read-scoped API key", async () => {
+    withHeaders({ authorization: `Bearer ${RAW_KEY}` })
+    stubVerifiedKey({ scopes: ["read"] })
+    stubMembership("OWNER")
+
+    await expect(requirePermission("ws-1", "attachment:upload")).rejects.toThrow("FORBIDDEN")
+  })
+
   it("rejects a delegated connection even with write scope (no canonical operation)", async () => {
     withHeaders({ authorization: "Bearer oauth-token" })
     vi.mocked(verifyOAuthBearer).mockResolvedValue({

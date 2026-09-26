@@ -9,6 +9,7 @@ import {
 import { PromptInjectionGuard } from "./prompt-injection-guard"
 import { validateToolArgs } from "./args-validation"
 import { capToolResult } from "./result-cap"
+import { TASK_CAPABLE_TOOLS } from "./task-adapter"
 
 /**
  * Human-approval gate for mutating MCP tools. Returns whether the mutating call
@@ -53,6 +54,12 @@ export interface McpServerOptions {
   approvalGate?: ApprovalGate
   /** Explicit opt-out of the mutation gate. Defaults to false (gate enforced). */
   allowMutations?: boolean
+  /**
+   * Advertise `execution.taskSupport: "optional"` on task-capable tools. Set
+   * only when the transport is wired with a task backend — otherwise every
+   * tool stays "forbidden".
+   */
+  taskSupportEnabled?: boolean
 }
 
 export class McpServer {
@@ -62,6 +69,7 @@ export class McpServer {
   private serverVersion: string
   private approvalGate?: ApprovalGate
   private allowMutations: boolean
+  private taskSupportEnabled: boolean
 
   constructor(options?: McpServerOptions) {
     const context: ToolHandlerContext = options?.toolContext ?? {
@@ -76,6 +84,7 @@ export class McpServer {
     this.serverVersion = options?.serverVersion ?? "0.1.0"
     this.approvalGate = options?.approvalGate
     this.allowMutations = options?.allowMutations ?? false
+    this.taskSupportEnabled = options?.taskSupportEnabled ?? false
   }
 
   listTools({
@@ -118,10 +127,16 @@ export class McpServer {
         : t.inputSchema,
       annotations: t.annotations ?? MCP_TOOL_ANNOTATIONS[t.name],
       outputSchema: t.outputSchema ?? { type: "object", additionalProperties: true },
-      // SDK 1.30 supports MCP task declarations, but LyraShield scan IDs are
-      // persisted domain jobs. Advertising protocol tasks without a durable
-      // MCP task store would make stateless HTTP cancellation and replay unsafe.
-      execution: { taskSupport: "forbidden" as const },
+      // Task advertisement is honest: "optional" is emitted only for the
+      // recorded, delegated scan tool and only when this server was built
+      // with a task backend that can resolve get/result/cancel durably.
+      // Everything else stays "forbidden".
+      execution: {
+        taskSupport:
+          this.taskSupportEnabled && TASK_CAPABLE_TOOLS.has(t.name)
+            ? ("optional" as const)
+            : ("forbidden" as const),
+      },
     }))
   }
 

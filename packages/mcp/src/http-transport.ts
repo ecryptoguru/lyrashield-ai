@@ -1,6 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 import { createLyraShieldServer } from "./create-server"
 import type { RemoteApprovalContext, RemoteApprovalGate } from "./create-server"
+import type { McpTaskBackend } from "./task-adapter"
 import type { ToolHandlerContext } from "./tools"
 
 /**
@@ -32,6 +33,13 @@ export interface RemoteMcpOptions {
   remoteApprovalGate?: RemoteApprovalGate
   /** Advertise the pre-authorized, idempotent mutation contract. */
   delegatedAuthorization?: boolean
+  /**
+   * Enable MCP task support (protocol 2025-11-25) for this request's server.
+   * The caller must only pass a backend when the negotiated protocol version
+   * carries task semantics AND the caller holds a delegated connection —
+   * the backend is constructed per request from that request's verified auth.
+   */
+  tasks?: { backend: McpTaskBackend }
 }
 
 export async function handleRemoteMcpRequest(
@@ -50,6 +58,7 @@ export async function handleRemoteMcpRequest(
           remoteApprovalGate: options.remoteApprovalGate,
         }
       : {}),
+    ...(options.tasks ? { tasks: options.tasks } : {}),
   })
 
   // Stateless: no sessionIdGenerator. Each request is fully self-contained.

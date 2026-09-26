@@ -89,6 +89,8 @@ Deeper modes consume more compute and take longer. Choose the least intensive mo
 - `explain <findingId>` — show full finding detail and plain-language guidance
 - `fix-plan <findingId>` — **read-only** remediation plan assembled from the finding's recorded detail
 - `fix-plan create <findingId> --summary <summary>` — record a fix proposal on a finding (summary must be ≥ 10 characters)
+- `fix-plan create-pr <proposalId> --idempotency-key <key>` — request a fix pull request; reports `pending_approval` (with the approval URL) or the opened PR. Nothing is merged automatically and rejected/failed outcomes exit non-zero.
+- `attachments list|upload <path>|remove <attachmentId>` — manage workspace scan attachments (input evidence for scans). Upload requires `--idempotency-key`, accepts `.txt/.md/.markdown/.json/.yaml/.yml` files up to 1 MiB, and takes the attachment filename from the file path's basename.
 - `verify <findingId>` — queue a retest of a finding
 
 ### Local checks and CI

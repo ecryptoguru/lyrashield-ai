@@ -299,6 +299,37 @@ export async function listRecentAgentOperations(
   }))
 }
 
+/**
+ * Principal-bound, keyset-paginated operation listing used by the MCP task
+ * surface: a task id encodes an operation id, and tasks/list must only ever
+ * return operations the calling principal created — never another
+ * principal's, even inside the same workspace. Rows are returned newest
+ * first; `cursor` is the previous page's last operation id.
+ */
+export async function listAgentOperationsForTasks(params: {
+  workspaceId: string
+  principalType: "OAUTH_CONNECTION" | "API_KEY" | "BROWSER_SESSION"
+  principalId: string
+  operationName: string
+  cursor?: string
+  limit?: number
+}): Promise<AgentOperation[]> {
+  const limit = Math.max(1, Math.min(params.limit ?? 20, 50))
+  return withWorkspaceRLS(params.workspaceId, (tx) =>
+    tx.agentOperation.findMany({
+      where: {
+        workspaceId: params.workspaceId,
+        principalType: params.principalType,
+        principalId: params.principalId,
+        operationName: params.operationName,
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit,
+      ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+    })
+  )
+}
+
 export type OperationStatusState = "PENDING" | "EXECUTING" | "COMPLETED" | "FAILED" | "CONFLICT"
 
 export interface OperationStatusView {

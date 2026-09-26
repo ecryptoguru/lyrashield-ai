@@ -23,5 +23,6 @@ export * from "./resources/workspaces"
 export * from "./resources/launch-readiness"
 export * from "./resources/gate"
 export * from "./resources/agent-approvals"
+export * from "./resources/scan-attachments"
 
 export * from "./resources/operations"

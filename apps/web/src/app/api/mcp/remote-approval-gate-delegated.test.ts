@@ -16,6 +16,10 @@ vi.mock("@lyrashield/db", () => ({
   TOOL_OPERATION_MAP: {
     lyrashield_scan_target: { canonicalOperation: "scan.create" },
     lyrashield_cancel_scan: { canonicalOperation: "scan.cancel" },
+    lyrashield_list_scan_attachments: { canonicalOperation: "scan_attachment.list" },
+    lyrashield_upload_scan_attachment: { canonicalOperation: "scan_attachment.upload" },
+    lyrashield_delete_scan_attachment: { canonicalOperation: "scan_attachment.delete" },
+    lyrashield_request_fix_pr: { canonicalOperation: "fix_pr.create" },
   },
   createApproval: (...args: unknown[]) => createApprovalMock(...args),
   findPendingApprovalByHash: (...args: unknown[]) => findPendingApprovalByHashMock(...args),
@@ -48,13 +52,37 @@ vi.mock("@lyrashield/db", () => ({
       ) {
         return { authorized: true, canonicalOperation: "scan.cancel" }
       }
+      if (
+        connection?.allowedOperations?.includes("scan_attachment.upload") &&
+        operationName === "lyrashield_upload_scan_attachment" &&
+        connection?.allTargets
+      ) {
+        return { authorized: true, canonicalOperation: "scan_attachment.upload" }
+      }
+      if (
+        connection?.allowedOperations?.includes("scan_attachment.delete") &&
+        operationName === "lyrashield_delete_scan_attachment" &&
+        connection?.allTargets
+      ) {
+        return { authorized: true, canonicalOperation: "scan_attachment.delete" }
+      }
+      if (
+        connection?.allowedOperations?.includes("fix_pr.create") &&
+        operationName === "lyrashield_request_fix_pr" &&
+        (connection?.allTargets || connection?.allowedTargetIds?.includes(targetId))
+      ) {
+        return { authorized: true, canonicalOperation: "fix_pr.create" }
+      }
+
       return { authorized: false, code: "OPERATION_NOT_GRANTED", reason: "Operation not granted" }
     }),
   prisma: { finding: { findFirst: vi.fn() }, scan: { findFirst: vi.fn() } },
   withWorkspaceRLS: vi.fn((_workspaceId: string, fn: (tx: unknown) => unknown) =>
     Promise.resolve(
       fn({
-        finding: { findFirst: vi.fn().mockResolvedValue(null) },
+        finding: { findFirst: vi.fn().mockResolvedValue({ targetId: "target-1" }) },
+        fixProposal: { findFirst: vi.fn().mockResolvedValue({ findingId: "finding-1" }) },
+
         scan: {
           findFirst: vi.fn().mockResolvedValue({ targetId: "target-1", mode: "STANDARD" }),
         },
@@ -63,8 +91,10 @@ vi.mock("@lyrashield/db", () => ({
   ),
 }))
 
-vi.mock("@lyrashield/mcp", () => {
+vi.mock("@lyrashield/mcp", async () => {
+  const actual = await vi.importActual<typeof import("@lyrashield/mcp")>("@lyrashield/mcp")
   return {
+    ...actual,
     McpServer: class {
       callTool(...args: unknown[]) {
         return callToolMock(...args)
@@ -180,16 +210,22 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
 
     expect(result.approved).toBe(true)
     if (result.approved) {
-      expect(result.result).toEqual(expectedToolResult)
+      // The approved result carries the durable operation id stamp so the
+      // MCP task layer can bind a task id to this exact ledger row.
+      expect(result.result.structuredContent).toEqual({
+        scanId: "scan-999",
+        operationId: "op-123",
+      })
+      expect(result.result.content[0].text).toContain('"operationId": "op-123"')
     }
     // Verifies no approval was created in Review Queue
     expect(createApprovalMock).not.toHaveBeenCalled()
-    // Verifies operation was completed
+    // Verifies operation was completed with the stamped result retained
     expect(completeAgentOperationMock).toHaveBeenCalledWith("op-123", "ws-1", {
       result: {
-        content: expectedToolResult.content,
+        content: expect.any(Array),
         isError: undefined,
-        structuredContent: expectedToolResult.structuredContent,
+        structuredContent: { scanId: "scan-999", operationId: "op-123" },
       },
     })
   })
@@ -231,7 +267,13 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
 
     expect(result.approved).toBe(true)
     if (result.approved) {
-      expect(result.result).toEqual(cachedResult)
+      // The replay is the recorded result stamped with the durable operation
+      // id — the id the MCP task layer binds `lst_<id>` to.
+      expect(result.result.structuredContent).toEqual({
+        scanId: "scan-999",
+        operationId: "op-123",
+      })
+      expect(result.result.content[0].text).toContain('"operationId": "op-123"')
     }
     // Tool was NOT re-executed
     expect(callToolMock).not.toHaveBeenCalled()
@@ -420,6 +462,156 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
       reason: expect.stringContaining("Update this connection's authorized workflows"),
     })
     expect(createApprovalMock).not.toHaveBeenCalled()
+    expect(callToolMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("makeRemoteApprovalGate - attachment + fix-PR tools (D2)", () => {
+  const apiKeyInfo = {
+    workspaceId: "ws-1",
+    scopes: ["write", "lyrashield.write"],
+    createdById: "user-1",
+    keyId: "key-1",
+  }
+  const toolContext = {
+    apiBaseUrl: "https://app.lyrashieldai.com",
+    apiKey: "test-key",
+  }
+
+  function connectionWith(allowedOperations: string[]) {
+    return {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      authorizationVersion: 1,
+      allowedOperations,
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["STANDARD"],
+      expiresAt: null,
+    }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("executes an attachment upload claim under an explicit scan_attachment.upload grant", async () => {
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "NEW",
+      operation: { id: "op-up" },
+    })
+    const toolResult = {
+      content: [{ type: "text", text: '{"action":"scan_attachment_uploaded"}' }],
+      structuredContent: { action: "scan_attachment_uploaded" },
+    }
+    callToolMock.mockResolvedValueOnce(toolResult)
+
+    const gate = makeRemoteApprovalGate({
+      apiKeyInfo,
+      connection: connectionWith(["scan_attachment.upload"]),
+      toolContext,
+    })
+    const result = await gate("lyrashield_upload_scan_attachment", {
+      workspaceId: "ws-1",
+      filename: "notes.txt",
+      content: "hello",
+      idempotencyKey: "up-1",
+    })
+
+    expect(result.approved).toBe(true)
+    expect(requirePermissionMock).toHaveBeenCalledWith("ws-1", "attachment:upload")
+    expect(claimOrGetAgentOperationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationName: "scan_attachment.upload",
+        idempotencyKey: "up-1",
+        connectionId: "conn-1",
+      })
+    )
+    expect(callToolMock).toHaveBeenCalledWith(
+      "lyrashield_upload_scan_attachment",
+      expect.objectContaining({ filename: "notes.txt" })
+    )
+  })
+
+  it("denies attachment upload on an old scan.create-only grant — grants are never widened", async () => {
+    const gate = makeRemoteApprovalGate({
+      apiKeyInfo,
+      connection: connectionWith(["scan.create"]),
+      toolContext,
+    })
+    const result = await gate("lyrashield_upload_scan_attachment", {
+      workspaceId: "ws-1",
+      filename: "notes.txt",
+      content: "x",
+      idempotencyKey: "up-1",
+    })
+    expect(result.approved).toBe(false)
+    expect(claimOrGetAgentOperationMock).not.toHaveBeenCalled()
+    expect(callToolMock).not.toHaveBeenCalled()
+  })
+
+  it("denies attachment delete on a revoke-equivalent (empty operations) grant", async () => {
+    const gate = makeRemoteApprovalGate({
+      apiKeyInfo,
+      connection: connectionWith([]),
+      toolContext,
+    })
+    const result = await gate("lyrashield_delete_scan_attachment", {
+      workspaceId: "ws-1",
+      attachmentId: "att-1",
+      idempotencyKey: "del-1",
+    })
+    expect(result.approved).toBe(false)
+    expect(callToolMock).not.toHaveBeenCalled()
+  })
+
+  it("executes a fix-PR request under fix_pr.create and resolves the proposal's stored target", async () => {
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "NEW",
+      operation: { id: "op-fix" },
+    })
+    const toolResult = {
+      content: [{ type: "text", text: '{"action":"fix_pr_pending_approval"}' }],
+      structuredContent: { action: "fix_pr_pending_approval" },
+    }
+    callToolMock.mockResolvedValueOnce(toolResult)
+
+    const gate = makeRemoteApprovalGate({
+      apiKeyInfo,
+      // Target-scoped grant: the proposal's stored target must satisfy it.
+      connection: {
+        ...connectionWith(["fix_pr.create"]),
+        allTargets: false,
+        allowedTargetIds: ["target-1"],
+      },
+      toolContext,
+    })
+    const result = await gate("lyrashield_request_fix_pr", {
+      workspaceId: "ws-1",
+      proposalId: "prop-1",
+      idempotencyKey: "fp-1",
+    })
+
+    expect(result.approved).toBe(true)
+    expect(requirePermissionMock).toHaveBeenCalledWith("ws-1", "fix:create_pr")
+    expect(claimOrGetAgentOperationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ operationName: "fix_pr.create", idempotencyKey: "fp-1" })
+    )
+  })
+
+  it("denies a fix-PR request on a scan.create-only grant", async () => {
+    const gate = makeRemoteApprovalGate({
+      apiKeyInfo,
+      connection: connectionWith(["scan.create"]),
+      toolContext,
+    })
+    const result = await gate("lyrashield_request_fix_pr", {
+      workspaceId: "ws-1",
+      proposalId: "prop-1",
+      idempotencyKey: "fp-1",
+    })
+    expect(result.approved).toBe(false)
     expect(callToolMock).not.toHaveBeenCalled()
   })
 })

@@ -14,6 +14,9 @@ export const MUTATING_TOOL_NAMES = [
   "lyrashield_run_pr_scan",
   "lyrashield_record_fix_proposal",
   "lyrashield_verify_fix",
+  "lyrashield_upload_scan_attachment",
+  "lyrashield_delete_scan_attachment",
+  "lyrashield_request_fix_pr",
 ] as const
 
 export type MutatingToolName = (typeof MUTATING_TOOL_NAMES)[number]

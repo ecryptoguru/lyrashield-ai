@@ -43,6 +43,7 @@ const COMMANDS: Record<string, CommandThunk> = {
   findings: () => import("./commands/findings.js").then((m) => m.handleFindings),
   explain: () => import("./commands/explain.js").then((m) => m.handleExplain),
   "fix-plan": () => import("./commands/fix-plan.js").then((m) => m.handleFixPlan),
+  attachments: () => import("./commands/attachments.js").then((m) => m.handleAttachments),
   verify: () => import("./commands/verify.js").then((m) => m.handleVerify),
   "check-diff": () => import("./commands/check-diff.js").then((m) => m.handleCheckDiff),
   gate: () => import("./commands/gate.js").then((m) => m.handleGate),
@@ -84,7 +85,8 @@ Commands:
   quality <scanId>     Show the scan's measured evidence-quality surface
   findings             List findings
   explain <findingId>  Explain a finding
-  fix-plan <findingId> Generate a fix plan
+  fix-plan <findingId> Generate a fix plan [create <findingId> --summary <s> | create-pr <proposalId> --idempotency-key <key>]
+  attachments          List, upload and remove workspace scan attachments
   verify <findingId>   Queue a retest
   check-diff           Local advisory diff check
   gate                 CI gate (local + findings)
