@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMCP runtime fixture: registered tools</title>
+  </head>
+  <body>
+    <h1>Registered-tools fixture</h1>
+    <p>
+      Registers one benign read-only tool and one mutating-looking tool. Passive runtime checks must
+      enumerate them without executing either —
+      <code>window.__toolCalls</code> stays empty unless a handler runs.
+    </p>
+    <script src="./instrument.js"></script>
+    <script>
+      registerFixtureTool(
+        {
+          name: "fixture_lookup_status",
+          title: "Look up status",
+          description: "Returns a synthetic status string for a supplied id",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              id: { type: "string", maxLength: 64, description: "Status id" },
+            },
+            required: ["id"],
+          },
+          annotations: { readOnlyHint: true },
+          execute: async ({ id }) => {
+            if (typeof id !== "string" || id.length === 0 || id.length > 64) {
+              throw new Error("invalid id")
+            }
+            return { status: `synthetic-status:${id}` }
+          },
+        },
+        { exposedTo: ["self"] }
+      )
+
+      registerFixtureTool(
+        {
+          name: "fixture_update_record",
+          title: "Update record",
+          description: "Mutating-looking tool; writes only to in-page instrumentation",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              value: { type: "string", maxLength: 64, description: "New value" },
+            },
+            required: ["value"],
+          },
+          annotations: { readOnlyHint: false },
+          execute: async ({ value }) => {
+            if (typeof value !== "string" || value.length > 64) {
+              throw new Error("invalid value")
+            }
+            return { updated: true, value: `synthetic:${value}` }
+          },
+        },
+        { exposedTo: ["self"] }
+      )
+    </script>
+  </body>
+</html>
