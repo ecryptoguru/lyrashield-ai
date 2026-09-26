@@ -143,7 +143,7 @@ describe("packed @lyrashield/mcp stdio artifact", () => {
         name: string
       }>
       expect(tools.map((t) => t.name)).toContain("lyrashield_list_workspaces")
-      expect(tools.length).toBe(17)
+      expect(tools.length).toBe(21)
     }
   )
 
