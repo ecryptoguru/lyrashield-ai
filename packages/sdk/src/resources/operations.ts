@@ -16,10 +16,12 @@ export type OperationStatus = z.infer<typeof OperationStatusSchema>
 export function getOperationStatus(
   client: LyraShieldClient,
   id: string,
-  workspaceId = client.workspaceId
+  workspaceId = client.workspaceId,
+  options?: { signal?: AbortSignal }
 ): Promise<OperationStatus> {
   const query = new URLSearchParams(workspaceId ? { workspaceId } : {})
   return client.request("GET", `/agent-operations/${encodeURIComponent(id)}?${query}`, {
+    signal: options?.signal,
     parse: (data) => OperationStatusSchema.parse(data),
   })
 }

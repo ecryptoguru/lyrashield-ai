@@ -3,19 +3,26 @@ export interface LyraShieldErrorOptions {
   code?: string
   message: string
   retryAfter?: number
+  /**
+   * Opaque server-supplied error details (e.g. `operationId` on idempotent
+   * replay conflicts) — carried verbatim for programmatic recovery.
+   */
+  details?: Record<string, unknown>
 }
 
 export class LyraShieldError extends Error {
   status: number
   code?: string
   retryAfter?: number
+  details?: Record<string, unknown>
 
-  constructor({ status, code, message, retryAfter }: LyraShieldErrorOptions) {
+  constructor({ status, code, message, retryAfter, details }: LyraShieldErrorOptions) {
     super(message)
     this.name = "LyraShieldError"
     this.status = status
     this.code = code
     this.retryAfter = retryAfter
+    this.details = details
   }
 
   get isScanConcurrencyLimit(): boolean {

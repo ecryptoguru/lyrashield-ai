@@ -1,5 +1,6 @@
 export {
   createScanTargetTool,
+  createCancelScanTool,
   createGetFindingsTool,
   createGetLaunchReadinessTool,
   createCreateReportTool,

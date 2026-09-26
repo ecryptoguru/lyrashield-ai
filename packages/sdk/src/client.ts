@@ -29,8 +29,41 @@ export interface RequestOptions<T = unknown> {
   body?: unknown
   headers?: Record<string, string>
   etag?: string
+  /**
+   * Optional caller abort signal. A pre-aborted signal rejects before any
+   * fetch with code `REQUEST_ABORTED`; an in-flight abort cancels the request
+   * and any in-progress retry sleep. The internal per-request deadline still
+   * reports `REQUEST_TIMEOUT` — the two are distinct error codes.
+   */
+  signal?: AbortSignal
   /** Optional parser that validates `data` at runtime instead of casting it. */
   parse?: (data: unknown) => T
+}
+
+function callerAbortError(): LyraShieldError {
+  return new LyraShieldError({
+    status: 0,
+    code: "REQUEST_ABORTED",
+    message: "Request aborted by the caller",
+  })
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(callerAbortError())
+      return
+    }
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(callerAbortError())
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
 }
 
 const ApiEnvelopeSchema = z.union([
@@ -44,6 +77,7 @@ const ApiEnvelopeSchema = z.union([
       .object({
         code: z.string().optional(),
         message: z.string().optional(),
+        details: z.record(z.string(), z.unknown()).optional(),
       })
       .optional(),
   }),
@@ -98,6 +132,9 @@ export class LyraShieldClient {
     path: string,
     options?: RequestOptions<T>
   ): Promise<T | NotModified> {
+    const callerSignal = options?.signal
+    if (callerSignal?.aborted) throw callerAbortError()
+
     const url = this.buildUrl(path)
     const isIdempotent = IDEMPOTENT_METHODS.has(method.toUpperCase())
     const body = options?.body != null ? JSON.stringify(options.body) : undefined
@@ -115,16 +152,24 @@ export class LyraShieldClient {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      // The per-attempt controller owns the internal deadline; the caller's
+      // signal is forwarded alongside it so caller aborts cancel in-flight
+      // work while remaining distinguishable via callerSignal.aborted.
+      const signal = callerSignal
+        ? AbortSignal.any([callerSignal, controller.signal])
+        : controller.signal
       let lastStatus = 0
 
       try {
+        if (callerSignal?.aborted) throw callerAbortError()
         const res = await this.fetchFn(url, {
           method,
           headers,
           body,
-          signal: controller.signal,
+          signal,
         })
         lastStatus = res.status
+        if (callerSignal?.aborted) throw callerAbortError()
 
         if (res.status === 304) {
           const etag = this.getHeader(res, "etag") ?? options?.etag ?? undefined
@@ -158,17 +203,18 @@ export class LyraShieldClient {
           const delay = Math.min(baseDelay + jitter, MAX_RETRY_DELAY_MS)
           clearTimeout(timeout)
           await res.body?.cancel()
-          await new Promise((resolve) => setTimeout(resolve, delay))
+          await sleep(delay, callerSignal)
           continue
         }
 
         if (!res.ok) {
-          const { message, code } = await this.parseErrorBody(res)
+          const { message, code, details } = await this.parseErrorBody(res)
           throw new LyraShieldError({
             status: res.status,
             code,
             message,
             retryAfter: this.parseRetryAfter(res),
+            details,
           })
         }
 
@@ -184,6 +230,7 @@ export class LyraShieldClient {
             code: envelope.error?.code,
             message: envelope.error?.message ?? "API call failed",
             retryAfter: this.parseRetryAfter(res),
+            details: envelope.error?.details,
           })
         }
 
@@ -191,6 +238,9 @@ export class LyraShieldClient {
       } catch (err) {
         if (err instanceof LyraShieldError) throw err
         if (err instanceof Error && err.name === "AbortError") {
+          // The caller's signal wins over the deadline: AbortSignal.any fires
+          // the fetch abort identically for either source.
+          if (callerSignal?.aborted) throw callerAbortError()
           throw new LyraShieldError({
             status: 0,
             code: "REQUEST_TIMEOUT",
@@ -261,27 +311,37 @@ export class LyraShieldClient {
     }
   }
 
-  private async parseErrorBody(res: Response): Promise<{ message: string; code?: string }> {
+  private async parseErrorBody(res: Response): Promise<{
+    message: string
+    code?: string
+    details?: Record<string, unknown>
+  }> {
     let message = `${res.status} ${res.statusText ?? ""}`.trim()
     let code: string | undefined
+    let details: Record<string, unknown> | undefined
     try {
       const json = await res.json()
       const parsed = z
         .object({
           error: z
-            .object({ code: z.string().optional(), message: z.string().optional() })
+            .object({
+              code: z.string().optional(),
+              message: z.string().optional(),
+              details: z.record(z.string(), z.unknown()).optional(),
+            })
             .optional(),
         })
         .safeParse(json)
       if (parsed.success) {
         if (parsed.data.error?.message) message = parsed.data.error.message
         if (parsed.data.error?.code) code = parsed.data.error.code
+        if (parsed.data.error?.details) details = parsed.data.error.details
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") throw err
       // fall through
     }
-    return { message, code }
+    return { message, code, details }
   }
 
   private parseRetryAfter(res: Response): number | undefined {

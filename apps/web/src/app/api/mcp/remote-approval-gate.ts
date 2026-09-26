@@ -15,6 +15,7 @@ import { z } from "zod"
 
 const operationPermissions: Partial<Record<string, Permission>> = {
   "scan.create": PERMISSIONS.scan.create,
+  "scan.cancel": PERMISSIONS.scan.cancel,
   "report.create": PERMISSIONS.report.create,
   "fix_proposal.create": PERMISSIONS.fix.create,
   "retest.create": PERMISSIONS.retest.create,
@@ -62,6 +63,7 @@ function stripControlArgs(args: Record<string, unknown>): Record<string, unknown
 
 async function resolveDelegatedScope(
   workspaceId: string,
+  toolName: string,
   args: Record<string, unknown>
 ): Promise<{ targetId?: string; profile?: string }> {
   if (typeof args.targetId === "string") {
@@ -95,7 +97,13 @@ async function resolveDelegatedScope(
         select: { targetId: true, mode: true },
       })
     )
-    return { targetId: scan?.targetId ?? undefined, profile: scan?.mode }
+    // Cancellation does not spend on the scan's recorded profile — a
+    // cancel-scoped grant must not also require a billable profile grant.
+    // The profile is only resolved for billable scanId-scoped tools (retest).
+    return {
+      targetId: scan?.targetId ?? undefined,
+      profile: toolName === "lyrashield_cancel_scan" ? undefined : scan?.mode,
+    }
   }
   return {}
 }
@@ -151,7 +159,7 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
           "Connection-bound credentials cannot bypass their grant with a per-action approval. Update the connection scope instead."
         )
       }
-      const { targetId, profile } = await resolveDelegatedScope(workspaceId, toolArgs)
+      const { targetId, profile } = await resolveDelegatedScope(workspaceId, toolName, toolArgs)
 
       const authCheck = checkDelegatedOperationAuthorization({
         connection: options.connection,

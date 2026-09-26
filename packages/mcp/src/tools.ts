@@ -74,6 +74,12 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     destructiveHint: false,
     openWorldHint: false,
   },
+  lyrashield_get_scan_eligibility: {
+    title: "Check scan eligibility (advisory preflight)",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
   lyrashield_check_diff: {
     title: "Check a diff",
     readOnlyHint: true,
@@ -86,6 +92,15 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     destructiveHint: false,
     idempotentHint: false,
     openWorldHint: true,
+  },
+  lyrashield_cancel_scan: {
+    title: "Cancel a scan",
+    readOnlyHint: false,
+    destructiveHint: false,
+    // Repeating a cancel with the same idempotency key replays the recorded
+    // result; without one, a second call conflicts on the now-terminal scan.
+    idempotentHint: true,
+    openWorldHint: false,
   },
   lyrashield_explain_finding: {
     title: "Explain a finding",
@@ -180,6 +195,7 @@ async function apiCall(
     method === "POST" &&
     (sdkPath === "/scans" ||
       sdkPath === "/reports" ||
+      /\/scans\/[^/?]+$/.test(sdkPath) ||
       /\/findings\/[^/]+\/(retests|fix-proposals)$/.test(sdkPath))
   if (!recorded || !body) return client.request(method, sdkPath, body ? { body } : undefined)
   const { idempotencyKey, ...input } = body
@@ -456,6 +472,39 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
   }
 }
 
+export function createCancelScanTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_cancel_scan",
+    mutating: true,
+    description:
+      "Request cancellation of a queued or running scan. Stops further engine work and billing shortly after the request lands; already-recorded findings are preserved. If the scan is already terminal or its finalization has started, the API returns a conflict — inspect the result with lyrashield_get_scan_status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", description: "Workspace ID" },
+        scanId: { type: "string", description: "Scan ID to cancel" },
+      },
+      required: ["workspaceId", "scanId"],
+    },
+    handler: async (args) => {
+      try {
+        const data = await apiCall(
+          context,
+          "POST",
+          `/api/scans/${encodeURIComponent(args.scanId as string)}`,
+          {
+            workspaceId: args.workspaceId,
+            idempotencyKey: args.idempotencyKey,
+          }
+        )
+        return makeToolResult({ action: "scan_cancel_requested", scan: data })
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
 export function createGetFindingsTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_get_findings",
@@ -672,6 +721,77 @@ export function createGetScanStatusTool(context: ToolHandlerContext): McpTool {
         return makeToolResult(args.operationId ? OperationStatusSchema.parse(data) : data)
       } catch (err) {
         return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
+export function createGetScanEligibilityTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_get_scan_eligibility",
+    mutating: false,
+    description:
+      "Advisory read-only preflight for a security scan on a registered target: whether POST /api/scans would currently admit the requested review — same permission, plan, domain-proof and entitlement gates, evaluated with no trial, billing, scan or audit mutation. allowed:false is a successful read carrying the structured denial code/message/blockers, not a tool error. POST /api/scans re-checks authoritatively at creation; a pass here never guarantees admission. Inputs mirror lyrashield_scan_target (goal, mode, workflow fields); the workflow and attachment semantics match POST.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string" },
+        targetId: {
+          type: "string",
+          description: "An existing target id (lyrashield_list_targets).",
+        },
+        goal: {
+          type: "string",
+          enum: [
+            "CHECK_PR",
+            "TEST_APP",
+            "LAUNCH_REVIEW",
+            "WEEKLY_MONITOR",
+            "FULL_PENTEST",
+            "COMPLIANCE_REVIEW",
+          ],
+          description: "Review intent. Default TEST_APP.",
+        },
+        mode: {
+          type: "string",
+          enum: ["SAFE", "QUICK", "STANDARD", "DEEP", "CUSTOM"],
+          description:
+            "Review depth. QUICK is an alias for SAFE on URL targets; CUSTOM is an alias for DEEP on repository targets. Default STANDARD.",
+        },
+        ...WORKFLOW_INPUT_PROPERTIES,
+      },
+      required: ["workspaceId", "targetId"],
+    },
+    handler: async (args: Record<string, unknown>) => {
+      try {
+        if (typeof args.workspaceId !== "string" || !args.workspaceId) {
+          throw new Error("workspaceId is required")
+        }
+        if (typeof args.targetId !== "string" || !args.targetId) {
+          throw new Error("targetId is required")
+        }
+        const fields = workflowInputFields(args)
+        const workflow = fields.workflow as string | undefined
+        const baseRef = fields.baseRef as string | undefined
+        const headRef = fields.headRef as string | undefined
+        const attachmentIds = fields.attachmentIds as string[] | undefined
+        const authorizationRef = fields.authorizationRef as string | undefined
+        const params = new URLSearchParams()
+        params.set("workspaceId", args.workspaceId)
+        params.set("targetId", args.targetId)
+        params.set("goal", typeof args.goal === "string" && args.goal ? args.goal : "TEST_APP")
+        params.set("mode", typeof args.mode === "string" && args.mode ? args.mode : "STANDARD")
+        if (workflow) params.set("workflow", workflow)
+        if (baseRef) params.set("baseRef", baseRef)
+        if (headRef) params.set("headRef", headRef)
+        for (const id of attachmentIds ?? []) params.append("attachmentIds", id)
+        if (authorizationRef) params.set("authorizationRef", authorizationRef)
+        const data = await apiCall(context, "GET", `/api/scans/eligibility?${params}`)
+        return makeToolResult(data)
+      } catch (err) {
+        return makeErrorResult(
+          err instanceof Error ? err.message : "Failed to evaluate scan eligibility"
+        )
       }
     },
   }
@@ -1249,8 +1369,10 @@ export function createAllTools(context: ToolHandlerContext): McpTool[] {
     createListTargetsTool(context),
     createGetScanStatusTool(context),
     createGetScanQualityTool(context),
+    createGetScanEligibilityTool(context),
     // Core
     createScanTargetTool(context),
+    createCancelScanTool(context),
     createGetFindingsTool(context),
     createGetLaunchReadinessTool(context),
     createCreateReportTool(context),

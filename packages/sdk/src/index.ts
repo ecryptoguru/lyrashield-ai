@@ -10,6 +10,8 @@ export { parseRepoIdentifier, type ParsedRepo } from "./repo"
 export * from "./schemas"
 
 export * from "./resources/scans"
+export * from "./resources/scan-eligibility"
+export * from "./resources/scan-wait"
 export * from "./resources/findings"
 export * from "./resources/targets"
 export * from "./resources/reports"

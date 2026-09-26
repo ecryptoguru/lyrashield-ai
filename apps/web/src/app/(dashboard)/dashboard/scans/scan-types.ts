@@ -27,6 +27,23 @@ export type ScanEligibility = {
   plan: string
   isTrial: boolean
   remainingMinutes: number
+  canonicalMode?: string | null
+  canonicalProfileId?: string | null
+  supportedModes?: {
+    id: string
+    label: string
+    goal: string
+    mode: string
+    workflow?: string
+    available?: boolean
+    disabledReason?: string | null
+    usesAi?: boolean | null
+    requiresRevisionInputs?: boolean
+    authorizationHint?: string | null
+  }[]
+  expectedScannerFamilies?: string[]
+  blockers?: { code: string; message: string }[]
+  limitations?: string[]
 }
 
 export type ScanEligibilityState =

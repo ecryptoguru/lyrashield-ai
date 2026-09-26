@@ -9,6 +9,7 @@
  */
 export const MUTATING_TOOL_NAMES = [
   "lyrashield_scan_target",
+  "lyrashield_cancel_scan",
   "lyrashield_create_report",
   "lyrashield_run_pr_scan",
   "lyrashield_record_fix_proposal",

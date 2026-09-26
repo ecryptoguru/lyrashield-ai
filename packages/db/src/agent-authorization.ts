@@ -5,6 +5,7 @@ export { CANONICAL_OPERATIONS, AUTOMATION_WORKFLOWS } from "@lyrashield/types"
 
 export const MUTATING_CANONICAL_OPERATIONS = new Set<CanonicalOperation>([
   CANONICAL_OPERATIONS.SCAN_CREATE,
+  CANONICAL_OPERATIONS.SCAN_CANCEL,
   CANONICAL_OPERATIONS.REPORT_CREATE,
   CANONICAL_OPERATIONS.FIX_PROPOSAL_CREATE,
   CANONICAL_OPERATIONS.RETEST_CREATE,
@@ -76,6 +77,12 @@ export const TOOL_OPERATION_MAP: Record<string, ToolOperationDescriptor> = {
     requiresTarget: true,
     isBillable: false,
   },
+  lyrashield_get_scan_eligibility: {
+    canonicalOperation: CANONICAL_OPERATIONS.SCAN_ELIGIBILITY,
+    mutating: false,
+    requiresTarget: true,
+    isBillable: false,
+  },
   lyrashield_get_verdict: {
     canonicalOperation: CANONICAL_OPERATIONS.GATE_READ,
     mutating: false,
@@ -113,7 +120,7 @@ export const TOOL_OPERATION_MAP: Record<string, ToolOperationDescriptor> = {
     isBillable: false,
   },
 
-  // Mutating tools (5)
+  // Mutating tools
   lyrashield_scan_target: {
     canonicalOperation: CANONICAL_OPERATIONS.SCAN_CREATE,
     mutating: true,
@@ -159,6 +166,14 @@ export const TOOL_OPERATION_MAP: Record<string, ToolOperationDescriptor> = {
   lyrashield_create_fix_pr: {
     canonicalOperation: CANONICAL_OPERATIONS.FIX_PR_CREATE,
     mutating: true,
+    requiresTarget: false,
+    isBillable: false,
+  },
+  lyrashield_cancel_scan: {
+    canonicalOperation: CANONICAL_OPERATIONS.SCAN_CANCEL,
+    mutating: true,
+    // The caller supplies a scanId; the scan's target is resolved server-side,
+    // so a target-scoped connection can only cancel scans on granted targets.
     requiresTarget: false,
     isBillable: false,
   },

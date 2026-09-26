@@ -388,6 +388,7 @@ export async function requirePermission(
   if (session.oauth?.connectionId && !READ_SCOPE_PERMISSIONS.has(permission)) {
     const requiredOps: Partial<Record<string, string[]>> = {
       [PERMISSIONS.scan.create]: [CANONICAL_OPERATIONS.SCAN_CREATE],
+      [PERMISSIONS.scan.cancel]: [CANONICAL_OPERATIONS.SCAN_CANCEL],
       [PERMISSIONS.retest.create]: [CANONICAL_OPERATIONS.RETEST_CREATE],
       [PERMISSIONS.fix.create]: [CANONICAL_OPERATIONS.FIX_PROPOSAL_CREATE],
       [PERMISSIONS.fix.createPr]: [CANONICAL_OPERATIONS.FIX_PR_CREATE],

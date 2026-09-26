@@ -3,11 +3,39 @@
 import { useEffect, useRef } from "react"
 import { registerWebMcpTool, type WebMcpInputSchema } from "@/lib/webmcp/register"
 import { useWebMcpReceiptStore } from "@/components/webmcp/webmcp-receipt-provider"
-import { getManualScanOptions } from "@/lib/scan-presets"
 
 import type { TargetItem } from "./scan-types"
+import {
+  createCheckSecurityScanHandler,
+  resolveReviewOption,
+  resolveVisibleTargetByName,
+} from "./scans-webmcp.utils"
+
+const WEBMCP_FORBIDDEN_INPUT_KEYS = [
+  "workspaceId",
+  "workspace",
+  "userId",
+  "user",
+  "targetId",
+  "evidence",
+  "secret",
+]
 
 const prepareScanInputSchema: WebMcpInputSchema = {
+  required: ["targetName"],
+  properties: {
+    targetName: {
+      type: "string",
+      description: "The unique visible target name.",
+    },
+    reviewType: {
+      type: "string",
+      description: "Optional review type id. Defaults to the first available option.",
+    },
+  },
+}
+
+const checkScanInputSchema: WebMcpInputSchema = {
   required: ["targetName"],
   properties: {
     targetName: {
@@ -66,6 +94,39 @@ export function useScansWebMcp({
     selectedPresetRef.current = selectedPreset
   }, [targets, selectedPreset])
 
+  // Advisory read-only preflight: reports whether the server would currently
+  // admit the chosen review, using the page's own workspace and session —
+  // agent input can never supply a workspace or principal. Returns the same
+  // verdict semantics the SDK/CLI/MCP preflight exposes.
+  useEffect(() => {
+    const checkHandler = createCheckSecurityScanHandler({
+      workspaceId,
+      getTargets: () => targetsRef.current,
+      getSelectedPreset: () => selectedPresetRef.current,
+    })
+    const cleanup = registerWebMcpTool<{
+      targetName: string
+      reviewType?: string
+    }>({
+      name: "check_security_scan",
+      title: "Check security scan",
+      description:
+        "Advisory read-only check whether starting a scan for a target and review type would currently be admitted. Returns the server's verdict; does not start the scan.",
+      inputSchema: checkScanInputSchema,
+      receiptStore,
+      classification: "read",
+      dataClass: "workspace-summary",
+      untrustedContent: false,
+      uiChanged: false,
+      durableMutation: false,
+      humanConfirmationRequired: false,
+      forbiddenInputKeys: WEBMCP_FORBIDDEN_INPUT_KEYS,
+      handler: (input, options) => checkHandler(input, options),
+    })
+
+    return cleanup
+  }, [workspaceId, receiptStore])
+
   useEffect(() => {
     const cleanup = registerWebMcpTool<{
       targetName: string
@@ -82,65 +143,14 @@ export function useScansWebMcp({
       untrustedContent: false,
       uiChanged: true,
       humanConfirmationRequired: true,
-      forbiddenInputKeys: [
-        "workspaceId",
-        "workspace",
-        "userId",
-        "user",
-        "targetId",
-        "evidence",
-        "secret",
-      ],
+      forbiddenInputKeys: WEBMCP_FORBIDDEN_INPUT_KEYS,
       handler: async (input) => {
-        const currentTargets = targetsRef.current
-        const currentSelectedPreset = selectedPresetRef.current
-
-        const byName = currentTargets.filter(
-          (t) => t.name.localeCompare(input.targetName, undefined, { sensitivity: "base" }) === 0
+        const target = resolveVisibleTargetByName(targetsRef.current, input.targetName)
+        const selectedOption = resolveReviewOption(
+          target,
+          input.reviewType,
+          selectedPresetRef.current
         )
-
-        if (byName.length === 0) {
-          throw new Error(
-            `No target named "${input.targetName}" is visible. Create or select a target first.`
-          )
-        }
-
-        if (byName.length > 1) {
-          throw new Error(
-            `Multiple targets named "${input.targetName}" are visible. Select the target manually in the dashboard.`
-          )
-        }
-
-        const [target] = byName
-        if (!target) {
-          throw new Error(`Target "${input.targetName}" was selected but is no longer visible.`)
-        }
-        const options = getManualScanOptions({
-          type: target.type,
-          hasApiSpec: Boolean(target.apiSpecUrl),
-        })
-        const enabledOptions = options.filter((o) => o.available)
-
-        const desiredReviewType = input.reviewType?.trim()
-        const currentStillAvailable = enabledOptions.find((o) => o.id === currentSelectedPreset)
-
-        let selectedOption = enabledOptions.find((o) => o.id === desiredReviewType)
-
-        if (desiredReviewType && !selectedOption) {
-          throw new Error(
-            `Review type "${desiredReviewType}" is not available for ${target.name}. Choose a different type or target.`
-          )
-        }
-
-        if (!selectedOption) {
-          selectedOption = currentStillAvailable ?? enabledOptions[0]
-        }
-
-        if (!selectedOption) {
-          throw new Error(
-            `No review option is available for ${target.name}. Add configuration first.`
-          )
-        }
 
         // Prepare the existing form for human confirmation. No apiPost.
         setSelectedTarget(target.id)
@@ -195,52 +205,14 @@ export function useScansWebMcp({
       uiChanged: false,
       durableMutation: true,
       humanConfirmationRequired: false,
-      forbiddenInputKeys: [
-        "workspaceId",
-        "workspace",
-        "userId",
-        "user",
-        "targetId",
-        "evidence",
-        "secret",
-      ],
+      forbiddenInputKeys: WEBMCP_FORBIDDEN_INPUT_KEYS,
       handler: async (input, { signal }) => {
-        const currentTargets = targetsRef.current
-        const byName = currentTargets.filter(
-          (t) => t.name.localeCompare(input.targetName, undefined, { sensitivity: "base" }) === 0
+        const target = resolveVisibleTargetByName(targetsRef.current, input.targetName)
+        const selectedOption = resolveReviewOption(
+          target,
+          input.reviewType,
+          selectedPresetRef.current
         )
-        if (byName.length === 0) {
-          throw new Error(
-            `No target named "${input.targetName}" is visible. Create or select a target first.`
-          )
-        }
-        if (byName.length > 1) {
-          throw new Error(
-            `Multiple targets named "${input.targetName}" are visible. Select the target manually in the dashboard.`
-          )
-        }
-        const [target] = byName
-        if (!target) {
-          throw new Error(`Target "${input.targetName}" was selected but is no longer visible.`)
-        }
-        const options = getManualScanOptions({
-          type: target.type,
-          hasApiSpec: Boolean(target.apiSpecUrl),
-        }).filter((o) => o.available)
-        const desired = input.reviewType?.trim()
-        if (desired && !options.some((o) => o.id === desired)) {
-          throw new Error(
-            `Review type "${desired}" is not available for ${target.name}. Choose a different type or target.`
-          )
-        }
-        const selectedOption = desired
-          ? options.find((o) => o.id === desired)
-          : (options.find((o) => o.id === selectedPresetRef.current) ?? options[0])
-        if (!selectedOption) {
-          throw new Error(
-            `No review option is available for ${target.name}. Add configuration first.`
-          )
-        }
 
         // Cancellation after server acceptance reports the existing or
         // uncertain operation rather than falsely claiming no side effect.
