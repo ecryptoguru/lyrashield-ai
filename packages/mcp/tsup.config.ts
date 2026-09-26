@@ -20,6 +20,6 @@ export default defineConfig({
   clean: true,
   splitting: false,
   noExternal: [/^@lyrashield\//],
-  external: ["@modelcontextprotocol/sdk", "zod"],
+  external: ["@modelcontextprotocol/sdk", "zod", "typescript"],
   banner: { js: "#!/usr/bin/env node" },
 })
