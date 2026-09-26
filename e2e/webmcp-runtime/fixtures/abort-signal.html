@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMCP runtime fixture: abort signal</title>
+  </head>
+  <body>
+    <h1>Abort-signal fixture</h1>
+    <p>
+      Registers a deliberately slow tool that honors AbortSignal. Active mode schedules an abort
+      through <code>__invokeTool</code>'s <code>abortAfterMs</code> and confirms cancellation
+      propagated.
+    </p>
+    <script src="./instrument.js"></script>
+    <script>
+      window.__abortObserved = false
+
+      registerFixtureTool(
+        {
+          name: "fixture_slow_task",
+          title: "Slow task",
+          description: "Waits several seconds unless cancelled via AbortSignal",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {},
+          },
+          annotations: { readOnlyHint: true },
+          execute: async (_input, { signal }) => {
+            await new Promise((resolve, reject) => {
+              const timer = setTimeout(resolve, 8000)
+              if (signal) {
+                if (signal.aborted) {
+                  clearTimeout(timer)
+                  reject(new DOMException("aborted", "AbortError"))
+                  return
+                }
+                signal.addEventListener(
+                  "abort",
+                  () => {
+                    clearTimeout(timer)
+                    window.__abortObserved = true
+                    reject(new DOMException("aborted", "AbortError"))
+                  },
+                  { once: true }
+                )
+              }
+            })
+            return { completed: true }
+          },
+        },
+        { exposedTo: ["self"] }
+      )
+    </script>
+  </body>
+</html>
