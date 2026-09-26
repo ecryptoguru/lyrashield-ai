@@ -7,7 +7,7 @@ Run bounded security scans, review findings with their evidence states and drive
 Run the following once in a terminal, select one workspace in the browser, then restart Zed:
 
 ```sh
-npx -y lyrashield@0.2.11 login --oauth
+npx -y lyrashield@0.2.12 login --oauth
 ```
 
 The extension starts `@lyrashield/mcp`, which reads the user-only credential from
@@ -61,7 +61,7 @@ See the full tool list and behavior in the [`@lyrashield/mcp` README](https://ww
 
 ## Troubleshooting
 
-**Authentication errors from the tools** — run `npx -y lyrashield@0.2.11 login --oauth` again, restart Zed and
+**Authentication errors from the tools** — run `npx -y lyrashield@0.2.12 login --oauth` again, restart Zed and
 confirm the selected workspace. If using the fallback, check that `api_key` has the required scope.
 
 **Server fails to start** — confirm Zed can reach `https://registry.npmjs.org` to download the package.

@@ -63,10 +63,11 @@ The default project is stored in `~/.lyrashield/project.json` (mode `0o600`). On
 - `pr-scan [--auto] [--repo <owner/repo>] [--mode <mode>] [--wait|--watch] [--timeout <s>]` — shortcut for `scan --goal CHECK_PR --mode QUICK`; supports the same wait flags
 - `status [scanId] [--operation <operationId>] [--watch|--wait] [--timeout <s>] [--poll-interval <s>]` — list scans or inspect one scan. `--watch` follows a scan to its terminal state; `--operation <id> --watch` waits on a durable submission operation and follows the recorded scan reference it produced, within the same timeout budget.
 - `cancel <scanId> [--idempotency-key <key>]` — request cancellation of a queued or running scan. If the scan is already terminal or finalizing (HTTP 409), the command re-reads and reports the true status: exit `0` when already `CANCELLED`, exit `1` otherwise.
+
 - `targets [--name ... --type ... --url ... --repo ...]` — list or create targets
 - `targets remove <targetId>` — soft-delete a target; its history is retained, it is hidden from readers and the plan cap slot is freed
 - `targets verify-domain <targetId> [--issue|--check]` — show domain-control status for a WEB_APP/API target in the configured workspace. `--issue` returns the DNS TXT host, value, and challenge expiry; publish that record, then use `--check`. Issuing replaces the previous token and verified status. The TXT value is returned only on issue; save it before exiting. All proof operations require target validation permission. Supports `--json`; invalid targets, permission failures, missing/expired proofs, and failed DNS checks exit nonzero. DNS control does not establish application security.
-- `readiness [--target <targetId>]` — get the launch-readiness gate result (`READY`, `NOT_READY` or `INSUFFICIENT_EVIDENCE`)
+- `readiness [--target <targetId>]` — workspace launch-readiness report: every gate target's state (`READY`, `NOT_READY` or `INSUFFICIENT_EVIDENCE`), findings rollup and optional release-identity check. For the enforceable single-target release gate use `gate --verdict --target <id>` (below).
 
 ### Scan mode guide
 
@@ -94,7 +95,7 @@ Deeper modes consume more compute and take longer. Choose the least intensive mo
 
 - `check-diff [--staged] [--base <ref>] [--head <ref>] [--sarif <file>]` — fast advisory diff check for obvious risky patterns; not a substitute for a full recorded scan
 - `gate [--fail-on HIGH|MEDIUM|LOW] [--staged] [--base <ref>] [--head <ref>] [--sarif <file>] [--target <targetId>]` — combine local diff patterns with that target's open findings and fail at the chosen severity threshold. Without `--target` (or a saved default project from `project use`), only the local diff checks gate the PR — never the whole workspace's findings.
-- `gate --verdict [--target <id>]` — return the launch-gate verdict for the target instead of the diff-severity gate, with exit code `0` (READY), `1` (NOT_READY), or `2` (insufficient evidence or error — fails closed).
+- `gate --verdict [--target <id>]` — return the target's versioned release-gate state instead of the diff-severity gate, with exit code `0` (READY), `1` (NOT_READY), or `2` (insufficient evidence or error — fails closed). This is the single-target gate, distinct from the workspace-wide `readiness` report above.
 
 The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes only. It rejects `DEEP` with directions to the hosted app, MCP server, or REST API instead of silently reducing coverage.
 
@@ -127,9 +128,12 @@ The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes on
 
 ## Environment
 
-- `LYRASHIELD_API_KEY` — required; the workspace API key (`lsk_...`)
+- `LYRASHIELD_API_KEY` — optional workspace API key (`lsk_...`); the CI/headless path. Not needed after `lyrashield login --oauth` (or `lyrashield login`) stores a credential in `~/.lyrashield/credentials.json` — either works.
+- `LYRASHIELD_OAUTH_ACCESS_TOKEN` — optional OAuth bearer alternative to an API key.
 - `LYRASHIELD_API_URL` — optional; defaults to `https://app.lyrashieldai.com`
 - `NO_COLOR=1` — optional; disables colored terminal output
+
+Environment credentials take precedence over the stored credentials file. With no environment credential, the CLI uses the stored OAuth/API-key credential; an explicit `LYRASHIELD_API_URL` override binds stored credentials only to a matching origin (see `lyrashield doctor` to diagnose resolution).
 
 ### Importing SARIF
 

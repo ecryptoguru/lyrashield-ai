@@ -19,6 +19,13 @@ export default defineConfig({
   clean: true,
   splitting: false,
   noExternal: [/^@lyrashield\/(?!agent-plugin$)/],
-  external: ["@lyrashield/agent-plugin", "jsonc-parser", "yaml", "@iarna/toml", "minimist"],
+  external: [
+    "@lyrashield/agent-plugin",
+    "jsonc-parser",
+    "yaml",
+    "@iarna/toml",
+    "minimist",
+    "typescript",
+  ],
   banner: { js: "#!/usr/bin/env node" },
 })
