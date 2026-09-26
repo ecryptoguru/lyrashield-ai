@@ -8,7 +8,7 @@ Requires Node.js 24 or newer.
 
 The `@lyrashield/mcp` package is pinned to version 0.2.9; releases deliberately update this pin.
 
-Run `npx -y lyrashield@0.2.11 login --oauth` once in a terminal, select one workspace, then restart Zed. The
+Run `npx -y lyrashield@0.2.12 login --oauth` once in a terminal, select one workspace, then restart Zed. The
 extension starts the local MCP server with that user-only credential store; no secret goes into Zed
 settings.
 

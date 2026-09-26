@@ -4,7 +4,7 @@ This tagged extension uses the published `@lyrashield/mcp` stdio package and the
 credential store. Add the `gemini-cli-extension` topic to the public repository before
 publishing a release tag, as required by the Gemini CLI gallery.
 
-Use Node.js 24 and run `npx -y lyrashield@0.2.11 login --oauth` first. Leave the extension API-key setting empty to use
+Use Node.js 24 and run `npx -y lyrashield@0.2.12 login --oauth` first. Leave the extension API-key setting empty to use
 that local credential store. The launcher removes inherited credential overrides while preserving
 `LYRASHIELD_API_URL`; an optional explicit extension API key uses
 `https://app.lyrashieldai.com` only.
