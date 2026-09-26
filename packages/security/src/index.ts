@@ -218,6 +218,20 @@ export {
   type StandardView,
 } from "./standards/render"
 
+export {
+  analyzeDiffAdvisory,
+  isWebMcpEligiblePath,
+  isWebMcpUnsupportedCodePath,
+  DiffAdvisoryInputError,
+  DIFF_ADVISORY_RULES,
+  DIFF_ADVISORY_LIMITS,
+  type DiffAdvisoryCoverage,
+  type DiffAdvisoryFinding,
+  type DiffAdvisoryInput,
+  type DiffAdvisoryResult,
+  type DiffAdvisoryRule,
+  type DiffAdvisorySeverity,
+} from "./diff-advisory"
 export { computeDedupeKey, type DedupeIdentity } from "./finding-dedupe"
 export {
   parseSarifReport,

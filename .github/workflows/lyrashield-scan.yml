@@ -256,7 +256,7 @@ jobs:
             # Skip non-code files in SAFE mode. AGGRESSIVE mode also
             # scans config/doc file types for hardcoded-secret patterns etc.
             case "$file" in
-              apps/worker/src/engine/scanners/secrets-scanner.test.ts|e2e/*)
+              apps/worker/src/engine/scanners/secrets-scanner.test.ts|e2e/*|packages/cli/src/__tests__/diff-advisory-parity.test.ts|packages/mcp/src/check-diff.test.ts|packages/security/src/diff-advisory.test.ts)
                 continue
                 ;;
             esac
@@ -271,7 +271,7 @@ jobs:
             ADDED="$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" -- "$file" | grep -v '^+++' | sed -n 's/^+//p')"
 
             # Check for hardcoded secrets (severity: HIGH)
-            if grep -qE '(password|secret|api_key|apikey|token)\s*[=:]\s*["'"'"'][^"'"'"']{8,}["'"'"']' <<< "$ADDED"; then
+            if grep -qE '(password|passwd|secret|api[_-]?key|token|bearer)\s*[=:]\s*["'"'"'][^"'"'"']{8,}["'"'"']' <<< "$ADDED"; then
               echo "::warning file=$file::Potential hardcoded secret detected"
               ISSUES_FOUND=1
               bump_severity HIGH
@@ -291,11 +291,12 @@ jobs:
               bump_severity MEDIUM
             fi
 
-            # Check for eval/exec usage (severity: HIGH). The prompt-injection
-            # guard is detection code whose regex literals intentionally match
-            # eval/exec text; scanning those literals as executable calls is a
-            # known false positive. Keep the exemption exact to this one file.
+            # Check for eval/exec usage (severity: HIGH). Detection-code files
+            # whose regex literals intentionally match eval/exec text are a
+            # known false positive when scanned as executable calls. Keep the
+            # exemption exact per file.
             if [ "$file" != "packages/mcp/src/prompt-injection-guard.ts" ] && \
+              [ "$file" != "packages/security/src/diff-advisory.ts" ] && \
               grep -qE '(^|[^.[:alnum:]_])(eval|exec)[[:space:]]*\(' <<< "$ADDED"; then
               echo "::warning file=$file::Use of eval/exec detected"
               ISSUES_FOUND=1
@@ -353,10 +354,10 @@ jobs:
             while IFS= read -r file; do
               if [ ! -f "$file" ]; then continue; fi
               case "$file" in
-                apps/worker/src/engine/scanners/secrets-scanner.test.ts|e2e/*) continue ;;
+                apps/worker/src/engine/scanners/secrets-scanner.test.ts|e2e/*|packages/cli/src/__tests__/diff-advisory-parity.test.ts|packages/mcp/src/check-diff.test.ts|packages/security/src/diff-advisory.test.ts) continue ;;
               esac
               ADDED="$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" -- "$file" | grep -v '^+++' | sed -n 's/^+//p')"
-              if grep -qE '(password|secret|api_key|apikey|token)\s*[=:]\s*["'"'"'][^"'"'"']{8,}["'"'"']' <<< "$ADDED"; then
+              if grep -qE '(password|passwd|secret|api[_-]?key|token|bearer)\s*[=:]\s*["'"'"'][^"'"'"']{8,}["'"'"']' <<< "$ADDED"; then
                 add_result "hardcoded-secret" "warning" "Potential hardcoded secret in $file" "$file"
               fi
               if grep -qE '(SELECT|INSERT|UPDATE|DELETE).*\+.*\$\{' <<< "$ADDED"; then

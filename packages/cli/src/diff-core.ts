@@ -2,11 +2,17 @@ import { execFile } from "node:child_process"
 import process from "node:process"
 import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
-import { extname } from "node:path"
 import { CLI_VERSION } from "./version.js"
-import { evaluateWebMcpSurface, WEBMCP_CONTROLS_BY_ID } from "@lyrashield/security/webmcp"
-import { discoverWebMcpTools } from "@lyrashield/security/webmcp/discover"
-import type { WebMcpScanFile, WebMcpSignal } from "@lyrashield/security/webmcp"
+import { WEBMCP_CONTROLS_BY_ID } from "@lyrashield/security/webmcp"
+import {
+  analyzeDiffAdvisory,
+  isWebMcpEligiblePath,
+  DIFF_ADVISORY_RULES,
+  type DiffAdvisoryFinding,
+  type DiffAdvisoryInput,
+  type DiffAdvisoryResult,
+  type DiffAdvisorySeverity,
+} from "@lyrashield/security/diff-advisory"
 
 export interface DiffFinding {
   ruleId: string
@@ -18,41 +24,31 @@ export interface DiffFinding {
   coverageIncomplete?: true
 }
 
-// Source of truth for the risky-pattern detector rules. The root `action.yml`
-// embeds bash (grep -E) equivalents for CI runners without a Node runtime —
-// `packages/cli/src/__tests__/action-patterns.drift.test.ts` fails when the
-// two copies diverge, so change both together (that test first).
+// Source of truth for the risky-pattern detector rules is the shared
+// DIFF_ADVISORY_RULES table in @lyrashield/security/diff-advisory (consumed by
+// the CLI, the MCP check_diff tool, and derived here as RISKY_PATTERNS). The
+// root `action.yml` embeds bash (grep -E) equivalents for CI runners without a
+// Node runtime — `packages/cli/src/__tests__/action-patterns.drift.test.ts`
+// fails when the two copies diverge, so change both together (that test
+// first).
+const RISKY_RULE_IDS = new Set([
+  "hardcoded-secret",
+  "sql-injection",
+  "disabled-security-control",
+  "eval-exec",
+])
+
 export const RISKY_PATTERNS: {
   ruleId: string
   severity: DiffFinding["severity"]
   regex: RegExp
   message: (file: string) => string
-}[] = [
-  {
-    ruleId: "hardcoded-secret",
-    severity: "MEDIUM",
-    regex: /(password|secret|api_key|apikey|token)\s*[=:]\s*["'][^"']{8,}["']/i,
-    message: (file) => `Potential hardcoded secret in ${file}`,
-  },
-  {
-    ruleId: "sql-injection",
-    severity: "MEDIUM",
-    regex: /(SELECT|INSERT|UPDATE|DELETE).*\+.*\$\{/i,
-    message: (file) => `Potential SQL injection in ${file}`,
-  },
-  {
-    ruleId: "disabled-security-control",
-    severity: "MEDIUM",
-    regex: /(csrf|cors|xss|helmet|secure)\s*[:=]\s*(false|disabled|off|none)/i,
-    message: (file) => `Security control may be disabled in ${file}`,
-  },
-  {
-    ruleId: "eval-exec",
-    severity: "HIGH",
-    regex: /(^|[^.\w])(eval|exec)\s*\(/i,
-    message: (file) => `Use of eval/exec in ${file}`,
-  },
-]
+}[] = DIFF_ADVISORY_RULES.filter((rule) => RISKY_RULE_IDS.has(rule.ruleId)).map((rule) => ({
+  ruleId: rule.ruleId,
+  severity: rule.severity,
+  regex: rule.regex,
+  message: (file) => `${rule.label} in ${file}`,
+}))
 
 export function rankSeverity(s: string): number {
   switch (s.toUpperCase()) {
@@ -133,11 +129,7 @@ export async function getChangedFiles(base: string, head: string): Promise<strin
   })
 }
 
-export async function getAddedLinesForFile(
-  base: string,
-  head: string,
-  file: string
-): Promise<string[]> {
+async function getFileDiff(base: string, head: string, file: string): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
       "git",
@@ -145,14 +137,22 @@ export async function getAddedLinesForFile(
       { cwd: process.cwd() },
       (err, stdout) => {
         if (err) return reject(err)
-        const lines = stdout
-          .split("\n")
-          .filter((l) => l.startsWith("+") && !l.startsWith("+++") && !l.startsWith("+//"))
-          .map((l) => l.slice(1))
-        resolve(lines)
+        resolve(stdout)
       }
     )
   })
+}
+
+export async function getAddedLinesForFile(
+  base: string,
+  head: string,
+  file: string
+): Promise<string[]> {
+  const stdout = await getFileDiff(base, head, file)
+  return stdout
+    .split("\n")
+    .filter((l) => l.startsWith("+") && !l.startsWith("+++") && !l.startsWith("+//"))
+    .map((l) => l.slice(1))
 }
 
 function parseHunkHeader(line: string): { newStart: number; newCount: number } | null {
@@ -170,35 +170,26 @@ export async function getAddedLineNumbers(
   head: string,
   file: string
 ): Promise<Set<number>> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      "git",
-      ["diff", "--unified=0", base, head, "--", file],
-      { cwd: process.cwd() },
-      (err, stdout) => {
-        if (err) return reject(err)
-        const added = new Set<number>()
-        let currentLine: number | null = null
-        for (const line of stdout.split("\n")) {
-          const header = parseHunkHeader(line)
-          if (header) {
-            currentLine = header.newStart
-            continue
-          }
-          if (currentLine == null) continue
-          if (line.startsWith("+") && !line.startsWith("+++") && !line.startsWith("+//")) {
-            added.add(currentLine)
-            currentLine++
-          } else if (line.startsWith(" ")) {
-            currentLine++
-          } else if (line.startsWith("-")) {
-            // Removed lines do not advance the new-file line counter.
-          }
-        }
-        resolve(added)
-      }
-    )
-  })
+  const stdout = await getFileDiff(base, head, file)
+  const added = new Set<number>()
+  let currentLine: number | null = null
+  for (const line of stdout.split("\n")) {
+    const header = parseHunkHeader(line)
+    if (header) {
+      currentLine = header.newStart
+      continue
+    }
+    if (currentLine == null) continue
+    if (line.startsWith("+") && !line.startsWith("+++") && !line.startsWith("+//")) {
+      added.add(currentLine)
+      currentLine++
+    } else if (line.startsWith(" ")) {
+      currentLine++
+    } else if (line.startsWith("-")) {
+      // Removed lines do not advance the new-file line counter.
+    }
+  }
+  return added
 }
 
 export async function getChangedFileContent(
@@ -228,103 +219,43 @@ export async function getChangedFileContent(
   })
 }
 
-const MAX_TOTAL_BYTES = 10 * 1024 * 1024
-const MAX_FILE_BYTES = 1024 * 1024
+// ---------------------------------------------------------------------------
+// Shared-analyzer glue: git subprocesses collect { diff, files }, the analyzer
+// in @lyrashield/security does the detection, and this adapter maps canonical
+// findings back to the CLI's DiffFinding shape.
+// ---------------------------------------------------------------------------
 
-const WEBMCP_CONFIG_NAMES = new Set([
-  "next.config.js",
-  "next.config.ts",
-  "next.config.mjs",
-  "astro.config.mjs",
-  "astro.config.ts",
-  "astro.config.js",
-  "vercel.json",
-  "_headers",
-  ".htaccess",
-  "nginx.conf",
-])
-
-const WEBMCP_SUPPORTED_EXTENSIONS = new Set([
-  ".js",
-  ".jsx",
-  ".ts",
-  ".tsx",
-  ".mjs",
-  ".cjs",
-  ".astro",
-  ".html",
-  ".htm",
-])
-
-// Other source and component formats can embed browser-side WebMCP calls, but
-// discovery does not parse them. Keep documentation and binary assets outside
-// this list so unrelated changes do not fail the gate.
-const WEBMCP_CODE_LIKE_EXTENSIONS = new Set([
-  ".vue",
-  ".svelte",
-  ".mdx",
-  ".marko",
-  ".riot",
-  ".hbs",
-  ".handlebars",
-  ".ejs",
-  ".erb",
-  ".pug",
-  ".njk",
-  ".nunjucks",
-  ".php",
-  ".py",
-  ".rb",
-  ".go",
-  ".rs",
-  ".java",
-  ".kt",
-  ".kts",
-  ".swift",
-  ".cs",
-  ".fs",
-  ".fsx",
-  ".c",
-  ".cc",
-  ".cpp",
-  ".cxx",
-  ".h",
-  ".hpp",
-  ".scala",
-  ".sh",
-  ".bash",
-  ".zsh",
-  ".fish",
-  ".lua",
-  ".dart",
-  ".elm",
-  ".ex",
-  ".exs",
-  ".clj",
-  ".cljs",
-  ".groovy",
-  ".gvy",
-  ".pl",
-  ".pm",
-  ".r",
-  ".sol",
-  ".zig",
-  ".nim",
-  ".jl",
-])
-
-function webMcpCoverageFinding(reasons: Iterable<string>): DiffFinding {
-  const details = [...new Set(reasons)].sort().join(", ")
-  return {
-    ruleId: "WEBMCP-COVERAGE-INCOMPLETE",
-    level: "error",
-    severity: "HIGH",
-    message: `WebMCP diff coverage incomplete: ${details}`,
-    coverageIncomplete: true,
-  }
+/** `diff --git` header synthesized when a collector returns hunk text only. */
+function synthesizedDiffHeader(file: string): string {
+  return `diff --git ${JSON.stringify(`a/${file}`)} ${JSON.stringify(`b/${file}`)}\n`
 }
 
-function webMcpSeverityToLevel(severity: WebMcpSignal["severity"]): DiffFinding["level"] {
+/**
+ * Collect the shared analyzer's input from the repository: the concatenated
+ * per-file unified diff plus supplied content snapshots for WebMCP-eligible
+ * files. Eligible files whose content cannot be read are simply not supplied;
+ * the analyzer reports them as `file_content_not_supplied` (the former
+ * `unreadable_file` gap) and coverage stays INCOMPLETE — fail closed.
+ */
+export async function collectDiffAdvisoryInput(
+  base: string,
+  head: string
+): Promise<{ diff: string; files: { path: string; content: string }[] }> {
+  const changedFiles = await getChangedFiles(base, head)
+  const parts: string[] = []
+  const files: { path: string; content: string }[] = []
+  for (const file of changedFiles) {
+    const body = await getFileDiff(base, head, file)
+    parts.push(body.startsWith("diff --git") ? body : synthesizedDiffHeader(file) + body)
+    if (isWebMcpEligiblePath(file)) {
+      const content = await getChangedFileContent(head, file)
+      if (content !== undefined) files.push({ path: file, content })
+    }
+  }
+  return { diff: parts.join(""), files }
+}
+
+function advisorySeverityToLevel(severity: DiffAdvisorySeverity): DiffFinding["level"] {
   switch (severity) {
     case "CRITICAL":
     case "HIGH":
@@ -338,133 +269,99 @@ function webMcpSeverityToLevel(severity: WebMcpSignal["severity"]): DiffFinding[
   }
 }
 
-function isWebMcpEligibleFile(path: string): boolean {
-  const extension = extname(path).toLowerCase()
-  const basename = path.split("/").pop() ?? ""
-  return WEBMCP_CONFIG_NAMES.has(basename) || WEBMCP_SUPPORTED_EXTENSIONS.has(extension)
+function webMcpCoverageFinding(reasons: Iterable<string>): DiffFinding {
+  const details = [...new Set(reasons)].sort().join(", ")
+  return {
+    ruleId: "WEBMCP-COVERAGE-INCOMPLETE",
+    level: "error",
+    severity: "HIGH",
+    message: `WebMCP diff coverage incomplete: ${details}`,
+    coverageIncomplete: true,
+  }
 }
 
-function isWebMcpUnsupportedCodeFile(path: string): boolean {
-  return WEBMCP_CODE_LIKE_EXTENSIONS.has(extname(path).toLowerCase())
+/** Canonical pattern findings collapse to one DiffFinding per (file, rule). */
+function mapPatternFindings(findings: DiffAdvisoryFinding[]): DiffFinding[] {
+  const byFile = new Map<string, Map<string, DiffAdvisoryFinding>>()
+  const fileOrder: string[] = []
+  for (const finding of findings) {
+    const key = finding.file ?? ""
+    let bucket = byFile.get(key)
+    if (!bucket) {
+      bucket = new Map()
+      byFile.set(key, bucket)
+      fileOrder.push(key)
+    }
+    if (!bucket.has(finding.ruleId)) bucket.set(finding.ruleId, finding)
+  }
+  const mapped: DiffFinding[] = []
+  for (const fileKey of fileOrder) {
+    const bucket = byFile.get(fileKey)!
+    for (const rule of DIFF_ADVISORY_RULES) {
+      const finding = bucket.get(rule.ruleId)
+      if (!finding) continue
+      mapped.push({
+        ruleId: finding.ruleId,
+        level: advisorySeverityToLevel(finding.severity),
+        severity: finding.severity,
+        message: finding.message,
+        file: finding.file,
+      })
+    }
+  }
+  return mapped
 }
 
-export async function runWebMcpDiffChecks(base: string, head: string): Promise<DiffFinding[]> {
-  const changedFiles = await getChangedFiles(base, head)
-  const files = changedFiles.filter(isWebMcpEligibleFile)
-  const addedLineNumbers: Map<string, Set<number>> = new Map()
-  const scanFiles: WebMcpScanFile[] = []
-  const coverageGaps = new Set<string>()
-  let totalBytes = 0
+function mapWebMcpFindings(findings: DiffAdvisoryFinding[]): DiffFinding[] {
+  return findings.map((finding) => ({
+    ruleId: finding.ruleId,
+    level: advisorySeverityToLevel(finding.severity),
+    severity: finding.severity,
+    message: finding.message,
+    file: finding.file,
+    line: finding.line,
+  }))
+}
 
-  if (changedFiles.some(isWebMcpUnsupportedCodeFile)) {
-    coverageGaps.add("unsupported_language")
-  }
+/**
+ * Map the shared analyzer's canonical result onto the CLI's DiffFinding
+ * shape: pattern findings deduplicate to one per (file, rule) and an
+ * INCOMPLETE coverage state becomes the fail-closed
+ * WEBMCP-COVERAGE-INCOMPLETE pseudo-finding ahead of WebMCP signals.
+ */
+export function mapDiffAdvisoryResult(result: DiffAdvisoryResult): DiffFinding[] {
+  const patternFindings = mapPatternFindings(result.findings.filter((f) => f.source === "pattern"))
+  const webMcpFindings = mapWebMcpFindings(result.findings.filter((f) => f.source === "webmcp"))
+  const coverage =
+    result.coverage.state === "INCOMPLETE" ? [webMcpCoverageFinding(result.coverage.reasons)] : []
+  return [...patternFindings, ...coverage, ...webMcpFindings]
+}
 
-  for (const file of files) {
-    const content = await getChangedFileContent(head, file)
-    if (content === undefined) {
-      coverageGaps.add("unreadable_file")
-      continue
-    }
-    const size = Buffer.byteLength(content, "utf-8")
-    if (size > MAX_FILE_BYTES) {
-      coverageGaps.add("max_file_bytes")
-      continue
-    }
-    if (totalBytes + size > MAX_TOTAL_BYTES) {
-      coverageGaps.add("max_total_bytes")
-      continue
-    }
-    totalBytes += size
-    const added = await getAddedLineNumbers(base, head, file)
-    addedLineNumbers.set(file, added)
-    scanFiles.push({
-      path: file,
-      content,
-      size,
-      extension: extname(file).toLowerCase(),
-      truncated: false,
-    })
-  }
-
-  if (scanFiles.length === 0) {
-    return coverageGaps.size > 0 ? [webMcpCoverageFinding(coverageGaps)] : []
-  }
-
-  let inventory: Awaited<ReturnType<typeof discoverWebMcpTools>>["inventory"]
-  let context: Awaited<ReturnType<typeof discoverWebMcpTools>>["context"]
-  try {
-    ;({ inventory, context } = await discoverWebMcpTools(scanFiles, {
-      limits: {
-        maxFiles: 500,
-        maxFileBytes: MAX_FILE_BYTES,
-        maxTotalBytes: MAX_TOTAL_BYTES,
-        maxDefinitions: 500,
-      },
-    }))
-  } catch {
-    coverageGaps.add("parser_error")
-    return [webMcpCoverageFinding(coverageGaps)]
-  }
-  for (const limit of inventory.limitsReached) coverageGaps.add(limit)
-  if (inventory.incompleteDefinitions > 0) coverageGaps.add("incomplete_definitions")
-  if (inventory.unsupportedFiles.length > 0) coverageGaps.add("unsupported_language")
-  if (inventory.truncatedFiles.length > 0 && inventory.limitsReached.length === 0) {
-    coverageGaps.add("truncated_files")
-  }
-  const signals = evaluateWebMcpSurface(scanFiles, inventory, context)
-
-  const findings: DiffFinding[] = []
-  for (const signal of signals) {
-    if (signal.state !== "DETECTED") continue
-    if (!signal.file || signal.line == null) continue
-    const added = addedLineNumbers.get(signal.file)
-    const endLine = signal.endLine ?? signal.line
-    if (!added || ![...added].some((line) => line >= signal.line! && line <= endLine)) continue
-    const control = WEBMCP_CONTROLS_BY_ID[signal.controlId]
-    findings.push({
-      ruleId: signal.controlId,
-      level: webMcpSeverityToLevel(signal.severity),
-      severity: signal.severity,
-      message: control?.title
-        ? `${control.title} (${signal.ruleId})`
-        : `WebMCP surface issue ${signal.controlId}`,
-      file: signal.file,
-      line: signal.line,
-    })
-  }
-
-  return coverageGaps.size > 0 ? [webMcpCoverageFinding(coverageGaps), ...findings] : findings
+/** Analyzer-only path (no git): supplied inputs in, CLI findings out. */
+export async function runAdvisoryChecks(input: DiffAdvisoryInput): Promise<DiffFinding[]> {
+  return mapDiffAdvisoryResult(await analyzeDiffAdvisory(input))
 }
 
 export async function runDiffChecks(base: string, head: string): Promise<DiffFinding[]> {
-  const [patternFindings, webMcpFindings] = await Promise.all([
-    runRiskyPatternChecks(base, head),
-    runWebMcpDiffChecks(base, head),
-  ])
-  return [...patternFindings, ...webMcpFindings]
+  return runAdvisoryChecks(await collectDiffAdvisoryInput(base, head))
 }
 
 export async function runRiskyPatternChecks(base: string, head: string): Promise<DiffFinding[]> {
-  const files = await getChangedFiles(base, head)
-  const findings: DiffFinding[] = []
-  for (const file of files) {
-    const added = await getAddedLinesForFile(base, head, file)
-    const text = added.join("\n")
-    for (const pattern of RISKY_PATTERNS) {
-      if (pattern.regex.test(text)) {
-        findings.push({
-          ruleId: pattern.ruleId,
-          level:
-            pattern.severity === "HIGH" || pattern.severity === "CRITICAL" ? "error" : "warning",
-          severity: pattern.severity,
-          message: pattern.message(file),
-          file,
-        })
-      }
-    }
+  const changedFiles = await getChangedFiles(base, head)
+  const parts: string[] = []
+  for (const file of changedFiles) {
+    const body = await getFileDiff(base, head, file)
+    parts.push(body.startsWith("diff --git") ? body : synthesizedDiffHeader(file) + body)
   }
-  return findings
+  const result = await analyzeDiffAdvisory({ diff: parts.join("") })
+  return mapPatternFindings(result.findings.filter((f) => f.source === "pattern"))
+}
+
+export async function runWebMcpDiffChecks(base: string, head: string): Promise<DiffFinding[]> {
+  const result = await analyzeDiffAdvisory(await collectDiffAdvisoryInput(base, head))
+  const coverage =
+    result.coverage.state === "INCOMPLETE" ? [webMcpCoverageFinding(result.coverage.reasons)] : []
+  return [...coverage, ...mapWebMcpFindings(result.findings.filter((f) => f.source === "webmcp"))]
 }
 
 export interface SarifResult {

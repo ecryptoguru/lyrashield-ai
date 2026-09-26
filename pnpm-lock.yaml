@@ -635,6 +635,9 @@ importers:
       minimist:
         specifier: ^1.2.8
         version: 1.2.8
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
       yaml:
         specifier: ^2.7.1
         version: 2.9.0
@@ -669,9 +672,6 @@ importers:
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.26)(supports-color@10.2.2)(tsx@4.23.12)(typescript@6.0.3)(yaml@2.9.0)
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -885,6 +885,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.1
         version: 1.30.1(supports-color@10.2.2)(zod@4.4.3)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -898,15 +901,15 @@ importers:
       '@lyrashield/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@lyrashield/security':
+        specifier: workspace:*
+        version: link:../security
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.26)(supports-color@10.2.2)(tsx@4.23.12)(typescript@6.0.3)(yaml@2.9.0)
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))

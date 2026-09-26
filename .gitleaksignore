@@ -35,3 +35,10 @@ e02853f094dd61f5732b539b81143e6cc49f647d:codebase.md:generic-api-key:290
 # source literal was replaced by a runtime read of that file; this fingerprint
 # covers the original commit's snapshot inside the PR range.
 983c146f36ee197dafadd2660179d9f700d1a6bf:apps/marketing/scripts/indexnow.mjs:generic-api-key:25
+
+# Synthetic fixtures in the shared diff-advisory tests (commit 580430fc):
+# api_key/password strings exist only to trigger the hardcoded-secret rule.
+580430fcbe61fc02cba696d3c725df513b14abb2:packages/cli/src/__tests__/diff-advisory-parity.test.ts:generic-api-key:22
+580430fcbe61fc02cba696d3c725df513b14abb2:packages/cli/src/__tests__/diff-advisory-parity.test.ts:generic-api-key:39
+580430fcbe61fc02cba696d3c725df513b14abb2:packages/mcp/src/check-diff.test.ts:generic-api-key:19
+580430fcbe61fc02cba696d3c725df513b14abb2:packages/mcp/src/check-diff.test.ts:generic-api-key:36

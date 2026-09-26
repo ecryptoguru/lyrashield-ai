@@ -8,6 +8,12 @@ import {
   type ParsedRepo,
 } from "@lyrashield/sdk"
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js"
+import {
+  analyzeDiffAdvisory,
+  DiffAdvisoryInputError,
+  DIFF_ADVISORY_LIMITS,
+} from "@lyrashield/security/diff-advisory"
+import { MCP_RESULT_MAX_BYTES } from "./result-cap"
 
 const execFileAsync = promisify(execFile)
 
@@ -707,34 +713,77 @@ export function createGetScanQualityTool(context: ToolHandlerContext): McpTool {
 // read-only helpers; a full recorded scan always runs server-side.
 // ---------------------------------------------------------------------------
 
-// High-signal, obviously-risky patterns for the local advisory diff check.
-// This is a fast heuristic pre-filter, NOT a scanner — real detection is the
-// full server-side scan. Kept deliberately small and honest.
-const DIFF_ADVISORY_PATTERNS: Array<{ id: string; label: string; re: RegExp }> = [
-  {
-    id: "hardcoded-secret",
-    label: "Possible hardcoded secret or API key",
-    re: /(?:api[_-]?key|secret|token|password|passwd|bearer)\s*[:=]\s*['"][^'"]{8,}['"]/i,
-  },
-  { id: "private-key", label: "Embedded private key", re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
-  {
-    id: "aws-key",
-    label: "Possible AWS access key id",
-    re: /AKIA[0-9A-Z]{16}/,
-  },
-  { id: "eval", label: "Use of eval()", re: /\beval\s*\(/ },
-  {
-    id: "dangerous-html",
-    label: "React dangerouslySetInnerHTML",
-    re: /dangerouslySetInnerHTML/,
-  },
-  {
-    id: "sql-concat",
-    label: "Possible SQL string concatenation",
-    re: /(?:SELECT|INSERT|UPDATE|DELETE)\b[^;]*?["'`]\s*\+\s*\w/i,
-  },
-  { id: "child-process", label: "Shell/child_process execution", re: /child_process|exec\s*\(/ },
-]
+// The advisory pattern table lives in @lyrashield/security/diff-advisory so
+// this tool and the CLI share one detector inventory. This is a fast heuristic
+// pre-filter, NOT a scanner — real detection is the full server-side scan.
+
+interface CheckDiffFileArg {
+  path: string
+  content: string
+}
+
+function invalidFilesResult(message: string): McpToolResult {
+  return makeErrorResult(`Invalid check_diff files: ${message}`)
+}
+
+/**
+ * Validate the optional `files` input before it reaches the analyzer. Inputs
+ * over the shared byte/entry budgets are rejected with a structured tool
+ * error instead of being silently truncated.
+ */
+function parseCheckDiffFiles(value: unknown): {
+  files?: CheckDiffFileArg[]
+  error?: McpToolResult
+} {
+  if (value === undefined) return {}
+  if (!Array.isArray(value)) {
+    return { error: invalidFilesResult("expected an array of {path, content} objects") }
+  }
+  if (value.length > DIFF_ADVISORY_LIMITS.maxFiles) {
+    return {
+      error: invalidFilesResult(
+        `at most ${DIFF_ADVISORY_LIMITS.maxFiles} file snapshots are accepted; ` +
+          `received ${value.length} — supply only the changed files, or run lyrashield_run_pr_scan`
+      ),
+    }
+  }
+  const files: CheckDiffFileArg[] = []
+  let totalBytes = 0
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") {
+      return { error: invalidFilesResult("each entry must be a {path, content} object") }
+    }
+    const { path, content } = entry as Record<string, unknown>
+    if (typeof path !== "string" || typeof content !== "string") {
+      return { error: invalidFilesResult("each entry must have string path and content") }
+    }
+    const size = Buffer.byteLength(content)
+    totalBytes += size
+    if (size > DIFF_ADVISORY_LIMITS.maxFileBytes) {
+      return {
+        error: invalidFilesResult(
+          `${JSON.stringify(path)} exceeds the ${DIFF_ADVISORY_LIMITS.maxFileBytes}-byte per-file limit; ` +
+            `run lyrashield_run_pr_scan for a full recorded scan`
+        ),
+      }
+    }
+    if (totalBytes > DIFF_ADVISORY_LIMITS.maxTotalBytes) {
+      return {
+        error: invalidFilesResult(
+          `supplied files exceed the ${DIFF_ADVISORY_LIMITS.maxTotalBytes}-byte aggregate limit; ` +
+            `supply only the changed files, or run lyrashield_run_pr_scan`
+        ),
+      }
+    }
+    files.push({ path, content })
+  }
+  return { files }
+}
+
+/** Serialized size of the complete tool result (text + structured content). */
+function checkDiffResultSize(payload: Record<string, unknown>): number {
+  return Buffer.byteLength(JSON.stringify(makeToolResult(payload)), "utf8")
+}
 
 /**
  * Creates the offline `lyrashield_check_diff` tool. The `context` parameter is
@@ -746,13 +795,31 @@ export function createCheckDiffTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_check_diff",
     mutating: false,
     description:
-      "Fast ADVISORY heuristic scan of a code diff for obviously risky patterns (hardcoded secrets, eval, unsafe HTML, SQL concatenation). This is a lightweight pre-PR pre-filter only — it is NOT a substitute for a full recorded scan. Run lyrashield_run_pr_scan for a bounded repository scan with findings, coverage receipts, evidence states and explicit limitations; results are not automatically independently verified or exploit-validated.",
+      "Fast ADVISORY heuristic scan of a code diff for obviously risky patterns (hardcoded secrets, eval, unsafe HTML, SQL concatenation), plus structural WebMCP checks when optional full-file snapshots are supplied. This is a lightweight pre-PR pre-filter only — it is NOT a substitute for a full recorded scan. Run lyrashield_run_pr_scan for a bounded repository scan with findings, coverage receipts, evidence states and explicit limitations; results are not automatically independently verified or exploit-validated.",
     inputSchema: {
       type: "object",
       properties: {
         diff: {
           type: "string",
           description: "The unified diff or code snippet to check (added lines are most relevant).",
+        },
+        files: {
+          type: "array",
+          description:
+            "Optional full-file snapshots for the files the diff touches ({path, content}), capped at " +
+            `${DIFF_ADVISORY_LIMITS.maxFiles} files / ${DIFF_ADVISORY_LIMITS.maxFileBytes} bytes each / ` +
+            `${DIFF_ADVISORY_LIMITS.maxTotalBytes} bytes total. Supplying them enables structural ` +
+            "analysis and COMPLETE coverage; omitting them yields advisory pattern checks with " +
+            "INCOMPLETE coverage (full-file context not supplied).",
+          items: {
+            type: "object",
+            properties: {
+              path: { type: "string", description: "Repo-relative path label (e.g. src/app.ts)." },
+              content: { type: "string", description: "Full file contents at the head revision." },
+            },
+            required: ["path", "content"],
+            additionalProperties: false,
+          },
         },
       },
       required: ["diff"],
@@ -761,27 +828,74 @@ export function createCheckDiffTool(context: ToolHandlerContext): McpTool {
       void context
       const diff = typeof args.diff === "string" ? args.diff : ""
       if (!diff.trim()) {
-        return makeToolResult({ advisory: [], note: "Empty diff — nothing to check." })
+        return makeToolResult({
+          advisory: [],
+          coverage: { state: "COMPLETE", scope: "supplied-inputs", reasons: [] },
+          note: "Empty diff — nothing to check.",
+        })
       }
-      const addedLines = diff
-        .split("\n")
-        .filter((l) => !l.startsWith("-") && !l.startsWith("@@"))
-        .map((l) => (l.startsWith("+") ? l.slice(1) : l))
-      const advisory: Array<{ id: string; label: string; line: string }> = []
-      for (const line of addedLines) {
-        for (const p of DIFF_ADVISORY_PATTERNS) {
-          if (p.re.test(line)) {
-            advisory.push({ id: p.id, label: p.label, line: line.trim().slice(0, 200) })
-          }
+      const { files, error } = parseCheckDiffFiles(args.files)
+      if (error) return error
+
+      let result
+      try {
+        result = await analyzeDiffAdvisory({ diff, files })
+      } catch (err) {
+        if (err instanceof DiffAdvisoryInputError) {
+          return makeErrorResult(`Invalid check_diff input (${err.reason}): ${err.message}`)
+        }
+        throw err
+      }
+
+      const advisory: Array<Record<string, unknown>> = result.findings.map((finding) => ({
+        id: finding.ruleId,
+        label: finding.label,
+        line: finding.match ?? "",
+        severity: finding.severity,
+        ...(finding.file !== undefined ? { file: finding.file } : {}),
+        ...(finding.line !== undefined ? { lineNumber: finding.line } : {}),
+      }))
+
+      let coverage = result.coverage
+      const baseNote =
+        advisory.length > 0
+          ? "Advisory findings are heuristic and may include false positives. Run lyrashield_run_pr_scan for a full recorded scan."
+          : "No high-signal patterns matched. This does not mean the diff is secure — run lyrashield_run_pr_scan for a full recorded scan."
+      const note =
+        coverage.state === "INCOMPLETE"
+          ? `${baseNote} Coverage is incomplete (${coverage.reasons.join(
+              ", "
+            )}): only the supplied inputs were analyzed — pass files:[{path, content}] for fuller context, or run lyrashield_run_pr_scan for a recorded scan of the full change.`
+          : baseNote
+
+      // The serialized result must stay under the MCP result cap: shrink the
+      // advisory list (never the coverage block) and say so explicitly.
+      let bounded = false
+      while (advisory.length > 0) {
+        const payload: Record<string, unknown> = {
+          advisory,
+          checked: result.stats.checkedLines,
+          coverage,
+          note: bounded
+            ? `${note} Advisory output was bounded to fit the ${MCP_RESULT_MAX_BYTES}-byte tool result cap — run lyrashield_run_pr_scan for a recorded scan of the full change.`
+            : note,
+        }
+        if (checkDiffResultSize(payload) <= MCP_RESULT_MAX_BYTES) {
+          return makeToolResult(payload)
+        }
+        advisory.length = Math.floor(advisory.length / 2)
+        bounded = true
+        coverage = {
+          state: "INCOMPLETE",
+          scope: "supplied-inputs",
+          reasons: [...new Set([...coverage.reasons, "result_too_large"])].sort(),
         }
       }
       return makeToolResult({
-        advisory,
-        checked: addedLines.length,
-        note:
-          advisory.length > 0
-            ? "Advisory findings are heuristic and may include false positives. Run lyrashield_run_pr_scan for a full recorded scan."
-            : "No high-signal patterns matched. This does not mean the diff is secure — run lyrashield_run_pr_scan for a full recorded scan.",
+        advisory: [],
+        checked: result.stats.checkedLines,
+        coverage,
+        note: `${note} Advisory output exceeded the ${MCP_RESULT_MAX_BYTES}-byte tool result cap — run lyrashield_run_pr_scan for a recorded scan of the full change.`,
       })
     },
   }
