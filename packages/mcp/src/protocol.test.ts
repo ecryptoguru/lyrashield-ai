@@ -11,9 +11,12 @@ describe("MCP_PROTOCOL_SUPPORT", () => {
     expect(MCP_PROTOCOL_SUPPORT.supported).toEqual(SUPPORTED_PROTOCOL_VERSIONS)
   })
 
-  it("does not advertise SDK-unsupported discovery, list caching, or durable tasks", () => {
+  it("does not advertise SDK-unsupported discovery or list caching", () => {
     expect(MCP_PROTOCOL_SUPPORT.serverDiscovery).toBe(false)
     expect(MCP_PROTOCOL_SUPPORT.listCacheMetadata).toBe(false)
-    expect(MCP_PROTOCOL_SUPPORT.durableTasks).toBe(false)
+  })
+
+  it("supports durable tasks through the AgentOperation-bound backend", () => {
+    expect(MCP_PROTOCOL_SUPPORT.durableTasks).toBe(true)
   })
 })
