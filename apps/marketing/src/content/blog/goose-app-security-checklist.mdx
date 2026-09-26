@@ -63,7 +63,7 @@ Run negative cases, not just the happy path. A test that confirms a feature work
 
 ## Why pair Goose with LyraShield
 
-Goose accelerates implementation as the open source agent from Block. LyraShield AI provides release assurance for AI built apps through a loop of target, review, evidence, fix, retest and report. The platform separates detection from proof: it flags candidate issues and keeps them in a detected state until independent verification confirms the behavior. An immutable assurance record captures what was checked, when and with what result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
+Goose accelerates implementation as the open source agent from Block. LyraShield AI provides release assurance for AI built apps through a loop of target, review, evidence, fix, retest and report. The platform keeps detected candidates distinct from findings with separate verification receipts and from later retest outcomes. Each receipt is limited to its stated evidence and scope, and the assurance record preserves what was checked and the result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
 
 LyraShield AI is in open beta with open registration. Its runner-local GitHub Action provides an advisory diff gate and SARIF output; it does not create hosted scan or retest evidence. A recorded scan keeps detected findings separate from independently verified results. Approval-gated fix proposals still require review and missing verification must remain visible in the release decision.
 

@@ -20,6 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { severityLabel, humanizeToken } from "@/lib/labels"
+import { findingsHref } from "@/lib/finding-list-params"
 import { FINDING_STATUS_LABELS, getVerificationStatusLabel } from "@/lib/enum-labels"
 import {
   buildRemediationTimeline,
@@ -417,12 +418,16 @@ export function FindingDetailDrawer({
   canCreatePr,
   finding,
   workspaceId,
+  targetId,
+  observedInScanId,
   onClose,
   onStatusChange,
 }: {
   canCreatePr: boolean
   finding: FindingListItem
   workspaceId: string
+  targetId?: string
+  observedInScanId?: string
   onClose: () => void
   onStatusChange: (id: string, status: string) => void
 }) {
@@ -455,13 +460,18 @@ export function FindingDetailDrawer({
   const knownExploited = detail?.technicalDetail?.includes("CISA KEV:") ?? false
   const epssSummary = extractEpssPercentage(detail?.technicalDetail)
 
+  const detailParams = new URLSearchParams({ workspaceId })
+  if (targetId) detailParams.set("targetId", targetId)
+  if (observedInScanId) detailParams.set("observedInScanId", observedInScanId)
+  const detailUrl = `/api/findings/${finding.id}?${detailParams.toString()}`
+
   const fetchDetail = useCallback(
     (signal?: AbortSignal) =>
-      apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+      apiGet(detailUrl, {
         schema: findingDetailSchema,
         ...(signal ? { signal } : {}),
       }),
-    [finding.id, workspaceId]
+    [detailUrl]
   )
 
   useEffect(() => {
@@ -512,6 +522,8 @@ export function FindingDetailDrawer({
     setHistoryError(null)
     try {
       const params = new URLSearchParams({ workspaceId, collection, cursor })
+      if (targetId) params.set("targetId", targetId)
+      if (observedInScanId) params.set("observedInScanId", observedInScanId)
       const page = await apiGet(`/api/findings/${finding.id}/history?${params.toString()}`, {
         schema: findingHistoryPageSchema(collection),
       })
@@ -559,7 +571,7 @@ export function FindingDetailDrawer({
         { schema: retestResultSchema }
       )
       setQueuedRetestScanId(result.scan.id)
-      const res = await apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+      const res = await apiGet(detailUrl, {
         schema: findingDetailSchema,
       })
       setDetail(res ?? null)
@@ -585,7 +597,7 @@ export function FindingDetailDrawer({
       )
       onStatusChange(finding.id, result.status)
       setShowAcceptRisk(false)
-      const res = await apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+      const res = await apiGet(detailUrl, {
         schema: findingDetailSchema,
       })
       setDetail(res ?? null)
@@ -611,7 +623,7 @@ export function FindingDetailDrawer({
       )
       onStatusChange(finding.id, result.status)
       setShowFalsePositive(false)
-      const res = await apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+      const res = await apiGet(detailUrl, {
         schema: findingDetailSchema,
       })
       setDetail(res ?? null)
@@ -633,7 +645,14 @@ export function FindingDetailDrawer({
           <nav aria-label="Breadcrumb" className="mb-1">
             <ol className="text-muted-foreground flex items-center gap-1 text-xs">
               <li>
-                <Link href="/dashboard/findings" className="hover:text-foreground">
+                <Link
+                  href={findingsHref({
+                    tab: "issues",
+                    ...(observedInScanId ? { scanId: observedInScanId } : {}),
+                    ...(targetId ? { target: targetId } : {}),
+                  })}
+                  className="hover:text-foreground"
+                >
                   Findings
                 </Link>
               </li>
@@ -791,7 +810,11 @@ export function FindingDetailDrawer({
                         result.
                       </p>
                       <Link
-                        href={`/dashboard/findings?tab=reports&scanId=${encodeURIComponent(latestRetest.scanId)}`}
+                        href={findingsHref({
+                          tab: "reports",
+                          scanId: latestRetest.scanId,
+                          ...(targetId ? { targetId } : {}),
+                        })}
                         className={buttonVariants({ size: "sm", className: "mt-3" })}
                       >
                         Generate report

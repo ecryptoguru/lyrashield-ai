@@ -36,6 +36,8 @@ import { AiSecurityScoreCard } from "./ai-score-card"
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { track } from "@/lib/analytics"
 import { safeApiErrorMessage } from "@/components/api-error-card"
+import { presentOperationFailure } from "@/lib/operation-failure"
+import { findingsHref } from "@/lib/finding-list-params"
 import { scanRecoveryHref } from "../scans-client.utils"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
 import type { CleanResultScorecard, FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
@@ -418,6 +420,82 @@ export function ScanDetailClient({
         ? "Complete"
         : "Partial"
   const topFinding = sortedFindings[0]
+  const scanRecovery = presentation.showFailureDetails
+    ? presentOperationFailure(scan.errorCategory ?? scan.status, {
+        targetName: scan.target?.name,
+      })
+    : null
+  const nextAction = isActive
+    ? {
+        kind: "refresh" as const,
+        label: "Refresh scan status",
+        description: "Read the latest accepted scan status. This does not start another scan.",
+      }
+    : currentFindings.length > 0
+      ? {
+          kind: "link" as const,
+          label: "Review highest-priority finding",
+          href: findingsHref({
+            tab: "issues",
+            finding: topFinding!.id,
+            scanId: scan.id,
+            ...(scan.target ? { target: scan.target.id } : {}),
+          }),
+          description:
+            "Review the retained evidence first. Detection is not verification; propose a fix only after reviewing its scope.",
+        }
+      : scanRecovery
+        ? {
+            kind: "link" as const,
+            label:
+              presentation.recoveryAction === "usage"
+                ? "Review account usage"
+                : "Review scan recovery",
+            href:
+              presentation.recoveryAction === "usage"
+                ? "/dashboard/billing"
+                : (scanRecovery.recoveryHref ??
+                  (scan.target
+                    ? scanRecoveryHref({
+                        targetId: scan.target.id,
+                        goal: scan.goal,
+                        mode: scan.mode,
+                      })
+                    : "/dashboard/scans")),
+            description: scanRecovery.recovery,
+          }
+        : scan.status === "COMPLETED" && runCoverageState === "Complete" && !hasLimitedCoverage
+          ? {
+              kind: "link" as const,
+              label: "Create an assurance report",
+              href: findingsHref({
+                tab: "reports",
+                scanId: scan.id,
+                ...(scan.target ? { targetId: scan.target.id } : {}),
+              }),
+              description:
+                "Package this scan and its recorded scope into an immutable report for your team.",
+            }
+          : {
+              kind: "link" as const,
+              label: scan.target ? "Review target setup" : "Review scans",
+              href: scan.target
+                ? `/dashboard/targets/${encodeURIComponent(scan.target.id)}`
+                : "/dashboard/scans",
+              description:
+                "This scan does not have complete usable coverage. Review the visible limitations before deciding what to do next.",
+            }
+  const coverageSummary = isActive
+    ? "Coverage is still being recorded; this is not a completed result."
+    : scan.status === "COMPLETED" && runCoverageState === "Complete" && !hasLimitedCoverage
+      ? "Applicable scanner receipts completed within the recorded scope."
+      : runCoverageState === "Partial" || scan.status === "PARTIAL" || hasLimitedCoverage
+        ? "Coverage is partial or has a recorded limitation. Findings are available, but a clean result cannot be treated as complete."
+        : "No complete applicable coverage was recorded. This scan does not support an assurance conclusion."
+  const displayedCoverageState =
+    (scan.status === "PARTIAL" || hasLimitedCoverage) && runCoverageState === "Complete"
+      ? "Complete with limitations"
+      : runCoverageState
   function toggleFinding(id: string) {
     setExpandedFindings((prev) => {
       const next = new Set(prev)
@@ -458,16 +536,6 @@ export function ScanDetailClient({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void handleManualRefresh()}
-              disabled={refreshing}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
             {isActive && !refreshError && (
               <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
                 <span className="relative flex h-2 w-2">
@@ -491,6 +559,85 @@ export function ScanDetailClient({
           </div>
         </div>
       </div>
+
+      <section
+        id="scan-evidence-summary"
+        className="border-primary/30 bg-primary/[0.04] mb-6 rounded-xl border p-5 sm:p-6"
+        aria-labelledby="scan-next-action"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+              {isActive ? "In progress" : "Evidence summary"}
+            </p>
+            <h2 id="scan-next-action" className="mt-1 text-lg font-semibold">
+              {nextAction.kind === "refresh" ? "Scan in progress" : nextAction.label}
+            </h2>
+            <p className="text-muted-foreground mt-1 text-sm">{nextAction.description}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+              <span>
+                <span className="text-muted-foreground">Target: </span>
+                <span className="font-medium">
+                  {scan.target?.name ?? "Target details unavailable"}
+                </span>
+                {scan.target && (
+                  <span className="text-muted-foreground"> · {scan.target.type}</span>
+                )}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                {runCoverageState === "Complete" && !hasLimitedCoverage ? (
+                  <ShieldCheck className="text-primary size-4" aria-hidden="true" />
+                ) : (
+                  <ShieldAlert className="text-amber-600 size-4" aria-hidden="true" />
+                )}
+                <span className="font-medium">Coverage: {displayedCoverageState}</span>
+              </span>
+            </div>
+            <p className="text-muted-foreground mt-2 text-sm">{coverageSummary}</p>
+            {scan.executionPlan && (
+              <p className="text-muted-foreground mt-1 text-xs">
+                Recorded scope:{" "}
+                {scan.executionPlan.scope === "DIFF" ? "exact diff" : "target snapshot"}
+                {scan.executionPlan.sourceRevision
+                  ? ` · revision ${scan.executionPlan.sourceRevision.slice(0, 7)}`
+                  : ""}
+                {scan.executionPlan.baseRevision
+                  ? ` from ${scan.executionPlan.baseRevision.slice(0, 7)}`
+                  : ""}
+              </p>
+            )}
+            {hasLimitedCoverage && (
+              <p className="mt-2 text-sm font-medium text-amber-700 dark:text-amber-300">
+                {coverageWarnings.length} coverage limitation
+                {coverageWarnings.length === 1 ? "" : "s"} are listed below.
+              </p>
+            )}
+          </div>
+          {nextAction.kind === "refresh" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 shrink-0"
+              onClick={() => void handleManualRefresh()}
+              disabled={refreshing}
+            >
+              <RefreshCw
+                className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+              Refresh status
+            </Button>
+          ) : (
+            <Link
+              href={nextAction.href}
+              className={`${buttonVariants({ className: "shrink-0" })} min-h-11`}
+            >
+              {nextAction.label}
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          )}
+        </div>
+      </section>
 
       {refreshError && (
         <div
@@ -631,31 +778,6 @@ export function ScanDetailClient({
             </Card>
           )}
 
-          {presentation.assuranceAvailable && topFinding && (
-            <Card className="border-primary/30 bg-primary/5 mb-6 p-5 sm:p-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                    Next step
-                  </p>
-                  <h2 className="mt-1 text-lg font-semibold">
-                    Review the highest-priority finding
-                  </h2>
-                  <p className="text-muted-foreground mt-1 max-w-2xl text-sm">
-                    Understand the evidence, record a fix proposal, then queue a fresh retest.
-                  </p>
-                </div>
-                <Link
-                  href={`/dashboard/findings?finding=${encodeURIComponent(topFinding.id)}`}
-                  className={buttonVariants({ className: "shrink-0" })}
-                >
-                  Review finding
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
-              </div>
-            </Card>
-          )}
-
           {presentation.showFailureDetails && (
             <div
               role="alert"
@@ -663,25 +785,6 @@ export function ScanDetailClient({
             >
               <p className="font-semibold">{presentation.headline}</p>
               <p className="text-foreground/80 mt-1">{presentation.description}</p>
-              {presentation.recoveryAction === "usage" ? (
-                <Link
-                  href="/dashboard/billing"
-                  className={buttonVariants({ variant: "outline", className: "mt-3" })}
-                >
-                  Review usage
-                </Link>
-              ) : scan.target ? (
-                <Link
-                  href={scanRecoveryHref({
-                    targetId: scan.target.id,
-                    goal: scan.goal,
-                    mode: scan.mode,
-                  })}
-                  className={buttonVariants({ variant: "outline", className: "mt-3" })}
-                >
-                  Start a new scan
-                </Link>
-              ) : null}
               {scan.errorMessage && (
                 <details className="text-foreground mt-3">
                   <summary className="cursor-pointer font-medium">Failure details</summary>
@@ -1458,7 +1561,11 @@ export function ScanDetailClient({
                         Package this completed scan and its retained scope into an immutable report.
                       </p>
                       <Link
-                        href={`/dashboard/findings?tab=reports&scanId=${encodeURIComponent(scan.id)}`}
+                        href={findingsHref({
+                          tab: "reports",
+                          scanId: scan.id,
+                          ...(scan.target ? { targetId: scan.target.id } : {}),
+                        })}
                         className={buttonVariants({ className: "mt-3" })}
                       >
                         Generate report
@@ -1467,7 +1574,7 @@ export function ScanDetailClient({
                     </div>
                     {scorecard && (
                       <div className="min-w-0 border-t pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
-                        <h2 className="font-semibold">Share the scorecard</h2>
+                        <h2 className="font-semibold">Share this review</h2>
                         <p className="text-muted-foreground mt-1 text-sm">
                           Publish only the approved public score fields. Target and vulnerability
                           details stay private.
@@ -1489,7 +1596,7 @@ export function ScanDetailClient({
         </>
       )}
 
-      <details className="group">
+      <details id="technical-details" className="group">
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 border-y py-3 text-sm font-semibold marker:hidden">
           <span>Technical details</span>
           <span className="text-muted-foreground text-xs font-normal">

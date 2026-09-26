@@ -12,6 +12,7 @@
  * If you add a page under src/pages, add it here too, or it is invisible.
  */
 const xUrl = __MARKETING_X_URL__
+const appUrl = import.meta.env.PUBLIC_APP_URL || "https://app.lyrashieldai.com"
 
 // On the homepage the free scan is an in-page section; elsewhere it is a route.
 const freeScanHref = Astro.url.pathname === "/" ? "#free-scan" : "/scan"
@@ -106,6 +107,25 @@ const columns = [
       <p class="text-center text-xs sm:text-left">
         Evidence is limited to the authorized scope and the checks that ran. No security guarantee.
       </p>
+      <div class="flex flex-col items-center gap-2 sm:items-end">
+        <button
+          type="button"
+          data-analytics-toggle
+          class="inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-sm font-medium text-text hover:bg-bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          Turn analytics off
+        </button>
+        <p data-analytics-status role="status" aria-live="polite" class="max-w-sm text-center text-xs sm:text-right">
+          Checking your optional analytics preference…
+        </p>
+        <a
+          data-analytics-settings
+          href={`${appUrl.replace(/\/$/, "")}/dashboard/settings`}
+          class="inline-flex min-h-11 items-center text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          Account analytics settings
+        </a>
+      </div>
       <nav aria-label="Legal and social" class="flex flex-wrap items-center justify-center gap-x-6">
         <a
           href="/privacy"

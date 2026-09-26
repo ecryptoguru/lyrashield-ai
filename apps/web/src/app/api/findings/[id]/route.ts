@@ -5,6 +5,7 @@ import {
   updateFindingStatus,
   markFalsePositive,
   acceptRisk,
+  validateFindingScope,
 } from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
 import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
@@ -53,6 +54,11 @@ const AdvisoryCvssSchema = z
     metric_reasoning: z.string().max(8_000).optional(),
   })
   .strip()
+
+const FindingDetailScopeSchema = z.object({
+  targetId: z.string().min(1).optional(),
+  observedInScanId: z.string().min(1).optional(),
+})
 
 /**
  * Allowlisted projection of a finding's `claim_context` evidence artifact.
@@ -127,9 +133,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
+    const parsedScope = FindingDetailScopeSchema.safeParse({
+      ...(searchParams.has("targetId") ? { targetId: searchParams.get("targetId") } : {}),
+      ...(searchParams.has("observedInScanId")
+        ? { observedInScanId: searchParams.get("observedInScanId") }
+        : {}),
+    })
+    if (!parsedScope.success) {
+      return apiError("INVALID_PARAM", "Invalid finding scope", 400)
+    }
+
     await requirePermission(workspaceId, PERMISSIONS.finding.view)
 
-    const finding = await getFinding(id, workspaceId)
+    const scope = await validateFindingScope({ workspaceId, ...parsedScope.data })
+    if (!scope.available) {
+      return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
+    }
+
+    const finding = await getFinding(id, workspaceId, parsedScope.data)
     if (!finding) {
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }

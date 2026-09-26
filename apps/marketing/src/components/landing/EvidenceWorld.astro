@@ -251,6 +251,8 @@ const { manifest } = Astro.props
   }
 
   .evidence-world__copy {
+    box-sizing: border-box;
+    min-width: 0;
     width: min(36rem, 46%);
     padding: clamp(1.25rem, 3vw, 2.5rem);
     border: 1px solid rgba(84, 214, 223, 0.18);
@@ -341,12 +343,15 @@ const { manifest } = Astro.props
   .evidence-world__actions {
     display: flex;
     flex-wrap: wrap;
+    min-width: 0;
     gap: 0.75rem;
     margin-top: 1.35rem;
   }
 
   .evidence-world__actions a {
     display: inline-flex;
+    min-width: 0;
+    max-width: 100%;
     min-height: 2.75rem;
     align-items: center;
     justify-content: center;
@@ -357,6 +362,8 @@ const { manifest } = Astro.props
     background: var(--world-cyan);
     font-weight: 750;
     text-decoration: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .evidence-world__actions a.is-secondary {
@@ -512,6 +519,7 @@ const { manifest } = Astro.props
     .evidence-world__copy h2 {
       font-size: clamp(1.6rem, 7.4vw, 2.5rem);
       line-height: 1;
+      overflow-wrap: anywhere;
     }
 
     .evidence-world__copy > p:first-child {

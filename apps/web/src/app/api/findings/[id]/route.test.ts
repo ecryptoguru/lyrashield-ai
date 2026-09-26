@@ -10,10 +10,12 @@ vi.mock("next/cache", () => ({
 }))
 
 const getFinding = vi.fn()
+const validateFindingScope = vi.fn()
 const requirePermission = vi.fn()
 
 vi.mock("@lyrashield/db", () => ({
   getFinding,
+  validateFindingScope,
   prisma: {
     auditLog: { create: vi.fn() },
     evidence: { findFirst: vi.fn().mockResolvedValue(null) },
@@ -34,6 +36,7 @@ describe("GET /api/findings/[id]", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
+    validateFindingScope.mockResolvedValue({ available: true, target: null, scanId: null })
   })
 
   it("never serializes raw evidence storage URIs even when the service result contains them", async () => {
@@ -144,5 +147,41 @@ describe("GET /api/findings/[id]", () => {
         metric_reasoning: "Network attack vector",
       },
     })
+  })
+
+  it("binds the detail response to the requested observation scope", async () => {
+    getFinding.mockResolvedValue({ id: "finding-1", evidence: [] })
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/findings/finding-1?workspaceId=ws-1&targetId=target-1&observedInScanId=scan-2"
+      ),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+
+    expect(response.status).toBe(200)
+    expect(validateFindingScope).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      observedInScanId: "scan-2",
+    })
+    expect(getFinding).toHaveBeenCalledWith("finding-1", "ws-1", {
+      targetId: "target-1",
+      observedInScanId: "scan-2",
+    })
+  })
+
+  it("does not return an out-of-scope finding detail", async () => {
+    validateFindingScope.mockResolvedValue({ available: false, target: null, scanId: null })
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/findings/finding-1?workspaceId=ws-1&observedInScanId=foreign-scan"
+      ),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+
+    expect(response.status).toBe(404)
+    expect(getFinding).not.toHaveBeenCalled()
   })
 })

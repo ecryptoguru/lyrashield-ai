@@ -3,6 +3,34 @@ import { createHmac } from "node:crypto"
 
 const recordScorecardEvent = vi.fn()
 vi.mock("@lyrashield/db", () => ({ recordScorecardEvent }))
+vi.mock("@lyrashield/config", () => ({ isProd: false }))
+const analyticsAllowedForRequest = vi.fn()
+const optionalTrackingCookies = [
+  "lyrashield-acq",
+  "ls_ref",
+  "ls_ref_source",
+  "ls_scorecard_visitor",
+]
+const clearOptionalTrackingCookies = vi.fn((response: Response, request: Request) => {
+  const url = new URL(request.url)
+  const secure = url.protocol === "https:"
+  const canonical = ["lyrashieldai.com", "www.lyrashieldai.com", "app.lyrashieldai.com"].includes(
+    url.hostname
+  )
+  for (const name of optionalTrackingCookies) {
+    const domains = ["", ...(canonical ? ["; Domain=.lyrashieldai.com"] : [])]
+    for (const domain of domains) {
+      response.headers.append(
+        "Set-Cookie",
+        `${name}=; Path=/; Max-Age=0; SameSite=Lax${domain}${secure ? "; Secure" : ""}`
+      )
+    }
+  }
+})
+vi.mock("@/lib/analytics-preference", () => ({
+  analyticsAllowedForRequest,
+  clearOptionalTrackingCookies,
+}))
 
 const { POST } = await import("./route")
 
@@ -31,6 +59,10 @@ describe("POST /api/scorecards/events", () => {
     vi.clearAllMocks()
     process.env.BETTER_AUTH_SECRET = "test-secret-at-least-32-characters-long"
     recordScorecardEvent.mockResolvedValue({ recorded: true })
+    analyticsAllowedForRequest.mockImplementation(async (request: Request) => {
+      const dnt = request.headers.get("dnt")?.toLowerCase()
+      return !["1", "yes"].includes(dnt ?? "") && request.headers.get("sec-gpc") !== "1"
+    })
   })
 
   it("mints the visitor server-side when no signed cookie exists", async () => {
@@ -94,8 +126,18 @@ describe("POST /api/scorecards/events", () => {
 
       expect(response.status).toBe(204)
       expect(response.headers.get("Cache-Control")).toBe("private, no-store")
-      expect(response.headers.getSetCookie()).toEqual([])
+      const cookies = response.headers.getSetCookie().join(";")
+      for (const name of optionalTrackingCookies) expect(cookies).toContain(`${name}=`)
       expect(recordScorecardEvent).not.toHaveBeenCalled()
     }
   )
+
+  it("stops collection for the account preference while leaving no visitor cookie", async () => {
+    analyticsAllowedForRequest.mockResolvedValue(false)
+    const response = await POST(request(valid))
+    expect(response.status).toBe(204)
+    expect(recordScorecardEvent).not.toHaveBeenCalled()
+    expect(clearOptionalTrackingCookies).toHaveBeenCalledOnce()
+    expect(response.headers.getSetCookie().join(";")).toContain("ls_scorecard_visitor=")
+  })
 })

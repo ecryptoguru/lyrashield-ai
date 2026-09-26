@@ -240,7 +240,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       PlatformAdminElevation: "Owner-only cross-workspace action elevation",
       PlatformAdminChallengeLimit: "Owner-only operator challenge rate limit",
     }
-    const accountTables = ["account_acquisitions"]
+    const accountTables = ["account_acquisitions", "account_preferences"]
     // Myra support-agent tables (20260915000000_myra_support_agent): dual-owner
     // (accountId/publicSessionId) tables plus child/append-only/system tables.
     // All FORCE RLS like account/tenant tables — unbound is the trusted path.

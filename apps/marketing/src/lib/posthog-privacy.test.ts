@@ -1,11 +1,42 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import {
+  marketingAnalyticsAllowed,
+  marketingAnalyticsCookie,
+  marketingAnalyticsPreference,
   MARKETING_EVENT_ALLOWLIST,
   privacyBoundedMarketingEvent,
   sanitizeMarketingProperties,
   type MarketingEventName,
 } from "./posthog-privacy"
+
+describe("marketing analytics preference", () => {
+  it("defaults an anonymous visitor to enabled and honors browser/account opt-outs", () => {
+    expect(marketingAnalyticsPreference("")).toBeNull()
+    expect(marketingAnalyticsAllowed({ cookie: "", accountEnabled: true })).toBe(true)
+    expect(
+      marketingAnalyticsAllowed({ cookie: "lyrashield-analytics=off", accountEnabled: true })
+    ).toBe(false)
+    expect(marketingAnalyticsAllowed({ cookie: "", accountEnabled: false })).toBe(false)
+    expect(marketingAnalyticsAllowed({ cookie: "", accountEnabled: null })).toBe(false)
+    expect(marketingAnalyticsAllowed({ cookie: "", accountEnabled: true, doNotTrack: "YES" })).toBe(
+      false
+    )
+    expect(
+      marketingAnalyticsAllowed({ cookie: "", accountEnabled: true, globalPrivacyControl: true })
+    ).toBe(false)
+  })
+
+  it("shares the 180-day browser choice only across canonical product hosts", () => {
+    expect(marketingAnalyticsCookie(false, "lyrashieldai.com", true)).toContain(
+      "Domain=.lyrashieldai.com"
+    )
+    expect(marketingAnalyticsCookie(true, "preview.example.test", false)).not.toContain("Domain=")
+    expect(marketingAnalyticsCookie(true, "preview.example.test", false)).toContain(
+      "Max-Age=15552000"
+    )
+  })
+})
 
 describe("privacyBoundedMarketingEvent", () => {
   it("removes session-entry query strings, fragments, and malformed URLs", () => {
@@ -152,5 +183,15 @@ describe("Lite Check analytics source", () => {
         "sanitizeMarketingProperties"
       )
     }
+  })
+
+  it("does not import or capture PostHog until the account and browser preferences allow it", () => {
+    const base = source("../layouts/Base.astro")
+    expect(base).toContain("marketingAnalyticsAllowed")
+    expect(base).toContain("accountEnabled: accountAnalyticsEnabled")
+    expect(base).toContain("if (!posthogKey || !trackingAllowed() || initializingPosthog) return")
+    expect(base).toContain('credentials: "include"')
+    expect(base).toContain("ph.opt_out_capturing()")
+    expect(base).toContain("data-analytics-toggle")
   })
 })

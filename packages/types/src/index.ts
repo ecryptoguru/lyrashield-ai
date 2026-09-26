@@ -10,6 +10,9 @@ export * from "./agent-operations"
  */
 export const MAX_CONCURRENT_WORKSPACE_SCANS = 3
 
+/** Both-sided scorecard referral reward, denominated in agent minutes. */
+export const SCORECARD_REFERRAL_BONUS_MINUTES = 30
+
 export const WorkspaceModeSchema = z.enum(["VIBE", "TEAM", "ENTERPRISE"])
 export const WorkspacePlanSchema = z.enum([
   "FREE",
@@ -610,8 +613,9 @@ export type CreatePRInput = z.infer<typeof CreatePRSchema>
 
 export const FindingQuerySchema = z.object({
   workspaceId: z.string().min(1),
-  targetId: z.string().optional(),
-  scanId: z.string().optional(),
+  targetId: z.string().min(1).optional(),
+  observedInScanId: z.string().min(1).optional(),
+  scanId: z.string().min(1).optional(),
   severity: FindingSeveritySchema.optional(),
   status: FindingStatusSchema.optional(),
   verified: z.enum(["true", "false"]).optional(),

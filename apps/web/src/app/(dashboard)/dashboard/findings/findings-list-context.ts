@@ -31,16 +31,22 @@ export interface FindingsListContext {
 
 export function findingsContextKey(
   workspaceId: string,
-  context: { filter: string; sort: string; target: string; q: string }
+  context: { filter: string; sort: string; scanId: string; target: string; q: string }
 ): string {
-  return `lyrashield:findings-list:${workspaceId}:${context.filter}:${context.sort}:${context.target}:${context.q}`
+  return `lyrashield:findings-list:${workspaceId}:${context.filter}:${context.sort}:${context.scanId}:${context.target}:${context.q}`
 }
 
 export function sameListContext(
-  a: { filter: string; sort: string; target: string; q: string },
-  b: { filter: string; sort: string; target: string; q: string }
+  a: { filter: string; sort: string; scanId: string; target: string; q: string },
+  b: { filter: string; sort: string; scanId: string; target: string; q: string }
 ): boolean {
-  return a.filter === b.filter && a.sort === b.sort && a.target === b.target && a.q === b.q
+  return (
+    a.filter === b.filter &&
+    a.sort === b.sort &&
+    a.scanId === b.scanId &&
+    a.target === b.target &&
+    a.q === b.q
+  )
 }
 
 export function saveFindingsListContext(key: string, context: FindingsListContext): void {

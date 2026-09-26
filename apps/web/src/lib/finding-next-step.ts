@@ -46,6 +46,12 @@ export function getFindingNextAction(input: {
       reason: "Risk was accepted by a human decision; the record stays auditable.",
     }
   }
+  if (status === "FIXED" && input.latestRetestStatus === "passed") {
+    return {
+      action: "REPORT",
+      reason: "A passing retest is on record; package the evidence into a report.",
+    }
+  }
   if (status === "FIXED") {
     return {
       action: "NONE",

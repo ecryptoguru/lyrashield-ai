@@ -62,8 +62,19 @@ test("admin enrollment, deny-by-default, TOTP sign-in, and console work end to e
   page,
 }) => {
   const browserErrors: string[] = []
+  let anonymousPreferenceUnauthorizedResponses = 0
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text())
+  })
+  page.on("response", (response) => {
+    if (
+      response.status() === 401 &&
+      new URL(response.url()).pathname === "/api/account/preferences"
+    ) {
+      // Analytics reads the account preference anonymously during sign-up and
+      // sign-out transitions. The route correctly denies that private read.
+      anonymousPreferenceUnauthorizedResponses += 1
+    }
   })
   await page.setExtraHTTPHeaders({ "x-forwarded-for": forwardedFor })
 
@@ -170,5 +181,12 @@ test("admin enrollment, deny-by-default, TOTP sign-in, and console work end to e
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth
   )
   expect(hasHorizontalOverflow).toBe(false)
-  expect(browserErrors).toEqual([])
+  const expectedAnonymousPreferenceErrors = browserErrors.filter(
+    (error) =>
+      error === "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  )
+  expect(expectedAnonymousPreferenceErrors).toHaveLength(anonymousPreferenceUnauthorizedResponses)
+  expect(
+    browserErrors.filter((error) => !expectedAnonymousPreferenceErrors.includes(error))
+  ).toEqual([])
 })

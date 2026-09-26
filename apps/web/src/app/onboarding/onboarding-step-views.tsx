@@ -41,6 +41,22 @@ const BUILD_TOOLS = [
 
 type StepDef = ReturnType<typeof stepModelForPath>[number]
 
+export type OnboardingEligibilityState =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "error" }
+  | {
+      status: "ready"
+      eligibility: {
+        allowed: boolean
+        code: string | null
+        message: string | null
+        plan: string
+        isTrial: boolean
+        remainingMinutes: number
+      }
+    }
+
 export function StepProgress({
   steps,
   displayStep,
@@ -455,6 +471,8 @@ export function TargetDetailsView({
   retryingExistingTarget,
   reviewOptions,
   selectedReview,
+  eligibility,
+  targetId,
   onSelectGoal,
   loading,
   onBack,
@@ -467,6 +485,8 @@ export function TargetDetailsView({
   retryingExistingTarget: boolean
   reviewOptions: ManualScanOption[]
   selectedReview: ManualScanOption | undefined
+  eligibility: OnboardingEligibilityState
+  targetId: string | null
   onSelectGoal: (goal: string) => void
   loading: boolean
   onBack: () => void
@@ -523,19 +543,31 @@ export function TargetDetailsView({
           <div className="border-primary bg-primary/8 rounded-lg border p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">{selectedReview.label}</span>
-              <Badge variant="info">
-                ~{selectedReview.estimate.low}–{selectedReview.estimate.high} min
-              </Badge>
+              <Badge variant="info">{selectedReview.mode.toLowerCase()}</Badge>
             </div>
             <p className="text-muted-foreground mt-1 text-sm">{selectedReview.description}</p>
             <p className="text-muted-foreground mt-1 text-xs">
-              Depth: {selectedReview.mode.toLowerCase()} · runs within your workspace plan, budgets,
-              and target authorization. A clean result is not a security guarantee.
+              Scope: {selectedReview.scopeSummary} {selectedReview.limitsSummary}. A clean result is
+              not a security guarantee.
             </p>
+            {selectedReview.authorizationHint && (
+              <p className="text-muted-foreground mt-1 text-xs">
+                Setup required: {selectedReview.authorizationHint}
+              </p>
+            )}
+            <p className="text-muted-foreground mt-2 text-xs font-medium">Applicable checks</p>
+            <ul className="text-muted-foreground mt-1 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
+              {selectedReview.applicableChecks.map((check) => (
+                <li key={check} className="flex items-start gap-2">
+                  <span aria-hidden="true">•</span>
+                  <span>{check}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         <details className="mt-2">
-          <summary className="text-muted-foreground cursor-pointer text-sm font-medium">
+          <summary className="text-muted-foreground flex min-h-11 cursor-pointer items-center text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
             Change review
           </summary>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -544,8 +576,9 @@ export function TargetDetailsView({
                 type="button"
                 key={option.id}
                 onClick={() => onSelectGoal(option.goal)}
+                disabled={loading}
                 aria-pressed={selectedReview?.id === option.id}
-                className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                className={`min-h-11 rounded-lg border p-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   selectedReview?.id === option.id
                     ? "border-primary bg-primary/8"
                     : "hover:bg-accent"
@@ -554,7 +587,7 @@ export function TargetDetailsView({
                 <span className="block font-medium">{option.label}</span>
                 <span className="text-muted-foreground text-xs">{option.description}</span>
                 <span className="text-muted-foreground mt-1 block text-xs">
-                  ~{option.estimate.low}-{option.estimate.high} min · {option.mode.toLowerCase()}
+                  {option.limitsSummary} · {option.mode.toLowerCase()}
                 </span>
               </button>
             ))}
@@ -566,6 +599,85 @@ export function TargetDetailsView({
           </p>
         )}
       </fieldset>
+
+      <section aria-labelledby="onboarding-eligibility-heading" aria-live="polite">
+        <h3 id="onboarding-eligibility-heading" className="text-sm font-semibold">
+          Account usage and eligibility
+        </h3>
+        {!targetId && eligibility.status === "idle" && (
+          <p className="text-muted-foreground mt-1 text-sm">
+            Check your current account allowance and setup before starting. The server checks again
+            when the scan is submitted.
+          </p>
+        )}
+        {eligibility.status === "checking" && (
+          <p className="text-muted-foreground mt-1 text-sm" role="status">
+            Checking current account usage and scan requirements…
+          </p>
+        )}
+        {eligibility.status === "error" && (
+          <div className="border-warning/50 bg-warning/10 mt-2 rounded-lg border p-3 text-sm">
+            <p role="status">
+              Eligibility could not be checked because the service is temporarily unavailable. No
+              scan was started.
+            </p>
+            <p className="text-muted-foreground mt-1">Try the check again before starting.</p>
+          </div>
+        )}
+        {eligibility.status === "ready" && eligibility.eligibility.allowed && (
+          <p className="mt-2 rounded-lg border p-3 text-sm" role="status">
+            Current plan: <span className="font-medium">{eligibility.eligibility.plan}</span> ·
+            Account minutes available:{" "}
+            <span className="font-medium">{eligibility.eligibility.remainingMinutes}</span>
+            {eligibility.eligibility.isTrial ? " (trial)" : ""}. This advisory can change; the
+            server checks eligibility again when you start.
+          </p>
+        )}
+        {eligibility.status === "ready" && !eligibility.eligibility.allowed && (
+          <div
+            className="border-destructive/40 bg-destructive/5 mt-2 rounded-lg border p-3 text-sm"
+            role="alert"
+          >
+            <p className="font-medium">This review cannot start yet</p>
+            <p className="text-muted-foreground mt-1">
+              {eligibility.eligibility.message ??
+                "Required setup or account eligibility is missing."}
+            </p>
+            {eligibility.eligibility.code === "DOMAIN_VERIFICATION_REQUIRED" && targetId && (
+              <Link
+                href={`/dashboard/targets/${encodeURIComponent(targetId)}#domain-verification`}
+                className="text-primary mt-2 inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+              >
+                Verify this domain
+              </Link>
+            )}
+            {["NO_MINUTES_REMAINING", "TRIAL_EXPIRED", "DEEP_NOT_ALLOWED"].includes(
+              eligibility.eligibility.code ?? ""
+            ) && (
+              <Link
+                href="/dashboard/billing"
+                className="text-primary mt-2 inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+              >
+                Review account usage
+              </Link>
+            )}
+            {[
+              "TARGET_AUTHORIZATION_FAILED",
+              "VERIFICATION_REQUIRED",
+              "GITHUB_INSTALLATION_REQUIRED",
+              "NO_REPOSITORIES",
+              "CONNECTION_EXPIRED",
+            ].includes(eligibility.eligibility.code ?? "") && (
+              <Link
+                href="/dashboard/connections"
+                className="text-primary mt-2 inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+              >
+                Review connected access
+              </Link>
+            )}
+          </div>
+        )}
+      </section>
 
       <p className="border-warning bg-warning/10 border-l-2 p-3 text-sm">
         A {RUN_SINGULAR.toLowerCase()} reports evidence and limitations. A clean result is not a
@@ -582,9 +694,22 @@ export function TargetDetailsView({
             <ChevronLeft className="size-4" /> Back
           </Button>
         )}
-        <Button type="button" onClick={onStart} disabled={loading}>
-          <ShieldCheck className="size-4" />
-          {loading ? "Starting…" : `Start ${selectedReview?.label.toLowerCase() ?? "review"}`}
+        <Button
+          type="button"
+          onClick={onStart}
+          disabled={loading || eligibility.status === "checking"}
+        >
+          <ShieldCheck className="size-4" aria-hidden="true" />
+          {loading
+            ? eligibility.status === "checking"
+              ? "Checking eligibility…"
+              : "Starting…"
+            : eligibility.status === "ready" && eligibility.eligibility.allowed
+              ? `Start ${selectedReview?.label.toLowerCase() ?? "review"}`
+              : eligibility.status === "error" ||
+                  (eligibility.status === "ready" && !eligibility.eligibility.allowed)
+                ? "Check eligibility again"
+                : "Check availability"}
         </Button>
       </div>
     </div>

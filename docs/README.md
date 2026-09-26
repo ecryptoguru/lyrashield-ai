@@ -8,6 +8,16 @@ Use this index to find the owning document and avoid duplicating current truth.
 - [`../codebase.md`](../codebase.md) — architecture, runtime contracts, code map and compact implementation ledger.
 - [`../AGENTS.md`](../AGENTS.md) — immediate engineering handoff, execution queue, rules and landmines.
 
+## Compact metric, contract and evidence index
+
+| Area                           | Owner                                                                                                                                      | Implementation or evidence locator                                                                                                                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Product metrics                | [`growth/analytics-taxonomy.md`](./growth/analytics-taxonomy.md), [`growth/posthog-dashboard-spec.md`](./growth/posthog-dashboard-spec.md) | Metric/event definitions; producers and regression tests remain in source. This index links to the existing privacy taxonomy without duplicating it.                                                                           |
+| Public and technical contracts | [`policies.md`](./policies.md), [`yellowpaper.md`](./yellowpaper.md#9-contract-version-registry)                                           | Public API compatibility policy and versioned technical contracts; executable schemas and route handlers remain authoritative.                                                                                                 |
+| Workspace API keys             | [`user-guide.md`](./user-guide.md#21-settings-and-account-deletion), [`../codebase.md`](../codebase.md#5-core-contracts)                   | `packages/db/src/api-key-service.ts`, `/api/api-keys` routes and Settings UI; code/tests establish source behavior, not deployment.                                                                                            |
+| Manifest integrity             | [`yellowpaper.md`](./yellowpaper.md#4-evidence-and-integrity), [`../codebase.md`](../codebase.md#5-core-contracts)                         | Worker writer and DB verifier; unit tests plus `packages/db/src/manifest-checksum.runtime.test.ts` with disposable `DATABASE_URL` and `RLS_RUNTIME_DATABASE_URL` for the same database. Null legacy inputs remain unavailable. |
+| Runtime and release evidence   | [`../PRD.md`](../PRD.md#8-current-production-evidence), [`../codebase.md`](../codebase.md#11-production-topology-and-accepted-evidence)    | Dated, revision-bound deployment/runtime claims and open gates. Refresh live state before reusing a dated claim.                                                                                                               |
+
 ## Papers (public + investor safe)
 
 - [`litepaper.md`](./litepaper.md) — executive overview of the product, modes, coverage and business model.

@@ -1,6 +1,6 @@
 # LyraShield AI — Whitepaper
 
-## Version 1.0.1 — 2026-09-19
+## Version 1.0.2 — 2026-09-27
 
 > The authoritative public description of LyraShield AI: the problem, the product, the evidence model, the commercial structure and the boundaries of what we claim. Companion documents: [`litepaper.md`](./litepaper.md) (executive overview) and [`yellowpaper.md`](./yellowpaper.md) (technical specification).
 
@@ -164,7 +164,7 @@ The free Lite Check returns a distinct result — never the official LyraShield 
 - **Audit.** Sensitive mutations write hash-chained audit events through a single advisory-locked transaction that owns chain ordering.
 - **Evidence storage.** Private, checksum-bound, encrypted (AES-256-GCM envelope encryption), workspace-isolated and fail-closed.
 - **Network.** URL inputs pass SSRF validation; DNS is resolved, validated and pinned at connection time; every redirect hop is revalidated. Worker public egress is denied by default; approved fetching goes through an authenticated SSRF-safe proxy. Repository execution is sandboxed: non-root, bounded resources, deny-by-default egress.
-- **Agents.** Model-facing inputs are normalized and injection-guarded. Remote OAuth is read-only by default; a browser-confirmed connection grant can authorize delegated writes. Every delegated call revalidates membership, permission, scope, expiry and idempotency. Nondelegated remote callers, including write-scoped API keys, receive `connect_required`; no remote approval is queued. Local stdio calls use the credential's API permissions and any client-side approval setting remains a separate client control.
+- **Agents.** Model-facing inputs are normalized and injection-guarded. Remote OAuth is read-only by default; a browser-confirmed connection grant can authorize delegated writes. Every delegated call revalidates membership, permission, scope, expiry and idempotency. Nondelegated remote callers, including write-scoped API keys and legacy `approvalId` requests, receive `connect_required`; no remote approval is queued. Workspace API keys are owner/admin managed, scoped to a workspace and creator, shown in full once and stored only as a hash. Direct REST and local stdio use the key scope and workspace permissions; hosted remote MCP writes require OAuth delegation.
 - **Platform administration.** A hidden, noindex read console restricted to exactly two allowlisted, verified, TOTP-enrolled operators; bearer credentials and workspace roles never grant access.
 
 ## 8. Commercial model

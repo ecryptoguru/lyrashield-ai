@@ -46,6 +46,7 @@ vi.mock("./system-client", async () => {
 
 import { prisma } from "./client"
 import { Prisma } from "./generated/prisma"
+import { SCORECARD_REFERRAL_BONUS_MINUTES } from "@lyrashield/types"
 import {
   buildScorecardPayload,
   normalizeScorecardPayload,
@@ -113,6 +114,10 @@ describe("score-service", () => {
       expect(payload).not.toHaveProperty("breakdown")
       expect(payload).not.toHaveProperty("unresolvedFindings")
       expect(payload).not.toHaveProperty("scanId")
+      expect(payload).not.toHaveProperty("targetId")
+      expect(payload).not.toHaveProperty("repository")
+      expect(payload).not.toHaveProperty("evidence")
+      expect(payload).not.toHaveProperty("findingText")
     })
 
     it("maps score to a release verdict", () => {
@@ -247,6 +252,15 @@ describe("score-service", () => {
       })
       const result = await attributeReferral("CODE2345", "old-user")
       expect(result).toBeNull()
+      expect(mockPrisma.referralAttribution.upsert).not.toHaveBeenCalled()
+    })
+
+    it("rejects attribution after the seven-day new-account window", async () => {
+      mockPrisma.referralCode.findUnique.mockResolvedValue({ id: "rc-1", userId: "referrer" })
+      mockPrisma.user.findUnique.mockResolvedValue({
+        createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+      })
+      await expect(attributeReferral("CODE2345", "late-user")).resolves.toBeNull()
       expect(mockPrisma.referralAttribution.upsert).not.toHaveBeenCalled()
     })
 
@@ -547,7 +561,11 @@ describe("score-service", () => {
       expect(mockPrisma.usageRecord.upsert).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({
-          create: expect.objectContaining({ workspaceId: "ws-referred", kind: "referral_bonus" }),
+          create: expect.objectContaining({
+            workspaceId: "ws-referred",
+            kind: "referral_bonus",
+            quantity: SCORECARD_REFERRAL_BONUS_MINUTES,
+          }),
         })
       )
       // Referrer-side reward goes to the deterministically selected workspace.
@@ -557,10 +575,61 @@ describe("score-service", () => {
           create: expect.objectContaining({
             workspaceId: "ws-referrer-oldest",
             idempotencyKey: "attr-1:referrer",
+            quantity: SCORECARD_REFERRAL_BONUS_MINUTES,
           }),
         })
       )
       expect(recipient).toEqual({ id: "reward-1" })
+    })
+
+    it("serializes concurrent qualification so one pending referral is credited once", async () => {
+      let status = "PENDING"
+      mockPrisma.workspaceMember.findFirst.mockImplementation(async ({ where }) =>
+        "userId" in where
+          ? { workspaceId: "ws-referrer" }
+          : { userId: "owner-1", workspaceId: "ws-referred" }
+      )
+      mockPrisma.referralAttribution.findFirst.mockResolvedValue({
+        id: "attr-1",
+        referredUserId: "owner-1",
+        status: "PENDING",
+        code: { id: "code-1", userId: "referrer-1" },
+      })
+      mockPrisma.referralAttribution.findUnique.mockImplementation(async () => ({
+        id: "attr-1",
+        status,
+      }))
+      mockPrisma.referralAttribution.update.mockImplementation(async () => {
+        status = "REWARDED"
+        return {}
+      })
+      mockPrisma.usageRecord.upsert.mockResolvedValue({ id: "reward-1" })
+      mockPrisma.auditLog.create.mockResolvedValue({})
+
+      let transactionTail = Promise.resolve()
+      mockPrisma.$transaction.mockImplementation(async (callback: (tx: unknown) => unknown) => {
+        let release!: () => void
+        const previous = transactionTail
+        transactionTail = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        await previous
+        try {
+          return await callback(mockPrisma)
+        } finally {
+          release()
+        }
+      })
+
+      const results = await Promise.all([
+        qualifyReferralForWorkspace("ws-referred"),
+        qualifyReferralForWorkspace("ws-referred"),
+      ])
+
+      expect(results).toEqual([{ id: "reward-1" }, null])
+      expect(mockPrisma.usageRecord.upsert).toHaveBeenCalledTimes(2)
+      expect(mockPrisma.referralAttribution.update).toHaveBeenCalledOnce()
+      expect(mockPrisma.auditLog.create).toHaveBeenCalledOnce()
     })
 
     it("awards nothing when the attribution is no longer PENDING inside the transaction", async () => {

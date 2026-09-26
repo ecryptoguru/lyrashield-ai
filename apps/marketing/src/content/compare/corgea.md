@@ -3,7 +3,7 @@ title: "LyraShield vs Corgea — release assurance compared"
 description: "How LyraShield AI compares to Corgea for LLM-core SAST and auto-fix. Evidence states, retest workflows, coverage framework and approval-gated fix differences."
 competitor: "Corgea"
 heading: "LyraShield AI vs Corgea"
-disclaimer: "Factual comparison. Corgea is an AI-native application security platform spanning AI SAST, SCA, secrets detection, IaC, container scanning and a multi-agent AI pentest, delivering review-ready fix PRs. LyraShield AI is release assurance for AI-built apps — it separates detection from proof, produces immutable evidence reports and gates fixes behind approvals. The two overlap on pentest, SCA and secrets; neither fully replaces the other."
+disclaimer: "Factual comparison. Corgea is an AI-native application security platform spanning AI SAST, SCA, secrets detection, IaC, container scanning and a multi-agent AI pentest, delivering review-ready fix PRs. LyraShield AI is release assurance for AI-built apps — it keeps detected candidates, separate verification receipts and retest outcomes distinct in scoped evidence reports, with fixes gated behind approvals. The two overlap on pentest, SCA and secrets; neither fully replaces the other."
 updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
@@ -61,7 +61,7 @@ faq:
 - Your app is AI-built and you want security checks inside your AI coding agent via MCP
 - You want recorded fix proposals before your team applies a patch
 - You need coverage receipts mapping to a control framework
-- You want detection and proof separated so a finding is never conflated with a verified exploit
+- You want detected candidates, separate verification receipts and retest outcomes clearly distinguished
 
 ### Use Corgea when
 

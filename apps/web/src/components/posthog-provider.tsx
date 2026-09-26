@@ -1,7 +1,12 @@
 "use client"
 
 import { useEffect, type ReactNode } from "react"
-import { analyticsOptedOut, flushQueuedAnalytics } from "@/lib/analytics"
+import {
+  ANALYTICS_PREFERENCE_EVENT,
+  analyticsCollectionAllowed,
+  flushQueuedAnalytics,
+  resolveAnalyticsPreference,
+} from "@/lib/analytics"
 
 const URL_PROPERTIES = [
   "$current_url",
@@ -37,53 +42,82 @@ export function privacyBoundedPostHogEvent<T extends { properties: Record<string
 export function PostHogProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const key = process.env.NEXT_PUBLIC_POSTHOG_KEY
-    if (!key || typeof window === "undefined") {
-      flushQueuedAnalytics()
-      return
-    }
-    const dnt = navigator.doNotTrack
-    const gpc = (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl
-    if (analyticsOptedOut(dnt, gpc)) {
-      flushQueuedAnalytics()
-      return
-    }
+    if (!key) return
 
-    // Avoid double init on hot reload.
-    const win = window as unknown as { posthog?: { __loaded?: boolean } }
-    if (win.posthog?.__loaded) return
-
-    import("posthog-js")
-      .then(({ default: posthog }) => {
-        posthog.init(key, {
-          api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com",
-          ui_host: "https://us.posthog.com",
-          autocapture: false,
-          capture_pageview: false,
-          capture_pageleave: true,
-          disable_scroll_properties: false,
-          disable_session_recording: true,
-          persistence: "localStorage",
-          respect_dnt: true,
-          before_send: (event) => (event ? privacyBoundedPostHogEvent(event) : null),
-          loaded: (ph) => {
-            const currentDnt = navigator.doNotTrack
-            const currentGpc = (navigator as Navigator & { globalPrivacyControl?: boolean })
-              .globalPrivacyControl
-            if (analyticsOptedOut(currentDnt, currentGpc)) {
-              ph.opt_out_capturing()
-              flushQueuedAnalytics()
-              return
-            }
-            flushQueuedAnalytics((event, properties) => ph.capture(event, properties))
-          },
+    let active = true
+    let importing = false
+    const initialize = async () => {
+      if (!active || !analyticsCollectionAllowed() || importing) return
+      const win = window as unknown as {
+        posthog?: {
+          __loaded?: boolean
+          opt_in_capturing?: () => void
+          opt_out_capturing?: () => void
+        }
+      }
+      if (win.posthog?.__loaded) {
+        win.posthog.opt_in_capturing?.()
+        flushQueuedAnalytics((event, properties) => {
+          ;(win.posthog as typeof import("posthog-js").default).capture(event, properties)
         })
+        return
+      }
 
+      importing = true
+      try {
+        const { default: posthog } = await import("posthog-js")
+        if (!active || !analyticsCollectionAllowed()) return
+        if (!posthog.__loaded) {
+          posthog.init(key, {
+            api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com",
+            ui_host: "https://us.posthog.com",
+            autocapture: false,
+            capture_pageview: false,
+            capture_pageleave: true,
+            disable_scroll_properties: false,
+            disable_session_recording: true,
+            persistence: "localStorage",
+            respect_dnt: true,
+            before_send: (event) =>
+              event && analyticsCollectionAllowed() ? privacyBoundedPostHogEvent(event) : null,
+            loaded: (ph) => {
+              if (!analyticsCollectionAllowed()) {
+                ph.opt_out_capturing()
+                flushQueuedAnalytics()
+                return
+              }
+              ph.opt_in_capturing()
+              flushQueuedAnalytics((event, properties) => ph.capture(event, properties))
+            },
+          })
+        } else {
+          posthog.opt_in_capturing()
+        }
         ;(window as unknown as { posthog?: typeof posthog }).posthog = posthog
-      })
-      .catch(() => {
+      } catch {
         // Silently skip analytics if posthog-js fails to load.
+      } finally {
+        importing = false
+      }
+    }
+
+    const synchronize = () => {
+      const posthog = (window as unknown as { posthog?: typeof import("posthog-js").default })
+        .posthog
+      if (!analyticsCollectionAllowed()) {
+        posthog?.opt_out_capturing()
         flushQueuedAnalytics()
-      })
+      } else {
+        void initialize()
+      }
+    }
+
+    window.addEventListener(ANALYTICS_PREFERENCE_EVENT, synchronize)
+    void resolveAnalyticsPreference().then(synchronize)
+    return () => {
+      active = false
+      window.removeEventListener(ANALYTICS_PREFERENCE_EVENT, synchronize)
+    }
   }, [])
 
   return <>{children}</>

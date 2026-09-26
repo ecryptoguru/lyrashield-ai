@@ -77,6 +77,14 @@ describe("forward database constraints", () => {
     )
   })
 
+  it("adds nullable manifest checksum input without backfilling legacy rows", () => {
+    const sql = migration(
+      "../prisma/migrations/20260927000000_manifest_checksum_input/migration.sql"
+    )
+    expect(sql).toContain('ALTER TABLE "ScanResultManifest" ADD COLUMN "checksumInput" TEXT')
+    expect(sql).not.toMatch(/UPDATE\s+"ScanResultManifest"|NOT NULL|DEFAULT|DROP /i)
+  })
+
   it("keeps Myra generation reservations restricted to unbound service work", () => {
     const sql = migration("../prisma/migrations/20260915000000_myra_support_agent/migration.sql")
     expect(sql).toContain('ALTER TABLE "myra_generation_reservations" FORCE ROW LEVEL SECURITY')

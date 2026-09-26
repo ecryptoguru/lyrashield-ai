@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => {
@@ -15,13 +16,14 @@ vi.mock("@lyrashield/db", () => {
   return {
     prisma: mockPrisma,
     getWorkspaceContext: vi.fn().mockReturnValue("ws-1"),
+    verifyStoredManifestChecksum: vi.fn().mockReturnValue("UNAVAILABLE"),
     withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
       fn(mockPrisma)
     ),
   }
 })
 
-import { prisma } from "@lyrashield/db"
+import { prisma, verifyStoredManifestChecksum } from "@lyrashield/db"
 import {
   buildCoverageReceipts,
   completeRetestsForScan,
@@ -127,6 +129,7 @@ function mockRepoRetestState(
 describe("result integrity", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(verifyStoredManifestChecksum).mockReturnValue("UNAVAILABLE")
     vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback(prisma))
   })
 
@@ -498,7 +501,7 @@ describe("result integrity", () => {
     )
   })
 
-  it("binds worker execution provenance into the stored manifest checksum", async () => {
+  it("persists reproducible checksum input and binds worker execution provenance", async () => {
     vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
 
     const workerExecution = {
@@ -516,9 +519,17 @@ describe("result integrity", () => {
     })
 
     const createCall = vi.mocked(prisma.scanResultManifest.create).mock.calls[0][0] as {
-      data: { checksum: string; manifest: { workerExecution: unknown } }
+      data: {
+        checksum: string
+        checksumInput: string
+        manifest: { workerExecution: unknown }
+      }
     }
     expect(createCall.data.manifest.workerExecution).toEqual(workerExecution)
+    expect(createCall.data.checksumInput).toBe(JSON.stringify(createCall.data.manifest))
+    expect(createHash("sha256").update(createCall.data.checksumInput).digest("hex")).toBe(
+      createCall.data.checksum
+    )
 
     const firstChecksum = createCall.data.checksum
 
@@ -536,9 +547,31 @@ describe("result integrity", () => {
       workerExecution,
     })
     expect(prisma.scanResultManifest.create).not.toHaveBeenCalled()
+    expect(verifyStoredManifestChecksum).toHaveBeenCalledWith({ checksum: firstChecksum })
+
+    // A present but invalid checksum input rejects the duplicate even when
+    // its stored hash happens to equal the newly produced result.
+    vi.mocked(verifyStoredManifestChecksum).mockReturnValue("MISMATCH")
+    await expect(
+      persistResultManifest({
+        scanId: "scan-provenance",
+        target: { id: "target-1", type: "URL", url: "https://example.com" },
+        sourceCheckoutAvailable: false,
+        engineFindingCount: 0,
+        coverageIssues: [],
+        workerExecution,
+      })
+    ).rejects.toThrow("Scan result manifest already exists with different contents")
+    expect(prisma.scanResultManifest.create).not.toHaveBeenCalled()
 
     // Any single provenance field change must fail closed against the stored
     // manifest instead of silently overwriting it.
+    vi.mocked(verifyStoredManifestChecksum).mockReturnValue("MATCH")
+    vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue({
+      checksum: firstChecksum,
+      checksumInput: createCall.data.checksumInput,
+      manifest: createCall.data.manifest,
+    } as never)
     vi.mocked(prisma.scanResultManifest.create).mockClear()
     await expect(
       persistResultManifest({

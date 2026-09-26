@@ -13,15 +13,11 @@
  * for the capture-and-scrub rule that governs every product image on this
  * site.
  *
- * Each frame renders BOTH its dark and light capture as separate <img>
+ * Each frame renders BOTH its dark and light capture as separate lazy <img>
  * elements; `:root[data-theme="light"]` toggles which one is visible (see
  * the .hero-frame__img--dark / --light rules below). This is CSS-only, no
- * JS: the browser fetches both images (the light one eagerly at
- * `fetchpriority="high"` since it is the default visible variant — the
- * theme script resolves to light for system-light users before first
- * paint; the dark one stays `loading="lazy"`), so the hero's image
- * payload is roughly double a single-theme collage in exchange for the
- * screenshots always matching the page's current theme.
+ * JS. Keeping both variants lazy lets the browser defer the lower-page
+ * collage and avoids downloading the hidden theme capture on initial load.
  *
  * Layout: the dashboard view runs large on the left; two more (Issues, Coding
  * Agents) stack on the right, in that order. Trust Runs was cut from the
@@ -131,8 +127,7 @@ const secondary: Shot[] = [
           alt={primary.lightAlt}
           width={primary.lightWidth}
           height={primary.lightHeight}
-          loading="eager"
-          fetchpriority="high"
+          loading="lazy"
           decoding="async"
         />
       </div>

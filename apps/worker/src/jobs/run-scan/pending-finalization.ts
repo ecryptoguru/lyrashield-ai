@@ -3,6 +3,7 @@ import {
   prisma,
   qualifyReferralForWorkspace,
   updateScanStatus,
+  verifyStoredManifestChecksum,
   type ScanStatus,
 } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
@@ -33,7 +34,7 @@ export async function resumePendingScanFinalization(params: {
       errorCategory: true,
       errorMessage: true,
       actualCostCents: true,
-      resultManifest: { select: { id: true, manifest: true } },
+      resultManifest: { select: { id: true, checksum: true, checksumInput: true, manifest: true } },
       events: {
         where: { stage: "billable_boundary" },
         select: { id: true },
@@ -41,7 +42,15 @@ export async function resumePendingScanFinalization(params: {
       },
     },
   })
-  const terminalOutcome = storedTerminalOutcome(pendingFinalization?.resultManifest?.manifest)
+  const resultManifest = pendingFinalization?.resultManifest
+  if (
+    resultManifest &&
+    ["RUNNING", "VERIFYING"].includes(pendingFinalization.status) &&
+    verifyStoredManifestChecksum(resultManifest) === "MISMATCH"
+  ) {
+    throw new Error("Stored scan result manifest failed checksum verification")
+  }
+  const terminalOutcome = storedTerminalOutcome(resultManifest?.manifest)
   if (pendingFinalization?.status === "FAILED") {
     return {
       status: "failed",

@@ -38,6 +38,7 @@ import { calculateFindingPriority, type FindingPriorityResult } from "@/lib/find
 import type { FindingStatus, TargetEnvironment } from "@lyrashield/types"
 import {
   findingFilterToApiQuery,
+  findingsHref,
   parseFindingListParams,
   type FindingFilter as FindingFilterValue,
 } from "@/lib/finding-list-params"
@@ -80,6 +81,7 @@ export function FindingsClient({
   initialData,
   initialNextCursor,
   initialSelectedFindingId,
+  initialScanId = "",
   initialFilter = "OPEN",
   initialSort = "priority",
   initialTargetFilter = "",
@@ -91,6 +93,7 @@ export function FindingsClient({
   initialData: FindingListItem[]
   initialNextCursor: string | null
   initialSelectedFindingId?: string
+  initialScanId?: string
   /** Parsed on the server from the URL; never re-read from window here. */
   initialFilter?: string
   initialSort?: SortMode
@@ -113,6 +116,7 @@ export function FindingsClient({
         else params.delete("sort")
       }
       if (updates.target !== undefined) {
+        params.delete("targetId")
         if (updates.target) params.set("target", updates.target)
         else params.delete("target")
       }
@@ -138,6 +142,7 @@ export function FindingsClient({
   // render matches the server-rendered HTML exactly (no hydration divergence).
   const [filter, setFilter] = useState<string>(initialFilter)
   const [sortMode, setSortMode] = useState<SortMode>(initialSort)
+  const [scanId, setScanId] = useState(initialScanId)
   const [targetFilter, setTargetFilter] = useState(initialTargetFilter)
   const [query, setQuery] = useState(initialQuery)
   const [selectedFinding, setSelectedFinding] = useState<FindingListItem | null>(() =>
@@ -165,14 +170,15 @@ export function FindingsClient({
   ])
   const initialScope = JSON.stringify({
     filter: initialFilter,
+    scanId: initialScanId,
     target: initialTargetFilter,
     q: initialQuery,
   })
   const loadedScopeRef = useRef(initialScope)
   const currentScopeRef = useRef(initialScope)
   useEffect(() => {
-    currentScopeRef.current = JSON.stringify({ filter, target: targetFilter, q: query })
-  }, [filter, targetFilter, query])
+    currentScopeRef.current = JSON.stringify({ filter, scanId, target: targetFilter, q: query })
+  }, [filter, scanId, targetFilter, query])
 
   /**
    * Drawer URL state: opening writes `finding=` (pushState, so Back returns to
@@ -206,6 +212,16 @@ export function FindingsClient({
     requestAnimationFrame(() => opener?.focus())
   }, [])
 
+  const clearFindingForScopeChange = useCallback(() => {
+    setSelectedFinding(null)
+    openerRef.current = null
+    pushedFindingUrlRef.current = false
+    if (typeof window === "undefined") return
+    const url = new URL(window.location.href)
+    url.searchParams.delete("finding")
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`)
+  }, [])
+
   // Browser Back from a drawer deep link or an opened drawer returns to the
   // list state without losing filter/sort/search.
   useEffect(() => {
@@ -234,6 +250,7 @@ export function FindingsClient({
             findingsContextKey(workspaceId, {
               filter: initialFilter,
               sort: initialSort,
+              scanId: initialScanId,
               target: initialTargetFilter,
               q: initialQuery,
             })
@@ -258,6 +275,7 @@ export function FindingsClient({
               {
                 workspaceId,
                 ...findingFilterToApiQuery(initialFilter as FindingFilterValue),
+                ...(initialScanId ? { observedInScanId: initialScanId } : {}),
                 ...(initialTargetFilter ? { targetId: initialTargetFilter } : {}),
                 ...(initialQuery ? { q: initialQuery } : {}),
                 cursor,
@@ -301,13 +319,29 @@ export function FindingsClient({
       return
     const save = () =>
       saveFindingsListContext(
-        findingsContextKey(workspaceId, { filter, sort: sortMode, target: targetFilter, q: query }),
+        findingsContextKey(workspaceId, {
+          filter,
+          sort: sortMode,
+          scanId,
+          target: targetFilter,
+          q: query,
+        }),
         { pages: pagesRef.current, scrollY: window.scrollY }
       )
     save()
     window.addEventListener("pagehide", save)
     return () => window.removeEventListener("pagehide", save)
-  }, [workspaceId, filter, sortMode, targetFilter, query, findings, nextCursor, restoreReady])
+  }, [
+    workspaceId,
+    filter,
+    sortMode,
+    scanId,
+    targetFilter,
+    query,
+    findings,
+    nextCursor,
+    restoreReady,
+  ])
 
   const fetchFindings = useCallback(async (params: Record<string, string>, generation: number) => {
     if (generation !== requestGenerationRef.current) return
@@ -352,6 +386,7 @@ export function FindingsClient({
     async (newFilter: string, newSort: SortMode, externalSignal?: AbortSignal) => {
       currentScopeRef.current = JSON.stringify({
         filter: newFilter,
+        scanId,
         target: targetFilter,
         q: query,
       })
@@ -372,6 +407,7 @@ export function FindingsClient({
           {
             workspaceId,
             ...findingFilterToApiQuery(newFilter as FindingFilterValue),
+            ...(scanId ? { observedInScanId: scanId } : {}),
             ...(targetFilter ? { targetId: targetFilter } : {}),
             ...(query ? { q: query } : {}),
           },
@@ -401,7 +437,7 @@ export function FindingsClient({
         }
       }
     },
-    [workspaceId, targetFilter, query, invalidateRequest, updateQueryParams]
+    [workspaceId, scanId, targetFilter, query, invalidateRequest, updateQueryParams]
   )
 
   const { hasUndo: hasWebMcpUndo, undoWebMcpChange } = useFindingsWebMcp({
@@ -430,17 +466,19 @@ export function FindingsClient({
     (extra: Record<string, string> = {}) => ({
       workspaceId,
       ...findingFilterToApiQuery(filter as FindingFilterValue),
+      ...(scanId ? { observedInScanId: scanId } : {}),
       ...(targetFilter ? { targetId: targetFilter } : {}),
       ...(query ? { q: query } : {}),
       ...extra,
     }),
-    [workspaceId, filter, targetFilter, query]
+    [workspaceId, filter, scanId, targetFilter, query]
   )
 
   const handleFilterChange = useCallback(
     async (newFilter: string) => {
       currentScopeRef.current = JSON.stringify({
         filter: newFilter,
+        scanId,
         target: targetFilter,
         q: query,
       })
@@ -451,6 +489,7 @@ export function FindingsClient({
         {
           workspaceId,
           ...findingFilterToApiQuery(newFilter as FindingFilterValue),
+          ...(scanId ? { observedInScanId: scanId } : {}),
           ...(targetFilter ? { targetId: targetFilter } : {}),
           ...(query ? { q: query } : {}),
         },
@@ -464,34 +503,46 @@ export function FindingsClient({
       targetFilter,
       query,
       fetchFindings,
+      scanId,
       workspaceId,
     ]
   )
 
   const handleTargetFilterChange = useCallback(
     async (value: string) => {
-      currentScopeRef.current = JSON.stringify({ filter, target: value, q: query })
+      currentScopeRef.current = JSON.stringify({ filter, scanId, target: value, q: query })
       const generation = invalidateRequest()
+      clearFindingForScopeChange()
       setTargetFilter(value)
       updateQueryParams({ target: value })
       await fetchFindings(
         {
           workspaceId,
           ...findingFilterToApiQuery(filter as FindingFilterValue),
+          ...(scanId ? { observedInScanId: scanId } : {}),
           ...(value ? { targetId: value } : {}),
           ...(query ? { q: query } : {}),
         },
         generation
       )
     },
-    [updateQueryParams, fetchFindings, invalidateRequest, workspaceId, filter, query]
+    [
+      updateQueryParams,
+      fetchFindings,
+      invalidateRequest,
+      workspaceId,
+      filter,
+      scanId,
+      query,
+      clearFindingForScopeChange,
+    ]
   )
 
   // Only user edits schedule a search; hydration and Back/Forward fetch their
   // already-parsed query directly. Filter changes cancel this timer.
   const handleQueryChange = useCallback(
     (value: string) => {
-      currentScopeRef.current = JSON.stringify({ filter, target: targetFilter, q: value })
+      currentScopeRef.current = JSON.stringify({ filter, scanId, target: targetFilter, q: value })
       const generation = invalidateRequest()
       setQuery(value)
       setLoading(true)
@@ -501,6 +552,7 @@ export function FindingsClient({
           {
             workspaceId,
             ...findingFilterToApiQuery(filter as FindingFilterValue),
+            ...(scanId ? { observedInScanId: scanId } : {}),
             ...(targetFilter ? { targetId: targetFilter } : {}),
             ...(value ? { q: value } : {}),
           },
@@ -508,7 +560,7 @@ export function FindingsClient({
         )
       }, 300)
     },
-    [filter, targetFilter, workspaceId, fetchFindings, invalidateRequest, updateQueryParams]
+    [filter, scanId, targetFilter, workspaceId, fetchFindings, invalidateRequest, updateQueryParams]
   )
 
   useEffect(() => {
@@ -516,24 +568,40 @@ export function FindingsClient({
       const params = parseFindingListParams(
         Object.fromEntries(new URLSearchParams(window.location.search))
       )
-      if (params.filter === filter && params.target === targetFilter && params.q === query) {
+      const scopeChanged = params.scanId !== scanId || params.target !== targetFilter
+      if (params.scopeValid && !scopeChanged && params.filter === filter && params.q === query) {
         if (params.sort !== sortMode) setSortMode(params.sort)
         return
       }
       currentScopeRef.current = JSON.stringify({
         filter: params.filter,
+        scanId: params.scanId,
         target: params.target,
         q: params.q,
       })
       const generation = invalidateRequest()
+      if (scopeChanged) clearFindingForScopeChange()
       setFilter(params.filter)
       setSortMode(params.sort)
+      setScanId(params.scanId)
       setTargetFilter(params.target)
       setQuery(params.q)
+      if (!params.scopeValid) {
+        pagesRef.current = []
+        loadedScopeRef.current = ""
+        setFindings([])
+        setNextCursor(null)
+        setLoading(false)
+        setError(
+          "Selected scan or target is unavailable in this workspace. Clear the scope to continue."
+        )
+        return
+      }
       void fetchFindings(
         {
           workspaceId,
           ...findingFilterToApiQuery(params.filter),
+          ...(params.scanId ? { observedInScanId: params.scanId } : {}),
           ...(params.target ? { targetId: params.target } : {}),
           ...(params.q ? { q: params.q } : {}),
         },
@@ -542,7 +610,17 @@ export function FindingsClient({
     }
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
-  }, [workspaceId, filter, sortMode, targetFilter, query, invalidateRequest, fetchFindings])
+  }, [
+    workspaceId,
+    filter,
+    sortMode,
+    scanId,
+    targetFilter,
+    query,
+    invalidateRequest,
+    fetchFindings,
+    clearFindingForScopeChange,
+  ])
 
   // Client-side sort — priority first (the API-ranked page default), then
   // severity high-first, then newest. Each mode keeps its own tie-breakers so
@@ -574,6 +652,27 @@ export function FindingsClient({
 
   return (
     <div>
+      <div
+        aria-label="Findings scope"
+        className="mb-5 flex flex-col gap-2 rounded-lg border bg-card px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+      >
+        <p>
+          <span className="font-medium">Scope:</span>{" "}
+          {targetFilter
+            ? `Target: ${targets.find((target) => target.id === targetFilter)?.name ?? targetFilter}`
+            : "All targets"}
+          {scanId ? ` · Scan: ${scanId}` : ""}
+          {!scanId && !targetFilter ? " · All workspace findings" : ""}
+        </p>
+        {(scanId || targetFilter) && (
+          <Link
+            href={findingsHref({ tab: "issues" })}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            All workspace findings
+          </Link>
+        )}
+      </div>
       <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           {filterChips.map((chip) => (
@@ -600,6 +699,7 @@ export function FindingsClient({
               aria-label={`Filter by ${TARGET_SINGULAR.toLowerCase()}`}
               value={targetFilter}
               onChange={(e) => void handleTargetFilterChange(e.target.value)}
+              disabled={Boolean(scanId)}
               className="h-9 w-44"
             >
               <option value="">All {TARGET_PLURAL.toLowerCase()}</option>
@@ -758,7 +858,7 @@ export function FindingsClient({
 
           {restoreReady && (
             <LoadMore
-              key={JSON.stringify([workspaceId, filter, targetFilter, query])}
+              key={JSON.stringify([workspaceId, scanId, filter, targetFilter, query])}
               cursor={nextCursor}
               onLoadMore={async (cursor) => {
                 const generation = requestGenerationRef.current
@@ -799,9 +899,11 @@ export function FindingsClient({
       {selectedFinding && (
         <FindingDetailDrawer
           canCreatePr={canCreatePr}
-          key={selectedFinding.id}
+          key={`${workspaceId}:${scanId}:${targetFilter}:${selectedFinding.id}`}
           finding={selectedFinding}
           workspaceId={workspaceId}
+          targetId={targetFilter || undefined}
+          observedInScanId={scanId || undefined}
           onClose={closeFinding}
           onStatusChange={(id, status) => {
             const reprioritize = (f: FindingListItem): FindingListItem =>

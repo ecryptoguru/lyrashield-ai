@@ -80,7 +80,7 @@ function renderDetail(props: {
         scorecard={props.scorecard ?? null}
       />
     </WebMcpReceiptProvider>
-  )
+  ).replaceAll("<!-- -->", "")
 }
 
 const html = renderDetail({ scan, findings: [finding] })
@@ -98,6 +98,110 @@ describe("scan detail badge labels", () => {
   it("labels verification state through the verification label map", () => {
     expect(html).toContain("Independently verified")
     expect(html).not.toContain(">VERIFIED<")
+  })
+})
+
+describe("scan detail guided states", () => {
+  const target = {
+    id: "target-1",
+    name: "Checkout API",
+    type: "API",
+    url: "https://api.example.test",
+    repoFullName: null,
+  }
+
+  it("keeps a running scan non-assuring and offers a read-only refresh", () => {
+    const html = renderDetail({
+      scan: {
+        ...scan,
+        status: "RUNNING",
+        endedAt: null,
+        target,
+        integrity: { ...scan.integrity, coverage: [] },
+      },
+      findings: [],
+    })
+
+    expect(html).toContain("Scan in progress")
+    expect(html).toContain("Refresh status")
+    expect(html).toContain("This does not start another scan.")
+    expect(html).toContain('Target: </span><span class="font-medium">Checkout API')
+    expect(html).not.toContain("Create an assurance report")
+  })
+
+  it("shows partial coverage with its retained findings and never routes it to a clean report", () => {
+    const html = renderDetail({
+      scan: {
+        ...scan,
+        status: "PARTIAL",
+        target,
+        integrity: {
+          ...scan.integrity,
+          coverage: [
+            {
+              scanner: "sca",
+              controlId: "sca-review",
+              status: "PARTIAL",
+              reason: "The configured source was only partly available.",
+              subject: null,
+              metadata: null,
+            },
+          ],
+        },
+      },
+      findings: [finding],
+    })
+
+    expect(html).toContain("Coverage: Partial")
+    expect(html).toContain("Coverage is partial or has a recorded limitation.")
+    expect(html).toContain("Review highest-priority finding")
+    expect(html).toContain("/dashboard/findings?tab=issues&amp;finding=finding-1")
+    expect(html).not.toContain("Create an assurance report")
+  })
+
+  it("offers a scan-scoped report only after completed applicable coverage with no findings", () => {
+    const html = renderDetail({
+      scan: {
+        ...scan,
+        target,
+        integrity: {
+          ...scan.integrity,
+          coverage: [
+            {
+              scanner: "sca",
+              controlId: "sca-review",
+              status: "COMPLETED",
+              reason: null,
+              subject: null,
+              metadata: null,
+            },
+          ],
+        },
+      },
+      findings: [],
+    })
+
+    expect(html).toContain("Coverage: Complete")
+    expect(html).toContain("Create an assurance report")
+    expect(html).toContain(
+      "/dashboard/findings?tab=reports&amp;scanId=scan-1&amp;targetId=target-1"
+    )
+  })
+
+  it("routes an exhausted-minutes result to account usage instead of retrying", () => {
+    const html = renderDetail({
+      scan: {
+        ...scan,
+        status: "STOPPED_BUDGET",
+        errorCategory: "AGENT_MINUTES_EXHAUSTED",
+        target,
+      },
+      findings: [],
+    })
+
+    expect(html).toContain("Review account usage")
+    expect(html).toContain("/dashboard/billing")
+    expect(html).not.toContain("Start a new scan")
   })
 })
 

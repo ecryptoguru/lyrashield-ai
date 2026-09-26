@@ -40,8 +40,25 @@ describe("explainFinding", () => {
       severity: "CRITICAL",
     })
     expect(result.title).toBe("Unknown vulnerability")
-    expect(result.whatItIs).toContain("critical vulnerability")
+    expect(result.whatItIs).toContain("critical-severity finding")
     expect(result.difficulty).toBe("hard")
+  })
+
+  it("keeps generic critical impact conditional and preserves technical detail", () => {
+    const result = explainFinding({
+      title: "Unknown candidate",
+      severity: "CRITICAL",
+      technicalDetail: "The affected route could not be confirmed.",
+    })
+
+    expect(result.whatItIs).toContain("if the reported condition applies")
+    expect(result.whatItIs).toContain(
+      "Technical detail: The affected route could not be confirmed."
+    )
+    expect(result.whyItMatters).toContain("Severity alone does not establish")
+    expect(`${result.whatItIs} ${result.whyItMatters}`).not.toMatch(
+      /typically exploitable|often exploitable|must be fixed before/i
+    )
   })
 
   it("falls back to low severity generic", () => {
@@ -58,6 +75,6 @@ describe("explainFinding", () => {
       title: "Info note",
       severity: "INFO",
     })
-    expect(result.whatItIs).toContain("not a vulnerability")
+    expect(result.whatItIs).toContain("does not confirm a vulnerability")
   })
 })

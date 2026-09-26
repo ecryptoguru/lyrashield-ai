@@ -11,6 +11,7 @@ import { formatDate } from "@/lib/date-format"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { SEVERITY_BADGE } from "@/lib/severity-badge"
+import { findingsHref } from "@/lib/finding-list-params"
 
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
 
@@ -105,10 +106,14 @@ const fixProposalsPaginatedSchema = paginatedResponseSchema(fixProposalItemSchem
  */
 export function FixesClient({
   workspaceId,
+  targetId,
+  observedInScanId,
   initialData,
   initialNextCursor,
 }: {
   workspaceId: string
+  targetId?: string
+  observedInScanId?: string
   initialData: FixProposalItem[]
   initialNextCursor: string | null
 }) {
@@ -123,7 +128,14 @@ export function FixesClient({
           title="No proposed fixes yet"
           description="Open a finding to record a fix proposal. Proposals with a stored patch can request a pull request after human approval. A summary alone does not change your code."
           action={
-            <Link href="/dashboard/findings?tab=issues" className={buttonVariants()}>
+            <Link
+              href={findingsHref({
+                tab: "issues",
+                ...(observedInScanId ? { scanId: observedInScanId } : {}),
+                ...(targetId ? { target: targetId } : {}),
+              })}
+              className={buttonVariants()}
+            >
               Review findings
             </Link>
           }
@@ -195,7 +207,14 @@ export function FixesClient({
                 {/* Deep link to the finding this proposal patches — the drawer's
                     `?finding=` contract, same as everywhere else in this app. */}
                 <Link
-                  href={`/dashboard/findings?finding=${encodeURIComponent(proposal.finding.id)}`}
+                  href={findingsHref({
+                    tab: "issues",
+                    finding: proposal.finding.id,
+                    ...(observedInScanId ? { scanId: observedInScanId } : {}),
+                    ...((targetId ?? proposal.finding.target?.id)
+                      ? { target: targetId ?? proposal.finding.target?.id }
+                      : {}),
+                  })}
                   className="text-muted-foreground hover:text-foreground mt-3 inline-flex text-xs underline underline-offset-4"
                 >
                   View the finding
@@ -234,6 +253,7 @@ export function FixesClient({
           ))}
 
           <LoadMore
+            key={`${workspaceId}:${observedInScanId ?? ""}:${targetId ?? ""}`}
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
               try {
@@ -242,6 +262,8 @@ export function FixesClient({
                   {
                     workspaceId,
                     cursor,
+                    ...(targetId ? { targetId } : {}),
+                    ...(observedInScanId ? { observedInScanId } : {}),
                   },
                   { schema: fixProposalsPaginatedSchema }
                 )

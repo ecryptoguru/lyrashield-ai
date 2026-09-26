@@ -96,6 +96,19 @@ export const findingListItemSchema = z
 
 export const findingsPaginatedSchema = paginatedResponseSchema(findingListItemSchema)
 
+export const evidenceFindingItemSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    summary: z.string(),
+    target: z.object({ id: z.string(), name: z.string(), type: z.string() }).nullable(),
+    evidence: z.array(z.object({ type: z.string(), createdAt: dateString })),
+    _count: z.object({ evidence: z.number() }),
+  })
+  .passthrough()
+
+export const evidenceFindingsPaginatedSchema = paginatedResponseSchema(evidenceFindingItemSchema)
+
 export const scanTargetSchema = z
   .object({
     id: z.string(),

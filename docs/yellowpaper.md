@@ -1,6 +1,6 @@
 # LyraShield AI — Yellowpaper
 
-## Version 1.0.1 — 2026-09-19
+## Version 1.0.2 — 2026-09-27
 
 > The technical specification for LyraShield AI: system architecture, scan pipeline, coverage contracts, evidence integrity, tenancy and distribution interfaces. Public-safe — provider internals, model identifiers and operational cost data are deliberately excluded. For product narrative see [`whitepaper.md`](./whitepaper.md); for the short overview see [`litepaper.md`](./litepaper.md).
 
@@ -68,6 +68,14 @@ Terminal alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserv
 
 Target creation performs SSRF validation. At fetch time the hostname is resolved, validated and pinned at the connection; each redirect hop is revalidated. Profiles bound documents, depth, bytes, concurrency, methods, origin probes and wall time. API Standard/Deep scans require a validated public HTTPS OpenAPI input.
 
+### 1.5 Readiness and release boundaries
+
+Scan admission fails closed unless both the worker heartbeat is available and no maintenance stop is active. Readiness therefore describes whether new work may be admitted, not only whether a process is running. Queue reconciliation uses persisted scan state and shared queue state; uncertain state fails safe, and ambiguous paid work is never automatically replayed. A controlled worker replacement stops new admission and requires nonterminal scans and queues to be empty before restart. Its temporary readiness failure means new scans are unavailable during maintenance; outside that controlled operation, the same failure is unexpected service unavailability.
+
+Each result manifest binds the exact product revision, immutable worker image digest, and engine revision used for that scan. A source pin or successful build does not establish which identity is running; deployment and live readiness evidence must match the same release. Database changes are forward-only, so application or worker rollback never reverses schema migrations. Encrypted backups are verified through isolated restore checks, including schema, audit-chain, and application startup; a restore drill does not itself establish that a particular production backup is current or perform a production restore.
+
+Optional browser error reporting waits for a resolved opt-in and emits only sanitized error class, static route template, release/environment, and safe stack locations. Request data, identities, error messages, breadcrumbs, replay, and browser performance traces are excluded. Server error logging and security audit records follow their separate operational controls.
+
 ## 2. Engine boundary and model routing
 
 - The engine runs as a controlled subprocess; product code and upstream code are separated by hard-gated seams. Engine output artifacts and parsed fields are byte-, field- and count-bounded; raw engine output is never logged or persisted.
@@ -132,7 +140,7 @@ A private-beta contract defining a fixed, non-destructive catalog for prompt inj
 
 ## 4. Evidence and integrity
 
-- **Manifests.** Every scan persists a result manifest binding execution provenance (product revision, worker image digest, engine revision) into its checksum; workers fail closed before readiness without it.
+- **Manifests.** Every scan persists a result manifest binding execution provenance (product revision, worker image digest, engine revision) into its checksum; workers fail closed before readiness without it. New rows retain the exact JSON checksum input and hash those bytes. The database verifier also checks structural agreement with JSONB and returns `MATCH`, `MISMATCH`, or `UNAVAILABLE`; legacy null-input rows remain unavailable and are not backfilled. Duplicate persistence and pending finalization reject mismatches without rewriting historical hashes.
 - **Evidence storage.** All artifacts use a single upload path with checksum and valid encryption-key reference; envelope encryption (AES-256-GCM) in a self-describing format; storage is private, workspace-isolated and fail-closed. Finding detail never exposes raw storage URIs.
 - **Audit chain.** Sensitive mutations create audit rows whose `prevHash`/`hash` serialization is owned by an advisory-locked transaction in the extended data client.
 - **Retest binding.** A deterministic retest produces `VALIDATED` only when both the original and retest scans carry stored manifests, exact revisions (which may differ after a fix) or matching URL checksums and complete deterministic coverage. Missing identity writes an idempotent `INCONCLUSIVE` receipt and never sets `FIXED`. Manifests persist before retest finalization so crash recovery resumes pending retests without replaying billable work.
@@ -148,7 +156,9 @@ Every workspace query is explicitly scoped by `workspaceId`; request context tra
 
 ### 5.2 Authorization
 
-Role order: `OWNER > ADMIN > SECURITY_ADMIN > APPSEC_MANAGER > BILLING_ADMIN > DEVELOPER > MEMBER > EXTERNAL_PENTESTER > AUDITOR > VIEWER`. Hosted MCP writes require a browser-confirmed OAuth connection grant bound to workspace, scopes, allowed operations, target scope, profiles and expiry, plus a stable idempotency key. The server revalidates permission and the grant at execution. Nondelegated remote callers, including write-scoped API keys, receive `connect_required`; the former remote `PENDING`/`approvalId` flow is retired. Remote OAuth is read-only by default. Local stdio requests use their credential permissions without the hosted delegation gate.
+Role order: `OWNER > ADMIN > SECURITY_ADMIN > APPSEC_MANAGER > BILLING_ADMIN > DEVELOPER > MEMBER > EXTERNAL_PENTESTER > AUDITOR > VIEWER`. Hosted MCP writes require a browser-confirmed OAuth connection grant bound to workspace, scopes, allowed operations, target scope, profiles and expiry, plus a stable idempotency key. The server revalidates permission and the grant at execution. Nondelegated remote callers, including write-scoped API keys and requests carrying a legacy `approvalId`, receive `connect_required`; the remote `PENDING`/`approvalId` flow is retired. Remote OAuth is read-only by default. Local stdio requests use their credential permissions without the hosted delegation gate.
+
+Workspace API keys are created, listed, and revoked through ADMIN+ browser-session management. A generated raw key is shown once; only its hash and display prefix are persisted. Keys have coarse read/write scopes, bind to one workspace and creator, support optional expiry, and allow at most 20 active keys per workspace. A revoked or expired key, or a key whose creator is no longer an active member, fails verification. REST authorization still evaluates current workspace permission; hosted remote MCP mutations require a valid OAuth delegation.
 
 Platform administration sits outside workspace roles: a fixed email allowlist, verified `PLATFORM_OPERATOR` accounts, recent TOTP-stamped browser sessions, action-specific single-use elevation nonces, transaction-time authority revalidation and atomic platform audit rows. Bearer credentials and workspace roles never cross this boundary.
 

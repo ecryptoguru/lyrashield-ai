@@ -11,7 +11,7 @@ faq:
   - q: "Does LyraShield replace RunSybil?"
     a: "No. RunSybil is an AI-native black-box offensive platform whose Sybil agents reason like elite attackers without requiring source code, testing multi-tenant and business-logic flaws continuously on every deployment. LyraShield in open beta is source and MCP-aware release assurance for AI-built apps with SCA, secrets, evidence states and reviewed fix proposals."
   - q: "Can I use RunSybil and LyraShield together?"
-    a: "Yes. Use RunSybil as the black-box validation layer that proves exploitability like an external attacker, then use LyraShield for the white-box release gate that records coverage receipts, evidence states and retest-confirmed fixes. RunSybil serves as CTEM Phase 4 validation; LyraShield produces the immutable record for sign-off."
+    a: "Yes. Use RunSybil as the black-box validation layer that attempts attacker-style checks, then use LyraShield to record its own target scope, coverage receipts, evidence states and retest outcomes. RunSybil serves as CTEM Phase 4 validation; LyraShield provides a scoped record for release review."
   - q: "When should I choose RunSybil over LyraShield?"
     a: "Choose RunSybil when you want hypothesis-driven offensive testing without handing over source, with cross-tenant access, privilege escalation and transaction manipulation coverage and PR-level feedback. Its black-box-first model genuinely mimics attacker intuition. Choose LyraShield when you need inside-the-agent checks via MCP and reviewed fix proposals."
 ---
@@ -32,7 +32,7 @@ faq:
 | Capability                            | LyraShield AI                                                   | RunSybil                                                                      |
 | ------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Agentic / AI-driven pentest           | Yes (app-layer)                                                 | Yes (hierarchical multi-agent)                                                |
-| Independent exploit validation        | Yes (verified state)                                            | Yes (live exploitation; reproducible findings)                                |
+| Independent finding verification      | Yes (separate receipt; scope-bound)                             | Yes (live exploitation; reproducible findings)                                |
 | Black-box (no source required)        | Source/MCP-aware (not black-box-first)                          | Yes (core differentiator)                                                     |
 | SCA (dependency scanning)             | Yes (engine)                                                    | Not a primary focus                                                           |
 | Secret scanning                       | Yes (engine + GitHub Action)                                    | Not a primary focus                                                           |

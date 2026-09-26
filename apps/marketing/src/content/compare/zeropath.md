@@ -3,7 +3,7 @@ title: "LyraShield vs ZeroPath — release assurance compared"
 description: "How LyraShield AI compares to ZeroPath for AI-native SAST and auto-fix. Evidence states, deterministic retest, coverage framework and deployment model."
 competitor: "ZeroPath"
 heading: "LyraShield AI vs ZeroPath"
-disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native application security platform that unifies SAST, SCA, secrets, IaC and DAST-style runtime validation into a single reasoning engine and generates fix PRs. LyraShield AI is release assurance for AI-built apps — it separates detection from proof, produces immutable evidence reports and gates fixes behind approvals. Neither replaces the other."
+disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native application security platform that unifies SAST, SCA, secrets, IaC and DAST-style runtime validation into a single reasoning engine and generates fix PRs. LyraShield AI is release assurance for AI-built apps — it keeps detected candidates, separate verification receipts and retest outcomes distinct in scoped evidence reports, with fixes gated behind approvals. Neither replaces the other."
 updatedDate: 2026-09-19
 draft: false
 pricingLadder: true
@@ -13,7 +13,7 @@ faq:
   - q: "Can I use ZeroPath and LyraShield together?"
     a: "Yes. ZeroPath can serve as your broad AI-native scanner replacing multiple detectors, with an open-source CLI and SARIF; confirm current commercial terms with the vendor. Add LyraShield for the release assurance loop that records fix proposals for review before the team merges a change and produces an immutable snapshot. Both support MCP, so they can run inside AI coding agents."
   - q: "When should I choose ZeroPath over LyraShield?"
-    a: "Choose ZeroPath when you need business-logic and authorization flaw detection, AI-component inventory, one-click fix PRs with natural-language refinement and broad language coverage with 700+ secret detectors. Its strength is consolidating SAST, SCA, secrets and runtime validation. Choose LyraShield when release proof and approval gates are the priority."
+    a: "Choose ZeroPath when you need business-logic and authorization flaw detection, AI-component inventory, one-click fix PRs with natural-language refinement and broad language coverage with 700+ secret detectors. Its strength is consolidating SAST, SCA, secrets and runtime validation. Choose LyraShield when scoped evidence and approval-gated fix proposals would help inform a release review."
 ---
 
 ## Core approach

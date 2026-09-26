@@ -37,14 +37,18 @@ const DEFAULT_FINDING_FILTER: FindingFilter = "OPEN"
 interface FindingListParams {
   filter: FindingFilter
   sort: SortMode
+  scanId: string
   target: string
+  scopeValid: boolean
   q: string
 }
 
 export function parseFindingListParams(params: {
   filter?: string
   sort?: string
+  scanId?: string
   target?: string
+  targetId?: string
   q?: string
 }): FindingListParams {
   const filter = (FINDING_FILTERS as readonly string[]).includes(params.filter ?? "")
@@ -53,12 +57,49 @@ export function parseFindingListParams(params: {
   const sort = (FINDING_SORTS as readonly string[]).includes(params.sort ?? "")
     ? (params.sort as SortMode)
     : "priority"
+  const scanId = params.scanId?.trim() ?? ""
+  const target = params.target?.trim() ?? ""
+  const targetId = params.targetId?.trim() ?? ""
   return {
     filter,
     sort,
-    target: params.target?.trim() ?? "",
+    scanId,
+    target: target || targetId,
+    scopeValid:
+      (params.scanId === undefined || Boolean(scanId)) &&
+      (params.target === undefined || Boolean(target)) &&
+      (params.targetId === undefined || Boolean(targetId)) &&
+      !(target && targetId && target !== targetId),
     q: params.q?.trim().slice(0, 120) ?? "",
   }
+}
+
+export function findingsHref(params: {
+  tab?: string
+  finding?: string
+  scanId?: string
+  target?: string
+  targetId?: string
+}): string {
+  const query = new URLSearchParams()
+  for (const key of ["tab", "finding", "scanId", "target", "targetId"] as const) {
+    const value = params[key]
+    if (value !== undefined) query.set(key, value)
+  }
+  return `/dashboard/findings?${query.toString()}`
+}
+
+export function withPreservedSearchParams(
+  href: string,
+  current: URLSearchParams,
+  keys: string[]
+): string {
+  const destination = new URL(href, "https://lyrashield.invalid")
+  for (const key of keys) destination.searchParams.delete(key)
+  for (const key of keys) {
+    if (current.has(key)) destination.searchParams.set(key, current.get(key)!)
+  }
+  return `${destination.pathname}${destination.search}`
 }
 
 /**

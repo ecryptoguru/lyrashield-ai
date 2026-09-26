@@ -166,7 +166,7 @@ export function generateLaunchReadinessReportFromAggregate(
   // no numeric score to misread and no GO verdict to act on.
   if (coverage && !coverage.evaluated) {
     const why = coverage.reason ?? "No scanner was able to inspect the target."
-    const summary = `The scan completed but could not evaluate this target, so no findings could be produced. This is not a clean result. ${why}`
+    const summary = `Insufficient current evidence. The completed scan could not evaluate this target, so this is not a clean result. ${why}`
     const condition = "Resolve the coverage failure and re-run before treating this as assessed"
     return {
       verdict: "INCONCLUSIVE",
@@ -206,16 +206,20 @@ export function generateLaunchReadinessReportFromAggregate(
   if (blockingFindings > 0) {
     verdict = "NO_GO"
     conditions.push(
-      `${blockingFindings} unresolved critical/high finding(s) must be fixed before launch`
+      `Review ${blockingFindings} unresolved critical/high finding(s) against the affected target, evidence, and release policy.`
     )
   } else if (score >= 80) {
     verdict = "GO"
   } else if (score >= 40) {
     verdict = "GO_WITH_CONDITIONS"
-    conditions.push("Address remaining medium-severity findings before production deployment")
+    conditions.push(
+      "Review remaining medium-severity findings against the target, evidence, and release policy."
+    )
   } else {
     verdict = "NO_GO"
-    conditions.push("Security score too low for production launch")
+    conditions.push(
+      "The triage score is below its configured threshold; review findings and release policy."
+    )
   }
 
   // A partial assessment must not present as a clean one. Findings we did see
@@ -235,23 +239,25 @@ export function generateLaunchReadinessReportFromAggregate(
 
   if (total > 0 && verified === 0) {
     recommendations.push(
-      "No findings have been verified — run a deeper scan to confirm vulnerabilities"
+      "No findings have a separate independent verification receipt. Review candidate evidence; a deeper scan is not the same as independent verification."
     )
   }
 
   if ((bySeverity.CRITICAL ?? 0) > 0) {
-    recommendations.push(`${bySeverity.CRITICAL} critical finding(s) require immediate attention`)
+    recommendations.push(
+      `Review ${bySeverity.CRITICAL} critical finding(s) in the context of the affected target and retained evidence.`
+    )
   }
 
   if ((bySeverity.HIGH ?? 0) > 0) {
     recommendations.push(
-      `${bySeverity.HIGH} high-severity finding(s) should be prioritized for remediation`
+      `Review ${bySeverity.HIGH} high-severity finding(s) against the affected component, exposure, and release policy.`
     )
   }
 
   const summary = scopeLimited
-    ? `${total} finding(s) detected, ${verified} verified. ${unresolvedControls} applicable control(s) could not be established, so this assessment is scope-limited and no security score is issued. Verdict: ${verdict}.`
-    : `${total} finding(s) detected, ${verified} verified. Security score: ${score}/100. Verdict: ${verdict}.`
+    ? `${total} finding(s) detected, ${verified} independently verified. ${unresolvedControls} applicable control(s) could not be established, so this assessment is scope-limited and no triage score is issued. Verdict: ${verdict}.`
+    : `${total} finding(s) detected, ${verified} independently verified. Triage score: ${score}/100. Verdict: ${verdict}.`
 
   return {
     verdict,
@@ -290,7 +296,7 @@ export function gateReasonSentence(reason: { code: string; message: string }): s
     case "POLICY_CHANGED":
       return "The scan policy changed after the last assessment. Run a new scan under the current policy."
     case "NEWER_ASSESSMENT_ATTEMPT":
-      return "A newer scan attempt is still running. Wait for it to finish before deciding."
+      return "A newer scan attempt makes the previous verdict unavailable for this release. Review the newer scan's status before deciding."
     case "EVIDENCE_CHANGED":
       return "Findings or verification evidence changed after the last assessment. Run a new scan to confirm the verdict still holds."
     case "NO_GATE_VERDICT":
@@ -484,7 +490,7 @@ export function projectGateReadinessReport(
       blockingFindings,
       summary: `${insufficient.length} of ${targets.length} ${
         targets.length === 1 ? "target has" : "targets have"
-      } no completed assessment yet.`,
+      } insufficient current evidence for this release check.`,
       conditions:
         conditions.length > 0
           ? conditions

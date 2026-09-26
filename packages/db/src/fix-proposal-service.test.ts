@@ -227,6 +227,36 @@ describe("fix-proposal-service", () => {
         })
       )
     })
+
+    it("shares the observed scan and target predicate with finding lists", async () => {
+      mockPrisma.fixProposal.findMany.mockResolvedValue([])
+
+      await listFixProposals({
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        observedInScanId: "scan-2",
+      })
+
+      expect(mockPrisma.fixProposal.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            deletedAt: null,
+            finding: {
+              workspaceId: "ws-1",
+              deletedAt: null,
+              targetId: "target-1",
+              candidates: {
+                some: {
+                  workspaceId: "ws-1",
+                  scanId: "scan-2",
+                  targetId: "target-1",
+                },
+              },
+            },
+          },
+        })
+      )
+    })
   })
 
   describe("updateFixProposalStatus", () => {

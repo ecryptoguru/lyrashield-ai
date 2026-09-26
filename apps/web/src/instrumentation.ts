@@ -4,19 +4,17 @@ import { logger } from "@lyrashield/logger"
 /**
  * Sentry wiring for the Next.js server/edge runtimes.
  *
- * packages/config validates SENTRY_DSN (server) and NEXT_PUBLIC_SENTRY_DSN
- * (browser/client) but no SDK was previously initialised. We dynamically import
- * @sentry/nextjs inside register() so the module is only loaded (and the
- * dependency only required) when a DSN is actually configured — keeping dev and
- * DSN-less deploys a true no-op.
+ * packages/config validates SENTRY_DSN. We dynamically import @sentry/nextjs
+ * inside register() so the module is only loaded (and the dependency only
+ * required) when a server DSN is configured — keeping DSN-less deploys a true
+ * no-op. Browser setup lives in BrowserErrorMonitor, mounted after optional
+ * collection permission resolves.
  *
  * NEXT_RUNTIME is "nodejs" | "edge" for the server entrypoints; the client
- * bundle sets neither and relies on NEXT_PUBLIC_SENTRY_DSN.
+ * bundle sets neither; Next.js client instrumentation is not initialized here.
  */
 export async function register(): Promise<void> {
   const serverDsn = process.env.SENTRY_DSN
-  const publicDsn = process.env.NEXT_PUBLIC_SENTRY_DSN
-
   // Server (Node.js) runtime.
   if (process.env.NEXT_RUNTIME === "nodejs") {
     if (!serverDsn) return
@@ -41,16 +39,6 @@ export async function register(): Promise<void> {
     })
     return
   }
-
-  // Client (browser). Uses the public DSN only.
-  if (publicDsn) {
-    const Sentry = await import("@sentry/nextjs")
-    Sentry.init({
-      dsn: publicDsn,
-      environment: process.env.NODE_ENV,
-      tracesSampleRate: 0.1,
-    })
-  }
 }
 
 export const onRequestError: Instrumentation.onRequestError = async (error, request, context) => {
@@ -64,7 +52,7 @@ export const onRequestError: Instrumentation.onRequestError = async (error, requ
 
   // Mirror to Sentry when configured. captureRequestError is the Sentry-provided
   // onRequestError implementation; it is a no-op when the SDK was not initialised.
-  if (process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN) {
+  if (process.env.SENTRY_DSN) {
     try {
       const Sentry = await import("@sentry/nextjs")
       Sentry.captureRequestError(error, request, context)

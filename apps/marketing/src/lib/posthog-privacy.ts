@@ -7,6 +7,42 @@ const URL_PROPERTIES = [
   "referrer",
 ]
 
+export const ANALYTICS_PREFERENCE_COOKIE = "lyrashield-analytics"
+export const ANALYTICS_PREFERENCE_MAX_AGE = 180 * 24 * 60 * 60
+
+export function marketingAnalyticsPreference(cookie: string): "on" | "off" | null {
+  const match = cookie.match(/(?:^|;\s*)lyrashield-analytics=(on|off)(?:;|$)/)
+  return match?.[1] === "on" || match?.[1] === "off" ? match[1] : null
+}
+
+export function marketingAnalyticsAllowed({
+  cookie,
+  accountEnabled,
+  doNotTrack,
+  globalPrivacyControl,
+}: {
+  cookie: string
+  accountEnabled: boolean | null
+  doNotTrack?: string | null
+  globalPrivacyControl?: boolean
+}): boolean {
+  return (
+    accountEnabled === true &&
+    marketingAnalyticsPreference(cookie) !== "off" &&
+    !["1", "yes"].includes(doNotTrack?.toLowerCase() ?? "") &&
+    globalPrivacyControl !== true
+  )
+}
+
+export function marketingAnalyticsCookie(enabled: boolean, hostname: string, secure: boolean) {
+  const domain = ["lyrashieldai.com", "www.lyrashieldai.com", "app.lyrashieldai.com"].includes(
+    hostname.toLowerCase()
+  )
+    ? "; Domain=.lyrashieldai.com"
+    : ""
+  return `${ANALYTICS_PREFERENCE_COOKIE}=${enabled ? "on" : "off"}; Path=/; Max-Age=${ANALYTICS_PREFERENCE_MAX_AGE}; SameSite=Lax${domain}${secure ? "; Secure" : ""}`
+}
+
 // Property keys that must never reach analytics, regardless of event.
 // Mirrors FORBIDDEN_PROPERTY_KEYS in apps/web/src/lib/analytics.ts plus the
 // target-derived keys the Lite Check used to send.

@@ -5,6 +5,9 @@ import { FindingHistoryPageSchema, FindingListSchema, FindingSchema } from "../s
 export interface FindingQuery {
   workspaceId?: string
   targetId?: string
+  /** Origin scan identity retained on the Finding record. */
+  scanId?: string
+  observedInScanId?: string
   severity?: string
   status?: string
   cursor?: string
@@ -13,6 +16,8 @@ export interface FindingQuery {
 
 export interface GetFindingQuery {
   workspaceId?: string
+  targetId?: string
+  observedInScanId?: string
 }
 
 export interface FindingHistoryQuery extends GetFindingQuery {
@@ -26,6 +31,8 @@ function buildFindingParams(query: FindingQuery, client: LyraShieldClient): URLS
   const workspaceId = query.workspaceId ?? client.workspaceId
   if (workspaceId) params.set("workspaceId", workspaceId)
   if (query.targetId) params.set("targetId", query.targetId)
+  if (query.scanId) params.set("scanId", query.scanId)
+  if (query.observedInScanId) params.set("observedInScanId", query.observedInScanId)
   if (query.severity) params.set("severity", query.severity)
   if (query.status) params.set("status", query.status)
   if (query.cursor) params.set("cursor", query.cursor)
@@ -52,6 +59,8 @@ export function getFinding(
   const params = new URLSearchParams()
   const workspaceId = query.workspaceId ?? client.workspaceId
   if (workspaceId) params.set("workspaceId", workspaceId)
+  if (query.targetId) params.set("targetId", query.targetId)
+  if (query.observedInScanId) params.set("observedInScanId", query.observedInScanId)
   const qs = params.toString()
   const path = qs
     ? `/findings/${encodeURIComponent(id)}?${qs}`
@@ -69,6 +78,8 @@ export function getFindingHistory(
   const params = new URLSearchParams({ collection: query.collection })
   const workspaceId = query.workspaceId ?? client.workspaceId
   if (workspaceId) params.set("workspaceId", workspaceId)
+  if (query.targetId) params.set("targetId", query.targetId)
+  if (query.observedInScanId) params.set("observedInScanId", query.observedInScanId)
   if (query.cursor) params.set("cursor", query.cursor)
   if (query.limit) params.set("limit", String(query.limit))
   return client.request("GET", `/findings/${encodeURIComponent(id)}/history?${params.toString()}`, {

@@ -5,10 +5,16 @@ import { useEffect, useState } from "react"
 import { Check, Code2, Copy, Download, ExternalLink, Share2 } from "lucide-react"
 import { Button } from "@lyrashield/ui"
 import {
+  analyticsPermissionAllowsOptionalCollection,
+  resolveAnalyticsPreference,
+  track as trackAnalytics,
+} from "../lib/analytics"
+import {
   scorecardCaption,
   scorecardChannelUrl,
   scorecardEmbed,
-  scorecardTrackingAllowed,
+  SCORECARD_FORMAT_DIMENSIONS,
+  scorecardFixesSummary,
   scorecardUrlWithSource,
   type ScorecardFormat,
   type ScorecardVariant,
@@ -20,11 +26,6 @@ const FORMATS: { value: ScorecardFormat; label: string }[] = [
   { value: "portrait", label: "Feed image" },
   { value: "square", label: "Square" },
 ]
-
-function trackingAllowed() {
-  const navigatorWithGpc = navigator as Navigator & { globalPrivacyControl?: boolean }
-  return scorecardTrackingAllowed(navigatorWithGpc)
-}
 
 export async function writeClipboard(value: string) {
   if (navigator.clipboard?.writeText) {
@@ -51,6 +52,21 @@ export async function writeClipboard(value: string) {
   if (!copied) throw new Error("Clipboard unavailable")
 }
 
+export function scorecardUrlWithCurrentPermission(
+  url: string,
+  source: Parameters<typeof scorecardUrlWithSource>[1]
+) {
+  return scorecardUrlWithSource(url, source, analyticsPermissionAllowsOptionalCollection())
+}
+
+export function scorecardChannelUrlWithCurrentPermission(
+  channel: ShareChannel,
+  url: string,
+  caption: string
+) {
+  return scorecardChannelUrl(channel, url, caption, analyticsPermissionAllowsOptionalCollection())
+}
+
 export function ScorecardShareComposer({
   slug,
   url,
@@ -71,10 +87,18 @@ export function ScorecardShareComposer({
   const [busy, setBusy] = useState(false)
   const caption = scorecardCaption(grade, resolvedFindings, variant)
   const cardPath = `/api/og/score/${slug}?variant=${variant}&format=${format}`
+  const dimensions = SCORECARD_FORMAT_DIMENSIONS[format]
 
   const absolute = (path: string) => new URL(path, window.location.origin).toString()
-  const track = async (channel?: string, eventType: "VIEW" | "SHARE" = "SHARE") => {
-    if (!trackingAllowed()) return
+  useEffect(() => {
+    void resolveAnalyticsPreference()
+  }, [])
+
+  const recordEvent = async (channel?: string, eventType: "VIEW" | "SHARE" = "SHARE") => {
+    if (!analyticsPermissionAllowsOptionalCollection()) return
+    if (eventType === "SHARE" && channel) {
+      trackAnalytics("share_created", { variant, channel })
+    }
     try {
       await fetch("/api/scorecards/events", {
         method: "POST",
@@ -97,7 +121,14 @@ export function ScorecardShareComposer({
   }
 
   useEffect(() => {
-    if (source === "public") void track(undefined, "VIEW")
+    if (source !== "public") return
+    let active = true
+    void resolveAnalyticsPreference().then(() => {
+      if (active) void recordEvent(undefined, "VIEW")
+    })
+    return () => {
+      active = false
+    }
     // The endpoint deduplicates React strict-mode and repeat session views.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, slug])
@@ -107,16 +138,16 @@ export function ScorecardShareComposer({
       await writeClipboard(value)
       setError(null)
       setNotice(message)
-      await track(channel)
+      await recordEvent(channel)
     } catch {
       setError("Clipboard access is unavailable. Open the scorecard and copy from your browser.")
     }
   }
 
   const openChannel = async (channel: ShareChannel) => {
-    const shareUrl = scorecardChannelUrl(channel, absolute(url), caption)
+    const shareUrl = scorecardChannelUrlWithCurrentPermission(channel, absolute(url), caption)
     window.open(shareUrl, "_blank", "noopener,noreferrer")
-    await track(channel)
+    await recordEvent(channel)
   }
 
   const download = async () => {
@@ -132,7 +163,7 @@ export function ScorecardShareComposer({
       anchor.click()
       URL.revokeObjectURL(blobUrl)
       setNotice("Card downloaded.")
-      await track("download")
+      await recordEvent("download")
     } catch {
       setError("Could not download this card. Try again.")
     } finally {
@@ -143,7 +174,7 @@ export function ScorecardShareComposer({
   const nativeShare = async () => {
     if (!navigator.share) {
       await copy(
-        `${caption}\n\n${scorecardUrlWithSource(absolute(url), "copy")}`,
+        `${caption}\n\n${scorecardUrlWithCurrentPermission(absolute(url), "copy")}`,
         "Post and link copied."
       )
       return
@@ -151,14 +182,16 @@ export function ScorecardShareComposer({
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch(`/api/og/score/${slug}?variant=${variant}&format=square`, {
+      const response = await fetch(cardPath, {
         signal: AbortSignal.timeout(15_000),
       })
       const file = response.ok
-        ? new File([await response.blob()], `lyrashield-${variant}.png`, { type: "image/png" })
+        ? new File([await response.blob()], `lyrashield-${variant}-${format}.png`, {
+            type: "image/png",
+          })
         : null
       const canShareFile = file && navigator.canShare?.({ files: [file] })
-      const sourcedUrl = scorecardUrlWithSource(absolute(url), "native")
+      const sourcedUrl = scorecardUrlWithCurrentPermission(absolute(url), "native")
       const shareData = {
         title: "LyraShield AI security review",
         ...(canShareFile
@@ -176,7 +209,7 @@ export function ScorecardShareComposer({
       }
       await navigator.share(shareData)
       setNotice("Shared from your device.")
-      await track("native")
+      await recordEvent("native")
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") return
       setError("Your device could not open the share sheet. Copy the post instead.")
@@ -195,10 +228,11 @@ export function ScorecardShareComposer({
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 id={`share-${slug}`} className="font-semibold">
-                Share verified progress
+                Share this review
               </h2>
               <p className="text-muted-foreground mt-1 text-sm">
-                Only the approved public scorecard fields appear.
+                Only approved public scorecard fields appear. Share actions do not verify external
+                posts or impressions.
               </p>
             </div>
             <div className="flex rounded-lg border p-1" aria-label="Card message">
@@ -210,24 +244,27 @@ export function ScorecardShareComposer({
                   aria-pressed={variant === value}
                   onClick={() => setVariant(value)}
                 >
-                  {value === "grade" ? "Grade" : "Verified fixes"}
+                  {value === "grade" ? "Grade" : "Retest-confirmed fixes"}
                 </button>
               ))}
             </div>
           </div>
-          <div className="relative aspect-1200/630 overflow-hidden rounded-lg border bg-(--surface-void) shadow-lg">
+          <div
+            className="relative overflow-hidden rounded-lg border bg-(--surface-void) shadow-lg"
+            style={{ aspectRatio: `${dimensions.width} / ${dimensions.height}` }}
+          >
             <Image
               key={cardPath}
               src={cardPath}
-              alt={`${variant === "grade" ? `Grade ${grade}` : `${resolvedFindings} retest-confirmed fixes`} LyraShield AI sharing card preview`}
+              alt={`${variant === "grade" ? `Grade ${grade}` : scorecardFixesSummary(resolvedFindings)} LyraShield AI sharing card preview`}
               fill
               unoptimized
               loading={source === "public" ? "eager" : "lazy"}
               sizes="(max-width: 1024px) 100vw, 60vw"
-              className="object-cover"
+              className="object-contain"
             />
           </div>
-          <div className="mt-4 flex flex-wrap gap-2" aria-label="Download format">
+          <div className="mt-4 flex flex-wrap gap-2" aria-label="Card format">
             {FORMATS.map((item) => (
               <button
                 key={item.value}
@@ -274,7 +311,7 @@ export function ScorecardShareComposer({
               variant="ghost"
               onClick={() =>
                 void copy(
-                  `${caption}\n\n${scorecardUrlWithSource(absolute(url), "copy")}`,
+                  `${caption}\n\n${scorecardUrlWithCurrentPermission(absolute(url), "copy")}`,
                   "Post and link copied."
                 )
               }
@@ -290,7 +327,7 @@ export function ScorecardShareComposer({
               onClick={() =>
                 void copy(
                   scorecardEmbed(
-                    scorecardUrlWithSource(absolute(url), "embed"),
+                    scorecardUrlWithCurrentPermission(absolute(url), "embed"),
                     absolute(`/api/badge/score/${slug}`)
                   ),
                   "README badge Markdown copied.",

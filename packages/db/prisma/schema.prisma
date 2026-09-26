@@ -40,6 +40,7 @@ model User {
   platformAdminElevations PlatformAdminElevation[]
   agentConnections        AgentConnection[]
   accountAcquisition      AccountAcquisition?
+  accountPreference       AccountPreference?
 
   @@map("users")
 }
@@ -1047,12 +1048,13 @@ model ArtifactDeletionTask {
 }
 
 model ScanResultManifest {
-  id        String   @id @default(cuid())
-  scanId    String   @unique
-  version   Int      @default(1)
-  manifest  Json
-  checksum  String
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  scanId        String   @unique
+  version       Int      @default(1)
+  manifest      Json
+  checksum      String
+  checksumInput String?  @db.Text
+  createdAt     DateTime @default(now())
 
   scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
 }
@@ -1931,6 +1933,19 @@ model AccountAcquisition {
   user           User     @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@map("account_acquisitions")
+}
+
+// Account-level optional analytics choice. It follows the user across
+// workspaces and devices, and is isolated with account-owned RLS.
+model AccountPreference {
+  id              String   @id @default(cuid())
+  accountId       String   @unique
+  analyticsEnabled Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+  user            User     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("account_preferences")
 }
 
 model NotificationPreference {

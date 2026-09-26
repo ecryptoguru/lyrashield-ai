@@ -7,6 +7,7 @@ import { CreateScanSheet } from "./create-scan-sheet"
 import { ScanList } from "./scan-list"
 import Link from "next/link"
 import { Play, RefreshCw } from "lucide-react"
+import { z } from "zod"
 import { Button, Select } from "@lyrashield/ui"
 import {
   scanAttachmentListSchema,
@@ -34,6 +35,22 @@ import {
 import { getDefaultScanOptionId, getManualScanOptions } from "@/lib/scan-presets"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import type { ScanEligibilityState, ScanItem, TargetItem } from "./scan-types"
+import {
+  beginScanSubmission,
+  clearPendingScanSubmission,
+  operationIdFromErrorDetails,
+  readPendingScanSubmission,
+  recordAcceptedScan,
+  recordScanOperation,
+  runScanSubmission,
+  scanOperationStatusSchema,
+  scanRequestIdentity,
+  type PendingScanSubmission,
+  type ScanOperationStatus,
+  type ScanSubmissionScope,
+} from "@/lib/scan-submission"
+
+const scanCreateResponseSchema = scanItemSchema.extend({ operationId: z.string().optional() })
 
 /**
  * Media query with SSR-safe hydration: the server snapshot (mobile) is used
@@ -53,6 +70,7 @@ function useMediaQuery(query: string): boolean {
 }
 
 interface ScansClientProps {
+  principalId: string
   workspaceId: string
   targets: TargetItem[]
   initialData: ScanItem[]
@@ -70,6 +88,7 @@ interface ScansClientProps {
 }
 
 export function ScansClient({
+  principalId,
   workspaceId,
   targets,
   initialData,
@@ -127,6 +146,15 @@ export function ScansClient({
   const [eligibility, setEligibility] = useState<ScanEligibilityState>({ status: "idle" })
   const [eligibilityAttempt, setEligibilityAttempt] = useState(0)
   const [startingTrial, setStartingTrial] = useState(false)
+  const scanSubmissionLock = useRef(false)
+  const [pendingScanSubmission, setPendingScanSubmission] = useState<PendingScanSubmission | null>(
+    null
+  )
+  const [scanOperationStatus, setScanOperationStatus] = useState<ScanOperationStatus | null>(null)
+  const [checkingScanOperation, setCheckingScanOperation] = useState(false)
+  const [scanRecoveryError, setScanRecoveryError] = useState<string | null>(null)
+  const [scanRecoveryUnavailable, setScanRecoveryUnavailable] = useState(false)
+  const [forceNewAfterRecovery, setForceNewAfterRecovery] = useState(false)
 
   const isDesktop = useMediaQuery("(min-width: 768px)")
 
@@ -221,7 +249,7 @@ export function ScansClient({
     refetchFirstPage("", "ALL").catch(() => setPollStale(true))
   }
 
-  async function handleCreateScan() {
+  async function handleCreateScan(startNewScan = false) {
     setErrorCode(null)
     if (!selectedTarget) {
       setError("Select a target to scan")
@@ -235,55 +263,124 @@ export function ScansClient({
       setError("Enter the base revision to compare against")
       return
     }
-    setCreating(true)
-    setError(null)
-    try {
-      const result = await apiPost(
-        "/api/scans",
-        {
-          workspaceId,
-          targetId: selectedTarget,
-          goal: selectedOption.goal,
-          mode: selectedOption.mode,
-          ...(selectedOption.workflow !== "REVIEW_TARGET"
-            ? { workflow: selectedOption.workflow }
-            : {}),
-          ...(selectedOption.requiresRevisionInputs
-            ? {
-                baseRef: baseRef.trim(),
-                ...(headRef.trim() ? { headRef: headRef.trim() } : {}),
-              }
-            : {}),
-          ...(selectedFocus ? { focus: selectedFocus } : {}),
-          // Immutable inputs only — never configuration or instructions.
-          ...(selectedAttachments.length > 0 ? { attachmentIds: selectedAttachments } : {}),
-        },
-        { schema: scanItemSchema }
-      )
-      setScans((prev) => [result, ...prev])
-      setShowCreate(false)
-      setSelectedFocus(null)
-      setBaseRef("")
-      setHeadRef("")
-      setSelectedAttachments([])
-      // Clear back to the preselect default (the sole target when there is
-      // exactly one) rather than an unconditional blank.
-      setSelectedTarget(initialSelectedTarget)
-      setSelectedPreset(() => {
-        const target = targets.find((item) => item.id === initialSelectedTarget)
-        if (!target) return ""
-        const options = getManualScanOptions({
-          type: target.type,
-          hasApiSpec: Boolean(target.apiSpecUrl),
-        })
-        return getDefaultScanOptionId(options)
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create scan")
-      setErrorCode(err instanceof ApiError ? err.code : null)
-    } finally {
-      setCreating(false)
+    if (!createScanRequest) {
+      setError("No review option is available for this target")
+      return
     }
+
+    await runScanSubmission(scanSubmissionLock, async () => {
+      setCreating(true)
+      if (startNewScan) setForceNewAfterRecovery(false)
+      setError(null)
+      setScanRecoveryError(null)
+      try {
+        if (startNewScan) {
+          const existing = readPendingScanSubmission(scanSubmissionScope)
+          if (existing?.state === "accepted") {
+            setPendingScanSubmission(existing)
+            setError("This scan was already accepted. Open it before starting another scan.")
+            return
+          }
+          if (existing) {
+            clearPendingScanSubmission(scanSubmissionScope, existing.idempotencyKey)
+          }
+        }
+        let begun = beginScanSubmission(scanSubmissionScope, createScanRequest)
+        if (begun.kind === "conflict") {
+          setPendingScanSubmission(begun.submission)
+          if (!startNewScan || begun.submission.state === "accepted") {
+            setScanRecoveryError(
+              "A previous scan may still be starting. Check its status or explicitly start a new scan."
+            )
+            return
+          }
+          clearPendingScanSubmission(scanSubmissionScope, begun.submission.idempotencyKey)
+          begun = beginScanSubmission(scanSubmissionScope, createScanRequest)
+        }
+
+        let submission = begun.submission
+        setPendingScanSubmission(submission)
+        if (submission.state === "accepted" && submission.scanId) {
+          setShowCreate(false)
+          return
+        }
+        if (submission.operationId) {
+          await checkPendingScanOperation(submission)
+          return
+        }
+
+        let result: z.infer<typeof scanCreateResponseSchema>
+        try {
+          result = await apiPost("/api/scans", createScanRequest, {
+            schema: scanCreateResponseSchema,
+            headers: { "Idempotency-Key": submission.idempotencyKey },
+          })
+        } catch (err) {
+          const operationId =
+            err instanceof ApiError ? operationIdFromErrorDetails(err.details) : null
+          if (operationId) {
+            const updated = recordScanOperation(
+              scanSubmissionScope,
+              submission.idempotencyKey,
+              operationId
+            )
+            submission = updated ?? { ...submission, operationId }
+            setPendingScanSubmission(submission)
+          }
+          setError(err instanceof Error ? err.message : "Failed to create scan")
+          setErrorCode(err instanceof ApiError ? err.code : null)
+          setScanRecoveryError(
+            err instanceof Error
+              ? err.message
+              : "We could not confirm whether the scan started. Retry with the same details."
+          )
+          return
+        }
+
+        const operationId = typeof result.operationId === "string" ? result.operationId : undefined
+        const accepted = {
+          ...submission,
+          state: "accepted" as const,
+          scanId: result.id,
+          ...(operationId ? { operationId } : {}),
+        }
+        setPendingScanSubmission(accepted)
+        try {
+          recordAcceptedScan(scanSubmissionScope, submission.idempotencyKey, result.id, operationId)
+        } catch (cause) {
+          setScanRecoveryUnavailable(true)
+          setScanRecoveryError(
+            cause instanceof Error
+              ? cause.message
+              : "Scan accepted; recovery details could not be saved."
+          )
+        }
+        setScans((prev) => (prev.some((scan) => scan.id === result.id) ? prev : [result, ...prev]))
+        setShowCreate(false)
+        setSelectedFocus(null)
+        setBaseRef("")
+        setHeadRef("")
+        setSelectedAttachments([])
+        setSelectedTarget(initialSelectedTarget)
+        setSelectedPreset(() => {
+          const target = targets.find((item) => item.id === initialSelectedTarget)
+          if (!target) return ""
+          const options = getManualScanOptions({
+            type: target.type,
+            hasApiSpec: Boolean(target.apiSpecUrl),
+          })
+          return getDefaultScanOptionId(options)
+        })
+        setForceNewAfterRecovery(false)
+      } catch (err) {
+        setScanRecoveryUnavailable(true)
+        setScanRecoveryError(
+          err instanceof Error ? err.message : "Could not save scan recovery information."
+        )
+      } finally {
+        setCreating(false)
+      }
+    })
   }
 
   async function handleStartTrial() {
@@ -387,6 +484,105 @@ export function ScansClient({
         hasApiSpec: Boolean(selectedTargetDetails.apiSpecUrl),
       })
     : null
+
+  const scanSubmissionScope: ScanSubmissionScope = {
+    principalId,
+    workspaceId,
+    surface: "dashboard",
+  }
+  const createScanRequest =
+    selectedTarget && selectedOption
+      ? {
+          workspaceId,
+          targetId: selectedTarget,
+          goal: selectedOption.goal,
+          mode: selectedOption.mode,
+          ...(selectedOption.workflow !== "REVIEW_TARGET"
+            ? { workflow: selectedOption.workflow }
+            : {}),
+          ...(selectedOption.requiresRevisionInputs
+            ? {
+                baseRef: baseRef.trim(),
+                ...(headRef.trim() ? { headRef: headRef.trim() } : {}),
+              }
+            : {}),
+          ...(selectedFocus ? { focus: selectedFocus } : {}),
+          ...(selectedAttachments.length > 0 ? { attachmentIds: selectedAttachments } : {}),
+        }
+      : null
+  const pendingScanMatchesCurrent = Boolean(
+    pendingScanSubmission &&
+    pendingScanSubmission.principalId === principalId &&
+    pendingScanSubmission.workspaceId === workspaceId &&
+    pendingScanSubmission.requestIdentity === scanRequestIdentity(createScanRequest)
+  )
+
+  useEffect(() => {
+    // Browser session storage is external state and is only available after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setScanOperationStatus(null)
+    setScanRecoveryError(null)
+    setScanRecoveryUnavailable(false)
+    const scope: ScanSubmissionScope = { principalId, workspaceId, surface: "dashboard" }
+    try {
+      setPendingScanSubmission(readPendingScanSubmission(scope))
+    } catch (cause) {
+      setPendingScanSubmission(null)
+      setScanRecoveryUnavailable(true)
+      setScanRecoveryError(
+        cause instanceof Error ? cause.message : "Saved scan recovery data could not be read."
+      )
+    }
+  }, [principalId, workspaceId])
+
+  async function checkPendingScanOperation(submission: PendingScanSubmission) {
+    if (!submission.operationId) return
+    setCheckingScanOperation(true)
+    setScanRecoveryError(null)
+    try {
+      const status = await apiGet(
+        `/api/agent-operations/${encodeURIComponent(submission.operationId)}?workspaceId=${encodeURIComponent(workspaceId)}`,
+        { schema: scanOperationStatusSchema }
+      )
+      setScanOperationStatus(status)
+      if (status.status === "COMPLETED" && status.resultLocation) {
+        const accepted = {
+          ...submission,
+          state: "accepted" as const,
+          scanId: status.resultLocation,
+          operationId: status.operationId,
+        }
+        setPendingScanSubmission(accepted)
+        try {
+          recordAcceptedScan(
+            scanSubmissionScope,
+            submission.idempotencyKey,
+            status.resultLocation,
+            status.operationId
+          )
+        } catch (cause) {
+          setScanRecoveryUnavailable(true)
+          setScanRecoveryError(
+            cause instanceof Error
+              ? cause.message
+              : "Scan accepted; recovery details could not be saved."
+          )
+        }
+        return
+      }
+      setScanRecoveryError(
+        status.recovery === "retry_new_key"
+          ? "The previous attempt was not submitted. Review the request before starting a new attempt."
+          : "The previous scan start is still unresolved. Check its status again."
+      )
+    } catch (cause) {
+      setScanRecoveryError(
+        cause instanceof Error ? cause.message : "Could not check the scan status."
+      )
+    } finally {
+      setCheckingScanOperation(false)
+    }
+  }
 
   // ─── Eligibility preflight (advisory; POST re-checks authoritatively) ────
 
@@ -659,6 +855,139 @@ export function ScansClient({
         </div>
       )}
 
+      {scanRecoveryUnavailable && (
+        <div
+          role="alert"
+          className="border-amber-500/50 bg-amber-500/10 mb-4 rounded-lg border p-3 text-sm"
+        >
+          <p>
+            {scanRecoveryError ??
+              "Saved scan recovery data could not be read. Starting again may create a second scan."}
+          </p>
+          <Button
+            className="mt-2"
+            type="button"
+            variant="outline"
+            onClick={() => {
+              try {
+                clearPendingScanSubmission(scanSubmissionScope)
+                setScanRecoveryUnavailable(false)
+                setScanRecoveryError(null)
+                setForceNewAfterRecovery(true)
+                setShowCreate(true)
+              } catch (cause) {
+                setScanRecoveryError(
+                  cause instanceof Error ? cause.message : "Could not clear scan recovery data."
+                )
+              }
+            }}
+          >
+            Discard recovery data and continue
+          </Button>
+        </div>
+      )}
+
+      {pendingScanSubmission &&
+        pendingScanSubmission.principalId === principalId &&
+        pendingScanSubmission.workspaceId === workspaceId && (
+          <div
+            className="border-amber-500/50 bg-amber-500/10 mb-4 flex flex-col gap-3 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+            role={pendingScanSubmission.state === "accepted" ? "status" : "alert"}
+            aria-live="polite"
+          >
+            <div className="space-y-1">
+              {pendingScanSubmission.state === "accepted" && pendingScanSubmission.scanId ? (
+                <p>
+                  Scan accepted.{" "}
+                  <Link
+                    className="text-primary underline underline-offset-4"
+                    href={`/dashboard/scans/${encodeURIComponent(pendingScanSubmission.scanId)}`}
+                  >
+                    View scan
+                  </Link>
+                </p>
+              ) : (
+                <p>
+                  {pendingScanMatchesCurrent
+                    ? "A previous scan start is unresolved. Retrying the same details reuses its key."
+                    : "A previous scan start is unresolved, and the current details differ. Restore the same request or explicitly start a new scan."}
+                </p>
+              )}
+              {scanRecoveryError && <p>{scanRecoveryError}</p>}
+              {scanOperationStatus?.recovery === "poll" && (
+                <p>The scan operation is still processing.</p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {pendingScanSubmission.state === "accepted" && pendingScanSubmission.scanId ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    try {
+                      clearPendingScanSubmission(
+                        scanSubmissionScope,
+                        pendingScanSubmission.idempotencyKey
+                      )
+                      setPendingScanSubmission(null)
+                      setScanOperationStatus(null)
+                      setForceNewAfterRecovery(false)
+                      setShowCreate(true)
+                    } catch (cause) {
+                      setScanRecoveryUnavailable(true)
+                      setScanRecoveryError(
+                        cause instanceof Error
+                          ? cause.message
+                          : "Could not clear scan recovery data."
+                      )
+                    }
+                  }}
+                >
+                  Start another scan
+                </Button>
+              ) : (
+                <>
+                  {pendingScanSubmission.operationId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={checkingScanOperation}
+                      onClick={() => void checkPendingScanOperation(pendingScanSubmission)}
+                    >
+                      {checkingScanOperation ? "Checking status…" : "Check previous scan"}
+                    </Button>
+                  )}
+                  {scanOperationStatus?.recovery !== "retry_new_key" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setForceNewAfterRecovery(false)
+                        setShowCreate(true)
+                      }}
+                    >
+                      {pendingScanMatchesCurrent ? "Review same request" : "Review current request"}
+                    </Button>
+                  )}
+                  {(!pendingScanMatchesCurrent ||
+                    scanOperationStatus?.recovery === "retry_new_key") && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setForceNewAfterRecovery(true)
+                        setShowCreate(true)
+                      }}
+                    >
+                      Review details for a new scan
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
       {pollStale && (
         <div
           role="status"
@@ -701,7 +1030,7 @@ export function ScansClient({
         handleStartTrial={handleStartTrial}
         startDisabled={startDisabled}
         creating={creating}
-        handleCreateScan={handleCreateScan}
+        handleCreateScan={() => handleCreateScan(forceNewAfterRecovery)}
         showAdvanced={showAdvanced}
         setShowAdvanced={setShowAdvanced}
         baseRef={baseRef}

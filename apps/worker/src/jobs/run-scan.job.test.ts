@@ -52,12 +52,16 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
 })
 
 vi.mock("@lyrashield/db", async () => {
-  // Keep the real stored-plan verifier — the fixtures exercise it directly.
+  // Keep the real stored verifiers — the fixtures exercise them directly.
   const planModule = await vi.importActual<typeof import("@lyrashield/db/src/scan-execution-plan")>(
     "@lyrashield/db/src/scan-execution-plan"
   )
+  const manifestModule = await vi.importActual<
+    typeof import("@lyrashield/db/src/manifest-checksum")
+  >("@lyrashield/db/src/manifest-checksum")
   return {
     verifyStoredScanExecutionPlan: planModule.verifyStoredScanExecutionPlan,
+    verifyStoredManifestChecksum: manifestModule.verifyStoredManifestChecksum,
     resolveAuthenticatedAssessmentAuthorization: vi.fn(),
     LiveAiSafetyError: class LiveAiSafetyError extends Error {
       readonly code: string

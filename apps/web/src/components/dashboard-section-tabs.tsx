@@ -1,5 +1,9 @@
+"use client"
+
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { cn } from "@lyrashield/ui"
+import { withPreservedSearchParams } from "@/lib/finding-list-params"
 
 export interface SectionTab {
   /** Tab identifier, also used as the `tab` query value. */
@@ -25,13 +29,17 @@ export function DashboardSectionTabs({
   tabs,
   activeTab,
   action,
+  preserveSearchParams,
 }: {
   title: string
   description?: string
   tabs: SectionTab[]
   activeTab: string
   action?: React.ReactNode
+  /** Reapply only current scope parameters when a tab's canonical URL is followed. */
+  preserveSearchParams?: string[]
 }) {
+  const router = useRouter()
   return (
     <div className="mb-6 space-y-4 sm:mb-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -56,6 +64,25 @@ export function DashboardSectionTabs({
               <li key={tab.value}>
                 <Link
                   href={tab.href}
+                  onClick={(event) => {
+                    if (
+                      !preserveSearchParams?.length ||
+                      event.defaultPrevented ||
+                      event.button !== 0 ||
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.shiftKey ||
+                      event.altKey
+                    )
+                      return
+                    event.preventDefault()
+                    const href = withPreservedSearchParams(
+                      tab.href,
+                      new URLSearchParams(window.location.search),
+                      preserveSearchParams
+                    )
+                    router.push(href)
+                  }}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "relative inline-flex min-h-11 items-center border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-[border-color,color] duration-(--duration-fast) ease-out",

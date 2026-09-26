@@ -30,7 +30,12 @@ describe("premium assurance-world homepage", () => {
     expect(astroConfig).toContain('inlineStylesheets: "auto"')
     expect(homepage).toContain("<HomeLiteScan />")
     expect(homepage).toContain("<EvidenceWorld manifest={motionManifest} />")
-    expect(homepage.indexOf("<EvidenceWorld")).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
+    expect(homepage.indexOf("<PremiumHero />")).toBeLessThan(homepage.indexOf('id="how-it-works"'))
+    expect(homepage.indexOf('id="how-it-works"')).toBeLessThan(
+      homepage.indexOf("<HeroProductFrame />")
+    )
+    expect(homepage.indexOf("<HeroProductFrame />")).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
+    expect(homepage.indexOf("<HomeLiteScan")).toBeLessThan(homepage.indexOf("<EvidenceWorld"))
     expect(homepage).toContain('renderHash === "local" ? "/media-local"')
     expect(homepage.match(/cinematic-threshold--to-dark/g)).toHaveLength(3)
     expect(homepage.match(/cinematic-threshold--to-light/g)).toHaveLength(3)
@@ -41,7 +46,10 @@ describe("premium assurance-world homepage", () => {
 
   it("uses approved gateway copy and conversion anchors", () => {
     expect(hero).toContain("Release assurance for AI-built apps")
-    expect(hero).toContain("Ship AI-built apps with evidence, not hope.")
+    expect(hero).toContain("Know what your AI-built app is ready to ship.")
+    expect(hero).toContain(
+      "Review an authorized repository, URL or API. See what was checked, what needs attention, and"
+    )
     expect(hero.indexOf("landing_hero&cta=review_app")).toBeLessThan(
       hero.indexOf('href="#free-scan"')
     )
@@ -52,10 +60,10 @@ describe("premium assurance-world homepage", () => {
   it("keeps the hero task-oriented and the artifact example honest", () => {
     // EXP-001: task CTA outranks account creation; lite check is a real
     // secondary action, not a buried text link.
-    expect(hero).toContain("Review my app")
+    expect(hero).toContain("Start a review")
     expect(hero).toContain('data-cta-id="premium-hero-review-app"')
     expect(hero).toContain("premium-hero__secondary")
-    expect(hero).toContain("Try free Lite Check")
+    expect(hero).toContain("Try the free Lite Check")
     expect(hero).not.toContain("Create account")
     // The artifact is a synthetic example — it must never claim a verified or
     // independently-reviewed state.
@@ -64,29 +72,16 @@ describe("premium assurance-world homepage", () => {
     expect(hero).not.toMatch(/Verified finding|independent verification/i)
   })
 
-  it("shows the release workflow as a labeled example strip", () => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
-    const flow = readFileSync(
-      new URL("../components/landing/ReleaseFlowSample.astro", import.meta.url),
-      "utf8"
-    )
-    expect(homepage).toContain("<ReleaseFlowSample />")
-    expect(homepage.indexOf("<ReleaseFlowSample")).toBeLessThan(homepage.indexOf("<ProblemStats"))
-    for (const label of [
-      "Target",
-      "Review",
-      "Finding",
-      "Evidence",
-      "Fix proposal",
-      "Retest",
-      "Release record",
-    ]) {
-      expect(flow).toContain(label)
+  it("shows a three-step review flow in the landing decision path", () => {
+    expect(homepage).toContain('aria-labelledby="workflow-heading"')
+    expect(homepage).toContain("One review, from authorized scope to useful evidence")
+    for (const label of ["Choose scope", "Review evidence", "Decide what is next"]) {
+      expect(homepage).toContain(label)
     }
-    expect(flow).toContain("Example output")
-    expect(flow).toContain("Detected")
-    expect(flow).toContain("Validated")
-    expect(flow).not.toMatch(/independent/i)
+    expect(homepage).toContain(
+      "review a proposed fix, approve it explicitly and run a fresh retest"
+    )
+    expect(homepage).not.toMatch(/independent verification|verified fixes/i)
   })
 
   it("keeps agent setup subordinate to existing homepage conversions", () => {

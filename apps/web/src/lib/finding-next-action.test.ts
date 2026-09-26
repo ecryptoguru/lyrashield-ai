@@ -43,6 +43,19 @@ describe("getFindingNextAction (W3-02)", () => {
     }
   })
 
+  it("packages a completed passing retest for a fixed finding", () => {
+    expect(
+      getFindingNextAction({
+        hasFixProposal: true,
+        status: "FIXED",
+        latestRetestStatus: "passed",
+      })
+    ).toEqual({
+      action: "REPORT",
+      reason: expect.stringContaining("passing retest"),
+    })
+  })
+
   it.each(["pending", "running"])(
     "shows an existing %s retest before proposing another",
     (latestRetestStatus) => {

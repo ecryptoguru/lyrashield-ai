@@ -4,12 +4,9 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
-  ArrowUpRight,
   Bug,
   Crosshair,
   LoaderCircle,
-  Plus,
-  Play,
   ShieldCheck,
   Wrench,
 } from "lucide-react"
@@ -170,13 +167,10 @@ export default async function DashboardPage() {
       ? latestRun
       : null
 
-  const primaryAction = decision.primaryAction
-  const primaryIcon = primaryAction.href.startsWith("/dashboard/targets") ? "plus" : "play"
-
   return (
     <div className="flex flex-col gap-6 lg:gap-8">
       {/* 1 — workspace label and the one primary CTA from the canonical decision */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header>
         <div>
           <p className="text-primary text-xs font-semibold tracking-[0.15em] uppercase">
             {activeWorkspace?.name ?? "Active workspace"}
@@ -187,16 +181,6 @@ export default async function DashboardPage() {
           <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
             Start with the next decision, then use the evidence below when you need detail.
           </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          <Link href={primaryAction.href} className={buttonVariants()}>
-            {primaryIcon === "plus" ? (
-              <Plus className="size-4" aria-hidden="true" />
-            ) : (
-              <Play className="size-4" aria-hidden="true" />
-            )}
-            {primaryAction.label}
-          </Link>
         </div>
       </header>
 
@@ -238,58 +222,28 @@ export default async function DashboardPage() {
           state: readiness.state ?? "INSUFFICIENT_EVIDENCE",
           coverageLabel,
         }}
+        targetScope={`${targetCount} active ${targetCount === 1 ? "target" : "targets"}`}
+        latestAssessment={
+          overview.lastEvaluatedAssessment
+            ? {
+                targetName: overview.lastEvaluatedAssessment.targetName,
+                completedAtLabel: formatDate(overview.lastEvaluatedAssessment.completedAt),
+              }
+            : null
+        }
+        limitations={readiness.conditions}
         latestScore={readiness.state === "READY" ? latestScore : null}
       />
 
       {/* 3 — latest run warning/progress when it needs attention */}
       {latestRunAlert && <LatestRunAlert run={latestRunAlert} />}
 
-      {/* 4 — three compact metrics: blockers, freshness/coverage, activity (W1-05).
-          Score, severity mix, verification counts and trends remain reachable in
-          the secondary analytics sections below. */}
-      <section className="grid gap-4 sm:grid-cols-3" aria-label="Workspace metrics">
-        <MetricCard
-          label="Actionable blockers"
-          value={openIssues.critical + openIssues.high}
-          detail={`${openIssuesBySeverity.CRITICAL ?? 0} critical · ${openIssuesBySeverity.HIGH ?? 0} high · workspace-wide`}
-          icon={Bug}
-        />
-        <MetricCard
-          label="Assessment coverage"
-          value={targetCount === 0 ? "—" : `${targets.assessed}/${targetCount}`}
-          detail={coverageLabel}
-          icon={Crosshair}
-        />
-        <MetricCard
-          label="Current activity"
-          value={
-            overview.activeScan
-              ? "Scan running"
-              : latestRun
-                ? getScanPresentation(latestRun.status, {}).label
-                : "—"
-          }
-          detail={
-            overview.activeScan ? (
-              `${overview.activeScan.targetName ?? "Workspace"} scan in progress`
-            ) : latestRun ? (
-              <>
-                Last run <LocalTime withTime value={latestRun.createdAt} />
-              </>
-            ) : (
-              "No scan activity yet"
-            )
-          }
-          icon={Activity}
-        />
-      </section>
-
-      {/* 5 — recent activity */}
+      {/* Recent scans stay immediately below the evidence summary. */}
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between gap-4 border-b px-5 py-4 sm:px-6">
           <div>
-            <h2 className="font-semibold">Recent activity</h2>
-            <p className="text-muted-foreground mt-1 text-xs">Your most recent scans.</p>
+            <h2 className="font-semibold">Recent scans</h2>
+            <p className="text-muted-foreground mt-1 text-xs">Up to five most recent scans.</p>
           </div>
           <Link
             href="/dashboard/scans"
@@ -336,154 +290,190 @@ export default async function DashboardPage() {
                   ? "Add a target to begin your first scan."
                   : "Run your first scan to see activity here."
               }
-              action={
-                <Link
-                  href={primaryAction.href}
-                  className={buttonVariants({ variant: "secondary", size: "sm" })}
-                >
-                  {primaryIcon === "plus" ? (
-                    <Plus className="size-4" aria-hidden="true" />
-                  ) : (
-                    <Play className="size-4" aria-hidden="true" />
-                  )}
-                  {primaryAction.label}
-                </Link>
-              }
+              action={null}
             />
           </div>
         )}
       </Card>
 
-      {/* 6 — secondary analytics and remediation details (on demand) */}
-      <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
-        <Card className="p-5 sm:p-6">
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div>
-              <h2 className="font-semibold">Risk posture</h2>
-              <p className="text-muted-foreground mt-1 text-xs">
-                {latestScore && readiness.state === "READY"
-                  ? `Score from the ${latestScore.completedAtLabel} review of ${latestScore.targetName}, with recent evaluated snapshots.`
-                  : "No launch-ready verdict yet. Scores appear when every active target's gate is ready."}
-              </p>
-            </div>
-            <Badge
-              variant={
-                latestScore && readiness.state === "READY"
-                  ? latestScore.score >= 80
-                    ? "success"
-                    : "warning"
-                  : "muted"
-              }
-            >
-              {latestScore && readiness.state === "READY"
-                ? assessedIdentityLabels.length > 0
-                  ? `Evaluated · ${assessedIdentityLabels.join(" · ")}`
-                  : "Evaluated"
-                : "Not launch-ready"}
-            </Badge>
-          </div>
-          <div className="grid items-center gap-6 md:grid-cols-[auto_1fr]">
-            <ScoreGauge
-              score={readiness.state === "READY" ? (latestScore?.score ?? null) : null}
-              grade={readiness.state === "READY" ? (latestScore?.grade ?? null) : null}
+      {/* Supporting metrics remain available without competing with the main task. */}
+      <details className="group">
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 border-y py-3 text-sm font-semibold marker:hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none">
+          <span>Supporting metrics and analysis</span>
+          <span className="text-muted-foreground text-xs font-normal">
+            Open for trends and detail
+          </span>
+        </summary>
+        <div className="space-y-6 pt-4">
+          <section className="grid gap-4 sm:grid-cols-3" aria-label="Workspace metrics">
+            <MetricCard
+              label="Actionable blockers"
+              value={openIssues.critical + openIssues.high}
+              detail={`${openIssuesBySeverity.CRITICAL ?? 0} critical · ${openIssuesBySeverity.HIGH ?? 0} high · workspace-wide`}
+              icon={Bug}
             />
-            <ScoreTrend points={trend} />
-          </div>
-        </Card>
+            <MetricCard
+              label="Assessment coverage"
+              value={targetCount === 0 ? "—" : `${targets.assessed}/${targetCount}`}
+              detail={coverageLabel}
+              icon={Crosshair}
+            />
+            <MetricCard
+              label="Current activity"
+              value={
+                overview.activeScan
+                  ? "Scan running"
+                  : latestRun
+                    ? getScanPresentation(latestRun.status, {}).label
+                    : "—"
+              }
+              detail={
+                overview.activeScan ? (
+                  `${overview.activeScan.targetName ?? "Workspace"} scan in progress`
+                ) : latestRun ? (
+                  <>
+                    Last run <LocalTime withTime value={latestRun.createdAt} />
+                  </>
+                ) : (
+                  "No scan activity yet"
+                )
+              }
+              icon={Activity}
+            />
+          </section>
+          <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+            <Card className="p-5 sm:p-6">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">Risk posture</h2>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {latestScore && readiness.state === "READY"
+                      ? `Score from the ${latestScore.completedAtLabel} review of ${latestScore.targetName}, with recent evaluated snapshots.`
+                      : "No launch-ready verdict yet. Scores appear when every active target's gate is ready."}
+                  </p>
+                </div>
+                <Badge
+                  variant={
+                    latestScore && readiness.state === "READY"
+                      ? latestScore.score >= 80
+                        ? "success"
+                        : "warning"
+                      : "muted"
+                  }
+                >
+                  {latestScore && readiness.state === "READY"
+                    ? assessedIdentityLabels.length > 0
+                      ? `Evaluated · ${assessedIdentityLabels.join(" · ")}`
+                      : "Evaluated"
+                    : "Not launch-ready"}
+                </Badge>
+              </div>
+              <div className="grid items-center gap-6 md:grid-cols-[auto_1fr]">
+                <ScoreGauge
+                  score={readiness.state === "READY" ? (latestScore?.score ?? null) : null}
+                  grade={readiness.state === "READY" ? (latestScore?.grade ?? null) : null}
+                />
+                <ScoreTrend points={trend} />
+              </div>
+            </Card>
 
-        <Card className="p-5 sm:p-6">
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div>
-              <h2 className="font-semibold">Retained finding mix</h2>
-              <p className="text-muted-foreground mt-1 text-xs">
-                All retained findings grouped by severity, workspace-wide.
-              </p>
-            </div>
-            <Badge variant="muted">{openIssues.independentlyVerified} independently verified</Badge>
-          </div>
-          <SeverityDonut values={openIssuesBySeverity} />
-        </Card>
-      </section>
+            <Card className="p-5 sm:p-6">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">Retained finding mix</h2>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    All retained findings grouped by severity, workspace-wide.
+                  </p>
+                </div>
+                <Badge variant="muted">
+                  {openIssues.independentlyVerified} independently verified
+                </Badge>
+              </div>
+              <SeverityDonut values={openIssuesBySeverity} />
+            </Card>
+          </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_1.35fr]">
-        <Card className="p-5 sm:p-6">
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-semibold">Remediation flow</h2>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Current finding movement from review through closure.
-              </p>
-            </div>
-            <Wrench className="text-primary size-5" aria-hidden="true" />
-          </div>
-          <RemediationBars
-            rows={[
-              {
-                label: "Open",
-                value: Math.max(
-                  0,
-                  openIssues.total - remediation.inProgress - remediation.riskAccepted
-                ),
-                tone: "warning",
-              },
-              { label: "In remediation", value: remediation.inProgress, tone: "primary" },
-              { label: "Fixed", value: remediation.fixed, tone: "success" },
-              { label: "Risk accepted", value: remediation.riskAccepted },
-            ]}
-          />
-        </Card>
+          <section className="grid gap-4 xl:grid-cols-[1fr_1.35fr]">
+            <Card className="p-5 sm:p-6">
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">Remediation flow</h2>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Current finding movement from review through closure.
+                  </p>
+                </div>
+                <Wrench className="text-primary size-5" aria-hidden="true" />
+              </div>
+              <RemediationBars
+                rows={[
+                  {
+                    label: "Open",
+                    value: Math.max(
+                      0,
+                      openIssues.total - remediation.inProgress - remediation.riskAccepted
+                    ),
+                    tone: "warning",
+                  },
+                  { label: "In remediation", value: remediation.inProgress, tone: "primary" },
+                  { label: "Fixed", value: remediation.fixed, tone: "success" },
+                  { label: "Risk accepted", value: remediation.riskAccepted },
+                ]}
+              />
+            </Card>
 
-        <Card className="p-5 sm:p-6">
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div>
-              <h2 className="font-semibold">Launch verdict</h2>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Derived from retained evidence across every active target.
-              </p>
-            </div>
-            <Link
-              href="/dashboard/launch-readiness"
-              className="text-primary flex min-h-11 items-center gap-1 text-sm font-medium"
-            >
-              Details <ArrowUpRight className="size-4" aria-hidden="true" />
-            </Link>
-          </div>
-          <div
-            className={`border-l-2 p-4 ${
-              readiness.verdict === "GO"
-                ? "border-success bg-success/10"
-                : readiness.verdict === "NO_GO"
-                  ? "border-destructive bg-destructive/10"
-                  : "border-warning bg-warning/10"
-            }`}
-          >
-            <p className="font-semibold">
-              {readiness.verdict === "GO"
-                ? "Ready to launch"
-                : readiness.verdict === "INCONCLUSIVE"
-                  ? "Inconclusive: nothing was checked"
-                  : readiness.verdict === "NOT_EVALUATED"
-                    ? "Needs evidence"
-                    : readiness.verdict === "GO_WITH_CONDITIONS"
-                      ? "Ready with conditions"
-                      : "Needs action"}
-            </p>
-            <ul className="text-muted-foreground mt-2 space-y-1 text-sm">
-              {(readiness.conditions.length > 0
-                ? readiness.conditions
-                : ["Current scan evidence has no unresolved launch blockers."]
-              )
-                .slice(0, 3)
-                .map((condition) => (
-                  <li key={condition}>{condition}</li>
-                ))}
-            </ul>
-            <p className="text-muted-foreground mt-2 text-xs">
-              Absence of findings is not independent verification or a security guarantee.
-            </p>
-          </div>
-        </Card>
-      </section>
+            <Card className="p-5 sm:p-6">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">Launch verdict</h2>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Derived from retained evidence across every active target.
+                  </p>
+                </div>
+                <Link
+                  href="/dashboard/launch-readiness"
+                  className="text-primary text-sm font-medium"
+                >
+                  Details <ArrowRight className="inline size-4" aria-hidden="true" />
+                </Link>
+              </div>
+              <div
+                className={`border-l-2 p-4 ${
+                  readiness.verdict === "GO"
+                    ? "border-success bg-success/10"
+                    : readiness.verdict === "NO_GO"
+                      ? "border-destructive bg-destructive/10"
+                      : "border-warning bg-warning/10"
+                }`}
+              >
+                <p className="font-semibold">
+                  {readiness.verdict === "GO"
+                    ? "Ready to launch"
+                    : readiness.verdict === "INCONCLUSIVE"
+                      ? "Inconclusive: nothing was checked"
+                      : readiness.verdict === "NOT_EVALUATED"
+                        ? "Needs evidence"
+                        : readiness.verdict === "GO_WITH_CONDITIONS"
+                          ? "Ready with conditions"
+                          : "Needs action"}
+                </p>
+                <ul className="text-muted-foreground mt-2 space-y-1 text-sm">
+                  {(readiness.conditions.length > 0
+                    ? readiness.conditions
+                    : ["Current scan evidence has no unresolved launch blockers."]
+                  )
+                    .slice(0, 3)
+                    .map((condition) => (
+                      <li key={condition}>{condition}</li>
+                    ))}
+                </ul>
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Absence of findings is not independent verification or a security guarantee.
+                </p>
+              </div>
+            </Card>
+          </section>
+        </div>
+      </details>
     </div>
   )
 }
@@ -498,14 +488,9 @@ function LatestRunAlert({
   // W1-07: failures present cause, effect and recovery from structured codes.
   const failure =
     !active && (run.userSafeFailure || run.coverageState === "NONE")
-      ? presentOperationFailure(
-          run.userSafeFailure
-            ? run.status === "STOPPED_BUDGET"
-              ? "NO_MINUTES_REMAINING"
-              : run.status
-            : "COVERAGE_INCOMPLETE",
-          { targetName: run.targetName }
-        )
+      ? presentOperationFailure(run.userSafeFailure ? run.status : "COVERAGE_INCOMPLETE", {
+          targetName: run.targetName,
+        })
       : null
   const tone = active
     ? "border-primary/30 bg-primary/5"

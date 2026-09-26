@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   sanitizeProperties,
   EVENT_ALLOWLIST,
@@ -9,7 +9,14 @@ import {
   signupErrorUrl,
   track,
   flushQueuedAnalytics,
+  setAnalyticsPreference,
+  analyticsPermissionAllowsOptionalCollection,
+  clearOptionalTrackingCookiesInBrowser,
 } from "./analytics"
+
+beforeEach(() => {
+  setAnalyticsPreference(null)
+})
 
 describe("sanitizeProperties", () => {
   it("returns only allowed properties for an event", () => {
@@ -56,6 +63,18 @@ describe("sanitizeProperties", () => {
     ).toEqual({ method: "github", source: "landing_hero", cta: "create_account" })
   })
 
+  it("records checkout returns with only provider and browser outcome", () => {
+    expect(EVENT_ALLOWLIST).not.toHaveProperty("checkout_completed")
+    expect(
+      sanitizeProperties("checkout_returned", {
+        provider: "polar",
+        outcome: "success",
+        account_id: "account-private",
+        amount: 42,
+      })
+    ).toEqual({ provider: "polar", outcome: "success" })
+  })
+
   it("has an exhaustive event allowlist", () => {
     const events = Object.keys(EVENT_ALLOWLIST)
     expect(events.length).toBeGreaterThan(0)
@@ -70,9 +89,24 @@ describe("track", () => {
     expect(() => track("landing_view", { utm_source: "x" })).not.toThrow()
   })
 
+  it("keeps optional capture off until a preference is known", () => {
+    const capture = vi.fn()
+    vi.stubGlobal("window", { posthog: { capture } })
+    vi.stubGlobal("navigator", { doNotTrack: null, globalPrivacyControl: false })
+    try {
+      expect(analyticsPermissionAllowsOptionalCollection()).toBe(false)
+      track("results_viewed", { status: "COMPLETED" })
+      flushQueuedAnalytics(capture)
+      expect(capture).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("flushes an allowlisted first event after the SDK loads", () => {
     const previousKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
     process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test"
+    setAnalyticsPreference(true)
     vi.stubGlobal("window", {})
     vi.stubGlobal("navigator", { doNotTrack: null, globalPrivacyControl: false })
     try {
@@ -91,6 +125,7 @@ describe("track", () => {
   it("discards pending events if privacy opt-out appears before SDK load", () => {
     const previousKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
     process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test"
+    setAnalyticsPreference(true)
     vi.stubGlobal("window", {})
     vi.stubGlobal("navigator", { doNotTrack: null, globalPrivacyControl: false })
     try {
@@ -125,15 +160,46 @@ describe("signup attribution", () => {
     }
     vi.stubGlobal("document", documentStub)
     vi.stubGlobal("navigator", { doNotTrack: "1", globalPrivacyControl: false })
-    vi.stubGlobal("window", { location: { protocol: "https:" } })
+    vi.stubGlobal("window", {
+      location: { hostname: "app.lyrashieldai.com", protocol: "https:" },
+    })
     try {
+      setAnalyticsPreference(true)
       rememberAcquisition({ source: "first" })
       expect(cookie).toBe("")
       vi.stubGlobal("navigator", { doNotTrack: "0", globalPrivacyControl: false })
       rememberAcquisition({ source: "first" })
       rememberAcquisition({ source: "second" })
       expect(cookie).toContain("first")
+      expect(cookie).toContain("Domain=.lyrashieldai.com")
       expect(cookie).not.toContain("second")
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+  it("expires every optional tracking cookie in the browser", () => {
+    const written: string[] = []
+    const documentStub = {
+      cookie: "",
+      set cookie(value: string) {
+        written.push(value)
+      },
+    }
+    vi.stubGlobal("document", documentStub)
+    vi.stubGlobal("window", {
+      location: { hostname: "app.lyrashieldai.com", protocol: "https:" },
+    })
+    try {
+      clearOptionalTrackingCookiesInBrowser()
+      expect(written).toHaveLength(8)
+      for (const cookie of ["lyrashield-acq", "ls_ref", "ls_ref_source", "ls_scorecard_visitor"]) {
+        expect(written.some((value) => value.startsWith(`${cookie}=`))).toBe(true)
+        expect(
+          written.some(
+            (value) => value.startsWith(`${cookie}=`) && value.includes("Domain=.lyrashieldai.com")
+          )
+        ).toBe(true)
+      }
     } finally {
       vi.unstubAllGlobals()
     }

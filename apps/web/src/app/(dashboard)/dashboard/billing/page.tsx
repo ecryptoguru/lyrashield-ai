@@ -91,11 +91,17 @@ export default async function BillingPage({
   ])
 
   const plan = billingAccount?.currentPlan ?? "FREE"
+  const effectivePlan = billingAccount?.effectivePlan ?? "FREE"
   const cloudPlan =
     CLOUD_PLAN_MAP[(trialState.isActive ? "TRIAL" : plan) as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = trialState.isActive
   const isLaunchAssurance = plan === "LAUNCH_ASSURANCE"
   const isComplimentary = billingAccount?.provider === "complimentary"
+  const accountHasPaidPlan = Boolean(
+    billingAccount &&
+    (billingAccount.provider === "polar" || billingAccount.provider === "razorpay") &&
+    effectivePlan !== "FREE"
+  )
 
   return (
     <div>
@@ -118,6 +124,11 @@ export default async function BillingPage({
           provider={checkoutProvider}
           plan={plan}
           trialActive={isTrial}
+          planName={
+            CLOUD_PLAN_MAP[effectivePlan as keyof typeof CLOUD_PLAN_MAP]?.name ??
+            getWorkspacePlanLabel(effectivePlan)
+          }
+          accountHasPaidPlan={accountHasPaidPlan}
         />
         {canManageBilling && !purchasesAvailable && (
           <div
@@ -164,6 +175,16 @@ export default async function BillingPage({
                   billingRegion={checkoutRegion}
                 />
               )}
+              <div className="rounded-md border p-3 text-sm">
+                <p className="font-medium">
+                  Your account balance: {balance.totalRemaining} agent-minutes available
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  {isTrial
+                    ? `Trial active · ${trialState.daysLeft} days and ${trialState.minutesLeft} minutes remaining.`
+                    : "Minutes, plan access and billing status belong to your account."}
+                </p>
+              </div>
             </div>
 
             {billingAccount?.currentPeriodEnd && (

@@ -65,11 +65,10 @@ const launchReadinessResponseSchema = launchReadinessReportSchema.extend({
 })
 
 const VERDICT_CONFIG = {
-  // A completed run that evaluated nothing. Deliberately not styled as a pass:
-  // zero findings from zero coverage is the absence of evidence.
+  // Insufficient evidence remains neutral for both empty and partial coverage.
   INCONCLUSIVE: {
     icon: ShieldAlert,
-    label: "Inconclusive — Nothing Checked",
+    label: "Insufficient current evidence",
     color: "text-amber-600 dark:text-amber-400",
     bg: "bg-amber-500/10",
     border: "border-amber-500/20",
@@ -93,7 +92,7 @@ const VERDICT_CONFIG = {
   },
   GO_WITH_CONDITIONS: {
     icon: ShieldAlert,
-    label: "Launch with Conditions",
+    label: "Review Conditions for This Release",
     color: "text-amber-600 dark:text-amber-400",
     bg: "bg-amber-500/10",
     border: "border-amber-500/20",
@@ -101,7 +100,7 @@ const VERDICT_CONFIG = {
   },
   NO_GO: {
     icon: ShieldX,
-    label: "Do Not Launch",
+    label: "Not Ready for This Release",
     color: "text-destructive",
     bg: "bg-destructive/10",
     border: "border-destructive/20",
@@ -487,7 +486,7 @@ export function LaunchReadinessClient({
                   href={`/dashboard/scans?target=${encodeURIComponent(releaseCheck.targetId)}`}
                   className="text-accent font-medium underline underline-offset-4"
                 >
-                  Inspect the in-progress assessment
+                  Review the newer assessment
                 </Link>
               )}
               {(releaseCheck.match !== "match" || !releaseCheck.applicable) && (
@@ -529,7 +528,7 @@ export function LaunchReadinessClient({
               </Badge>
               <Badge variant="muted">{report.totalFindings} total findings</Badge>
               <Badge variant="muted">{report.blockingFindings} blocking</Badge>
-              <Badge variant="muted">{report.verifiedFindings} verified</Badge>
+              <Badge variant="muted">{report.verifiedFindings} independently verified</Badge>
             </div>
           </div>
         </div>

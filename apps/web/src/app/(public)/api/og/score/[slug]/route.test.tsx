@@ -6,9 +6,14 @@ vi.mock("next/og", () => ({
   ImageResponse: class extends Response {
     width: number
     height: number
+    element: unknown
 
-    constructor(_: unknown, options: { width: number; height: number; headers: HeadersInit }) {
+    constructor(
+      element: unknown,
+      options: { width: number; height: number; headers: HeadersInit }
+    ) {
       super("png", { headers: options.headers })
+      this.element = element
       this.width = options.width
       this.height = options.height
     }
@@ -56,6 +61,20 @@ describe("scorecard OG route", () => {
     }
   )
 
+  it("does not say zero findings were fixed", async () => {
+    getPublicScorecard.mockResolvedValue({
+      ...scorecard,
+      payload: { ...scorecard.payload, resolvedFindings: 0 },
+    })
+    const response = (await GET(
+      new Request("http://localhost/api/og/score/slug?variant=fixes&format=square"),
+      { params: Promise.resolve({ slug: "slug" }) }
+    )) as Response & { element: unknown }
+    const text = collectText(response.element).join(" ")
+    expect(text).toContain("No retest-confirmed fixes reported")
+    expect(text).not.toContain("0 findings fixed")
+  })
+
   it("404s revoked, expired, or unknown scorecards", async () => {
     getPublicScorecard.mockResolvedValue(null)
     const response = await GET(new Request("http://localhost/api/og/score/missing"), {
@@ -64,3 +83,12 @@ describe("scorecard OG route", () => {
     expect(response.status).toBe(404)
   })
 })
+
+function collectText(value: unknown): string[] {
+  if (typeof value === "string" || typeof value === "number") return [String(value)]
+  if (Array.isArray(value)) return value.flatMap(collectText)
+  if (value && typeof value === "object" && "props" in value) {
+    return collectText((value as { props?: { children?: unknown } }).props?.children)
+  }
+  return []
+}
