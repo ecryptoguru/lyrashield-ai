@@ -88,8 +88,8 @@ minimumReleaseAgeExclude:
   # Grandfathered lockfile entries resolved before the corrected gate —
   # already pinned and integrity-verified in pnpm-lock.yaml. Remove once the
   # entry ages past the cutoff and the lockfile re-resolves.
-  - "entities@8.1.0"
-  - "hono@4.13.7"
+  - entities@8.1.0
+  - hono@4.13.7
   - "@turbo/darwin-64@2.10.3"
   - "@turbo/darwin-arm64@2.10.3"
   - "@turbo/linux-64@2.10.3"
@@ -97,3 +97,7 @@ minimumReleaseAgeExclude:
   - "@turbo/windows-64@2.10.3"
   - "@turbo/windows-arm64@2.10.3"
   - turbo@2.10.3
+  # Released 2026-09-23, inside the 7-day gate; a reviewed patch (bounded
+  # request bodies / JSON-RPC batch cap + auth resource-URI fix). Remove once
+  # it ages past the cutoff.
+  - "@modelcontextprotocol/sdk@1.30.1"

@@ -53,6 +53,7 @@ apps/agent/
 tmp-*-test/
 lyrashield_runs/
 .lyrashield-worker-tmp/
+packages/mcp/.packed-stdio-*/
 
 # Prisma generated (tracked via migrations)
 packages/db/src/generated/
