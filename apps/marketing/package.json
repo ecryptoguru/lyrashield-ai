@@ -54,13 +54,13 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "@cloudflare/workers-types": "^5.20260823.1",
+    "@cloudflare/workers-types": "^5.20260923.1",
     "@tailwindcss/typography": "^0.5.20",
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.13.6",
     "tsx": "^4.23.12",
     "typescript": "^6.0.0",
-    "webmcp-types": "^0.1.5",
-    "wrangler": "^4.125.0"
+    "webmcp-types": "^0.1.9",
+    "wrangler": "^4.136.3"
   },
   "engines": {
     "node": ">=24.0.0"
