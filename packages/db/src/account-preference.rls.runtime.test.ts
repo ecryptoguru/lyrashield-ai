@@ -5,6 +5,9 @@ import { PrismaClient } from "./generated/prisma"
 
 const databaseUrl = process.env.DATABASE_URL
 const runtimeUrl = process.env.RLS_RUNTIME_DATABASE_URL
+const shouldRunRuntimeRlsTest = Boolean(
+  databaseUrl && runtimeUrl && process.env.ACCOUNT_PREFERENCE_RLS_RUNTIME_TEST === "1"
+)
 const owner = databaseUrl
   ? new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) })
   : undefined
@@ -15,13 +18,13 @@ const suffix = randomUUID().replace(/-/g, "")
 const accountA = `analytics-pref-${suffix}-a`
 const accountB = `analytics-pref-${suffix}-b`
 
-if (!databaseUrl || !runtimeUrl) {
+if (!shouldRunRuntimeRlsTest) {
   console.warn(
-    "[account-preference.rls.runtime] SKIPPED: requires DATABASE_URL and RLS_RUNTIME_DATABASE_URL"
+    "[account-preference.rls.runtime] SKIPPED: requires ACCOUNT_PREFERENCE_RLS_RUNTIME_TEST=1 and disposable DATABASE_URL/RLS_RUNTIME_DATABASE_URL"
   )
 }
 
-describe.skipIf(!databaseUrl || !runtimeUrl)("AccountPreference forced RLS boundary", () => {
+describe.skipIf(!shouldRunRuntimeRlsTest)("AccountPreference forced RLS boundary", () => {
   beforeAll(async () => {
     if (!owner || !runtime || !databaseUrl || !runtimeUrl) return
     const ownerDatabase = new URL(databaseUrl)

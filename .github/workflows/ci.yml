@@ -564,7 +564,7 @@ jobs:
           assert_named_tests_passed "$RUNNER_TEMP/manifest-checksum-runtime.json" \
             'round-trips reordered JSONB, detects tampering, and leaves legacy hashes unavailable'
 
-          RLS_RUNTIME_DATABASE_URL="$team_runtime_database_url" DATABASE_URL="$team_owner_database_url" \
+          ACCOUNT_PREFERENCE_RLS_RUNTIME_TEST=1 RLS_RUNTIME_DATABASE_URL="$team_runtime_database_url" DATABASE_URL="$team_owner_database_url" \
             pnpm exec vitest run packages/db/src/account-preference.rls.runtime.test.ts \
             --reporter=json --outputFile="$RUNNER_TEMP/account-preference-rls-runtime.json"
           assert_named_tests_passed "$RUNNER_TEMP/account-preference-rls-runtime.json" \
