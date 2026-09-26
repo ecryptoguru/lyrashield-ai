@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
-import { createWebMcpReceiptStore, redactToolInputs } from "./receipts"
+import {
+  createWebMcpReceiptStore,
+  redactToolInputs,
+  safeDashboardHref,
+  sanitizeReceiptReferences,
+} from "./receipts"
 
 describe("WebMCP receipt store", () => {
   it("returns the same snapshot until the store changes", () => {
@@ -72,6 +77,87 @@ describe("WebMCP receipt store", () => {
   it("returns null when updating an unknown receipt", () => {
     const store = createWebMcpReceiptStore()
     expect(store.update("missing", { status: "completed" })).toBeNull()
+  })
+
+  it("carries references and a recovery href on the receipt", () => {
+    const store = createWebMcpReceiptStore()
+    const receipt = store.add({
+      toolName: "request_security_scan",
+      classification: "mutation-durable",
+      status: "running",
+      dataClass: "workspace-summary",
+      untrustedContent: false,
+      uiChanged: false,
+      durableMutation: true,
+      humanConfirmationRequired: false,
+      summary: "started",
+    })
+    store.update(receipt.id, {
+      references: { requestId: "req-1", scanId: "scan-1" },
+      href: "/dashboard/scans/scan-1",
+    })
+    const stored = store.getSnapshot().receipts[0]
+    expect(stored?.references).toEqual({ requestId: "req-1", scanId: "scan-1" })
+    expect(stored?.href).toBe("/dashboard/scans/scan-1")
+  })
+})
+
+describe("safeDashboardHref", () => {
+  it("accepts relative dashboard paths", () => {
+    expect(safeDashboardHref("/dashboard/scans/scan-1")).toBe("/dashboard/scans/scan-1")
+    expect(safeDashboardHref("/dashboard/reports")).toBe("/dashboard/reports")
+    expect(safeDashboardHref("  /dashboard/scans  ")).toBe("/dashboard/scans")
+  })
+
+  it("rejects external URLs, query secrets, evidence and storage URIs", () => {
+    expect(safeDashboardHref("https://app.example.com/dashboard/scans/x")).toBeUndefined()
+    expect(safeDashboardHref("/dashboard/scans/x?token=abc")).toBeUndefined()
+    expect(safeDashboardHref("/reports/shared/r1?token=secret")).toBeUndefined()
+    expect(safeDashboardHref("encrypted://evidence/1")).toBeUndefined()
+    expect(safeDashboardHref("s3://bucket/key")).toBeUndefined()
+    expect(safeDashboardHref("//evil.example.com/dashboard")).toBeUndefined()
+    expect(safeDashboardHref("/dashboard/../admin")).toBeUndefined()
+    expect(safeDashboardHref("javascript:alert(1)")).toBeUndefined()
+    expect(safeDashboardHref("/dashboard/scans/x#frag")).toBeUndefined()
+    expect(safeDashboardHref(42)).toBeUndefined()
+    expect(safeDashboardHref(null)).toBeUndefined()
+  })
+})
+
+describe("sanitizeReceiptReferences", () => {
+  it("keeps short string ids and drops sensitive keys", () => {
+    const refs = sanitizeReceiptReferences({
+      scanId: "scan-1",
+      operationId: "op-9",
+      requestId: "req-2",
+      workspaceId: "ws-secret",
+      userId: "user-1",
+      token: "t",
+      nested: { deep: true },
+      count: 3,
+      empty: "",
+    })
+    expect(refs).toEqual({ scanId: "scan-1", operationId: "op-9", requestId: "req-2" })
+  })
+
+  it("drops URI-shaped values — references are identifiers, not locators", () => {
+    const refs = sanitizeReceiptReferences({
+      scanId: "scan-1",
+      evidenceUri: "encrypted://evidence/1",
+      link: "https://signed.example/x?token=abc",
+    })
+    expect(refs).toEqual({ scanId: "scan-1" })
+  })
+
+  it("returns undefined for non-objects or empty results", () => {
+    expect(sanitizeReceiptReferences("scan-1")).toBeUndefined()
+    expect(sanitizeReceiptReferences(null)).toBeUndefined()
+    expect(sanitizeReceiptReferences({ workspaceId: "ws" })).toBeUndefined()
+  })
+
+  it("truncates oversized values", () => {
+    const refs = sanitizeReceiptReferences({ scanId: "s".repeat(500) })
+    expect(refs?.scanId.length).toBeLessThanOrEqual(201)
   })
 })
 

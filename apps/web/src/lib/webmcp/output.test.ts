@@ -7,6 +7,7 @@ import {
   enforceToolDescription,
   enforceToolName,
   enforceToolTitle,
+  redactEmbeddedUrls,
   wrapToolError,
   wrapToolOutput,
 } from "./output"
@@ -80,6 +81,17 @@ describe("WebMCP output budgets", () => {
     const err = wrapToolError("a".repeat(2_000))
     expect(err.ok).toBe(false)
     expect(JSON.stringify(err).length).toBeLessThanOrEqual(WEBMCP_BUDGETS.output)
+  })
+
+  it("redacts embedded URLs from echoed engine text", () => {
+    expect(redactEmbeddedUrls("Found evidence at s3://bucket/key for review")).toBe(
+      "Found evidence at [URL removed] for review"
+    )
+    expect(
+      redactEmbeddedUrls("See https://signed.example/x?token=sekret and encrypted://ev/1")
+    ).toBe("See [URL removed] and [URL removed]")
+    expect(redactEmbeddedUrls("Plain stage label")).toBe("Plain stage label")
+    expect(redactEmbeddedUrls("x".repeat(200), 100).length).toBeLessThanOrEqual(101)
   })
 
   it("builds an object schema with bounded parameter descriptions", () => {
