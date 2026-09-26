@@ -39,7 +39,7 @@ decision instead, add this to `.claude/settings.json` or `.github/copilot/settin
 
 Neither marketplace path inlines a credential. Their remote MCP connection completes hosted OAuth
 inside the client. The Kiro stdio adapter is the path that reads
-`~/.lyrashield/credentials.json` after `npx -y lyrashield@0.2.11 login --oauth`.
+`~/.lyrashield/credentials.json` after `npx -y lyrashield@0.2.12 login --oauth`.
 
 For local stdio clients (Kiro, Gemini CLI, Zed and Codebuff), use Node.js 24 and run the pinned
 CLI login command above before starting the client. Select one workspace in the browser. First
