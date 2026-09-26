@@ -113,6 +113,7 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     expect(tools.map((t) => t.name)).toContain("lyrashield_get_scan_eligibility")
     expect(tools.map((t) => t.name)).toContain("lyrashield_upload_scan_attachment")
     expect(tools.map((t) => t.name)).toContain("lyrashield_request_fix_pr")
+
   })
 
   it("runs a read-only tool", async () => {

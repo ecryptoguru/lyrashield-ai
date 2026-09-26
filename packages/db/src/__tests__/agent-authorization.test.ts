@@ -17,6 +17,7 @@ describe("WP-02 Agent Authorization and 14-tool Catalog", () => {
       "lyrashield_upload_scan_attachment",
       "lyrashield_delete_scan_attachment",
       "lyrashield_request_fix_pr",
+
     ]
 
     for (const tool of mutatingTools) {
@@ -386,6 +387,7 @@ describe("WP-02 Agent Authorization and 14-tool Catalog", () => {
       }).authorized
     ).toBe(true)
   })
+
 
   it("fails closed for empty mutation grants and at the exact expiry boundary", () => {
     const connection = {

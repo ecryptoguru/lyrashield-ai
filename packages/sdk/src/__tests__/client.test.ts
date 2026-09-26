@@ -515,6 +515,7 @@ describe("LyraShieldClient", () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
+
   it("retries on HTTP 401 once if getAccessToken provides a refreshed token", async () => {
     let callCount = 0
     const getAccessToken = vi.fn().mockImplementation(async () => {

@@ -20,6 +20,7 @@ vi.mock("@lyrashield/db", () => ({
     lyrashield_upload_scan_attachment: { canonicalOperation: "scan_attachment.upload" },
     lyrashield_delete_scan_attachment: { canonicalOperation: "scan_attachment.delete" },
     lyrashield_request_fix_pr: { canonicalOperation: "fix_pr.create" },
+
   },
   createApproval: (...args: unknown[]) => createApprovalMock(...args),
   findPendingApprovalByHash: (...args: unknown[]) => findPendingApprovalByHashMock(...args),
@@ -73,6 +74,7 @@ vi.mock("@lyrashield/db", () => ({
       ) {
         return { authorized: true, canonicalOperation: "fix_pr.create" }
       }
+
       return { authorized: false, code: "OPERATION_NOT_GRANTED", reason: "Operation not granted" }
     }),
   prisma: { finding: { findFirst: vi.fn() }, scan: { findFirst: vi.fn() } },
@@ -81,6 +83,7 @@ vi.mock("@lyrashield/db", () => ({
       fn({
         finding: { findFirst: vi.fn().mockResolvedValue({ targetId: "target-1" }) },
         fixProposal: { findFirst: vi.fn().mockResolvedValue({ findingId: "finding-1" }) },
+
         scan: {
           findFirst: vi.fn().mockResolvedValue({ targetId: "target-1", mode: "STANDARD" }),
         },

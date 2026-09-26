@@ -148,6 +148,7 @@ export class LyraShieldClient {
       })
     }
 
+
     const url = this.buildUrl(path)
     const isIdempotent = IDEMPOTENT_METHODS.has(method.toUpperCase())
     const body =

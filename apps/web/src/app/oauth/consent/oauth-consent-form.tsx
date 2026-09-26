@@ -151,6 +151,7 @@ export function OAuthConsentForm({
           <p className="text-muted-foreground mt-2 text-sm leading-6">
             {canAutomate
               ? "Connecting authorizes this integration to run scans and retests, cancel running scans, save fix proposals, create reports, upload and delete scan attachments, and open fix pull requests for all current and future targets in this workspace. Scans and retests can consume your included usage and incur charges under your workspace plan."
+
               : "This integration requested read access. It can inspect workspace evidence but cannot make changes."}
           </p>
           <p className="text-muted-foreground mt-2 text-sm leading-6">
