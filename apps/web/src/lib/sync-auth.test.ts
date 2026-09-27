@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { hasSyncWriteAccess } from "./sync-auth"
+import { hasSyncFindingWriteRole, hasSyncWriteAccess } from "./sync-auth"
 
 const baseSession = {
   userId: "user-1",
@@ -38,5 +38,25 @@ describe("hasSyncWriteAccess", () => {
         "ws-1"
       )
     ).toBe(false)
+  })
+})
+
+describe("hasSyncFindingWriteRole", () => {
+  it.each(["OWNER", "ADMIN", "SECURITY_ADMIN", "APPSEC_MANAGER"] as const)(
+    "allows %s to sync findings",
+    (role) => {
+      expect(hasSyncFindingWriteRole(role)).toBe(true)
+    }
+  )
+
+  it.each([
+    "DEVELOPER",
+    "MEMBER",
+    "EXTERNAL_PENTESTER",
+    "AUDITOR",
+    "BILLING_ADMIN",
+    "VIEWER",
+  ] as const)("denies %s from syncing findings", (role) => {
+    expect(hasSyncFindingWriteRole(role)).toBe(false)
   })
 })
