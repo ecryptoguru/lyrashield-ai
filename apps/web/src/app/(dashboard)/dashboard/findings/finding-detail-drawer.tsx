@@ -639,7 +639,7 @@ export function FindingDetailDrawer({
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full max-w-lg overflow-y-auto p-6 sm:max-w-lg">
+      <SheetContent className="w-full max-w-lg overflow-y-auto p-4 sm:max-w-lg sm:p-6">
         <SheetHeader className="mb-4 p-0 pr-8 text-left">
           {/* Breadcrumb inside drawer */}
           <nav aria-label="Breadcrumb" className="mb-1">
@@ -752,14 +752,23 @@ export function FindingDetailDrawer({
                 Tab 3: History     (retests, fix proposals, verification receipts)
             ----------------------------------------------------------------- */}
             <Tabs value={detailTab} onValueChange={setDetailTab} className="w-full">
-              <TabsList className="w-full">
-                <TabsTrigger value="what-to-do" className="flex-1">
+              <TabsList className="h-auto min-h-9 w-full">
+                <TabsTrigger
+                  value="what-to-do"
+                  className="h-auto min-h-9 min-w-0 flex-1 whitespace-normal px-1 leading-tight"
+                >
                   What to do
                 </TabsTrigger>
-                <TabsTrigger value="technical" className="flex-1">
+                <TabsTrigger
+                  value="technical"
+                  className="h-auto min-h-9 min-w-0 flex-1 whitespace-normal px-1 leading-tight"
+                >
                   Technical
                 </TabsTrigger>
-                <TabsTrigger value="history" className="flex-1">
+                <TabsTrigger
+                  value="history"
+                  className="h-auto min-h-9 min-w-0 flex-1 whitespace-normal px-1 leading-tight"
+                >
                   History
                 </TabsTrigger>
               </TabsList>
@@ -769,7 +778,7 @@ export function FindingDetailDrawer({
               ============================================================ */}
               <TabsContent value="what-to-do" className="mt-4 space-y-4">
                 {/* Audience mode selector */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
                   <label
                     htmlFor="audience-mode"
                     className="text-muted-foreground shrink-0 text-xs font-medium"
@@ -780,7 +789,7 @@ export function FindingDetailDrawer({
                     id="audience-mode"
                     value={audienceMode}
                     onChange={(e) => setAudienceMode(e.target.value as AudienceMode)}
-                    className="bg-background focus:ring-ring rounded-md border px-2 py-1 text-xs focus:ring-2 focus:outline-none"
+                    className="bg-background focus:ring-ring w-full min-w-0 rounded-md border px-2 py-1 text-xs focus:ring-2 focus:outline-none sm:w-auto"
                     aria-label="Select audience mode for plain-language explanation"
                   >
                     {(Object.entries(AUDIENCE_LABELS) as [AudienceMode, string][]).map(
