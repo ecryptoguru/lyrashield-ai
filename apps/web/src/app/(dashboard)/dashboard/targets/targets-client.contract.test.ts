@@ -6,7 +6,6 @@ describe("manual repository target form", () => {
   // contract here. The screen is split across a coordinator (targets-client.tsx)
   // plus form/table views, so contract greps read all of them.
   const source = ["targets-client.tsx", "targets-form.tsx", "targets-table.tsx"]
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     .map((file) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8"))
     .join("\n")
 
@@ -33,7 +32,6 @@ describe("manual repository target form", () => {
 })
 
 describe("targets table responsive contract (UF-28)", () => {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const table = readFileSync(new URL("./targets-table.tsx", import.meta.url), "utf8")
 
   it("only applies the 640px floor once the columns it protects are shown", () => {

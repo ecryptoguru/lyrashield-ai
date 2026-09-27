@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest"
 describe("CLI SARIF import route", () => {
   it("exports the handler through the v1 API route", () => {
     // Fixed repository paths; no caller input reaches the filesystem.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const route = readFileSync(
       new URL(
         "../../../../apps/web/src/app/api/v1/scans/[id]/artifacts/sarif/route.ts",
@@ -14,7 +13,6 @@ describe("CLI SARIF import route", () => {
       ),
       "utf8"
     )
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const handler = readFileSync(
       new URL(
         "../../../../apps/web/src/app/api/scans/[id]/artifacts/sarif/route.ts",

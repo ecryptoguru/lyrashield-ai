@@ -9,7 +9,6 @@ import { describe, expect, it } from "vitest"
  * exact wrapper source the build emits — not a copy.
  */
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const script = readFileSync(
   new URL("../../scripts/apply-worker-scheme-guard.mjs", import.meta.url),
   "utf8"

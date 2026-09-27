@@ -11,7 +11,7 @@ declare const __MARKETING_GOOGLE_VERIFICATION__: string
 declare const __MARKETING_BING_VERIFICATION__: string
 
 interface Window {
-  posthog?: import("posthog-js").PostHog
+  posthog?: typeof import("posthog-js").default
 }
 
 interface ImportMetaEnv {

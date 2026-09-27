@@ -4,7 +4,6 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import type { AgentEntry } from "@lyrashield/agent-registry"
 
-/* eslint-disable security/detect-non-literal-fs-filename */
 
 // Hoist the mock so vi.mock can reference it. Most tests need the real plugin
 // dir; the copy-failure test overrides it to a non-existent path so `cp`

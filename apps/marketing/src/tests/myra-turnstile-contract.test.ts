@@ -18,7 +18,6 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 const read = (path: string) =>
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   readFileSync(new URL(path, import.meta.url), "utf8")
 const stripComments = (source: string) =>
   source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1")

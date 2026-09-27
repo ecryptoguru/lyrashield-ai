@@ -98,16 +98,13 @@ describe("stageScanAttachments", () => {
 
     // Staged bytes are identical and read-only.
     const stagedPath = join(staged!.dir, staged!.entries[0]!.stagedAs)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const stat = await lstat(stagedPath)
     expect(stat.isFile()).toBe(true)
     expect(stat.isSymbolicLink()).toBe(false)
     expect(stat.mode & 0o222).toBe(0)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     expect((await readFile(stagedPath)).toString("utf8")).toBe(content)
 
     // The manifest binds ids to staged files and checksums.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const manifest = JSON.parse(await readFile(staged!.manifestPath, "utf8"))
     expect(manifest.version).toBe(SCAN_ATTACHMENT_MANIFEST_VERSION)
     expect(manifest.scanId).toBe(scanId)
@@ -164,7 +161,6 @@ describe("stageScanAttachments", () => {
     const names = staged!.entries.map((e) => e.stagedAs)
     expect(new Set(names).size).toBe(2)
     for (const entry of staged!.entries) {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       expect((await readFile(join(staged!.dir, entry.stagedAs))).toString()).toBe(
         entry.id === "att-a" ? a : b
       )
@@ -185,12 +181,10 @@ describe("stageScanAttachments", () => {
     await rm(join(ENGINE_WORK_ROOT, scanId), { recursive: true, force: true })
     const outside = await mkdtemp(join(tmpdir(), "att-target-"))
     const outsideFile = join(outside, "evil.txt")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(outsideFile, "existing")
     const { mkdir } = await import("node:fs/promises")
     await mkdir(dir, { recursive: true })
     const stagedAs = "att-1-notes.txt"
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await symlink(outsideFile, join(dir, stagedAs))
 
     // O_NOFOLLOW rejects the planted symlink instead of writing through it.
@@ -198,7 +192,6 @@ describe("stageScanAttachments", () => {
       stageScanAttachments({ scanId, workspaceId: "ws-1", attachmentIds: ["att-1"] })
     ).rejects.toThrow()
     // The symlinked target must be untouched.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     expect((await readFile(outsideFile)).toString()).toBe("existing")
     await rm(outside, { recursive: true, force: true })
   })
@@ -267,7 +260,6 @@ describe("attachments are untrusted input, never control", () => {
     // The staged file itself retains the hostile bytes verbatim — it is inert
     // data on disk, not a control surface.
     const stagedPath = join(staged!.dir, staged!.entries[0]!.stagedAs)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     expect((await readFile(stagedPath)).toString("utf8")).toBe(hostile)
   })
 })

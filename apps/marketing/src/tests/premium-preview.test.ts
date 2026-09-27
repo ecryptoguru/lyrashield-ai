@@ -2,24 +2,19 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { createMotionMediaManifest } from "../lib/motion-manifest"
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const homepage = readFileSync(new URL("../pages/index.astro", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const hero = readFileSync(
   new URL("../components/landing/PremiumHero.astro", import.meta.url),
   "utf8"
 )
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const world = readFileSync(
   new URL("../components/landing/EvidenceWorld.astro", import.meta.url),
   "utf8"
 )
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const worldModule = readFileSync(
   new URL("../components/landing/evidence-world.ts", import.meta.url),
   "utf8"
 )
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const astroConfig = readFileSync(new URL("../../astro.config.mjs", import.meta.url), "utf8")
 
 describe("premium assurance-world homepage", () => {

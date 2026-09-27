@@ -1,9 +1,7 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const dashboardLayout = readFileSync(new URL("./layout.tsx", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const scorecardPage = readFileSync(
   new URL("../(public)/score/[slug]/page.tsx", import.meta.url),
   "utf8"

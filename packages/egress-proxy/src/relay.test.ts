@@ -191,9 +191,7 @@ describe("scoped relay", () => {
       ],
       { stdio: "ignore" }
     )
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- generated private test directory
     const tlsKey = readFileSync(keyPath, "utf8")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- generated private test directory
     const tlsCert = readFileSync(certPath, "utf8")
     httpsUpstream = createHttpsServer({ key: tlsKey, cert: tlsCert }, (_req, res) =>
       res.end("secure-target")

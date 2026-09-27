@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename -- checked-in fixture paths only. */
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, it, expect } from "vitest"

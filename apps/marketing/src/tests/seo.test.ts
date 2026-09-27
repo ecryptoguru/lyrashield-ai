@@ -5,7 +5,6 @@ import { tools } from "../lib/tools"
 import { allRoutes } from "../../scripts/redirects-lib.mjs"
 
 function source(path: string): string {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   return readFileSync(new URL(path, import.meta.url), "utf8")
 }
 
@@ -28,7 +27,6 @@ function parseRedirectRules(redirectsFile: string): RedirectRule[] {
 
 describe("marketing SEO metadata", () => {
   it("does not publish or link the retired sample report", () => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     expect(existsSync(new URL("../pages/sample-report.astro", import.meta.url))).toBe(false)
 
     const publicNavigation = [

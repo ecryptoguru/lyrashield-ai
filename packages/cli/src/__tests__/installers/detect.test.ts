@@ -16,7 +16,6 @@ describe("agent plugin detection", () => {
     const root = await mkdtemp(path.join(tmpdir(), "lyrashield-plugin-detect-"))
     tempDirs.push(root)
     const pluginPath = path.join(root, "lyrashield")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- isolated test path
     await mkdir(pluginPath)
     const agent: AgentEntry = {
       id: "test-agent-plugin",

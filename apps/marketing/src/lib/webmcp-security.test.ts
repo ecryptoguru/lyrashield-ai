@@ -19,7 +19,6 @@ import {
 describe("public WebMCP Security Lab", () => {
   it("documents the real GitHub Action input", () => {
     // Test-only path is fixed relative to this module.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const source = readFileSync(
       new URL("../components/tools/WebMcpSecurityLab.astro", import.meta.url),
       "utf8"
@@ -32,7 +31,6 @@ describe("public WebMCP Security Lab", () => {
 
   it("keeps a keyboard-focused section tab clear of the sticky header", () => {
     // Test-only path is fixed relative to this module.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const source = readFileSync(
       new URL("../components/tools/WebMcpSecurityLab.astro", import.meta.url),
       "utf8"
@@ -92,7 +90,6 @@ describe("public WebMCP Security Lab", () => {
     expect(inventory.definitions[0]?.inputSchema.type).toBe(payload)
 
     // Test-only path is fixed relative to this module.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const component = readFileSync(
       new URL("../components/tools/WebMcpSecurityLab.astro", import.meta.url),
       "utf8"
@@ -103,7 +100,6 @@ describe("public WebMCP Security Lab", () => {
 
   it("gates Apply on edits and Undo on an applied rewrite while retaining Rerun", () => {
     // Test-only path is fixed relative to this module.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const component = readFileSync(
       new URL("../components/tools/WebMcpSecurityLab.astro", import.meta.url),
       "utf8"
@@ -272,7 +268,6 @@ describe("public WebMCP Security Lab", () => {
     ).rejects.toThrow("5 MiB total")
 
     // Test-only path is fixed relative to this module.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const component = readFileSync(
       new URL("../components/tools/WebMcpSecurityLab.astro", import.meta.url),
       "utf8"
@@ -286,7 +281,6 @@ describe("public WebMCP Security Lab", () => {
 
   it("uses the native registration option shape from the project spec", () => {
     // Test-only path is fixed relative to this module.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const page = readFileSync(new URL("../pages/webmcp.astro", import.meta.url), "utf8")
     expect(page).toContain("{ signal: controller.signal }")
     expect(page).not.toContain("{ signal: controller.signal, exposedTo:")

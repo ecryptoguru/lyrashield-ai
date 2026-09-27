@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
 //
 // Drift guard: root `action.yml` embeds bash (grep -E) mirrors of the
 // risky-pattern detector rules whose source of truth is

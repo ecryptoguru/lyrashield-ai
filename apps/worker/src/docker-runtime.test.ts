@@ -3,73 +3,61 @@ import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const dockerfile = readFileSync(
   fileURLToPath(new URL("../../../Dockerfile", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const imageVerifier = readFileSync(
   fileURLToPath(new URL("../scripts/verify-worker-image.sh", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const dockerIgnore = readFileSync(
   fileURLToPath(new URL("../../../.dockerignore", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const deployWorkflow = readFileSync(
   fileURLToPath(new URL("../../../.github/workflows/deploy-azure.yml", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const ciWorkflow = readFileSync(
   fileURLToPath(new URL("../../../.github/workflows/ci.yml", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const workerRunner = readFileSync(
   fileURLToPath(new URL("../../../ops/worker/run-worker.sh", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const workerEnv = readFileSync(
   fileURLToPath(new URL("../../../ops/worker/worker-env.sh", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const workerPromoter = readFileSync(
   fileURLToPath(new URL("../../../.github/scripts/promote-worker-vm.sh", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const workerProvenanceValidator = readFileSync(
   fileURLToPath(new URL("../../../.github/scripts/validate-worker-provenance.sh", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const workerSecretRefresh = readFileSync(
   fileURLToPath(new URL("../../../ops/worker/refresh-secrets.sh", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const dockerCompose = readFileSync(
   fileURLToPath(new URL("../../../docker-compose.yml", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const engineContractVerifier = readFileSync(
   fileURLToPath(
     new URL("../../../.github/scripts/verify-engine-worker-contract.sh", import.meta.url)

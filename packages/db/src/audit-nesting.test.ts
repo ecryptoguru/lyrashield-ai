@@ -6,7 +6,6 @@ const repoRoot = process.cwd()
 const allowlist = new Set(["packages/db/src/client.ts", "packages/db/src/account-deletion.ts"])
 
 function sourceFiles(directory: string): string[] {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- test scans only repo source roots.
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name)
     if (entry.isDirectory()) return sourceFiles(path)
@@ -22,7 +21,6 @@ describe("audit nesting regression", () => {
         .map((file) => relative(repoRoot, file))
         .filter((file) => !file.includes("/generated/"))
         .filter((file) => !allowlist.has(file))
-        // eslint-disable-next-line security/detect-non-literal-fs-filename -- file originates from sourceFiles.
         .filter((file) => pattern.test(readFileSync(join(repoRoot, file), "utf8")))
     )
     expect(

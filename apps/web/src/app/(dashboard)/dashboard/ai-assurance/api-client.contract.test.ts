@@ -2,9 +2,7 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 // apps/web has no component test harness; preserve the bounded request contract here.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const evidenceSource = readFileSync(new URL("./ai-assurance-client.tsx", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const inventorySource = readFileSync(new URL("./assurance-inventory.tsx", import.meta.url), "utf8")
 
 describe("AI assurance mutation transport", () => {

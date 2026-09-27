@@ -10,7 +10,6 @@ describe("Myra dashboard admission", () => {
 
   it("is the single gate shared by the dashboard layout and the API principal gate", () => {
     const read = (path: string) =>
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       readFileSync(new URL(path, import.meta.url), "utf8")
     const layout = read("../../../apps/web/src/app/(dashboard)/layout.tsx")
     const lib = read("../../../apps/web/src/app/api/myra/_lib.ts")
@@ -22,7 +21,6 @@ describe("Myra dashboard admission", () => {
 
   it("leaves no allowlist plumbing in the schema, examples or the deploy wiring", () => {
     const read = (path: string) =>
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       readFileSync(new URL(path, import.meta.url), "utf8")
     const files = [
       "./env.ts",

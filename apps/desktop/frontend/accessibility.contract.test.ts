@@ -1,14 +1,11 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const activation = readFileSync(
   new URL("./src/screens/ActivationScreen.tsx", import.meta.url),
   "utf8"
 )
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const setup = readFileSync(new URL("./src/screens/SetupScreen.tsx", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const scan = readFileSync(new URL("./src/screens/ScanScreen.tsx", import.meta.url), "utf8")
 
 describe("desktop setup accessibility", () => {

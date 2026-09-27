@@ -12,7 +12,6 @@ import {
 } from "../lib/blog-publishing"
 
 function source(relativePath: string): string {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   return readFileSync(new URL(relativePath, import.meta.url), "utf8")
 }
 
@@ -118,7 +117,6 @@ describe("every blog collection consumer applies the shared gate", () => {
   })
 
   it("indexes no future-dated post from the sitemap", () => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned config file.
     const config = readFileSync(new URL("../../astro.config.mjs", import.meta.url), "utf8")
 
     expect(config).toContain("isFutureDated")
@@ -130,10 +128,8 @@ describe("every blog collection consumer applies the shared gate", () => {
     // workflow may both run on a schedule and touch the marketing deploy,
     // which is what a fallback "publish the backlog" job would look like.
     const workflowRoot = fileURLToPath(new URL("../../../../.github/workflows/", import.meta.url))
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned workflow directory.
     const files = readdirSync(workflowRoot).filter((name) => name.endsWith(".yml"))
     const scheduledMarketingDeploys = files.filter((name) => {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned workflow file.
       const body = readFileSync(join(workflowRoot, name), "utf8")
       return /^\s*schedule:/m.test(body) && /marketing/i.test(body)
     })

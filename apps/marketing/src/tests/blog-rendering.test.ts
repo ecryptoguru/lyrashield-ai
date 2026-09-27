@@ -7,7 +7,6 @@ import BlogPost from "../layouts/BlogPost.astro"
 import { markdownWordCount, readingMinutes } from "../lib/blog-content"
 
 function source(relativePath: string): string {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   return readFileSync(new URL(relativePath, import.meta.url), "utf8")
 }
 
