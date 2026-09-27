@@ -135,8 +135,7 @@ fn sign_test_receipt(
         "verifiedAt": verified_at,
         "expiresAt": expires_at,
     });
-    let signature =
-        SigningKey::from_bytes(&[1u8; 32]).sign(canonical_json(&payload).as_bytes());
+    let signature = SigningKey::from_bytes(&[1u8; 32]).sign(canonical_json(&payload).as_bytes());
     types::LicenseRevalidationReceipt {
         license_id: stored.license_id.clone(),
         license_signature: stored.license.signature.clone(),
@@ -231,8 +230,7 @@ fn test_tampered_revalidation_receipt_cannot_extend_offline_grace() {
         .unwrap()
         .with_timezone(&chrono::Utc);
     let (mut stored, pubkey) = make_valid_stored("machine");
-    let mut receipt =
-        sign_test_receipt(&stored, "2026-09-01T12:00:00Z", "2026-09-08T12:00:00Z");
+    let mut receipt = sign_test_receipt(&stored, "2026-09-01T12:00:00Z", "2026-09-08T12:00:00Z");
     receipt.verified_at = "2026-09-11T12:00:00Z".into();
     receipt.expires_at = "2026-09-18T12:00:00Z".into();
     stored.revalidation_receipt = Some(receipt);
@@ -246,8 +244,7 @@ fn successful_server_verification_remains_operational_when_cache_write_fails() {
     let (stored, pubkey) = make_valid_stored("machine");
     let body = verified_server_body(&stored);
     let response: serde_json::Value = serde_json::from_str(&body).unwrap();
-    let receipt =
-        serde_json::from_value(response["data"]["revalidationReceipt"].clone()).unwrap();
+    let receipt = serde_json::from_value(response["data"]["revalidationReceipt"].clone()).unwrap();
     let operational =
         refresh_server_verified_license(stored, receipt, &pubkey, |_| Err("read only".into()))
             .unwrap();
@@ -273,8 +270,7 @@ fn test_guard_wrong_machine_non_operational() {
     let tmp = tempfile::tempdir().unwrap();
     std::env::set_var("HOME", tmp.path());
     std::env::set_var("XDG_DATA_HOME", tmp.path());
-    crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
-        .unwrap();
+    crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob).unwrap();
     // Now re-load and check machine membership fails before server
     // We test verify_license still valid but ensure_license_operational should fail on machine check
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -298,12 +294,10 @@ fn test_guard_revoked_signature_non_operational() {
     let tmp = tempfile::tempdir().unwrap();
     std::env::set_var("HOME", tmp.path());
     std::env::set_var("XDG_DATA_HOME", tmp.path());
-    crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
-        .unwrap();
+    crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob).unwrap();
     let rt = tokio::runtime::Runtime::new().unwrap();
     let res = rt.block_on(async {
-        crate::license::ensure_license_operational(Some("http://127.0.0.1:1".into()), &pubkey)
-            .await
+        crate::license::ensure_license_operational(Some("http://127.0.0.1:1".into()), &pubkey).await
     });
     assert!(matches!(res, Err(LicenseOperationalError::Invalid(_))));
 }
@@ -319,8 +313,7 @@ fn test_guard_expired_eligibility_keeps_current_build_operational() {
     let tmp = tempfile::tempdir().unwrap();
     std::env::set_var("HOME", tmp.path());
     std::env::set_var("XDG_DATA_HOME", tmp.path());
-    crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
-        .unwrap();
+    crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob).unwrap();
     let body = verified_server_body(&stored);
     // Mock server that returns success
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -373,7 +366,8 @@ async fn test_v1_envelope_requires_online_verification_and_rewrites_v2() {
             let _ = stream.read(&mut buf).await;
             let response = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                body.len(), body
+                body.len(),
+                body
             );
             let _ = stream.write_all(response.as_bytes()).await;
         }
@@ -439,8 +433,7 @@ async fn test_guard_5xx_uses_fresh_offline_grace() {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
             let mut buf = [0u8; 4096];
             let _ = stream.read(&mut buf).await;
-            let body =
-                r#"{"success":false,"error":{"code":"INTERNAL_ERROR","message":"oops"}}"#;
+            let body = r#"{"success":false,"error":{"code":"INTERNAL_ERROR","message":"oops"}}"#;
             let resp = format!(
                 "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
                 body.len(),
@@ -463,8 +456,7 @@ async fn test_guard_malformed_non_operational() {
     let tmp = tempfile::tempdir().unwrap();
     std::env::set_var("HOME", tmp.path());
     std::env::set_var("XDG_DATA_HOME", tmp.path());
-    crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
-        .unwrap();
+    crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob).unwrap();
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -496,8 +488,7 @@ async fn test_guard_unknown_id_non_operational() {
     let tmp = tempfile::tempdir().unwrap();
     std::env::set_var("HOME", tmp.path());
     std::env::set_var("XDG_DATA_HOME", tmp.path());
-    crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob)
-        .unwrap();
+    crate::license::store::save_license(&stored.license, &stored.license_id, &stored.blob).unwrap();
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

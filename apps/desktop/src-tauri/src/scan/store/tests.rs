@@ -1,8 +1,9 @@
 #[test]
 fn browser_fixtures_match_real_native_wire_and_export_inputs() {
-    let wire: serde_json::Value =
-        serde_json::from_str(include_str!("../../../../../../e2e/browser/desktop-wire.json"))
-            .unwrap();
+    let wire: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../../../e2e/browser/desktop-wire.json"
+    ))
+    .unwrap();
     let summary: super::ScanSummary = serde_json::from_value(wire["summary"].clone()).unwrap();
     assert_eq!(serde_json::to_value(summary).unwrap(), wire["summary"]);
     let detail: super::ScanDetail = serde_json::from_value(wire["detail"].clone()).unwrap();
@@ -15,10 +16,9 @@ fn browser_fixtures_match_real_native_wire_and_export_inputs() {
         let actual: crate::sync::SyncResult = serde_json::from_value(result.clone()).unwrap();
         assert_eq!(serde_json::to_value(actual).unwrap(), *result);
     }
-    let sarif: serde_json::Value = serde_json::from_str(
-        &super::export_sarif(&detail.findings[..1], &detail.scan_id).unwrap(),
-    )
-    .unwrap();
+    let sarif: serde_json::Value =
+        serde_json::from_str(&super::export_sarif(&detail.findings[..1], &detail.scan_id).unwrap())
+            .unwrap();
     assert_eq!(sarif["runs"][0]["results"].as_array().unwrap().len(), 1);
     assert_eq!(
         sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]
