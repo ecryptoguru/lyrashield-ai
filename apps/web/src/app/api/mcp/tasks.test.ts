@@ -4,6 +4,7 @@ const verifyApiKey = vi.fn()
 const verifyOAuthBearer = vi.fn()
 const requirePermissionMock = vi.fn().mockResolvedValue({})
 const claimOrGetAgentOperationMock = vi.fn()
+const retryScanCancellationMock = vi.fn()
 const completeAgentOperationMock = vi.fn()
 const failAgentOperationMock = vi.fn()
 const getAgentOperationMock = vi.fn()
@@ -21,6 +22,7 @@ vi.mock("@lyrashield/db", () => ({
   },
   CANONICAL_OPERATIONS: { SCAN_CREATE: "scan.create", SCAN_CANCEL: "scan.cancel" },
   claimOrGetAgentOperation: (...a: unknown[]) => claimOrGetAgentOperationMock(...a),
+  retryScanCancellation: (...a: unknown[]) => retryScanCancellationMock(...a),
   completeAgentOperation: (...a: unknown[]) => completeAgentOperationMock(...a),
   failAgentOperation: (...a: unknown[]) => failAgentOperationMock(...a),
   getAgentOperation: (...a: unknown[]) => getAgentOperationMock(...a),
@@ -179,6 +181,7 @@ beforeEach(() => {
   verifyApiKey.mockReset()
   verifyOAuthBearer.mockReset()
   claimOrGetAgentOperationMock.mockReset()
+  retryScanCancellationMock.mockReset()
   completeAgentOperationMock.mockReset()
   failAgentOperationMock.mockReset()
   getAgentOperationMock.mockReset()
@@ -526,6 +529,44 @@ describe("MCP tasks over the hosted endpoint", () => {
     })
   })
 
+  it("returns the cancelled task when cancellation races with another request", async () => {
+    oauthConnection()
+    getAgentOperationMock.mockResolvedValue(makeOperation())
+    claimOrGetAgentOperationMock.mockResolvedValue({
+      status: "NEW",
+      operation: { id: "cancel-op-1", updatedAt: new Date("2026-09-28T00:00:00Z") },
+    })
+    completeAgentOperationMock.mockResolvedValue(undefined)
+    scanFindFirstMock
+      .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
+      .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
+      .mockResolvedValue(makeScan({ status: "CANCELLED" }))
+    cancelScanMock.mockRejectedValue(new Error("already cancelled"))
+    checkDelegatedOperationAuthorizationMock.mockReturnValue({
+      authorized: true,
+      canonicalOperation: "scan.cancel",
+    })
+
+    const res = await POST(
+      req({
+        method: "POST",
+        rpcMethod: "tasks/cancel",
+        rpcParams: { taskId: "lst_op-1" },
+        protocolHeader: PROTOCOL_2025,
+      })
+    )
+
+    const body = await readJson(res)
+    const result = body.result as { status?: string; task?: { status?: string } } | undefined
+    expect(res.status).toBe(200)
+    expect(result?.status ?? result?.task?.status).toBe("cancelled")
+    expect(completeAgentOperationMock).toHaveBeenCalledWith("cancel-op-1", "ws-1", {
+      resultReference: "scan-1",
+      result: { taskId: "lst_op-1", scanId: "scan-1", status: "CANCELLED" },
+    })
+    expect(failAgentOperationMock).not.toHaveBeenCalled()
+  })
+
   it("replays cancellation after the scan reached CANCELLED", async () => {
     oauthConnection()
     getAgentOperationMock.mockResolvedValue(makeOperation())
@@ -561,6 +602,103 @@ describe("MCP tasks over the hosted endpoint", () => {
       })
     )
     expect(cancelScanMock).not.toHaveBeenCalled()
+  })
+
+  it("retries a failed cancellation claim while the scan remains active", async () => {
+    oauthConnection()
+    getAgentOperationMock.mockResolvedValue(makeOperation())
+    claimOrGetAgentOperationMock.mockResolvedValue({
+      status: "FAILED",
+      operation: makeOperation({
+        id: "cancel-op-1",
+        status: "FAILED",
+        operationName: "scan.cancel",
+      }),
+    })
+    retryScanCancellationMock.mockResolvedValue({
+      status: "NEW",
+      operation: makeOperation({
+        id: "cancel-op-1",
+        status: "EXECUTING",
+        operationName: "scan.cancel",
+      }),
+    })
+    completeAgentOperationMock.mockResolvedValue(undefined)
+    scanFindFirstMock
+      .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
+      .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
+      .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
+      .mockResolvedValue(makeScan({ status: "CANCELLED" }))
+    cancelScanMock.mockResolvedValue({ id: "scan-1", status: "CANCELLED" })
+    checkDelegatedOperationAuthorizationMock.mockReturnValue({
+      authorized: true,
+      canonicalOperation: "scan.cancel",
+    })
+
+    const res = await POST(
+      req({
+        method: "POST",
+        rpcMethod: "tasks/cancel",
+        rpcParams: { taskId: "lst_op-1" },
+        protocolHeader: PROTOCOL_2025,
+      })
+    )
+
+    const body = await readJson(res)
+    expect(res.status).toBe(200)
+    const result = body.result as { status?: string; task?: { status?: string } } | undefined
+    expect(result?.status ?? result?.task?.status).toBe("cancelled")
+    expect(retryScanCancellationMock).toHaveBeenCalledWith("cancel-op-1", "ws-1", expect.any(Date))
+    expect(cancelScanMock).toHaveBeenCalledWith("scan-1", "ws-1")
+  })
+
+  it("recovers a stale in-progress cancellation claim while the scan remains active", async () => {
+    oauthConnection()
+    getAgentOperationMock.mockResolvedValue(makeOperation())
+    claimOrGetAgentOperationMock.mockResolvedValue({
+      status: "IN_PROGRESS",
+      operation: makeOperation({
+        id: "cancel-op-1",
+        status: "EXECUTING",
+        operationName: "scan.cancel",
+        updatedAt: new Date(Date.now() - 3 * 60 * 1000),
+      }),
+    })
+    retryScanCancellationMock.mockResolvedValue({
+      status: "NEW",
+      operation: makeOperation({
+        id: "cancel-op-1",
+        status: "EXECUTING",
+        operationName: "scan.cancel",
+      }),
+    })
+    completeAgentOperationMock.mockResolvedValue(undefined)
+    scanFindFirstMock
+      .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
+      .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
+      .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
+      .mockResolvedValue(makeScan({ status: "CANCELLED" }))
+    cancelScanMock.mockResolvedValue({ id: "scan-1", status: "CANCELLED" })
+    checkDelegatedOperationAuthorizationMock.mockReturnValue({
+      authorized: true,
+      canonicalOperation: "scan.cancel",
+    })
+
+    const res = await POST(
+      req({
+        method: "POST",
+        rpcMethod: "tasks/cancel",
+        rpcParams: { taskId: "lst_op-1" },
+        protocolHeader: PROTOCOL_2025,
+      })
+    )
+
+    const body = await readJson(res)
+    expect(res.status).toBe(200)
+    const result = body.result as { status?: string; task?: { status?: string } } | undefined
+    expect(result?.status ?? result?.task?.status).toBe("cancelled")
+    expect(retryScanCancellationMock).toHaveBeenCalledWith("cancel-op-1", "ws-1", expect.any(Date))
+    expect(cancelScanMock).toHaveBeenCalledWith("scan-1", "ws-1")
   })
 
   it.each([

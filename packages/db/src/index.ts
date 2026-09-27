@@ -487,6 +487,7 @@ export {
   claimOrGetAgentOperation,
   completeAgentOperation,
   failAgentOperation,
+  retryScanCancellation,
   getAgentOperation,
   getOperationStatus,
   toOperationStatusView,

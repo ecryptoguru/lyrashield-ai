@@ -28,12 +28,15 @@ import {
   failAgentOperation,
   getAgentOperation,
   listAgentOperationsForTasks,
+  retryScanCancellation,
   withWorkspaceRLS,
   type AgentOperation,
 } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
 import { CANONICAL_OPERATIONS } from "@lyrashield/db"
+
+const MCP_TASK_CANCEL_RETRY_AFTER_MS = 2 * 60 * 1000
 
 /**
  * Hosted MCP task backend — the durable side of the MCP tasks surface.
@@ -273,7 +276,7 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
         )
       }
 
-      const cancelClaim = await claimOrGetAgentOperation({
+      let cancelClaim = await claimOrGetAgentOperation({
         workspaceId,
         connectionId: connection.id,
         authorizationVersion: connection.authorizationVersion,
@@ -300,17 +303,44 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
             return toTask(taskId, after)
           }
         }
-        const reason =
-          cancelClaim.status === "CONFLICT"
-            ? cancelClaim.message
-            : `Cancellation operation is ${cancelClaim.status.toLowerCase()}; current task status is ${afterView?.status ?? "unavailable"}.`
-        throw new McpError(ErrorCode.InvalidRequest, reason)
+        if (
+          afterView &&
+          !isTerminalTaskStatus(afterView.status) &&
+          (cancelClaim.status === "FAILED" ||
+            (cancelClaim.status === "IN_PROGRESS" &&
+              Date.now() - cancelClaim.operation.updatedAt.getTime() >=
+                MCP_TASK_CANCEL_RETRY_AFTER_MS))
+        ) {
+          cancelClaim =
+            (await retryScanCancellation(
+              cancelClaim.operation.id,
+              workspaceId,
+              new Date(Date.now() - MCP_TASK_CANCEL_RETRY_AFTER_MS)
+            )) ?? cancelClaim
+        }
+        if (cancelClaim.status === "REPLAY") {
+          const latest = await resolve(taskId, PERMISSIONS.scan.view)
+          const latestView = latest
+            ? resolveTaskView({ operation: toOperationRecord(latest.operation), scan: latest.scan })
+            : null
+          if (latest && latestView?.status === "cancelled") return toTask(taskId, latest)
+        }
+        if (cancelClaim.status !== "NEW") {
+          const reason =
+            cancelClaim.status === "CONFLICT"
+              ? cancelClaim.message
+              : `Cancellation operation is ${cancelClaim.status.toLowerCase()}; current task status is ${afterView?.status ?? "unavailable"}.`
+          throw new McpError(ErrorCode.InvalidRequest, reason)
+        }
       }
+
+      const cancellationAttemptUpdatedAt = cancelClaim.operation.updatedAt
 
       if (isTerminalTaskStatus(view.status)) {
         await failAgentOperation(cancelClaim.operation.id, workspaceId, {
           error: "TASK_CANCELLATION_TERMINAL",
           resultReference: scan.id,
+          expectedUpdatedAt: cancellationAttemptUpdatedAt,
         }).catch(() => undefined)
         throw new McpError(
           ErrorCode.InvalidParams,
@@ -328,9 +358,17 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
         const afterView = after
           ? resolveTaskView({ operation: toOperationRecord(after.operation), scan: after.scan })
           : null
+        if (after && afterView?.status === "cancelled") {
+          await completeAgentOperation(cancelClaim.operation.id, workspaceId, {
+            resultReference: scan.id,
+            result: { taskId, scanId: scan.id, status: "CANCELLED" },
+          })
+          return toTask(taskId, after)
+        }
         await failAgentOperation(cancelClaim.operation.id, workspaceId, {
           error: "TASK_CANCELLATION_FAILED",
           resultReference: scan.id,
+          expectedUpdatedAt: cancellationAttemptUpdatedAt,
         }).catch(() => undefined)
         throw new McpError(
           ErrorCode.InvalidRequest,
@@ -346,6 +384,7 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
         await failAgentOperation(cancelClaim.operation.id, workspaceId, {
           error: "TASK_CANCELLATION_STATUS_UNAVAILABLE",
           resultReference: scan.id,
+          expectedUpdatedAt: cancellationAttemptUpdatedAt,
         }).catch(() => undefined)
         throw notFound(taskId)
       }
@@ -353,6 +392,7 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
         await failAgentOperation(cancelClaim.operation.id, workspaceId, {
           error: "TASK_CANCELLATION_NOT_CONFIRMED",
           resultReference: scan.id,
+          expectedUpdatedAt: cancellationAttemptUpdatedAt,
         }).catch(() => undefined)
         throw new McpError(
           ErrorCode.InvalidRequest,
