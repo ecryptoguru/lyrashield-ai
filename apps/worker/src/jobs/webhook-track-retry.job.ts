@@ -71,5 +71,3 @@ export async function processWebhookTrackRetry(
 
   return { outcome, reEnqueued }
 }
-
-export { WEBHOOK_TRACK_MAX_ATTEMPTS }

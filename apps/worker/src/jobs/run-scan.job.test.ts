@@ -273,16 +273,15 @@ vi.mock("../engine/scanner-orchestrator", () => ({
 }))
 
 import {
-  extractActualCostUsd,
   engineRoutingCoverageIssue,
-  extractUsageSummary,
   persistEngineUsageCheckpoint,
   processScanJob,
-  resolveEngineRuntimeBudgetMs,
   resolveScanRuntimeBudgetMs,
   resolveScannerPhaseTimeoutMs,
   shouldRecordAgentMinutes,
 } from "./run-scan.job"
+import { extractActualCostUsd, extractUsageSummary } from "./run-scan/usage"
+import { resolveEngineRuntimeBudgetMs } from "./run-scan/lifecycle-utils"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"

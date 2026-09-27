@@ -1371,10 +1371,6 @@ function parseVulnerabilitiesArtifact(
   }
 }
 
-export function parseVulnerabilitiesJson(raw: string): EngineVulnerability[] {
-  return parseVulnerabilitiesArtifact(raw).vulnerabilities
-}
-
 export function parseRunJson(raw: string): EngineRunRecord | null {
   if (!raw.trim()) return null
   try {
