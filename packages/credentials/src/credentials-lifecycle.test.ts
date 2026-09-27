@@ -138,12 +138,9 @@ describe("WP-01 Credential Lifecycle and Refresh Regressions", () => {
         )
     ) as unknown as typeof fetch
 
-    try {
-      await refreshOAuthCredentials(initial, { fetchFn: fetchPermanent, retries: 0 })
-    } catch (err) {
-      expect(err).toBeInstanceOf(OAuthRefreshError)
-      expect((err as OAuthRefreshError).permanent).toBe(true)
-    }
+    await expect(
+      refreshOAuthCredentials(initial, { fetchFn: fetchPermanent, retries: 0 })
+    ).rejects.toMatchObject({ name: "OAuthRefreshError", permanent: true })
   })
 
   it("treats missing oauthExpiresAt as unknown expiry and triggers refresh when refresh token is present", async () => {

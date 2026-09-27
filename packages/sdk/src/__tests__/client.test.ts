@@ -128,13 +128,10 @@ describe("LyraShieldClient", () => {
         body: { success: false, error: { code: "SCAN_RATE_LIMITED", message: "rate limited" } },
       })
     )
-    try {
-      await client.request("GET", "/scans")
-    } catch (err) {
-      const e = err as LyraShieldError
-      expect(e.isScanRateLimited).toBe(true)
-      expect(e.isScanConcurrencyLimit).toBe(false)
-    }
+    await expect(client.request("GET", "/scans")).rejects.toMatchObject({
+      isScanRateLimited: true,
+      isScanConcurrencyLimit: false,
+    })
   })
 
   it("retries on 429 for idempotent GET with Retry-After", async () => {
@@ -209,12 +206,9 @@ describe("LyraShieldClient", () => {
         body: { error: { message: "Permission denied" } },
       })
     )
-    try {
-      await client.request("GET", "/scans")
-    } catch (err) {
-      const e = err as LyraShieldError
-      expect(e.message).toBe("Permission denied")
-    }
+    await expect(client.request("GET", "/scans")).rejects.toMatchObject({
+      message: "Permission denied",
+    })
   })
 
   it("surfaces error.details (e.g. operationId on a 409) for programmatic recovery", async () => {
@@ -247,13 +241,7 @@ describe("LyraShieldClient", () => {
         body: {},
       })
     )
-    try {
-      await client.request("GET", "/scans")
-    } catch (err) {
-      const e = err as LyraShieldError
-      expect(e.message).toContain("500")
-      expect(e.message).toContain("Internal Server Error")
-    }
+    await expect(client.request("GET", "/scans")).rejects.toThrow(/500.*Internal Server Error/)
   })
 
   it("wraps Zod validation failures in LyraShieldError with VALIDATION_ERROR", async () => {

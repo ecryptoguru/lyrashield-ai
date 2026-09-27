@@ -121,6 +121,9 @@ jobs:
         shell: bash
         run: bash .github/scripts/tests/test-action-webmcp-guard.sh
 
+      - name: Test Desktop release manifest
+        run: python3 .github/scripts/test_desktop_release.py
+
       - name: Classify changed files
         id: classify
         shell: bash
@@ -175,6 +178,80 @@ jobs:
           path: ci-routing/azure-deploy
           if-no-files-found: error
           retention-days: 1
+
+  docs-hygiene:
+    name: Docs and Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      # Advisory only — reports markdown hygiene without blocking the merge.
+      - name: Markdown lint (non-blocking)
+        continue-on-error: true
+        run: pnpm lint:md
+
+      # Advisory only — rendered copy must never put a comma immediately
+      # before "and" or "or". Raw hits are advisory because comments and
+      # fenced code blocks can legitimately match the pattern. The path set
+      # covers the site copy sources: marketing pages/components, served
+      # public assets, docs/ and the shared registries that render into the
+      # site (WebMCP/AI-security controls, the agent registry, Myra copy,
+      # pricing strings and the OpenAPI description source).
+      - name: Serial-comma copy scan (advisory)
+        continue-on-error: true
+        shell: bash
+        run: |
+          hits=$(grep -rnE ', +(and|or)\b' \
+            apps/marketing/src apps/marketing/public docs \
+            packages/security/src packages/agent-registry/src \
+            packages/myra/src packages/pricing/src \
+            packages/agent-rules/src packages/mcp/src \
+            packages/types/src/openapi || true)
+          {
+            echo '### Serial-comma copy scan (advisory)'
+            echo
+            echo 'Rendered copy must not put a comma immediately before "and" or "or".'
+            echo 'Raw hits are advisory: comments and fenced code can legitimately match.'
+            echo
+            echo 'Scanned: apps/marketing/src, apps/marketing/public, docs,'
+            echo 'packages/security/src, packages/agent-registry/src, packages/myra/src,'
+            echo 'packages/pricing/src, packages/agent-rules/src, packages/mcp/src'
+            echo 'and packages/types/src/openapi.'
+            echo
+            if [ -n "$hits" ]; then
+              echo '```'
+              printf '%s\n' "$hits"
+              echo '```'
+            else
+              echo 'No raw hits in the rendered-copy sources.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$hits" ]; then
+            echo "clean: no raw serial-comma candidates"
+            exit 0
+          fi
+          printf '%s\n' "$hits" | head -20
+          total=$(printf '%s\n' "$hits" | wc -l)
+          echo "::notice::$total raw serial-comma candidate(s) — inspect the step summary (advisory)"
+          exit 1
 
   lint-and-typecheck:
     name: Lint, Typecheck, Test & Build
@@ -234,11 +311,9 @@ jobs:
         run: git config --global init.defaultBranch main
 
       - name: Checkout
-        if: needs.changes.outputs.docs-only != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        if: needs.changes.outputs.docs-only != 'true'
         uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
@@ -246,14 +321,12 @@ jobs:
           install: false
 
       - name: Setup Node.js
-        if: needs.changes.outputs.docs-only != 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: pnpm
 
       - name: Cache Turbo
-        if: needs.changes.outputs.docs-only != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo
@@ -263,7 +336,6 @@ jobs:
             turbo-${{ runner.os }}-main-
 
       - name: Install dependencies
-        if: needs.changes.outputs.docs-only != 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma Client
@@ -361,60 +433,6 @@ jobs:
         if: needs.changes.outputs.marketing == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
         run: pnpm --filter @lyrashield/marketing lint
 
-      - name: Format check
-        if: needs.changes.outputs.docs-only != 'true'
-        run: pnpm format:check
-
-      # Advisory only — reports markdown hygiene without blocking the merge.
-      - name: Markdown lint (non-blocking)
-        continue-on-error: true
-        run: pnpm lint:md
-
-      # Advisory only — rendered copy must never put a comma immediately
-      # before "and" or "or". Raw hits are advisory because comments and
-      # fenced code blocks can legitimately match the pattern. The path set
-      # covers the site copy sources: marketing pages/components, served
-      # public assets, docs/ and the shared registries that render into the
-      # site (WebMCP/AI-security controls, the agent registry, Myra copy,
-      # pricing strings and the OpenAPI description source).
-      - name: Serial-comma copy scan (advisory)
-        continue-on-error: true
-        shell: bash
-        run: |
-          hits=$(grep -rnE ', +(and|or)\b' \
-            apps/marketing/src apps/marketing/public docs \
-            packages/security/src packages/agent-registry/src \
-            packages/myra/src packages/pricing/src \
-            packages/agent-rules/src packages/mcp/src \
-            packages/types/src/openapi || true)
-          {
-            echo '### Serial-comma copy scan (advisory)'
-            echo
-            echo 'Rendered copy must not put a comma immediately before "and" or "or".'
-            echo 'Raw hits are advisory: comments and fenced code can legitimately match.'
-            echo
-            echo 'Scanned: `apps/marketing/src`, `apps/marketing/public`, `docs`,'
-            echo '`packages/security/src`, `packages/agent-registry/src`, `packages/myra/src`,'
-            echo '`packages/pricing/src`, `packages/agent-rules/src`, `packages/mcp/src`'
-            echo 'and `packages/types/src/openapi`.'
-            echo
-            if [ -n "$hits" ]; then
-              echo '```'
-              printf '%s\n' "$hits"
-              echo '```'
-            else
-              echo 'No raw hits in the rendered-copy sources.'
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ -z "$hits" ]; then
-            echo "clean: no raw serial-comma candidates"
-            exit 0
-          fi
-          printf '%s\n' "$hits" | head -20
-          total=$(printf '%s\n' "$hits" | wc -l)
-          echo "::notice::$total raw serial-comma candidate(s) — inspect the step summary (advisory)"
-          exit 1
-
       - name: Typecheck
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm typecheck
@@ -482,7 +500,7 @@ jobs:
           set -euo pipefail
           suites=()
           if [ "$APP_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
-            suites+=(core)
+            suites+=(core ops)
           fi
           if [ "$MARKETING_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
             suites+=(marketing motion)
@@ -586,7 +604,9 @@ jobs:
           bash .github/scripts/tests/test-check-engine-revision-parity.sh
           bash .github/scripts/tests/test-configure-cloud-billing-admission.sh
           bash .github/scripts/tests/test-azure-secret-set.sh
-          node --test .github/scripts/tests/parse-billing-receipt.test.mjs .github/scripts/tests/worker-preflight.test.mjs .github/scripts/tests/worker-contract-worktree.test.mjs
+          bash .github/scripts/tests/test-trial-claim-backfill-vm.sh
+          bash .github/scripts/tests/test-validate-worker-provenance.sh
+          sh ops/monitoring/scan-admission.test.sh
           sh ops/deployment/azure-vm-run-command.test.sh
           sh ops/monitoring/provision-alerts.test.sh
           sh ops/worker/refresh-secrets.test.sh
@@ -665,10 +685,6 @@ jobs:
         timeout-minutes: 10
         run: pnpm test:browser-harness
 
-      - name: No code changes
-        if: needs.changes.outputs.docs-only == 'true'
-        run: echo "No code changes detected — skipping lint, typecheck, test, and build."
-
   engine-worker-contract:
     name: Pinned Engine / Worker Contract
     needs: changes
@@ -716,19 +732,10 @@ jobs:
             lyrashield-engine "${{ steps.engine.outputs.revision }}" \
             "${{ github.repository_owner }}/lyrashield-engine"
 
-      - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
-        with:
-          # Every workflow runs pnpm install as an explicit step; the
-          # successor action's install default is true, so opt out.
-          install: false
-
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          # No pnpm cache needed for this one-off contract install. Keep setup
-          # read-only: the contract verifier rejects tracked checkout drift.
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -764,7 +771,7 @@ jobs:
       # also trigger a deploy. App-only changes (apps/web, apps/worker) do not
       # affect the Cloudflare marketing Worker and skip this deploy. If a direct push to
       # main includes marketing changes that fail CI, fix them in a push that touches
-      # marketing or shared files — or run this workflow manually from the Actions tab.
+      # marketing or shared files.
       # The smoke step below is what actually proves the deploy landed.
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
@@ -1076,6 +1083,9 @@ jobs:
       - name: Lint
         run: pnpm --filter @lyrashield/desktop-frontend lint
 
+      - name: Test desktop frontend
+        run: pnpm exec vitest run apps/desktop/frontend
+
       - name: Build
         run: pnpm --filter @lyrashield/desktop-frontend build
 
@@ -1086,6 +1096,15 @@ jobs:
       - name: Lint portable browser harness
         if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
         run: pnpm lint:browser-harness
+
+      - name: Cache Playwright browser for Desktop
+        if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
 
       - name: Install Playwright Chromium for desktop browser harness
         if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
