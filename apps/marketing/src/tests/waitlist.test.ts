@@ -61,9 +61,12 @@ describe("public marketing claims", () => {
       "../pages/index.astro",
       "../pages/methodology.astro",
       "../pages/llms.txt.ts",
-      "../components/landing/Hero.astro",
+      "../components/landing/PremiumHero.astro",
+      "../components/landing/HeroProductFrame.astro",
+      "../components/landing/HomeLiteScan.astro",
+      "../components/landing/EvidenceWorld.astro",
       "../components/landing/Faq.astro",
-      "../components/landing/TwoDepths.astro",
+      "../components/landing/FinalCta.astro",
     ]
     const source = publicFiles
       .map((path) => {
