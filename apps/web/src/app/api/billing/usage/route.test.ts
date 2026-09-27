@@ -65,7 +65,7 @@ describe("GET /api/billing/usage", () => {
     })
   })
 
-  it("reports zero expired FREE trial minutes while retaining purchased balance", async () => {
+  it("excludes expired FREE trial minutes from the remaining balance", async () => {
     const response = await GET(
       new Request("https://app.lyrashieldai.com/api/billing/usage?workspaceId=ws-1")
     )
@@ -73,8 +73,21 @@ describe("GET /api/billing/usage", () => {
 
     expect(response.status).toBe(200)
     expect(body.data.trial.minutesLeft).toBe(0)
-    expect(body.data.usage.totalRemaining).toBe(20)
-    expect(body.data.usage.poolRemaining).toBe(20)
+    expect(body.data.usage.totalRemaining).toBe(0)
+    expect(body.data.usage.poolRemaining).toBe(0)
+  })
+
+  it("retains purchased packs when an expired FREE trial pool is removed", async () => {
+    mocks.getUsageBalance.mockResolvedValue(balance(40))
+
+    const response = await GET(
+      new Request("https://app.lyrashieldai.com/api/billing/usage?workspaceId=ws-1")
+    )
+    const body = await response.json()
+
+    expect(body.data.usage.poolRemaining).toBe(0)
+    expect(body.data.usage.packRemaining).toBe(20)
+    expect(body.data.usage.totalRemaining).toBe(0)
   })
 
   it("leaves paid account balances intact when a historical trial is expired", async () => {
@@ -113,6 +126,6 @@ describe("GET /api/billing/usage", () => {
     const body = await response.json()
 
     expect(body.data.trial.minutesLeft).toBe(0)
-    expect(body.data.usage.totalRemaining).toBe(20)
+    expect(body.data.usage.totalRemaining).toBe(0)
   })
 })
