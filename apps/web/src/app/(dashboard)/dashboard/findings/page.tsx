@@ -186,6 +186,7 @@ export default async function FindingsPage({
       <div>
         {renderHeader("Independently verified evidence behind findings.")}
         <EvidenceList
+          key={`${workspaceId}:${listParams.scanId}:${effectiveTargetId}`}
           workspaceId={workspaceId}
           {...(effectiveTargetId ? { targetId: effectiveTargetId } : {})}
           {...(listParams.scanId ? { observedInScanId: listParams.scanId } : {})}
@@ -232,6 +233,7 @@ export default async function FindingsPage({
       <div>
         {renderHeader("Proposed fixes for these findings, with their pull requests.")}
         <FixesClient
+          key={`${workspaceId}:${listParams.scanId}:${effectiveTargetId}`}
           workspaceId={workspaceId}
           {...(effectiveTargetId ? { targetId: effectiveTargetId } : {})}
           {...(listParams.scanId ? { observedInScanId: listParams.scanId } : {})}

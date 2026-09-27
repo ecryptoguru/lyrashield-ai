@@ -103,7 +103,7 @@ The authenticated workflow supports project targets, findings, deterministic rec
 
 ## Local setup
 
-Prerequisites: Node.js 24, pnpm 11, Docker, and an environment file based on `.env.example`. CI and production container stages use the same Node major; the container base is pinned by digest.
+Prerequisites: Node.js 24, pnpm 12.2.0 (pinned in `package.json`), Docker, and an environment file based on `.env.example`. CI and production container stages use the same Node major; the container base is pinned by digest.
 
 ```bash
 pnpm install
@@ -130,6 +130,19 @@ database for `DATABASE_URL` and a separate `NOSUPERUSER NOBYPASSRLS` role for
 shows the required grants. The SDK and MCP builds above provide package entry
 points used by CLI and API tests in a fresh checkout. Never aim fixture suites
 at a development database containing user data or at production.
+
+The account-preference RLS runtime test requires an explicit opt-in. Point
+`DATABASE_URL` at the owner role and `RLS_RUNTIME_DATABASE_URL` at the restricted
+role on the **same disposable local database**. Its safety guard accepts only
+`lyrashield_test`, `v15_product`, or `lyra_v18_ci`; both URLs must use the same
+local host and port. Then run:
+
+```bash
+ACCOUNT_PREFERENCE_RLS_RUNTIME_TEST=1 pnpm exec vitest run packages/db/src/account-preference.rls.runtime.test.ts
+```
+
+Without the opt-in, this suite is skipped. CI runs it explicitly and requires it
+to execute successfully.
 
 The full worker requires a BullMQ-compatible Redis URL, private evidence storage, the controlled engine image/runtime, and Azure model configuration. It intentionally refuses scan admission if no live worker is registered.
 
