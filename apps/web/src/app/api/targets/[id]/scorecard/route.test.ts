@@ -41,6 +41,7 @@ describe("POST target scorecard", () => {
   it("authorizes publishing through the scorecard:publish permission", async () => {
     vi.mocked(createScorecardShare).mockResolvedValue({
       share: { id: "share-1", slug: "SLUG", publicPayload: { resolvedFindings: 1 }, viewCount: 0 },
+      publicPayload: { resolvedFindings: 1 },
       referralCode: "12345678",
       shareHandoffs: 0,
       referredSignups: 0,
@@ -57,19 +58,26 @@ describe("POST target scorecard", () => {
   it("returns persisted counters when publishing an existing share", async () => {
     vi.mocked(createScorecardShare).mockResolvedValue({
       share: { id: "share-1", slug: "SLUG", publicPayload: { resolvedFindings: 4 }, viewCount: 12 },
+      publicPayload: { resolvedFindings: 4 },
       referralCode: "23456789",
       shareHandoffs: 7,
       referredSignups: 3,
     } as never)
     const response = await POST(makeRequest(), { params: Promise.resolve({ id: "target-1" }) })
     const body = await response.json()
-    expect(body.data).toMatchObject({ views: 12, shareHandoffs: 7, referredSignups: 3 })
+    expect(body.data).toMatchObject({
+      resolvedFindings: 4,
+      views: 12,
+      shareHandoffs: 7,
+      referredSignups: 3,
+    })
   })
 
   it("keeps sharing available without creating a referral-tracked URL when analytics is off", async () => {
     analyticsAllowedForRequest.mockResolvedValue(false)
     vi.mocked(createScorecardShare).mockResolvedValue({
       share: { id: "share-1", slug: "SLUG", publicPayload: { resolvedFindings: 1 }, viewCount: 0 },
+      publicPayload: { resolvedFindings: 1 },
       referralCode: "12345678",
       shareHandoffs: 0,
       referredSignups: 0,

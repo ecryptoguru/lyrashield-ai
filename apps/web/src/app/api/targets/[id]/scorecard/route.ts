@@ -20,18 +20,14 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
     )
     const includeReferral = await analyticsAllowedForRequest(request, { session })
     const { id } = await params
-    const { share, referralCode, shareHandoffs, referredSignups } = await createScorecardShare(
-      id,
-      parsed.data.workspaceId,
-      session.userId
-    )
-    const publicPayload = share.publicPayload as unknown as { resolvedFindings: number }
+    const { share, publicPayload, referralCode, shareHandoffs, referredSignups } =
+      await createScorecardShare(id, parsed.data.workspaceId, session.userId)
     return apiSuccess(
       {
         id: share.id,
         slug: share.slug,
         url: `/score/${share.slug}${includeReferral ? `?ref=${referralCode}` : ""}`,
-        resolvedFindings: publicPayload.resolvedFindings,
+        resolvedFindings: publicPayload?.resolvedFindings ?? 0,
         views: share.viewCount,
         shareHandoffs,
         referredSignups,

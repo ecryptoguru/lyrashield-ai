@@ -366,6 +366,7 @@ export async function createScorecardShare(targetId: string, workspaceId: string
     if (existingShare) {
       return {
         share: existingShare,
+        publicPayload: normalizeScorecardPayload(existingShare.publicPayload),
         referralCode: existingShare.referralCode?.code ?? referralCode.code,
         created: false,
         ...(await getScorecardShareStats(tx, existingShare.id, existingShare.referralCodeId)),
@@ -382,6 +383,7 @@ export async function createScorecardShare(targetId: string, workspaceId: string
     })
     return {
       share,
+      publicPayload,
       referralCode: referralCode.code,
       created: true,
       ...(await getScorecardShareStats(tx, share.id, referralCode.id)),

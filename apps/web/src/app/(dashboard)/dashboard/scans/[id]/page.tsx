@@ -4,6 +4,7 @@ import {
   getScanQualitySurface,
   getScanWithEvents,
   getScanResultManifestDetail,
+  normalizeScorecardPayload,
   prisma,
 } from "@lyrashield/db"
 import { ScanExecutionPlanSchema } from "@lyrashield/types"
@@ -275,9 +276,8 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
             ? {
                 id: existingShare.id,
                 slug: existingShare.slug,
-                resolvedFindings: (
-                  existingShare.publicPayload as unknown as { resolvedFindings: number }
-                ).resolvedFindings,
+                resolvedFindings:
+                  normalizeScorecardPayload(existingShare.publicPayload)?.resolvedFindings ?? 0,
                 views: existingShare.viewCount,
                 shareHandoffs: existingShare._count.events,
                 referredSignups: existingShare.referralCode?._count.attributions ?? 0,

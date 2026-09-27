@@ -216,6 +216,7 @@ export {
   attributeReferral,
   qualifyReferralForWorkspace,
   buildScorecardPayload,
+  normalizeScorecardPayload,
   type ScorecardPayload,
   type ScorecardEventInput,
 } from "./score-service"
