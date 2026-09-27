@@ -1,20 +1,16 @@
 /**
  * Shared plain-language finding explanations.
  *
- * Both the web API (`apps/web/src/lib/plain-language.ts`) and the worker
- * engine (`apps/worker/src/engine/plain-language.ts`) previously carried their
- * own copy of this data and drifted (different fallback titles, different
- * params). The CWE catalogue and severity fallbacks live here so both apps
- * explain a finding identically; each app keeps its own `explainFinding`
- * wrapper because they legitimately differ in presentation (the web API adds
- * category-specific titles, the worker appends technical detail).
+ * The web API uses this catalogue and the severity fallbacks when it builds
+ * user-facing explanations. Keep the shared data here so its categories and
+ * fallback text stay consistent with the public API.
  *
  * The severity type is re-declared structurally ("INFO" | "LOW" | "MEDIUM" |
  * "HIGH" | "CRITICAL") rather than imported from ./index — index re-exports
  * this module, so importing here would be a cycle.
  *
- * This module is data only — no Prisma, no Node APIs — so it is importable
- * from both @lyrashield/types consumers and the worker.
+ * This module is data only — no Prisma, no Node APIs — so it is safe for
+ * @lyrashield/types consumers on both the server and client.
  */
 
 type PlainLanguageSeverity = "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
