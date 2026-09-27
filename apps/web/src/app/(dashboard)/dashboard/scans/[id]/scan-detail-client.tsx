@@ -432,60 +432,72 @@ export function ScanDetailClient({
         label: "Refresh scan status",
         description: "Read the latest accepted scan status. This does not start another scan.",
       }
-    : currentFindings.length > 0
+    : scan.status === "PARTIAL" && scan.target
       ? {
           kind: "link" as const,
-          label: "Review highest-priority finding",
-          href: findingsHref({
-            tab: "issues",
-            finding: topFinding!.id,
-            scanId: scan.id,
-            ...(scan.target ? { target: scan.target.id } : {}),
+          label: "Complete coverage",
+          href: scanRecoveryHref({
+            targetId: scan.target.id,
+            goal: scan.goal,
+            mode: scan.mode,
           }),
           description:
-            "Review the retained evidence first. Detection is not verification; propose a fix only after reviewing its scope.",
+            "Review the recorded limitations, then use the existing scan flow to request another scan for this target.",
         }
-      : scanRecovery
+      : currentFindings.length > 0
         ? {
             kind: "link" as const,
-            label:
-              presentation.recoveryAction === "usage"
-                ? "Review account usage"
-                : "Review scan recovery",
-            href:
-              presentation.recoveryAction === "usage"
-                ? "/dashboard/billing"
-                : (scanRecovery.recoveryHref ??
-                  (scan.target
-                    ? scanRecoveryHref({
-                        targetId: scan.target.id,
-                        goal: scan.goal,
-                        mode: scan.mode,
-                      })
-                    : "/dashboard/scans")),
-            description: scanRecovery.recovery,
+            label: "Review highest-priority finding",
+            href: findingsHref({
+              tab: "issues",
+              finding: topFinding!.id,
+              scanId: scan.id,
+              ...(scan.target ? { target: scan.target.id } : {}),
+            }),
+            description:
+              "Review the retained evidence first. Detection is not verification; propose a fix only after reviewing its scope.",
           }
-        : scan.status === "COMPLETED" && runCoverageState === "Complete" && !hasLimitedCoverage
+        : scanRecovery
           ? {
               kind: "link" as const,
-              label: "Create an assurance report",
-              href: findingsHref({
-                tab: "reports",
-                scanId: scan.id,
-                ...(scan.target ? { targetId: scan.target.id } : {}),
-              }),
-              description:
-                "Package this scan and its recorded scope into an immutable report for your team.",
+              label:
+                presentation.recoveryAction === "usage"
+                  ? "Review account usage"
+                  : "Review scan recovery",
+              href:
+                presentation.recoveryAction === "usage"
+                  ? "/dashboard/billing"
+                  : (scanRecovery.recoveryHref ??
+                    (scan.target
+                      ? scanRecoveryHref({
+                          targetId: scan.target.id,
+                          goal: scan.goal,
+                          mode: scan.mode,
+                        })
+                      : "/dashboard/scans")),
+              description: scanRecovery.recovery,
             }
-          : {
-              kind: "link" as const,
-              label: scan.target ? "Review target setup" : "Review scans",
-              href: scan.target
-                ? `/dashboard/targets/${encodeURIComponent(scan.target.id)}`
-                : "/dashboard/scans",
-              description:
-                "This scan does not have complete usable coverage. Review the visible limitations before deciding what to do next.",
-            }
+          : scan.status === "COMPLETED" && runCoverageState === "Complete" && !hasLimitedCoverage
+            ? {
+                kind: "link" as const,
+                label: "Create an assurance report",
+                href: findingsHref({
+                  tab: "reports",
+                  scanId: scan.id,
+                  ...(scan.target ? { targetId: scan.target.id } : {}),
+                }),
+                description:
+                  "Package this scan and its recorded scope into an immutable report for your team.",
+              }
+            : {
+                kind: "link" as const,
+                label: scan.target ? "Review target setup" : "Review scans",
+                href: scan.target
+                  ? `/dashboard/targets/${encodeURIComponent(scan.target.id)}`
+                  : "/dashboard/scans",
+                description:
+                  "This scan does not have complete usable coverage. Review the visible limitations before deciding what to do next.",
+              }
   const coverageSummary = isActive
     ? "Coverage is still being recorded; this is not a completed result."
     : scan.status === "COMPLETED" && runCoverageState === "Complete" && !hasLimitedCoverage

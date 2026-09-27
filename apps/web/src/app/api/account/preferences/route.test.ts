@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { findUnique, getSession, upsert, withAccountRLS } = vi.hoisted(() => ({
+const { findUnique, getSession, logError, upsert, withAccountRLS } = vi.hoisted(() => ({
   findUnique: vi.fn(),
   getSession: vi.fn(),
+  logError: vi.fn(),
   upsert: vi.fn(),
   withAccountRLS: vi.fn(),
 }))
@@ -19,6 +20,7 @@ vi.mock("@lyrashield/config", () => ({
   },
 }))
 vi.mock("@lyrashield/db", () => ({ withAccountRLS }))
+vi.mock("@lyrashield/logger", () => ({ logger: { error: logError } }))
 
 import { GET, PATCH } from "./route"
 
@@ -61,6 +63,49 @@ describe("/api/account/preferences", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe("https://lyrashieldai.com")
     expect(response.headers.get("access-control-allow-credentials")).toBe("true")
     expect(response.headers.get("vary")).toContain("Origin")
+  })
+
+  it("logs only sanitized error metadata when a preference read fails", async () => {
+    const error = Object.assign(
+      new Error("postgres://user:password@db/secret connection timeout"),
+      {
+        code: "08001",
+        cause: Object.assign(new Error("socket timed out for postgres://secret"), {
+          code: "ETIMEDOUT",
+        }),
+      }
+    )
+    findUnique.mockRejectedValueOnce(error)
+
+    const response = await GET(new Request("https://app.lyrashieldai.com/api/account/preferences"))
+
+    expect(response.status).toBe(500)
+    expect(logError).toHaveBeenCalledWith("Account preference read failed", {
+      eventCode: "ACCOUNT_PREFERENCE_GET_FAILED",
+      errorClass: "Error",
+      databaseCode: "08001",
+      causeClassification: "connection_timeout",
+    })
+    const logged = JSON.stringify(logError.mock.calls)
+    expect(logged).not.toContain("postgres://")
+    expect(logged).not.toContain("password")
+    expect(logged).not.toContain("account-1")
+  })
+
+  it("logs sanitized metadata on failed saves while keeping the local opt-out", async () => {
+    upsert.mockRejectedValueOnce(Object.assign(new Error("connection reset"), { code: "08006" }))
+
+    const response = await PATCH(patch({ analyticsEnabled: true }))
+
+    expect(response.status).toBe(500)
+    expect(logError).toHaveBeenCalledWith("Account preference update failed", {
+      eventCode: "ACCOUNT_PREFERENCE_PATCH_FAILED",
+      errorClass: "Error",
+      databaseCode: "08006",
+      causeClassification: "connection_interrupted",
+    })
+    expect(response.headers.getSetCookie().join(";")).toContain("lyrashield-analytics=off")
+    expect(JSON.stringify(logError.mock.calls)).not.toContain("connection reset")
   })
 
   it("rejects anonymous, API-key and OAuth sessions", async () => {

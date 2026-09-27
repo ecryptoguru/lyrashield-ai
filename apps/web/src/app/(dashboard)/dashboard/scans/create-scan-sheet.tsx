@@ -38,6 +38,8 @@ export function CreateScanSheet({
   onOpenChange,
   isDesktop,
   errorCode,
+  errorMessage,
+  scanRecoveryError,
   targets,
   selectedTarget,
   handleSelectTarget,
@@ -71,6 +73,8 @@ export function CreateScanSheet({
   onOpenChange: (open: boolean) => void
   isDesktop: boolean
   errorCode: string | null
+  errorMessage: string | null
+  scanRecoveryError: string | null
   targets: TargetItem[]
   selectedTarget: string
   handleSelectTarget: (targetId: string) => void
@@ -122,6 +126,12 @@ export function CreateScanSheet({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <div className="space-y-5">
+            {(errorMessage || scanRecoveryError) && (
+              <div role="alert" className="border-destructive/40 rounded-lg border p-3 text-sm">
+                {errorMessage && <p>{errorMessage}</p>}
+                {scanRecoveryError && <p>{scanRecoveryError}</p>}
+              </div>
+            )}
             {errorCode === "DOMAIN_VERIFICATION_REQUIRED" && selectedTarget && (
               <div role="alert" className="border-destructive/40 rounded-lg border p-3 text-sm">
                 <p>Domain verification is required before this review can start.</p>

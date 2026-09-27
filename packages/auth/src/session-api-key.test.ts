@@ -255,6 +255,20 @@ describe("scorecard:publish via requirePermission", () => {
     await expect(requirePermission("ws-1", "scan:cancel")).resolves.toBeTruthy()
   })
 
+  it("never maps a delegated grant to scan removal", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan.cancel"],
+    })
+    stubMembership("OWNER")
+
+    await expect(requirePermission("ws-1", "scan:remove" as never)).rejects.toThrow("FORBIDDEN")
+  })
+
   it("rejects scan:cancel for a delegated connection that granted only scan.create", async () => {
     withHeaders({ authorization: "Bearer oauth-token" })
     vi.mocked(verifyOAuthBearer).mockResolvedValue({

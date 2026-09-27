@@ -426,6 +426,7 @@ export function buildEngineEnv(
   if (!("LYRASHIELD_PROMPT_CACHE_ROUTING" in filtered)) {
     filtered.LYRASHIELD_PROMPT_CACHE_ROUTING = "1"
   }
+  filtered.LYRASHIELD_ALLOW_CHATGPT_SUBSCRIPTION = "0"
   // The engine clones repositories below TMPDIR before asking host Docker to
   // bind-mount them into the sandbox. Keep the child on the same host-visible
   // temp root as the worker; /tmp inside the worker container is not visible

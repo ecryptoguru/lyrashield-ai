@@ -25,6 +25,7 @@ vi.mock("@lyrashield/auth/server", () => ({
     session: { userId: "user-1" },
     workspace: { id: "ws-1" },
   }),
+  assertOAuthDelegatedScope: vi.fn(),
 }))
 
 vi.mock("@lyrashield/auth", () => ({
@@ -43,7 +44,7 @@ import {
   softDeleteScanAttachment,
 } from "@lyrashield/db"
 import { deleteEncryptedArtifact } from "@lyrashield/evidence-storage"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 
 function deleteRequest(key?: string): Request {
   const headers: Record<string, string> = {}
@@ -77,6 +78,7 @@ describe("DELETE /api/scans/attachments/[id]", () => {
     const json = await res.json()
     expect(json.data).toMatchObject({ id: "att-1", deleted: true })
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "attachment:delete")
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(expect.anything(), null)
     expect(softDeleteScanAttachment).toHaveBeenCalledWith("ws-1", "att-1")
     expect(deleteEncryptedArtifact).toHaveBeenCalledWith("file:///tmp/evidence/ws-1/att-1", "ws-1")
     expect(claimOrGetAgentOperation).not.toHaveBeenCalled()

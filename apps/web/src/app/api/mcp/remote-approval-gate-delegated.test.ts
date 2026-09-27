@@ -81,7 +81,9 @@ vi.mock("@lyrashield/db", () => ({
     Promise.resolve(
       fn({
         finding: { findFirst: vi.fn().mockResolvedValue({ targetId: "target-1" }) },
-        fixProposal: { findFirst: vi.fn().mockResolvedValue({ findingId: "finding-1" }) },
+        fixProposal: {
+          findFirst: vi.fn().mockResolvedValue({ finding: { targetId: "target-1" } }),
+        },
 
         scan: {
           findFirst: vi.fn().mockResolvedValue({ targetId: "target-1", mode: "STANDARD" }),

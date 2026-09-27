@@ -8,6 +8,7 @@ import {
 import { getAiSecurityScoreSnapshot } from "./ai-security-score-service"
 import { getAiSystemProfile } from "./ai-system-profile-service"
 import { getThreatModel } from "./threat-model-service"
+import { env } from "@lyrashield/config"
 import { VIBE_SECURITY_CONTROLS, defaultStandards, renderStandards } from "@lyrashield/security"
 import {
   WEBMCP_CONTROLS,
@@ -33,6 +34,9 @@ export interface ReportData {
   workspaceName: string
   scanInfo: {
     scanId: string
+    targetId: string | null
+    goal: string
+    mode: string
     status: string
     summary: string | null
     targetName: string
@@ -490,6 +494,9 @@ export async function gatherReportData(
       webMcpCoverage = parseWebMcpAssurance(rawWebMcp) ?? undefined
       scanInfo = {
         scanId: scan.id,
+        targetId: scan.targetId,
+        goal: scan.goal,
+        mode: scan.mode,
         status: scan.status,
         summary: scan.summary,
         targetName: scan.target?.name ?? "Unknown",
@@ -663,21 +670,38 @@ export async function gatherReportData(
   const currentScore = scoreTrend[0] ?? null
   const criticalCount = bySeverity.CRITICAL ?? 0
   const highCount = bySeverity.HIGH ?? 0
-  // W3-05: only a successfully completed scan can ground a readiness verdict.
-  // A failed, cancelled, timed-out, budget-stopped, or still-running scan
-  // never acquires a readiness claim, no matter how few findings it retained.
-  // (Historical rows may carry lowercase enum spellings.)
+  // Only terminal scans with usable coverage can ground a readiness verdict.
+  // Partial scans remain conditional even with no retained findings.
+  // Historical rows may carry lowercase enum spellings.
   const scanStatus = scanInfo?.status.toUpperCase()
-  const scanUsableForVerdict =
-    scanInfo !== null && (scanStatus === "COMPLETED" || scanStatus === "PARTIAL")
+  const scanUsableForVerdict = scanInfo !== null && scanStatus === "COMPLETED"
+  const isPartialScan = scanStatus === "PARTIAL"
   const verdict = !scanUsableForVerdict
-    ? "NOT_EVALUATED"
+    ? isPartialScan
+      ? criticalCount > 0
+        ? "NO_GO"
+        : "GO_WITH_CONDITIONS"
+      : "NOT_EVALUATED"
     : criticalCount > 0
       ? "NO_GO"
       : highCount > 0
         ? "GO_WITH_CONDITIONS"
         : "GO"
-  const narrative =
+  const incompleteScanners = isPartialScan
+    ? [
+        ...new Set(
+          scanCoverageReceipts
+            .filter((receipt) => !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status))
+            .map((receipt) => receipt.scanner)
+        ),
+      ]
+    : []
+  const coverageNarrative = isPartialScan
+    ? incompleteScanners.length > 0
+      ? `Coverage is incomplete; these checks did not complete: ${incompleteScanners.join(", ")}.`
+      : "Coverage is incomplete; later coverage may have stopped before a scanner receipt was recorded."
+    : ""
+  const verdictNarrative =
     verdict === "NOT_EVALUATED"
       ? scanInfo
         ? `The attached scan did not complete successfully (${scanInfo.status.toLowerCase()}), so its evidence cannot establish release posture.`
@@ -685,8 +709,11 @@ export async function gatherReportData(
       : verdict === "NO_GO"
         ? `${criticalCount} critical finding${criticalCount === 1 ? " requires" : "s require"} remediation and verification before release.`
         : verdict === "GO_WITH_CONDITIONS"
-          ? `${highCount} high-severity finding${highCount === 1 ? " remains" : "s remain"}; release should proceed only with documented owners and conditions.`
+          ? highCount > 0
+            ? `${highCount} high-severity finding${highCount === 1 ? " remains" : "s remain"}; release should proceed only with documented owners and conditions.`
+            : "Complete and review the remaining scan coverage before relying on this release posture."
           : totalFindingsLabel(sortedFindings.length)
+  const narrative = [coverageNarrative, verdictNarrative].filter(Boolean).join(" ")
   const priorityActions: ReportData["assurance"] extends infer A
     ? A extends { priorityActions: infer P }
       ? P
@@ -704,6 +731,13 @@ export async function gatherReportData(
       label: "Assign high-risk remediation",
       detail: `${highCount} high-severity finding${highCount === 1 ? " needs" : "s need"} an owner and due date.`,
       severity: "HIGH",
+    })
+  if (isPartialScan && scanInfo)
+    priorityActions.push({
+      label: "Complete coverage",
+      detail:
+        "Run the existing scan flow for this target after reviewing the recorded limitations.",
+      severity: "MEDIUM",
     })
   if (retestCounts.failed > 0)
     priorityActions.push({
@@ -968,6 +1002,13 @@ export function generateReportHTML(data: ReportData): string {
               `<li><strong>${escapeHtml(action.label)}</strong><span>${escapeHtml(action.detail)}</span></li>`
           )
           .join("")}</ol>
+        ${
+          data.scanInfo?.status.toUpperCase() === "PARTIAL" && data.scanInfo.targetId
+            ? `<p><a class="coverage-action" href="${escapeHtml(
+                `${env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")}/dashboard/scans?new=1&target=${encodeURIComponent(data.scanInfo.targetId)}&goal=${encodeURIComponent(data.scanInfo.goal)}&mode=${encodeURIComponent(data.scanInfo.mode)}`
+              )}">Complete coverage</a></p>`
+            : ""
+        }
       </div>`
     : ""
 

@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto"
 import { expect, test } from "@playwright/test"
-import { prisma } from "@lyrashield/db"
+import { getSystemPrisma, prisma } from "@lyrashield/db"
 
 const adminEmail = "ankit@lyrashieldai.com"
 const password = "E2e-admin-password-123!"
@@ -44,17 +44,18 @@ test.beforeAll(async () => {
 })
 
 test.afterAll(async () => {
+  const systemPrisma = getSystemPrisma()
   try {
     const user = await prisma.user.findUnique({
       where: { email: adminEmail },
       select: { id: true },
     })
     if (user) {
-      await prisma.platformAdminAudit.deleteMany({ where: { actorUserId: user.id } })
+      await systemPrisma.platformAdminAudit.deleteMany({ where: { actorUserId: user.id } })
       await prisma.user.delete({ where: { id: user.id } })
     }
   } finally {
-    await prisma.$disconnect()
+    await Promise.all([prisma.$disconnect(), systemPrisma.$disconnect()])
   }
 })
 

@@ -20,7 +20,8 @@ import { describe, expect, it } from "vitest"
  * camelCase — prisma.webhookEvent, not prisma.WebhookEvent) in a file that
  * references NONE of the explicit RLS-context mechanisms fails CI. The
  * mechanisms:
- *   - withWorkspaceRLS — transaction-local RLS GUC for multi-statement reads
+ *   - withWorkspaceRLS — transaction-local workspace RLS GUC for reads
+ *   - withAccountRLS — transaction-local account RLS GUC for account-owned reads
  *   - runWithDatabaseRLSContext — binds the extension's RLS wrap explicitly
  *   - getSystemPrisma — deliberate cross-workspace system operation
  *
@@ -98,6 +99,7 @@ const FORCE_RLS_ACCESSORS = new Set([
   "syncCursor",
   // v18 1.3: growth + Myra tables under FORCE RLS.
   "accountAcquisition",
+  "accountPreference",
   "myraPublicSession",
   "myraConversation",
   "myraMessage",
@@ -116,6 +118,7 @@ const FORCE_RLS_ACCESSORS = new Set([
 
 const RLS_CONTEXT_MARKERS = [
   "withWorkspaceRLS",
+  "withAccountRLS",
   "runWithDatabaseRLSContext",
   "getSystemPrisma",
 ] as const
@@ -152,6 +155,12 @@ const ALLOWLIST: Record<string, string> = {
     "target read is a bare-id lookup inside the scan pipeline (extension-wrapped)",
   "apps/worker/src/schedules.ts":
     "scan counts and schedule updates with explicit workspaceId args (extension-wrapped; the P1-8 guard count passes workspaceId explicitly — regression-tested in worker-rls-regressions.runtime.test.ts)",
+  "apps/web/src/lib/cache.ts":
+    "pending-approval and unread-notification counts use the server-selected active workspace id and explicit workspaceId filters; dashboard callers derive it from authenticated memberships",
+  "apps/web/src/lib/fix-pr-context.ts":
+    "finding lookup uses the permission-checked workspaceId supplied by the fix-PR route and an explicit workspaceId filter",
+  "apps/web/src/lib/scan-admission.ts":
+    "domain-proof and policy reads use the route-authenticated workspaceId with explicit workspaceId filters",
   "packages/billing/src/entitlements.ts":
     "billingAccount/usageRecord/target reads with explicit workspaceId args (extension-wrapped)",
   "packages/billing/src/usage/balance.ts":
@@ -233,6 +242,7 @@ const ROOTS = [
   join(__dirname, "..", "..", "myra", "src"),
   join(__dirname, "..", "..", "..", "apps", "worker", "src"),
   join(__dirname, "..", "..", "..", "apps", "web", "src", "app", "api"),
+  join(__dirname, "..", "..", "..", "apps", "web", "src", "lib"),
 ] as const
 
 // The generated Prisma client is thousands of files and matches every
@@ -288,7 +298,7 @@ describe("plain-client FORCE-RLS reads (v16 2.2 tripwire)", () => {
     }
     expect(
       offenders,
-      `plain-client FORCE-RLS reads with no RLS context and no ALLOWLIST entry (add withWorkspaceRLS, runWithDatabaseRLSContext or getSystemPrisma — or justify in this test's ALLOWLIST):\n${offenders.join("\n")}`
+      `plain-client FORCE-RLS reads with no RLS context and no ALLOWLIST entry (add withWorkspaceRLS, withAccountRLS, runWithDatabaseRLSContext or getSystemPrisma — or justify in this test's ALLOWLIST):\n${offenders.join("\n")}`
     ).toEqual([])
   })
 

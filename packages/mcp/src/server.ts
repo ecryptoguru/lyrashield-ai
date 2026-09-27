@@ -191,7 +191,17 @@ export class McpServer {
     // Validate the exact (sanitized) arguments against the tool's advertised
     // inputSchema before any approval or execution. Structured errors name
     // the offending fields so agents can correct the call.
-    const argErrors = validateToolArgs(safeArgs, tool.inputSchema as Record<string, unknown>)
+    const inputSchema = tool.mutating
+      ? {
+          ...tool.inputSchema,
+          properties: {
+            ...tool.inputSchema.properties,
+            idempotencyKey: { type: "string", minLength: 1, maxLength: 128 },
+            approvalId: { type: "string", minLength: 1, maxLength: 128 },
+          },
+        }
+      : tool.inputSchema
+    const argErrors = validateToolArgs(safeArgs, inputSchema as Record<string, unknown>)
     if (argErrors.length > 0) {
       logger.warn("MCP tool call failed argument validation", { tool: name, argErrors })
       const error = {
