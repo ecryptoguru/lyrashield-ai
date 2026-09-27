@@ -2,14 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { OPTIONS, POST } from "./route"
 
 const MARKETING_ORIGIN = "https://lyrashieldai.com"
-const OPTIONAL_COOKIE_NAMES = [
-  "lyrashield-acq",
-  "ls_ref",
-  "ls_ref_source",
-  "ls_scorecard_visitor",
-]
+const OPTIONAL_COOKIE_NAMES = ["lyrashield-acq", "ls_ref", "ls_ref_source", "ls_scorecard_visitor"]
 
-function request(origin: string | undefined = MARKETING_ORIGIN, method: "OPTIONS" | "POST" = "POST") {
+function request(
+  origin: string | undefined = MARKETING_ORIGIN,
+  method: "OPTIONS" | "POST" = "POST"
+) {
   const headers = new Headers()
   if (origin !== undefined) headers.set("origin", origin)
   return new Request("https://app.lyrashieldai.com/api/privacy/analytics-opt-out", {
