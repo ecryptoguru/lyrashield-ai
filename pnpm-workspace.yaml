@@ -69,21 +69,13 @@ overrides:
   # by @astrojs/internal-helpers).
   smol-toml: ">=1.7.1"
 
-onlyBuiltDependencies:
-  - "@prisma/engines"
-  - "esbuild"
-  - "msgpackr-extract"
-  - "prisma"
-  - "sharp"
-  - "unrs-resolver"
 allowBuilds:
   "@prisma/engines": true
   "@sentry/cli": false
-  core-js: true
+  core-js: false
   esbuild: true
   msgpackr-extract: true
   prisma: true
-  puppeteer: true
   sharp: true
   unrs-resolver: true
   workerd: true
