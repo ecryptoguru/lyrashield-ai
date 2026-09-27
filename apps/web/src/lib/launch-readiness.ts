@@ -206,14 +206,14 @@ export function generateLaunchReadinessReportFromAggregate(
   if (blockingFindings > 0) {
     verdict = "NO_GO"
     conditions.push(
-      `Review ${blockingFindings} unresolved critical/high finding(s) against the affected target, evidence, and release policy.`
+      `Review ${blockingFindings} unresolved critical/high finding(s) against the affected target, evidence and release policy.`
     )
   } else if (score >= 80) {
     verdict = "GO"
   } else if (score >= 40) {
     verdict = "GO_WITH_CONDITIONS"
     conditions.push(
-      "Review remaining medium-severity findings against the target, evidence, and release policy."
+      "Review remaining medium-severity findings against the target, evidence and release policy."
     )
   } else {
     verdict = "NO_GO"
@@ -251,7 +251,7 @@ export function generateLaunchReadinessReportFromAggregate(
 
   if ((bySeverity.HIGH ?? 0) > 0) {
     recommendations.push(
-      `Review ${bySeverity.HIGH} high-severity finding(s) against the affected component, exposure, and release policy.`
+      `Review ${bySeverity.HIGH} high-severity finding(s) against the affected component, exposure and release policy.`
     )
   }
 
