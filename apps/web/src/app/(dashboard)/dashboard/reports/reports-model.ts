@@ -28,7 +28,7 @@ export interface LaunchReportProvenance {
   effectiveState: string | null
 }
 
-export const reportItemSchema = z
+const reportItemSchema = z
   .object({
     id: z.string(),
     title: z.string(),
@@ -45,7 +45,7 @@ export const reportItemSchema = z
 export const reportsPaginatedSchema = paginatedResponseSchema(reportItemSchema)
 
 /** Bounded launch-gate provenance carried on a launch-readiness report. */
-export const launchReportProvenanceSchema = z
+const launchReportProvenanceSchema = z
   .object({
     gateVerdictId: z.string(),
     verdictChecksum: z.string(),

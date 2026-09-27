@@ -6,7 +6,7 @@ import {
 } from "../utils"
 import type { AIScanFile, AISecuritySignal } from "../types"
 
-export const AI_05_RULE_ID = "AI-05.excessive-agency" as const
+const AI_05_RULE_ID = "AI-05.excessive-agency" as const
 
 /**
  * Destructive verbs, matched on a word-character boundary.

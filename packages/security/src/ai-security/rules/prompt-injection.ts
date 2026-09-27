@@ -6,7 +6,7 @@ import {
 } from "../utils"
 import type { AIScanFile, AISecuritySignal } from "../types"
 
-export const AI_01_RULE_ID = "AI-01.prompt-injection" as const
+const AI_01_RULE_ID = "AI-01.prompt-injection" as const
 
 const LLM_CALL_PATTERNS = [
   /openai\.chat\.completions\.create\s*\(/i,

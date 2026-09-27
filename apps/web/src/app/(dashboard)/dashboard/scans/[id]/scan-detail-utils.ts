@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react"
 import type { ScanEvent } from "./scan-detail-types"
 
-export const ELAPSED_TIME_INTERVAL_MS = 1_000
+const ELAPSED_TIME_INTERVAL_MS = 1_000
 export const COMPLETION_NOTICE_DISMISS_MS = 6_000
 /** Matches the service's event window cap (getScanWithEvents take: 200). */
-export const MAX_EVENT_WINDOW = 200
+const MAX_EVENT_WINDOW = 200
 
 /** Ticking elapsed time from a start timestamp, returning a formatted string. */
 export function useElapsedTime(startedAt: string | null): string {
@@ -38,10 +38,7 @@ export function asIsoString(value: string | Date | null): string | null {
 // Event ordering for the incremental merge. The API returns events newest-first
 // and the client stores them ascending; a stale full window and a fresh
 // incremental tail can interleave, so comparisons never assume response order.
-export function isEventAtOrAfterCursor(
-  event: { createdAt: string; id: string },
-  cursor: ScanEvent
-) {
+function isEventAtOrAfterCursor(event: { createdAt: string; id: string }, cursor: ScanEvent) {
   if (event.createdAt > cursor.createdAt) return true
   if (event.createdAt < cursor.createdAt) return false
   return event.id >= cursor.id

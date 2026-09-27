@@ -55,7 +55,7 @@ export interface GateApplicabilityResult {
 }
 
 /** True when the caller supplies a release identity to enforce. */
-export function isEnforcingIdentityInput(
+function isEnforcingIdentityInput(
   input: Pick<GateApplicabilityInput, "expectedCommit" | "expectedArtifactDigest">
 ): boolean {
   return Boolean(input.expectedCommit ?? input.expectedArtifactDigest)

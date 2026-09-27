@@ -15,14 +15,14 @@ import { logger } from "@lyrashield/logger"
  * team needs for diagnosis. The listener parameter is declared structurally
  * (duration + query) rather than naming the generated `Prisma.QueryEvent`.
  */
-export const SLOW_QUERY_THRESHOLD_MS = 500
+const SLOW_QUERY_THRESHOLD_MS = 500
 
 /**
  * Extract the model/action pair from a query event WITHOUT logging query text.
  * Prisma 7 appends a trailing comment (`/* <action> for <model> *\/`) to the
  * SQL it emits through query events; strip it and never emit the remainder.
  */
-export function describeQueryEvent(event: { query: string; duration: number }): {
+function describeQueryEvent(event: { query: string; duration: number }): {
   model: string | null
   action: string | null
   durationMs: number

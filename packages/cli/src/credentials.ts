@@ -25,7 +25,7 @@ import {
   type StoredCredentials,
 } from "@lyrashield/credentials"
 
-export { CREDENTIALS_FILE, DEFAULT_API_URL, getEnvApiUrl }
+export { DEFAULT_API_URL, getEnvApiUrl }
 
 export type Credentials = StoredCredentials
 export type EffectiveCredentials = ResolvedCredentials

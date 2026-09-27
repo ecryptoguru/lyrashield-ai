@@ -46,7 +46,7 @@ const githubRepoSchema = z
 
 export const githubReposSchema = z.array(githubRepoSchema)
 
-export const findingPrioritySchema = z
+const findingPrioritySchema = z
   .object({
     score: z.number(),
     band: z.enum(["urgent", "high", "normal", "low"]),
@@ -109,7 +109,7 @@ export const evidenceFindingItemSchema = z
 
 export const evidenceFindingsPaginatedSchema = paginatedResponseSchema(evidenceFindingItemSchema)
 
-export const scanTargetSchema = z
+const scanTargetSchema = z
   .object({
     id: z.string(),
     name: z.string(),
@@ -138,7 +138,7 @@ export const scanItemSchema = z
   })
   .passthrough()
 
-export const findingDetailItemSchema = z
+const findingDetailItemSchema = z
   .object({
     id: z.string(),
     title: z.string(),
@@ -165,7 +165,7 @@ export const scanCancelSchema = z
   })
   .passthrough()
 
-export const scanAttachmentItemSchema = z
+const scanAttachmentItemSchema = z
   .object({
     id: z.string(),
     filename: z.string(),
@@ -216,7 +216,7 @@ export const scanEligibilitySchema = z.object({
 
 export const findingDetailItemsPaginatedSchema = paginatedResponseSchema(findingDetailItemSchema)
 
-export const scanPollEventSchema = z
+const scanPollEventSchema = z
   .object({
     id: z.string(),
     stage: z.string(),
@@ -230,9 +230,9 @@ export const scanPollEventSchema = z
 // Echoed by the API only when an incremental event window was actually applied
 // to the poll (see eventsAfter); lets the client prove the cursor took effect
 // before merging the tail into the full list.
-export const eventsCursorAppliedSchema = z.string().optional()
+const eventsCursorAppliedSchema = z.string().optional()
 
-export const scanPollCoverageReceiptSchema = z
+const scanPollCoverageReceiptSchema = z
   .object({
     scanner: z.string(),
     controlId: z.string(),

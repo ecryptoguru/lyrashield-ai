@@ -24,7 +24,7 @@ export interface ResolveRepoResult {
   cwd: string
 }
 
-export async function getProjectsDir(): Promise<string> {
+async function getProjectsDir(): Promise<string> {
   await mkdir(PROJECTS_DIR, { recursive: true, mode: 0o700 })
   return PROJECTS_DIR
 }
@@ -126,7 +126,7 @@ export async function findTargetByRepository(
   return undefined
 }
 
-export async function createRepoTarget(
+async function createRepoTarget(
   client: LyraShieldClient,
   workspaceId: string,
   repo: ParsedRepo,

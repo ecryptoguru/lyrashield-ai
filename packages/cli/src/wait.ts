@@ -17,8 +17,8 @@ export const EXIT_WAIT_TIMEOUT = 8
 /** SIGINT while waiting — the server-side work keeps running. */
 export const EXIT_SIGINT = 130
 
-export const DEFAULT_WAIT_TIMEOUT_MS = 30 * 60 * 1000
-export const DEFAULT_POLL_INTERVAL_MS = 5000
+const DEFAULT_WAIT_TIMEOUT_MS = 30 * 60 * 1000
+const DEFAULT_POLL_INTERVAL_MS = 5000
 
 export interface WaitFlags {
   wait: boolean
@@ -76,7 +76,7 @@ export interface WaitControl {
  * the default Ctrl+C termination, so the command can report resumable state
  * and exit 130 itself. Always dispose() when the wait ends.
  */
-export function bindSigint(controller = new AbortController()): WaitControl {
+function bindSigint(controller = new AbortController()): WaitControl {
   const onSigint = () => controller.abort()
   process.on("SIGINT", onSigint)
   return {
@@ -184,7 +184,7 @@ export async function runScanWait(
  * (cuid-shaped). Anything else — URLs, paths, empty strings — is not
  * followed: the operation result is reported without a scan tail.
  */
-export function extractInternalScanId(resultLocation: string | null): string | null {
+function extractInternalScanId(resultLocation: string | null): string | null {
   if (!resultLocation) return null
   const trimmed = resultLocation.trim()
   return /^[A-Za-z0-9_-]{1,128}$/.test(trimmed) ? trimmed : null
