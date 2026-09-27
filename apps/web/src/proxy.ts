@@ -9,6 +9,7 @@ import {
 } from "@/lib/rate-limit"
 import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
 import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
+import { hashPrivacyValue } from "@/lib/privacy-hash"
 import { assessAppOrigin, isAppHost, isDirectAppOrigin, trustedAppCountry } from "@/lib/app-origin"
 import { isOAuthProtocolPath, OAUTH_RATE_LIMIT_ERROR } from "@/lib/oauth-registration"
 
@@ -81,15 +82,6 @@ function warnUnknownIp(): "unknown" {
  * S3: Hash a value (IP or user-agent) with a server-side salt using Web Crypto.
  * Raw IPs and plaintext UAs are never persisted to the affiliate click store.
  */
-async function hashWithSalt(value: string): Promise<string> {
-  const salt = process.env.IP_HASH_SALT ?? "lyrashield-ip-salt-v1"
-  const data = new TextEncoder().encode(value + salt)
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data)
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
-}
-
 /**
  * S3: Extract and hash the client IP for affiliate click storage.
  * Uses the same configured trusted last hop as rate limiting.
@@ -97,7 +89,7 @@ async function hashWithSalt(value: string): Promise<string> {
  */
 export async function getAffiliateIpHash(request: NextRequest): Promise<string | undefined> {
   const ip = getClientIP(request)
-  return ip === "unknown" ? undefined : hashWithSalt(ip)
+  return ip === "unknown" ? undefined : hashPrivacyValue(ip)
 }
 
 /**
@@ -148,7 +140,7 @@ async function handleAffiliateAttribution(
   const ipHash = await getAffiliateIpHash(request)
   const rawUserAgent = request.headers.get("user-agent") ?? undefined
   // S4: Hash the user-agent before storing — never store plaintext UA
-  const userAgent = rawUserAgent ? await hashWithSalt(rawUserAgent) : undefined
+  const userAgent = rawUserAgent ? await hashPrivacyValue(rawUserAgent) : undefined
 
   // S8: Check consent cookie — GDPR-compliant
   const consentCookie = request.cookies.get("__ls_consent")?.value

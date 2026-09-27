@@ -1,22 +1,15 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { createHash } from "node:crypto"
 import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { getCachedSession } from "@/lib/cache"
 import { detectFraudSignals, AFFILIATE_TERMS_VERSION } from "@lyrashield/affiliate"
 import { clientIpFromRequest } from "@/lib/rate-limit"
+import { hashPrivacyValue } from "@/lib/privacy-hash"
 
 // C-M10: IP / user-agent hashing for fraud-signal signup counts. Mirrors the
 // salted SHA-256 used by the click route so the hashes match across routes.
-function hashIp(value: string): string {
-  const salt = process.env.IP_HASH_SALT ?? "lyrashield-ip-salt-v1"
-  return createHash("sha256")
-    .update(value + salt)
-    .digest("hex")
-}
-
 function getClientIp(request: Request): string | undefined {
   const ip = clientIpFromRequest(request)
   return ip === "unknown" ? undefined : ip
@@ -91,9 +84,9 @@ async function post(request: Request) {
     // email check ran). Hash the applicant's IP the same way the click route
     // does (salted SHA-256) and count prior Clicks from that IP / user-agent hash.
     const clientIp = getClientIp(request)
-    const ipHash = clientIp ? hashIp(clientIp) : undefined
+    const ipHash = clientIp ? await hashPrivacyValue(clientIp) : undefined
     const userAgent = request.headers.get("user-agent")
-    const userAgentHash = userAgent ? hashIp(userAgent) : undefined
+    const userAgentHash = userAgent ? await hashPrivacyValue(userAgent) : undefined
     const [signupCountByIp, signupCountByDevice] = await Promise.all([
       ipHash ? prisma.click.count({ where: { ipHash } }) : Promise.resolve(0),
       userAgentHash

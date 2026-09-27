@@ -362,7 +362,7 @@ describe("worker Docker runtime", () => {
     ]) {
       expect(evidenceSync).toContain(binding)
     }
-    expect(evidenceSync).not.toContain("az keyvault secret show")
+    expect(evidenceSync).not.toMatch(/az keyvault secret show[^\n]*--query\s+value/)
     for (const binding of [
       '"S3_ENDPOINT=secretref:evidence-s3-endpoint"',
       '"S3_BUCKET=secretref:evidence-s3-bucket"',

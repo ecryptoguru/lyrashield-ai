@@ -679,6 +679,41 @@ jobs:
             --output none
           echo "Evidence storage Key Vault references synced to the app Container App."
 
+      - name: Sync IP hash salt Key Vault reference
+        env:
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: |
+          set -euo pipefail
+          if [ -z "$AZURE_APP_CONTAINER_APP_NAME" ]; then
+            echo "::error::The app Container App is required to sync IP_HASH_SALT."
+            exit 1
+          fi
+          secret_name=$(az keyvault secret show \
+            --vault-name "$AZURE_KEY_VAULT_NAME" \
+            --name ip-hash-salt \
+            --query name \
+            --output tsv)
+          if [ "$secret_name" != "ip-hash-salt" ]; then
+            echo "::error::The ip-hash-salt Key Vault secret is missing or unavailable. Its value was not read."
+            exit 1
+          fi
+          source .github/scripts/azure_secret_set.sh
+          vault_secret_ref="keyvaultref:https://${AZURE_KEY_VAULT_NAME}.vault.azure.net/secrets/ip-hash-salt,identityref:system"
+          for container_app in "$AZURE_APP_CONTAINER_APP_NAME" "$AZURE_SCANNER_CONTAINER_APP_NAME"; do
+            if [ -z "$container_app" ]; then
+              continue
+            fi
+            azure_containerapp_secret_set_retrying \
+              --name "$container_app" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --secrets "ip-hash-salt=${vault_secret_ref}" \
+              --output none
+          done
+          echo "IP hash salt Key Vault references synced without retrieving the secret value."
+
       # Myra support agent (docs/myra-spec.md). All MYRA_* flags default off;
       # these secrets are synced only when the GitHub secret is configured, so
       # enabling stays a vars/secrets change with no workflow edit.
@@ -1023,6 +1058,7 @@ jobs:
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "PLATFORM_ADMIN_EMAILS=${{ env.PLATFORM_ADMIN_EMAILS }}" \
+              "IP_HASH_SALT=secretref:ip-hash-salt" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
               "LYRASHIELD_PRODUCT_REVISION=${{ env.DEPLOY_SHA }}" \
               "CLOUDFLARE_ORIGIN_MTLS=${{ env.CLOUDFLARE_ORIGIN_MTLS }}" \
@@ -1146,6 +1182,7 @@ jobs:
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "PLATFORM_ADMIN_EMAILS=${{ env.PLATFORM_ADMIN_EMAILS }}" \
+              "IP_HASH_SALT=secretref:ip-hash-salt" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
               "POLAR_BILLING_ADMISSION=${{ env.POLAR_BILLING_ADMISSION }}" \
               "POLAR_LOCAL_BILLING_ADMISSION=${{ env.POLAR_LOCAL_BILLING_ADMISSION }}" \
