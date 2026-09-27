@@ -31,7 +31,7 @@ export const AUTOMATION_WORKFLOWS = [
   {
     id: "cancel_scans",
     label: "Cancel Running Scans",
-    description: "Stop queued or running scans in the workspace.",
+    description: "Stop queued or running scans in the workspace; it cannot remove scans.",
     operations: [CANONICAL_OPERATIONS.SCAN_CANCEL],
   },
   {

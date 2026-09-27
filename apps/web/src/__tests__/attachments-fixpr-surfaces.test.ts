@@ -79,6 +79,13 @@ describe("D2 attachment + fix-PR surfaces", () => {
     expect(PERMISSIONS.scan.view).toBe("scan:view")
   })
 
+  it("keeps scan removal out of delegated cancellation consent", () => {
+    const cancel = AUTOMATION_WORKFLOWS.find((wf) => wf.id === "cancel_scans")!
+    expect(cancel.label).toBe("Cancel Running Scans")
+    expect(cancel.description).toMatch(/cannot remove scans/i)
+    expect(cancel.operations).toEqual(["scan.cancel"])
+  })
+
   it("maps every mutating canonical op used by the tool map into the mutating set", () => {
     for (const descriptor of Object.values(TOOL_OPERATION_MAP)) {
       if (!descriptor.mutating) continue

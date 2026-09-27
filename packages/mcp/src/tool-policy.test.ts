@@ -22,4 +22,11 @@ describe("MUTATING_TOOL_NAMES", () => {
       expect(catalogNames.has(name)).toBe(true)
     }
   })
+
+  it("rejects extra arguments for every mutating tool", () => {
+    const tools = new Map(createAllTools(dummyContext).map((tool) => [tool.name, tool]))
+    for (const name of MUTATING_TOOL_NAMES) {
+      expect(tools.get(name)?.inputSchema.additionalProperties, name).toBe(false)
+    }
+  })
 })

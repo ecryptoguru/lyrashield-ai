@@ -19,7 +19,7 @@ export const SERVER_DESCRIPTION =
   "Bounded security scans, recorded evidence states, fix proposals, retests and launch-readiness review."
 export const SERVER_WEBSITE_URL = "https://lyrashieldai.com"
 export const SERVER_INSTRUCTIONS =
-  "Start with lyrashield_list_workspaces and lyrashield_list_targets. Follow nextCursor with cursor for paged targets and findings; absence of a cursor means the list is complete. Use read-only tools to inspect recorded evidence. Authorized mutations run within connection permissions. Use stable idempotency keys for identical retries and reuse returned scan or operation IDs; conflicting input needs a new key. A queued scan ID is a LyraShield domain result, not an MCP protocol task. Poll lyrashield_get_scan_status after five seconds, back off to 30 seconds, stop at a terminal state and return the resumable ID after a bounded session."
+  "Start with lyrashield_list_workspaces and lyrashield_list_targets. Follow nextCursor with cursor for paged targets and findings; absence of a cursor means the list is complete. Use read-only tools to inspect recorded evidence. Authorized mutations run within connection permissions. Use stable idempotency keys for identical retries and reuse returned scan or operation IDs; conflicting input needs a new key. On protocol 2025-11-25, lyrashield_scan_target may return an MCP task ID; poll it with tasks/get and tasks/result and use tasks/cancel to request cancellation. Task IDs differ from LyraShield scan IDs. If the call returns a scan ID without task augmentation, poll lyrashield_get_scan_status after five seconds, back off to 30 seconds, stop at a terminal state and return the resumable ID after a bounded session."
 
 export interface RemoteApprovalContext {
   workspaceId: string
