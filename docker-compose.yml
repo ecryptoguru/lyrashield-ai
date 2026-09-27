@@ -192,12 +192,12 @@ services:
       GITHUB_APP_CLIENT_SECRET: "${GITHUB_APP_CLIENT_SECRET:-}"
       # Scan engine
       LYRASHIELD_LLM: "${LYRASHIELD_LLM:-}"
-      # Local defaults preserve the documented low-cost routing contract:
-      # Quick/Safe/Standard use Luna; Deep uses Terra with Luna delegates.
+      # Local defaults preserve the model routing contract:
+      # Quick/Safe/Standard use Luna; Deep uses Sol with Luna delegates.
       # Production must still set explicit deployment names through its secret
       # and configuration management boundary.
-      LYRASHIELD_LUNA_LLM: "${LYRASHIELD_LUNA_LLM:-azure_ai/gpt-5.6-luna}"
-      LYRASHIELD_TERRA_LLM: "${LYRASHIELD_TERRA_LLM:-azure_ai/gpt-5.6-terra}"
+      LYRASHIELD_LUNA_LLM: "${LYRASHIELD_LUNA_LLM:-azure_ai/gpt-6-luna}"
+      LYRASHIELD_SOL_LLM: "${LYRASHIELD_SOL_LLM:-azure_ai/gpt-6-sol}"
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LLM_API_BASE: "${LLM_API_BASE:-}"
       LLM_API_VERSION: "${LLM_API_VERSION:-}"
@@ -255,7 +255,6 @@ services:
           memory: ${WORKER_MEMORY_LIMIT:-4G}
           pids: ${WORKER_PIDS_LIMIT:-512}
     working_dir: /app
-    command: ["./apps/worker/node_modules/.bin/tsx", "apps/worker/src/index.ts"]
     healthcheck:
       test:
         [

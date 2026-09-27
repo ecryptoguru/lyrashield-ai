@@ -28,7 +28,7 @@ pnpm lint
 
 ## Environment
 
-Copy `apps/web/.env.example` to `apps/web/.env` and set at least `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MARKETING_URL`, `BETTER_AUTH_SECRET`, and database credentials.
+Copy the root `.env.example` to the root `.env`, then link it for Next.js with `ln -s ../../.env apps/web/.env` from the repository root. Set at least `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MARKETING_URL`, `BETTER_AUTH_SECRET`, and database credentials. If `apps/web/.env` already exists, keep its local settings instead of replacing it.
 
 ## See also
 

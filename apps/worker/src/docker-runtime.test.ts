@@ -95,6 +95,17 @@ describe("worker Docker runtime", () => {
     )
   })
 
+  it("uses the Compose image for local verification and the image's worker command", () => {
+    expect(dockerCompose).toContain("image: lyrashield-worker:local")
+    expect(imageVerifier).toContain('image="${1:-lyrashield-worker:local}"')
+    expect(dockerCompose).not.toContain('command: ["./apps/worker/node_modules/.bin/tsx"')
+  })
+
+  it("defaults app email verification on when the deploy variable is absent", () => {
+    expect(dockerfile).toContain('ARG BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="1"')
+    expect(deployWorkflow).toContain("vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '1'")
+  })
+
   it("installs the engine non-editably and omits its build checkout", () => {
     const workerMarker = `FROM ${pinnedNodeBase} AS worker\n`
     const engineStage = dockerfile.slice(

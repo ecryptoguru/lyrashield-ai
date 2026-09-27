@@ -27,7 +27,6 @@ describe("Myra dashboard admission", () => {
     const files = [
       "./env.ts",
       "../../../.env.example",
-      "../../../apps/web/.env.example",
       "../../../.github/scripts/verify-myra-deployment-config.mjs",
       "../../../.github/workflows/deploy-azure.yml",
       "../../../apps/web/src/app/(dashboard)/layout.tsx",

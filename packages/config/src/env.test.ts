@@ -23,7 +23,7 @@ const envSchema = z
     TRUSTED_PROXY_IP_HEADER: z.string().optional().or(z.literal("")),
     LYRASHIELD_LLM: z.string().optional().or(z.literal("")),
     LYRASHIELD_LUNA_LLM: z.string().optional().or(z.literal("")),
-    LYRASHIELD_TERRA_LLM: z.string().optional().or(z.literal("")),
+    LYRASHIELD_SOL_LLM: z.string().optional().or(z.literal("")),
     LLM_API_KEY: z.string().optional().or(z.literal("")),
     LYRASHIELD_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().optional(),
     LYRASHIELD_MAX_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
@@ -64,7 +64,6 @@ const envSchema = z
     RAZORPAY_LOCAL_BILLING_ADMISSION: z.enum(["off", "public"]).default("off"),
     BILLING_CANARY_WORKSPACE_IDS: z.string().optional().default(""),
     RAZORPAYX_PAYOUT_ADMISSION: z.enum(["off", "public"]).default("off"),
-    PAYONEER_PAYOUT_ADMISSION: z.literal("off").default("off"),
     SENTRY_DSN: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional().or(z.literal("")),
     AZURE_RESOURCE_GROUP: z.string().optional().or(z.literal("")),
@@ -158,7 +157,6 @@ describe("Env Validation Schema", () => {
         expect(result.data.POLAR_LOCAL_BILLING_ADMISSION).toBe("off")
         expect(result.data.RAZORPAY_LOCAL_BILLING_ADMISSION).toBe("off")
         expect(result.data.RAZORPAYX_PAYOUT_ADMISSION).toBe("off")
-        expect(result.data.PAYONEER_PAYOUT_ADMISSION).toBe("off")
       }
     })
 

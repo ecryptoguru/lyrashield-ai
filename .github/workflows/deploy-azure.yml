@@ -34,7 +34,7 @@ env:
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
-  REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}
+  REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '1' }}
   PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
   # Cloud modes are protected azure-production variables. Local purchases stay
   # hard-off independently of Cloud launch state.
@@ -354,7 +354,6 @@ jobs:
           POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
           POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
           POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
-          POLAR_ORG_ID: ${{ vars.POLAR_ORG_ID }}
           POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
           POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
           RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
@@ -911,7 +910,6 @@ jobs:
           GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
           EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
-          POLAR_ORG_ID: ${{ vars.POLAR_ORG_ID }}
           POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
           POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
           RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
@@ -1030,7 +1028,6 @@ jobs:
               "DEPLOY_PROBE_CERT_SHA256=${DEPLOY_PROBE_CERT_SHA256}" \
               "POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}" \
               "POLAR_ACCESS_TOKEN=secretref:polar-access-token" \
-              "POLAR_ORG_ID=${POLAR_ORG_ID}" \
               "POLAR_WEBHOOK_SECRET=secretref:polar-webhook-secret" \
               "POLAR_PRODUCT_IDS=${POLAR_PRODUCT_IDS}" \
               "POLAR_LOCAL_PRODUCT_IDS=${POLAR_LOCAL_PRODUCT_IDS}" \
@@ -1068,7 +1065,6 @@ jobs:
               "MYRA_CALENDAR_PROVIDER=${{ vars.MYRA_CALENDAR_PROVIDER }}" \
               "MYRA_AZURE_OPENAI_ENDPOINT=${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}" \
               "MYRA_MODEL=${{ vars.MYRA_MODEL }}" \
-              "MYRA_EMBED_MODEL=${{ vars.MYRA_EMBED_MODEL }}" \
               "MYRA_MONTHLY_BUDGET_USD=${{ vars.MYRA_MONTHLY_BUDGET_USD }}" \
               "MYRA_GOOGLE_CLIENT_ID=${{ vars.MYRA_GOOGLE_CLIENT_ID }}" \
               "MYRA_GOOGLE_CALENDAR_ID=${{ vars.MYRA_GOOGLE_CALENDAR_ID }}" \

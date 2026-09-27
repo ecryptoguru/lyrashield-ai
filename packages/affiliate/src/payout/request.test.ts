@@ -41,7 +41,7 @@ vi.mock("@lyrashield/db", () => ({
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), error: vi.fn() } }))
 vi.mock("@lyrashield/config", () => ({
-  env: { RAZORPAYX_PAYOUT_ADMISSION: "public", PAYONEER_PAYOUT_ADMISSION: "off" },
+  env: { RAZORPAYX_PAYOUT_ADMISSION: "public" },
 }))
 vi.mock("./eligibility", () => ({
   checkPayoutEligibility: vi.fn().mockResolvedValue({ eligible: true, reasons: [] }),
