@@ -29,10 +29,6 @@ export async function getProjectsDir(): Promise<string> {
   return PROJECTS_DIR
 }
 
-export function getProjectFilePath(): string {
-  return PROJECTS_FILE
-}
-
 export async function loadDefaultProject(): Promise<StoredProject | undefined> {
   try {
     await access(PROJECTS_FILE)

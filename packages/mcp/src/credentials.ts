@@ -10,7 +10,6 @@
  * LYRASHIELD_API_KEY environment variable from working.
  */
 import {
-  CREDENTIALS_DIR,
   CREDENTIALS_FILE,
   refreshOAuthCredentials,
   resolveCredentials,
@@ -20,12 +19,9 @@ import {
   hasCredentialsChanged,
   hasUsableOAuthAccessToken,
   OAuthRefreshError,
-  type StoredCredentials,
 } from "@lyrashield/credentials"
 
-export { CREDENTIALS_DIR, CREDENTIALS_FILE }
-
-export type Credentials = Pick<StoredCredentials, "apiKey" | "oauthAccessToken" | "apiUrl">
+export { CREDENTIALS_FILE }
 
 export class NoApiKeyError extends Error {
   constructor() {

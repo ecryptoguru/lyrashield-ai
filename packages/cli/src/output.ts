@@ -31,18 +31,6 @@ export function yellow(s: string): string {
   return fmt("\x1b[33m", s)
 }
 
-export function green(s: string): string {
-  return fmt("\x1b[32m", s)
-}
-
-export function cyan(s: string): string {
-  return fmt("\x1b[36m", s)
-}
-
-export function dim(s: string): string {
-  return fmt("\x1b[2m", s)
-}
-
 export function redactKey(key: string | undefined): string {
   if (!key) return "not set"
   if (!key.startsWith("lsk_")) return "non-LyraShield key"
@@ -96,13 +84,4 @@ export function createOutput({ json, quiet = false }: { json: boolean; quiet?: b
       process.exit(exitCode)
     },
   }
-}
-
-export function printJsonError(error: string, exitCode = 1): never {
-  console.log(JSON.stringify({ ok: false, error }, null, 2))
-  process.exit(exitCode)
-}
-
-export function printJsonResult(data: unknown): void {
-  console.log(JSON.stringify({ ok: true, data }, null, 2))
 }
