@@ -17,4 +17,4 @@ Environment validation and shared configuration for the LyraShield monorepo.
 ## See also
 
 - `.env.example` in the repository root.
-- The former `docs/deployment/LOCAL_SETUP.md` (removed 2026-09-09; git history is the recovery path)
+- [Local setup](../../README.md#local-setup) and [operator runbooks](../../docs/operations.md).

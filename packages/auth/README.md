@@ -24,4 +24,4 @@ Authentication, session helpers, permissions, and OAuth providers for LyraShield
 ## See also
 
 - `apps/web` for dashboard usage.
-- The former `docs/deployment/PRODUCTION_DEPLOYMENT.md` runbook (auth and email verification notes) was retired on 2026-09-09 and remains recoverable from git history (e.g. `git show <history>`).
+- [Operator runbooks](../../docs/operations.md) for current operational guidance.

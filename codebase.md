@@ -304,7 +304,7 @@ Primary locations:
 
 Billing webhook inserts `WebhookEvent` before synchronous Track A/B/C processing. Money uses `Decimal(19,4)`, never Float. Usage, pack purchase, subscription, refund, commission, and payout operations are idempotent. Agent-minute recording and FIFO pack debit share one workspace+account advisory-locked serializable transaction; each tick debits only its incremental spill beyond the monthly pool, and conditional pack updates prevent negative balances.
 
-Subscriptions, entitlements, usage balances, allowances, grace, overage, and minute packs are **account-owned** (`BillingAccount.accountId`, `UsageRecord.accountId`, `MinutePack.accountId`); `workspaceId` fields on those rows are purchase attribution only. The sponsoring account is the persisted scan creator (`Scan.createdById` / `Schedule.createdById` / `ApiKey.createdById` / `AgentConnection.userId`); missing sponsor fails closed. `workspace.plan`/`deepAllowed` are display mirrors; entitlement decisions use the sponsor account's `effectivePlan`. Annual subscriptions receive monthly allowance cycles derived from the term anchor via the hourly `billing-allowance-replenishment` job. See `docs/yellowpaper.md` §5.3 for the ownership model and RLS boundary; the original design record and migration stages remain in git history (`docs/plans/2026-09-11-account-billing-ownership.md`, removed 2026-09-12).
+Subscriptions, entitlements, usage balances, allowances, grace, overage, and minute packs are **account-owned** (`BillingAccount.accountId`, `UsageRecord.accountId`, `MinutePack.accountId`); `workspaceId` fields on those rows are purchase attribution only. The sponsoring account is the persisted scan creator (`Scan.createdById` / `Schedule.createdById` / `ApiKey.createdById` / `AgentConnection.userId`); missing sponsor fails closed. `workspace.plan`/`deepAllowed` are display mirrors; entitlement decisions use the sponsor account's `effectivePlan`. Annual subscriptions receive monthly allowance cycles derived from the term anchor via the hourly `billing-allowance-replenishment` job. See `docs/yellowpaper.md` §5.3 for the ownership model and RLS boundary. Support evidence and history are indexed in [docs/README.md](./docs/README.md).
 
 Exact health/readiness requests use a local 120/minute bound and do not call the
 Upstash REST limiter. A failed Upstash initialization or request opens a 60-second process-local cooldown;
@@ -322,6 +322,8 @@ request after cooldown probes shared limiting once.
 
 Revoked licenses hard-stop. Production signing fails closed if Key Vault is unavailable.
 
+Cloud Sync connects through `/api/sync/connect`; the raw license key stays in the native OS keychain, and the 15-minute session token stays in Rust process memory. A direct-purchase license binds to one workspace on first connection under workspace RLS. `SyncCursor.seq` is the server-owned monotonic sequence: finding batches require `expectedSeq`, advance it by compare-and-swap, return `409 CURSOR_STALE` for conflicting batches, and allow exact idempotent replays. Findings remain unverified and `FIXED` becomes `FIXED_PENDING_RETEST`. Findings, bounded reports and cursor advancement commit atomically. Desktop stores its trusted cursor in native SQLite and adopts the server cursor after restart or rewind. Revocation is checked on each endpoint; disconnect clears native cursor state.
+
 ### Affiliate
 
 - `packages/affiliate/src/attribution`: referral cookie/promo resolution.
@@ -330,7 +332,7 @@ Revoked licenses hard-stop. Production signing fails closed if Key Vault is unav
 - `packages/affiliate/src/payout`: eligibility, reservations, provider routing, reserve release.
 - `apps/web/src/app/affiliates`: public application, partner dashboard, admin surfaces.
 
-Annual Cloud commission is flat 25%; 30% tier applies only to monthly. No commission on packs, trials, or self-referrals.
+The affiliate service owns commission and exclusion rules; see [PRD affiliate terms](./PRD.md#affiliate-terms) for current commercial wording.
 
 ### Agent, MCP, CLI, and plugin
 
@@ -389,7 +391,7 @@ Trust-boundary rules:
 - Database: `DATABASE_URL`, `DATABASE_DIRECT_URL`, and a separately scoped `DATABASE_SYSTEM_URL` where a verified cross-workspace path requires it. Production app and worker each receive separately provisioned, bounded system credentials for reviewed global operations; Lite Scanner receives none.
 - Queue: `REDIS_URL`; production BullMQ requires authenticated `rediss://`.
 - Rate limit: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` only.
-- Engine: `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, `LYRASHIELD_LLM`, Azure API values.
+- Engine: `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_SOL_LLM`, `LYRASHIELD_LLM`, Azure API values.
 - Evidence: `S3_*` plus encryption/key references.
 - Proxy: `LYRASHIELD_EGRESS_PROXY_URL`, `LYRASHIELD_EGRESS_PROXY_SECRET`.
 - Email: `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION`, `BREVO_API_KEY`, sender values.
@@ -550,27 +552,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 
 ## 13. Landmines
 
-1. Never push directly to `main`; use focused branch and PR.
-2. Never replace AsyncLocalStorage workspace context with module state.
-3. Never add a model to scope/soft-delete sets without matching columns.
-4. Never use superuser or `BYPASSRLS` runtime DB credentials.
-5. Never write audit events inside a larger transaction.
-6. Never create `Evidence` without `uploadEvidence()`, checksum, and encryption key reference.
-7. Never interchange BullMQ `REDIS_URL` with Upstash REST rate-limit credentials.
-8. Never trust proxy headers unless ingress strips and overwrites them.
-9. URL/API engine work must use a verified-domain, scan-scoped relay; Safe/Quick remain deterministic-only. Never bypass the relay for target traffic.
-10. Never persist raw engine output or trust model confidence as verification.
-11. Never auto-requeue ambiguous paid work or delete BullMQ keys directly.
-12. Never accept client-authored GitHub patch/branch/title/body.
-13. Never process Polar/Razorpay webhook before idempotent event insertion.
-14. Never use Float for money; use `Decimal(19,4)`.
-15. Never allow revoked license perpetual fallback.
-16. Never put private target/finding/user data in public scorecard analytics.
-17. Never deploy marketing from source `wrangler.jsonc`; use generated config.
-18. New production migrations are additive and forward-only; container rollback does not reverse schema.
-19. Keep Brevo binding while email verification is required.
-20. Keep engine upstream imports review-gated; no mechanical rebrand or force-push.
-21. Never resolve a billing payer from workspace role, membership, or client-supplied account IDs; the sponsor comes from trusted persisted state and missing sponsor identity fails closed.
+See [AGENTS.md](./AGENTS.md#landmines) for the current engineering rules and operational landmines.
 
 ## 14. Compact implementation ledger
 
@@ -583,7 +565,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 - **2026-08-21:** backup/restore proof, worker egress proxy, Upstash TLS BullMQ cutover, public `6379` removal, restart-safe DNS refresh, immutable worker promotion, current Standard/Luna production acceptance, and AI App Security coverage/evidence remediation.
 - **2026-08-24 to 08-25:** current assurance hardening (PRs #428–#430): nonnegative policy budget constraint, explainable finding priority, immutable retest validation bound to stored manifests, raw evidence-storage URI removal, worker execution provenance in manifest v5 with production fail-closed readiness, actionable Azure alert provisioning with readback, and a bounded host-side dry-run-first launch-assurance orchestrator.
 - **2026-08-26:** exact-two administrator provisioning/browser proof, evidence-storage and Key Vault signing proofs, operator alert acknowledgment, terminal-cost disposition, controlled queue-orphan recovery, current exact-SHA deployment, and temporary public-scorecard verification/revocation. The scorecard pass found and fixed a shared-image canonical-origin regression; deployment readback remains pending.
-- **2026-09-11:** launch-review remediation merged in PR #657 (`71aa4db3`) and deployed by release `34552773295` to app revision `lyrashield-app--0000343` at 100% traffic. It introduced account-owned subscriptions/usage/packs/grace with account RLS context, annual monthly allowance replenishment, sponsor-from-persisted-state payer policy, `effectivePlan` entitlement resolution, logger request-ID ALS scoping, mobile layout fixes, bounded API reference, desktop clippy fix, and the additive `20260911000000_account_billing_ownership` migration. The coordinated production cutover mapped every retained legacy billing/usage row, deleted the 12 non-admin test accounts, retained exactly the two platform administrators, and granted each administrator a no-charge 6,000-minute Launch Assurance allowance. PR #658 (`3b289a43`) extended the deletion transaction timeout used for the largest test workspace. Repository secrets `AZURE_DEPLOY_CLIENT_ID`, `AZURE_DEPLOY_TENANT_ID`, and `AZURE_DEPLOY_SUBSCRIPTION_ID` are provisioned; release `34552773295` recorded successful Azure CLI OIDC login. The design and remediation records live in git history (`docs/plans/2026-09-11-account-billing-ownership.md` and `docs/plans/2026-09-11-launch-review-remediation.md`, removed 2026-09-12).
+- **2026-09-11:** launch-review remediation merged in PR #657 (`71aa4db3`) and deployed by release `34552773295` to app revision `lyrashield-app--0000343` at 100% traffic. It introduced account-owned subscriptions/usage/packs/grace with account RLS context, annual monthly allowance replenishment, sponsor-from-persisted-state payer policy, `effectivePlan` entitlement resolution, logger request-ID ALS scoping, mobile layout fixes, bounded API reference, desktop clippy fix, and the additive `20260911000000_account_billing_ownership` migration. The coordinated production cutover mapped every retained legacy billing/usage row, deleted the 12 non-admin test accounts, retained exactly the two platform administrators, and granted each administrator a no-charge 6,000-minute Launch Assurance allowance. PR #658 (`3b289a43`) extended the deletion transaction timeout used for the largest test workspace. Repository secrets `AZURE_DEPLOY_CLIENT_ID`, `AZURE_DEPLOY_TENANT_ID`, and `AZURE_DEPLOY_SUBSCRIPTION_ID` are provisioned; release `34552773295` recorded successful Azure CLI OIDC login.
 - **2026-09-11 security review:** 15 confirmed findings and 11 promoted verification items were remediated through PR #660 (`ddc42df4`). CI `34614103823` and release `34615053797` deployed the reviewed product at 100% traffic; PR #663 closed the final six platform evidence gates with direct readback and focused fixes at `e9162054`. Four bounded risks remain accepted through 2026-10-11 with named owners in [`docs/policies.md`](./docs/policies.md#security-risk-register). The full historical review and machine ledger remain in Git at `ae7cabc5`.
 - **2026-09-19 to 09-25:** the Deep Review v20 and product waves merged. Delegated outbound connectors (GitHub/Slack registry in `packages/integrations/src/connectors`, fail-closed admission `off`/`canary`/`public` with workspace allowlist, workspace connector APIs) gated on the Agency tier (#744, #755). Scan attachments with strict RLS, a deletion outbox and dashboard/CLI support (#741, #749). The review-changes scan workflow (`scan-workflows/1.0.0`) with parity across API/SDK/CLI/MCP/Desktop (#739, #742). A gated authenticated-assessment staging beta (`packages/config/src/auth-assessment`) and run.json 1.1 engine evidence fields (#740, #743). GPT-6 Sol/Luna paid-scan routing with strict receipts, fail-closed GPT-6 accounting and an accepted engine runtime deadline with a tunable cache-routing knob; engine pinned to `cfc31bda` with exact engine/app release-pair gating and CI revision-parity checks (#747, #752, #767, #772, #779). Myra product support launched behind default-off `MYRA_*` flags — premium chat, reviewed knowledge base, feedback APIs, Turnstile-gated composer, session/daily caps and hardened production gates (#768, #773, #778, #780). Release-identity confirmation for signed reports (#758) and the truthful scan-quality surface `lyrashield-scan-quality/1.0.0` (#744). The trial-claim VM backfill runner (`ops/worker/trial-claim-backfill.sh`, documented in `docs/operations.md`) plus desktop workflow-evidence storage and scan history. Blog batch-11 and a 59-post accuracy pass brought the program to 166 published articles. Azure secret-sync retry with surfaced reasons (#781), free-tool detector corrections (#783) and the marketing header overflow fix (#782) closed the wave.
 

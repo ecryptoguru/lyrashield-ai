@@ -1,12 +1,12 @@
 # Myra — LyraShield Support Agent & Demo Booking: Master Specification
 
-Single implementation handoff for Myra across marketing and dashboard: product journeys, governed knowledge, permission-scoped tools, human support inbox, Google Calendar OAuth booking, architecture, quality gates and launch decisions. Specification only; no deployment authorized.
+Single implementation handoff for Myra across marketing and dashboard: product journeys, governed knowledge, permission-scoped tools, human support inbox, Google Calendar OAuth booking, architecture, quality gates and launch decisions. Implemented behind default-off `MYRA_*` flags; this specification retains the remaining release gates.
 
 ## 1. Executive decision and scope
 
 ## Myra: support that helps users finish the task
 
-**Status:** consolidated specification, 15 September 2026. Ankit approved consolidation and quality review. This document does not authorize feature implementation, production migrations, credential provisioning, calendar invitations or deployment. Requirements become release gates after implementation scope approval. Myra is not built and the knowledge corpus is not yet ingested.
+**Status:** consolidated specification, 15 September 2026. Ankit approved consolidation and quality review. Myra is implemented behind default-off `MYRA_*` flags. This specification records remaining release gates; verify deployed flags, credentials, calendar integration and live acceptance before claiming availability.
 
 **Change note v1.1, 15 September 2026:** section 13 adds the advanced-agent capability layer — bounded task loop, resumable guided workflows with closed-loop verification, context-aware starters, instant-answer suggestions, scoped memory, expanded component/tool contracts and the DX harness. Source: founder directive to build a support agent, not a chatbot. The independent QA PASS in section 12 covers v1.0 only; v1.1 requires the added acceptance tests in sections 13.7 and 13.8 plus re-review before release sign-off. No v1.0 requirement is weakened; all additions ship behind the same default-off flags and confirmation rules.
 
