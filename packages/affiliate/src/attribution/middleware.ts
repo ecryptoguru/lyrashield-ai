@@ -39,7 +39,7 @@ function hashToken(token: string): string {
 /**
  * Extract the referral code from either `?ref=CODE` or a `/r/:code` path.
  */
-export function extractRefCode(pathname: string, searchParams: URLSearchParams): string | null {
+function extractRefCode(pathname: string, searchParams: URLSearchParams): string | null {
   // ?ref=CODE takes precedence
   const refParam = searchParams.get("ref")
   if (refParam) return refParam.trim()

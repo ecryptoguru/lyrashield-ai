@@ -32,7 +32,7 @@ import {
  * Private issue-time provenance for a launch_readiness report. This surface is
  * authenticated-only; the shared public page never receives these fields.
  */
-export function LaunchReportProvenanceBlock({
+function LaunchReportProvenanceBlock({
   provenance,
 }: {
   provenance: LaunchReportProvenance | null

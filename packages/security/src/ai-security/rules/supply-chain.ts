@@ -6,7 +6,7 @@ import {
 } from "../utils"
 import type { AIScanFile, AISecuritySignal } from "../types"
 
-export const AI_03_RULE_ID = "AI-03.supply-chain" as const
+const AI_03_RULE_ID = "AI-03.supply-chain" as const
 
 const AI_ML_PACKAGES = new Set([
   "openai",

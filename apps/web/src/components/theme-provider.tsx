@@ -20,7 +20,7 @@ function setThemeCookie(preference: ThemePreference) {
   document.cookie = `lyrashield-theme=${preference}; Max-Age=31536000; Path=/${domain}; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`
 }
 
-export function applyTheme(preference: ThemePreference) {
+function applyTheme(preference: ThemePreference) {
   const dark =
     preference === "dark" ||
     (preference === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)

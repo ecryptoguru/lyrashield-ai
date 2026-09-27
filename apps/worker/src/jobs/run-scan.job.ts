@@ -62,7 +62,6 @@ import {
 
 export {
   engineRoutingCoverageIssue,
-  engineRuntimeDeadlineCoverageIssue,
   persistEngineUsageCheckpoint,
   resolveScanRuntimeBudgetMs,
   resolveScannerPhaseTimeoutMs,

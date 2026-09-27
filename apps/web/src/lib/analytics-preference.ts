@@ -1,7 +1,7 @@
 import { getSession } from "@lyrashield/auth/server"
 import { withAccountRLS } from "@lyrashield/db"
 
-export const ANALYTICS_PREFERENCE_COOKIE = "lyrashield-analytics"
+const ANALYTICS_PREFERENCE_COOKIE = "lyrashield-analytics"
 export const OPTIONAL_TRACKING_COOKIES = [
   "lyrashield-acq",
   "ls_ref",
@@ -15,7 +15,7 @@ export interface AnalyticsBrowserSession {
   oauth?: unknown
 }
 
-export function browserAnalyticsPreferenceIsOff(cookieHeader: string | null): boolean {
+function browserAnalyticsPreferenceIsOff(cookieHeader: string | null): boolean {
   return (
     cookieHeader
       ?.split(";")
@@ -24,7 +24,7 @@ export function browserAnalyticsPreferenceIsOff(cookieHeader: string | null): bo
   )
 }
 
-export function requestPrivacySignalIsOff(request: Pick<Request, "headers">): boolean {
+function requestPrivacySignalIsOff(request: Pick<Request, "headers">): boolean {
   const dnt = request.headers.get("dnt")?.toLowerCase()
   return dnt === "1" || dnt === "yes" || request.headers.get("sec-gpc") === "1"
 }

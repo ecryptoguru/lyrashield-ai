@@ -9,7 +9,7 @@ import {
   routineGroupDedupeKey,
 } from "./notification-grouping"
 
-export function computeNotificationDedupeKey(input: {
+function computeNotificationDedupeKey(input: {
   workspaceId: string
   type: string
   title: string

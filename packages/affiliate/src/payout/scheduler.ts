@@ -23,7 +23,7 @@ export interface PayoutBatch {
 /**
  * Check if today is a payout day (15th of the month).
  */
-export function isPayoutDay(now: Date = new Date()): boolean {
+function isPayoutDay(now: Date = new Date()): boolean {
   return now.getDate() === PAYOUT_DAY_OF_MONTH
 }
 

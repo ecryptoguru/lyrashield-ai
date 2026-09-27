@@ -52,7 +52,7 @@ export function BrowserErrorMonitorGate() {
   return <BrowserErrorMonitor optionalCollectionEnabled={optionalCollectionEnabled} />
 }
 
-export function BrowserErrorMonitor({
+function BrowserErrorMonitor({
   optionalCollectionEnabled,
 }: {
   optionalCollectionEnabled: boolean | null

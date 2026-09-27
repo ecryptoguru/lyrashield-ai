@@ -28,7 +28,7 @@ import { deriveCurrentStage, derivePhases } from "./scan-detail-utils"
  * foreign resource ids and secret-shaped keys. `scanId` is legitimate — it is
  * resolved against the page's own displayed scan.
  */
-export const SCAN_DETAIL_WEBMCP_FORBIDDEN_INPUT_KEYS = [
+const SCAN_DETAIL_WEBMCP_FORBIDDEN_INPUT_KEYS = [
   "workspaceId",
   "workspace",
   "userId",

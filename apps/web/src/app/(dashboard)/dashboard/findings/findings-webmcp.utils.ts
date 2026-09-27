@@ -19,7 +19,7 @@ import type { FindingListItem, SortMode } from "./findings-client"
  * Inputs the tool must never accept from an agent: tenancy, principals and
  * foreign resource ids are bound to the page's own session and visible list.
  */
-export const FINDINGS_WEBMCP_FORBIDDEN_INPUT_KEYS = [
+const FINDINGS_WEBMCP_FORBIDDEN_INPUT_KEYS = [
   "workspaceId",
   "workspace",
   "userId",

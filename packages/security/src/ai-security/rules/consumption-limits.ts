@@ -7,7 +7,7 @@ import {
 } from "../utils"
 import type { AIScanFile, AISecuritySignal } from "../types"
 
-export const AI_08_RULE_ID = "AI-08.consumption-limits" as const
+const AI_08_RULE_ID = "AI-08.consumption-limits" as const
 
 const LLM_CALL_PATTERNS = [
   /chat\.completions\.create\s*\(/i,

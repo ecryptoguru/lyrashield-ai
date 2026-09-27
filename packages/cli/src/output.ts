@@ -11,11 +11,11 @@ export interface Output {
   fail(error: string, exitCode?: number): never
 }
 
-export function isTTY(): boolean {
+function isTTY(): boolean {
   return !!process.stdout.isTTY && !process.env.CI
 }
 
-export function noColor(): boolean {
+function noColor(): boolean {
   return !!process.env.NO_COLOR || !isTTY()
 }
 
@@ -23,11 +23,11 @@ function fmt(c: string, s: string): string {
   return noColor() ? s : `${c}${s}\x1b[0m`
 }
 
-export function red(s: string): string {
+function red(s: string): string {
   return fmt("\x1b[31m", s)
 }
 
-export function yellow(s: string): string {
+function yellow(s: string): string {
   return fmt("\x1b[33m", s)
 }
 

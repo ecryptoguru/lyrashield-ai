@@ -42,7 +42,7 @@ export interface EngineCommand {
   workDir: string
 }
 
-export const PLATFORM_MAX_SCAN_BUDGET_USD = env.PLATFORM_MAX_SCAN_BUDGET_USD
+const PLATFORM_MAX_SCAN_BUDGET_USD = env.PLATFORM_MAX_SCAN_BUDGET_USD
 
 /**
  * Every engine run must have a positive spend cap. A policy can reduce the
