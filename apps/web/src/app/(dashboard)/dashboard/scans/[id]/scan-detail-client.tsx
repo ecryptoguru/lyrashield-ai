@@ -38,7 +38,7 @@ import { severityLabel, humanizeToken } from "@/lib/labels"
 import { track } from "@/lib/analytics"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import { presentOperationFailure } from "@/lib/operation-failure"
-import { findingsHref, reportsHref } from "@/lib/finding-list-params"
+import { findingsHref } from "@/lib/finding-list-params"
 import { scanRecoveryHref } from "../scans-client.utils"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
 import type { CleanResultScorecard, FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
@@ -481,7 +481,8 @@ export function ScanDetailClient({
             ? {
                 kind: "link" as const,
                 label: "Create an assurance report",
-                href: reportsHref({
+                href: findingsHref({
+                  tab: "reports",
                   scanId: scan.id,
                   ...(scan.target ? { targetId: scan.target.id } : {}),
                 }),
@@ -1576,7 +1577,8 @@ export function ScanDetailClient({
                         Package this completed scan and its retained scope into an immutable report.
                       </p>
                       <Link
-                        href={reportsHref({
+                        href={findingsHref({
+                          tab: "reports",
                           scanId: scan.id,
                           ...(scan.target ? { targetId: scan.target.id } : {}),
                         })}
