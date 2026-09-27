@@ -376,6 +376,18 @@ describe("worker Docker runtime", () => {
     expect(scannerDeployment).not.toContain("LYRASHIELD_EVIDENCE_KEK")
   })
 
+  it("checks the IP hash salt using Key Vault metadata only", () => {
+    const ipHashSaltSync = deployWorkflow.slice(
+      deployWorkflow.indexOf("- name: Sync IP hash salt Key Vault reference"),
+      deployWorkflow.indexOf("# Myra support agent")
+    )
+
+    expect(ipHashSaltSync).toContain("az keyvault secret list")
+    expect(ipHashSaltSync).toContain("attributes.enabled")
+    expect(ipHashSaltSync).not.toContain("az keyvault secret show")
+    expect(ipHashSaltSync).not.toContain("--query value")
+  })
+
   it("shares engine work and temp paths with the host Docker daemon", () => {
     expect(workerRunner).toContain(
       "--tmpfs /lyrashield-retests:rw,nosuid,nodev,noexec,size=1g,mode=1777"

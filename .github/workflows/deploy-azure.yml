@@ -691,13 +691,12 @@ jobs:
             echo "::error::The app Container App is required to sync IP_HASH_SALT."
             exit 1
           fi
-          secret_name=$(az keyvault secret show \
+          secret_name=$(az keyvault secret list \
             --vault-name "$AZURE_KEY_VAULT_NAME" \
-            --name ip-hash-salt \
-            --query name \
+            --query "[?name=='ip-hash-salt' && attributes.enabled].name | [0]" \
             --output tsv)
           if [ "$secret_name" != "ip-hash-salt" ]; then
-            echo "::error::The ip-hash-salt Key Vault secret is missing or unavailable. Its value was not read."
+            echo "::error::The enabled ip-hash-salt Key Vault secret is missing or unavailable."
             exit 1
           fi
           source .github/scripts/azure_secret_set.sh
@@ -712,7 +711,7 @@ jobs:
               --secrets "ip-hash-salt=${vault_secret_ref}" \
               --output none
           done
-          echo "IP hash salt Key Vault references synced without retrieving the secret value."
+          echo "IP hash salt Key Vault references synced using metadata-only secret listing."
 
       # Myra support agent (docs/myra-spec.md). All MYRA_* flags default off;
       # these secrets are synced only when the GitHub secret is configured, so
