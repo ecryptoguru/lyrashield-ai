@@ -13,17 +13,17 @@
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-shell": "^2",
-    "react": "^19.0.0",
-    "react-dom": "^19.2.8"
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "4.3.3",
-    "@types/react": "^19",
-    "@types/react-dom": "^19.2.5",
+    "@tailwindcss/vite": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "^6.1.0",
-    "eslint": "^9",
-    "tailwindcss": "^4",
-    "typescript": "^5",
-    "vite": "^8.2.2"
+    "eslint": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
   }
 }

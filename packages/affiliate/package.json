@@ -15,7 +15,8 @@
     "@lyrashield/pricing": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^6.0.0"
+    "@prisma/client-runtime-utils": "7.9.1",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   }
 }

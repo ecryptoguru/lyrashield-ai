@@ -31,12 +31,12 @@
     "@sentry/node": "^10.70.0",
     "bullmq": "6.2.0",
     "ioredis": "^5.11.1",
-    "tsx": "^4.23.12",
-    "yaml": "^2.9.0",
-    "zod": "^4.0.0"
+    "tsx": "catalog:",
+    "yaml": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^6.0.0"
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   }
 }

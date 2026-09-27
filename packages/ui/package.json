@@ -15,11 +15,11 @@
     "tailwind-merge": "^3.0.0"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "@types/react": "^19.2.18",
-    "typescript": "^6.0.0"
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "typescript": "catalog:"
   },
   "peerDependencies": {
-    "react": "^19.0.0"
+    "react": "catalog:"
   }
 }

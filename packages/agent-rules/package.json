@@ -34,10 +34,10 @@
     "@lyrashield/agent-registry": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "tsup": "^8.5.1",
-    "typescript": "6.0.3",
-    "vitest": "^4.1.11"
+    "@types/node": "catalog:",
+    "tsup": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=24.0.0"
