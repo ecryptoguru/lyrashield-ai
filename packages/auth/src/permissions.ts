@@ -360,10 +360,6 @@ export function getRolePermissions(role: MemberRole): Permission[] {
   return ROLE_PERMISSIONS[role] ?? []
 }
 
-export function isWorkspaceAdmin(role: MemberRole): boolean {
-  return hasMinimumRole(role, "ADMIN")
-}
-
 /**
  * Whether `inviterRole` is allowed to grant `targetRole` to someone else.
  * OWNER can grant any role; everyone else may only grant roles STRICTLY below
@@ -373,8 +369,4 @@ export function isWorkspaceAdmin(role: MemberRole): boolean {
 export function canGrantRole(inviterRole: MemberRole, targetRole: MemberRole): boolean {
   if (inviterRole === "OWNER") return true
   return (ROLE_HIERARCHY[inviterRole] ?? 0) > (ROLE_HIERARCHY[targetRole] ?? 0)
-}
-
-export function isWorkspaceOwner(role: MemberRole): boolean {
-  return role === "OWNER"
 }

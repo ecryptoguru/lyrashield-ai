@@ -20,7 +20,5 @@ export {
   hasMinimumRole,
   canGrantRole,
   getRolePermissions,
-  isWorkspaceAdmin,
-  isWorkspaceOwner,
 } from "./permissions"
 export type { Permission } from "./permissions"

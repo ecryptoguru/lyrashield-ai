@@ -16,12 +16,6 @@
 
 export const AFFILIATE_RULE_VERSION = "v1"
 
-/** Cookie name for the first-party attribution token (random id, NOT a JWT). */
-export const AFFILIATE_COOKIE_NAME = "__ls_aff"
-
-/** Default attribution window in days (last-click wins). */
-export const DEFAULT_ATTRIBUTION_WINDOW_DAYS = 60
-
 /** Default hold period in days before a PENDING commission becomes AVAILABLE. */
 export const DEFAULT_HOLD_DAYS = 30
 
@@ -49,9 +43,6 @@ export const DEFAULT_RESERVE_PCT = 25
 /** New-affiliate reserve duration in days. */
 export const DEFAULT_RESERVE_DAYS = 90
 
-/** Minimum payout amount in USD (major units). */
-export const DEFAULT_MIN_PAYOUT_USD = 100
-
 /** Payout day of month (net-30 on the 15th). */
 export const PAYOUT_DAY_OF_MONTH = 15
 
@@ -71,6 +62,7 @@ export { loadActiveProgram, type AffiliateProgramTerms } from "./program"
 export { detectAttribution, type AttributionDetectionResult } from "./attribution/middleware"
 
 export {
+  AFFILIATE_COOKIE_NAME,
   buildAffiliateCookie,
   parseAffiliateCookie,
   AFFILIATE_COOKIE_MAX_AGE,

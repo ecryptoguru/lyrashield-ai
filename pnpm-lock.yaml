@@ -76,7 +76,11 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  apps/desktop: {}
+  apps/desktop:
+    devDependencies:
+      '@tauri-apps/cli':
+        specifier: ^2
+        version: 2.11.4
 
   apps/desktop/frontend:
     dependencies:
@@ -96,9 +100,6 @@ importers:
       '@tailwindcss/vite':
         specifier: 4.3.3
         version: 4.3.3(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-      '@tauri-apps/cli':
-        specifier: ^2
-        version: 2.11.4
       '@types/react':
         specifier: ^19
         version: 19.2.18
@@ -190,6 +191,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^5.20260823.1
         version: 5.20260823.1
+      '@playwright/test':
+        specifier: ^1.62.1
+        version: 1.62.1
       '@tailwindcss/typography':
         specifier: ^0.5.20
         version: 0.5.20(tailwindcss@4.3.3)
@@ -827,6 +831,9 @@ importers:
       typescript:
         specifier: ^6.0.0
         version: 6.0.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/gate:
     devDependencies:
@@ -836,6 +843,9 @@ importers:
       typescript:
         specifier: ^6.0.0
         version: 6.0.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/integrations:
     dependencies:
@@ -1021,6 +1031,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
       webmcp-types:
         specifier: ^0.1.5
         version: 0.1.5
@@ -1052,9 +1065,6 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.8
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.2.8(react@19.2.8)
       tailwind-merge:
         specifier: ^3.0.0
         version: 3.6.0

@@ -13,7 +13,7 @@ Authentication, session helpers, permissions, and OAuth providers for LyraShield
 
 - `authClient`, `signIn`, `signOut`, `signUp`, `useSession`, `getClientSession`
 - `isOAuthProviderConfigured`
-- `PERMISSIONS`, `hasPermission`, `hasMinimumRole`, `canGrantRole`, `getRolePermissions`, `isWorkspaceAdmin`, `isWorkspaceOwner`
+- `PERMISSIONS`, `hasPermission`, `hasMinimumRole`, `canGrantRole`, `getRolePermissions`
 
 ## Subpath exports
 
