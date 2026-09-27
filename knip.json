@@ -1,25 +1,159 @@
 {
-  "comment": "Informational dead-code audit config. Knip output is candidate evidence only — every deletion must be re-verified by reference tracing (framework-discovered files, dynamic imports, public package exports are false-positive prone).",
-  "entry": [
-    "apps/web/next.config.*",
-    "apps/web/src/middleware.ts",
-    "apps/web/src/app/**/{page,layout,route,loading,error,not-found,template,default}.{ts,tsx}",
-    "apps/web/instrumentation*.ts",
-    "apps/marketing/astro.config.*",
-    "apps/marketing/src/pages/**/*.{ts,astro}",
-    "apps/marketing/src/middleware.ts",
-    "apps/marketing/tests-browser/**/*.e2e.ts",
-    "apps/marketing/scripts/*.mjs",
-    "apps/worker/src/index.ts",
-    "apps/desktop/frontend/src/main.tsx",
-    "e2e/**/*.spec.ts",
-    "**/playwright*.config.ts",
-    "**/vitest*.config.ts",
-    "**/wrangler*.toml",
-    "packages/*/src/index.ts"
-  ],
-  "ignoreExportsUsedInFile": true,
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreExportsUsedInFile": false,
   "rules": {
     "duplicates": "off"
+  },
+  "workspaces": {
+    ".": {
+      "entry": ["e2e/**/*.{js,mjs,ts,tsx}"],
+      "project": ["e2e/**/*.{js,mjs,ts,tsx}"]
+    },
+    "apps/desktop": {
+      "entry": [],
+      "project": []
+    },
+    "apps/marketing": {
+      "entry": [
+        "src/pages/**/*.{ts,astro}",
+        "tests-browser/**/*.e2e.ts",
+        "scripts/crawl-built-blog.mjs",
+        "scripts/generate-og-cards.mjs",
+        "src/**/*.test.{ts,tsx}"
+      ],
+      "project": ["src/**/*.{ts,tsx,astro}", "tests-browser/**/*.ts", "scripts/**/*.{mjs,ts}"]
+    },
+    "apps/marketing-motion": {
+      "entry": ["tests/**/*.test.mjs"],
+      "project": ["scripts/**/*.mjs", "tests/**/*.mjs"]
+    },
+    "apps/web": {
+      "entry": [
+        "src/app/**/{page,layout,route,loading,error,not-found,template,default}.{ts,tsx}",
+        "src/instrumentation*.ts",
+        "src/**/*.test.{ts,tsx}"
+      ],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "apps/worker": {
+      "entry": [
+        "src/operations/verify-evidence-storage.ts",
+        "src/operations/verify-evidence-storage-fail-closed.ts",
+        "src/**/*.test.{ts,tsx}"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,ts}"]
+    },
+    "packages/affiliate": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/agent-plugin": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/agent-registry": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/agent-rules": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/auth": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/billing": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/cli": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/cli-alias": {
+      "entry": [],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/config": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/credentials": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/db": {
+      "entry": [
+        "src/**/*.test.ts",
+        "scripts/backfill-account-billing.ts",
+        "scripts/backfill-clear-wrong-trial-claims.ts"
+      ],
+      "project": ["src/**/*.{js,mjs,ts}", "scripts/**/*.ts"]
+    },
+    "packages/egress-proxy": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/evidence-storage": {
+      "entry": ["src/**/*.test.ts", "scripts/generate-kek.mjs"],
+      "project": ["src/**/*.ts", "scripts/**/*.mjs"]
+    },
+    "packages/fix": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/gate": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/integrations": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/licenses": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/logger": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/mcp": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/myra": {
+      "entry": ["src/**/*.test.ts", "scripts/import-knowledge.ts"],
+      "project": ["src/**/*.ts", "scripts/**/*.ts"]
+    },
+    "packages/pricing": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/score": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/sdk": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/security": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/types": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/ui": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "apps/desktop/frontend": {
+      "entry": [],
+      "project": ["src/**/*.{ts,tsx}"]
+    }
   }
 }

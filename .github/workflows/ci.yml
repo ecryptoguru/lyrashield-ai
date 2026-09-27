@@ -267,8 +267,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma Client
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm db:generate
+
+      - name: Informational dead-code inventory
+        # Findings are candidate evidence until the 4a baseline is cleared.
+        # Knip still exits nonzero for invalid configuration or execution errors.
+        run: pnpm exec knip --no-exit-code
 
       - name: Create shadow database
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
