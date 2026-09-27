@@ -383,9 +383,7 @@ describe("worker Docker runtime", () => {
     )
 
     expect(ipHashSaltSync).toContain("az keyvault secret list")
-    expect(ipHashSaltSync).toContain(
-      "[?name=='ip-hash-salt' && attributes.enabled].name | [0]"
-    )
+    expect(ipHashSaltSync).toContain("[?name=='ip-hash-salt' && attributes.enabled].name | [0]")
     expect(ipHashSaltSync).not.toContain("az keyvault secret show")
     expect(ipHashSaltSync).not.toContain("--query value")
   })
