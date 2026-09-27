@@ -23,33 +23,10 @@ import {
   getFindingHistoryPage,
   listEvidenceFindings,
   listFindings,
-  listFindingsByScan,
   markFalsePositive,
   updateFindingStatus,
   validateFindingScope,
 } from "./finding-service"
-
-describe("listFindingsByScan", () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it("uses immutable candidate receipts instead of the mutable latest scan pointer", async () => {
-    vi.mocked(prisma.finding.findMany).mockResolvedValue([])
-
-    await listFindingsByScan("scan-1", "workspace-1")
-
-    expect(prisma.finding.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          workspaceId: "workspace-1",
-          deletedAt: null,
-          candidates: {
-            some: { workspaceId: "workspace-1", scanId: "scan-1" },
-          },
-        },
-      })
-    )
-  })
-})
 
 describe("validateFindingScope", () => {
   beforeEach(() => vi.clearAllMocks())

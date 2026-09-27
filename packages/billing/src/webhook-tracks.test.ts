@@ -267,7 +267,9 @@ describe("c) Razorpay Track B — first + recurring payments each mint a license
   })
 
   it("idempotent replay of the same order does not mint twice", async () => {
-    issueLicenseMock.mockResolvedValue({ licenseId: "lic_dup", alreadyIssued: true })
+    issueLicenseMock
+      .mockResolvedValueOnce({ licenseId: "lic_dup", alreadyIssued: false })
+      .mockResolvedValueOnce({ licenseId: "lic_dup", alreadyIssued: true })
     const entity = {
       id: "pay_DUP",
       order_id: "order_DUP",
@@ -279,7 +281,12 @@ describe("c) Razorpay Track B — first + recurring payments each mint a license
     // Fulfillment itself is idempotent per orderId — called once per ingress
     // execution, but the second call reports alreadyIssued (no double mint).
     expect(issueLicenseMock).toHaveBeenCalledTimes(2)
-    expect(issueLicenseMock.mock.results[1]!.value).resolves.toMatchObject({
+    await expect(issueLicenseMock.mock.results[0]!.value).resolves.toMatchObject({
+      licenseId: "lic_dup",
+      alreadyIssued: false,
+    })
+    await expect(issueLicenseMock.mock.results[1]!.value).resolves.toMatchObject({
+      licenseId: "lic_dup",
       alreadyIssued: true,
     })
   })
