@@ -201,7 +201,7 @@ export async function executePlatformAdminMutation<T>(
     })
     if (consumed.count !== 1) throw new Error("ADMIN_ELEVATION_INVALID")
 
-    const result = await mutate(tx as unknown as ScopedTransaction)
+    const result = await mutate(tx)
     await tx.platformAdminAudit.create({
       data: {
         actorUserId: input.userId,

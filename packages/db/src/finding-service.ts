@@ -669,25 +669,3 @@ export async function getFindingStats(
   }
 }
 
-export type FindingForScore = Pick<
-  Finding,
-  "id" | "severity" | "status" | "verified" | "verificationStatus" | "category"
->
-
-export async function listFindingsByScan(
-  scanId: string,
-  workspaceId: string
-): Promise<FindingForScore[]> {
-  return prisma.finding.findMany({
-    where: findingScopeWhere({ workspaceId, observedInScanId: scanId }),
-    orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      severity: true,
-      status: true,
-      verified: true,
-      verificationStatus: true,
-      category: true,
-    },
-  })
-}

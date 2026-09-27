@@ -227,7 +227,6 @@ export {
   acceptRisk,
   getFindingStats,
   listEvidenceFindings,
-  listFindingsByScan,
   getFindingReference,
   getFindingHistoryPage,
   findingScopeWhere,

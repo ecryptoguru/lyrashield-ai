@@ -12,15 +12,11 @@ import {
   type WebhookTrackRetryJobData,
 } from "@lyrashield/integrations"
 import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
+import { FIX_GENERATE_QUEUE_NAME, type FixGenerateJobData } from "@lyrashield/integrations"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processScanJob } from "./jobs/run-scan.job"
 import { processWebhookTrackRetry } from "./jobs/webhook-track-retry.job"
-import {
-  FIX_GENERATE_QUEUE,
-  processFixGenerateJob,
-  type FixGenerateJobData,
-  type FixGenerateJobResult,
-} from "./jobs/fix-generate.job"
+import { processFixGenerateJob, type FixGenerateJobResult } from "./jobs/fix-generate.job"
 import { startScheduleRunner } from "./schedules"
 import { startBillingJobsScheduler } from "./billing-jobs-scheduler"
 import { startApprovalExpiryRunner } from "./approval-expiry"
@@ -460,7 +456,7 @@ async function main(): Promise<void> {
   // WP3 fix-PR producer: assembles a validated patch from a finding's
   // engine-emitted structured fix and stores it for the approval-bound PR flow.
   fixGenerateWorker = new Worker<FixGenerateJobData, FixGenerateJobResult>(
-    FIX_GENERATE_QUEUE,
+    FIX_GENERATE_QUEUE_NAME,
     async (job) => {
       const result = await processFixGenerateJob(job.data)
       logger.info("Fix generation job processed", {
