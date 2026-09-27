@@ -179,8 +179,10 @@ export class McpServer {
     let safeArgs = args
     if (guardResult.sanitizedInput) {
       try {
-        const parsed = JSON.parse(guardResult.sanitizedInput)
-        safeArgs = parsed.args ?? args
+        const parsed: unknown = JSON.parse(guardResult.sanitizedInput)
+        if (parsed && typeof parsed === "object" && "args" in parsed) {
+          safeArgs = (parsed.args ?? args) as Record<string, unknown>
+        }
       } catch {
         logger.warn("MCP sanitization produced invalid JSON, using original args", { tool: name })
       }

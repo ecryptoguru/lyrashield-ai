@@ -31,16 +31,24 @@ function decodeHistoryCursor(
 ): HistoryCursor | null {
   if (!value) return null
   try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as HistoryCursor
+    const parsed: unknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8"))
     if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed) ||
+      !("findingId" in parsed) ||
+      !("collection" in parsed) ||
+      !("id" in parsed) ||
+      !("createdAt" in parsed) ||
       parsed.findingId !== findingId ||
       parsed.collection !== collection ||
       typeof parsed.id !== "string" ||
+      typeof parsed.createdAt !== "string" ||
       Number.isNaN(Date.parse(parsed.createdAt))
     ) {
       return null
     }
-    return parsed
+    return { findingId, collection, createdAt: parsed.createdAt, id: parsed.id }
   } catch {
     return null
   }

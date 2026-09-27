@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { cache } from "react"
-import { withWorkspaceRLS } from "@lyrashield/db"
+import { normalizeScorecardPayload, withWorkspaceRLS } from "@lyrashield/db"
 import { redirect, notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, GitBranch, Globe, Bug, Crosshair } from "lucide-react"
@@ -215,11 +215,9 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
                   ? {
                       id: latestScore.shares[0].id,
                       slug: latestScore.shares[0].slug,
-                      resolvedFindings: (
-                        latestScore.shares[0].publicPayload as unknown as {
-                          resolvedFindings: number
-                        }
-                      ).resolvedFindings,
+                      resolvedFindings:
+                        normalizeScorecardPayload(latestScore.shares[0].publicPayload)
+                          ?.resolvedFindings ?? 0,
                       views: latestScore.shares[0].viewCount,
                       shareHandoffs: latestScore.shares[0]._count.events,
                       referredSignups: latestScore.shares[0].referralCode?._count.attributions ?? 0,

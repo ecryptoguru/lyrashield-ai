@@ -503,8 +503,10 @@ export class PromptInjectionGuard {
 
     if (result.allowed && result.sanitizedInput) {
       try {
-        const parsed = JSON.parse(result.sanitizedInput)
-        result.sanitizedInput = JSON.stringify({ tool: toolName, args: parsed.args ?? args })
+        const parsed: unknown = JSON.parse(result.sanitizedInput)
+        const sanitizedArgs =
+          parsed && typeof parsed === "object" && "args" in parsed ? parsed.args : null
+        result.sanitizedInput = JSON.stringify({ tool: toolName, args: sanitizedArgs ?? args })
       } catch {
         result.sanitizedInput = JSON.stringify({ tool: toolName, args })
       }

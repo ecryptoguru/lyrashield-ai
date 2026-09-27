@@ -378,11 +378,7 @@ export function track<T extends EventName>(event: T, properties?: Record<string,
   }
 
   const sanitized = sanitizeProperties(event, properties) ?? {}
-  const posthog = (
-    window as unknown as {
-      posthog?: { capture?: (name: EventName, props: Record<string, unknown>) => void }
-    }
-  ).posthog
+  const posthog = window.posthog
   if (posthog?.capture) {
     posthog.capture(event, sanitized)
   } else if (pendingEvents.length < MAX_PENDING_EVENTS) {
