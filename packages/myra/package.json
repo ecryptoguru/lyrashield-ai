@@ -9,6 +9,7 @@
     "./server": "./src/server/index.ts"
   },
   "scripts": {
+    "kb:import": "tsx scripts/import-knowledge.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0",
     "test": "vitest run"
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "tsx": "^4.23.12",
     "typescript": "^6.0.0",
     "vitest": "^4.1.11"
   }
