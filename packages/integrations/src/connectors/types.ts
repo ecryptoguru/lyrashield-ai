@@ -13,6 +13,7 @@
  * token mint, sealed config artifact, …) and passed in as `credential`; tool
  * inputs, relay grants, logs and operation results never carry them.
  */
+import { isJsonObject } from "@lyrashield/types"
 
 export const CONNECTOR_PROVIDERS = ["github", "slack"] as const
 export type ConnectorProvider = (typeof CONNECTOR_PROVIDERS)[number]
@@ -98,11 +99,9 @@ export function capConnectorOutput(output: unknown, maxBytes: number): Connector
   }
 }
 
-// ── Shared untrusted-input helpers (kept dependency-free on purpose) ────────
+// ── Shared untrusted-input helpers ────────────────────────────────────────────
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
-}
+export { isJsonObject as isRecord }
 
 export function stringField(
   input: Record<string, unknown>,

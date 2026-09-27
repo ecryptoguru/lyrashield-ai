@@ -667,6 +667,9 @@ importers:
       '@lyrashield/security':
         specifier: workspace:*
         version: link:../security
+      '@lyrashield/types':
+        specifier: workspace:*
+        version: link:../types
       '@types/iarna__toml':
         specifier: ^2.0.5
         version: 2.0.5
