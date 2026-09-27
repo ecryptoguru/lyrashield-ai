@@ -18,7 +18,6 @@ const baseEnv = {
   POLAR_ENVIRONMENT: "production",
   POLAR_ACCESS_TOKEN: "polar_oat_valid",
   POLAR_WEBHOOK_SECRET: "secret",
-  POLAR_ORG_ID: "org",
   POLAR_PRODUCT_IDS: JSON.stringify(polarCatalog),
   POLAR_LOCAL_PRODUCT_IDS: JSON.stringify({ local: "product" }),
   RAZORPAY_KEY_ID: "rzp_live_valid",

@@ -12,7 +12,6 @@ if (process.env.POLAR_ENVIRONMENT !== "production") {
 const required = [
   "POLAR_ACCESS_TOKEN",
   "POLAR_WEBHOOK_SECRET",
-  "POLAR_ORG_ID",
   "POLAR_PRODUCT_IDS",
   "POLAR_LOCAL_PRODUCT_IDS",
   "RAZORPAY_KEY_ID",
