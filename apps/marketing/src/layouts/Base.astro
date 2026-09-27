@@ -224,6 +224,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
         marketingAnalyticsAllowed,
         marketingAnalyticsCookie,
         marketingAnalyticsPreference,
+        optionalTrackingCookieExpirations,
         privacyBoundedMarketingEvent,
         sanitizeMarketingProperties,
       } from "../lib/posthog-privacy"
@@ -403,8 +404,21 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
           const enabling = marketingAnalyticsPreference(document.cookie) === "off"
           if (!enabling) {
             document.cookie = marketingAnalyticsCookie(false, location.hostname, location.protocol === "https:")
+            for (const cookie of optionalTrackingCookieExpirations(location.hostname, location.protocol === "https:")) {
+              document.cookie = cookie
+            }
             window.posthog?.opt_out_capturing()
-            updatePrivacyControls("Optional analytics are now disabled in this browser.")
+            const cleared = await fetch(new URL("/api/privacy/analytics-opt-out", appOrigin), {
+              method: "POST",
+              mode: "cors",
+              credentials: "include",
+              cache: "no-store",
+            }).then((response) => response.ok).catch(() => false)
+            updatePrivacyControls(
+              cleared
+                ? "Optional analytics are now disabled in this browser."
+                : "Optional analytics are off. Some server-held tracking cookies could not be cleared; try again."
+            )
             return
           }
           document.cookie = marketingAnalyticsCookie(true, location.hostname, location.protocol === "https:")

@@ -49,20 +49,26 @@ const INSTALL_TIMEOUT_MS = 120_000
  * so the receipt asserts the published catalog, not whatever a build emits.
  */
 export const EXPECTED_MCP_TOOLS = [
+  "lyrashield_cancel_scan",
   "lyrashield_check_diff",
   "lyrashield_create_pr_security_recap",
   "lyrashield_create_report",
+  "lyrashield_delete_scan_attachment",
   "lyrashield_explain_finding",
   "lyrashield_generate_fix_plan",
   "lyrashield_get_findings",
   "lyrashield_get_launch_readiness",
+  "lyrashield_get_scan_eligibility",
   "lyrashield_get_scan_quality",
   "lyrashield_get_scan_status",
+  "lyrashield_list_scan_attachments",
   "lyrashield_list_targets",
   "lyrashield_list_workspaces",
   "lyrashield_record_fix_proposal",
+  "lyrashield_request_fix_pr",
   "lyrashield_run_pr_scan",
   "lyrashield_scan_target",
+  "lyrashield_upload_scan_attachment",
   "lyrashield_verify_fix",
 ]
 

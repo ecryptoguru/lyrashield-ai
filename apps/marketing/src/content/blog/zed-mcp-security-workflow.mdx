@@ -2,7 +2,7 @@
 title: Zed MCP security workflow for AI built apps
 description: Connect Zed to LyraShield AI over MCP for findings with explicit evidence states and a diff aware GitHub Action gate inside your existing editor flow.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-22
+updatedDate: 2026-09-27
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -39,7 +39,7 @@ Local stdio mode:
   "context_servers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.8"],
+      "args": ["-y", "@lyrashield/mcp@0.2.10"],
       "env": {}
     }
   }
@@ -58,7 +58,7 @@ Remote HTTP mode with browser OAuth:
 }
 ```
 
-The remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp). Zed handles the OAuth browser flow for this entry; an API-key `headers` form is available only if your team deliberately chooses it. Local stdio uses the published `@lyrashield/mcp@0.2.8` package and requires a valid local LyraShield credential before authenticated calls. See the [Zed AI app security checklist](/blog/zed-ai-app-security-checklist) for client-side permission review. The runner-local CI Action is a separate check and does not share hosted finding IDs by default.
+The remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp). Zed handles the OAuth browser flow for this entry; an API-key `headers` form is available only if your team deliberately chooses it. Local stdio uses the published `@lyrashield/mcp@0.2.10` package and requires a valid local LyraShield credential before authenticated calls. See the [Zed AI app security checklist](/blog/zed-ai-app-security-checklist) for client-side permission review. The runner-local CI Action is a separate check and does not share hosted finding IDs by default.
 
 ## 3. Verify the connection in Zed
 
@@ -112,7 +112,7 @@ This keeps behavior consistent between human and agent edits. The rule avoids ph
 
 | Mode        | Transport                         | Best for             | Env key                                | URL                                  |
 | ----------- | --------------------------------- | -------------------- | -------------------------------------- | ------------------------------------ |
-| Local stdio | npx -y @lyrashield/mcp@0.2.8      | Local dev, offline   | LYRASHIELD_API_KEY                     | internal process                     |
+| Local stdio | npx -y @lyrashield/mcp@0.2.10      | Local dev, offline   | LYRASHIELD_API_KEY                     | internal process                     |
 | Remote HTTP | streamable HTTP with Bearer lsk\_ | Team shared keys, CI | LYRASHIELD_API_KEY, LYRASHIELD_API_URL | https://app.lyrashieldai.com/api/mcp |
 | Diff gate   | GitHub Action + SARIF             | PR enforcement       | LYRASHIELD_API_KEY secret              | https://app.lyrashieldai.com/api/mcp |
 

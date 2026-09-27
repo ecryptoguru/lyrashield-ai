@@ -1,5 +1,6 @@
 export * from "./types"
 export * from "./schema"
+export * from "./versions"
 export * from "./render"
 export * from "./agents"
 

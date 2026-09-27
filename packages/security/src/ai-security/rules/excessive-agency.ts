@@ -24,6 +24,8 @@ export const AI_05_RULE_ID = "AI-05.excessive-agency" as const
  */
 const DESTRUCTIVE_NAME_PATTERN =
   /(?<![A-Za-z0-9])(?:delete|remove|drop|rm|truncate|overwrite|destroy)(?![A-Za-z0-9])/i
+const CAMEL_CASE_DESTRUCTIVE_NAME_PATTERN =
+  /(?<![A-Za-z0-9])(?:delete|remove|drop|rm|truncate|overwrite|destroy)(?=[A-Z])/
 
 const AUTO_APPROVE_PATTERNS = [
   /autoApprove\s*:\s*true/i,
@@ -35,7 +37,9 @@ const AUTO_APPROVE_PATTERNS = [
 ]
 
 function hasDestructiveToolWithoutApproval(line: string): boolean {
-  if (!DESTRUCTIVE_NAME_PATTERN.test(line)) return false
+  if (!DESTRUCTIVE_NAME_PATTERN.test(line) && !CAMEL_CASE_DESTRUCTIVE_NAME_PATTERN.test(line)) {
+    return false
+  }
 
   const hasApproval = /requireApproval\s*:\s*true|require_approval\s*:\s*true/i.test(line)
   const hasAutoApprove = /autoApprove\s*:\s*true|auto_approve\s*:\s*true/i.test(line)

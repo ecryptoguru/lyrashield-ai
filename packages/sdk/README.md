@@ -12,7 +12,13 @@ Shared LyraShield HTTP client used by the CLI (`packages/cli`) and MCP server (`
 ## Usage
 
 ```ts
-import { LyraShieldClient, LyraShieldError } from "@lyrashield/sdk"
+import {
+  LyraShieldClient,
+  LyraShieldError,
+  listScanAttachments,
+  uploadScanAttachment,
+  deleteScanAttachment,
+} from "@lyrashield/sdk"
 
 const client = new LyraShieldClient({
   apiKey: process.env.LYRASHIELD_API_KEY!,
@@ -20,7 +26,20 @@ const client = new LyraShieldClient({
 })
 
 const finding = await client.request("GET", "/findings/fnd_...")
+
+const attachments = await listScanAttachments(client)
+const attachment = await uploadScanAttachment(client, {
+  filename: "scope.md",
+  mediaType: "text/markdown",
+  content: "Authorized staging hosts: staging.example.com",
+  idempotencyKey: "scope-md-2026-09-27",
+})
+await deleteScanAttachment(client, attachment.id, {
+  idempotencyKey: "remove-scope-md-2026-09-27",
+})
 ```
+
+Attachments are workspace-scoped input evidence for a new scan. Upload accepts UTF-8 text or bytes in supported text, JSON, YAML and OpenAPI formats up to 1 MiB; use a stable idempotency key when retrying an upload or deletion. Pass an uploaded attachment id through the scan request's `attachmentIds` field. The server remains authoritative for validation and scan admission.
 
 The client always prepends `/api/v1` to bare paths, so callers should pass paths like `/findings` instead of `/api/v1/findings`. If you accidentally pass an already-prefixed path such as `/api/v1/findings` or `/api/findings`, the client throws a `LyraShieldError` with `code: "INVALID_PATH"` before any network request is made.
 

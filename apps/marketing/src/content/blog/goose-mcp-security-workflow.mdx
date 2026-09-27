@@ -2,7 +2,7 @@
 title: Connect Goose to LyraShield via MCP
 description: A step by step workflow to configure LyraShield MCP in the Block Goose agent using the CLI, verify the connection, run a scan and gate pull requests.
 pubDate: "2026-08-07"
-updatedDate: 2026-09-22
+updatedDate: 2026-09-27
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -59,7 +59,7 @@ extensions:
   lyrashield:
     type: stdio
     cmd: npx
-    args: -y @lyrashield/mcp@0.2.8
+    args: -y @lyrashield/mcp@0.2.10
 ```
 
 Keep any headers or credentials in environment variables referenced by the config, never as literal strings in the YAML.

@@ -485,7 +485,7 @@ jobs:
           set -euo pipefail
           suites=()
           if [ "$APP_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
-            suites+=(core)
+            suites+=(core ops)
           fi
           if [ "$MARKETING_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
             suites+=(marketing motion)
@@ -589,6 +589,8 @@ jobs:
           bash .github/scripts/tests/test-check-engine-revision-parity.sh
           bash .github/scripts/tests/test-configure-cloud-billing-admission.sh
           bash .github/scripts/tests/test-azure-secret-set.sh
+          bash .github/scripts/tests/test-trial-claim-backfill-vm.sh
+          bash .github/scripts/tests/test-validate-worker-provenance.sh
           node --test .github/scripts/tests/parse-billing-receipt.test.mjs .github/scripts/tests/worker-preflight.test.mjs .github/scripts/tests/worker-contract-worktree.test.mjs
           sh ops/deployment/azure-vm-run-command.test.sh
           sh ops/monitoring/provision-alerts.test.sh
