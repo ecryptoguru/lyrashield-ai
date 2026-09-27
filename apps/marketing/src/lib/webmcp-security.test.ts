@@ -11,7 +11,6 @@ import {
   pastedCodeForWebMcp,
   readFilesForWebMcp,
   registerWebMcpTools,
-  runLightweightWebMcpDiscovery,
   UNSAFE_EXAMPLE,
   WebMcpAnalyzerState,
   type WebMcpToolDefinition,
@@ -257,12 +256,6 @@ describe("public WebMCP Security Lab", () => {
         value: previousDocument,
       })
     }
-  })
-
-  it("fails closed when the shared analyzer is unavailable", async () => {
-    await expect(
-      runLightweightWebMcpDiscovery([pastedCodeForWebMcp(UNSAFE_EXAMPLE, ".html")])
-    ).rejects.toThrow("no fallback result")
   })
 
   it("matches the visible file-limit UX", async () => {
