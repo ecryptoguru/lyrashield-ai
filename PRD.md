@@ -404,7 +404,7 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 
 ## 9. Release status
 
-Cloud and Desktop release configuration selects engine `21ce6688b8bc39c88822a0e1792b9be08dca8a07`, including the GPT-6-only model boundary and Local scan integrity/viewer corrections. The engine/product contract is a required product merge check. Release acceptance still requires successful exact-SHA production promotion or signed Desktop publication; changing the source pin alone does not satisfy either gate.
+Cloud and Desktop release configuration selects the exact engine revision pinned in the workflows, including the GPT-6-only model boundary and Local scan integrity/viewer corrections. The engine/product contract is a required product merge check. Release acceptance still requires successful exact-SHA production promotion or signed Desktop publication; changing the source pin alone does not satisfy either gate.
 
 ### Complete
 
@@ -418,9 +418,9 @@ Cloud and Desktop release configuration selects engine `21ce6688b8bc39c88822a0e1
 - Read-only Brave provider review on 2026-08-26: Razorpay Live was activated with six matching INR Cloud plans and one enabled eight-event webhook. Polar Live had a production token, fifteen private Cloud/pack/Local products, and an enabled lifecycle webhook. That review performed no provider mutation or payment. Direct Azure readback after production release `34842662910` on 2026-09-14 found both Cloud purchase admissions `public` and both Local admissions `off`; no live charge, settlement, refund, or payout proof followed from that configuration.
 - Cloud billing, usage, Local/Desktop, and affiliate implementations merged.
 - The single adaptive dashboard and the bounded platform-admin console are implemented. Exact-two preflight/apply passed, and both named administrators completed fresh independent Google-plus-TOTP browser proof across every admin destination; bearer-only and workspace-only access remained denied.
-- Production evidence-storage round-trip/fail-closed, actionable notification acknowledgment, terminal-cost disposition, queue-orphan recovery, and Key Vault managed-identity signing proofs passed. Exact receipts and limitations live in git history (`docs/ops/launch-assurance-status-2026-08-26.md`, removed 2026-09-09).
+- Production evidence-storage round-trip/fail-closed, actionable notification acknowledgment, terminal-cost disposition, queue-orphan recovery, and Key Vault managed-identity signing proofs passed.
 - SEO/AEO/GEO foundations include canonical/schema metadata, sitemap and robots controls, dated `llms.txt`, `agents.md`, answer-engine crawler stanzas, integration guides, comparison/research pages, and content validation.
-- Current assurance hardening (PRs #428–#430): nonnegative policy budgets enforced by PostgreSQL check constraint, explainable deterministic finding priority with limitation disclosure, immutable retest validation bound to stored manifests, removal of raw evidence-storage URIs from finding detail, worker execution provenance (product revision, worker image digest, engine revision) bound into manifest checksums with production fail-closed readiness, actionable Azure alert provisioning with readback and idempotent reruns, and a bounded host-side dry-run-first launch-assurance orchestrator composing existing evidence, cancellation, and queue-reconciliation paths. Evidence, alert, queue, and signing production receipts are recorded in git history (`docs/ops/launch-assurance-status-2026-08-26.md`, removed 2026-09-09); every future deployment or profile still requires revision-bound proof.
+- Current assurance hardening (PRs #428–#430): nonnegative policy budgets enforced by PostgreSQL check constraint, explainable deterministic finding priority with limitation disclosure, immutable retest validation bound to stored manifests, removal of raw evidence-storage URIs from finding detail, worker execution provenance (product revision, worker image digest, engine revision) bound into manifest checksums with production fail-closed readiness, actionable Azure alert provisioning with readback and idempotent reruns, and a bounded host-side dry-run-first launch-assurance orchestrator composing existing evidence, cancellation, and queue-reconciliation paths. Every future deployment or profile still requires revision-bound proof.
 - The 2026-09-19 to 09-25 product waves are merged: delegated outbound connectors, scan attachments, the review-changes workflow with client parity, release-identity confirmation, the scan-quality surface, the authenticated-assessment staging beta, GPT-6 routing/accounting hardening and the Myra support launch behind feature flags. See the `codebase.md` ledger for the commit-level record.
 
 ### Remaining before broader paid/untrusted exposure
@@ -428,7 +428,7 @@ Cloud and Desktop release configuration selects engine `21ce6688b8bc39c88822a0e1
 1. Merge and deploy the scorecard canonical-origin fix, then repeat live canonical/OG readback. The temporary internal scorecard otherwise passed cards, badge, referral, privacy, deduplication, LinkedIn unfurl, and revocation checks.
 2. Retain longer-window Redis command/capacity evidence; provision RazorpayX and Payoneer payout API access plus tax-form workflow.
 3. Triage the 25 findings from Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted.
-4. Select and authorize a controlled Deep/Terra target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
+4. Select and authorize a controlled Deep/Sol target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
 5. Capture authenticated client-matrix receipts plus webmaster indexing and answer-engine citation observations; code, simulated crawlers, and one LinkedIn unfurl do not prove universal discovery.
 
 ### Deferred
@@ -493,11 +493,4 @@ A capability is done only when relevant layers are complete:
 
 ## 13. Documentation ownership
 
-- [PRD.md](./PRD.md): product strategy, accepted scope, release status, backlog, and founder decisions.
-- [codebase.md](./codebase.md): architecture, code map, runtime contracts, and compact implementation ledger.
-- [AGENTS.md](./AGENTS.md): immediate handoff, non-negotiable rules, landmines, and execution queue.
-- [docs/whitepaper.md](./docs/whitepaper.md): consolidated product, evidence model, commercial model, claims boundary, and Phase 2 roadmap direction.
-- [docs/yellowpaper.md](./docs/yellowpaper.md): technical specification and contract registry.
-- [docs/user-guide.md](./docs/user-guide.md): end-user workflows and limitations.
-- Former `docs/deployment/*` and `docs/ops/*` runbooks were removed on 2026-09-09; git history is the recovery path.
-- [docs/README.md](./docs/README.md): documentation map and retention rules.
+See [docs/README.md](./docs/README.md) for the current document map, including [operator runbooks](./docs/operations.md) and retention rules.

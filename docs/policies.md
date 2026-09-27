@@ -110,7 +110,7 @@ First-party evaluation results must remain labeled first-party and tied to the n
 - [MLCommons AILuminate](https://mlcommons.org/benchmarks/ailuminate/)
 - [OWASP GenAI Red Teaming and Evaluation](https://genai.owasp.org/initiative/red-teaming-evaluation/)
 
-Historical legal analysis, proposed certification roadmaps, cost estimates and the complete reference list remain in Git at commit `e3fa791f` under `docs/claims-readiness.md`. Revalidate external requirements and obtain qualified legal advice before relying on them.
+Revalidate external requirements and obtain qualified legal advice before relying on them.
 
 ## Security risk register
 

@@ -59,6 +59,4 @@ The desktop verifies licenses in compiled Rust using `ed25519-dalek`, pinned by 
 
 ## Release
 
-Releases are triggered by tagging `v*` — see `.github/workflows/release-tauri.yml`. The former release runbook (`docs/ops/desktop-release-runbook.md`) was retired on 2026-09-09 and remains recoverable from git history (e.g. `git show <history>`).
-
-The former end-user installation guide (`docs/ops/desktop-installation.md`) was retired on 2026-09-09 and remains recoverable from git history (e.g. `git show <history>`).
+Releases are triggered by tagging `v*` — see `.github/workflows/release-tauri.yml` and the [current documentation map](../../docs/README.md).

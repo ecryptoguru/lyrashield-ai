@@ -141,7 +141,7 @@ and discovery locations differ.
 
 The server gives `LYRASHIELD_API_KEY` or `LYRASHIELD_OAUTH_ACCESS_TOKEN` precedence over `~/.lyrashield/credentials.json`, the credentials file written by `lyrashield login` (with `0o600` permissions). `LYRASHIELD_API_URL` independently overrides the API origin without replacing a stored OAuth credential. This means `npx -y @lyrashield/mcp` works without any env credential after a single `lyrashield login`.
 
-`@lyrashield/mcp` is an MCP stdio server, not a command-line scanner: start it with `npx -y @lyrashield/mcp` and let your MCP client call its tools. For pull-request CI, use the [LyraShield GitHub Action](../../README.md#github-action) instead.
+`@lyrashield/mcp` is an MCP stdio server, not a command-line scanner: start it with `npx -y @lyrashield/mcp` and let your MCP client call its tools. For pull-request CI, use the [LyraShield GitHub Action](../../README.md#use-it-from-your-coding-agent) instead.
 
 `lyrashield login --oauth` opens hosted consent using authorization code flow with PKCE and an issuer-bound loopback callback. It saves the selected workspace and tokens only after successful exchange and authenticated workspace discovery. Failed login preserves existing credentials. `lyrashield login` accepts an API key instead. `packages/credentials` owns storage, environment precedence, origin binding, refresh locking and atomic updates for both CLI and MCP.
 

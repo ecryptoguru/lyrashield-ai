@@ -841,7 +841,7 @@ jobs:
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
         run: |
           if [ -z "${GITHUB_APP_ID}" ] || [ -z "${GITHUB_APP_SLUG}" ] || [ -z "${GITHUB_APP_PRIVATE_KEY}" ] || [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
-            echo "::warning::GITHUB_APP_ID / GITHUB_APP_SLUG / GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET are not all set. GitHub connect path will 500 CONFIG_ERROR until they are. F1's four-way onboarding (URL/API/Skip) keeps signups alive in the meantime — see PRODUCTION_DEPLOYMENT.md #6 for runbook."
+            echo "::warning::GITHUB_APP_ID / GITHUB_APP_SLUG / GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET are not all set. GitHub connect path will 500 CONFIG_ERROR until they are. F1's four-way onboarding (URL/API/Skip) keeps signups alive in the meantime."
           else
             if ! echo "${GITHUB_APP_PRIVATE_KEY}" | grep -q "BEGIN"; then
               echo "::error::GITHUB_APP_PRIVATE_KEY must be a PEM-formatted key starting with -----BEGIN."
@@ -855,7 +855,7 @@ jobs:
           # already-connected workspaces keep working, so this warns and never
           # blocks a deploy.
           if [ -z "${GITHUB_APP_CLIENT_ID}" ] || [ -z "${GITHUB_APP_CLIENT_SECRET}" ]; then
-            echo "::warning::GITHUB_APP_CLIENT_ID / GITHUB_APP_CLIENT_SECRET are not set. No new workspace can complete a GitHub install — the callback cannot verify installation ownership and fails closed. See PRODUCTION_DEPLOYMENT.md #6."
+            echo "::warning::GITHUB_APP_CLIENT_ID / GITHUB_APP_CLIENT_SECRET are not set. No new workspace can complete a GitHub install — the callback cannot verify installation ownership and fails closed."
           else
             echo "GitHub App OAuth credentials present."
           fi
