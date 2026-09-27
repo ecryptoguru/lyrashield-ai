@@ -7,7 +7,10 @@ vi.mock("@lyrashield/db", () => ({
 import type { MyraToolContext } from "./types"
 import { runGetMyContext } from "./context"
 
-function context(plan: string, minutesRemaining: number | null): MyraToolContext {
+function context(
+  plan: string,
+  balance: { totalRemaining: number; packRemaining?: number } | null
+): MyraToolContext {
   const trial = {
     isActive: false,
     isExpired: true,
@@ -37,7 +40,7 @@ function context(plan: string, minutesRemaining: number | null): MyraToolContext
       getAccountTrialState: vi.fn().mockResolvedValue(trial),
       getUsageBalance: vi
         .fn()
-        .mockResolvedValue(minutesRemaining === null ? null : { totalRemaining: minutesRemaining }),
+        .mockResolvedValue(balance),
       evaluateScanEntitlement: vi.fn(),
     },
   }
@@ -51,7 +54,15 @@ describe("get_my_context expired trial summary", () => {
   })
 
   it("preserves remaining account balance for a paid plan", async () => {
-    const result = await runGetMyContext(context("PRO", 80), {})
+    const result = await runGetMyContext(context("PRO", { totalRemaining: 80 }), {})
     expect(result.data.minutesRemaining).toBe(80)
+  })
+
+  it("reports no usable minutes after an expired FREE trial", async () => {
+    const result = await runGetMyContext(
+      context("FREE", { totalRemaining: 63, packRemaining: 12 }),
+      {}
+    )
+    expect(result.data.minutesRemaining).toBe(0)
   })
 })

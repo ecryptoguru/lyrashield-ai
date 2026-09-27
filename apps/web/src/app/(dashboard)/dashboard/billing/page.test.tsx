@@ -152,7 +152,7 @@ describe("billing page plan label", () => {
       poolConsumed: 9,
       poolMinutes: 60,
       packRemaining: 12,
-      totalRemaining: 12,
+      totalRemaining: 63,
       packs: [{ remainingMinutes: 12, expiresAt: null, purchasedAt: new Date("2026-09-01") }],
     })
 
@@ -160,7 +160,10 @@ describe("billing page plan label", () => {
 
     expect(html).toContain("Unused trial minutes were forfeited.")
     expect(html).toContain("9<!-- --> used of<!-- --> <!-- -->60")
-    expect(html).toContain("12<!-- --> agent-minutes available")
+    expect(html).toContain("0<!-- --> agent-minutes available")
+    expect(html).toContain('Pack Minutes</p><p class="text-xl font-semibold">12</p>')
+    expect(html).toContain('Total Remaining</p><p class="text-xl font-semibold">0</p>')
+    expect(html).not.toContain("63<!-- --> agent-minutes available")
     expect(html).toContain('Minutes Left</p><p class="text-xl font-semibold">0')
   })
 
@@ -179,6 +182,35 @@ describe("billing page plan label", () => {
 
     expect(html).toContain("80<!-- --> agent-minutes available")
     expect(html).not.toContain("Unused trial minutes were forfeited.")
+  })
+
+  it("does not show retained balance as spendable after a paid term lapses", async () => {
+    mockPlan("PRO")
+    resolveAccountBilling.mockResolvedValue({
+      currentPlan: "PRO",
+      effectivePlan: "FREE",
+      provider: "polar",
+      status: "canceled",
+      interval: "monthly",
+      currentPeriodEnd: new Date("2026-09-01T00:00:00Z"),
+      canceledAt: new Date("2026-08-01T00:00:00Z"),
+      spendLimitCents: null,
+    })
+    getAccountTrialState.mockResolvedValue({ ...inactiveTrial, isExpired: true, minutesLeft: 37 })
+    getUsageBalance.mockResolvedValue({
+      poolConsumed: 9,
+      poolMinutes: 60,
+      packRemaining: 12,
+      totalRemaining: 63,
+      packs: [{ remainingMinutes: 12, expiresAt: null, purchasedAt: new Date("2026-09-01") }],
+    })
+
+    const html = renderToString(await BillingPage({ searchParams: Promise.resolve({}) }))
+
+    expect(html).toContain("Your trial has expired.")
+    expect(html).toContain("0<!-- --> agent-minutes available")
+    expect(html).toContain('Pack Minutes</p><p class="text-xl font-semibold">12</p>')
+    expect(html).toContain('Total Remaining</p><p class="text-xl font-semibold">0</p>')
   })
 
   it("formats large minute counts and uses singular day wording", async () => {

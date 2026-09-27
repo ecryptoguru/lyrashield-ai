@@ -98,7 +98,9 @@ export default async function BillingPage({
     CLOUD_PLAN_MAP[(trialState.isActive ? "TRIAL" : plan) as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = trialState.isActive
   const displayedTrialMinutesLeft =
-    plan === "FREE" && trialState.isExpired ? 0 : trialState.minutesLeft
+    effectivePlan === "FREE" && trialState.isExpired ? 0 : trialState.minutesLeft
+  const displayedAccountMinutesRemaining =
+    effectivePlan === "FREE" && trialState.isExpired ? 0 : balance.totalRemaining
   const trialDaysLabel = `${NUMBER_FORMAT.format(trialState.daysLeft)} ${trialState.daysLeft === 1 ? "day" : "days"}`
   const isLaunchAssurance = plan === "LAUNCH_ASSURANCE"
   const isComplimentary = billingAccount?.provider === "complimentary"
@@ -182,8 +184,8 @@ export default async function BillingPage({
               )}
               <div className="rounded-md border p-3 text-sm">
                 <p className="font-medium">
-                  Your account balance: {NUMBER_FORMAT.format(balance.totalRemaining)} agent-minutes
-                  available
+                  Your account balance:{" "}
+                  {NUMBER_FORMAT.format(displayedAccountMinutesRemaining)} agent-minutes available
                 </p>
                 <p className="mt-1 text-muted-foreground">
                   {isTrial
@@ -214,7 +216,7 @@ export default async function BillingPage({
 
         {/* Keep an expired-trial upgrade prompt on FREE accounts, but never
             contradict an active paid or complimentary plan. */}
-        {(isTrial || (trialState.isExpired && plan === "FREE")) && (
+        {(isTrial || (trialState.isExpired && effectivePlan === "FREE")) && (
           <Card>
             <CardHeader>
               <CardTitle as="h2">Trial Status</CardTitle>
@@ -228,7 +230,7 @@ export default async function BillingPage({
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Agent-minutes left</p>
+                  <p className="text-sm text-muted-foreground">Minutes Left</p>
                   <p className="text-xl font-semibold">
                     {NUMBER_FORMAT.format(displayedTrialMinutesLeft)}
                   </p>
@@ -283,7 +285,9 @@ export default async function BillingPage({
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Remaining</p>
-                <p className="text-xl font-semibold">{balance.totalRemaining}</p>
+                <p className="text-xl font-semibold">
+                  {NUMBER_FORMAT.format(displayedAccountMinutesRemaining)}
+                </p>
               </div>
             </div>
 

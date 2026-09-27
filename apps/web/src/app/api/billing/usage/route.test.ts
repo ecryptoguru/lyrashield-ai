@@ -96,4 +96,23 @@ describe("GET /api/billing/usage", () => {
     expect(body.data.trial.minutesLeft).toBe(37)
     expect(body.data.usage.totalRemaining).toBe(80)
   })
+
+  it("reports no usable trial minutes after a paid term lapses", async () => {
+    mocks.resolveAccountBilling.mockResolvedValue({
+      currentPlan: "PRO",
+      status: "canceled",
+      effectivePlan: "FREE",
+      interval: "monthly",
+      currentPeriodStart: null,
+      currentPeriodEnd: new Date("2026-09-01T00:00:00Z"),
+    })
+
+    const response = await GET(
+      new Request("https://app.lyrashieldai.com/api/billing/usage?workspaceId=ws-1")
+    )
+    const body = await response.json()
+
+    expect(body.data.trial.minutesLeft).toBe(0)
+    expect(body.data.usage.totalRemaining).toBe(20)
+  })
 })

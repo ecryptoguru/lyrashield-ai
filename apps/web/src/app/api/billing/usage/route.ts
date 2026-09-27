@@ -76,7 +76,7 @@ export async function GET(request: Request) {
           endsAt: trialState.endsAt?.toISOString() ?? null,
           daysLeft: trialState.daysLeft,
           minutesLeft:
-            (billingAccount?.currentPlan ?? "FREE") === "FREE" && trialState.isExpired
+            (billingAccount?.effectivePlan ?? "FREE") === "FREE" && trialState.isExpired
               ? 0
               : trialState.minutesLeft,
           targetsUsed: trialState.targetsUsed,
