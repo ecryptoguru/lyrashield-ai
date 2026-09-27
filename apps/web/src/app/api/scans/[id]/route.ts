@@ -2,7 +2,7 @@ import { withCookieMutation } from "../../../../lib/api-auth"
 import { createHash } from "crypto"
 import { getScanWithEvents, cancelScan, prisma, removeScan } from "@lyrashield/db"
 import { getScanQueuePosition } from "@lyrashield/integrations"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
@@ -101,6 +101,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
     if (!scan) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
+    assertOAuthDelegatedScope(session, scan.targetId)
 
     return await recordedOperation(
       request,
@@ -156,7 +157,12 @@ async function remove(request: Request, { params }: { params: Promise<{ id: stri
   const workspaceId = parsedWorkspace.data
 
   try {
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.cancel)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.remove)
+    const scan = await getScanWithEvents(id, workspaceId)
+    if (!scan) {
+      return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
+    }
+    assertOAuthDelegatedScope(session, scan.targetId)
     await removeScan(id, workspaceId)
     await prisma.auditLog.create({
       data: {

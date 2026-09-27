@@ -39,6 +39,7 @@ export const PERMISSIONS = {
     view: "scan:view",
     create: "scan:create",
     cancel: "scan:cancel",
+    remove: "scan:remove",
     retry: "scan:retry",
   },
   attachment: {

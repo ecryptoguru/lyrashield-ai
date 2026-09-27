@@ -97,66 +97,102 @@ async function resolveDelegatedScope(
   workspaceId: string,
   toolName: string,
   args: Record<string, unknown>
-): Promise<{ targetId?: string; profile?: string }> {
-  if (typeof args.targetId === "string") {
+): Promise<{ targetId?: string; profile?: string } | null> {
+  const has = (field: string) => args[field] !== undefined
+  const only = (...allowed: string[]) =>
+    ["targetId", "scanId", "findingId", "proposalId"].every(
+      (field) => !has(field) || allowed.includes(field)
+    )
+  const targetInput = typeof args.targetId === "string" ? args.targetId : undefined
+  if (has("targetId") && !targetInput) return null
+
+  if (toolName === "lyrashield_scan_target" || toolName === "lyrashield_run_pr_scan") {
+    if (!only("targetId")) return null
     return {
-      targetId: args.targetId,
+      targetId: targetInput,
       profile: typeof args.mode === "string" ? args.mode : undefined,
     }
   }
-  if (typeof args.findingId === "string") {
-    const findingId = args.findingId
+
+  if (
+    toolName === "lyrashield_upload_scan_attachment" ||
+    toolName === "lyrashield_delete_scan_attachment"
+  ) {
+    // Attachments are workspace-level resources; any target identifier is spoofable noise.
+    return only() ? {} : null
+  }
+
+  if (toolName === "lyrashield_cancel_scan") {
+    if (!only("targetId", "scanId") || typeof args.scanId !== "string") return null
+    const scan = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.scan.findFirst({
+        where: { id: args.scanId as string, workspaceId, deletedAt: null },
+        select: { targetId: true },
+      })
+    )
+    if (!scan?.targetId || (targetInput && targetInput !== scan.targetId)) return null
+    return { targetId: scan.targetId }
+  }
+
+  if (toolName === "lyrashield_create_report") {
+    if (!only("targetId", "scanId")) return null
+    if (typeof args.scanId === "string") {
+      const scan = await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.scan.findFirst({
+          where: { id: args.scanId as string, workspaceId, deletedAt: null },
+          select: { targetId: true },
+        })
+      )
+      if (!scan?.targetId || (targetInput && targetInput !== scan.targetId)) return null
+      return { targetId: scan.targetId }
+    }
+    if (targetInput) {
+      const target = await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.target.findFirst({
+          where: { id: targetInput, workspaceId, deletedAt: null },
+          select: { id: true },
+        })
+      )
+      return target ? { targetId: target.id } : null
+    }
+    return {}
+  }
+
+  if (toolName === "lyrashield_record_fix_proposal" || toolName === "lyrashield_verify_fix") {
+    if (!only("findingId") || typeof args.findingId !== "string") return null
     const finding = await withWorkspaceRLS(workspaceId, (tx) =>
       tx.finding.findFirst({
-        where: { id: findingId, workspaceId, deletedAt: null },
+        where: { id: args.findingId as string, workspaceId, deletedAt: null },
         select: { targetId: true, scanId: true },
       })
     )
-    if (!finding) return {}
+    if (!finding?.targetId) return null
+    if (toolName === "lyrashield_record_fix_proposal") return { targetId: finding.targetId }
     const scan = await withWorkspaceRLS(workspaceId, (tx) =>
       tx.scan.findFirst({
         where: { id: finding.scanId, workspaceId, deletedAt: null },
         select: { mode: true },
       })
     )
-    return { targetId: finding.targetId ?? undefined, profile: scan?.mode }
+    return scan?.mode ? { targetId: finding.targetId, profile: scan.mode } : null
   }
-  if (typeof args.proposalId === "string") {
-    const proposalId = args.proposalId
+
+  if (toolName === "lyrashield_request_fix_pr") {
+    if (!only("proposalId") || typeof args.proposalId !== "string") return null
     const proposal = await withWorkspaceRLS(workspaceId, (tx) =>
       tx.fixProposal.findFirst({
-        where: { id: proposalId, deletedAt: null, finding: { workspaceId, deletedAt: null } },
-        select: { findingId: true },
+        where: {
+          id: args.proposalId as string,
+          deletedAt: null,
+          finding: { workspaceId, deletedAt: null },
+        },
+        select: { finding: { select: { targetId: true } } },
       })
     )
-    if (!proposal) return {}
-    const finding = await withWorkspaceRLS(workspaceId, (tx) =>
-      tx.finding.findFirst({
-        where: { id: proposal.findingId, workspaceId, deletedAt: null },
-        select: { targetId: true },
-      })
-    )
-    // fix_pr.create is non-billable: like cancellation, the gate must not
-    // resolve the scan's recorded mode into a profile check.
-    return { targetId: finding?.targetId ?? undefined }
+    return proposal?.finding.targetId ? { targetId: proposal.finding.targetId } : null
   }
-  if (typeof args.scanId === "string") {
-    const scanId = args.scanId
-    const scan = await withWorkspaceRLS(workspaceId, (tx) =>
-      tx.scan.findFirst({
-        where: { id: scanId, workspaceId, deletedAt: null },
-        select: { targetId: true, mode: true },
-      })
-    )
-    // Cancellation does not spend on the scan's recorded profile — a
-    // cancel-scoped grant must not also require a billable profile grant.
-    // The profile is only resolved for billable scanId-scoped tools (retest).
-    return {
-      targetId: scan?.targetId ?? undefined,
-      profile: toolName === "lyrashield_cancel_scan" ? undefined : scan?.mode,
-    }
-  }
-  return {}
+
+  return only() ? {} : null
 }
 
 interface RemoteApprovalGateOptions {
@@ -210,14 +246,30 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
           "Connection-bound credentials cannot bypass their grant with a per-action approval. Update the connection scope instead."
         )
       }
-      const { targetId, profile } = await resolveDelegatedScope(workspaceId, toolName, toolArgs)
+      let delegatedScope: Awaited<ReturnType<typeof resolveDelegatedScope>>
+      try {
+        delegatedScope = await resolveDelegatedScope(workspaceId, toolName, toolArgs)
+      } catch (error) {
+        logger.warn("Could not resolve delegated MCP resource scope", {
+          connectionId: options.connection.id,
+          workspaceId,
+          toolName,
+          error: error instanceof Error ? error.name : "UnknownError",
+        })
+        return denied("The referenced resource could not be resolved for this workspace.")
+      }
+      if (!delegatedScope) {
+        return denied(
+          "The referenced resource is missing, out of scope or has conflicting identifiers."
+        )
+      }
 
       const authCheck = checkDelegatedOperationAuthorization({
         connection: options.connection,
         workspaceId,
         operationName: toolName,
-        targetId,
-        profile,
+        targetId: delegatedScope.targetId,
+        profile: delegatedScope.profile,
       })
 
       if (authCheck.authorized) {

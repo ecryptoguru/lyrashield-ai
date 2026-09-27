@@ -1,7 +1,7 @@
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import { softDeleteScanAttachment } from "@lyrashield/db"
 import { deleteEncryptedArtifact } from "@lyrashield/evidence-storage"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { CANONICAL_OPERATIONS } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
@@ -31,6 +31,7 @@ async function del(request: Request, { params }: { params: Promise<{ id: string 
       return privateResponse(apiError("MISSING_PARAM", "workspaceId is required", 400))
     }
     const { session } = await requirePermission(workspaceId, PERMISSIONS.attachment.delete)
+    assertOAuthDelegatedScope(session, null)
 
     return privateResponse(
       await recordedOperation(
