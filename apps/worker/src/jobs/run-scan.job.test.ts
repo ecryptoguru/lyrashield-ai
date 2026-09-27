@@ -709,27 +709,25 @@ describe("processScanJob", () => {
       process.env.LYRASHIELD_RELAY_SIGNING_SECRET = "test-signing-secret"
       process.env.LYRASHIELD_EGRESS_PROXY_SECRET = "test-egress-secret"
       mockStoredScanAuthority({ mode: "STANDARD" })
-      vi.mocked(runEngine).mockImplementation(
-        ({ scanId }: { scanId: string }) => {
-          const fixture = {
-            exitCode: 0,
-            output: {
-              ingestionIssues: [],
-              vulnerabilities: [],
-              findingsComplete: true,
-              runRecord: {
-                run_id: scanId,
-                run_name: scanId,
-                status: "completed",
-                llm_usage: completeUsage,
-              },
-              summary: "Scan completed with 0 findings",
-              findingCount: 0,
+      vi.mocked(runEngine).mockImplementation(({ scanId }: { scanId: string }) => {
+        const fixture = {
+          exitCode: 0,
+          output: {
+            ingestionIssues: [],
+            vulnerabilities: [],
+            findingsComplete: true,
+            runRecord: {
+              run_id: scanId,
+              run_name: scanId,
+              status: "completed",
+              llm_usage: completeUsage,
             },
-          }
-          return fixture as never
+            summary: "Scan completed with 0 findings",
+            findingCount: 0,
+          },
         }
-      )
+        return fixture as never
+      })
       vi.mocked(runPreflight).mockResolvedValue({ passed: true, checks: [] })
     })
 
@@ -896,27 +894,25 @@ describe("processScanJob", () => {
       vi.mocked(resolveAuthenticatedAssessmentAuthorization).mockResolvedValue(
         betaAuthorization as never
       )
-      vi.mocked(runEngine).mockImplementation(
-        ({ scanId }: { scanId: string }) => {
-          const fixture = {
-            exitCode: 0,
-            output: {
-              ingestionIssues: [],
-              vulnerabilities: [],
-              findingsComplete: true,
-              runRecord: {
-                run_id: scanId,
-                run_name: scanId,
-                status: "completed",
-                llm_usage: completeUsage,
-              },
-              summary: "Scan completed with 0 findings",
-              findingCount: 0,
+      vi.mocked(runEngine).mockImplementation(({ scanId }: { scanId: string }) => {
+        const fixture = {
+          exitCode: 0,
+          output: {
+            ingestionIssues: [],
+            vulnerabilities: [],
+            findingsComplete: true,
+            runRecord: {
+              run_id: scanId,
+              run_name: scanId,
+              status: "completed",
+              llm_usage: completeUsage,
             },
-          }
-          return fixture as never
+            summary: "Scan completed with 0 findings",
+            findingCount: 0,
+          },
         }
-      )
+        return fixture as never
+      })
       vi.mocked(runPreflight).mockResolvedValue({ passed: true, checks: [] })
     })
 
@@ -1064,27 +1060,25 @@ describe("processScanJob", () => {
     } as never)
     // Restore default mock implementations after clearAllMocks
     vi.mocked(runPreflight).mockResolvedValue({ passed: true, checks: [] })
-    vi.mocked(runEngine).mockImplementation(
-      ({ scanId }: { scanId: string }) => {
-        const fixture = {
-          exitCode: 0,
-          output: {
-            ingestionIssues: [],
-            vulnerabilities: [],
-            findingsComplete: true,
-            runRecord: {
-              run_id: scanId,
-              run_name: scanId,
-              status: "completed",
-              llm_usage: completeUsage,
-            },
-            summary: "Scan completed with 0 findings",
-            findingCount: 0,
+    vi.mocked(runEngine).mockImplementation(({ scanId }: { scanId: string }) => {
+      const fixture = {
+        exitCode: 0,
+        output: {
+          ingestionIssues: [],
+          vulnerabilities: [],
+          findingsComplete: true,
+          runRecord: {
+            run_id: scanId,
+            run_name: scanId,
+            status: "completed",
+            llm_usage: completeUsage,
           },
-        }
-        return fixture as never
+          summary: "Scan completed with 0 findings",
+          findingCount: 0,
+        },
       }
-    )
+      return fixture as never
+    })
     vi.mocked(interpretExitCode).mockImplementation((code: number) => {
       if (code === 0) return { status: "COMPLETED" as const, category: "SUCCESS", message: "" }
       if (code === 2)

@@ -120,7 +120,10 @@ describe("invokeScanConnectorTool", () => {
     // metadata.installationId wins; numeric externalId is the fallback.
     const cred = await args.resolveCredential(githubConnection())
     expect(cred).toEqual({ kind: "github_installation", installationId: 777 })
-    const missing = await args.resolveCredential({ ...githubConnection(), externalId: "not-a-number" })
+    const missing = await args.resolveCredential({
+      ...githubConnection(),
+      externalId: "not-a-number",
+    })
     expect(missing).toBeNull()
   })
 

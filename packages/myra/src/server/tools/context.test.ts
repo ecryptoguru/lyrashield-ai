@@ -38,9 +38,7 @@ function context(
     deps: {
       resolveAccountBilling: vi.fn().mockResolvedValue({ effectivePlan: plan }),
       getAccountTrialState: vi.fn().mockResolvedValue(trial),
-      getUsageBalance: vi
-        .fn()
-        .mockResolvedValue(balance),
+      getUsageBalance: vi.fn().mockResolvedValue(balance),
       evaluateScanEntitlement: vi.fn(),
     },
   }

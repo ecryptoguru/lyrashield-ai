@@ -980,18 +980,19 @@ export async function scanAiAppSecurity({
       reason: "No supported source files found for AI App Security scan",
     })
     const notAssessedControls = Object.fromEntries(
-      AI_SECURITY_CONTROLS.map((control) =>
-        [
-          control.id,
-          {
-            controlId: control.id,
-            state: "NOT_ASSESSED",
-            assessed: false,
-            ruleIds: [],
-            fileCount: 0,
-            signalCount: 0,
-          } satisfies AIScanResult["coverage"]["controls"][typeof control.id],
-        ] as const
+      AI_SECURITY_CONTROLS.map(
+        (control) =>
+          [
+            control.id,
+            {
+              controlId: control.id,
+              state: "NOT_ASSESSED",
+              assessed: false,
+              ruleIds: [],
+              fileCount: 0,
+              signalCount: 0,
+            } satisfies AIScanResult["coverage"]["controls"][typeof control.id],
+          ] as const
       )
     ) satisfies AIScanResult["coverage"]["controls"]
 

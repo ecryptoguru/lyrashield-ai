@@ -184,8 +184,8 @@ export default async function BillingPage({
               )}
               <div className="rounded-md border p-3 text-sm">
                 <p className="font-medium">
-                  Your account balance:{" "}
-                  {NUMBER_FORMAT.format(displayedAccountMinutesRemaining)} agent-minutes available
+                  Your account balance: {NUMBER_FORMAT.format(displayedAccountMinutesRemaining)}{" "}
+                  agent-minutes available
                 </p>
                 <p className="mt-1 text-muted-foreground">
                   {isTrial
