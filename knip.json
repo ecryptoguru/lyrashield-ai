@@ -17,13 +17,14 @@
       "entry": [
         "src/pages/**/*.{ts,astro}",
         "tests-browser/**/*.e2e.ts",
-        "scripts/**/*.{mjs,ts}",
+        "scripts/crawl-built-blog.mjs",
+        "scripts/generate-og-cards.mjs",
         "src/**/*.test.{ts,tsx}"
       ],
       "project": ["src/**/*.{ts,tsx,astro}", "tests-browser/**/*.ts", "scripts/**/*.{mjs,ts}"]
     },
     "apps/marketing-motion": {
-      "entry": ["scripts/**/*.mjs", "tests/**/*.mjs"],
+      "entry": ["tests/**/*.test.mjs"],
       "project": ["scripts/**/*.mjs", "tests/**/*.mjs"]
     },
     "apps/web": {
@@ -38,8 +39,7 @@
       "entry": [
         "src/operations/verify-evidence-storage.ts",
         "src/operations/verify-evidence-storage-fail-closed.ts",
-        "src/**/*.test.{ts,tsx}",
-        "scripts/**/*.{mjs,ts}"
+        "src/**/*.test.{ts,tsx}"
       ],
       "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,ts}"]
     },
@@ -84,7 +84,11 @@
       "project": ["src/**/*.ts"]
     },
     "packages/db": {
-      "entry": ["src/**/*.test.ts", "scripts/**/*.ts"],
+      "entry": [
+        "src/**/*.test.ts",
+        "scripts/backfill-account-billing.ts",
+        "scripts/backfill-clear-wrong-trial-claims.ts"
+      ],
       "project": ["src/**/*.{js,mjs,ts}", "scripts/**/*.ts"]
     },
     "packages/egress-proxy": {
@@ -92,7 +96,7 @@
       "project": ["src/**/*.ts"]
     },
     "packages/evidence-storage": {
-      "entry": ["src/**/*.test.ts", "scripts/**/*.mjs"],
+      "entry": ["src/**/*.test.ts", "scripts/generate-kek.mjs"],
       "project": ["src/**/*.ts", "scripts/**/*.mjs"]
     },
     "packages/fix": {
@@ -120,7 +124,7 @@
       "project": ["src/**/*.ts"]
     },
     "packages/myra": {
-      "entry": ["src/**/*.test.ts", "scripts/**/*.ts"],
+      "entry": ["src/**/*.test.ts", "scripts/import-knowledge.ts"],
       "project": ["src/**/*.ts", "scripts/**/*.ts"]
     },
     "packages/pricing": {
