@@ -284,8 +284,19 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
         const afterView = after
           ? resolveTaskView({ operation: toOperationRecord(after.operation), scan: after.scan })
           : null
-        if (cancelClaim.status === "REPLAY" && after && afterView?.status === "cancelled") {
-          return toTask(taskId, after)
+        if (after && afterView?.status === "cancelled") {
+          if (cancelClaim.status === "REPLAY") return toTask(taskId, after)
+          if (cancelClaim.status === "IN_PROGRESS" || cancelClaim.status === "FAILED") {
+            await completeAgentOperation(cancelClaim.operation.id, workspaceId, {
+              resultReference: scan.id,
+              result: {
+                taskId,
+                scanId: scan.id,
+                status: afterView.status.toUpperCase(),
+              },
+            })
+            return toTask(taskId, after)
+          }
         }
         const reason =
           cancelClaim.status === "CONFLICT"

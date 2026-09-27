@@ -563,6 +563,53 @@ describe("MCP tasks over the hosted endpoint", () => {
     expect(cancelScanMock).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ["IN_PROGRESS", "EXECUTING"],
+    ["FAILED", "FAILED"],
+  ] as const)(
+    "reconciles a %s cancellation claim after the scan reached CANCELLED",
+    async (status, operationStatus) => {
+      oauthConnection()
+      getAgentOperationMock.mockResolvedValue(makeOperation())
+      claimOrGetAgentOperationMock.mockResolvedValue({
+        status,
+        operation: makeOperation({
+          id: "cancel-op-1",
+          status: operationStatus,
+          operationName: "scan.cancel",
+        }),
+      })
+      completeAgentOperationMock.mockResolvedValue(undefined)
+      scanFindFirstMock
+        .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
+        .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
+        .mockResolvedValue(makeScan({ status: "CANCELLED" }))
+      checkDelegatedOperationAuthorizationMock.mockReturnValue({
+        authorized: true,
+        canonicalOperation: "scan.cancel",
+      })
+
+      const res = await POST(
+        req({
+          method: "POST",
+          rpcMethod: "tasks/cancel",
+          rpcParams: { taskId: "lst_op-1" },
+          protocolHeader: PROTOCOL_2025,
+        })
+      )
+
+      const body = await readJson(res)
+      const task =
+        (body.result as { status?: string }) ?? (body.result as { task?: { status: string } }).task
+      expect(task.status).toBe("cancelled")
+      expect(completeAgentOperationMock).toHaveBeenCalledWith("cancel-op-1", "ws-1", {
+        resultReference: "scan-1",
+        result: { taskId: "lst_op-1", scanId: "scan-1", status: "CANCELLED" },
+      })
+      expect(cancelScanMock).not.toHaveBeenCalled()
+    }
+  )
+
   it("does not cancel or record an operation outside the connection target grant", async () => {
     oauthConnection({ allowedTargetIds: ["different-target"], allTargets: false })
     getAgentOperationMock.mockResolvedValue(makeOperation())
