@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("./client", () => ({
   prisma: {
+    scan: { findFirst: vi.fn() },
+    target: { findFirst: vi.fn() },
     finding: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     evidence: { findMany: vi.fn(), count: vi.fn() },
     findingVerification: { findMany: vi.fn(), count: vi.fn() },
@@ -19,10 +21,12 @@ import {
   acceptRisk,
   getFinding,
   getFindingHistoryPage,
+  listEvidenceFindings,
   listFindings,
   listFindingsByScan,
   markFalsePositive,
   updateFindingStatus,
+  validateFindingScope,
 } from "./finding-service"
 
 describe("listFindingsByScan", () => {
@@ -38,10 +42,65 @@ describe("listFindingsByScan", () => {
         where: {
           workspaceId: "workspace-1",
           deletedAt: null,
-          candidates: { some: { scanId: "scan-1" } },
+          candidates: {
+            some: { workspaceId: "workspace-1", scanId: "scan-1" },
+          },
         },
       })
     )
+  })
+})
+
+describe("validateFindingScope", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("requires a workspace-owned target and scan with matching target identity", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      name: "Production",
+    } as never)
+    vi.mocked(prisma.scan.findFirst).mockResolvedValue({
+      id: "scan-1",
+      targetId: "target-1",
+    } as never)
+
+    const result = await validateFindingScope({
+      workspaceId: "workspace-1",
+      targetId: "target-1",
+      observedInScanId: "scan-1",
+    })
+
+    expect(result).toEqual({
+      available: true,
+      target: { id: "target-1", name: "Production" },
+      scanId: "scan-1",
+    })
+    expect(prisma.target.findFirst).toHaveBeenCalledWith({
+      where: { id: "target-1", workspaceId: "workspace-1", deletedAt: null },
+      select: { id: true, name: true },
+    })
+    expect(prisma.scan.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "scan-1",
+        workspaceId: "workspace-1",
+        deletedAt: null,
+        targetId: "target-1",
+      },
+      select: { id: true, targetId: true },
+    })
+  })
+
+  it("fails closed when either workspace-owned scope row is unavailable", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.scan.findFirst).mockResolvedValue(null)
+
+    await expect(
+      validateFindingScope({
+        workspaceId: "workspace-1",
+        targetId: "foreign-target",
+        observedInScanId: "foreign-scan",
+      })
+    ).resolves.toEqual({ available: false, target: null, scanId: null })
   })
 })
 
@@ -126,6 +185,55 @@ describe("getFinding", () => {
 
 describe("getFindingHistoryPage", () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it("binds evidence rows and counts to the finding's workspace", async () => {
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.evidence.findMany).mockResolvedValue([])
+    vi.mocked(prisma.evidence.count).mockResolvedValue(0)
+
+    await getFindingHistoryPage("finding-1", "workspace-1", "evidence")
+
+    expect(prisma.evidence.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          findingId: "finding-1",
+          finding: { workspaceId: "workspace-1" },
+        }),
+      })
+    )
+    expect(prisma.evidence.count).toHaveBeenCalledWith({
+      where: {
+        findingId: "finding-1",
+        finding: { workspaceId: "workspace-1" },
+        redactionStatus: { not: "deleted" },
+      },
+    })
+  })
+
+  it("binds fix proposal rows and counts to the finding's workspace", async () => {
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.fixProposal.findMany).mockResolvedValue([])
+    vi.mocked(prisma.fixProposal.count).mockResolvedValue(0)
+
+    await getFindingHistoryPage("finding-1", "workspace-1", "fixProposals")
+
+    expect(prisma.fixProposal.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          findingId: "finding-1",
+          finding: { workspaceId: "workspace-1" },
+          deletedAt: null,
+        },
+      })
+    )
+    expect(prisma.fixProposal.count).toHaveBeenCalledWith({
+      where: {
+        findingId: "finding-1",
+        finding: { workspaceId: "workspace-1" },
+        deletedAt: null,
+      },
+    })
+  })
 
   it("uses a stable createdAt/id cursor and caps pages at 100", async () => {
     vi.mocked(prisma.finding.findFirst).mockResolvedValue({ id: "finding-1" } as never)
@@ -230,6 +338,76 @@ describe("listFindings", () => {
 
     expect(result.items).toHaveLength(1)
     expect(result.nextCursor).toBeNull()
+  })
+
+  it("keeps origin scan and observed scan as independent filters", async () => {
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([] as never)
+
+    await listFindings({
+      workspaceId: "workspace-1",
+      targetId: "target-1",
+      scanId: "origin-scan",
+      observedInScanId: "later-scan",
+    })
+
+    expect(prisma.finding.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          workspaceId: "workspace-1",
+          deletedAt: null,
+          targetId: "target-1",
+          candidates: {
+            some: {
+              workspaceId: "workspace-1",
+              scanId: "later-scan",
+              targetId: "target-1",
+            },
+          },
+          scanId: "origin-scan",
+        },
+      })
+    )
+  })
+
+  it("paginates evidence only after redaction and never selects storage URIs", async () => {
+    vi.mocked(prisma.finding.findMany).mockResolvedValue(
+      Array.from({ length: 26 }, (_, index) => ({ id: `finding-${index}` })) as never
+    )
+
+    const result = await listEvidenceFindings({
+      workspaceId: "workspace-1",
+      targetId: "target-1",
+      observedInScanId: "scan-1",
+      limit: 25,
+    })
+
+    expect(result.items).toHaveLength(25)
+    expect(result.nextCursor).toBe("finding-24")
+    expect(prisma.finding.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          workspaceId: "workspace-1",
+          deletedAt: null,
+          targetId: "target-1",
+          candidates: {
+            some: {
+              workspaceId: "workspace-1",
+              scanId: "scan-1",
+              targetId: "target-1",
+            },
+          },
+          verified: true,
+          evidence: { some: { redactionStatus: "complete" } },
+        },
+        select: expect.objectContaining({
+          evidence: expect.objectContaining({
+            where: { redactionStatus: "complete" },
+            select: { type: true, createdAt: true },
+          }),
+        }),
+      })
+    )
+    expect(JSON.stringify(prisma.finding.findMany.mock.calls.at(-1))).not.toContain("storageUri")
   })
 })
 

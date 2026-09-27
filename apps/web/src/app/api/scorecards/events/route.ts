@@ -2,8 +2,12 @@ import { recordScorecardEvent } from "@lyrashield/db"
 import { isProd } from "@lyrashield/config"
 import { z } from "zod"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
-import { SCORECARD_CHANNELS, scorecardTrackingAllowed } from "../../../../lib/scorecard-sharing"
+import { SCORECARD_CHANNELS } from "../../../../lib/scorecard-sharing"
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto"
+import {
+  analyticsAllowedForRequest,
+  clearOptionalTrackingCookies,
+} from "../../../../lib/analytics-preference"
 
 const VISITOR_COOKIE = "ls_scorecard_visitor"
 
@@ -18,13 +22,13 @@ const Body = z
   .strict()
 
 export async function POST(request: Request) {
-  if (
-    !scorecardTrackingAllowed({
-      doNotTrack: request.headers.get("dnt"),
-      globalPrivacyControl: request.headers.get("sec-gpc") === "1",
+  if (!(await analyticsAllowedForRequest(request))) {
+    const response = new Response(null, {
+      status: 204,
+      headers: { "Cache-Control": "private, no-store" },
     })
-  ) {
-    return new Response(null, { status: 204, headers: { "Cache-Control": "private, no-store" } })
+    clearOptionalTrackingCookies(response, request)
+    return response
   }
 
   const parsed = Body.safeParse(await request.json().catch(() => null))

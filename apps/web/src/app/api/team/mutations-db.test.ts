@@ -1,7 +1,13 @@
 import { expect, it, vi } from "vitest"
 const permission = vi.hoisted(() => vi.fn())
 const getSession = vi.hoisted(() => vi.fn())
-vi.mock("@lyrashield/auth/server", () => ({ requirePermission: permission, getSession }))
+vi.mock("@lyrashield/auth/server", () => ({
+  requirePermission: permission,
+  getSession,
+  assertBrowserSession: (session: { apiKey?: unknown; oauth?: unknown }) => {
+    if (session.apiKey || session.oauth) throw new Error("FORBIDDEN")
+  },
+}))
 vi.mock("@lyrashield/integrations", () => ({ sendNotification: vi.fn() }))
 vi.mock("../../../lib/rate-limit", () => ({
   checkInvitationCreateRateLimit: vi.fn().mockResolvedValue({ limited: false }),
@@ -24,6 +30,7 @@ async function localFixture() {
           id: crypto.randomUUID(),
           name: `Owner ${index}`,
           email: `team-review-${suffix}-${index}@example.com`,
+          emailVerified: true,
         },
       })
     )
@@ -113,7 +120,17 @@ it.runIf(process.env.TEAM_MUTATION_DB_TEST === "1")(
     const { system, users, workspace, members } = fixture
     const { DELETE, POST } = await import("./route")
     const { POST: accept } = await import("./invitations/accept/route")
+    let billingId: string | undefined
     try {
+      const billing = await system.billingAccount.create({
+        data: {
+          accountId: users[0]!.id,
+          provider: "complimentary",
+          status: "active",
+          currentPlan: "LAUNCH_ASSURANCE",
+        },
+      })
+      billingId = billing.id
       permission.mockResolvedValue({
         session: { userId: users[0]!.id },
         workspace: { role: "OWNER" },
@@ -141,20 +158,18 @@ it.runIf(process.env.TEAM_MUTATION_DB_TEST === "1")(
       expect(invitation.status).toBe(200)
       const token = new URL((await invitation.json()).data.inviteUrl).searchParams.get("invite")
       getSession.mockResolvedValue({ userId: users[1]!.id, userEmail: users[1]!.email })
-      expect(
-        (
-          await accept(
-            new Request("http://localhost/api/team/invitations/accept", {
-              method: "POST",
-              body: JSON.stringify({ token }),
-            })
-          )
-        ).status
-      ).toBe(200)
+      const accepted = await accept(
+        new Request("http://localhost/api/team/invitations/accept", {
+          method: "POST",
+          body: JSON.stringify({ token }),
+        })
+      )
+      expect(accepted.status, JSON.stringify(await accepted.clone().json())).toBe(200)
       expect(
         await system.workspaceMember.findUnique({ where: { id: members[1]!.id } })
       ).toMatchObject({ id: members[1]!.id, role: "VIEWER", status: "active" })
     } finally {
+      if (billingId) await system.billingAccount.delete({ where: { id: billingId } })
       await fixture.cleanup()
     }
   },

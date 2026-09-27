@@ -4,6 +4,10 @@ import { z } from "zod"
 import { REFERRAL_SOURCES } from "../../../../lib/scorecard-sharing"
 import { isProd } from "@lyrashield/config"
 import { assertSameOriginMutation, authErrorResponse } from "../../../../lib/api-auth"
+import {
+  analyticsAllowedForRequest,
+  clearOptionalTrackingCookies,
+} from "../../../../lib/analytics-preference"
 
 const Source = z.enum(REFERRAL_SOURCES)
 const Body = z
@@ -20,6 +24,14 @@ export async function POST(request: Request) {
     const response = authErrorResponse(error)
     if (response) return response
     throw error
+  }
+  if (!(await analyticsAllowedForRequest(request))) {
+    const response = new Response(null, {
+      status: 204,
+      headers: { "Cache-Control": "private, no-store" },
+    })
+    clearOptionalTrackingCookies(response, request)
+    return response
   }
   const parsed = Body.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ success: false }, { status: 400 })

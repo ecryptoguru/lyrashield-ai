@@ -79,6 +79,7 @@ const inactiveTrial = {
 function mockPlan(currentPlan: string) {
   resolveAccountBilling.mockResolvedValue({
     currentPlan,
+    effectivePlan: currentPlan,
     provider: "polar",
     status: "active",
     interval: null,
@@ -123,5 +124,24 @@ describe("billing page plan label", () => {
 
     expect(html).toContain(">Team</p>")
     expect(html).not.toContain(">TEAM</p>")
+  })
+
+  it("shows the signed-in account's available minutes beside its plan", async () => {
+    mockPlan("PRO")
+    getUsageBalance.mockResolvedValue({
+      poolConsumed: 20,
+      poolMinutes: 100,
+      packRemaining: 15,
+      totalRemaining: 95,
+      packs: [],
+    })
+
+    const html = renderToString(await BillingPage({ searchParams: Promise.resolve({}) }))
+
+    expect(html).toContain("Your account balance:")
+    expect(html).toContain("95")
+    expect(html).toContain("agent-minutes available")
+    expect(html).toContain(">Pro</p>")
+    expect(html).toContain("Minutes, plan access and billing status belong to your account.")
   })
 })

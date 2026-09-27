@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   completeScanWithScore: vi.fn(),
   qualifyReferralForWorkspace: vi.fn(),
   updateScanStatus: vi.fn(),
+  verifyStoredManifestChecksum: vi.fn(),
   completeRetestsForScan: vi.fn(),
   refreshGate: vi.fn(),
   reportInterruptedSettlement: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock("@lyrashield/db", () => ({
   prisma: mocks.prisma,
   qualifyReferralForWorkspace: mocks.qualifyReferralForWorkspace,
   updateScanStatus: mocks.updateScanStatus,
+  verifyStoredManifestChecksum: mocks.verifyStoredManifestChecksum,
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -59,6 +61,7 @@ describe("resumePendingScanFinalization", () => {
     mocks.refreshGate.mockResolvedValue(undefined)
     mocks.reportInterruptedSettlement.mockResolvedValue(undefined)
     mocks.updateScanStatus.mockResolvedValue({ id: "scan-1" })
+    mocks.verifyStoredManifestChecksum.mockReturnValue("UNAVAILABLE")
   })
 
   it("returns the stored failure for an already-FAILED scan", async () => {
@@ -101,11 +104,17 @@ describe("resumePendingScanFinalization", () => {
   })
 
   it("resumes a non-COMPLETED manifest outcome without replaying billable work", async () => {
+    const resultManifest = {
+      id: "m-1",
+      checksum: "a".repeat(64),
+      checksumInput: null,
+      manifest: { terminalOutcome: {} },
+    }
     mocks.prisma.scan.findUnique.mockResolvedValue(
       scanRow({
         status: "RUNNING",
         actualCostCents: 42,
-        resultManifest: { id: "m-1", manifest: { terminalOutcome: {} } },
+        resultManifest,
       })
     )
     mocks.storedTerminalOutcome.mockReturnValue({
@@ -128,6 +137,38 @@ describe("resumePendingScanFinalization", () => {
       errorMessage: "no receipt",
       actualCostCents: 42,
     })
+    expect(mocks.verifyStoredManifestChecksum).toHaveBeenCalledWith(resultManifest)
+    expect(mocks.prisma.scan.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          resultManifest: {
+            select: { id: true, checksum: true, checksumInput: true, manifest: true },
+          },
+        }),
+      })
+    )
+  })
+
+  it("refuses pending finalization when stored manifest checksum mismatches", async () => {
+    mocks.prisma.scan.findUnique.mockResolvedValue(
+      scanRow({
+        status: "VERIFYING",
+        resultManifest: {
+          id: "m-1",
+          checksum: "a".repeat(64),
+          checksumInput: "{}",
+          manifest: { terminalOutcome: { status: "COMPLETED" } },
+        },
+      })
+    )
+    mocks.verifyStoredManifestChecksum.mockReturnValue("MISMATCH")
+
+    await expect(resumePendingScanFinalization(params)).rejects.toThrow(
+      "Stored scan result manifest failed checksum verification"
+    )
+    expect(mocks.storedTerminalOutcome).not.toHaveBeenCalled()
+    expect(mocks.completeRetestsForScan).not.toHaveBeenCalled()
+    expect(mocks.completeScanWithScore).not.toHaveBeenCalled()
   })
 
   it("seals a VERIFYING scan with a manifest at STOPPED_BUDGET on budget exhaustion", async () => {

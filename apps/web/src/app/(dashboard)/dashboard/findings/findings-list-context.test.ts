@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { loadFindingsListContext, saveFindingsListContext } from "./findings-list-context"
+import {
+  findingsContextKey,
+  loadFindingsListContext,
+  saveFindingsListContext,
+} from "./findings-list-context"
 import type { FindingListItem } from "./findings-client"
 
 const finding = (n: number): FindingListItem => ({
@@ -31,6 +35,13 @@ function storage() {
 afterEach(() => vi.unstubAllGlobals())
 
 describe("findings list snapshots", () => {
+  it("isolates saved pages by observed scan", () => {
+    const base = { filter: "OPEN", sort: "priority", target: "target-1", q: "" }
+    expect(findingsContextKey("workspace-1", { ...base, scanId: "scan-1" })).not.toBe(
+      findingsContextKey("workspace-1", { ...base, scanId: "scan-2" })
+    )
+  })
+
   it("retains only complete pages and their own continuation cursor", () => {
     const data = storage()
     const pages = Array.from({ length: 21 }, (_, index) => ({

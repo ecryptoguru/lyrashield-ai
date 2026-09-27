@@ -7,7 +7,7 @@ import { Badge, buttonVariants } from "@lyrashield/ui"
 import { CheckCircle2, ShieldCheck } from "lucide-react"
 import { ScorecardShareComposer } from "../../../../components/scorecard-share-composer"
 import { ReferralCapture } from "./referral-capture"
-import { REFERRAL_SOURCES } from "../../../../lib/scorecard-sharing"
+import { REFERRAL_SOURCES, scorecardFixesSummary } from "../../../../lib/scorecard-sharing"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 export const dynamic = "force-dynamic"
@@ -46,7 +46,7 @@ export async function generateMetadata({
     `/api/og/score/${slug}?variant=${variant}&format=wide`,
     appOrigin()
   ).toString()
-  const description = `Grade ${grade} from a scoped LyraShield AI review, with ${fixes} finding${fixes === 1 ? "" : "s"} fixed and retest-confirmed. Not a security guarantee.`
+  const description = `Grade ${grade} from a scoped LyraShield AI review. ${scorecardFixesSummary(fixes)} Not a security guarantee.`
 
   return {
     title: `Grade ${grade} security review | LyraShield AI`,
@@ -90,7 +90,7 @@ export default async function ScorecardPage({
   const scorecard = await getScorecard(slug)
   if (!scorecard) notFound()
 
-  const { payload, referralCode, superseded } = scorecard
+  const { payload, superseded } = scorecard
   const grade = payload.grade.replace("_PLUS", "+")
 
   const verdict = payload.releaseVerdict
@@ -98,7 +98,9 @@ export default async function ScorecardPage({
   // A pre-verdict share has nothing truthful to show here, so omit the panel rather than
   // advertising "Not evaluated" on a card whose scan simply predates the field.
   const showVerdict = verdict !== "NOT_EVALUATED"
-  const activeReferral = ref ?? referralCode
+  // Only an explicitly shared referral token participates in optional
+  // attribution; bare public scorecard URLs stay shareable without tracking.
+  const activeReferral = ref || null
   const referralSource = source && REFERRAL_SOURCE_SET.has(source) ? source : undefined
   const shareUrl = `/score/${slug}${activeReferral ? `?ref=${activeReferral}` : ""}`
   const signupUrl = `/sign-up${activeReferral ? `?ref=${activeReferral}` : ""}`
@@ -164,7 +166,7 @@ export default async function ScorecardPage({
                 </p>
                 <p className="mt-3 text-4xl font-semibold">{payload.resolvedFindings}</p>
                 <p className="text-muted-foreground mt-1 text-sm">
-                  finding{payload.resolvedFindings === 1 ? "" : "s"} fixed and retest-confirmed
+                  {scorecardFixesSummary(payload.resolvedFindings)}
                 </p>
               </div>
               {showVerdict && (

@@ -13,7 +13,7 @@ faq:
   - q: "Can I use Pixee and LyraShield together?"
     a: "Yes and it is logical. Run LyraShield or other scanners to produce SARIF, then let Pixee triage backlog and generate constrained fixes validated by an independent evaluator plus your CI gate. Pixee pricing is outcome-based and not public, with self-hosted and air-gapped plus BYOM options. LyraShield is live with open registration in open beta."
   - q: "When should I choose Pixee over LyraShield?"
-    a: "Choose Pixee when you already have a mature scanner stack and the bottleneck is triage and remediation at scale, needing scanner-agnostic fixes, audit trails with git history and validation logs and self-hosted sovereignty. Its Foresight spec review is valuable before code is written. Choose LyraShield when you lack detection and need release proof."
+    a: "Choose Pixee when you already have a mature scanner stack and the bottleneck is triage and remediation at scale, needing scanner-agnostic fixes, audit trails with git history and validation logs and self-hosted sovereignty. Its Foresight spec review is valuable before code is written. Choose LyraShield when you need authorized checks, scoped evidence and approval-gated fix proposals for a release review."
 ---
 
 ## Core approach

@@ -1,6 +1,6 @@
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { getFindingHistoryPage } from "@lyrashield/db"
+import { getFindingHistoryPage, validateFindingScope } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
 import { authErrorResponse } from "../../../../../lib/api-auth"
@@ -8,6 +8,8 @@ import { apiError, apiSuccess } from "../../../../../lib/api-response"
 
 const HistoryQuerySchema = z.object({
   workspaceId: z.string().min(1),
+  targetId: z.string().min(1).optional(),
+  observedInScanId: z.string().min(1).optional(),
   collection: z.enum(["evidence", "verificationReceipts", "fixProposals", "retests"]),
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -23,9 +25,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("INVALID_PARAM", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
 
-    const { workspaceId, collection, cursor, limit } = parsed.data
+    const { workspaceId, targetId, observedInScanId, collection, cursor, limit } = parsed.data
     await requirePermission(workspaceId, PERMISSIONS.finding.view)
-    const page = await getFindingHistoryPage(id, workspaceId, collection, { cursor, limit })
+    const scope = await validateFindingScope({
+      workspaceId,
+      ...(targetId ? { targetId } : {}),
+      ...(observedInScanId ? { observedInScanId } : {}),
+    })
+    if (!scope.available) {
+      return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
+    }
+    const page = await getFindingHistoryPage(id, workspaceId, collection, {
+      cursor,
+      limit,
+      ...(targetId ? { targetId } : {}),
+      ...(observedInScanId ? { observedInScanId } : {}),
+    })
     return apiSuccess(page)
   } catch (error) {
     const authErr = authErrorResponse(error)

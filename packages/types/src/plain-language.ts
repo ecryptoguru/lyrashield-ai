@@ -121,43 +121,43 @@ export const CWE_EXPLANATIONS: Record<string, PlainLanguageFinding> = {
 
 export const GENERIC_EXPLANATIONS: Record<PlainLanguageSeverity, PlainLanguageFinding> = {
   CRITICAL: {
-    title: "Critical Security Issue",
+    title: "Critical-Severity Finding",
     whatItIs:
-      "A critical vulnerability was detected that could allow attackers to compromise your application or data.",
+      "A critical-severity finding signals potentially serious impact if the reported condition applies to your system.",
     whyItMatters:
-      "Critical vulnerabilities are typically exploitable with minimal effort and can result in full system compromise, data breach, or service disruption. These must be fixed before any production deployment.",
+      "Severity alone does not establish that the condition applies, is reachable, or can be exploited. Review the retained evidence and environment before deciding how to respond.",
     howToFix:
-      "Review the technical details of this finding carefully. The fix will depend on the specific vulnerability type. If you're unsure how to proceed, consider consulting a security professional.",
+      "Confirm the affected component, configuration, and path. Review the recommended change and retest relevant coverage; seek a qualified review when needed.",
     difficulty: "hard",
     estimatedTimeToFix: "4+ hours",
   },
   HIGH: {
-    title: "High-Severity Security Issue",
+    title: "High-Severity Finding",
     whatItIs:
-      "A high-severity vulnerability was found that poses a significant risk to your application's security.",
+      "A high-severity rating signals notable potential impact if the reported condition applies to your system.",
     whyItMatters:
-      "These issues are often exploitable and can lead to data exposure, privilege escalation, or service degradation. They should be addressed promptly.",
+      "The practical impact depends on the affected component, configuration, reachable path, privileges, and existing controls. Review that context before setting priority.",
     howToFix:
       "Review the technical details and recommended fix steps. Most high-severity issues have well-documented remediation approaches.",
     difficulty: "medium",
     estimatedTimeToFix: "2-4 hours",
   },
   MEDIUM: {
-    title: "Medium-Severity Security Issue",
+    title: "Medium-Severity Finding",
     whatItIs:
-      "A medium-severity vulnerability was detected. While not immediately critical, it weakens your overall security posture.",
+      "A medium-severity rating describes potential impact if the reported condition applies to your system.",
     whyItMatters:
-      "Medium issues can be combined with other vulnerabilities to create more serious attack paths. They should be fixed as part of your regular security maintenance.",
+      "Its relevance depends on the affected component, configuration, reachability, and existing controls. Review the evidence and your release policy before deciding on next steps.",
     howToFix: "Review the recommended fix steps. These are typically straightforward to remediate.",
     difficulty: "easy",
     estimatedTimeToFix: "1-2 hours",
   },
   LOW: {
-    title: "Low-Severity Security Issue",
+    title: "Low-Severity Finding",
     whatItIs:
-      "A low-severity issue was found. It represents a minor security weakness that's unlikely to be directly exploitable.",
+      "A low-severity rating indicates lower potential impact under the rating method. Severity alone does not establish whether the condition applies or is reachable.",
     whyItMatters:
-      "Low-severity issues contribute to your overall risk score and can sometimes be chained with other vulnerabilities. Fix them when convenient.",
+      "Check the affected component and environment to decide whether the finding matters in your system and when to address it.",
     howToFix: "Follow the recommended fix steps. These are usually quick to address.",
     difficulty: "easy",
     estimatedTimeToFix: "30 min",
@@ -165,9 +165,9 @@ export const GENERIC_EXPLANATIONS: Record<PlainLanguageSeverity, PlainLanguageFi
   INFO: {
     title: "Informational Finding",
     whatItIs:
-      "An informational finding was reported. This is not a vulnerability but a security observation or best practice recommendation.",
+      "An informational finding records an observation or recommendation; the label alone does not confirm a vulnerability.",
     whyItMatters:
-      "Informational findings don't pose a direct risk but addressing them improves your overall security hygiene.",
+      "Its relevance depends on your environment and policies. Review the observation and decide whether it applies to your system.",
     howToFix: "Review the recommendation and implement it if appropriate for your use case.",
     difficulty: "easy",
     estimatedTimeToFix: "15 min",

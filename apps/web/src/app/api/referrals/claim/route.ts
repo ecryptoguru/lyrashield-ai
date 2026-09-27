@@ -8,6 +8,10 @@ import { env } from "@lyrashield/config"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { getClientIP } from "@/proxy"
 import { isReferralSource } from "../../../../lib/scorecard-sharing"
+import {
+  analyticsAllowedForRequest,
+  clearOptionalTrackingCookies,
+} from "../../../../lib/analytics-preference"
 
 async function post(request: NextRequest) {
   const session = await getSession()
@@ -18,6 +22,12 @@ async function post(request: NextRequest) {
     return apiError("FORBIDDEN", "You do not have permission to perform this action", 403)
   }
   const cookieStore = await cookies()
+  if (!(await analyticsAllowedForRequest(request, { session }))) {
+    const response = apiSuccess({ attributed: false })
+    clearOptionalTrackingCookies(response, request)
+    response.headers.set("Cache-Control", "private, no-store")
+    return response
+  }
   const code = cookieStore.get("ls_ref")?.value
   if (!code) return apiSuccess({ attributed: false })
   const storedSource = cookieStore.get("ls_ref_source")?.value ?? "scorecard"

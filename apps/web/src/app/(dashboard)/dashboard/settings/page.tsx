@@ -8,6 +8,7 @@ import { ConnectedAccounts } from "./connected-accounts"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { TwoFactorSecurity } from "./two-factor-security"
+import { AnalyticsPreferences } from "./analytics-preferences"
 
 export const metadata: Metadata = {
   title: "Settings",
@@ -39,6 +40,9 @@ export default async function SettingsPage() {
           <TwoFactorSecurity enabled={Boolean(accountSecurity?.twoFactorEnabled)} />
         </div>
         <div className="mt-6">
+          <AnalyticsPreferences />
+        </div>
+        <div className="mt-6">
           <DeleteAccount />
         </div>
       </div>
@@ -68,6 +72,8 @@ export default async function SettingsPage() {
       <ConnectedAccounts />
 
       <TwoFactorSecurity enabled={Boolean(accountSecurity?.twoFactorEnabled)} />
+
+      <AnalyticsPreferences />
 
       <WorkspaceSettingsLink
         workspaceName={workspace.name}

@@ -47,6 +47,7 @@ export default async function ReportsPage({
         description="Create immutable assurance snapshots from completed scan evidence. Reports summarize retained evidence; they do not create new verification."
       />
       <ReportsClient
+        key={`${session.userId}:${workspaceId}:${params.scanId ?? ""}:${params.targetId ?? ""}`}
         workspaceId={workspaceId}
         initialScanId={params.scanId}
         initialTargetId={params.targetId}

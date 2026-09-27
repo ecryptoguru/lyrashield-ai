@@ -11,9 +11,10 @@ vi.mock("next/cache", () => ({
 
 const listFindings = vi.fn()
 const getFindingStats = vi.fn()
+const validateFindingScope = vi.fn()
 const requirePermission = vi.fn()
 
-vi.mock("@lyrashield/db", () => ({ listFindings, getFindingStats }))
+vi.mock("@lyrashield/db", () => ({ listFindings, getFindingStats, validateFindingScope }))
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { finding: { view: "finding:view" } } }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
@@ -48,6 +49,7 @@ describe("GET /api/findings", () => {
     vi.clearAllMocks()
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
     getFindingStats.mockResolvedValue({ total: 0 })
+    validateFindingScope.mockResolvedValue({ available: true, target: null, scanId: null })
   })
 
   it("authorizes before reading findings", async () => {
@@ -139,7 +141,7 @@ describe("GET /api/findings", () => {
     )
     const body = await response.json()
 
-    expect(getFindingStats).toHaveBeenCalledWith("ws-1", undefined)
+    expect(getFindingStats).toHaveBeenCalledWith("ws-1", undefined, undefined)
     expect(body.data).toEqual({ total: 0 })
     expect(listFindings).not.toHaveBeenCalled()
   })
@@ -149,7 +151,7 @@ describe("GET /api/findings", () => {
 
     await GET(
       new Request(
-        "http://localhost/api/findings?workspaceId=ws-1&targetId=target-1&scanId=scan-1&severity=HIGH&status=OPEN&verified=true&category=Secrets&cursor=finding-9&limit=100"
+        "http://localhost/api/findings?workspaceId=ws-1&targetId=target-1&scanId=scan-1&observedInScanId=scan-2&severity=HIGH&status=OPEN&verified=true&category=Secrets&cursor=finding-9&limit=100"
       )
     )
 
@@ -157,6 +159,7 @@ describe("GET /api/findings", () => {
       workspaceId: "ws-1",
       targetId: "target-1",
       scanId: "scan-1",
+      observedInScanId: "scan-2",
       severity: "HIGH",
       status: "OPEN",
       verified: true,
@@ -164,5 +167,32 @@ describe("GET /api/findings", () => {
       cursor: "finding-9",
       limit: 100,
     })
+    expect(validateFindingScope).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      observedInScanId: "scan-2",
+    })
+  })
+
+  it("rejects a foreign or mismatched scope instead of listing workspace findings", async () => {
+    validateFindingScope.mockResolvedValue({ available: false, target: null, scanId: null })
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/findings?workspaceId=ws-1&targetId=target-1&observedInScanId=scan-2"
+      )
+    )
+
+    expect(response.status).toBe(400)
+    expect(listFindings).not.toHaveBeenCalled()
+  })
+
+  it("rejects an empty origin scan filter instead of treating it as unscoped", async () => {
+    const response = await GET(
+      new Request("http://localhost/api/findings?workspaceId=ws-1&scanId=")
+    )
+
+    expect(response.status).toBe(400)
+    expect(listFindings).not.toHaveBeenCalled()
   })
 })

@@ -12,7 +12,8 @@ import { cookies } from "next/headers"
 import { headers } from "next/headers"
 import { parsePlanIntent, planIntentPath, PLAN_INTENT_COOKIE } from "@/lib/plan-intent"
 import { verifyOAuthOnboardingReturn } from "@/lib/oauth-onboarding-return"
-import { ACQUISITION_COOKIE, analyticsOptedOut, parseAcquisitionCookie } from "@/lib/analytics"
+import { ACQUISITION_COOKIE, parseAcquisitionCookie } from "@/lib/analytics"
+import { analyticsAllowedForRequest } from "@/lib/analytics-preference"
 import { claimAccountAcquisition } from "@/lib/account-acquisition"
 
 export default async function OnboardingPage({
@@ -47,10 +48,7 @@ export default async function OnboardingPage({
   // onboarding.
   const acquisitionCookie = (await cookies()).get(ACQUISITION_COOKIE)?.value
   const requestHeaders = await headers()
-  const optedOut = analyticsOptedOut(
-    requestHeaders.get("dnt"),
-    requestHeaders.get("sec-gpc") === "1"
-  )
+  const optedOut = !(await analyticsAllowedForRequest({ headers: requestHeaders }, { session }))
   const acquisitionClaim = await claimAccountAcquisition(
     session.userId,
     optedOut ? null : parseAcquisitionCookie(acquisitionCookie)
@@ -145,6 +143,7 @@ export default async function OnboardingPage({
 
       <OnboardingWizard
         key={state.updatedAt.toISOString()}
+        principalId={session.userId}
         initialState={{ ...initialState, updatedAt: state.updatedAt.toISOString() }}
         selectedPlan={selectedPlan}
         acquisitionCookiePresent={Boolean(acquisitionCookie) && (acquisitionClaim.ok || optedOut)}

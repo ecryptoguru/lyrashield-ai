@@ -2,18 +2,34 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@lyrashield/ui"
 import {
   githubReposSchema,
   idSchema,
   installUrlSchema,
   onboardingDataSchema,
+  scanEligibilitySchema,
 } from "@/lib/api-schemas"
 import { z } from "zod"
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { ACQUISITION_COOKIE, track } from "@/lib/analytics"
 import { presentOperationFailure, type OperationFailurePresentation } from "@/lib/operation-failure"
 import { planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
+import {
+  beginScanSubmission,
+  clearPendingScanSubmission,
+  operationIdFromErrorDetails,
+  readPendingScanSubmission,
+  recordAcceptedScan,
+  recordScanOperation,
+  runScanSubmission,
+  scanOperationStatusSchema,
+  scanRequestIdentity,
+  type PendingScanSubmission,
+  type ScanOperationStatus,
+  type ScanSubmissionScope,
+} from "@/lib/scan-submission"
 import { TARGET_SINGULAR } from "@/lib/terminology"
 import {
   buildUrlTargetPayload,
@@ -34,6 +50,7 @@ import {
   StepProgress,
   TargetDetailsView,
   UrlTargetView,
+  type OnboardingEligibilityState,
   type Repo,
 } from "./onboarding-step-views"
 
@@ -51,6 +68,7 @@ interface OnboardingData {
 }
 
 export function OnboardingWizard({
+  principalId,
   initialState,
   selectedPlan,
   suggestedWorkspaceName,
@@ -59,6 +77,7 @@ export function OnboardingWizard({
   acquisitionCookiePresent,
   targetTypeHint,
 }: {
+  principalId: string
   initialState: OnboardingData
   selectedPlan?: string | null
   /** Used to name a default workspace when the user has none (W2-01). */
@@ -122,6 +141,19 @@ export function OnboardingWizard({
   const persistedState = useRef(initialState)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const scanSubmissionLock = useRef(false)
+  const [pendingScanSubmission, setPendingScanSubmission] = useState<PendingScanSubmission | null>(
+    null
+  )
+  const [scanOperationStatus, setScanOperationStatus] = useState<ScanOperationStatus | null>(null)
+  const [checkingScanOperation, setCheckingScanOperation] = useState(false)
+  const [scanRecoveryError, setScanRecoveryError] = useState<string | null>(null)
+  const [scanRecoveryUnavailable, setScanRecoveryUnavailable] = useState(false)
+  const [scanEligibility, setScanEligibility] = useState<OnboardingEligibilityState>({
+    status: "idle",
+  })
+  const [checkedEligibilityKey, setCheckedEligibilityKey] = useState<string | null>(null)
+  const startNewScanAfterPreflight = useRef(false)
   // Structured operation failure (cause/effect/recovery + retry) — preferred
   // over the plain string when the server returned a mappable reason code.
   const [failure, setFailure] = useState<{
@@ -154,7 +186,134 @@ export function OnboardingWizard({
   const reviewOptions = getOnboardingReviewOptions(path)
   const selectedReview =
     reviewOptions.find((option) => option.goal === selectedGoal) ?? reviewOptions[0]
+  const selectedEligibilityKey =
+    data.targetId && selectedReview
+      ? JSON.stringify([data.targetId, selectedReview.goal, selectedReview.mode])
+      : null
+  const visibleEligibility =
+    checkedEligibilityKey === selectedEligibilityKey ? scanEligibility : { status: "idle" as const }
   const retryingExistingTarget = Boolean(data.targetId)
+  const scanSubmissionScope: ScanSubmissionScope | null = data.workspaceId
+    ? { principalId, workspaceId: data.workspaceId, surface: "onboarding" }
+    : null
+  const currentScanRequest =
+    scanSubmissionScope && data.targetId && selectedReview
+      ? {
+          workspaceId: data.workspaceId,
+          targetId: data.targetId,
+          goal: selectedReview.goal,
+          mode: selectedReview.mode,
+        }
+      : null
+  const pendingScanMatchesCurrent = Boolean(
+    pendingScanSubmission &&
+    pendingScanSubmission.principalId === principalId &&
+    pendingScanSubmission.workspaceId === data.workspaceId &&
+    currentScanRequest &&
+    pendingScanSubmission.requestIdentity === scanRequestIdentity(currentScanRequest)
+  )
+
+  useEffect(() => {
+    // Browser session storage is external state and is only available after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setScanOperationStatus(null)
+    setScanRecoveryUnavailable(false)
+    setScanRecoveryError(null)
+    const workspaceId = data.workspaceId
+    if (!workspaceId) {
+      setPendingScanSubmission(null)
+      return
+    }
+    try {
+      const pending = readPendingScanSubmission({
+        principalId,
+        workspaceId,
+        surface: "onboarding",
+      })
+      setPendingScanSubmission(pending)
+    } catch (cause) {
+      setPendingScanSubmission(null)
+      setScanRecoveryUnavailable(true)
+      setScanRecoveryError(
+        cause instanceof Error ? cause.message : "Saved scan recovery data could not be read."
+      )
+    }
+  }, [principalId, data.workspaceId])
+
+  async function checkPendingScanOperation(submission: PendingScanSubmission) {
+    if (!submission.operationId || !data.workspaceId) return
+    const scope = { principalId, workspaceId: data.workspaceId, surface: "onboarding" as const }
+    setCheckingScanOperation(true)
+    setScanRecoveryError(null)
+    try {
+      const status = await apiGet(
+        `/api/agent-operations/${encodeURIComponent(submission.operationId)}?workspaceId=${encodeURIComponent(data.workspaceId)}`,
+        { schema: scanOperationStatusSchema }
+      )
+      setScanOperationStatus(status)
+      if (status.status === "COMPLETED" && status.resultLocation) {
+        const accepted = {
+          ...submission,
+          state: "accepted" as const,
+          scanId: status.resultLocation,
+          operationId: status.operationId,
+        }
+        setPendingScanSubmission(accepted)
+        try {
+          recordAcceptedScan(
+            scope,
+            submission.idempotencyKey,
+            status.resultLocation,
+            status.operationId
+          )
+        } catch (cause) {
+          setScanRecoveryUnavailable(true)
+          setScanRecoveryError(
+            cause instanceof Error
+              ? cause.message
+              : "Scan accepted; recovery details could not be saved."
+          )
+        }
+      } else if (status.recovery === "retry_new_key") {
+        setScanRecoveryError("The previous attempt was not submitted. You can start a new attempt.")
+      } else {
+        setScanRecoveryError("The previous scan start is still unresolved. Check its status again.")
+      }
+    } catch (cause) {
+      setScanRecoveryError(
+        cause instanceof Error ? cause.message : "Could not check the scan status."
+      )
+    } finally {
+      setCheckingScanOperation(false)
+    }
+  }
+
+  async function finishAcceptedOnboarding(scanId: string, goal: string) {
+    setLoading(true)
+    setError(null)
+    setFailure(null)
+    setScanRecoveryError(null)
+    try {
+      await persist({ currentStep: 4, completed: true, skipped: false, selectedGoal: goal })
+    } catch {
+      setScanRecoveryError("Your scan started; onboarding could not be saved.")
+      setLoading(false)
+      return
+    }
+    if (selectedReview) {
+      track("first_run_started", {
+        preset: goal,
+        asset_count: 1,
+        estimate_low_min: selectedReview.estimate.low,
+        estimate_high_min: selectedReview.estimate.high,
+      })
+    }
+    // W2-05: agent-first completion returns to the originating client's
+    // consent flow; the started scan keeps running server-side.
+    router.push(oauthReturnQuery ? completionPath : `/dashboard/scans/${scanId}`)
+    router.refresh()
+    setLoading(false)
+  }
 
   function bucketCount(n: number): string {
     if (n <= 0) return "0"
@@ -441,11 +600,12 @@ export function OnboardingWizard({
     setStep(3)
   }
 
-  async function createTargetAndStart() {
+  async function createTargetAndStart(startNewScan = false) {
     if (!data.workspaceId) {
       setError("Workspace is required.")
       return
     }
+    const workspaceId = data.workspaceId
     // A retry after scan admission fails reuses the target persisted by the
     // first attempt. New flows create it here so Back -> Continue cannot orphan
     // a duplicate before the final action.
@@ -479,74 +639,179 @@ export function OnboardingWizard({
       return
     }
 
-    setLoading(true)
-    setError(null)
-    setFailure(null)
-    try {
-      const targetId = await ensureOnboardingTargetId(data.targetId, async () => {
-        if (needsRepo && selectedRepo) {
-          const target = await apiPost(
-            "/api/targets",
-            {
-              workspaceId: data.workspaceId,
-              name: productName.trim(),
-              type: "REPO",
-              repoProvider: "github",
-              repoOwner: selectedRepo.owner,
-              repoName: selectedRepo.name,
-              installationId: selectedRepo.installationId,
-              branch: selectedRepo.defaultBranch,
-              environment,
-            },
-            { schema: idSchema }
-          )
-          return target.id
+    await runScanSubmission(scanSubmissionLock, async () => {
+      setLoading(true)
+      setError(null)
+      setFailure(null)
+      setScanRecoveryError(null)
+      if (startNewScan) startNewScanAfterPreflight.current = true
+      try {
+        const targetId = await ensureOnboardingTargetId(data.targetId, async () => {
+          if (needsRepo && selectedRepo) {
+            const target = await apiPost(
+              "/api/targets",
+              {
+                workspaceId: data.workspaceId,
+                name: productName.trim(),
+                type: "REPO",
+                repoProvider: "github",
+                repoOwner: selectedRepo.owner,
+                repoName: selectedRepo.name,
+                installationId: selectedRepo.installationId,
+                branch: selectedRepo.defaultBranch,
+                environment,
+              },
+              { schema: idSchema }
+            )
+            return target.id
+          }
+
+          const target = buildUrlTargetPayload({
+            workspaceId: data.workspaceId,
+            path,
+            name: productName,
+            url: urlForm.url,
+            environment,
+            ownershipAttested: urlForm.ownershipAttested,
+          })
+          if (!target) throw new Error("Target details are required.")
+          const created = await apiPost("/api/targets", target, { schema: idSchema })
+          return created.id
+        })
+        if (data.targetId !== targetId || data.selectedGoal !== selectedReview.goal) {
+          await persist({
+            targetId,
+            selectedGoal: selectedReview.goal,
+            currentStep: 3,
+            skipped: false,
+          })
         }
 
-        const payload = buildUrlTargetPayload({
-          workspaceId: data.workspaceId,
-          path,
-          name: productName,
-          url: urlForm.url,
-          environment,
-          ownershipAttested: urlForm.ownershipAttested,
-        })
-        if (!payload) throw new Error("Target details are required.")
-        const target = await apiPost("/api/targets", payload, { schema: idSchema })
-        return target.id
-      })
-      await persist({ targetId, selectedGoal: selectedReview.goal, currentStep: 3, skipped: false })
-      const scan = await apiPost(
-        "/api/scans",
-        {
-          workspaceId: data.workspaceId,
+        const scope: ScanSubmissionScope = {
+          principalId,
+          workspaceId,
+          surface: "onboarding",
+        }
+        const scanRequest = {
+          workspaceId,
           targetId,
           goal: selectedReview.goal,
           mode: selectedReview.mode,
-        },
-        { schema: idSchema }
-      )
-      await persist({
-        currentStep: 4,
-        completed: true,
-        skipped: false,
-        selectedGoal: selectedReview.goal,
-      })
-      track("first_run_started", {
-        preset: selectedReview.goal,
-        asset_count: 1,
-        estimate_low_min: selectedReview.estimate.low,
-        estimate_high_min: selectedReview.estimate.high,
-      })
-      // W2-05: agent-first completion returns to the originating client's
-      // consent flow; the started scan keeps running server-side.
-      router.push(oauthReturnQuery ? completionPath : `/dashboard/scans/${scan.id}`)
-      router.refresh()
-    } catch (cause) {
-      presentFailure(cause, continueWithUrlTarget, productName.trim() || undefined)
-    } finally {
-      setLoading(false)
-    }
+        }
+        const eligibilityKey = JSON.stringify([targetId, scanRequest.goal, scanRequest.mode])
+        if (
+          checkedEligibilityKey !== eligibilityKey ||
+          scanEligibility.status !== "ready" ||
+          !scanEligibility.eligibility.allowed
+        ) {
+          // Read-only advisory preflight; the scan-create endpoint still makes
+          // the authoritative decision on the explicit second click.
+          setCheckedEligibilityKey(eligibilityKey)
+          setScanEligibility({ status: "checking" })
+          const query = new URLSearchParams({
+            workspaceId,
+            targetId,
+            goal: scanRequest.goal,
+            mode: scanRequest.mode,
+          })
+          try {
+            const eligibility = await apiGet(`/api/scans/eligibility?${query.toString()}`, {
+              schema: scanEligibilitySchema,
+            })
+            setScanEligibility({ status: "ready", eligibility })
+          } catch {
+            setScanEligibility({ status: "error" })
+          }
+          return
+        }
+
+        const explicitlyStartingNew = startNewScan || startNewScanAfterPreflight.current
+        if (explicitlyStartingNew) {
+          const existing = readPendingScanSubmission(scope)
+          if (existing?.state === "accepted") {
+            setPendingScanSubmission(existing)
+            setScanRecoveryError("A scan has already started. Open it or retry saving onboarding.")
+            return
+          }
+          if (existing) clearPendingScanSubmission(scope, existing.idempotencyKey)
+        }
+        let begun = beginScanSubmission(scope, scanRequest)
+        if (begun.kind === "conflict") {
+          setPendingScanSubmission(begun.submission)
+          if (!startNewScan || begun.submission.state === "accepted") {
+            setScanRecoveryError(
+              "A previous scan may still be starting. Retry its original details or explicitly start a new scan."
+            )
+            return
+          }
+          clearPendingScanSubmission(scope, begun.submission.idempotencyKey)
+          begun = beginScanSubmission(scope, scanRequest)
+        }
+
+        let submission = begun.submission
+        setPendingScanSubmission(submission)
+        if (submission.state === "accepted" && submission.scanId) {
+          await finishAcceptedOnboarding(
+            submission.scanId,
+            data.selectedGoal ?? selectedReview.goal
+          )
+          return
+        }
+        if (submission.operationId) {
+          await checkPendingScanOperation(submission)
+          return
+        }
+
+        let scan: { id: string; operationId?: string }
+        try {
+          scan = await apiPost("/api/scans", scanRequest, {
+            schema: idSchema.extend({ operationId: z.string().optional() }).passthrough(),
+            headers: { "Idempotency-Key": submission.idempotencyKey },
+          })
+        } catch (cause) {
+          const operationId =
+            cause instanceof ApiError ? operationIdFromErrorDetails(cause.details) : null
+          if (operationId) {
+            const updated = recordScanOperation(scope, submission.idempotencyKey, operationId)
+            submission = updated ?? { ...submission, operationId }
+            setPendingScanSubmission(submission)
+          }
+          setScanRecoveryError(
+            cause instanceof Error
+              ? cause.message
+              : "We could not confirm whether the scan started. Retry with the same details."
+          )
+          presentFailure(cause, () => void createTargetAndStart(), productName.trim() || undefined)
+          return
+        }
+
+        startNewScanAfterPreflight.current = false
+
+        const operationId = typeof scan.operationId === "string" ? scan.operationId : undefined
+        submission = {
+          ...submission,
+          state: "accepted",
+          scanId: scan.id,
+          ...(operationId ? { operationId } : {}),
+        }
+        setPendingScanSubmission(submission)
+        try {
+          recordAcceptedScan(scope, begun.submission.idempotencyKey, scan.id, operationId)
+        } catch (cause) {
+          setScanRecoveryUnavailable(true)
+          setScanRecoveryError(
+            cause instanceof Error
+              ? cause.message
+              : "Scan accepted; recovery details could not be saved."
+          )
+        }
+        await finishAcceptedOnboarding(scan.id, selectedReview.goal)
+      } catch (cause) {
+        presentFailure(cause, () => void createTargetAndStart(), productName.trim() || undefined)
+      } finally {
+        setLoading(false)
+      }
+    })
   }
 
   // The progress list and the current-step indicator both derive from the step
@@ -573,6 +838,138 @@ export function OnboardingWizard({
         }}
       />
 
+      {scanRecoveryUnavailable && (
+        <div
+          className="bg-warning/10 border-warning/50 mb-4 rounded-lg border p-3 text-sm"
+          role="alert"
+        >
+          <p>
+            {scanRecoveryError ??
+              "Saved scan recovery data could not be read. Starting again may create a second scan."}
+          </p>
+          {data.workspaceId && (
+            <Button
+              className="mt-2"
+              type="button"
+              variant="outline"
+              disabled={loading}
+              onClick={() => {
+                try {
+                  clearPendingScanSubmission({
+                    principalId,
+                    workspaceId: data.workspaceId!,
+                    surface: "onboarding",
+                  })
+                  setScanRecoveryUnavailable(false)
+                  setScanRecoveryError(null)
+                  void createTargetAndStart(true)
+                } catch (cause) {
+                  setScanRecoveryError(
+                    cause instanceof Error ? cause.message : "Could not clear scan recovery data."
+                  )
+                }
+              }}
+            >
+              Start another scan anyway
+            </Button>
+          )}
+        </div>
+      )}
+
+      {pendingScanSubmission &&
+        pendingScanSubmission.principalId === principalId &&
+        pendingScanSubmission.workspaceId === data.workspaceId && (
+          <div
+            className="bg-muted/40 mb-4 flex flex-col gap-2 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+            role={pendingScanSubmission.state === "accepted" ? "status" : "alert"}
+            aria-live="polite"
+          >
+            <div className="space-y-1">
+              {pendingScanSubmission.state === "accepted" && pendingScanSubmission.scanId ? (
+                <>
+                  <p className="font-medium">
+                    {data.completed
+                      ? "Your scan started."
+                      : "Your scan started; onboarding could not be saved."}
+                  </p>
+                  <Link
+                    className="text-primary underline underline-offset-4"
+                    href={`/dashboard/scans/${encodeURIComponent(pendingScanSubmission.scanId)}`}
+                  >
+                    Open scan
+                  </Link>
+                </>
+              ) : (
+                <p>
+                  A previous scan may still be starting. Retrying the same details reuses its key.
+                </p>
+              )}
+              {pendingScanSubmission.state !== "accepted" && !pendingScanMatchesCurrent && (
+                <p>
+                  The current request has changed. Start a new scan explicitly to use these details.
+                </p>
+              )}
+              {scanRecoveryError && <p>{scanRecoveryError}</p>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {pendingScanSubmission.state === "accepted" && pendingScanSubmission.scanId ? (
+                !data.completed && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={loading}
+                    onClick={() =>
+                      void runScanSubmission(scanSubmissionLock, () =>
+                        finishAcceptedOnboarding(
+                          pendingScanSubmission.scanId!,
+                          data.selectedGoal ?? selectedReview?.goal ?? "LAUNCH_REVIEW"
+                        )
+                      )
+                    }
+                  >
+                    Retry saving onboarding
+                  </Button>
+                )
+              ) : (
+                <>
+                  {pendingScanSubmission.operationId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={checkingScanOperation}
+                      onClick={() => void checkPendingScanOperation(pendingScanSubmission)}
+                    >
+                      {checkingScanOperation ? "Checking status…" : "Check scan status"}
+                    </Button>
+                  )}
+                  {pendingScanMatchesCurrent &&
+                    scanOperationStatus?.recovery !== "retry_new_key" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={loading}
+                        onClick={() => void createTargetAndStart()}
+                      >
+                        Retry same details
+                      </Button>
+                    )}
+                  {(!pendingScanMatchesCurrent ||
+                    scanOperationStatus?.recovery === "retry_new_key") && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={loading}
+                      onClick={() => void createTargetAndStart(true)}
+                    >
+                      Start a new scan anyway
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
       <section className="rounded-xl border p-5 sm:p-7" aria-live="polite">
         {step === 1 && path !== "url" && path !== "api" && (
           <PathChooserView
@@ -583,7 +980,7 @@ export function OnboardingWizard({
               if (next) track("onboarding_context", { tool: next })
               persist({ buildTool: next }).catch(() => {})
             }}
-            loading={loading}
+            loading={loading || pendingScanSubmission?.state === "accepted"}
             githubUnavailable={githubUnavailable}
             onChoosePath={choosePath}
           />
@@ -644,8 +1041,10 @@ export function OnboardingWizard({
             retryingExistingTarget={retryingExistingTarget}
             reviewOptions={reviewOptions}
             selectedReview={selectedReview}
+            eligibility={visibleEligibility}
+            targetId={data.targetId}
             onSelectGoal={setSelectedGoal}
-            loading={loading}
+            loading={loading || pendingScanSubmission?.state === "accepted"}
             onBack={() => setStep(pathNeedsRepo(path) ? 2 : 1)}
             onStart={createTargetAndStart}
           />

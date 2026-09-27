@@ -173,6 +173,7 @@ export default async function ScansPage({
         activeTab={tab}
       />
       <ScansClient
+        principalId={session.userId}
         workspaceId={workspaceId}
         targets={targets.map((t) => ({
           id: t.id,

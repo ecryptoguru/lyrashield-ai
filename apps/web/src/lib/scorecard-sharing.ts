@@ -1,5 +1,13 @@
 export type ScorecardVariant = "grade" | "fixes"
 export type ScorecardFormat = "wide" | "square" | "portrait"
+export const SCORECARD_FORMAT_DIMENSIONS: Record<
+  ScorecardFormat,
+  { width: number; height: number }
+> = {
+  wide: { width: 1200, height: 630 },
+  square: { width: 1080, height: 1080 },
+  portrait: { width: 1080, height: 1350 },
+}
 export const SCORECARD_CHANNELS = [
   "native",
   "linkedin",
@@ -21,8 +29,17 @@ export function isReferralSource(value: string): value is ReferralSource {
   return REFERRAL_SOURCES.includes(value as ReferralSource)
 }
 
-export function scorecardUrlWithSource(url: string, source: ReferralSource) {
+export function scorecardUrlWithSource(
+  url: string,
+  source: ReferralSource,
+  includeTracking = true
+) {
   const tracked = new URL(url)
+  if (!includeTracking) {
+    for (const key of ["ref", "source", "utm_source", "utm_medium", "utm_campaign", "utm_content"])
+      tracked.searchParams.delete(key)
+    return tracked.toString()
+  }
   tracked.searchParams.set("source", source)
   tracked.searchParams.set("utm_source", source)
   tracked.searchParams.set("utm_medium", source === "embed" ? "badge" : "social")
@@ -44,14 +61,26 @@ export function scorecardCaption(
   resolvedFindings: number,
   variant: ScorecardVariant
 ) {
-  const fixes = `${resolvedFindings} finding${resolvedFindings === 1 ? "" : "s"}`
+  const fixes = scorecardFixesSummary(resolvedFindings)
   return variant === "fixes"
-    ? `${fixes} fixed and retest-confirmed with LyraShield AI. Current scoped grade: ${grade}.`
-    : `We ran a scoped LyraShield AI security review and earned grade ${grade}, with ${fixes} fixed and retest-confirmed.`
+    ? `${fixes} Current scoped grade: ${grade}.`
+    : `We ran a scoped LyraShield AI security review and earned grade ${grade}. ${fixes}`
 }
 
-export function scorecardChannelUrl(channel: ShareChannel, url: string, caption: string) {
-  const sourcedUrl = scorecardUrlWithSource(url, channel)
+export function scorecardFixesSummary(resolvedFindings: number) {
+  if (resolvedFindings === 0) {
+    return "No findings are marked fixed and retest-confirmed in this scoped review."
+  }
+  return `${resolvedFindings} finding${resolvedFindings === 1 ? "" : "s"} fixed and retest-confirmed.`
+}
+
+export function scorecardChannelUrl(
+  channel: ShareChannel,
+  url: string,
+  caption: string,
+  includeTracking = true
+) {
+  const sourcedUrl = scorecardUrlWithSource(url, channel, includeTracking)
   const encodedUrl = encodeURIComponent(sourcedUrl)
   const encodedCaption = encodeURIComponent(caption)
   const textWithUrl = encodeURIComponent(`${caption}\n\n${sourcedUrl}`)

@@ -24,9 +24,9 @@ const ENTITLEMENT_CODES: Record<string, OperationFailurePresentation> = {
     recoveryHref: "/dashboard/billing",
   },
   NO_MINUTES_REMAINING: {
-    cause: "This workspace has no included minutes remaining.",
-    effect: "Model-backed scans and retests cannot start until usage is available.",
-    recovery: "Review usage or add minutes, then retry.",
+    cause: "Your billing account has no included minutes remaining.",
+    effect: "Model-backed scans and retests cannot start until account usage is available.",
+    recovery: "Review account usage or add minutes, then retry.",
     recoveryHref: "/dashboard/billing",
   },
   TARGET_LIMIT_REACHED: {
@@ -161,17 +161,39 @@ export function presentOperationFailure(
     case "WORKER_UNAVAILABLE":
       return {
         cause: "Worker capacity was unavailable.",
-        effect: "The scan could not start; no billable work occurred.",
-        recovery: "Retry in a few minutes — capacity is reconciled automatically.",
+        effect: "Check the scan's status before starting another action.",
+        recovery: "Review the scan status and coverage before retrying.",
+        recoveryHref: "/dashboard/scans",
+      }
+    case "STOPPED_BUDGET":
+      return {
+        cause: "This scan stopped after reaching its protected per-scan budget.",
+        effect:
+          "This cap applies to one scan and does not show how many minutes remain in your billing account.",
+        recovery: "Review this scan's result and your account usage before starting another scan.",
+        recoveryHref: "/dashboard/scans",
+      }
+    case "TIMED_OUT":
+      return {
+        cause: "The scan timed out before producing a complete result.",
+        effect: "Check the scan's status and coverage before starting another action.",
+        recovery: "Review the scan details and coverage before deciding whether to retry.",
+        recoveryHref: "/dashboard/scans",
+      }
+    case "FAILED":
+      return {
+        cause: "The scan did not produce a complete result.",
+        effect: "Check the scan's status and coverage before starting another action.",
+        recovery: "Review the scan details and current coverage before deciding whether to retry.",
         recoveryHref: "/dashboard/scans",
       }
     case "SERVICE_UNAVAILABLE":
     case "INTERNAL_ERROR":
       return {
         cause: "The service is temporarily unavailable.",
-        effect:
-          "The action did not complete; no approval was granted and no billable work started.",
-        recovery: "Try again shortly. If it persists, check the status page before retrying.",
+        effect: "Check the action's status before starting another action.",
+        recovery:
+          "Review the latest status before retrying. If the issue persists, check the status page.",
       }
     case "COVERAGE_INCOMPLETE":
       return {
@@ -183,9 +205,10 @@ export function presentOperationFailure(
       }
     default:
       return {
-        cause: "The action could not be completed.",
-        effect: "No automatic approval was created and no billable work was started.",
-        recovery: "Review the details and retry or contact support if it persists.",
+        cause: "The request did not complete. Check its status before starting another action.",
+        effect: "This message does not establish the final outcome of any work already accepted.",
+        recovery:
+          "Review the latest status before retrying or contact support if it remains unclear.",
       }
   }
 }

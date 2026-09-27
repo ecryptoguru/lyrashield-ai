@@ -32,7 +32,7 @@ faq:
 | Capability                          | LyraShield AI                                                   | Horizon3 NodeZero                                               |
 | ----------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
 | Agentic / AI-driven pentest         | Yes (app-layer)                                                 | Yes (cross-environment)                                         |
-| Independent exploit validation      | Yes (verified state)                                            | Yes (proven attack paths with impact)                           |
+| Independent finding verification    | Yes (separate receipt; scope-bound)                             | Yes (proven attack paths with impact)                           |
 | SCA (dependency scanning)           | Yes (engine)                                                    | Not a primary focus                                             |
 | Secret scanning                     | Yes (engine + GitHub Action)                                    | Detects exposed credentials/secret-related weaknesses           |
 | Evidence states (4-state lifecycle) | Yes                                                             | Findings carry exploit proof; no explicit multi-state lifecycle |

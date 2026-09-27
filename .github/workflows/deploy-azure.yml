@@ -171,6 +171,7 @@ jobs:
           context: .
           target: runner
           push: true
+          sbom: true
           tags: ${{ env.WEB_IMAGE }}:${{ env.DEPLOY_SHA }},${{ env.WEB_IMAGE }}:latest
           build-args: |
             BUILD_APP_URL=${{ env.APP_URL }}
@@ -179,6 +180,8 @@ jobs:
             BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
             BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}
             BUILD_NEXT_PUBLIC_POSTHOG_KEY=${{ vars.POSTHOG_PUBLIC_PROJECT_KEY }}
+            BUILD_NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+            BUILD_NEXT_PUBLIC_SENTRY_RELEASE=${{ env.DEPLOY_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -189,6 +192,7 @@ jobs:
           context: .
           target: worker
           push: true
+          sbom: true
           # Worker candidates stay immutable. Deployment consumes the verified digest;
           # no mutable :latest tag may point at an image before policy verification.
           tags: ${{ env.WORKER_IMAGE }}:${{ env.DEPLOY_SHA }}
@@ -209,6 +213,7 @@ jobs:
           context: .
           target: egress-proxy
           push: true
+          sbom: true
           tags: ${{ env.EGRESS_PROXY_IMAGE }}:${{ env.DEPLOY_SHA }}
           labels: |
             org.opencontainers.image.revision=${{ env.DEPLOY_SHA }}
@@ -222,11 +227,28 @@ jobs:
           bash apps/worker/scripts/verify-worker-image.sh \
             "$worker_ref" "${{ env.DEPLOY_SHA }}" "${{ env.ENGINE_REVISION }}"
 
-      - name: Worker image digest
+      - name: Image digests and SBOM attestation references
         if: steps.build-worker.outcome == 'success'
+        shell: bash
+        env:
+          WEB_IMAGE_REF: ${{ env.WEB_IMAGE }}
+          WEB_DIGEST: ${{ steps.build-web.outputs.digest }}
+          WORKER_IMAGE_REF: ${{ env.WORKER_IMAGE }}
+          WORKER_DIGEST: ${{ steps.build-worker.outputs.digest }}
+          EGRESS_PROXY_IMAGE_REF: ${{ env.EGRESS_PROXY_IMAGE }}
+          EGRESS_PROXY_DIGEST: ${{ steps.build-egress-proxy.outputs.digest }}
         run: |
-          echo "Pushed worker image: ${{ env.WORKER_IMAGE }}:${{ env.DEPLOY_SHA }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Pinned digest: ${{ steps.build-worker.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Image digests and SBOM attestation references"
+            echo
+            echo "| Image | Runtime image reference | SBOM attestation reference |"
+            echo "| --- | --- | --- |"
+            echo "| Web | ${WEB_IMAGE_REF}@${WEB_DIGEST} | BuildKit SBOM attestation subject: ${WEB_IMAGE_REF}@${WEB_DIGEST} |"
+            echo "| Worker | ${WORKER_IMAGE_REF}@${WORKER_DIGEST} | BuildKit SBOM attestation subject: ${WORKER_IMAGE_REF}@${WORKER_DIGEST} |"
+            echo "| Egress proxy | ${EGRESS_PROXY_IMAGE_REF}@${EGRESS_PROXY_DIGEST} | BuildKit SBOM attestation subject: ${EGRESS_PROXY_IMAGE_REF}@${EGRESS_PROXY_DIGEST} |"
+            echo
+            echo "SBOM references identify image subjects. Runtime references above retain the image digests used for deployment."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Validates the exact immutable values the worker VM must inject into its
       # runtime environment (LYRASHIELD_PRODUCT_REVISION / _WORKER_IMAGE_DIGEST /

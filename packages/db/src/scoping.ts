@@ -156,6 +156,7 @@ export const ACCOUNT_OWNED_MODELS = new Set<string>([
   "UsageRecord",
   "MinutePack",
   "AccountAcquisition",
+  "AccountPreference",
   "MyraConversation",
   "SupportCase",
   "MyraOperation",

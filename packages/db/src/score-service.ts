@@ -5,12 +5,11 @@ import { logger } from "@lyrashield/logger"
 import { getSystemPrisma } from "./system-client"
 import { withWorkspaceRLS } from "./rls"
 import { Prisma } from "./generated/prisma"
+import { SCORECARD_REFERRAL_BONUS_MINUTES } from "@lyrashield/types"
 
 const SCORE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const SHARE_SCOPE = "agentic pentest + SCA + secrets"
 const BASE32 = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
-/** Both-sided referral reward, denominated in agent minutes (spec §4, founder decision #3). */
-const REFERRAL_BONUS_MINUTES = 30
 /** Attribution applies to newly created accounts only — never retroactively (spec §4). */
 const NEW_ACCOUNT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 const SCORE_GRADES = new Set<ScoreGrade>(["A_PLUS", "A", "B", "C", "D", "F"])
@@ -614,7 +613,7 @@ export async function qualifyReferralForWorkspace(workspaceId: string) {
         workspaceId,
         accountId: attribution.referredUserId,
         kind: "referral_bonus",
-        quantity: REFERRAL_BONUS_MINUTES,
+        quantity: SCORECARD_REFERRAL_BONUS_MINUTES,
         idempotencyKey: attribution.id,
         metadata: {
           denomination: "agent_minutes",
@@ -630,7 +629,7 @@ export async function qualifyReferralForWorkspace(workspaceId: string) {
         workspaceId: referrerWorkspace.workspaceId,
         accountId: attribution.code.userId,
         kind: "referral_bonus",
-        quantity: REFERRAL_BONUS_MINUTES,
+        quantity: SCORECARD_REFERRAL_BONUS_MINUTES,
         idempotencyKey: `${attribution.id}:referrer`,
         metadata: {
           denomination: "agent_minutes",

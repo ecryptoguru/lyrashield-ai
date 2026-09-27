@@ -9,7 +9,7 @@ draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace GitHub Advanced Security?"
-    a: "No. GHAS is a mature, integrated scanner inside GitHub with CodeQL, secret scanning for 180+ providers and Dependabot. LyraShield is release assurance for AI-built apps in open beta that separates detection from proof and produces an immutable assurance record. They solve different problems and complement each other."
+    a: "No. GHAS is a mature, integrated scanner inside GitHub with CodeQL, secret scanning for 180+ providers and Dependabot. LyraShield is release assurance for AI-built apps in open beta that keeps detected candidates, separate verification receipts and retest outcomes distinct in an immutable, scoped evidence record. They solve different problems and complement each other."
   - q: "Can I use LyraShield and GitHub Advanced Security together?"
     a: "Yes. LyraShield ships a GitHub Action with SARIF output and a diff-aware gate that writes to the same code scanning view GHAS uses. Run GHAS for continuous deterministic scanning and Dependabot updates, then run LyraShield for the target, review, evidence, fix, retest, report loop before release. LyraShield is live with open registration."
   - q: "When should I choose GitHub Advanced Security over LyraShield?"
@@ -24,7 +24,7 @@ faq:
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | Primary focus           | Release assurance for AI-built apps: one record of what was tested, the evidence behind each result and what a retest established before shipping | Code scanning, secret scanning, dependency management within GitHub         |
 | Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                        | CodeQL (data-flow analysis), pattern matching for secrets                   |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays separate from proof)                                        | Open → dismissed or fixed (alert-based workflow)                            |
+| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays distinct from separate verification receipts)               | Open → dismissed or fixed (alert-based workflow)                            |
 | Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                       | No published control framework; query-based detection                       |
 | Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                            | Copilot Autofix for CodeQL alerts (suggested, not approval-bound)           |
 | AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                              | Copilot Autofix for CodeQL alerts; AI-powered detections for some languages |

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@lyrashield/ui"
+import { SCORECARD_REFERRAL_BONUS_MINUTES } from "@lyrashield/types"
 import { ScorecardShareComposer } from "../../../../../components/scorecard-share-composer"
 
 type PublishedShare = {
@@ -141,9 +142,9 @@ export function ScorecardControls({
         <>
           <div className="grid grid-cols-3 gap-2 text-center sm:max-w-md">
             {[
-              ["Human views", share.views],
-              ["Share handoffs", share.shareHandoffs],
-              ["Referred signups", share.referredSignups],
+              ["Scorecard visits", share.views],
+              ["Share actions", share.shareHandoffs],
+              ["Attributed signups", share.referredSignups],
             ].map(([label, value]) => (
               <div key={label} className="bg-muted/40 rounded-lg border p-3">
                 <p className="text-lg font-semibold">{value}</p>
@@ -151,6 +152,14 @@ export function ScorecardControls({
               </div>
             ))}
           </div>
+          <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
+            Both the referring account and the new account can receive{" "}
+            {SCORECARD_REFERRAL_BONUS_MINUTES} agent minutes after the new workspace completes its
+            first real scan. The reward stays pending until then. A referral must be claimed within
+            seven days of account creation; existing accounts outside that window and self-referrals
+            do not qualify. Attributed signups include pending and credited referrals. External
+            posts and impressions are not measured.
+          </p>
           <ScorecardShareComposer
             slug={share.slug}
             url={share.url}

@@ -286,6 +286,22 @@ jobs:
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm --filter @lyrashield/db migrate:deploy
 
+      # These tests intentionally reject arbitrary DBs and use fixed local
+      # database names as a destructive-action guard. Keep each fixture DB
+      # disposable and migrate it from the checked-out schema.
+      - name: Create isolated product regression databases
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE v15_product' \
+            -c 'CREATE DATABASE lyra_v18_ci'
+          DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/v15_product?schema=public" \
+            pnpm --filter @lyrashield/db migrate:deploy
+          DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyra_v18_ci?schema=public" \
+            pnpm --filter @lyrashield/db migrate:deploy
+
       # Real-Postgres invariant proof, not an application-level mock: a
       # negative Policy.maxBudgetUsd must be rejected by SQLSTATE 23514 on the
       # named constraint, while NULL, zero, and a positive decimal remain valid.
@@ -316,6 +332,22 @@ jobs:
             -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci" \
             -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci"
           echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
+
+      - name: Grant restricted runtime access to regression databases
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for database in v15_product lyra_v18_ci; do
+            docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
+              -c "GRANT CONNECT ON DATABASE ${database} TO app_runtime_ci"
+            docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d "$database" -v ON_ERROR_STOP=1 \
+              -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
+              -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime_ci" \
+              -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_ci" \
+              -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci" \
+              -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci"
+          done
 
       - name: Lint
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
@@ -434,9 +466,9 @@ jobs:
 
       - name: Test affected suites
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
-        # The core suite includes the restricted-role RLS runtime tests. This
-        # job already provisions RLS_RUNTIME_DATABASE_URL above, so a second
-        # database job would only repeat the same migrations and assertions.
+        # The core suite includes the general restricted-role RLS tests against
+        # the disposable main database. Fixed-name regressions below use their
+        # own migrated databases because their guards require those names.
         env:
           APP_CHANGED: ${{ needs.changes.outputs.app }}
           MARKETING_CHANGED: ${{ needs.changes.outputs.marketing }}
@@ -465,6 +497,79 @@ jobs:
           packages/billing/src/trial-integration.test.ts
           apps/web/src/app/api/workspaces/route-integration.test.ts
           packages/myra/src/server/operations.runtime.test.ts
+
+      # Keep the opt-in database suites live in required CI. Their own guards
+      # still reject non-local databases; report checks make an accidental
+      # Vitest skip fail the job instead of looking green.
+      - name: Run required PostgreSQL regression tests
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          team_owner_database_url='postgresql://lyrashield:lyrashield@localhost:5432/v15_product?schema=public'
+          team_runtime_database_url='postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/v15_product?schema=public'
+          growth_database_url='postgresql://lyrashield:lyrashield@localhost:5432/lyra_v18_ci?schema=public'
+
+          assert_named_tests_passed() {
+            local report_path="$1"
+            shift
+            node --input-type=module - "$report_path" "$@" <<'NODE'
+          import { readFileSync } from "node:fs"
+
+          const [reportPath, ...expectedNames] = process.argv.slice(2)
+          const report = JSON.parse(readFileSync(reportPath, "utf8"))
+          const tests = (report.testResults ?? []).flatMap((file) => file.assertionResults ?? [])
+          for (const expectedName of expectedNames) {
+            const matches = tests.filter((test) => test.fullName.endsWith(expectedName))
+            if (matches.length !== 1 || matches[0].status !== "passed") {
+              throw new Error(`Expected exactly one passing test ending with ${JSON.stringify(expectedName)}; got ${JSON.stringify(matches)}`)
+            }
+            console.log(`verified: ${matches[0].fullName}`)
+          }
+          NODE
+          }
+
+          TEAM_MUTATION_DB_TEST=1 DATABASE_URL="$team_owner_database_url" DATABASE_SYSTEM_URL="$team_owner_database_url" \
+            pnpm exec vitest run apps/web/src/app/api/team/mutations-db.test.ts \
+            --testNamePattern='anonymizes attribution|removes, reinvites|revalidates account-deletion ownership' \
+            --reporter=json --outputFile="$RUNNER_TEMP/team-mutation-owner.json"
+          assert_named_tests_passed "$RUNNER_TEMP/team-mutation-owner.json" \
+            'anonymizes attribution and rebuilds the audit chain in a soft-deleted retained workspace' \
+            'removes, reinvites and reactivates the same membership with the new role' \
+            'revalidates account-deletion ownership after a concurrent team self-demotion'
+
+          TEAM_MUTATION_DB_TEST=1 DATABASE_URL="$team_runtime_database_url" DATABASE_SYSTEM_URL="$team_owner_database_url" \
+            pnpm exec vitest run apps/web/src/app/api/team/mutations-db.test.ts \
+            --testNamePattern='serializes concurrent owner removals' \
+            --reporter=json --outputFile="$RUNNER_TEMP/team-mutation-runtime.json"
+          assert_named_tests_passed "$RUNNER_TEMP/team-mutation-runtime.json" \
+            'serializes concurrent owner removals under the restricted database role'
+
+          GROWTH_METRICS_DB_TEST=1 DATABASE_URL="$growth_database_url" DATABASE_SYSTEM_URL="$growth_database_url" \
+            pnpm exec vitest run apps/web/src/lib/growth-metrics.test.ts \
+            --testNamePattern='produces the same numbers as computePaidAccountMetrics from a seeded set' \
+            --reporter=json --outputFile="$RUNNER_TEMP/growth-metrics-db.json"
+          assert_named_tests_passed "$RUNNER_TEMP/growth-metrics-db.json" \
+            'produces the same numbers as computePaidAccountMetrics from a seeded set'
+
+          RLS_RUNTIME_DATABASE_URL="$team_runtime_database_url" DATABASE_URL="$team_runtime_database_url" DATABASE_SYSTEM_URL="$team_owner_database_url" \
+            pnpm exec vitest run apps/web/src/lib/dashboard-overview.runtime.test.ts \
+            --reporter=json --outputFile="$RUNNER_TEMP/dashboard-overview-runtime.json"
+          assert_named_tests_passed "$RUNNER_TEMP/dashboard-overview-runtime.json" \
+            'keeps quiet targets and their usable snapshots outside the global top-200/top-20 windows'
+
+          RLS_RUNTIME_DATABASE_URL="$team_runtime_database_url" DATABASE_URL="$team_owner_database_url" DATABASE_SYSTEM_URL="$team_owner_database_url" \
+            pnpm exec vitest run packages/db/src/manifest-checksum.runtime.test.ts \
+            --reporter=json --outputFile="$RUNNER_TEMP/manifest-checksum-runtime.json"
+          assert_named_tests_passed "$RUNNER_TEMP/manifest-checksum-runtime.json" \
+            'round-trips reordered JSONB, detects tampering, and leaves legacy hashes unavailable'
+
+          ACCOUNT_PREFERENCE_RLS_RUNTIME_TEST=1 RLS_RUNTIME_DATABASE_URL="$team_runtime_database_url" DATABASE_URL="$team_owner_database_url" \
+            pnpm exec vitest run packages/db/src/account-preference.rls.runtime.test.ts \
+            --reporter=json --outputFile="$RUNNER_TEMP/account-preference-rls-runtime.json"
+          assert_named_tests_passed "$RUNNER_TEMP/account-preference-rls-runtime.json" \
+            'denies unbound and other-account reads and writes' \
+            'allows the owning account without workspace context'
 
       - name: Test worker egress pin rotation
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'

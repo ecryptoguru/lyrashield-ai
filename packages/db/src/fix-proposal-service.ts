@@ -1,4 +1,5 @@
 import { withWorkspaceRLS } from "./rls"
+import { findingScopeWhere } from "./finding-service"
 import type { FixProposal, PullRequest, Finding, Target } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 
@@ -84,6 +85,8 @@ export async function getFixProposal(
 
 export async function listFixProposals(params: {
   workspaceId: string
+  targetId?: string
+  observedInScanId?: string
   findingId?: string
   status?: string
   cursor?: string
@@ -96,8 +99,7 @@ export async function listFixProposals(params: {
       where: {
         deletedAt: null,
         finding: {
-          workspaceId: params.workspaceId,
-          deletedAt: null,
+          ...findingScopeWhere(params),
           ...(params.findingId ? { id: params.findingId } : {}),
         },
         ...(params.status ? { status: params.status } : {}),

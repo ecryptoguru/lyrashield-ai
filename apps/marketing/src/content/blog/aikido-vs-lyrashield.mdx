@@ -12,7 +12,7 @@ updatedDate: 2026-09-22
 author: lyrashield-team
 faq:
   - q: Is Aikido better than LyraShield?
-    a: They solve different problems. Aikido is a broad unified AppSec platform spanning SAST, SCA, secrets, IaC, cloud and runtime. LyraShield is a release assurance loop for AI built apps that separates detection from proof and gates fixes on approval. Pick by scope and workflow.
+    a: They solve different problems. Aikido is a broad unified AppSec platform spanning SAST, SCA, secrets, IaC, cloud and runtime. LyraShield is a release assurance loop for AI built apps that keeps detection, separate verification receipts and retest outcomes distinct and gates fixes on approval. Pick by scope and workflow.
   - q: Does LyraShield replace Aikido?
     a: No. Aikido covers a wide code to cloud surface with many scanners. LyraShield focuses on the release decision for an AI built app and runs agentic pentest with SCA and secrets inside that loop. Some teams use Aikido for broad AppSec and LyraShield for per release assurance.
   - q: Does Aikido support AI generated code scanning?
@@ -21,7 +21,7 @@ faq:
     a: A team that wants broad AppSec coverage across many layers may prefer Aikido. A team that wants a structured release assurance loop with immutable evidence and approval gated fixes for each AI built app may prefer LyraShield. Try the free checklist to decide.
 ---
 
-Aikido is a unified AppSec platform that spans SAST, SCA, secrets, infrastructure as code, cloud and runtime from code to cloud. LyraShield is a release assurance loop for AI built apps that separates detection from proof, records evidence in defined states and gates fixes on approval. Aikido excels at broad layered coverage and developer remediation; LyraShield targets the release decision for apps generated or heavily modified by AI coding tools.
+Aikido is a unified AppSec platform that spans SAST, SCA, secrets, infrastructure as code, cloud and runtime from code to cloud. LyraShield is a release assurance loop for AI built apps that keeps detection, separate verification receipts and retest outcomes distinct, records evidence in defined states and gates fixes on approval. Aikido excels at broad layered coverage and developer remediation; LyraShield targets the release decision for apps generated or heavily modified by AI coding tools.
 
 This comparison helps when your team uses AI coding tools and needs to choose between a broad unified AppSec platform and a focused release assurance workflow. Both reduce noise and prioritize real risk. The difference is the scope they cover and what they wrap around the fix step.
 
@@ -45,7 +45,7 @@ Notably, Aikido already ships an MCP plugin that connects its security engine to
 
 LyraShield is narrower and deeper on one workflow: the release decision for an AI built app. Its loop is target, review, evidence, fix, retest, report. You authorize a specific target, run a review that combines agentic pentest with SCA and secrets scanning and record evidence in defined states rather than a single pass or fail.
 
-The structural difference is that LyraShield separates detection from proof and gates the fix on approval. A finding moves through evidence states and a fix proposal is prepared for human approval before it is applied and retested. The final output is an immutable assurance record that supports a release decision. This matters when the question is whether a specific build is ready to ship, not just which dependencies are reachable.
+The structural difference is that LyraShield keeps detection, separate verification receipts and retest outcomes distinct and gates the fix on approval. A finding moves through evidence states and a fix proposal is prepared for human approval before it is applied and retested. The final output is an immutable assurance record that supports a release decision. This matters when the question is what evidence is available for reviewing a specific build, not just which dependencies are reachable.
 
 AI built apps add a wrinkle that a broad platform does not fully address. The generated code, the agent permissions, the resolved dependencies and the deployment configuration can all change between builds and a clean scan of one version does not carry to the next. LyraShield is designed to be re run per build, so the evidence record matches the build that is about to ship rather than a prior snapshot of the codebase.
 
@@ -71,9 +71,9 @@ Use LyraShield when your primary need is a structured release assurance loop for
 
 ## Why teams choose LyraShield for AI built apps
 
-Teams pick LyraShield when the release decision is the hard part and the app was built or heavily modified by an AI coding tool. The approval gated fix loop means a human still owns the change that ships. Evidence states mean you can show what was checked, what was proven, what is limited and what was retested, which is what an auditor or a careful reviewer asks for. Combining a broad AppSec platform with a governed release loop is stronger than either alone.
+Teams pick LyraShield when the release decision is the hard part and the app was built or heavily modified by an AI coding tool. The approval gated fix loop means a human still owns the change that ships. Evidence states mean you can show what was checked, which receipts support findings, what is limited and what a retest observed, which is what an auditor or a careful reviewer asks for. Combining a broad AppSec platform with a governed release loop is stronger than either alone.
 
-The decision often comes down to scope and who signs off. A broad platform answers which findings matter across code, cloud and runtime and it can auto open a fix PR. A release assurance loop answers whether this build, with these dependencies and this agent configuration, is ready to ship and it hands a reviewer a record that captures that decision with an approval gate on the fix. For a team that owns a release gate and needs to defend the call, the second answer is the one that closes the loop.
+The decision often comes down to scope and who signs off. A broad platform answers which findings matter across code, cloud and runtime and can auto-open a fix PR. A release assurance loop records scoped checks, findings, coverage and limitations for a reviewer to consider. The team retains its own release criteria and decision authority.
 
 As of August 2026, LyraShield is live with open registration in open beta. Some platform features remain on the near term roadmap and are not yet live; check the current status on the site before relying on a specific capability.
 

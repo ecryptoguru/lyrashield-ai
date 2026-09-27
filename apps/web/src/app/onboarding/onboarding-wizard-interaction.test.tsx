@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from "react"
 import { beforeEach, expect, it, vi } from "vitest"
 
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0 }))
+const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }))
 vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
   useEffect: () => {},
@@ -24,7 +25,22 @@ vi.mock("react", async (original) => ({
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }))
+vi.mock("@/lib/api-client", () => ({
+  apiGet: api.get,
+  apiPost: api.post,
+  apiPatch: api.patch,
+  ApiError: class ApiError extends Error {
+    constructor(
+      public code: string,
+      message: string,
+      public status: number
+    ) {
+      super(message)
+    }
+  },
+}))
 import { OnboardingWizard } from "./onboarding-wizard"
+import { apiPost, apiPatch } from "@/lib/api-client"
 import {
   OnboardingAlerts,
   PathChooserView,
@@ -40,6 +56,7 @@ type Element = ReactElement<{
   value?: string
   onChange?: (event: { target: { value?: string; checked?: boolean } }) => void
   onSubmit?: (event: { preventDefault: () => void }) => void
+  onClick?: () => unknown
 }>
 
 // Step views are plain presentational functions (no hooks). Descend into
@@ -64,10 +81,20 @@ function elements(node: ReactNode): Element[] {
       : element.props.children
   return [element, ...elements(inner)]
 }
-function render(targetType: string) {
+function render(
+  targetType: string,
+  overrides: {
+    currentStep?: number
+    workspaceId?: string | null
+    targetId?: string | null
+    selectedGoal?: string | null
+    targetName?: string | null
+  } = {}
+) {
   hooks.cursor = 0
   return elements(
     OnboardingWizard({
+      principalId: "user-1",
       initialState: {
         currentStep: 1,
         completed: false,
@@ -77,12 +104,25 @@ function render(targetType: string) {
         selectedGoal: null,
         targetType,
         targetName: "Staging Site",
+        ...overrides,
       },
     })
   )
 }
 beforeEach(() => {
   hooks.values = []
+  api.get.mockReset()
+  api.get.mockResolvedValue({
+    allowed: true,
+    code: null,
+    message: null,
+    plan: "TRIAL",
+    isTrial: true,
+    remainingMinutes: 120,
+  })
+  api.post.mockReset()
+  api.patch.mockReset()
+  vi.unstubAllGlobals()
 })
 
 it.each(["WEB_APP", "API"])(
@@ -110,3 +150,117 @@ it.each(["WEB_APP", "API"])(
     ).toBeUndefined()
   }
 )
+
+it("keeps an accepted scan and retries only the onboarding save after its PATCH fails", async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal("window", {
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  })
+  const initialState = {
+    currentStep: 3,
+    completed: false,
+    skipped: false,
+    workspaceId: "ws-1",
+    targetId: "target-1",
+    selectedGoal: "LAUNCH_REVIEW",
+    targetType: "REPO",
+    targetName: "My repo",
+    updatedAt: "2026-09-27T00:00:00.000Z",
+  }
+  api.patch
+    .mockRejectedValueOnce(new Error("completion write failed"))
+    .mockResolvedValueOnce({ ...initialState, currentStep: 4, completed: true })
+  api.post.mockResolvedValueOnce({ id: "scan-1", operationId: "operation-1" })
+
+  const checkAvailability = () =>
+    render("REPO", initialState).find((element) =>
+      String(element.props.children).includes("Check availability")
+    )!.props.onClick!()
+
+  await checkAvailability()
+  expect(api.get).toHaveBeenCalledOnce()
+  expect(api.post).not.toHaveBeenCalled()
+  const start = () =>
+    render("REPO", initialState).find((element) =>
+      String(element.props.children).includes("Start release check")
+    )!.props.onClick!()
+  await start()
+  const accepted = render("REPO", initialState)
+  expect(
+    accepted.some(
+      (element) => element.props.children === "Your scan started; onboarding could not be saved."
+    )
+  ).toBe(true)
+  expect(accepted.some((element) => element.props.href === "/dashboard/scans/scan-1")).toBe(true)
+
+  await accepted.find((element) => element.props.children === "Retry saving onboarding")!.props
+    .onClick!()
+
+  expect(apiPost).toHaveBeenCalledOnce()
+  expect(apiPost).toHaveBeenCalledWith(
+    "/api/scans",
+    { workspaceId: "ws-1", targetId: "target-1", goal: "LAUNCH_REVIEW", mode: expect.any(String) },
+    expect.objectContaining({ headers: { "Idempotency-Key": expect.any(String) } })
+  )
+  expect(apiPatch).toHaveBeenCalledTimes(2)
+  expect(apiPatch.mock.calls[1]?.[1]).toMatchObject({ completed: true, currentStep: 4 })
+})
+
+it("retries an uncertain scan start with the same idempotency key", async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal("window", {
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  })
+  const initialState = {
+    currentStep: 3,
+    completed: false,
+    skipped: false,
+    workspaceId: "ws-1",
+    targetId: "target-1",
+    selectedGoal: "LAUNCH_REVIEW",
+    targetType: "REPO",
+    targetName: "My repo",
+    updatedAt: "2026-09-27T00:00:00.000Z",
+  }
+  api.patch
+    .mockResolvedValueOnce(initialState)
+    .mockResolvedValueOnce(initialState)
+    .mockResolvedValueOnce({ ...initialState, currentStep: 4, completed: true })
+  api.post
+    .mockRejectedValueOnce(new Error("connection lost after submission"))
+    .mockResolvedValueOnce({ id: "scan-2", operationId: "operation-2" })
+
+  const checkAvailability = () =>
+    render("REPO", initialState).find((element) =>
+      String(element.props.children).includes("Check availability")
+    )!.props.onClick!()
+
+  await checkAvailability()
+  const start = render("REPO", initialState).find((element) =>
+    String(element.props.children).includes("Start release check")
+  )!.props.onClick!
+  await start()
+  const unresolved = render("REPO", initialState)
+  expect(unresolved.some((element) => element.props.children === "Retry same details")).toBe(true)
+  await unresolved.find((element) => element.props.children === "Retry same details")!.props
+    .onClick!()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  expect(apiPost).toHaveBeenCalledTimes(2)
+  const firstKey = (apiPost.mock.calls[0]?.[2] as { headers?: Record<string, string> }).headers?.[
+    "Idempotency-Key"
+  ]
+  const retryKey = (apiPost.mock.calls[1]?.[2] as { headers?: Record<string, string> }).headers?.[
+    "Idempotency-Key"
+  ]
+  expect(firstKey).toMatch(/^[0-9a-f-]{36}$/i)
+  expect(retryKey).toBe(firstKey)
+})

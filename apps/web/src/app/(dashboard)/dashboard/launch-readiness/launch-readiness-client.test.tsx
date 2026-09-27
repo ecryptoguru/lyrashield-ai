@@ -75,6 +75,8 @@ describe("LaunchReadinessClient triage relabel", () => {
 
     expect(html).not.toContain('stroke="var(--color-success)"')
     expect(html).toContain("Triage only — not a readiness score")
+    expect(html).toContain("Insufficient current evidence")
+    expect(html).not.toContain("Nothing Checked")
     expect(html).toContain("Triage counts open findings; it is not the launch verdict.")
   })
 
@@ -117,4 +119,44 @@ describe("LaunchReadinessClient release draft", () => {
     expect(html).toContain(`value="${COMMIT}"`)
     expect(html).toContain('<option value="target-1" selected="">API</option>')
   })
+
+  it.each(["The newer scan failed.", "The newer scan is in progress."])(
+    "keeps newer-attempt copy neutral when status is %s",
+    (message) => {
+      const html = renderToStaticMarkup(
+        <LaunchReadinessClient
+          workspaceId="ws-1"
+          initialReport={{
+            ...REPORT,
+            state: "INSUFFICIENT_EVIDENCE",
+            verdict: "INCONCLUSIVE",
+            triageScore: null,
+            summary: "Insufficient current evidence.",
+          }}
+          targets={[{ targetId: "target-1", targetName: "API" }]}
+          initialTargetId="target-1"
+          initialReleaseRef={COMMIT}
+          initialReleaseCheck={{
+            targetId: "target-1",
+            targetName: "API",
+            requested: { kind: "COMMIT", value: COMMIT },
+            assessed: { kind: "COMMIT", value: COMMIT },
+            match: "match",
+            historicalState: "READY",
+            state: "INSUFFICIENT_EVIDENCE",
+            applicable: false,
+            blockingFindings: 0,
+            reasons: [{ code: "NEWER_ASSESSMENT_ATTEMPT", message }],
+          }}
+          initialCheckError={null}
+          checkNeedsTarget={false}
+        />
+      )
+
+      expect(html).toContain("previous verdict unavailable for this release")
+      expect(html).toContain("Review the newer assessment")
+      expect(html).not.toContain("still running")
+      expect(html).not.toContain("in-progress assessment")
+    }
+  )
 })

@@ -20,6 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { severityLabel, humanizeToken } from "@/lib/labels"
+import { findingsHref } from "@/lib/finding-list-params"
 import { FINDING_STATUS_LABELS, getVerificationStatusLabel } from "@/lib/enum-labels"
 import {
   buildRemediationTimeline,
@@ -417,12 +418,16 @@ export function FindingDetailDrawer({
   canCreatePr,
   finding,
   workspaceId,
+  targetId,
+  observedInScanId,
   onClose,
   onStatusChange,
 }: {
   canCreatePr: boolean
   finding: FindingListItem
   workspaceId: string
+  targetId?: string
+  observedInScanId?: string
   onClose: () => void
   onStatusChange: (id: string, status: string) => void
 }) {
@@ -455,13 +460,18 @@ export function FindingDetailDrawer({
   const knownExploited = detail?.technicalDetail?.includes("CISA KEV:") ?? false
   const epssSummary = extractEpssPercentage(detail?.technicalDetail)
 
+  const detailParams = new URLSearchParams({ workspaceId })
+  if (targetId) detailParams.set("targetId", targetId)
+  if (observedInScanId) detailParams.set("observedInScanId", observedInScanId)
+  const detailUrl = `/api/findings/${finding.id}?${detailParams.toString()}`
+
   const fetchDetail = useCallback(
     (signal?: AbortSignal) =>
-      apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+      apiGet(detailUrl, {
         schema: findingDetailSchema,
         ...(signal ? { signal } : {}),
       }),
-    [finding.id, workspaceId]
+    [detailUrl]
   )
 
   useEffect(() => {
@@ -512,6 +522,8 @@ export function FindingDetailDrawer({
     setHistoryError(null)
     try {
       const params = new URLSearchParams({ workspaceId, collection, cursor })
+      if (targetId) params.set("targetId", targetId)
+      if (observedInScanId) params.set("observedInScanId", observedInScanId)
       const page = await apiGet(`/api/findings/${finding.id}/history?${params.toString()}`, {
         schema: findingHistoryPageSchema(collection),
       })
@@ -559,7 +571,7 @@ export function FindingDetailDrawer({
         { schema: retestResultSchema }
       )
       setQueuedRetestScanId(result.scan.id)
-      const res = await apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+      const res = await apiGet(detailUrl, {
         schema: findingDetailSchema,
       })
       setDetail(res ?? null)
@@ -585,7 +597,7 @@ export function FindingDetailDrawer({
       )
       onStatusChange(finding.id, result.status)
       setShowAcceptRisk(false)
-      const res = await apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+      const res = await apiGet(detailUrl, {
         schema: findingDetailSchema,
       })
       setDetail(res ?? null)
@@ -611,7 +623,7 @@ export function FindingDetailDrawer({
       )
       onStatusChange(finding.id, result.status)
       setShowFalsePositive(false)
-      const res = await apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+      const res = await apiGet(detailUrl, {
         schema: findingDetailSchema,
       })
       setDetail(res ?? null)
@@ -627,13 +639,20 @@ export function FindingDetailDrawer({
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full max-w-lg overflow-y-auto p-6 sm:max-w-lg">
+      <SheetContent className="w-full max-w-lg overflow-y-auto p-4 sm:max-w-lg sm:p-6">
         <SheetHeader className="mb-4 p-0 pr-8 text-left">
           {/* Breadcrumb inside drawer */}
           <nav aria-label="Breadcrumb" className="mb-1">
             <ol className="text-muted-foreground flex items-center gap-1 text-xs">
               <li>
-                <Link href="/dashboard/findings" className="hover:text-foreground">
+                <Link
+                  href={findingsHref({
+                    tab: "issues",
+                    ...(observedInScanId ? { scanId: observedInScanId } : {}),
+                    ...(targetId ? { target: targetId } : {}),
+                  })}
+                  className="hover:text-foreground"
+                >
                   Findings
                 </Link>
               </li>
@@ -733,14 +752,23 @@ export function FindingDetailDrawer({
                 Tab 3: History     (retests, fix proposals, verification receipts)
             ----------------------------------------------------------------- */}
             <Tabs value={detailTab} onValueChange={setDetailTab} className="w-full">
-              <TabsList className="w-full">
-                <TabsTrigger value="what-to-do" className="flex-1">
+              <TabsList className="h-auto min-h-9 w-full">
+                <TabsTrigger
+                  value="what-to-do"
+                  className="h-auto min-h-9 min-w-0 flex-1 whitespace-normal px-1 leading-tight"
+                >
                   What to do
                 </TabsTrigger>
-                <TabsTrigger value="technical" className="flex-1">
+                <TabsTrigger
+                  value="technical"
+                  className="h-auto min-h-9 min-w-0 flex-1 whitespace-normal px-1 leading-tight"
+                >
                   Technical
                 </TabsTrigger>
-                <TabsTrigger value="history" className="flex-1">
+                <TabsTrigger
+                  value="history"
+                  className="h-auto min-h-9 min-w-0 flex-1 whitespace-normal px-1 leading-tight"
+                >
                   History
                 </TabsTrigger>
               </TabsList>
@@ -750,7 +778,7 @@ export function FindingDetailDrawer({
               ============================================================ */}
               <TabsContent value="what-to-do" className="mt-4 space-y-4">
                 {/* Audience mode selector */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
                   <label
                     htmlFor="audience-mode"
                     className="text-muted-foreground shrink-0 text-xs font-medium"
@@ -761,7 +789,7 @@ export function FindingDetailDrawer({
                     id="audience-mode"
                     value={audienceMode}
                     onChange={(e) => setAudienceMode(e.target.value as AudienceMode)}
-                    className="bg-background focus:ring-ring rounded-md border px-2 py-1 text-xs focus:ring-2 focus:outline-none"
+                    className="bg-background focus:ring-ring w-full min-w-0 rounded-md border px-2 py-1 text-xs focus:ring-2 focus:outline-none sm:w-auto"
                     aria-label="Select audience mode for plain-language explanation"
                   >
                     {(Object.entries(AUDIENCE_LABELS) as [AudienceMode, string][]).map(
@@ -791,7 +819,11 @@ export function FindingDetailDrawer({
                         result.
                       </p>
                       <Link
-                        href={`/dashboard/findings?tab=reports&scanId=${encodeURIComponent(latestRetest.scanId)}`}
+                        href={findingsHref({
+                          tab: "reports",
+                          scanId: latestRetest.scanId,
+                          ...(targetId ? { targetId } : {}),
+                        })}
                         className={buttonVariants({ size: "sm", className: "mt-3" })}
                       >
                         Generate report

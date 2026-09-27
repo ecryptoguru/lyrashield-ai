@@ -83,6 +83,29 @@ describe("projectGateReadinessReport", () => {
     )
   })
 
+  it("describes expired evidence as insufficient current evidence", () => {
+    const report = projectGateReadinessReport(
+      [],
+      [
+        {
+          targetId: "target-1",
+          targetName: "API",
+          state: "INSUFFICIENT_EVIDENCE",
+          applicable: false,
+          blockingFindings: 0,
+          reasons: [{ code: "ASSESSMENT_EXPIRED", message: "stale" }],
+        },
+      ]
+    )
+
+    expect(report.verdict).toBe("INCONCLUSIVE")
+    expect(report.summary).toContain("insufficient current evidence")
+    expect(report.summary).not.toContain("no completed assessment yet")
+    expect(report.conditions).toContain(
+      "API: The last assessment is more than 24 hours old. Run a new scan to refresh it."
+    )
+  })
+
   it("maps READY only when every target is applicable", () => {
     const report = projectGateReadinessReport(
       [],
@@ -114,6 +137,22 @@ describe("gateReasonSentence", () => {
     expect(gateReasonSentence({ code: "EVIDENCE_CHANGED", message: "ignored" })).toContain(
       "Run a new scan"
     )
+  })
+
+  it("describes a newer attempt without assuming it is still active", () => {
+    const activeAttempt = gateReasonSentence({
+      code: "NEWER_ASSESSMENT_ATTEMPT",
+      message: "The newer scan is running.",
+    })
+    const failedAttempt = gateReasonSentence({
+      code: "NEWER_ASSESSMENT_ATTEMPT",
+      message: "The newer scan failed.",
+    })
+
+    expect(activeAttempt).toBe(failedAttempt)
+    expect(activeAttempt).toContain("previous verdict unavailable")
+    expect(activeAttempt).toContain("Review the newer scan's status")
+    expect(activeAttempt).not.toMatch(/still running|wait for it to finish/i)
   })
 
   it("keeps the gate's own message for unknown codes instead of inventing one", () => {
@@ -154,6 +193,34 @@ describe("generateLaunchReadinessReport", () => {
     )
     expect(report.verdict).toBe("NO_GO")
     expect(report.blockingFindings).toBe(1)
+  })
+
+  it("keeps critical-severity guidance tied to evidence and release context", () => {
+    const report = generateLaunchReadinessReport(
+      [makeFinding({ severity: "CRITICAL", status: "OPEN", verified: false })],
+      true
+    )
+    const copy = [report.summary, ...report.conditions, ...report.recommendations].join(" ")
+
+    expect(report.verdict).toBe("NO_GO")
+    expect(report.recommendations).toContain(
+      "No findings have a separate independent verification receipt. Review candidate evidence; a deeper scan is not the same as independent verification."
+    )
+    expect(report.conditions.join(" ")).toContain("release policy")
+    expect(copy).not.toMatch(/must be fixed before launch|exploitable/i)
+  })
+
+  it("labels an independently verified finding without equating it to retest confirmation", () => {
+    const report = generateLaunchReadinessReport(
+      [makeFinding({ severity: "HIGH", status: "OPEN", verified: true })],
+      true
+    )
+
+    expect(report.verifiedFindings).toBe(1)
+    expect(report.summary).toContain("1 independently verified")
+    expect(report.recommendations).not.toContain(
+      "No findings have a separate independent verification receipt. Review candidate evidence; a deeper scan is not the same as independent verification."
+    )
   })
 
   it.each(["PR_OPENED", "TICKET_CREATED", "FIXED_PENDING_RETEST"])(
@@ -213,13 +280,13 @@ describe("generateLaunchReadinessReport", () => {
     expect(report.bySeverity.HIGH).toBe(2)
   })
 
-  it("recommends verification when no findings are verified", () => {
+  it("recommends independent verification when no findings have a verification receipt", () => {
     const report = generateLaunchReadinessReport(
       [makeFinding({ verified: false, severity: "LOW", status: "OPEN" })],
       true
     )
     expect(report.recommendations).toContain(
-      "No findings have been verified — run a deeper scan to confirm vulnerabilities"
+      "No findings have a separate independent verification receipt. Review candidate evidence; a deeper scan is not the same as independent verification."
     )
   })
 
@@ -249,6 +316,7 @@ describe("generateLaunchReadinessReport", () => {
       expect(report.verdict).toBe("INCONCLUSIVE")
       // The critical assertion: no number for a user to read as a pass.
       expect(report.score).toBeNull()
+      expect(report.summary).toContain("Insufficient current evidence")
       expect(report.summary).toContain("not a clean result")
       expect(report.recommendations).toContain(
         "URL content could not be fetched: the connection failed"
@@ -299,6 +367,7 @@ describe("generateLaunchReadinessReport", () => {
       expect(report.score).toBeNull()
       expect(report.summary).toContain("scope-limited")
       expect(report.conditions.join(" ")).toContain("11 applicable control(s)")
+      expect(report.conditions.join(" ")).toContain("could not be established")
     })
 
     it("keeps GO and the score when every applicable control completed", () => {

@@ -1,4 +1,4 @@
-import { listFindings, getFindingStats } from "@lyrashield/db"
+import { listFindings, getFindingStats, validateFindingScope } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -22,8 +22,9 @@ const SEVERITY_ORDER: Record<string, number> = {
 
 const FindingQuerySchema = z.object({
   workspaceId: z.string().min(1),
-  targetId: z.string().optional(),
-  scanId: z.string().optional(),
+  targetId: z.string().min(1).optional(),
+  observedInScanId: z.string().min(1).optional(),
+  scanId: z.string().min(1).optional(),
   severity: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]).optional(),
   status: z
     .enum([
@@ -66,13 +67,36 @@ export async function GET(request: Request) {
       )
     }
 
-    const { workspaceId, targetId, scanId, severity, status, verified, category, q } = parsed.data
+    const {
+      workspaceId,
+      targetId,
+      observedInScanId,
+      scanId,
+      severity,
+      status,
+      verified,
+      category,
+      q,
+    } = parsed.data
     const stats = parsed.data.stats === "true"
 
     await requirePermission(workspaceId, PERMISSIONS.finding.view)
 
+    const scope = await validateFindingScope({
+      workspaceId,
+      ...(targetId ? { targetId } : {}),
+      ...(observedInScanId ? { observedInScanId } : {}),
+    })
+    if (!scope.available) {
+      return apiError(
+        "INVALID_PARAM",
+        "Selected scan or target is unavailable in this workspace",
+        400
+      )
+    }
+
     if (stats) {
-      const findingStats = await getFindingStats(workspaceId, targetId)
+      const findingStats = await getFindingStats(workspaceId, targetId, observedInScanId)
       return apiSuccess(findingStats)
     }
 
@@ -81,6 +105,7 @@ export async function GET(request: Request) {
     const { items, nextCursor } = await listFindings({
       workspaceId,
       ...(targetId ? { targetId } : {}),
+      ...(observedInScanId ? { observedInScanId } : {}),
       ...(scanId ? { scanId } : {}),
       ...(severity ? { severity } : {}),
       ...(status ? { status } : {}),

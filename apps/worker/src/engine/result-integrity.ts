@@ -1,5 +1,10 @@
 import { createHash } from "crypto"
-import { getWorkspaceContext, prisma, withWorkspaceRLS } from "@lyrashield/db"
+import {
+  getWorkspaceContext,
+  prisma,
+  verifyStoredManifestChecksum,
+  withWorkspaceRLS,
+} from "@lyrashield/db"
 import { VIBE_SECURITY_CONTROLS, VIBE_SECURITY_COVERAGE_VERSION } from "@lyrashield/security"
 import type { UrlExecutionSummary } from "@lyrashield/types"
 import type { EngineVulnerability, ParsedEngineCoverage } from "./output-parser"
@@ -463,12 +468,19 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
       ? { ingestionWarnings: input.ingestionWarnings.slice(0, 100) }
       : {}),
   }
-  const manifestChecksum = checksum(manifest)
+  const manifestChecksumInput = JSON.stringify(manifest)
+  if (manifestChecksumInput === undefined) {
+    throw new Error("Scan result manifest checksum input is unavailable")
+  }
+  const manifestChecksum = createHash("sha256").update(manifestChecksumInput).digest("hex")
 
   await withWorkspaceRLS(workspaceId, async (tx) => {
     const existing = await tx.scanResultManifest.findUnique({ where: { scanId: input.scanId } })
-    if (existing && existing.checksum !== manifestChecksum) {
-      throw new Error("Scan result manifest already exists with different contents")
+    if (existing) {
+      const integrity = verifyStoredManifestChecksum(existing)
+      if (integrity === "MISMATCH" || existing.checksum !== manifestChecksum) {
+        throw new Error("Scan result manifest already exists with different contents")
+      }
     }
 
     await tx.scanCoverageReceipt.createMany({
@@ -483,6 +495,7 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
           version: MANIFEST_VERSION,
           manifest,
           checksum: manifestChecksum,
+          checksumInput: manifestChecksumInput,
         },
       })
     }

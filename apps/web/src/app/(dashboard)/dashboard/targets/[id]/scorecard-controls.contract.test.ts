@@ -15,4 +15,27 @@ describe("scorecard confirmation", () => {
     expect(source).toContain("ref={noticeRef}")
     expect(source).toContain('role="status" tabIndex={-1}')
   })
+
+  it("labels only observed sharing counts and explains referral qualification", () => {
+    expect(source).toContain('"Scorecard visits"')
+    expect(source).toContain('"Share actions"')
+    expect(source).toContain('"Attributed signups"')
+    expect(source).not.toContain('"Human views"')
+    expect(source).toContain('import { SCORECARD_REFERRAL_BONUS_MINUTES } from "@lyrashield/types"')
+    expect(source).toContain("first real scan")
+    expect(source).toContain("pending until then")
+    expect(source).toContain("include pending and credited referrals")
+    expect(source.replace(/\s+/g, " ")).toContain(
+      "External posts and impressions are not measured."
+    )
+  })
+
+  it("keeps publication and revocation behind explicit user actions", () => {
+    expect(source).toContain("Create public scorecard")
+    expect(source).toContain("Revoke public scorecard")
+    expect(source).toContain("onClick={() => void create()}")
+    expect(source).toContain("onClick={() => void revoke()}")
+    expect(source).toContain('method: "POST"')
+    expect(source).toContain('method: "DELETE"')
+  })
 })

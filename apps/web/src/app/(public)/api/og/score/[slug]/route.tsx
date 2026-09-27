@@ -1,13 +1,8 @@
 import { ImageResponse } from "next/og"
 import { getPublicScorecard } from "@lyrashield/db"
+import { SCORECARD_FORMAT_DIMENSIONS, scorecardFixesSummary } from "@/lib/scorecard-sharing"
 
 export const runtime = "nodejs"
-
-const FORMATS = {
-  wide: { width: 1200, height: 630 },
-  square: { width: 1080, height: 1080 },
-  portrait: { width: 1080, height: 1350 },
-} as const
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -18,7 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const formatParam = url.searchParams.get("format")
   const variant = url.searchParams.get("variant") === "fixes" ? "fixes" : "grade"
   const format = formatParam === "square" || formatParam === "portrait" ? formatParam : "wide"
-  const { width, height } = FORMATS[format]
+  const { width, height } = SCORECARD_FORMAT_DIMENSIONS[format]
   const { payload, superseded } = scorecard
   const grade = payload.grade.replace("_PLUS", "+")
   const isTall = format !== "wide"
@@ -114,7 +109,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
             }}
           >
             {variant === "fixes"
-              ? `finding${payload.resolvedFindings === 1 ? "" : "s"} fixed and retest-confirmed`
+              ? payload.resolvedFindings === 0
+                ? "No retest-confirmed fixes reported"
+                : scorecardFixesSummary(payload.resolvedFindings).replace(/\.$/, "")
               : "LyraShield Score"}
           </div>
           <div
@@ -122,7 +119,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           >
             {variant === "fixes"
               ? `Current grade ${grade}`
-              : `${payload.resolvedFindings} retest-confirmed fixes`}
+              : scorecardFixesSummary(payload.resolvedFindings)}
             {superseded ? " · newer scan available" : ""}
           </div>
         </div>

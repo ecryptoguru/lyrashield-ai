@@ -19,17 +19,22 @@ export const initialFinding: FindingListItem = {
 }
 
 export default function FindingsHarness() {
-  const params = parseFindingListParams(Object.fromEntries(new URLSearchParams(location.search)))
-  const hasPages = new URLSearchParams(location.search).has("hasPages")
+  const searchParams = new URLSearchParams(location.search)
+  const params = parseFindingListParams(Object.fromEntries(searchParams))
+  const hasPages = searchParams.has("hasPages")
+  const initialData = searchParams.has("withPassingRetest")
+    ? [{ ...initialFinding, title: "Fixed scoped finding", status: "FIXED" }]
+    : [initialFinding]
   return (
     <WebMcpReceiptProvider>
       <main>
         <FindingsClient
           workspaceId="workspace-test"
-          initialData={[initialFinding]}
+          initialData={initialData}
           initialNextCursor={hasPages ? "cursor-1" : null}
           initialFilter={params.filter}
           initialSort={params.sort}
+          initialScanId={params.scanId}
           initialTargetFilter={params.target}
           initialQuery={params.q}
           targets={[{ id: "target-test", name: "Test target" }]}

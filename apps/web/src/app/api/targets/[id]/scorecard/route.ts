@@ -6,6 +6,7 @@ import { logger } from "@lyrashield/logger"
 import { z } from "zod"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
+import { analyticsAllowedForRequest } from "../../../../../lib/analytics-preference"
 
 const Body = z.object({ workspaceId: z.string().min(1) })
 
@@ -17,6 +18,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
       parsed.data.workspaceId,
       PERMISSIONS.scorecard.publish
     )
+    const includeReferral = await analyticsAllowedForRequest(request, { session })
     const { id } = await params
     const { share, referralCode, shareHandoffs, referredSignups } = await createScorecardShare(
       id,
@@ -28,7 +30,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
       {
         id: share.id,
         slug: share.slug,
-        url: `/score/${share.slug}?ref=${referralCode}`,
+        url: `/score/${share.slug}${includeReferral ? `?ref=${referralCode}` : ""}`,
         resolvedFindings: publicPayload.resolvedFindings,
         views: share.viewCount,
         shareHandoffs,

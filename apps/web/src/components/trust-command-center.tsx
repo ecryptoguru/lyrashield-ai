@@ -1,6 +1,6 @@
 import Link from "next/link"
-import { ListChecks, ShieldCheck } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, Badge } from "@lyrashield/ui"
+import { ListChecks } from "lucide-react"
+import { Badge } from "@lyrashield/ui"
 import { modeLabel } from "@/lib/labels"
 
 function trustPlanLabel(data: unknown): string {
@@ -107,6 +107,9 @@ export function TrustCommandCenter({
   mode,
   trustPlanData,
   gate,
+  targetScope,
+  latestAssessment,
+  limitations,
   latestScore,
 }: {
   productName: string
@@ -114,64 +117,86 @@ export function TrustCommandCenter({
   mode: string | null
   trustPlanData: unknown
   gate: GatePosture | null
+  targetScope: string
+  latestAssessment: { targetName: string; completedAtLabel: string } | null
+  limitations: string[]
   latestScore: { score: number; grade: string; targetName: string; completedAtLabel: string } | null
 }) {
   const verdict = postureVerdict(gate, latestScore)
 
   return (
-    <section aria-label="Current posture" className="space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">{productName}</h2>
-          <p className="text-muted-foreground text-sm">Assurance status and active review plan</p>
+    <section aria-label="Current evidence" className="rounded-xl border p-5 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+            Current evidence
+          </p>
+          <h2 className="mt-1 text-xl font-bold tracking-tight">{productName}</h2>
         </div>
-        <div className="sm:text-right">
-          <Badge variant={verdict.variant}>{verdict.text}</Badge>
-          <p className="text-muted-foreground mt-1 text-xs">{verdict.scope}</p>
-        </div>
+        <Badge variant={verdict.variant} className="w-fit">
+          {verdict.text}
+        </Badge>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Trust plan</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <ListChecks className="text-primary size-5" aria-hidden="true" />
-              <span className="text-lg font-semibold">{trustPlanLabel(trustPlanData)}</span>
-            </div>
-            <p className="text-muted-foreground text-xs">
-              The checks this workspace runs before release. Default covers the standard pre-release
-              checks.
-            </p>
-            <Link
-              href="/dashboard/scans?tab=monitoring"
-              className="text-muted-foreground decoration-border hover:text-foreground text-xs underline underline-offset-4"
-            >
-              Manage recurring checks.
-            </Link>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Latest review depth</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="text-primary size-5" aria-hidden="true" />
-              <span className="text-lg font-semibold">
-                {mode ? modeLabel(mode) : "No review yet"}
-              </span>
-            </div>
-            <p className="text-muted-foreground text-xs">
-              {mode
-                ? "Depth of the most recent scan in this workspace."
-                : "Depth appears after your first scan."}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+        <div className="min-w-0">
+          <dt className="text-muted-foreground text-xs">Target scope</dt>
+          <dd className="mt-1 font-medium">{targetScope}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-muted-foreground text-xs">Evidence coverage</dt>
+          <dd className="mt-1 font-medium">{gate?.coverageLabel ?? "No current assessment"}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-muted-foreground text-xs">Latest evaluated review</dt>
+          <dd className="mt-1 font-medium">
+            {latestAssessment
+              ? `${latestAssessment.targetName} · ${latestAssessment.completedAtLabel}`
+              : "No evaluated review yet"}
+          </dd>
+        </div>
+      </dl>
+
+      {limitations.length > 0 && (
+        <div className="border-warning/50 bg-warning/10 mt-4 rounded-lg border p-3" role="status">
+          <h3 className="text-sm font-semibold">Evidence still needs attention</h3>
+          <ul className="mt-1 list-inside list-disc space-y-1 text-sm">
+            {limitations.map((limitation) => (
+              <li key={limitation}>{limitation}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {!gate && <p className="text-muted-foreground mt-3 text-xs">{verdict.scope}</p>}
+
+      {latestScore && gate?.state === "READY" && (
+        <p className="text-muted-foreground mt-3 text-xs">
+          {verdict.scope}. A ready state applies only to the evidence shown here.
+        </p>
+      )}
+
+      <details className="mt-4 border-t pt-3">
+        <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+          <ListChecks className="text-primary size-4" aria-hidden="true" />
+          Review plan details
+        </summary>
+        <div className="text-muted-foreground grid gap-2 pb-1 text-sm sm:grid-cols-2">
+          <p>
+            Active plan: <span className="text-foreground">{trustPlanLabel(trustPlanData)}</span>
+          </p>
+          <p>
+            Latest review depth:{" "}
+            <span className="text-foreground">{mode ? modeLabel(mode) : "None yet"}</span>
+          </p>
+          <Link
+            href="/dashboard/scans?tab=monitoring"
+            className="text-primary min-h-11 w-fit underline underline-offset-4 sm:col-span-2"
+          >
+            Manage recurring checks
+          </Link>
+        </div>
+      </details>
     </section>
   )
 }

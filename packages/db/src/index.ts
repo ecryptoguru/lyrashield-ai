@@ -200,6 +200,10 @@ export {
   verifyStoredScanExecutionPlan,
   type StoredExecutionPlanCheck,
 } from "./scan-execution-plan"
+export {
+  verifyStoredManifestChecksum,
+  type StoredManifestChecksumStatus,
+} from "./manifest-checksum"
 export { softDeleteTarget, TargetHasActiveScanError, TargetNotFoundError } from "./target-service"
 export {
   completeScanWithScore,
@@ -222,10 +226,14 @@ export {
   markFalsePositive,
   acceptRisk,
   getFindingStats,
+  listEvidenceFindings,
   listFindingsByScan,
   getFindingReference,
   getFindingHistoryPage,
+  findingScopeWhere,
+  validateFindingScope,
   type ListFindingsParams,
+  type FindingScopeParams,
   type FindingStats,
   type FindingHistoryCollection,
   type FindingHistoryPage,

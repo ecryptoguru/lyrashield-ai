@@ -1,15 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const mocks = vi.hoisted(() => ({ requirePermission: vi.fn(), getFindingHistoryPage: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  requirePermission: vi.fn(),
+  getFindingHistoryPage: vi.fn(),
+  validateFindingScope: vi.fn(),
+}))
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission: mocks.requirePermission }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { finding: { view: "finding:view" } } }))
-vi.mock("@lyrashield/db", () => ({ getFindingHistoryPage: mocks.getFindingHistoryPage }))
+vi.mock("@lyrashield/db", () => ({
+  getFindingHistoryPage: mocks.getFindingHistoryPage,
+  validateFindingScope: mocks.validateFindingScope,
+}))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { GET } from "./route"
 
 describe("finding history route", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
+    mocks.validateFindingScope.mockResolvedValue({ available: true, target: null, scanId: null })
+  })
 
   it("requires workspace access and forwards bounded pagination", async () => {
     mocks.getFindingHistoryPage.mockResolvedValue({ items: [], nextCursor: null, total: 100000 })
@@ -42,5 +53,33 @@ describe("finding history route", () => {
     )
     expect(response.status).toBe(400)
     expect(mocks.getFindingHistoryPage).not.toHaveBeenCalled()
+  })
+
+  it("keeps history inside a scan and target scope", async () => {
+    mocks.getFindingHistoryPage.mockResolvedValue({ items: [], nextCursor: null, total: 0 })
+    const response = await GET(
+      new Request(
+        "http://localhost/api/findings/finding-1/history?workspaceId=workspace-1&collection=evidence&targetId=target-1&observedInScanId=scan-2"
+      ),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+
+    expect(response.status).toBe(200)
+    expect(mocks.validateFindingScope).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      targetId: "target-1",
+      observedInScanId: "scan-2",
+    })
+    expect(mocks.getFindingHistoryPage).toHaveBeenCalledWith(
+      "finding-1",
+      "workspace-1",
+      "evidence",
+      {
+        cursor: undefined,
+        limit: 25,
+        targetId: "target-1",
+        observedInScanId: "scan-2",
+      }
+    )
   })
 })

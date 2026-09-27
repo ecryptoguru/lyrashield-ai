@@ -4,6 +4,7 @@ import { headers } from "next/headers"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { PostHogProvider } from "@/components/posthog-provider"
+import { BrowserErrorMonitorGate } from "@/components/browser-error-monitor"
 import "./globals.css"
 
 const inter = Inter({
@@ -55,6 +56,7 @@ export default async function RootLayout({
       <body className={`${inter.variable} font-sans antialiased`}>
         <ThemeProvider>
           <TooltipProvider>
+            <BrowserErrorMonitorGate />
             <PostHogProvider>{children}</PostHogProvider>
           </TooltipProvider>
         </ThemeProvider>

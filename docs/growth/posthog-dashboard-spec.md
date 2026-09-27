@@ -12,19 +12,21 @@ filter by them.
 
 ## Event panels
 
-| Panel                    | Numerator            | Denominator          | Breakdown             |
-| ------------------------ | -------------------- | -------------------- | --------------------- |
-| Marketing CTA engagement | `cta_click`          | `landing_view`       | allowlisted `cta_id`  |
-| Lite check completion    | `scan_completed`     | `scan_started`       | no target identifiers |
-| Signup start by method   | `signup_started`     | `signup_page_viewed` | `method`              |
-| First-run start          | `first_run_started`  | `trial_started`      | `preset`              |
-| Checkout return          | `checkout_completed` | `checkout_started`   | `provider`, `outcome` |
+| Panel                    | Numerator           | Denominator          | Breakdown             |
+| ------------------------ | ------------------- | -------------------- | --------------------- |
+| Marketing CTA engagement | `cta_click`         | `landing_view`       | allowlisted `cta_id`  |
+| Lite check completion    | `scan_completed`    | `scan_started`       | no target identifiers |
+| Signup start by method   | `signup_started`    | `signup_page_viewed` | `method`              |
+| First-run start          | `first_run_started` | `trial_started`      | `preset`              |
+| Checkout return          | `checkout_returned` | `checkout_started`   | `provider`, `outcome` |
 
 Use a 30-day window and display event counts and rates with the exact
 denominator. Cross-origin anonymous IDs are not assumed to identify the same
 person. The email-only `account_created` event is diagnostic, not the all-method
 signup conversion numerator. The checkout-return panel reports browser flow
-only; `outcome=success` is not payment or entitlement proof.
+only; no outcome is payment, entitlement, settlement or revenue proof.
+Historical `checkout_completed` rows retain their original browser-return
+meaning and are not reclassified.
 
 The pinned [growth dashboard](https://us.posthog.com/project/605869/dashboard/2095018)
 currently has four verified panels: marketing CTA event rate, daily landing

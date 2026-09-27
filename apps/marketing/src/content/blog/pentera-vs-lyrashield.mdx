@@ -12,7 +12,7 @@ updatedDate: 2026-09-22
 author: lyrashield-team
 faq:
   - q: Is Pentera better than LyraShield?
-    a: They serve different scopes. Pentera runs AI driven automated pentesting across internal, external, cloud and identity surfaces with a deterministic attack engine. LyraShield is a release assurance loop for AI built apps that separates detection from proof and gates fixes on approval. Choose by scope.
+    a: They serve different scopes. Pentera runs AI driven automated pentesting across internal, external, cloud and identity surfaces with a deterministic attack engine. LyraShield is a release assurance loop for AI built apps that keeps detection, separate verification receipts and retest outcomes distinct and gates fixes on approval. Choose by scope.
   - q: Does LyraShield replace Pentera?
     a: No. Pentera emulates adversary kill chains across an enterprise attack surface and feeds a remediation workflow in Pentera Resolve. LyraShield focuses on the release decision for an AI built app. Some teams run Pentera for enterprise validation and LyraShield for per release assurance.
   - q: Does Pentera support remediation and retesting?
@@ -21,9 +21,9 @@ faq:
     a: A team that needs continuous adversarial validation across an enterprise may prefer Pentera. A team that wants a structured release assurance loop with immutable evidence and approval gated fixes for each AI built app may prefer LyraShield. Try the free checklist to decide.
 ---
 
-Pentera is an automated pentesting platform that runs AI driven adversarial testing across internal networks, external assets, cloud and identities with a deterministic attack engine. LyraShield is a release assurance loop for AI built apps that separates detection from proof, records evidence in defined states and gates fixes on approval. Pentera excels at enterprise scale adversary emulation and remediation; LyraShield targets the release decision for apps generated or heavily modified by AI coding tools.
+Pentera is an automated pentesting platform that runs AI driven adversarial testing across internal networks, external assets, cloud and identities with a deterministic attack engine. LyraShield is a release assurance loop for AI built apps that keeps detection, separate verification receipts and retest outcomes distinct, records evidence in defined states and gates fixes on approval. Pentera excels at enterprise scale adversary emulation and remediation; LyraShield targets the release decision for apps generated or heavily modified by AI coding tools.
 
-This comparison helps when your team ships AI built applications and needs to choose between enterprise attack surface validation and a structured application release assurance workflow. Both prove what is exploitable and both retest fixes. The difference is the surface they cover and how the fix step is governed.
+This comparison helps when your team ships AI built applications and needs to choose between enterprise attack surface validation and a structured application release assurance workflow. Pentera reports attack-path validation; LyraShield records separate verification receipts and distinct retest outcomes. The difference is the surface they cover and how the fix step is governed.
 
 For the broader framing of why AI built apps need a release check, read the [vibe coding security guide](/blog/vibe-coding-security-guide), which defines the trust boundaries and evidence states that this comparison builds on.
 
@@ -45,7 +45,7 @@ Pentera also closes the remediation loop. Pentera Resolve consolidates validated
 
 LyraShield is built for a narrower but specific decision: the release of an application that an AI coding tool generated or heavily modified. Its loop is target, review, evidence, fix, retest, report. You authorize a specific application target, run a review that combines agentic pentest with software composition analysis and secrets scanning and record evidence in defined states rather than a single pass or fail.
 
-The structural difference is that LyraShield separates detection from proof and gates the fix on approval. A finding moves through evidence states and a fix proposal is prepared for human approval before it is applied and retested. The final output is an immutable assurance record that supports a release decision. Where Pentera Resolve automates remediation routing and retesting at enterprise scale, LyraShield centers the approval gate and the per build evidence record.
+The structural difference is that LyraShield keeps detection, separate verification receipts and retest outcomes distinct and gates the fix on approval. A finding moves through evidence states and a fix proposal is prepared for human approval before it is applied and retested. The final output is an immutable assurance record that supports a release decision. Where Pentera Resolve automates remediation routing and retesting at enterprise scale, LyraShield centers the approval gate and the per build evidence record.
 
 AI built apps add a wrinkle that enterprise validation does not fully address. The generated code, the agent permissions, the resolved dependencies and the deployment configuration can all change between builds and a clean enterprise run against one environment does not carry to the next application version. LyraShield is designed to be re run per build, so the evidence record matches the build that is about to ship rather than a prior snapshot of the attack surface.
 
@@ -71,9 +71,9 @@ Use LyraShield when your primary need is a structured release assurance loop for
 
 ## Why teams choose LyraShield for AI built apps
 
-Teams pick LyraShield when the release decision is the hard part and the app was built or heavily modified by an AI coding tool. The approval gated fix loop means a human still owns the change that ships. Evidence states mean you can show what was checked, what was proven, what is limited and what was retested, which is what an auditor or a careful reviewer asks for. Combining enterprise adversarial validation with a governed application release loop is stronger than either alone.
+Teams pick LyraShield when the release decision is the hard part and the app was built or heavily modified by an AI coding tool. The approval gated fix loop means a human still owns the change that ships. Evidence states mean you can show what was checked, which receipts support findings, what is limited and what a retest observed, which is what an auditor or a careful reviewer asks for. Combining enterprise adversarial validation with a governed application release loop is stronger than either alone.
 
-The decision often comes down to scope and who signs off. An enterprise validation platform answers which exposures are exploitable across internal, external and cloud surfaces and can route fixes to owners. A release assurance loop answers whether this build, with these dependencies and this agent configuration, is ready to ship and it hands a reviewer a record that captures that decision with an approval gate on the fix. For a team that owns a release gate for an AI built app and needs to defend the call, the second answer is the one that closes the loop.
+The decision often comes down to scope and who signs off. An enterprise validation platform answers which exposures are exploitable across internal, external and cloud surfaces and can route fixes to owners. A release assurance loop records scoped checks, findings, coverage and limitations for a reviewer to consider. The team retains its own release criteria and decision authority.
 
 As of August 2026, LyraShield is live with open registration in open beta. Some platform features remain on the near term roadmap and are not yet live; check the current status on the site before relying on a specific capability.
 

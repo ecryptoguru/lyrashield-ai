@@ -132,22 +132,42 @@ export function ReportCreateForm({
   reportTitle,
   onTitleChange,
   scans,
-  selectedScanId,
-  onScanChange,
+  scanCursor,
+  loadingScans,
+  loadingMoreScans,
+  scansError,
+  scanPageError,
+  linkedScanUnavailable,
+  scopeValue,
+  onScopeChange,
+  onRetryScans,
+  onLoadMoreScans,
   creating,
+  canCreate,
   onCreate,
   onCancel,
+  onUseWorkspaceScope,
 }: {
   reportType: ReportType
   onReportTypeChange: (type: ReportType) => void
   reportTitle: string
   onTitleChange: (title: string) => void
   scans: ReportScanOption[]
-  selectedScanId: string
-  onScanChange: (scanId: string) => void
+  scanCursor: string | null
+  loadingScans: boolean
+  loadingMoreScans: boolean
+  scansError: { kind: "denied" | "failed"; message: string } | null
+  scanPageError: string | null
+  linkedScanUnavailable: boolean
+  scopeValue: string
+  onScopeChange: (value: string) => void
+  onRetryScans: () => void
+  onLoadMoreScans: () => void
   creating: boolean
+  canCreate: boolean
   onCreate: () => void
   onCancel: () => void
+  onUseWorkspaceScope: () => void
 }) {
   return (
     <Card className="mb-5 p-5 sm:p-6">
@@ -156,7 +176,7 @@ export function ReportCreateForm({
           {/* Page-level section under the /dashboard/reports h1 — an h3 here skipped a level. */}
           <h2 className="font-semibold">Generate an assurance report</h2>
           <p className="text-muted-foreground mt-1 text-xs">
-            Create an immutable, visual snapshot tailored to its reader and retained scan scope.
+            Create an immutable, visual snapshot for one completed scan or all workspace findings.
           </p>
         </div>
         <Tabs value={reportType} onValueChange={(value) => onReportTypeChange(value as ReportType)}>
@@ -190,27 +210,91 @@ export function ReportCreateForm({
             onChange={(e) => onTitleChange(e.target.value)}
           />
         </FormField>
-        {scans.length > 0 && (
-          <FormField label="Scan" htmlFor="report-scan">
-            <Select
-              id="report-scan"
-              value={selectedScanId}
-              onChange={(e) => onScanChange(e.target.value)}
-            >
-              <option value="">Select a completed scan (optional)</option>
-              {scans.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.targetName} — {s.status}
+        <FormField label="Report scope" htmlFor="report-scope">
+          <Select
+            id="report-scope"
+            value={scopeValue}
+            disabled={creating}
+            onChange={(e) => onScopeChange(e.target.value)}
+          >
+            <option value="workspace">All workspace findings</option>
+            {scopeValue.startsWith("scan:") &&
+              !scans.some((scan) => `scan:${scan.id}` === scopeValue) && (
+                <option value={scopeValue} disabled>
+                  {loadingScans ? "Checking linked scan…" : "Linked scan unavailable"}
                 </option>
-              ))}
-            </Select>
-          </FormField>
+              )}
+            {scans.map((s) => (
+              <option key={s.id} value={`scan:${s.id}`}>
+                {s.targetName} — {s.status} — {s.id}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+        {loadingScans && (
+          <p className="text-muted-foreground text-sm" role="status" aria-live="polite">
+            Loading completed scans…
+          </p>
+        )}
+        {scansError && (
+          <div className="space-y-2" role="alert">
+            <p className="text-destructive text-sm">
+              {scansError.kind === "denied"
+                ? "Access to completed scans was denied. You can still choose all workspace findings."
+                : scansError.message}
+            </p>
+            <Button type="button" size="sm" variant="ghost" onClick={onRetryScans}>
+              Retry scan list
+            </Button>
+          </div>
+        )}
+        {linkedScanUnavailable && (
+          <div className="space-y-2 rounded-lg border border-destructive/50 p-3" role="alert">
+            <p className="text-sm">
+              This linked scan is unavailable or is no longer completed. Report creation stays
+              scan-scoped until you retry or choose workspace scope.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="ghost" onClick={onRetryScans}>
+                Retry scan lookup
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={creating}
+                onClick={onUseWorkspaceScope}
+              >
+                Create a workspace report instead
+              </Button>
+            </div>
+          </div>
+        )}
+        {scanPageError && (
+          <p className="text-destructive text-sm" role="alert">
+            {scanPageError}
+          </p>
+        )}
+        {scanCursor && (
+          <div className="flex justify-start">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={loadingMoreScans}
+              aria-busy={loadingMoreScans}
+              onClick={onLoadMoreScans}
+            >
+              {loadingMoreScans ? <Spinner className="mr-2 h-4 w-4" /> : null}
+              {loadingMoreScans ? "Loading…" : "Load more scans"}
+            </Button>
+          </div>
         )}
         <div className="flex gap-2">
-          <Button size="sm" disabled={creating} onClick={onCreate}>
+          <Button type="button" size="sm" disabled={creating || !canCreate} onClick={onCreate}>
             {creating ? <Spinner /> : "Create"}
           </Button>
-          <Button size="sm" variant="ghost" onClick={onCancel}>
+          <Button type="button" size="sm" variant="ghost" disabled={creating} onClick={onCancel}>
             Cancel
           </Button>
         </div>
@@ -353,8 +437,8 @@ export function ReportsEmptyState() {
   return (
     <EmptyState
       icon={FileText}
-      title="No reports yet"
-      description="Generate a security report from a completed scan to share with stakeholders."
+      title="No workspace reports yet"
+      description="Create a report from one completed scan or all workspace findings."
       action={
         <Link href="/dashboard/scans" className={buttonVariants()}>
           Start a scan

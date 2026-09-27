@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test"
 
-function finding(id: string, title: string) {
+function finding(id: string, title: string, status = "OPEN") {
   return {
     id,
     title,
     summary: title,
     severity: "HIGH",
-    status: "OPEN",
+    status,
     verified: false,
     verificationStatus: "NOT_VERIFIED",
     confidence: "medium",
@@ -15,13 +15,13 @@ function finding(id: string, title: string) {
   }
 }
 
-function pageOf(id: string, title: string) {
+function pageOf(id: string, title: string, status = "OPEN", nextCursor: string | null = null) {
   return {
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({
       success: true,
-      data: { items: [finding(id, title)], nextCursor: null },
+      data: { items: [finding(id, title, status)], nextCursor },
     }),
   }
 }
@@ -149,6 +149,257 @@ test("reload revalidates saved additional pages before showing them", async ({ p
   expect(pageLoads).toBe(2)
 })
 
+test("observed-scan scope survives search, filters, Back, pagination, and reload", async ({
+  page,
+}) => {
+  const requests: string[] = []
+  let pageLoads = 0
+  await page.route("**/api/findings?**", (route) => {
+    const url = new URL(route.request().url())
+    requests.push(url.toString())
+    if (url.searchParams.has("cursor")) {
+      pageLoads++
+      return route.fulfill(
+        pageOf("scoped-page", pageLoads === 1 ? "Loaded scoped page" : "Restored scoped page")
+      )
+    }
+    const q = url.searchParams.get("q")
+    const severity = url.searchParams.get("severity")
+    return route.fulfill(
+      q
+        ? pageOf("search", "Search finding")
+        : severity
+          ? pageOf("high", "High finding")
+          : pageOf("initial", "Initial finding", "OPEN", "cursor-1")
+    )
+  })
+
+  await page.goto("?findings&hasPages=1&scanId=observed-scan&target=target-test")
+  await expect(page.getByText("Target: Test target · Scan: observed-scan")).toBeVisible()
+  await expect(page.getByRole("combobox", { name: "Filter by target" })).toBeDisabled()
+
+  const search = page.getByRole("searchbox", { name: "Search findings" })
+  await search.fill("needle")
+  await expect(page.getByRole("button", { name: /Search finding/ })).toBeVisible()
+  await search.fill("")
+  await expect(page.getByRole("button", { name: /Initial finding/ })).toBeVisible()
+
+  await page.getByRole("button", { name: "High", exact: true }).click()
+  await expect(page.getByRole("button", { name: /High finding/ })).toBeVisible()
+  await page.goBack()
+  await expect(page.getByRole("button", { name: /Initial finding/ })).toBeVisible()
+  await page.getByRole("button", { name: "Load more" }).click()
+  await expect(page.getByRole("button", { name: /Loaded scoped page/ })).toBeVisible()
+
+  for (const request of requests) {
+    const params = new URL(request).searchParams
+    expect(params.get("observedInScanId")).toBe("observed-scan")
+    expect(params.get("targetId")).toBe("target-test")
+  }
+  expect(requests.some((request) => new URL(request).searchParams.get("q") === "needle")).toBe(true)
+  expect(requests.some((request) => new URL(request).searchParams.get("severity") === "HIGH")).toBe(
+    true
+  )
+  expect(requests.some((request) => new URL(request).searchParams.get("status") === "OPEN")).toBe(
+    true
+  )
+  expect(
+    requests.some((request) => new URL(request).searchParams.get("cursor") === "cursor-1")
+  ).toBe(true)
+
+  await page.reload()
+  await expect(page.getByRole("button", { name: /Restored scoped page/ })).toBeVisible()
+  expect(pageLoads).toBe(2)
+  const restoredPageRequest = requests.at(-1)!
+  expect(new URL(restoredPageRequest).searchParams.get("observedInScanId")).toBe("observed-scan")
+  expect(new URL(restoredPageRequest).searchParams.get("targetId")).toBe("target-test")
+})
+
+test("scoped finding drawer keeps keyboard and report handoff context at responsive widths", async ({
+  page,
+}) => {
+  const findingsRequests: string[] = []
+  const detailRequests: string[] = []
+  const reportScopeRequests: string[] = []
+  const createBodies: Array<Record<string, unknown>> = []
+  let reportRouteUrl: string | null = null
+
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await page.route("**/api/findings?**", (route) => {
+    findingsRequests.push(route.request().url())
+    return route.fulfill(pageOf("initial", "Fixed scoped finding", "FIXED"))
+  })
+  await page.route("**/api/findings/initial?**", (route) => {
+    const url = new URL(route.request().url())
+    detailRequests.push(url.toString())
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          id: "initial",
+          title: "Fixed scoped finding",
+          summary: "A retained issue with a completed passing retest.",
+          scanId: "origin-scan",
+          retests: [
+            {
+              id: "retest-1",
+              scanId: "retest-scan",
+              status: "passed",
+              createdAt: "2026-09-01T00:00:00.000Z",
+            },
+          ],
+          fixProposals: [{ id: "fix-1", status: "merged", summary: "Reviewed fix" }],
+        },
+      }),
+    })
+  })
+  await page.route("**/api/scans?**", (route) => {
+    const url = new URL(route.request().url())
+    reportScopeRequests.push(url.toString())
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          items: [{ id: "retest-scan", target: { name: "Test target" }, status: "COMPLETED" }],
+          nextCursor: null,
+        },
+      }),
+    })
+  })
+  await page.route("**/api/reports**", (route) => {
+    if (route.request().method() === "POST") {
+      createBodies.push(route.request().postDataJSON() as Record<string, unknown>)
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true, data: { id: "report-1" } }),
+      })
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { items: [], nextCursor: null } }),
+    })
+  })
+  await page.route("**/dashboard/findings?tab=reports**", async (route) => {
+    const destination = new URL(route.request().url())
+    reportRouteUrl = destination.toString()
+    await route.continue({
+      url: new URL(`/e2e/browser/index.html${destination.search}`, destination.origin).toString(),
+    })
+  })
+
+  for (const width of [390, 768, 1440, 320]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("?findings&scanId=origin-scan&target=target-test&withPassingRetest=1")
+    await expect(page.getByText("Target: Test target · Scan: origin-scan")).toBeVisible()
+    const findingRow = page.getByRole("button", { name: /Fixed scoped finding/ })
+
+    for (let tab = 0; tab < 24; tab++) {
+      if (await findingRow.evaluate((element) => element === document.activeElement)) break
+      await page.keyboard.press("Tab")
+    }
+    await expect(findingRow).toBeFocused()
+    await page.keyboard.press("Enter")
+
+    const drawer = page.getByRole("dialog", { name: "Fixed scoped finding" })
+    await expect(drawer).toBeVisible()
+    await expect(drawer.getByRole("tab", { name: "What to do" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    )
+    const technicalTab = drawer.getByRole("tab", { name: "Technical" })
+    await technicalTab.focus()
+    await page.keyboard.press("Enter")
+    await expect(technicalTab).toHaveAttribute("aria-selected", "true")
+    const historyTab = drawer.getByRole("tab", { name: "History" })
+    await historyTab.focus()
+    await page.keyboard.press("Enter")
+    await expect(historyTab).toHaveAttribute("aria-selected", "true")
+    const whatToDoTab = drawer.getByRole("tab", { name: "What to do" })
+    await whatToDoTab.focus()
+    await page.keyboard.press("Enter")
+    await expect(whatToDoTab).toHaveAttribute("aria-selected", "true")
+
+    const reportLink = drawer.getByRole("link", { name: "Generate report" })
+    await expect(reportLink).toHaveAttribute(
+      "href",
+      "/dashboard/findings?tab=reports&scanId=retest-scan&targetId=target-test"
+    )
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(width)
+
+    if (width === 390) {
+      await page.evaluate(() => {
+        document.documentElement.style.fontSize = "200%"
+      })
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBeLessThanOrEqual(width)
+      await page.evaluate(() => {
+        document.documentElement.style.removeProperty("font-size")
+      })
+    }
+
+    await page.keyboard.press("Escape")
+    await expect(drawer).toHaveCount(0)
+    await expect(findingRow).toBeFocused()
+    await page.keyboard.press("Enter")
+    await expect(drawer).toBeVisible()
+    await reportLink.focus()
+    await page.keyboard.press("Enter")
+    await expect(page).toHaveURL(/tab=reports&scanId=retest-scan&targetId=target-test/)
+    await expect(page.getByRole("heading", { name: "Reports", exact: true })).toBeVisible()
+    const reportScope = page.getByRole("combobox", { name: "Report scope" })
+    await expect(reportScope).toHaveValue("scan:retest-scan")
+    await expect(page.getByRole("button", { name: "Create", exact: true })).toBeEnabled()
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(width)
+
+    const createButton = page.getByRole("button", { name: "Create", exact: true })
+    await Promise.all([
+      page.waitForRequest(
+        (request) =>
+          new URL(request.url()).pathname === "/api/reports" && request.method() === "POST"
+      ),
+      createButton.press("Enter"),
+    ])
+    expect(createBodies.at(-1)).toMatchObject({
+      workspaceId: "workspace-test",
+      scanId: "retest-scan",
+    })
+    expect(
+      reportScopeRequests.every(
+        (request) => new URL(request).searchParams.get("targetId") === "target-test"
+      )
+    ).toBe(true)
+    expect(
+      detailRequests.every(
+        (request) =>
+          new URL(request).searchParams.get("observedInScanId") === "origin-scan" &&
+          new URL(request).searchParams.get("targetId") === "target-test"
+      )
+    ).toBe(true)
+    expect(reportRouteUrl).toContain("scanId=retest-scan")
+    expect(reportRouteUrl).toContain("targetId=target-test")
+    expect(
+      findingsRequests.every(
+        (request) => new URL(request).searchParams.get("targetId") === "target-test"
+      )
+    ).toBe(true)
+  }
+
+  expect(
+    await page.evaluate(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+  ).toBe(true)
+})
+
 test("failed page revalidation keeps fresh first-page results and a usable cursor", async ({
   page,
 }) => {
@@ -237,7 +488,7 @@ test("a single saved page restores its scroll position", async ({ page }) => {
   await page.addInitScript(
     (savedFinding) => {
       sessionStorage.setItem(
-        "lyrashield:findings-list:workspace-test:OPEN:priority::",
+        "lyrashield:findings-list:workspace-test:OPEN:priority:::",
         JSON.stringify({
           version: 2,
           pages: [{ items: [savedFinding], nextCursor: null }],
@@ -264,7 +515,7 @@ test("WebMCP filter and Undo own the query while a saved page is restoring", asy
   await page.addInitScript(
     (savedFinding) => {
       sessionStorage.setItem(
-        "lyrashield:findings-list:workspace-test:OPEN:priority:target-test:needle",
+        "lyrashield:findings-list:workspace-test:OPEN:priority::target-test:needle",
         JSON.stringify({
           version: 2,
           pages: [

@@ -2,15 +2,11 @@
 import Base from "@layouts/Base.astro"
 import PremiumHero from "@components/landing/PremiumHero.astro"
 import HeroProductFrame from "@components/landing/HeroProductFrame.astro"
-import ProblemStats from "@components/landing/ProblemStats.astro"
-import ReleaseFlowSample from "@components/landing/ReleaseFlowSample.astro"
 import HomeLiteScan from "@components/landing/HomeLiteScan.astro"
 import EvidenceWorld from "@components/landing/EvidenceWorld.astro"
-import EvidenceVaultPromo from "@components/landing/EvidenceVaultPromo.astro"
-import AiSafetyPromo from "@components/landing/AiSafetyPromo.astro"
-import TwoDepths from "@components/landing/TwoDepths.astro"
 import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
+import { CLOUD_PLANS, formatUSD } from "@lyrashield/pricing"
 import { createMotionMediaManifest } from "../lib/motion-manifest"
 import { tools } from "../lib/tools"
 import { buildDateFor } from "../lib/build-date"
@@ -22,8 +18,11 @@ const buildDate =
 // Explicit freshness floor: the last content change to this page. The
 // git-derived buildDate wins when it resolves; the floor keeps dateModified
 // honest when the page ships without .git.
-const updatedDate = "2026-09-20"
+const updatedDate = "2026-09-27"
 const dateModified = buildDate ?? `${updatedDate}T00:00:00.000Z`
+const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
+const trialPlan = CLOUD_PLANS.find((plan) => plan.id === "TRIAL")!
+const enterprisePlan = CLOUD_PLANS.find((plan) => plan.id === "ENTERPRISE")!
 const renderHash = import.meta.env.PUBLIC_MOTION_RENDER_HASH as string
 const mediaUrl = renderHash === "local" ? "/media-local" : import.meta.env.PUBLIC_MEDIA_URL
 const motionManifest = createMotionMediaManifest(mediaUrl, renderHash)
@@ -54,7 +53,7 @@ const faqItems = [
   },
   {
     q: "What is live today and what is on the roadmap?",
-    a: `Live today: the free Lite Check, ${tools.length} browser-local tools, the full release-assurance platform in open beta, the Operational Evidence Vault, an MCP server, GitHub integration, a published CLI and a GitHub Action with a diff-aware gate and SARIF output. In detail: free Lite Check (passive public URL scan); the full platform with open registration covering target, review, evidence, fix proposal, retest and report; the Operational Evidence Vault for the seven evidence-required controls; the MCP server for agent-native use; and the GitHub Action running in your own CI. Near-term roadmap: deeper deterministic coverage, richer SARIF interop and expanded shareable report variants. Published plan prices are available on /pricing; purchase admission is controlled by the authenticated product.`,
+    a: `Live today: the free Lite Check, ${tools.length} browser-local tools, the full release-assurance platform in open beta, the Operational Evidence Vault, MCP and GitHub integrations, a published CLI and a GitHub Action with a diff-aware gate and SARIF output. Registration is open; product pages describe current coverage and limits. Cloud prices are listed on /pricing, while purchase availability is shown in the authenticated product.`,
   },
   {
     q: "Do you store my codebase?",
@@ -115,23 +114,98 @@ const jsonLd = [
   jsonLd={jsonLd}
 >
   <PremiumHero />
-  <p class="mx-auto max-w-7xl px-4 pt-8 text-lg leading-8 text-text-muted sm:px-6 lg:px-8">
-    LyraShield is a release-assurance platform for apps built with AI coding agents. You point it
-    at an authorized repository, URL or API and it returns one record: what was in scope, what it
-    found, what state of proof each finding carries, which fixes you approved and what a fresh
-    retest confirmed. It also reviews the tools your app exposes back to AI agents.
-  </p>
-  <ReleaseFlowSample />
-  <ProblemStats />
+  <section
+    id="how-it-works"
+    aria-labelledby="workflow-heading"
+    class="px-4 py-10 sm:px-6 sm:py-12 lg:px-8"
+    style="scroll-margin-top: 4.5rem"
+  >
+    <div class="mx-auto max-w-6xl">
+      <h2 id="workflow-heading" class="text-2xl font-semibold tracking-tight text-text sm:text-3xl">
+        One review, from authorized scope to useful evidence
+      </h2>
+      <ol class="mt-6 grid gap-4 md:grid-cols-3">
+        <li class="rounded-xl border border-border bg-bg-raised p-5">
+          <span class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">01 · Choose scope</span>
+          <p class="mt-3 font-semibold text-text">Select a repository, URL or API you are authorized to review.</p>
+        </li>
+        <li class="rounded-xl border border-border bg-bg-raised p-5">
+          <span class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">02 · Review evidence</span>
+          <p class="mt-3 font-semibold text-text">See what was checked, what needs attention and what could not be established.</p>
+        </li>
+        <li class="rounded-xl border border-border bg-bg-raised p-5">
+          <span class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">03 · Decide what is next</span>
+          <p class="mt-3 font-semibold text-text">If needed, review a proposed fix, approve it explicitly and run a fresh retest.</p>
+        </li>
+      </ol>
+      <p class="mt-4 text-sm leading-6 text-text-muted">
+        Fixes are proposals, retests are separate runs, and a finding changes state only when retained evidence supports it.
+      </p>
+    </div>
+  </section>
   <HeroProductFrame />
-  <div id="how-it-works" aria-hidden="true" style="scroll-margin-top: 4.5rem"></div>
+  <HomeLiteScan />
+  <section aria-labelledby="capabilities-heading" class="px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
+    <div class="mx-auto max-w-6xl">
+      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Review the full release context</p>
+      <h2 id="capabilities-heading" class="mt-3 text-2xl font-semibold tracking-tight text-text sm:text-3xl">
+        Code, connected tools and operational evidence
+      </h2>
+      <div class="mt-6 grid gap-4 md:grid-cols-3">
+        <article class="rounded-xl border border-border bg-bg-raised p-5">
+          <h3 class="font-semibold text-text">Repository, URL and API reviews</h3>
+          <p class="mt-2 text-sm leading-6 text-text-muted">Review the authorized target and keep the tested scope attached to findings and reports.</p>
+        </article>
+        <article class="rounded-xl border border-border bg-bg-raised p-5">
+          <h3 class="font-semibold text-text">Agent-tool surfaces</h3>
+          <p class="mt-2 text-sm leading-6 text-text-muted">Check MCP and WebMCP tool surfaces alongside the rest of the review. Coverage remains bounded to the checks that ran.</p>
+        </article>
+        <article class="rounded-xl border border-border bg-bg-raised p-5">
+          <h3 class="font-semibold text-text">Operational evidence</h3>
+          <p class="mt-2 text-sm leading-6 text-text-muted">Keep customer-provided operational evidence separate from what a repository or URL scan can establish.</p>
+          <a href="/evidence-vault" data-cta-id="homepage-evidence-vault" class="mt-3 inline-flex min-h-11 items-center font-semibold text-accent underline underline-offset-4">Explore the Evidence Vault</a>
+        </article>
+      </div>
+      <p class="mt-4 text-sm text-text-muted">
+        <a href="/ai-safety" data-cta-id="homepage-ai-safety" class="font-semibold text-accent underline underline-offset-4">Read the MCP guard evaluation</a>
+        for its methods, results and current limits.
+      </p>
+    </div>
+  </section>
+  <section id="cloud-plans" aria-labelledby="home-pricing-heading" class="border-y border-border bg-bg-raised/45 px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
+    <div class="mx-auto max-w-6xl">
+      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Cloud plans</p>
+      <h2 id="home-pricing-heading" class="mt-3 text-2xl font-semibold tracking-tight text-text sm:text-3xl">Choose by review depth and capacity</h2>
+      <p class="mt-3 min-w-0 max-w-3xl break-words text-sm leading-6 text-text-muted">
+        Start with a {trialPlan.agentMinutes}-minute, {trialPlan.targetCaps}-target trial for 7 days with no card. Paid plans use the existing monthly or annual catalog; regional prices and full limits are on <a href="/pricing" class="font-semibold text-accent underline underline-offset-4">pricing</a>.
+      </p>
+      <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {cloudPlans.map((plan) => (
+          <article class="min-w-0 rounded-xl border border-border bg-bg p-5">
+            <h3 class="break-words font-semibold text-text">{plan.name}</h3>
+            <p class="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-1 text-xl font-bold text-text sm:text-2xl">
+              <span>{formatUSD(plan.price.usd.monthly)}</span>
+              <span class="text-sm font-normal text-text-muted">/mo</span>
+            </p>
+            <p class="mt-1 min-w-0 break-words text-sm text-text-muted">
+              <span>{formatUSD(plan.price.usd.annual)}/yr</span>
+              <span aria-hidden="true"> · </span>
+              <span>{plan.agentMinutes.toLocaleString()} agent-minutes/month</span>
+              <span aria-hidden="true"> · </span>
+              <span>up to {plan.targetCaps} targets</span>
+            </p>
+            <p class="mt-3 min-w-0 break-words text-sm text-text-muted">{plan.deepAllowed ? "Deep and Custom scans included." : "Safe, Quick and Standard scans."}</p>
+          </article>
+        ))}
+      </div>
+      <p class="mt-4 min-w-0 break-words text-sm text-text-muted">
+        Enterprise is contact-led from {formatUSD(enterprisePlan.price.usd.monthly)}/month. Paid plans and purchase availability are confirmed in the authenticated product.
+      </p>
+    </div>
+  </section>
   <div class="cinematic-threshold cinematic-threshold--to-dark" aria-hidden="true"></div>
   <EvidenceWorld manifest={motionManifest} />
   <div class="cinematic-threshold cinematic-threshold--to-light" aria-hidden="true"></div>
-  <HomeLiteScan />
-  <EvidenceVaultPromo />
-  <AiSafetyPromo />
-  <TwoDepths />
   <Faq items={faqItems} />
   <section id="demo" aria-labelledby="demo-heading" class="px-4 py-14 sm:px-6 lg:px-8" style="scroll-margin-top: 4.5rem">
     <div class="mx-auto max-w-3xl" data-reveal-group>

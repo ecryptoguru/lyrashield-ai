@@ -49,6 +49,8 @@ function decodeHistoryCursor(
 export interface ListFindingsParams {
   workspaceId: string
   targetId?: string
+  /** Filter findings observed in a scan candidate receipt. `scanId` below remains the origin scan. */
+  observedInScanId?: string
   scanId?: string
   severity?: FindingSeverity
   status?: FindingStatus
@@ -58,6 +60,83 @@ export interface ListFindingsParams {
   q?: string
   cursor?: string
   limit?: number
+}
+
+export interface FindingScopeParams {
+  workspaceId: string
+  targetId?: string
+  observedInScanId?: string
+}
+
+export function findingScopeWhere({ workspaceId, targetId, observedInScanId }: FindingScopeParams) {
+  return {
+    workspaceId,
+    deletedAt: null,
+    ...(targetId ? { targetId } : {}),
+    ...(observedInScanId
+      ? {
+          candidates: {
+            some: {
+              workspaceId,
+              scanId: observedInScanId,
+              ...(targetId ? { targetId } : {}),
+            },
+          },
+        }
+      : {}),
+  }
+}
+
+export async function validateFindingScope({
+  workspaceId,
+  targetId,
+  observedInScanId,
+}: FindingScopeParams): Promise<
+  | { available: true; target: { id: string; name: string } | null; scanId: string | null }
+  | { available: false; target: null; scanId: null }
+> {
+  const [target, scan] = await Promise.all([
+    targetId
+      ? prisma.target.findFirst({
+          where: { id: targetId, workspaceId, deletedAt: null },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve(null),
+    observedInScanId
+      ? prisma.scan.findFirst({
+          where: {
+            id: observedInScanId,
+            workspaceId,
+            deletedAt: null,
+            ...(targetId ? { targetId } : {}),
+          },
+          select: { id: true, targetId: true },
+        })
+      : Promise.resolve(null),
+  ])
+
+  if ((targetId && !target) || (observedInScanId && !scan)) {
+    return { available: false, target: null, scanId: null }
+  }
+
+  const resolvedTargetId = targetId ?? scan?.targetId ?? null
+  const resolvedTarget =
+    target ??
+    (resolvedTargetId
+      ? await prisma.target.findFirst({
+          where: { id: resolvedTargetId, workspaceId, deletedAt: null },
+          select: { id: true, name: true },
+        })
+      : null)
+  if (resolvedTargetId && !resolvedTarget) {
+    return { available: false, target: null, scanId: null }
+  }
+
+  return {
+    available: true,
+    target: resolvedTarget,
+    scanId: scan?.id ?? null,
+  }
 }
 
 export interface FindingStats {
@@ -83,9 +162,7 @@ export async function listFindings(params: ListFindingsParams): Promise<{
   const limit = Math.min(Math.max(params.limit ?? 50, 1), 100)
   const search = params.q?.trim()
   const where: Record<string, unknown> = {
-    workspaceId: params.workspaceId,
-    deletedAt: null,
-    ...(params.targetId ? { targetId: params.targetId } : {}),
+    ...findingScopeWhere(params),
     ...(params.scanId ? { scanId: params.scanId } : {}),
     ...(params.severity ? { severity: params.severity } : {}),
     ...(params.status ? { status: params.status } : {}),
@@ -127,9 +204,47 @@ export async function listFindings(params: ListFindingsParams): Promise<{
   return { items, nextCursor }
 }
 
+export async function listEvidenceFindings(
+  params: FindingScopeParams & { cursor?: string; limit?: number }
+) {
+  const limit = Math.min(Math.max(params.limit ?? 20, 1), 100)
+  const evidenceWhere = { redactionStatus: "complete" }
+  const findings = await prisma.finding.findMany({
+    where: {
+      ...findingScopeWhere(params),
+      verified: true,
+      evidence: { some: evidenceWhere },
+    },
+    orderBy: [{ lastSeenAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+    ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+    select: {
+      id: true,
+      title: true,
+      summary: true,
+      target: { select: { id: true, name: true, type: true } },
+      evidence: {
+        where: evidenceWhere,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 1,
+        select: { type: true, createdAt: true },
+      },
+      _count: { select: { evidence: { where: evidenceWhere } } },
+    },
+  })
+
+  const hasMore = findings.length > limit
+  const items = hasMore ? findings.slice(0, limit) : findings
+  return {
+    items,
+    nextCursor: hasMore && items.length > 0 ? items[items.length - 1]!.id : null,
+  }
+}
+
 export async function getFinding(
   findingId: string,
-  workspaceId: string
+  workspaceId: string,
+  scope: Pick<FindingScopeParams, "targetId" | "observedInScanId"> = {}
 ): Promise<
   | (Finding & {
       evidence: { id: string; type: string; redactionStatus: string }[]
@@ -154,7 +269,7 @@ export async function getFinding(
   | null
 > {
   const finding = await prisma.finding.findFirst({
-    where: { id: findingId, workspaceId, deletedAt: null },
+    where: { id: findingId, ...findingScopeWhere({ workspaceId, ...scope }) },
     include: {
       evidence: {
         where: { redactionStatus: { not: "deleted" } },
@@ -291,14 +406,26 @@ export async function getFindingHistoryPage(
   findingId: string,
   workspaceId: string,
   collection: FindingHistoryCollection,
-  options: { cursor?: string; limit?: number } = {}
+  options: {
+    cursor?: string
+    limit?: number
+    targetId?: string
+    observedInScanId?: string
+  } = {}
 ): Promise<FindingHistoryPage> {
   const limit = Math.min(Math.max(options.limit ?? HISTORY_PREVIEW_LIMIT, 1), 100)
   const cursor = decodeHistoryCursor(options.cursor, findingId, collection)
   if (options.cursor && !cursor) throw new Error("Invalid finding history cursor")
 
   const finding = await prisma.finding.findFirst({
-    where: { id: findingId, workspaceId, deletedAt: null },
+    where: {
+      id: findingId,
+      ...findingScopeWhere({
+        workspaceId,
+        ...(options.targetId ? { targetId: options.targetId } : {}),
+        ...(options.observedInScanId ? { observedInScanId: options.observedInScanId } : {}),
+      }),
+    },
     select: { id: true },
   })
   if (!finding) throw new Error("Finding not found")
@@ -331,7 +458,12 @@ export async function getFindingHistoryPage(
 
   switch (collection) {
     case "evidence": {
-      const where = { findingId, redactionStatus: { not: "deleted" }, ...after }
+      const where = {
+        findingId,
+        finding: { workspaceId },
+        redactionStatus: { not: "deleted" },
+        ...after,
+      }
       const [rows, total] = await Promise.all([
         prisma.evidence.findMany({
           where,
@@ -339,7 +471,13 @@ export async function getFindingHistoryPage(
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: limit + 1,
         }),
-        prisma.evidence.count({ where: { findingId, redactionStatus: { not: "deleted" } } }),
+        prisma.evidence.count({
+          where: {
+            findingId,
+            finding: { workspaceId },
+            redactionStatus: { not: "deleted" },
+          },
+        }),
       ])
       return page(rows, total)
     }
@@ -367,7 +505,7 @@ export async function getFindingHistoryPage(
       return page(rows, total)
     }
     case "fixProposals": {
-      const where = { findingId, deletedAt: null, ...after }
+      const where = { findingId, finding: { workspaceId }, deletedAt: null, ...after }
       const [rows, total] = await Promise.all([
         prisma.fixProposal.findMany({
           where,
@@ -375,7 +513,9 @@ export async function getFindingHistoryPage(
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: limit + 1,
         }),
-        prisma.fixProposal.count({ where: { findingId, deletedAt: null } }),
+        prisma.fixProposal.count({
+          where: { findingId, finding: { workspaceId }, deletedAt: null },
+        }),
       ])
       return page(rows, total)
     }
@@ -490,13 +630,14 @@ export async function acceptRisk(
 
 export async function getFindingStats(
   workspaceId: string,
-  targetId?: string
+  targetId?: string,
+  observedInScanId?: string
 ): Promise<FindingStats> {
-  const where: Record<string, unknown> = {
+  const where: Record<string, unknown> = findingScopeWhere({
     workspaceId,
-    deletedAt: null,
     ...(targetId ? { targetId } : {}),
-  }
+    ...(observedInScanId ? { observedInScanId } : {}),
+  })
 
   const groups = await prisma.finding.groupBy({
     by: ["severity", "status", "verified"],
@@ -538,7 +679,7 @@ export async function listFindingsByScan(
   workspaceId: string
 ): Promise<FindingForScore[]> {
   return prisma.finding.findMany({
-    where: { workspaceId, deletedAt: null, candidates: { some: { scanId } } },
+    where: findingScopeWhere({ workspaceId, observedInScanId: scanId }),
     orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,

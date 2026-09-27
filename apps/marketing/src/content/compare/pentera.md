@@ -32,7 +32,7 @@ faq:
 | Capability                          | LyraShield AI                                                   | Pentera                                                                            |
 | ----------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Agentic / AI-driven pentest         | Yes (app-layer)                                                 | Yes (agentic AI coordinates attack paths across Core/Surface/Cloud)                |
-| Independent exploit validation      | Yes (verified state)                                            | Yes (proven exploitability in live production)                                     |
+| Independent finding verification    | Yes (separate receipt; scope-bound)                             | Yes (proven exploitability in live production)                                     |
 | SCA (dependency scanning)           | Yes (engine)                                                    | Not a primary focus                                                                |
 | Secret scanning                     | Yes (engine + GitHub Action)                                    | Not a primary focus (exposure validation focus)                                    |
 | Evidence states (4-state lifecycle) | Yes                                                             | Findings carry exploit proof; no explicit multi-state lifecycle                    |

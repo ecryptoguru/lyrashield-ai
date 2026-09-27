@@ -1,0 +1,53 @@
+import { readFileSync } from "node:fs"
+import { describe, expect, it } from "vitest"
+import { CLOUD_PLANS, formatUSD } from "@lyrashield/pricing"
+
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const page = readFileSync(new URL("../pages/index.astro", import.meta.url), "utf8")
+
+describe("homepage journey and plan summary", () => {
+  it("keeps the landing path in decision order and links deeper capability pages", () => {
+    const stages = [
+      page.indexOf("<PremiumHero />"),
+      page.indexOf('id="how-it-works"'),
+      page.indexOf("<HeroProductFrame />"),
+      page.indexOf("<HomeLiteScan />"),
+      page.indexOf('id="capabilities-heading"'),
+      page.indexOf('id="cloud-plans"'),
+      page.indexOf("<Faq items={faqItems} />"),
+      page.indexOf('id="demo-heading"'),
+      page.indexOf("<FinalCta />"),
+    ]
+    expect(stages.every((position) => position >= 0)).toBe(true)
+    expect(stages).toEqual([...stages].sort((left, right) => left - right))
+    expect(page).toContain('href="/evidence-vault"')
+    expect(page).toContain('href="/ai-safety"')
+    expect(page).not.toContain("<EvidenceVaultPromo")
+    expect(page).not.toContain("<AiSafetyPromo")
+  })
+
+  it("renders plan prices and limits from the shared catalog without a recommended tier", () => {
+    expect(page).toContain("CLOUD_PLANS.filter((plan) => plan.selfServe)")
+    expect(page).toContain("formatUSD(plan.price.usd.monthly)")
+    expect(page).toContain("formatUSD(plan.price.usd.annual)")
+    expect(page).toContain("plan.agentMinutes.toLocaleString()")
+    expect(page).toContain("plan.targetCaps")
+    expect(page).toContain("trialPlan.agentMinutes")
+    expect(page).toContain("enterprisePlan.price.usd.monthly")
+    expect(page).toContain('href="/pricing"')
+    expect(page).not.toMatch(/most popular|recommended plan|best value/i)
+
+    for (const plan of CLOUD_PLANS.filter((candidate) => candidate.selfServe)) {
+      expect(formatUSD(plan.price.usd.monthly)).toMatch(/^\$[\d,]+\.\d{2}$/)
+      expect(formatUSD(plan.price.usd.annual)).toMatch(/^\$[\d,]+\.\d{2}$/)
+      expect(plan.agentMinutes).toBeGreaterThan(0)
+      expect(plan.targetCaps).toBeGreaterThan(0)
+    }
+  })
+
+  it("keeps the preview bounded and makes no customer-count or certification claim", () => {
+    expect(page).toContain("<HeroProductFrame />")
+    expect(page).toContain("what was checked, what needs attention")
+    expect(page).not.toMatch(/\b\d+[k+] users\b|certified|guaranteed secure/i)
+  })
+})

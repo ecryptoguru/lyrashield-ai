@@ -1,4 +1,4 @@
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { prisma, Prisma, withWorkspaceRLS } from "@lyrashield/db"
 import type { ScanStatus, FindingSeverity, FindingStatus, ScoreGrade } from "@lyrashield/db"
 import type { ReadinessVerdict } from "./launch-readiness"
 
@@ -291,7 +291,11 @@ export function buildDashboardOverview(input: {
     if (!run.targetId) continue
     if (coverageStateFromReceipts(input.receiptsByScanId.get(run.id) ?? []) === "NONE") continue
     const existing = latestUsableRunByTarget.get(run.targetId)
-    if (!existing || run.createdAt > existing.createdAt)
+    if (
+      !existing ||
+      run.createdAt > existing.createdAt ||
+      (run.createdAt.getTime() === existing.createdAt.getTime() && run.id > existing.id)
+    )
       latestUsableRunByTarget.set(run.targetId, run)
   }
 
@@ -301,7 +305,12 @@ export function buildDashboardOverview(input: {
     if (!activeTargetIds.has(candidate.targetId)) continue
     if (coverageStateFromReceipts(candidate.receiptStatuses) === "NONE") continue
     const existing = latestEvaluatedByTarget.get(candidate.targetId)
-    if (!existing || candidate.completedAt > existing.completedAt) {
+    if (
+      !existing ||
+      candidate.completedAt > existing.completedAt ||
+      (candidate.completedAt.getTime() === existing.completedAt.getTime() &&
+        candidate.scanId > existing.scanId)
+    ) {
       latestEvaluatedByTarget.set(candidate.targetId, candidate)
     }
   }
@@ -327,7 +336,12 @@ export function buildDashboardOverview(input: {
   ).length
 
   const latestRunRow = input.terminalRuns.length
-    ? input.terminalRuns.reduce((newest, run) => (run.createdAt > newest.createdAt ? run : newest))
+    ? input.terminalRuns.reduce((newest, run) =>
+        run.createdAt > newest.createdAt ||
+        (run.createdAt.getTime() === newest.createdAt.getTime() && run.id > newest.id)
+          ? run
+          : newest
+      )
     : null
   const latestRun: DashboardOverview["latestRun"] = latestRunRow
     ? {
@@ -355,7 +369,12 @@ export function buildDashboardOverview(input: {
     (typeof input.evaluatedCandidates)[number] | null
   >(
     (latest, candidate) =>
-      !latest || candidate.completedAt > latest.completedAt ? candidate : latest,
+      !latest ||
+      candidate.completedAt > latest.completedAt ||
+      (candidate.completedAt.getTime() === latest.completedAt.getTime() &&
+        candidate.scanId > latest.scanId)
+        ? candidate
+        : latest,
     null
   )
   const lastEvaluatedAssessment: DashboardOverview["lastEvaluatedAssessment"] = evaluated
@@ -374,7 +393,7 @@ export function buildDashboardOverview(input: {
     : null
 
   const recentRuns: DashboardRecentRun[] = [...input.terminalRuns]
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
     .slice(0, 5)
     .map((run) => ({
       id: run.id,
@@ -456,7 +475,7 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     }),
     prisma.scan.findMany({
       where: { workspaceId, deletedAt: null, status: { in: TERMINAL_RUN_STATUSES } },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 200,
       select: {
         id: true,
@@ -483,9 +502,10 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     // it describes are one evidence unit, bound by ScoreSnapshot.scanId.
     prisma.scoreSnapshot.findMany({
       where: { workspaceId, scan: { workspaceId, deletedAt: null } },
-      orderBy: { computedAt: "desc" },
+      orderBy: [{ computedAt: "desc" }, { id: "desc" }],
       take: 20,
       select: {
+        id: true,
         scanId: true,
         score: true,
         grade: true,
@@ -511,10 +531,155 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     }),
   ])
 
+  const activeTargetIds = targets.map((target) => target.id)
+  const perTargetEvidence = activeTargetIds.length
+    ? await withWorkspaceRLS(
+        workspaceId,
+        (tx) =>
+          tx.$queryRaw<
+            {
+              targetId: string
+              latestTerminalScanId: string | null
+              latestUsableScanId: string | null
+              latestEvaluatedSnapshotId: string | null
+            }[]
+          >`
+          SELECT
+            t."id" AS "targetId",
+            (
+              SELECT s."id"
+              FROM "Scan" s
+              WHERE s."workspaceId" = ${workspaceId}
+                AND s."targetId" = t."id"
+                AND s."deletedAt" IS NULL
+                AND s."status" IN (${Prisma.join(
+                  TERMINAL_RUN_STATUSES.map((status) => Prisma.sql`${status}::"ScanStatus"`)
+                )})
+              ORDER BY s."createdAt" DESC, s."id" DESC
+              LIMIT 1
+            ) AS "latestTerminalScanId",
+            (
+              SELECT s."id"
+              FROM "Scan" s
+              WHERE s."workspaceId" = ${workspaceId}
+                AND s."targetId" = t."id"
+                AND s."deletedAt" IS NULL
+                AND s."status" IN (${Prisma.join(
+                  TERMINAL_RUN_STATUSES.map((status) => Prisma.sql`${status}::"ScanStatus"`)
+                )})
+                AND EXISTS (
+                  SELECT 1
+                  FROM "ScanCoverageReceipt" r
+                  WHERE r."scanId" = s."id"
+                    AND r."status" IN (${Prisma.join(
+                      [...APPLICABLE_RECEIPT_STATUSES].map(
+                        (status) => Prisma.sql`${status}::"ScanCoverageStatus"`
+                      )
+                    )})
+                    AND r."controlId" NOT LIKE 'engine-scope:%'
+                    AND r."controlId" NOT LIKE 'engine-gap:%'
+                )
+              ORDER BY s."createdAt" DESC, s."id" DESC
+              LIMIT 1
+            ) AS "latestUsableScanId",
+            (
+              SELECT ss."id"
+              FROM "ScoreSnapshot" ss
+              JOIN "Scan" s ON s."id" = ss."scanId"
+              WHERE ss."workspaceId" = ${workspaceId}
+                AND ss."targetId" = t."id"
+                AND s."workspaceId" = ${workspaceId}
+                AND s."targetId" = t."id"
+                AND s."deletedAt" IS NULL
+                AND s."endedAt" IS NOT NULL
+                AND EXISTS (
+                  SELECT 1
+                  FROM "ScanCoverageReceipt" r
+                  WHERE r."scanId" = s."id"
+                    AND r."status" IN (${Prisma.join(
+                      [...APPLICABLE_RECEIPT_STATUSES].map(
+                        (status) => Prisma.sql`${status}::"ScanCoverageStatus"`
+                      )
+                    )})
+                    AND r."controlId" NOT LIKE 'engine-scope:%'
+                    AND r."controlId" NOT LIKE 'engine-gap:%'
+                )
+              ORDER BY s."endedAt" DESC, s."id" DESC, ss."computedAt" DESC, ss."id" DESC
+              LIMIT 1
+            ) AS "latestEvaluatedSnapshotId"
+          FROM "Target" t
+          WHERE t."workspaceId" = ${workspaceId}
+            AND t."deletedAt" IS NULL
+            AND t."id" = ANY(${activeTargetIds}::text[])
+          ORDER BY t."id"
+        `
+      )
+    : []
+
+  const requiredScanIds = new Set(
+    perTargetEvidence.flatMap((row) =>
+      [row.latestTerminalScanId, row.latestUsableScanId].filter((id): id is string => id !== null)
+    )
+  )
+  const globalScanIds = new Set(terminalRuns.map((run) => run.id))
+  const extraScanIds = [...requiredScanIds].filter((id) => !globalScanIds.has(id))
+  const perTargetRuns = extraScanIds.length
+    ? await prisma.scan.findMany({
+        where: { id: { in: extraScanIds }, workspaceId, deletedAt: null },
+        select: {
+          id: true,
+          targetId: true,
+          status: true,
+          mode: true,
+          createdAt: true,
+          endedAt: true,
+          summary: true,
+          errorCategory: true,
+          errorMessage: true,
+          target: { select: { id: true, name: true } },
+          _count: { select: { findings: { where: { deletedAt: null } } } },
+        },
+      })
+    : []
+  const allTerminalRuns = [...terminalRuns, ...perTargetRuns]
+
+  const recentSnapshotIds = new Set(evaluatedSnapshots.map((snapshot) => snapshot.id))
+  const extraSnapshotIds = [
+    ...new Set(
+      perTargetEvidence
+        .map((row) => row.latestEvaluatedSnapshotId)
+        .filter((id): id is string => id !== null && !recentSnapshotIds.has(id))
+    ),
+  ]
+  const perTargetSnapshots = extraSnapshotIds.length
+    ? await prisma.scoreSnapshot.findMany({
+        where: {
+          id: { in: extraSnapshotIds },
+          workspaceId,
+          scan: { workspaceId, deletedAt: null },
+        },
+        select: {
+          id: true,
+          scanId: true,
+          score: true,
+          grade: true,
+          expiresAt: true,
+          computedAt: true,
+          scan: {
+            select: {
+              mode: true,
+              endedAt: true,
+              target: { select: { id: true, name: true } },
+            },
+          },
+        },
+      })
+    : []
+  const allEvaluatedSnapshots = [...evaluatedSnapshots, ...perTargetSnapshots]
   const scanIdsInScope = [
     ...new Set([
-      ...terminalRuns.map((run) => run.id),
-      ...evaluatedSnapshots.map((snapshot) => snapshot.scanId),
+      ...allTerminalRuns.map((run) => run.id),
+      ...allEvaluatedSnapshots.map((snapshot) => snapshot.scanId),
     ]),
   ]
   const receipts = scanIdsInScope.length
@@ -534,55 +699,9 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     else receiptsByScanId.set(receipt.scanId, [receipt.status])
   }
 
-  // The 200-run window is newest-first across ALL targets, so a target whose
-  // only terminal runs are old can fall outside it entirely — the coverage
-  // pass would then classify an assessed target as unassessed. Derive each
-  // active target's LATEST terminal run explicitly (bounded by target count,
-  // one query) and union it into the run set so the per-target lookup always
-  // sees the target's own newest evidence.
-  const activeTargetIds = targets.map((target) => target.id)
-  const windowScanIds = new Set(terminalRuns.map((run) => run.id))
-  const missingTargets = activeTargetIds.filter(
-    (id) => !terminalRuns.some((r) => r.targetId === id)
-  )
-  let perTargetRuns: typeof terminalRuns = []
-  if (missingTargets.length > 0) {
-    perTargetRuns = await prisma.scan.findMany({
-      where: {
-        workspaceId,
-        deletedAt: null,
-        status: { in: TERMINAL_RUN_STATUSES },
-        targetId: { in: missingTargets },
-      },
-      orderBy: { createdAt: "desc" },
-      // One newest run per missing target is all the coverage pass needs; a
-      // small per-target cap bounds the fetch while covering receipt variety.
-      take: missingTargets.length * 3,
-      select: {
-        id: true,
-        targetId: true,
-        status: true,
-        mode: true,
-        createdAt: true,
-        endedAt: true,
-        summary: true,
-        errorCategory: true,
-        errorMessage: true,
-        target: { select: { id: true, name: true } },
-        _count: { select: { findings: { where: { deletedAt: null } } } },
-      },
-    })
-  }
-  const allTerminalRuns = [...terminalRuns, ...perTargetRuns]
-  // Add receipts for the per-target runs the window fetch had not covered.
-  const extraScanIds = perTargetRuns.map((run) => run.id).filter((id) => !windowScanIds.has(id))
-
   // The newest active (non-terminal) scan, for the home decision: during an
   // active scan the header CTA leads with its progress instead of recommending
   // a duplicate. Bounded by the workspace's three-scan concurrency limit.
-  // Reads only non-terminal scans, so it shares no data dependency with the
-  // per-target-runs receipt fetch (which reads receipts of terminal scan ids)
-  // — start it now and await it together with that fetch below.
   const activeScanRowPromise = prisma.scan.findFirst({
     where: {
       workspaceId,
@@ -593,27 +712,7 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     select: { id: true, target: { select: { name: true } } },
   })
 
-  let activeScanRow: { id: string; target: { name: string } | null } | null
-  if (extraScanIds.length) {
-    const [row, extraReceipts] = await Promise.all([
-      activeScanRowPromise,
-      withWorkspaceRLS(workspaceId, (tx) =>
-        tx.scanCoverageReceipt.findMany({
-          where: { scanId: { in: extraScanIds }, scan: { workspaceId, deletedAt: null } },
-          select: { scanId: true, status: true, controlId: true },
-        })
-      ),
-    ])
-    activeScanRow = row
-    for (const receipt of extraReceipts) {
-      if (isEngineDeclaredReceipt(receipt.controlId)) continue
-      const statuses = receiptsByScanId.get(receipt.scanId)
-      if (statuses) statuses.push(receipt.status)
-      else receiptsByScanId.set(receipt.scanId, [receipt.status])
-    }
-  } else {
-    activeScanRow = await activeScanRowPromise
-  }
+  const activeScanRow = await activeScanRowPromise
 
   const findingGroups: DashboardFindingGroup[] = findingGroupRows.map((group) => ({
     severity: group.severity as FindingSeverity,
@@ -622,7 +721,7 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     count: group._count._all,
   }))
 
-  const evaluatedCandidates = evaluatedSnapshots
+  const evaluatedCandidates = allEvaluatedSnapshots
     .filter((snapshot) => snapshot.scan.endedAt && snapshot.scan.target)
     .map((snapshot) => ({
       scanId: snapshot.scanId,
@@ -644,7 +743,7 @@ export async function getDashboardOverview(workspaceId: string): Promise<Dashboa
     completedRunCount,
     reportCount,
     project,
-    evaluatedSnapshots,
+    evaluatedSnapshots: allEvaluatedSnapshots,
     evaluatedCandidates,
     activeScanRow,
   })

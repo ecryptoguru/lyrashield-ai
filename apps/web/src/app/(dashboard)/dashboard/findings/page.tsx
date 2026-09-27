@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { ISSUE_PLURAL, RUN_PLURAL } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
-import { prisma, listFindings } from "@lyrashield/db"
+import { prisma, listFindings, findingScopeWhere, validateFindingScope } from "@lyrashield/db"
 import { ShieldAlert } from "lucide-react"
 import { FindingsClient, type FindingListItem } from "./findings-client"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
@@ -11,8 +11,14 @@ import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-se
 import { EvidenceList } from "./evidence-list"
 import { FixesClient } from "./fixes-client"
 import { calculateFindingPriority } from "@/lib/finding-priority"
-import { findingFilterToApiQuery, parseFindingListParams } from "@/lib/finding-list-params"
+import {
+  findingFilterToApiQuery,
+  findingsHref,
+  parseFindingListParams,
+} from "@/lib/finding-list-params"
 import { listFixProposals } from "@lyrashield/db"
+import Link from "next/link"
+import { EmptyState, buttonVariants } from "@lyrashield/ui"
 
 const FINDINGS_TABS: SectionTab[] = [
   // The `issues` tab value is a compatibility URL parameter; the visible label
@@ -36,6 +42,47 @@ function normalizeTab(value: string | undefined): FindingsTab {
 
 export const metadata: Metadata = {
   title: ISSUE_PLURAL,
+}
+
+function FindingsScopeStrip({
+  available,
+  scoped,
+  scanId,
+  targetName,
+}: {
+  available: boolean
+  scoped: boolean
+  scanId: string
+  targetName?: string
+}) {
+  return (
+    <div
+      aria-label="Findings scope"
+      className="mb-5 flex flex-col gap-2 rounded-lg border bg-card px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p>
+        <span className="font-medium">Scope:</span>{" "}
+        {!available ? (
+          <span role="alert">Selected scan or target is unavailable in this workspace.</span>
+        ) : scoped ? (
+          <span>
+            {targetName ? `Target: ${targetName}` : "All targets"}
+            {scanId ? ` · Scan: ${scanId}` : ""}
+          </span>
+        ) : (
+          <span>All workspace findings</span>
+        )}
+      </p>
+      {scoped && (
+        <Link
+          href={findingsHref({ tab: "issues" })}
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          All workspace findings
+        </Link>
+      )}
+    </div>
+  )
 }
 
 export default async function FindingsPage({
@@ -73,23 +120,77 @@ export default async function FindingsPage({
 
   const params = await searchParams
   const tab = normalizeTab(params.tab)
-  const tabs = FINDINGS_TABS
   // Filter/sort/search are parsed on the server and passed as initial props so
   // the server-rendered tree and the client's first render match exactly.
   const listParams = parseFindingListParams(params)
+  const tabs = FINDINGS_TABS.map((sectionTab) => ({
+    ...sectionTab,
+    href: findingsHref({
+      tab: sectionTab.value,
+      scanId: params.scanId,
+      target: params.target,
+      targetId: params.targetId,
+    }),
+  }))
+  const scope = listParams.scopeValid
+    ? await validateFindingScope({
+        workspaceId,
+        ...(listParams.target ? { targetId: listParams.target } : {}),
+        ...(listParams.scanId ? { observedInScanId: listParams.scanId } : {}),
+      })
+    : { available: false as const, target: null, scanId: null }
+  const effectiveTargetId = scope.available ? (scope.target?.id ?? "") : ""
+  const scoped = Boolean(listParams.scanId || listParams.target || params.targetId !== undefined)
+  const renderHeader = (description: string) => (
+    <>
+      <DashboardSectionTabs
+        title={ISSUE_PLURAL}
+        description={description}
+        tabs={tabs}
+        activeTab={tab}
+        preserveSearchParams={["scanId", "target", "targetId"]}
+      />
+      {(!scope.available || tab !== "issues") && (
+        <FindingsScopeStrip
+          available={scope.available}
+          scoped={scoped}
+          scanId={scope.available ? (scope.scanId ?? "") : listParams.scanId}
+          targetName={scope.available ? (scope.target?.name ?? undefined) : undefined}
+        />
+      )}
+    </>
+  )
 
   const description = `Potential and verified security ${ISSUE_PLURAL.toLowerCase()} reported by your ${RUN_PLURAL.toLowerCase()}`
+
+  if (!scope.available) {
+    return (
+      <div>
+        {renderHeader(description)}
+        <EmptyState
+          icon={ShieldAlert}
+          title="Findings scope unavailable"
+          description="The selected scan or target is unavailable in this workspace. Clear the scope to continue."
+          action={
+            <Link href={findingsHref({ tab: "issues" })} className={buttonVariants()}>
+              All workspace findings
+            </Link>
+          }
+        />
+      </div>
+    )
+  }
 
   if (tab === "evidence") {
     return (
       <div>
-        <DashboardSectionTabs
-          title={ISSUE_PLURAL}
-          description="Independently verified evidence behind findings."
-          tabs={tabs}
-          activeTab={tab}
+        {renderHeader("Independently verified evidence behind findings.")}
+        <EvidenceList
+          key={`${workspaceId}:${listParams.scanId}:${effectiveTargetId}`}
+          workspaceId={workspaceId}
+          {...(effectiveTargetId ? { targetId: effectiveTargetId } : {})}
+          {...(listParams.scanId ? { observedInScanId: listParams.scanId } : {})}
         />
-        <EvidenceList workspaceId={workspaceId} />
       </div>
     )
   }
@@ -97,6 +198,8 @@ export default async function FindingsPage({
   if (tab === "fixes") {
     const { items: fixProposals, nextCursor: fixProposalsCursor } = await listFixProposals({
       workspaceId,
+      ...(effectiveTargetId ? { targetId: effectiveTargetId } : {}),
+      ...(listParams.scanId ? { observedInScanId: listParams.scanId } : {}),
       limit: 20,
     })
     const initialFixes = fixProposals.map((p) => ({
@@ -128,14 +231,12 @@ export default async function FindingsPage({
     }))
     return (
       <div>
-        <DashboardSectionTabs
-          title={ISSUE_PLURAL}
-          description="Proposed fixes for these findings, with their pull requests."
-          tabs={tabs}
-          activeTab={tab}
-        />
+        {renderHeader("Proposed fixes for these findings, with their pull requests.")}
         <FixesClient
+          key={`${workspaceId}:${listParams.scanId}:${effectiveTargetId}`}
           workspaceId={workspaceId}
+          {...(effectiveTargetId ? { targetId: effectiveTargetId } : {})}
+          {...(listParams.scanId ? { observedInScanId: listParams.scanId } : {})}
           initialData={initialFixes}
           initialNextCursor={fixProposalsCursor}
         />
@@ -148,7 +249,8 @@ export default async function FindingsPage({
     listFindings({
       workspaceId,
       ...findingFilterToApiQuery(listParams.filter),
-      ...(listParams.target ? { targetId: listParams.target } : {}),
+      ...(effectiveTargetId ? { targetId: effectiveTargetId } : {}),
+      ...(listParams.scanId ? { observedInScanId: listParams.scanId } : {}),
       ...(listParams.q ? { q: listParams.q } : {}),
       limit: 25,
     }),
@@ -160,7 +262,14 @@ export default async function FindingsPage({
     }),
     requestedFindingId
       ? prisma.finding.findFirst({
-          where: { id: requestedFindingId, workspaceId, deletedAt: null },
+          where: {
+            id: requestedFindingId,
+            ...findingScopeWhere({
+              workspaceId,
+              ...(effectiveTargetId ? { targetId: effectiveTargetId } : {}),
+              ...(listParams.scanId ? { observedInScanId: listParams.scanId } : {}),
+            }),
+          },
           select: {
             id: true,
             title: true,
@@ -190,28 +299,10 @@ export default async function FindingsPage({
       : Promise.resolve(null),
   ])
 
-  // W2-07 invalidation: a target filter that no longer matches an active
-  // target in this workspace (deleted target, stale cross-workspace link) is
-  // dropped rather than silently rendering an empty list.
-  const targetFilterValid = listParams.target
-    ? targets.some((target) => target.id === listParams.target)
-    : true
-  let effectiveFindings = findings
-  let effectiveNextCursor = nextCursor
-  if (listParams.target && !targetFilterValid) {
-    const unscoped = await listFindings({
-      workspaceId,
-      ...findingFilterToApiQuery(listParams.filter),
-      ...(listParams.q ? { q: listParams.q } : {}),
-      limit: 25,
-    })
-    effectiveFindings = unscoped.items
-    effectiveNextCursor = unscoped.nextCursor
-  }
   const visibleFindings =
-    requestedFinding && !effectiveFindings.some((finding) => finding.id === requestedFinding.id)
-      ? [requestedFinding, ...effectiveFindings]
-      : effectiveFindings
+    requestedFinding && !findings.some((finding) => finding.id === requestedFinding.id)
+      ? [requestedFinding, ...findings]
+      : findings
 
   // Page-local priority matches the API list contract: SSR initial data is
   // ranked with the same pure helper so the client's default Priority sort is
@@ -260,24 +351,21 @@ export default async function FindingsPage({
   })
   return (
     <div>
-      <DashboardSectionTabs
-        title={ISSUE_PLURAL}
-        description={description}
-        tabs={tabs}
-        activeTab={tab}
-      />
+      {renderHeader(description)}
       <FindingsClient
+        key={`${workspaceId}:${listParams.scanId}:${effectiveTargetId}`}
         canCreatePr={
           membership?.status === "active" &&
           hasPermission(membership.role, PERMISSIONS.fix.createPr)
         }
         workspaceId={workspaceId}
         initialData={initialData}
-        initialNextCursor={effectiveNextCursor}
-        initialSelectedFindingId={requestedFindingId}
+        initialNextCursor={nextCursor}
+        initialSelectedFindingId={requestedFinding?.id}
+        initialScanId={listParams.scanId}
         initialFilter={listParams.filter}
         initialSort={listParams.sort}
-        initialTargetFilter={targetFilterValid ? listParams.target : ""}
+        initialTargetFilter={effectiveTargetId}
         initialQuery={listParams.q}
         targets={targets}
       />

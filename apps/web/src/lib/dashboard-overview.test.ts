@@ -403,3 +403,50 @@ describe("userSafeRunFailure", () => {
     expect(userSafeRunFailure("STOPPED_BUDGET", null)).toContain("protected limit")
   })
 })
+
+describe("dashboard evidence ordering", () => {
+  it("uses descending IDs to break equal scan timestamps consistently", () => {
+    const timestamp = new Date("2026-08-01T10:00:00Z")
+    const overview = buildDashboardOverview({
+      targets: [{ id: "target-1", name: "Web app" }],
+      terminalRuns: [
+        makeRun({ id: "scan-a", createdAt: timestamp }),
+        makeRun({ id: "scan-z", createdAt: timestamp }),
+      ],
+      receiptsByScanId: new Map([
+        ["scan-a", ["COMPLETED"]],
+        ["scan-z", ["COMPLETED"]],
+      ]),
+      findingGroups: [],
+      evaluatedCandidates: [
+        {
+          scanId: "scan-a",
+          targetId: "target-1",
+          targetName: "Web app",
+          mode: "STANDARD",
+          completedAt: timestamp,
+          score: 70,
+          grade: "C",
+          expiresAt: new Date("2026-09-01T10:00:00Z"),
+          receiptStatuses: ["COMPLETED"],
+        },
+        {
+          scanId: "scan-z",
+          targetId: "target-1",
+          targetName: "Web app",
+          mode: "STANDARD",
+          completedAt: timestamp,
+          score: 90,
+          grade: "A",
+          expiresAt: new Date("2026-09-01T10:00:00Z"),
+          receiptStatuses: ["COMPLETED"],
+        },
+      ],
+    })
+
+    expect(overview.latestRun?.id).toBe("scan-z")
+    expect(overview.lastEvaluatedAssessment?.scanId).toBe("scan-z")
+    expect(overview.lastEvaluatedAssessment?.score).toBe(90)
+    expect(overview.recentRuns[0]?.id).toBe("scan-z")
+  })
+})

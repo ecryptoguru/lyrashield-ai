@@ -280,6 +280,45 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
     .header-beta-badge {
       display: none;
     }
+
+    header > div {
+      gap: 8px;
+      padding-inline: 16px;
+    }
+
+    header > div > a[href="/"] {
+      flex: 1 1 auto;
+      gap: 8px;
+      min-width: 0;
+      white-space: normal;
+    }
+
+    header > div > a[href="/"] > span:first-child {
+      box-sizing: border-box;
+      width: 36px;
+      height: 36px;
+      flex: 0 0 36px;
+      padding: 4px;
+    }
+
+    header > div > a[href="/"] > span:first-child img {
+      width: 32px;
+      height: 32px;
+    }
+
+    nav[aria-label="Main"] {
+      gap: 4px;
+    }
+
+    #menu-toggle,
+    #theme-toggle {
+      box-sizing: border-box;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      flex: 0 0 44px;
+    }
   }
 
   #mobile-menu::backdrop {

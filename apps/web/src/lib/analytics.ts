@@ -29,7 +29,7 @@ export const EVENT_ALLOWLIST = {
   billing_opened: ["plan", "trial_active"],
   upgrade_clicked: ["plan", "interval"],
   checkout_started: ["plan", "interval"],
-  checkout_completed: ["provider", "outcome"],
+  checkout_returned: ["provider", "outcome"],
   share_created: ["variant", "channel"],
   notification_opened: ["event_type"],
 } as const
@@ -37,6 +37,22 @@ export const EVENT_ALLOWLIST = {
 type EventName = keyof typeof EVENT_ALLOWLIST
 const pendingEvents: Array<[EventName, Record<string, unknown>]> = []
 const MAX_PENDING_EVENTS = 20
+export const ANALYTICS_PREFERENCE_COOKIE = "lyrashield-analytics"
+export const ANALYTICS_PREFERENCE_EVENT = "lyrashield:analytics-preference"
+const ANALYTICS_PREFERENCE_MAX_AGE = 180 * 24 * 60 * 60
+const SHARED_COOKIE_HOSTS = new Set([
+  "lyrashieldai.com",
+  "www.lyrashieldai.com",
+  "app.lyrashieldai.com",
+])
+const OPTIONAL_TRACKING_COOKIES = [
+  "lyrashield-acq",
+  "ls_ref",
+  "ls_ref_source",
+  "ls_scorecard_visitor",
+]
+let analyticsPreference: boolean | null = null
+let analyticsPreferenceRequest: Promise<boolean | null> | null = null
 
 const LANDING_ROUTES = new Set([
   "home",
@@ -56,6 +72,10 @@ const LANDING_ROUTES = new Set([
   "vibe-security-50",
 ])
 const TARGET_TYPE_HINTS = new Set(["url", "api"])
+
+function sharedCookieDomain(hostname: string): string {
+  return SHARED_COOKIE_HOSTS.has(hostname.toLowerCase()) ? "; Domain=.lyrashieldai.com" : ""
+}
 
 export interface SignupAttribution {
   source?: string
@@ -126,7 +146,110 @@ export function analyticsOptedOut(
   dnt: string | null | undefined,
   gpc: boolean | undefined
 ): boolean {
-  return gpc === true || dnt === "1" || dnt === "yes"
+  return gpc === true || ["1", "yes"].includes(dnt?.toLowerCase() ?? "")
+}
+
+export function analyticsCookiePreference(cookie: string): "on" | "off" | null {
+  const match = cookie.match(/(?:^|;\s*)lyrashield-analytics=(on|off)(?:;|$)/)
+  return match?.[1] === "on" || match?.[1] === "off" ? match[1] : null
+}
+
+function browserPrivacySignalIsOff(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    analyticsOptedOut(
+      navigator.doNotTrack,
+      (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl
+    )
+  )
+}
+
+export function analyticsPermissionAllowsOptionalCollection(): boolean {
+  if (browserPrivacySignalIsOff() || analyticsPreference !== true) return false
+  if (typeof document !== "undefined" && analyticsCookiePreference(document.cookie) === "off") {
+    return false
+  }
+  return true
+}
+
+export function analyticsCollectionAllowed(): boolean {
+  return (
+    Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY) && analyticsPermissionAllowsOptionalCollection()
+  )
+}
+
+function notifyAnalyticsPreferenceChange(): void {
+  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+    window.dispatchEvent(
+      new CustomEvent(ANALYTICS_PREFERENCE_EVENT, { detail: analyticsPreference })
+    )
+  }
+}
+
+export function setAnalyticsPreference(enabled: boolean | null): void {
+  analyticsPreference = enabled
+  if (enabled === false) flushQueuedAnalytics()
+  notifyAnalyticsPreferenceChange()
+}
+
+export function writeAnalyticsPreferenceCookie(enabled: boolean): void {
+  if (typeof document === "undefined" || typeof window === "undefined") return
+  const sharedDomain = sharedCookieDomain(window.location.hostname)
+  document.cookie = `${ANALYTICS_PREFERENCE_COOKIE}=${enabled ? "on" : "off"}; Path=/; Max-Age=${ANALYTICS_PREFERENCE_MAX_AGE}; SameSite=Lax${sharedDomain}${window.location.protocol === "https:" ? "; Secure" : ""}`
+}
+
+export function clearAcquisitionCookie(): void {
+  clearOptionalTrackingCookiesInBrowser()
+}
+
+export function clearOptionalTrackingCookiesInBrowser(): void {
+  if (typeof document === "undefined" || typeof window === "undefined") return
+  const secure = window.location.protocol === "https:" ? "; Secure" : ""
+  const sharedDomain = sharedCookieDomain(window.location.hostname)
+  for (const name of OPTIONAL_TRACKING_COOKIES) {
+    // HttpOnly referral/visitor cookies are also expired by the preference API.
+    // The browser-side expiration covers accessible pending acquisition cookies immediately.
+    document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax${secure}`
+    if (sharedDomain) {
+      document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax${sharedDomain}${secure}`
+    }
+  }
+}
+
+/** Resolve the account preference before any optional browser capture is allowed. */
+export function resolveAnalyticsPreference(): Promise<boolean | null> {
+  if (analyticsPreferenceRequest) return analyticsPreferenceRequest
+  if (browserPrivacySignalIsOff()) {
+    setAnalyticsPreference(false)
+    return Promise.resolve(false)
+  }
+  if (typeof document !== "undefined" && analyticsCookiePreference(document.cookie) === "off") {
+    setAnalyticsPreference(false)
+    return Promise.resolve(false)
+  }
+  if (typeof window === "undefined") return Promise.resolve(null)
+
+  analyticsPreferenceRequest = fetch("/api/account/preferences", { cache: "no-store" })
+    .then(async (response) => {
+      if (response.status === 401) return true // anonymous browser: default enabled
+      if (!response.ok) return null
+      const body: unknown = await response.json()
+      if (!body || typeof body !== "object" || !("success" in body) || body.success !== true) {
+        return null
+      }
+      const data = "data" in body ? body.data : null
+      if (!data || typeof data !== "object" || !("analyticsEnabled" in data)) return null
+      return typeof data.analyticsEnabled === "boolean" ? data.analyticsEnabled : null
+    })
+    .catch(() => null)
+    .then((enabled) => {
+      setAnalyticsPreference(enabled)
+      return enabled
+    })
+    .finally(() => {
+      analyticsPreferenceRequest = null
+    })
+  return analyticsPreferenceRequest
 }
 
 /**
@@ -143,14 +266,7 @@ export function acquisitionCookieValue(attribution: SignupAttribution): string |
 
 /** Client-side: persist the bounded attribution snapshot until signup completes. */
 export function rememberAcquisition(attribution: SignupAttribution): void {
-  if (
-    typeof document === "undefined" ||
-    analyticsOptedOut(
-      navigator.doNotTrack,
-      (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl
-    )
-  )
-    return
+  if (typeof document === "undefined" || !analyticsPermissionAllowsOptionalCollection()) return
   const value = acquisitionCookieValue(attribution)
   if (!value) return
   const existing = document.cookie
@@ -158,7 +274,8 @@ export function rememberAcquisition(attribution: SignupAttribution): void {
     .find((item) => item.startsWith(`${ACQUISITION_COOKIE}=`))
     ?.slice(ACQUISITION_COOKIE.length + 1)
   if (parseAcquisitionCookie(existing)) return
-  document.cookie = `${ACQUISITION_COOKIE}=${encodeURIComponent(value)}; Path=/; Max-Age=${ACQUISITION_COOKIE_MAX_AGE}; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`
+  const sharedDomain = sharedCookieDomain(window.location.hostname)
+  document.cookie = `${ACQUISITION_COOKIE}=${encodeURIComponent(value)}; Path=/; Max-Age=${ACQUISITION_COOKIE_MAX_AGE}; SameSite=Lax${sharedDomain}${window.location.protocol === "https:" ? "; Secure" : ""}`
 }
 
 /** Server-side: decode a claim cookie. Returns null on any malformed input. */
@@ -258,18 +375,8 @@ export function sanitizeProperties<T extends EventName>(
 }
 
 export function track<T extends EventName>(event: T, properties?: Record<string, unknown>): void {
-  if (
-    typeof window === "undefined" ||
-    typeof navigator === "undefined" ||
-    !process.env.NEXT_PUBLIC_POSTHOG_KEY
-  )
-    return
-  if (
-    analyticsOptedOut(
-      navigator.doNotTrack,
-      (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl
-    )
-  ) {
+  if (typeof window === "undefined" || !process.env.NEXT_PUBLIC_POSTHOG_KEY) return
+  if (!analyticsPermissionAllowsOptionalCollection()) {
     flushQueuedAnalytics()
     return
   }
@@ -290,6 +397,10 @@ export function track<T extends EventName>(event: T, properties?: Record<string,
 export function flushQueuedAnalytics(
   capture?: (event: EventName, properties: Record<string, unknown>) => void
 ): void {
+  if (!analyticsPermissionAllowsOptionalCollection()) {
+    pendingEvents.length = 0
+    return
+  }
   const events = pendingEvents.splice(0)
   if (capture) for (const [event, properties] of events) capture(event, properties)
 }
