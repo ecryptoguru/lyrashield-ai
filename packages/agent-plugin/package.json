@@ -28,8 +28,7 @@
     "build": "tsup",
     "build:plugin": "tsx src/build.ts",
     "export:marketplace": "tsx src/export.ts",
-    "prepublishOnly": "tsup",
-    "test": "vitest run"
+    "prepublishOnly": "tsup"
   },
   "dependencies": {
     "ajv": "^8.17.1"
@@ -37,11 +36,10 @@
   "devDependencies": {
     "@lyrashield/agent-rules": "workspace:*",
     "@lyrashield/mcp": "workspace:*",
-    "@types/node": "^24.0.0",
-    "tsup": "^8.5.1",
-    "tsx": "^4.23.12",
-    "typescript": "^6.0.0",
-    "vitest": "^4.1.11"
+    "@types/node": "catalog:",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
   },
   "engines": {
     "node": ">=24.0.0"

@@ -3,44 +3,71 @@ packages:
   - "apps/desktop/frontend"
   - "packages/*"
 
+catalog:
+  typescript: ^6.0.3
+  "@types/node": ^24.0.0
+  zod: ^4.5.4
+  vitest: ^4.1.11
+  tsup: ^8.5.1
+  tsx: ^4.23.12
+  react: ^19.2.8
+  "react-dom": ^19.2.8
+  "@types/react": ^19.2.18
+  "@types/react-dom": ^19.2.5
+  eslint: ^9.39.5
+  tailwindcss: ^4.3.3
+  "@tailwindcss/vite": ^4.3.3
+  vite: ^8.2.2
+  yaml: ^2.9.0
+
 overrides:
-  nanoid: ">=3.3.17"
-  "@hono/node-server": ">=2.0.5"
+  # GHSA-2v37-7h3g-55p8: keep postcss on the patched nanoid 3.x line.
+  "nanoid@<3.3.18": "^3.3.19"
+  # GHSA-9mqv-5hh9-4cgg and GHSA-frvp-7c67-39w9: patch node-server 2.x.
+  "@hono/node-server@<2.0.10": "^2.0.10"
+  # Kept pending auth-owner confirmation of the original pin in #273.
   "@better-auth/core": "1.7.1"
-  esbuild: ">=0.28.1"
-  fast-uri: ">=4.1.3"
-  hono: ">=4.13.5"
+  # GHSA-gv7w-rqvm-qjhr and GHSA-g7r4-m6w7-qqqr: keep affected esbuild below 0.28.1 out.
+  "esbuild@<0.28.1": "^0.28.1"
+  # fast-uri 3.x fixes: GHSA-v2hh-gcrm-f6hx, GHSA-7p8r-x3mc-p8w7,
+  # GHSA-fph4-wmhf-6fwf, GHSA-f65p-4m7j-42xc, GHSA-5jgf-p345-68v8,
+  # GHSA-jqff-g426-hqxp, GHSA-58mr-gqgx-xq4g, GHSA-qw65-cvwx-89v3,
+  # and GHSA-hrr3-gc8f-f4qj.
+  "fast-uri@>=3 <3.1.8": "^3.1.8"
+  # GHSA-g6gw-c38x-mqfc: bound Hono to the patched 4.x line.
+  "hono@<4.13.5": "^4.13.5"
+  # Kept pending auth-owner confirmation; 0.28.17 is the known fixed line.
   kysely: "0.28.17"
-  brace-expansion: ">=5.0.9"
-  minimatch: ">=10.0.1"
-  # GHSA-ggr8-5vv4-36mx: deepmerge-ts <8.0.0 has a stack-exhaustion vuln.
-  # Transitive via c12; force the fixed line.
-  deepmerge-ts: ">=8.0.0"
-  next: ">=16.3.3"
-  postcss: ">=8.5.18"
-  sharp: ">=0.35.4"
-  undici: ">=8.10.0"
-  dompurify: ">=3.4.13"
-  valibot: ">=1.4.2"
-  find-my-way: ">=9.6.1"
+  # GHSA-rgw5-rvv9-x895: patch brace-expansion 1.x and 5.x without changing majors.
+  "brace-expansion@<1.1.18": "^1.1.21"
+  "brace-expansion@>=5 <5.0.9": "^5.0.9"
+  # GHSA-7r86-cg39-jmmj and GHSA-23c5-xmqv-rm74: keep affected minimatch lines patched.
+  "minimatch@<3.1.4": "^3.1.5"
+  "minimatch@>=10 <10.2.3": "^10.2.3"
+  # GHSA-ggr8-5vv4-36mx: @prisma/config pins an affected pre-8 release.
+  "deepmerge-ts@<8.0.0": "^8.0.0"
+  # GHSA-p293-qw3h-jr36: fix Next 16 below the patched 16.3.3 release.
+  "next@<16.3.3": "^16.3.3"
+  # GHSA-fxqj-rqcc-2cmp: patched PostCSS starts at 8.5.23.
+  "postcss@<8.5.23": "^8.5.26"
+  # GHSA-rgj7-g3m4-5g8c: keep Sharp on its patched 0.35.x line.
+  "sharp@<0.35.4": "^0.35.4"
+  # GHSA-4cwx-7wf7-3272, GHSA-jr45-8vmc-qm54, and GHSA-pmjh-fq2x-6v4x: patch undici 7.x.
+  "undici@>=7 <7.29.1": "^7.29.1"
+  # Keep exact security-sensitive undici 8.x pins moving only after 8.10.0.
+  "undici@>=8 <8.10.0": "8.10.0"
+  # GHSA-2883-xcg3-v3hh: Astro and @eslint/eslintrc still admit vulnerable js-yaml.
   "js-yaml@<4.3.2": "^4.3.2"
+  # GHSA-w27v-7q3p-w38r: Astro still admits vulnerable svgo.
   "svgo@<4.1.0": "^4.1.0"
+  # GHSA-4mjr-xmp4-gh2g: Express admits vulnerable qs.
   "qs@<6.16.0": "^6.16.0"
-  # GHSA-w5hq-g745-h8pq: uuid <11.1.1 has a missing buffer bounds check.
-  # Transitive via @sentry/nextjs > @sentry/webpack-plugin.
-  uuid: ">=11.1.1"
-  # GHSA-3f6p-5ww8-9rcr: mysql2 <3.22.0 can downgrade auth to plaintext.
-  # Optional through Prisma and Better Auth; force the compatible fixed release.
+  # GHSA-3f6p-5ww8-9rcr and GHSA-rgwj-5xj2-c3m3: keep Prisma/Better Auth on fixed mysql2.
   mysql2: "3.23.1"
   # GHSA-7w5x-hrqm-74c2: smol-toml <=1.7.0 DoS via malformed TOML.
   # Transitive via markdownlint-cli2; force the patched line (already used
   # by @astrojs/internal-helpers).
   smol-toml: ">=1.7.1"
-
-peerDependencyRules:
-  allowedVersions:
-    "@cloudflare/workers-types": ">=5.20260724.1"
-    tailwindcss: ">=4.0.0"
 
 onlyBuiltDependencies:
   - "@prisma/engines"
@@ -85,19 +112,5 @@ minimumReleaseAgeExclude:
   # would deadlock the publish pipeline and buys nothing (we control the
   # artifact end-to-end). Exempt the whole scope permanently.
   - "@lyrashield/*"
-  # Grandfathered lockfile entries resolved before the corrected gate —
-  # already pinned and integrity-verified in pnpm-lock.yaml. Remove once the
-  # entry ages past the cutoff and the lockfile re-resolves.
-  - entities@8.1.0
-  - hono@4.13.7
-  - "@turbo/darwin-64@2.10.3"
-  - "@turbo/darwin-arm64@2.10.3"
-  - "@turbo/linux-64@2.10.3"
-  - "@turbo/linux-arm64@2.10.3"
-  - "@turbo/windows-64@2.10.3"
-  - "@turbo/windows-arm64@2.10.3"
-  - turbo@2.10.3
-  # Released 2026-09-23, inside the 7-day gate; a reviewed patch (bounded
-  # request bodies / JSON-RPC batch cap + auth resource-URI fix). Remove once
-  # it ages past the cutoff.
+  # Keep the reviewed SDK release out of the 7-day gate until 2026-09-30.
   - "@modelcontextprotocol/sdk@1.30.1"

@@ -10,8 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --max-warnings 0",
-    "test": "vitest run"
+    "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
     "@lyrashield/auth": "workspace:*",
@@ -21,11 +20,10 @@
     "@lyrashield/integrations": "workspace:*",
     "@lyrashield/pricing": "workspace:*",
     "@lyrashield/security": "workspace:*",
-    "zod": "^4.0.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^6.0.0",
-    "vitest": "^4.1.11"
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   }
 }

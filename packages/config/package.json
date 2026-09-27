@@ -14,10 +14,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "zod": "^4.0.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "typescript": "^6.0.0",
-    "@types/node": "^24.0.0"
+    "typescript": "catalog:",
+    "@types/node": "catalog:"
   }
 }
