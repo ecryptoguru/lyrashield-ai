@@ -32,14 +32,11 @@ const attachment = await uploadScanAttachment(client, {
   filename: "scope.md",
   mediaType: "text/markdown",
   content: "Authorized staging hosts: staging.example.com",
-  idempotencyKey: "upload-example",
 })
-await deleteScanAttachment(client, attachment.id, {
-  idempotencyKey: "delete-example",
-})
+await deleteScanAttachment(client, attachment.id)
 ```
 
-Attachments are workspace-scoped input evidence for a new scan. Upload accepts UTF-8 text or bytes in supported text, JSON, YAML and OpenAPI formats up to 1 MiB; use a stable idempotency key when retrying an upload or deletion. Pass an uploaded attachment id through the scan request's `attachmentIds` field. The server remains authoritative for validation and scan admission.
+Attachments are workspace-scoped input evidence for a new scan. Upload accepts UTF-8 text or bytes in supported text, JSON, YAML and OpenAPI formats up to 1 MiB. To retry an upload or deletion after a lost response, pass a stable request key and reuse it only with identical inputs. Pass an uploaded attachment id through the scan request's `attachmentIds` field. The server remains authoritative for validation and scan admission.
 
 The client always prepends `/api/v1` to bare paths, so callers should pass paths like `/findings` instead of `/api/v1/findings`. If you accidentally pass an already-prefixed path such as `/api/v1/findings` or `/api/findings`, the client throws a `LyraShieldError` with `code: "INVALID_PATH"` before any network request is made.
 
