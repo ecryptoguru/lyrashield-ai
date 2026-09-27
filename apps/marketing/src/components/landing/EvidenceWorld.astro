@@ -122,11 +122,7 @@ const { manifest } = Astro.props
     // poster fallback is the better experience anyway. It is also scheduled
     // after load and on idle so it never competes with the hero for bandwidth.
     if (!reduced && !saveData && !slowNetwork) {
-      const idle = (
-        window as unknown as {
-          requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
-        }
-      ).requestIdleCallback
+      const idle = "requestIdleCallback" in window ? window.requestIdleCallback : undefined
       const schedule = () => {
         if (idle) idle(bootstrapEvidenceWorld, { timeout: 2500 })
         else setTimeout(bootstrapEvidenceWorld, 900)
