@@ -32,8 +32,9 @@ const attachment = await uploadScanAttachment(client, {
   filename: "scope.md",
   mediaType: "text/markdown",
   content: "Authorized staging hosts: staging.example.com",
+  idempotencyKey: "scope-md-2026-09-27",
 })
-await deleteScanAttachment(client, attachment.id)
+await deleteScanAttachment(client, attachment.id, { idempotencyKey: "remove-scope-md-2026-09-27" })
 ```
 
 Attachments are workspace-scoped input evidence for a new scan. Upload accepts UTF-8 text or bytes in supported text, JSON, YAML and OpenAPI formats up to 1 MiB. To retry an upload or deletion after a lost response, pass a stable request key and reuse it only with identical inputs. Pass an uploaded attachment id through the scan request's `attachmentIds` field. The server remains authoritative for validation and scan admission.
