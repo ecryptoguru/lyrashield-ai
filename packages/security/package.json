@@ -72,6 +72,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "webmcp-types": "^0.1.5"
+    "webmcp-types": "^0.1.5",
+    "vitest": "^4.1.11"
   }
 }
