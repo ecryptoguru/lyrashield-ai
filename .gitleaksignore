@@ -42,3 +42,8 @@ e02853f094dd61f5732b539b81143e6cc49f647d:codebase.md:generic-api-key:290
 580430fcbe61fc02cba696d3c725df513b14abb2:packages/cli/src/__tests__/diff-advisory-parity.test.ts:generic-api-key:39
 580430fcbe61fc02cba696d3c725df513b14abb2:packages/mcp/src/check-diff.test.ts:generic-api-key:19
 580430fcbe61fc02cba696d3c725df513b14abb2:packages/mcp/src/check-diff.test.ts:generic-api-key:36
+
+# Historical SDK retry-key documentation example in Wave 3 commit b8b0c672;
+# the example value is synthetic and the literal field was removed to avoid
+# future false positives from the generic-api-key rule.
+b8b0c672fef24eeeec71c0d08a5494cedaad54c9:packages/sdk/README.md:generic-api-key:38
