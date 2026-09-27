@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { verifyVulnerability, verifyFindings, getConfidenceScore } from "./verifier"
+import { verifyVulnerability } from "./verifier"
 import type { EngineVulnerability } from "./output-parser"
 
 const baseVuln: EngineVulnerability = {
@@ -96,51 +96,5 @@ describe("verifyVulnerability", () => {
     expect(result.verified).toBe(false)
     expect(result.confidence).toBe("low")
     expect(result.verificationMethod).toBe("unverified")
-  })
-})
-
-describe("verifyFindings", () => {
-  it("does not self-verify a batch of engine vulnerabilities", () => {
-    const vulns = [
-      { ...baseVuln, id: "1", poc_description: "PoC" },
-      { ...baseVuln, id: "2", cwe: "CWE-79" },
-      { ...baseVuln, id: "3" },
-    ]
-    const results = verifyFindings(vulns)
-    expect(results).toHaveLength(3)
-    expect(results[0]!.verification.verified).toBe(false)
-    expect(results[1]!.verification.verified).toBe(false)
-    expect(results[2]!.verification.verified).toBe(false)
-  })
-})
-
-describe("getConfidenceScore", () => {
-  it("returns 0 for unverified", () => {
-    expect(
-      getConfidenceScore({ verified: false, confidence: "low", reason: "", verificationMethod: "" })
-    ).toBe(0)
-  })
-
-  it("returns 90 for high confidence", () => {
-    expect(
-      getConfidenceScore({ verified: true, confidence: "high", reason: "", verificationMethod: "" })
-    ).toBe(90)
-  })
-
-  it("returns 60 for medium confidence", () => {
-    expect(
-      getConfidenceScore({
-        verified: true,
-        confidence: "medium",
-        reason: "",
-        verificationMethod: "",
-      })
-    ).toBe(60)
-  })
-
-  it("returns 30 for low confidence", () => {
-    expect(
-      getConfidenceScore({ verified: true, confidence: "low", reason: "", verificationMethod: "" })
-    ).toBe(30)
   })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { AI_SECURITY_CONTROLS, AI_SECURITY_CONTROLS_BY_ID } from "./controls"
-import { AI_SECURITY_FIXTURES, getFixturesByControl } from "./fixtures"
+import { AI_SECURITY_FIXTURES } from "./fixtures"
 import { AI_RULES } from "./rules"
 import type { AIControlId } from "./types"
 
@@ -58,7 +58,7 @@ describe("AI App Security contract and fixtures", () => {
 
   it("has vulnerable, safe, unsupported, and truncated fixtures for every control", () => {
     for (const control of AI_SECURITY_CONTROLS) {
-      const fixtures = getFixturesByControl(control.id)
+      const fixtures = AI_SECURITY_FIXTURES.filter((fixture) => fixture.controlId === control.id)
       expect(fixtures).toHaveLength(4)
 
       const states = fixtures.map((fixture) => fixture.expectedState)

@@ -6,7 +6,6 @@ import type {
   WebMcpEvidenceSource,
   WebMcpEvidenceState,
   WebMcpScanFile,
-  WebMcpScanLimit,
   WebMcpSeverity,
   WebMcpSignal,
 } from "./types"
@@ -155,18 +154,6 @@ export function notAssessedSignal(
   return buildSignal(controlId, ruleId, "NOT_ASSESSED", file, {
     overrideRemediation: reason,
   })
-}
-
-export function buildProvenance(
-  files: WebMcpScanFile[],
-  limits: WebMcpScanLimit[],
-  start: number
-): { files: number; bytes: number; scannedAt: string } {
-  return {
-    files: files.length,
-    bytes: files.reduce((sum, file) => sum + file.size, 0),
-    scannedAt: new Date(start).toISOString(),
-  }
 }
 
 export function isProtectiveWording(text: string | null | undefined): boolean {

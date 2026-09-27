@@ -61,16 +61,6 @@ export function sanitizeLinkHref(raw: string): string | null {
   }
 }
 
-/** Escape every HTML-significant char — output is text, never markup. */
-export function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;")
-}
-
 export interface SanitizedSegment {
   kind: "text" | "code" | "link"
   text: string

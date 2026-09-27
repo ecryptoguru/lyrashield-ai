@@ -10,7 +10,7 @@
  * rejected before it is ever shown to a human as viable.
  */
 
-export type FixPlanTier = "STARTER" | "STANDARD"
+type FixPlanTier = "STARTER" | "STANDARD"
 
 export interface PatchScopePolicy {
   /**

@@ -21,11 +21,6 @@ export const SCAN_PLURAL = "Scans"
 export const ISSUE_SINGULAR = "Finding"
 export const ISSUE_PLURAL = "Findings"
 
-// Project is the workspace/project concept used in onboarding and trust
-// planning. Since Deep Review v16 (item 3.1) onboarding speaks the canonical
-// Target noun, these alias TARGET_* above; nothing else reads them — remove
-// here if still unused after the terminology sweep.
-export const PRODUCT_SINGULAR = "Target"
 export const APPROVAL_PLURAL = "Approvals"
 export const NOTIFICATION_PLURAL = "Notifications"
 export const TEAM_PLURAL = "Team"

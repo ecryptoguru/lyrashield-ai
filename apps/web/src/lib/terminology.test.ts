@@ -70,9 +70,6 @@ describe("user-facing terminology", () => {
       const relative = filePath.replaceAll("\\", "/")
       if (relative.includes("/onboarding/")) return false
       if (relative.includes("/app/api/")) return false
-      // terminology.ts is the label definition module: PRODUCT_SINGULAR lives
-      // there and is consumed only by onboarding, which the sibling task owns.
-      if (relative.endsWith("/lib/terminology.ts")) return false
       return /\bProducts?\b/.test(text)
     })
     expect(offenders, `retired noun found in: ${offenders.join(", ")}`).toEqual([])

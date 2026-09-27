@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto"
-import { redactUrlForLogs } from "./ssrf"
 import type { SurfaceCollection, SurfaceSubject } from "./public-surface"
 
 export type SurfaceSignalState = "DETECTED" | "OBSERVED"
@@ -460,12 +459,4 @@ export function analyzePublicSurface(collection: SurfaceCollection): SurfaceSign
     seen.add(signal.id)
     return true
   })
-}
-
-/**
- * Light adapter: derive a human-readable subject name from a normalized URL.
- * Useful when the real subject is not available.
- */
-export function redactedSubjectName(url: string): string {
-  return redactUrlForLogs(url)
 }

@@ -2,7 +2,8 @@
 import { describe, expect, it, beforeEach, afterEach, afterAll, vi } from "vitest"
 import { mkdir, writeFile, unlink, rm, readFile } from "node:fs/promises"
 import path from "node:path"
-import { resolveMcpCredentials, NoApiKeyError, CREDENTIALS_FILE } from "./credentials"
+import { CREDENTIALS_FILE } from "@lyrashield/credentials"
+import { resolveMcpCredentials, NoApiKeyError } from "./credentials"
 
 // Keep tests isolated from the real home directory by redirecting homedir()
 // to a per-file temp directory that is removed after the suite.

@@ -1,4 +1,3 @@
-import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "./output-parser"
 
 interface VerificationResult {
@@ -6,10 +5,6 @@ interface VerificationResult {
   confidence: "high" | "medium" | "low"
   reason: string
   verificationMethod: string
-}
-
-interface VerifiedVulnerability extends EngineVulnerability {
-  verification: VerificationResult
 }
 
 export function verifyVulnerability(vuln: EngineVulnerability): VerificationResult {
@@ -76,24 +71,4 @@ export function verifyVulnerability(vuln: EngineVulnerability): VerificationResu
       "Insufficient evidence for verification — no PoC, code location, or technical analysis provided",
     verificationMethod: "unverified",
   }
-}
-
-export function verifyFindings(vulns: EngineVulnerability[]): VerifiedVulnerability[] {
-  const results = vulns.map((vuln) => ({
-    ...vuln,
-    verification: verifyVulnerability(vuln),
-  }))
-
-  const verified = results.filter((r) => r.verification.verified).length
-  const unverified = results.length - verified
-  logger.info("Findings verification complete", { total: results.length, verified, unverified })
-
-  return results
-}
-
-export function getConfidenceScore(verification: VerificationResult): number {
-  if (!verification.verified) return 0
-  if (verification.confidence === "high") return 90
-  if (verification.confidence === "medium") return 60
-  return 30
 }

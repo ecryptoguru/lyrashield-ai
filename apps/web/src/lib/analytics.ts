@@ -198,10 +198,6 @@ export function writeAnalyticsPreferenceCookie(enabled: boolean): void {
   document.cookie = `${ANALYTICS_PREFERENCE_COOKIE}=${enabled ? "on" : "off"}; Path=/; Max-Age=${ANALYTICS_PREFERENCE_MAX_AGE}; SameSite=Lax${sharedDomain}${window.location.protocol === "https:" ? "; Secure" : ""}`
 }
 
-export function clearAcquisitionCookie(): void {
-  clearOptionalTrackingCookiesInBrowser()
-}
-
 export function clearOptionalTrackingCookiesInBrowser(): void {
   if (typeof document === "undefined" || typeof window === "undefined") return
   const secure = window.location.protocol === "https:" ? "; Secure" : ""
