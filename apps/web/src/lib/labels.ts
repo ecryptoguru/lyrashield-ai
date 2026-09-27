@@ -1,4 +1,4 @@
-import type { ScanMode, FindingSeverity, FindingStatus } from "@lyrashield/types"
+import type { ScanMode, FindingSeverity } from "@lyrashield/types"
 
 const GOAL_OPTIONS = [
   {
@@ -61,18 +61,6 @@ export const SEVERITY_LABELS: Record<FindingSeverity, string> = {
   CRITICAL: "Critical",
 }
 
-export const FINDING_STATUS_LABELS: Record<FindingStatus, string> = {
-  OPEN: "Open",
-  FIX_READY: "Fix ready",
-  PR_OPENED: "PR opened",
-  TICKET_CREATED: "Ticket created",
-  FIXED_PENDING_RETEST: "Awaiting retest",
-  FIXED: "Fixed",
-  ACCEPTED_RISK: "Risk accepted",
-  FALSE_POSITIVE: "Not a real issue",
-  DUPLICATE: "Duplicate",
-}
-
 /**
  * Turns an unknown SCREAMING_SNAKE token into something readable.
  *
@@ -98,19 +86,6 @@ const EVIDENCE_TYPE_LABELS: Record<string, string> = {
 export function evidenceTypeLabel(value: string | null | undefined): string {
   if (!value) return "Evidence"
   return EVIDENCE_TYPE_LABELS[value] ?? humanizeToken(value)
-}
-
-const TRIGGER_LABELS: Record<string, string> = {
-  manual: "Started manually",
-  scheduled: "Scheduled",
-  webhook: "Triggered by webhook",
-  api: "Started via API",
-  ci: "Started from CI",
-}
-
-export function triggerLabel(value: string | null | undefined): string {
-  if (!value) return "Unknown trigger"
-  return TRIGGER_LABELS[value.toLowerCase()] ?? humanizeToken(value)
 }
 
 /** Safe lookups for values arriving as plain strings across an API boundary. */
