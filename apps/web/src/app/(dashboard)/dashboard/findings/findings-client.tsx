@@ -24,9 +24,9 @@ import {
 import { findingsPaginatedSchema } from "@/lib/api-schemas"
 import { apiGetPaginated } from "@/lib/api-client"
 import {
-  ISSUE_PLURAL,
-  RUN_PLURAL,
-  RUN_SINGULAR,
+  FINDING_PLURAL,
+  SCAN_PLURAL,
+  SCAN_SINGULAR,
   TARGET_PLURAL,
   TARGET_SINGULAR,
 } from "@/lib/terminology"
@@ -363,7 +363,7 @@ export function FindingsClient({
       if (generation !== requestGenerationRef.current) return
       loadedScopeRef.current = ""
       setFindings([])
-      setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
+      setError(`Failed to load ${FINDING_PLURAL.toLowerCase()}. Please try again.`)
     } finally {
       if (generation === requestGenerationRef.current) {
         setLoading(false)
@@ -426,7 +426,7 @@ export function FindingsClient({
           pagesRef.current = []
           setFindings([])
           setNextCursor(null)
-          setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
+          setError(`Failed to load ${FINDING_PLURAL.toLowerCase()}. Please try again.`)
         }
         throw error
       } finally {
@@ -715,8 +715,8 @@ export function FindingsClient({
             value={query}
             maxLength={120}
             onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder={`Search ${ISSUE_PLURAL.toLowerCase()}…`}
-            aria-label={`Search ${ISSUE_PLURAL.toLowerCase()}`}
+            placeholder={`Search ${FINDING_PLURAL.toLowerCase()}…`}
+            aria-label={`Search ${FINDING_PLURAL.toLowerCase()}`}
             className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none lg:w-56"
           />
 
@@ -774,7 +774,7 @@ export function FindingsClient({
         <div
           className="space-y-3"
           aria-busy="true"
-          aria-label={`Loading ${ISSUE_PLURAL.toLowerCase()}`}
+          aria-label={`Loading ${FINDING_PLURAL.toLowerCase()}`}
         >
           {[0, 1, 2].map((item) => (
             <Skeleton key={item} className="h-32 w-full" />
@@ -783,11 +783,11 @@ export function FindingsClient({
       ) : findings.length === 0 ? (
         <EmptyState
           icon={Bug}
-          title={`No ${ISSUE_PLURAL.toLowerCase()} yet`}
-          description={`Security ${ISSUE_PLURAL.toLowerCase()} detected by ${RUN_PLURAL.toLowerCase()} will appear here. Start a ${RUN_SINGULAR.toLowerCase()} to get started.`}
+          title={`No ${FINDING_PLURAL.toLowerCase()} yet`}
+          description={`Security ${FINDING_PLURAL.toLowerCase()} detected by ${SCAN_PLURAL.toLowerCase()} will appear here. Start a ${SCAN_SINGULAR.toLowerCase()} to get started.`}
           action={
             <Link href="/dashboard/scans" className={buttonVariants()}>
-              Start a {RUN_SINGULAR.toLowerCase()}
+              Start a {SCAN_SINGULAR.toLowerCase()}
             </Link>
           }
         />

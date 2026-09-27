@@ -8,7 +8,7 @@ import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { formatDateTime } from "@/lib/date-format"
 import { getGoalLabel, modeLabel } from "@/lib/labels"
 import { getScanPresentation, isActiveScan, type ScanStateFilter } from "@/lib/scan-presentation"
-import { RUN_PLURAL, RUN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
+import { SCAN_PLURAL, SCAN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import type { ScanItem } from "./scan-types"
 
@@ -51,7 +51,7 @@ export function ScanList({
         <div
           className="space-y-3"
           aria-busy="true"
-          aria-label={`Loading ${RUN_PLURAL.toLowerCase()}`}
+          aria-label={`Loading ${SCAN_PLURAL.toLowerCase()}`}
         >
           {[0, 1, 2].map((item) => (
             <Skeleton key={item} className="h-20 w-full" />
@@ -62,15 +62,15 @@ export function ScanList({
           icon={Radar}
           title={
             targetFilter || stateFilter !== "ALL"
-              ? `No ${RUN_PLURAL.toLowerCase()} match these filters`
-              : `No ${RUN_PLURAL.toLowerCase()} yet`
+              ? `No ${SCAN_PLURAL.toLowerCase()} match these filters`
+              : `No ${SCAN_PLURAL.toLowerCase()} yet`
           }
           description={
             targetFilter || stateFilter !== "ALL"
               ? "Try a different target or state filter."
               : hasTargets
-                ? `A ${RUN_SINGULAR.toLowerCase()} checks one target for security findings and records what it could and could not prove. Choose a target to start.`
-                : `Add a ${TARGET_SINGULAR.toLowerCase()} first, then you can run ${RUN_PLURAL.toLowerCase()} against it.`
+                ? `A ${SCAN_SINGULAR.toLowerCase()} checks one target for security findings and records what it could and could not prove. Choose a target to start.`
+                : `Add a ${TARGET_SINGULAR.toLowerCase()} first, then you can run ${SCAN_PLURAL.toLowerCase()} against it.`
           }
           action={
             targetFilter || stateFilter !== "ALL" ? (
@@ -85,7 +85,7 @@ export function ScanList({
             ) : hasTargets ? (
               <Button onClick={() => onShowCreate()}>
                 <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-                New {RUN_SINGULAR}
+                New {SCAN_SINGULAR}
               </Button>
             ) : (
               <Link href="/dashboard/targets" className={buttonVariants()}>

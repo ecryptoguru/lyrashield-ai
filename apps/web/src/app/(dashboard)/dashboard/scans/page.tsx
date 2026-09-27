@@ -7,7 +7,7 @@ import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { ScansClient } from "./scans-client"
 import { SchedulesClient } from "../schedules/schedules-client"
 import { getCachedSession, getCachedWorkspaceContext, getCachedWorkspaceId } from "@/lib/cache"
-import { RUN_PLURAL, TARGET_PLURAL } from "@/lib/terminology"
+import { SCAN_PLURAL, TARGET_PLURAL } from "@/lib/terminology"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
@@ -52,12 +52,12 @@ export default async function ScansPage({
     return (
       <div>
         <PageHeader
-          title={RUN_PLURAL}
-          description={`Run and monitor ${RUN_PLURAL.toLowerCase()} against your ${TARGET_PLURAL.toLowerCase()}`}
+          title={SCAN_PLURAL}
+          description={`Run and monitor ${SCAN_PLURAL.toLowerCase()} against your ${TARGET_PLURAL.toLowerCase()}`}
         />
         <NoWorkspaceState
           icon={Radar}
-          description={`Create a workspace first to start running ${RUN_PLURAL.toLowerCase()}.`}
+          description={`Create a workspace first to start running ${SCAN_PLURAL.toLowerCase()}.`}
         />
       </div>
     )
@@ -72,8 +72,8 @@ export default async function ScansPage({
     return (
       <div>
         <DashboardSectionTabs
-          title={RUN_PLURAL}
-          description={`Schedule recurring ${RUN_PLURAL.toLowerCase()} to monitor your ${TARGET_PLURAL.toLowerCase()}`}
+          title={SCAN_PLURAL}
+          description={`Schedule recurring ${SCAN_PLURAL.toLowerCase()} to monitor your ${TARGET_PLURAL.toLowerCase()}`}
           tabs={tabs}
           activeTab={tab}
         />
@@ -167,8 +167,8 @@ export default async function ScansPage({
   return (
     <div>
       <DashboardSectionTabs
-        title={RUN_PLURAL}
-        description={`Run and monitor ${RUN_PLURAL.toLowerCase()} against your ${TARGET_PLURAL.toLowerCase()}`}
+        title={SCAN_PLURAL}
+        description={`Run and monitor ${SCAN_PLURAL.toLowerCase()} against your ${TARGET_PLURAL.toLowerCase()}`}
         tabs={tabs}
         activeTab={tab}
       />

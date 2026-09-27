@@ -4,6 +4,7 @@ import { getCachedSession } from "@/lib/cache"
 import { PageHeader } from "@/components/page-header"
 import { ActivityTabs } from "./activity-tabs"
 import { LocalTime } from "@/components/local-time"
+import { humanizeToken } from "@/lib/labels"
 
 export const metadata = {
   title: "Activity — Affiliate Dashboard — LyraShield AI",
@@ -237,10 +238,10 @@ export default async function AffiliateActivityPage({
                       </td>
                       <td className="py-2 pr-4">
                         <span className="rounded px-2 py-0.5 text-xs font-medium">
-                          {row.status as string}
+                          {humanizeToken(row.status as string)}
                         </span>
                       </td>
-                      <td className="py-2 pr-4">{row.method as string}</td>
+                      <td className="py-2 pr-4">{humanizeToken(row.method as string)}</td>
                       <td className="py-2 pr-4">{(row.subid as string) ?? "—"}</td>
                     </>
                   )}

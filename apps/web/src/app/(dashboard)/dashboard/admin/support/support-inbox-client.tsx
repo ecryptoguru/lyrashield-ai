@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Badge, Button, Card, Spinner, cn } from "@lyrashield/ui"
+import { formatAge } from "@/lib/date-format"
 import {
   SupportCaseDetail,
   supportCaseStatusVariant,
@@ -52,14 +53,6 @@ function isUnread(row: CaseRow): boolean {
   if (!row.lastUserReplyAt) return false
   // lastUserReplyAt ≈ updatedAt means the latest activity was a user reply.
   return new Date(row.lastUserReplyAt).getTime() >= new Date(row.updatedAt).getTime() - 60_000
-}
-
-function age(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime()
-  if (ms < 60_000) return "just now"
-  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m`
-  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h`
-  return `${Math.floor(ms / 86_400_000)}d`
 }
 
 async function readError(res: Response): Promise<never> {
@@ -422,7 +415,7 @@ export function SupportInbox() {
                     </Badge>
                     {isUnread(row) ? <Badge variant="info">unread</Badge> : null}
                     <span className="text-muted-foreground ml-auto font-mono text-xs">
-                      {age(row.createdAt)}
+                      {formatAge(row.createdAt)}
                     </span>
                   </div>
                   <p className="mt-1.5 line-clamp-2 text-sm font-medium">{row.subject}</p>
@@ -458,7 +451,7 @@ export function SupportInbox() {
               <Card key={item.id} className="p-3 text-sm">
                 <p className="line-clamp-3 whitespace-pre-wrap">{item.excerpt}</p>
                 <p className="text-muted-foreground mt-2 font-mono text-xs">
-                  {item.conversationId} · {age(item.ratedAt)}
+                  {item.conversationId} · {formatAge(item.ratedAt)}
                 </p>
               </Card>
             ))}

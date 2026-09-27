@@ -3,22 +3,18 @@ import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import {
   HOME_LABEL,
-  ISSUE_PLURAL,
-  ISSUE_SINGULAR,
-  RUN_PLURAL,
-  RUN_SINGULAR,
+  FINDING_PLURAL,
+  FINDING_SINGULAR,
   SCAN_PLURAL,
   SCAN_SINGULAR,
 } from "./terminology"
 
 describe("user-facing terminology", () => {
   it("uses the canonical Scan and Finding nouns", () => {
-    expect(RUN_SINGULAR).toBe("Scan")
-    expect(RUN_PLURAL).toBe("Scans")
     expect(SCAN_SINGULAR).toBe("Scan")
     expect(SCAN_PLURAL).toBe("Scans")
-    expect(ISSUE_SINGULAR).toBe("Finding")
-    expect(ISSUE_PLURAL).toBe("Findings")
+    expect(FINDING_SINGULAR).toBe("Finding")
+    expect(FINDING_PLURAL).toBe("Findings")
     expect(HOME_LABEL).toBe("Home")
   })
 

@@ -5,8 +5,9 @@ import { Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lucide-rea
 import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
 import type { OperationFailurePresentation } from "@/lib/operation-failure"
 import type { ManualScanOption } from "@/lib/scan-presets"
+import { getWorkspacePlanLabel } from "@/lib/enum-labels"
 import {
-  RUN_SINGULAR,
+  SCAN_SINGULAR,
   TARGET_DETAILS_LABEL,
   TARGET_NAME_LABEL,
   TARGET_SINGULAR,
@@ -502,7 +503,7 @@ export function TargetDetailsView({
             ? `Retry the review for ${productName || `this ${TARGET_SINGULAR.toLowerCase()}`}. The target stays locked so the retry cannot create or scan a different target.`
             : pathNeedsRepo(path)
               ? `Name your ${TARGET_SINGULAR.toLowerCase()}. You can classify its environment later in target settings.`
-              : `Reviewing your ${pathLabel(path)}. Confirm the details and choose what you need from this ${RUN_SINGULAR.toLowerCase()}.`}
+              : `Reviewing your ${pathLabel(path)}. Confirm the details and choose what you need from this ${SCAN_SINGULAR.toLowerCase()}.`}
         </p>
       </div>
 
@@ -626,8 +627,11 @@ export function TargetDetailsView({
         )}
         {eligibility.status === "ready" && eligibility.eligibility.allowed && (
           <p className="mt-2 rounded-lg border p-3 text-sm" role="status">
-            Current plan: <span className="font-medium">{eligibility.eligibility.plan}</span> ·
-            Account minutes available:{" "}
+            Current plan:{" "}
+            <span className="font-medium">
+              {getWorkspacePlanLabel(eligibility.eligibility.plan)}
+            </span>{" "}
+            · Agent-minutes available:{" "}
             <span className="font-medium">{eligibility.eligibility.remainingMinutes}</span>
             {eligibility.eligibility.isTrial ? " (trial)" : ""}. This advisory can change; the
             server checks eligibility again when you start.
@@ -680,7 +684,7 @@ export function TargetDetailsView({
       </section>
 
       <p className="border-warning bg-warning/10 border-l-2 p-3 text-sm">
-        A {RUN_SINGULAR.toLowerCase()} reports evidence and limitations. A clean result is not a
+        A {SCAN_SINGULAR.toLowerCase()} reports evidence and limitations. A clean result is not a
         universal security guarantee.
       </p>
 

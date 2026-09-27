@@ -8,6 +8,7 @@ import { apiPost } from "@/lib/api-client"
 import { type ApprovalListItem } from "@lyrashield/db"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { formatDateTime } from "@/lib/date-format"
+import { LocalTime } from "@/components/local-time"
 import type { AgentOperationListItem } from "@lyrashield/db"
 
 interface ApprovalItem extends Omit<ApprovalListItem, "input"> {
@@ -260,9 +261,7 @@ export function ApprovalsClient({
                     </details>
                     <p className="text-muted-foreground mt-1 text-xs">
                       Expires{" "}
-                      {approval.expiresAt
-                        ? new Date(approval.expiresAt).toLocaleDateString()
-                        : "Never"}
+                      {approval.expiresAt ? <LocalTime value={approval.expiresAt} /> : "Never"}
                     </p>
                   </div>
                   <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">

@@ -11,17 +11,11 @@ export const TARGET_PLURAL = "Targets"
 export const TARGET_DETAILS_LABEL = `${TARGET_SINGULAR} details`
 export const TARGET_NAME_LABEL = `${TARGET_SINGULAR} name`
 
-// User-facing nouns: a scan is a scan, a finding is a finding. The legacy
-// run/issue labels are retired from user-facing copy; identifiers, routes,
-// and API contracts keep their existing names.
-export const RUN_SINGULAR = "Scan"
-export const RUN_PLURAL = "Scans"
+// User-facing nouns; identifiers, routes and API contracts keep their existing names.
 export const SCAN_SINGULAR = "Scan"
 export const SCAN_PLURAL = "Scans"
-export const ISSUE_SINGULAR = "Finding"
-export const ISSUE_PLURAL = "Findings"
-
-export const APPROVAL_PLURAL = "Approvals"
+export const FINDING_SINGULAR = "Finding"
+export const FINDING_PLURAL = "Findings"
 export const NOTIFICATION_PLURAL = "Notifications"
 export const TEAM_PLURAL = "Team"
 

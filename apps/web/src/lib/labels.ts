@@ -34,7 +34,7 @@ const GOAL_OPTIONS = [
 ] as const
 
 export function getGoalLabel(value: string): string {
-  return GOAL_OPTIONS.find((g) => g.value === value)?.label ?? value
+  return GOAL_OPTIONS.find((g) => g.value === value)?.label ?? humanizeToken(value)
 }
 
 /**

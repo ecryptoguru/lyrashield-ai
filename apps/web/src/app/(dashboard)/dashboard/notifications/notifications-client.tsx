@@ -9,6 +9,7 @@ import { z } from "zod"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetPaginated, apiPatch } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
+import { humanizeToken } from "@/lib/labels"
 import { Skeleton } from "@/components/ui/skeleton"
 
 interface NotificationItem {
@@ -189,7 +190,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex items-center gap-2">
                       <h3 className="truncate font-medium">{notification.title}</h3>
-                      <Badge variant={badgeVariant}>{notification.type}</Badge>
+                      <Badge variant={badgeVariant}>{humanizeToken(notification.type)}</Badge>
                       {notification.status === "read" && <Badge variant="muted">read</Badge>}
                     </div>
                     <p className="text-muted-foreground text-sm whitespace-pre-line">
