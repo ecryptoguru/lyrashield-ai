@@ -327,8 +327,7 @@ jobs:
             -c "CREATE ROLE app_runtime_ci LOGIN PASSWORD 'runtime-ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS" \
             -c "GRANT CONNECT ON DATABASE lyrashield TO app_runtime_ci" \
             -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
-            -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime_ci" \
-            -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_ci" \
+            -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('PlatformAdminElevation', 'PlatformAdminChallengeLimit', 'PlatformAdminAudit') LOOP EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO app_runtime_ci', item.tablename); END LOOP; FOR item IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO app_runtime_ci', item.sequencename); END LOOP; END \$\$;" \
             -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci" \
             -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci"
           echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
@@ -343,11 +342,19 @@ jobs:
               -c "GRANT CONNECT ON DATABASE ${database} TO app_runtime_ci"
             docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d "$database" -v ON_ERROR_STOP=1 \
               -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
-              -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime_ci" \
-              -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_ci" \
+              -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('PlatformAdminElevation', 'PlatformAdminChallengeLimit', 'PlatformAdminAudit') LOOP EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO app_runtime_ci', item.tablename); END LOOP; FOR item IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO app_runtime_ci', item.sequencename); END LOOP; END \$\$;" \
               -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci" \
               -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci"
           done
+
+      - name: Smoke-test production-equivalent account and workspace grants
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec -e PGPASSWORD=runtime-ci-only "${{ job.services.postgres.id }}" \
+            psql -h 127.0.0.1 -U app_runtime_ci -d lyrashield -v ON_ERROR_STOP=1 \
+            -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT DISTINCT c.table_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE' AND c.column_name IN ('workspaceId', 'accountId') LOOP EXECUTE format('SELECT 1 FROM public.%I LIMIT 0', item.table_name); RAISE NOTICE 'runtime SELECT smoke passed for %', item.table_name; END LOOP; END \$\$;"
 
       - name: Lint
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
