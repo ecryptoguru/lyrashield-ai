@@ -38,12 +38,10 @@ function sharedUsageDistribution() {
 }
 
 function createFixtureDirectory(path: string) {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are descendants of mkdtemp-created fixture roots.
   mkdirSync(path, { recursive: true })
 }
 
 function writeFixtureFile(path: string, contents: string | Uint8Array) {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are descendants of mkdtemp-created fixture roots.
   writeFileSync(path, contents)
 }
 

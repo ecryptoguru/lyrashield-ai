@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { CLOUD_PLANS, formatUSD } from "@lyrashield/pricing"
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const page = readFileSync(new URL("../pages/index.astro", import.meta.url), "utf8")
 
 describe("homepage journey and plan summary", () => {

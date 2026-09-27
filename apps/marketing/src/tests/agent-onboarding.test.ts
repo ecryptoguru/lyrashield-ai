@@ -26,9 +26,7 @@ describe("agent onboarding contract", () => {
   })
 
   it("publishes matching visual and Markdown onboarding surfaces", () => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const agentPage = readFileSync(new URL("../pages/agents.astro", import.meta.url), "utf8")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const markdownRoute = readFileSync(new URL("../pages/agents.md.ts", import.meta.url), "utf8")
 
     expect(agentPage).toContain("agentOnboarding")
@@ -72,14 +70,11 @@ describe("agent onboarding contract", () => {
   })
 
   it("keeps a human-first funnel while exposing agent setup", () => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const header = readFileSync(new URL("../components/Header.astro", import.meta.url), "utf8")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const hero = readFileSync(
       new URL("../components/landing/PremiumHero.astro", import.meta.url),
       "utf8"
     )
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const finalCta = readFileSync(
       new URL("../components/landing/FinalCta.astro", import.meta.url),
       "utf8"

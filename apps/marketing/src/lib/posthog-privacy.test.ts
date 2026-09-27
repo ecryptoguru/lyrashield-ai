@@ -160,7 +160,6 @@ describe("sanitizeMarketingProperties", () => {
 })
 
 describe("Lite Check analytics source", () => {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8")
 
   it("keeps scan.astro free of target-derived hashing", () => {

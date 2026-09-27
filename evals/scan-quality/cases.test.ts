@@ -11,13 +11,11 @@ import {
 } from "../../packages/types/src/scan-quality"
 
 function loadCases(): QualityCase[] {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- CASE_DIR is the fixed corpus dir
   return readdirSync(CASE_DIR)
     .filter((f) => f.endsWith(".json"))
     .sort()
     .map((file) => {
       // Case filenames come from the on-disk corpus directory listing.
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const raw: unknown = JSON.parse(readFileSync(join(CASE_DIR, file), "utf8"))
       const validated = validateCase(raw, file)
       if (!validated.ok) throw new Error(validated.problems.join("; "))

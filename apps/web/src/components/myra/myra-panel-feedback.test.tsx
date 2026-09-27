@@ -36,7 +36,6 @@ vi.mock("./use-myra-panel", () => ({ useMyraPanel }))
 
 import { MyraPanel } from "./myra-panel"
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned source file.
 const panelSource = readFileSync(new URL("./myra-panel.tsx", import.meta.url), "utf8")
 
 type El = ReactElement<{
@@ -152,7 +151,6 @@ describe("MyraPanel answer feedback", () => {
     expect(panelSource).toContain("aria-pressed={turn.rating === rating}")
     expect(panelSource).toContain("disabled={turn.ratingPending}")
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- repository-owned source file.
     const hookSource = readFileSync(new URL("./use-myra-panel.ts", import.meta.url), "utf8")
     expect(hookSource).toContain("ratingPending: true")
     expect(hookSource).toContain("ratingPending: false")

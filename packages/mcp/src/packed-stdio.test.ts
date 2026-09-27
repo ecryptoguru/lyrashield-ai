@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
 import { execFile, execFileSync, spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { mkdtemp, readdir, rm } from "node:fs/promises"

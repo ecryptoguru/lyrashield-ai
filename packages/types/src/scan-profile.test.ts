@@ -93,7 +93,6 @@ describe("scanDepthContract", () => {
     // builder output exactly — regenerate it from scanDepthContract() whenever
     // profile data changes instead of editing it by hand.
     const fixture = JSON.parse(
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       readFileSync(new URL("./fixtures/scan-depths.json", import.meta.url), "utf8")
     )
     expect(fixture).toEqual(scanDepthContract())

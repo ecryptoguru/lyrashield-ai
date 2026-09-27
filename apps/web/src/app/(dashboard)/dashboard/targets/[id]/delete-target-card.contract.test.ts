@@ -7,11 +7,8 @@ import { describe, expect, it } from "vitest"
  * danger section below Domain verification.
  */
 describe("target delete confirmation copy", () => {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const card = readFileSync(new URL("./delete-target-card.tsx", import.meta.url), "utf8")
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8")
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const table = readFileSync(new URL("../targets-table.tsx", import.meta.url), "utf8")
 
   it("names the target and states what is retained", () => {

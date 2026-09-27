@@ -89,15 +89,12 @@ function scanWebSource(match: (text: string, filePath: string) => boolean): stri
   const roots = [join(__dirname, "..", "app"), join(__dirname, "..", "components"), __dirname]
   const offenders: string[] = []
   const walk = (dir: string) => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry)
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const stat = statSync(full)
       if (stat.isDirectory()) {
         walk(full)
       } else if (/\.tsx?$/.test(entry) && !/\.test\./.test(entry)) {
-        // eslint-disable-next-line security/detect-non-literal-fs-filename
         const text = readFileSync(full, "utf8")
         const hit = collectStringLiterals(text).some((literal) => match(literal, full))
         if (hit) offenders.push(full)
@@ -116,15 +113,12 @@ function scanTsxText(match: (text: string, filePath: string) => boolean): string
   const roots = [join(__dirname, "..", "app"), join(__dirname, "..", "components")]
   const offenders: string[] = []
   const walk = (dir: string) => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry)
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const stat = statSync(full)
       if (stat.isDirectory()) {
         walk(full)
       } else if (/\.tsx$/.test(entry) && !/\.test\./.test(entry)) {
-        // eslint-disable-next-line security/detect-non-literal-fs-filename
         const text = readFileSync(full, "utf8")
           .replace(/\/\*[\s\S]*?\*\//g, " ")
           .replace(/(^|[^:])\/\/[^\n]*/g, "$1 ")

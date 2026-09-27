@@ -12,7 +12,6 @@ import { describe, expect, it } from "vitest"
  * is a `md:` visibility rule. Guard the source shapes directly.
  */
 function read(relative: string): string {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   return readFileSync(new URL(relative, import.meta.url), "utf8")
 }
 

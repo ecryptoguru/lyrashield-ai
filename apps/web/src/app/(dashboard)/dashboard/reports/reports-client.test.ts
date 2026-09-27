@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest"
 function screenSource(): string {
   return (
     ["page.tsx", "reports-client.tsx", "reports-views.tsx"]
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       .map((file) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8"))
       .join("\n")
   )

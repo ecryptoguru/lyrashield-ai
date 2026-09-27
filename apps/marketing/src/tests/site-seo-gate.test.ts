@@ -21,7 +21,6 @@ import { DEFAULT_OG_IMAGE, OG_CARD_PATHS, ogImageFor } from "../lib/og-images"
 const ORIGIN = "https://lyrashieldai.com"
 
 function source(path: string): string {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   return readFileSync(new URL(path, import.meta.url), "utf8")
 }
 
@@ -144,7 +143,6 @@ describe("site SEO gate rules", () => {
 describe("social cards", () => {
   it("ships every card the map points at", () => {
     for (const card of OG_CARD_PATHS) {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       expect(existsSync(new URL(`../../public${card}`, import.meta.url)), card).toBe(true)
     }
   })

@@ -10,9 +10,7 @@ import { describe, expect, it } from "vitest"
  * The drawer keeps its pushState/popstate and focus-restoration contract.
  */
 describe("findings list context preservation contract", () => {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const client = readFileSync(new URL("./findings-client.tsx", import.meta.url), "utf8")
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const context = readFileSync(new URL("./findings-list-context.ts", import.meta.url), "utf8")
 
   it("keeps filter/sort/target/query in the URL", () => {

@@ -21,7 +21,6 @@ describe("evidence-storage", () => {
 
   it("keeps the production entry free of local filesystem imports", async () => {
     // The URL is a test-owned constant next to this file.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const source = await readFile(new URL("./index.ts", import.meta.url), "utf8")
 
     expect(source).not.toContain('from "node:fs/promises"')
@@ -74,7 +73,6 @@ describe("evidence-storage", () => {
 
     const path = decodeURIComponent(result.storageUri.replace("file://", ""))
     // The path is derived from the storage implementation in this test and is not user-controlled.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const encrypted = await readFile(path)
 
     // The file must not contain the raw content.
@@ -107,7 +105,6 @@ describe("evidence-storage", () => {
     await evidenceStorageImport.deleteEncryptedArtifact(result.storageUri, "ws-1")
 
     // The path came from the storage result created above, never user input.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await expect(readFile(path)).rejects.toMatchObject({ code: "ENOENT" })
   })
 

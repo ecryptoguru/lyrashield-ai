@@ -12,7 +12,6 @@ import {
 
 const DIGEST = `sha256:${"b".repeat(64)}`
 // The test reads its adjacent source file to lock the privileged-client boundary.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const operationSource = readFileSync(
   fileURLToPath(new URL("./verify-launch-assurance.ts", import.meta.url)),
   "utf8"

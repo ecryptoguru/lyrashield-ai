@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
 import { describe, expect, it, beforeEach, afterEach, afterAll, vi } from "vitest"
 import { mkdir, writeFile, unlink, rm, readFile } from "node:fs/promises"
 import path from "node:path"

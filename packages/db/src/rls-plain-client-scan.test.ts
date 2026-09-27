@@ -256,7 +256,6 @@ function scanSource(source: string): string[] {
 }
 
 function scanFile(path: string): string[] {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const source = readFileSync(path, "utf8")
   if (RLS_CONTEXT_MARKERS.some((marker) => source.includes(marker))) return []
   const prefix = relative(join(__dirname, "..", "..", ".."), path)
@@ -264,11 +263,9 @@ function scanFile(path: string): string[] {
 }
 
 function collect(root: string, files: string[] = []): string[] {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   for (const entry of readdirSync(root)) {
     if (SKIP_DIRS.has(entry)) continue
     const full = join(root, entry)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     if (statSync(full).isDirectory()) {
       collect(full, files)
     } else if (/\.tsx?$/.test(entry) && !/\.test\./.test(entry)) {
@@ -332,7 +329,6 @@ describe("plain-client FORCE-RLS reads (v16 2.2 tripwire)", () => {
   it("the allowlist stays honest: every entry still exists on disk", () => {
     for (const fileRef of Object.keys(ALLOWLIST)) {
       const fullPath = join(__dirname, "..", "..", "..", fileRef)
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       expect(statSync(fullPath).isFile(), `${fileRef} no longer exists — prune the ALLOWLIST`).toBe(
         true
       )

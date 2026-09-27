@@ -11,9 +11,7 @@ import { describe, expect, it } from "vitest"
  * destinations, it never widens who can act.
  */
 describe("settings personal/workspace split contract", () => {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const personal = readFileSync(new URL("./page.tsx", import.meta.url), "utf8")
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const workspace = readFileSync(new URL("./workspace/page.tsx", import.meta.url), "utf8")
 
   it("keeps account-level surfaces on the personal page", () => {

@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename -- Private temporary checkout fixtures only. */
 import { createHash } from "node:crypto"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { mkdir, writeFile } from "node:fs/promises"

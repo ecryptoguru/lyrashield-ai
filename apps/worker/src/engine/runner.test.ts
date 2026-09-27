@@ -75,11 +75,8 @@ async function createRun(
   mtime: Date
 ): Promise<string> {
   const runDir = join(workDir, layout, name)
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(runDir, { recursive: true })
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(join(runDir, artifact), "{}", "utf8")
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await utimes(runDir, mtime, mtime)
   return runDir
 }
@@ -99,12 +96,9 @@ it("reads the owned singular threat-model artifact before any legacy plural file
     run_id: "scan-1",
     models: [],
   })
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(join(outputDir, "threat_model.json"), canonical, "utf8")
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(join(outputDir, "threat_models.json"), "{}", "utf8")
   // Canonical evidence is bound to the producer's run manifest.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(
     join(outputDir, "run.json"),
     JSON.stringify({
@@ -128,7 +122,6 @@ it("reads the owned singular threat-model artifact before any legacy plural file
   expect(output.artifacts.threatModelsRaw).toBe(canonical)
 })
 
-/* eslint-disable security/detect-non-literal-fs-filename -- This test reads a fixed fixture and writes only to its own temporary directory. */
 it("round-trips an actual redacted engine writer artifact through the manifest-bound reader", async () => {
   // Produced by build_threat_model_document + write_threat_model_artifact in
   // lyrashield-engine; unlike synthetic models: [] fixtures, it exercises the
@@ -167,12 +160,10 @@ it("round-trips an actual redacted engine writer artifact through the manifest-b
   expect(JSON.stringify(parsed.threatModels)).toContain("[SECRET]")
   expect(JSON.stringify(parsed.threatModels)).not.toContain("sample-secret-123")
 })
-/* eslint-enable security/detect-non-literal-fs-filename */
 
 it("rejects an unbound canonical threat model without a 1.1 run receipt", async () => {
   const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-unbound-evidence-"))
   cleanupPaths.push(outputDir)
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(join(outputDir, "threat_model.json"), JSON.stringify({ models: [] }))
   const output = await readEngineOutput(outputDir)
   expect(output.artifacts.threatModelsRaw).toBeNull()
@@ -181,9 +172,7 @@ it("rejects an unbound canonical threat model without a 1.1 run receipt", async 
 it("does not import a plural-only legacy artifact into a 1.1 run", async () => {
   const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-plural-only-"))
   cleanupPaths.push(outputDir)
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(join(outputDir, "run.json"), JSON.stringify({ schema_version: "1.1" }))
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(
     join(outputDir, "threat_models.json"),
     JSON.stringify({ stale: { target: "other-run", content: "unbound" } })
@@ -196,9 +185,7 @@ it("retains the plural adapter for a pre-1.1 run", async () => {
   const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-legacy-plural-"))
   cleanupPaths.push(outputDir)
   const legacy = JSON.stringify({ old: { target: "legacy", content: "context" } })
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(join(outputDir, "run.json"), JSON.stringify({ schema_version: "1.0" }))
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(join(outputDir, "threat_models.json"), legacy)
   const output = await readEngineOutput(outputDir)
   expect(output.artifacts.threatModelsRaw).toBe(legacy)
@@ -222,13 +209,11 @@ it("rejects a threat model that is missing or differs from the run manifest", as
       },
     },
   }
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(
     join(outputDir, "run.json"),
     JSON.stringify({ schema_version: "1.1", run_id: "scan-1", result_manifest: manifest })
   )
   // A stale pre-contract sibling must never fill a missing 1.1 artifact.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(
     join(outputDir, "threat_models.json"),
     JSON.stringify({ stale: { target: "other-run", content: "unbound" } })
@@ -241,12 +226,10 @@ it("rejects a threat model that is missing or differs from the run manifest", as
       .ingestionIssues
   ).toContain("threat_model.json unreadable or oversized — artifact ignored")
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(join(outputDir, "threat_model.json"), canonical.replace("scan-1", "scan-2"))
   const changed = await readEngineOutput(outputDir)
   expect(changed.artifacts.threatModelsRaw).toBeNull()
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(join(outputDir, "threat_model.json"), canonical)
   const valid = await readEngineOutput(outputDir)
   expect(valid.artifacts.threatModelsRaw).toBe(canonical)
@@ -286,9 +269,7 @@ it("ignores newer runs whose expected artifact is a directory", async () => {
   cleanupPaths.push(workDir)
   const expected = await createRun(workDir, "lyrashield_runs", "valid", "run.json", new Date(1_000))
   const invalidRunDir = join(workDir, "strix_runs", "invalid")
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(join(invalidRunDir, "run.json"), { recursive: true })
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await utimes(invalidRunDir, new Date(2_000), new Date(2_000))
 
   await expect(findRunOutputDir(workDir)).resolves.toBe(expected)
@@ -297,7 +278,6 @@ it("ignores newer runs whose expected artifact is a directory", async () => {
 it("ignores directories without expected output artifacts", async () => {
   const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
   cleanupPaths.push(workDir)
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(join(workDir, "strix_runs", "empty"), { recursive: true })
   await expect(findRunOutputDir(workDir)).resolves.toBeNull()
 })
@@ -676,7 +656,6 @@ describe("readEngineProgressFingerprint", () => {
       new Date(1_000)
     )
     // runDir is created in the worker-owned temporary test workspace above.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(
       join(runDir, "run.json"),
       JSON.stringify({ seq: 7, turn_count: 4, phase: "running", instruction: "must not leak" }),
@@ -699,7 +678,6 @@ describe("readEngineProgressFingerprint", () => {
       new Date(1_000)
     )
     // runDir is created in the worker-owned temporary test workspace above.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(
       join(runDir, "run.json"),
       JSON.stringify({ seq: "7", phase: "running" }),
@@ -716,7 +694,6 @@ describe("readEngineSpendUsd", () => {
     cleanupPaths.push(workDir)
     const runDir = await createRun(workDir, "strix_runs", "scan-spend", "run.json", new Date(1_000))
     // runDir is created in the worker-owned temporary test workspace above.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(
       join(runDir, "run.json"),
       JSON.stringify({ seq: 3, turn_count: 2, phase: "running", llm_usage: { cost: 0.84 } }),
@@ -730,7 +707,6 @@ describe("readEngineSpendUsd", () => {
     const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
     cleanupPaths.push(workDir)
     const runDir = await createRun(workDir, "strix_runs", "scan-spend", "run.json", new Date(1_000))
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(
       join(runDir, "run.json"),
       JSON.stringify({ seq: 0, turn_count: 0, phase: "setup" }),
@@ -744,7 +720,6 @@ describe("readEngineSpendUsd", () => {
     const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
     cleanupPaths.push(workDir)
     const runDir = await createRun(workDir, "strix_runs", "scan-spend", "run.json", new Date(1_000))
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(
       join(runDir, "run.json"),
       JSON.stringify({
@@ -770,7 +745,6 @@ describe("readEngineSpendUsd", () => {
     const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
     cleanupPaths.push(workDir)
     const runDir = await createRun(workDir, "strix_runs", "scan-spend", "run.json", new Date(1_000))
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(join(runDir, "run.json"), "{ broken json", "utf8")
 
     await expect(readEngineSpendUsd(workDir, "scan-spend")).resolves.toBeNull()
@@ -780,7 +754,6 @@ describe("readEngineSpendUsd", () => {
     const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
     cleanupPaths.push(workDir)
     const runDir = await createRun(workDir, "strix_runs", "scan-spend", "run.json", new Date(1_000))
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(
       join(runDir, "run.json"),
       JSON.stringify({ seq: 1, turn_count: 1, phase: "running", llm_usage: { cost: -0.5 } }),
@@ -802,11 +775,9 @@ describe("resolveEngineSourceCheckout", () => {
     const scanId = `runner-test-${Date.now()}`
     const runRoot = join(tmpdir(), "strix_repos", `repo_${scanId}_source`)
     const checkout = join(runRoot, "repo")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await mkdir(checkout, { recursive: true })
     cleanupPaths.push(runRoot)
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const canonicalCheckout = await realpath(checkout)
     await expect(
       resolveEngineSourceCheckout(
@@ -827,11 +798,9 @@ describe("resolveEngineSourceCheckout", () => {
     const scanId = `sanitized-${Date.now()}`
     const runRoot = join(tmpdir(), "strix_repos", `repo_${scanId}_source`)
     const checkout = join(runRoot, "repo")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await mkdir(checkout, { recursive: true })
     cleanupPaths.push(runRoot)
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const canonicalCheckout = await realpath(checkout)
     await expect(
       resolveEngineSourceCheckout(
@@ -852,9 +821,7 @@ describe("resolveEngineSourceCheckout", () => {
     const scanId = `ambiguous-${Date.now()}`
     const first = join(tmpdir(), "strix_repos", `repo_${scanId}_first`)
     const second = join(tmpdir(), "strix_repos", `repo_${scanId}_second`)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await mkdir(join(first, "repo"), { recursive: true })
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await mkdir(join(second, "repo"), { recursive: true })
     cleanupPaths.push(first, second)
 
@@ -876,9 +843,7 @@ describe("resolveEngineSourceCheckout", () => {
   it("fails closed when a scan-owned root has multiple checkout directories", async () => {
     const scanId = `children-${Date.now()}`
     const runRoot = join(tmpdir(), "strix_repos", `repo_${scanId}_source`)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await mkdir(join(runRoot, "first"), { recursive: true })
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await mkdir(join(runRoot, "second"), { recursive: true })
     cleanupPaths.push(runRoot)
 
@@ -900,7 +865,6 @@ describe("resolveEngineSourceCheckout", () => {
   it("rejects a checkout when the durable receipt belongs to another scan", async () => {
     const scanId = `receipt-${Date.now()}`
     const runRoot = join(tmpdir(), "strix_repos", `repo_${scanId}_source`)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await mkdir(join(runRoot, "repo"), { recursive: true })
     cleanupPaths.push(runRoot)
 
@@ -938,9 +902,7 @@ describe("resolveEngineSourceCheckout", () => {
     const runRoot = join(tmpdir(), "strix_repos", `repo_${scanId}_source`)
     const outside = await mkdtemp(join(tmpdir(), "outside-strix-symlink-"))
     const checkout = join(runRoot, "repo")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await mkdir(runRoot, { recursive: true })
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await symlink(outside, checkout)
     cleanupPaths.push(runRoot, outside)
 
@@ -985,7 +947,6 @@ describe("resolveEngineSourceRevision", () => {
     const checkout = await mkdtemp(join(tmpdir(), "lyrashield-source-revision-"))
     cleanupPaths.push(checkout)
     execFileSync("git", ["init", checkout])
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(join(checkout, "README.md"), "scan me\n", "utf8")
     execFileSync("git", ["-C", checkout, "add", "README.md"])
     execFileSync("git", [
@@ -1075,12 +1036,10 @@ it("does not emit engine_start when cancellation already won", async () => {
 it("refuses to clean a workspace outside the worker-owned run root", async () => {
   const outside = await mkdtemp(join(tmpdir(), "worker-cleanup-guard-"))
   cleanupPaths.push(outside)
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(join(outside, "keep.txt"), "keep", "utf8")
 
   await cleanupEngineWorkspace(outside, "../outside")
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await expect(realpath(join(outside, "keep.txt"))).resolves.toMatch(/keep\.txt$/)
 })
 
@@ -1089,14 +1048,11 @@ it("cleans the engine-created temporary checkout for the run", async () => {
   const workspace = join(process.cwd(), "lyrashield_runs", runName)
   const checkoutRoot = join(tmpdir(), "strix_repos", `repo_${runName}_source`)
   cleanupPaths.push(workspace, checkoutRoot)
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(workspace, { recursive: true })
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(checkoutRoot, { recursive: true })
 
   await cleanupEngineWorkspace(workspace, runName)
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await expect(realpath(checkoutRoot)).rejects.toThrow()
 })
 
@@ -1105,16 +1061,12 @@ it("clears stale receipts before a new engine attempt", async () => {
   const workspace = join(process.cwd(), "lyrashield_runs", runName)
   const staleReceipt = join(workspace, "strix_runs", runName, "run.json")
   cleanupPaths.push(workspace)
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(join(workspace, "strix_runs", runName), { recursive: true })
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(staleReceipt, "{}", "utf8")
 
   await prepareEngineWorkspace(workspace)
 
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await expect(realpath(staleReceipt)).rejects.toThrow()
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await expect(realpath(workspace)).resolves.toBe(workspace)
 })
 
