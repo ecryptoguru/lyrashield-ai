@@ -676,4 +676,3 @@ export async function getFindingStats(
     unverified,
   }
 }
-

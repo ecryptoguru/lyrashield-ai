@@ -78,11 +78,11 @@ describe("Myra answer feedback", () => {
   })
 
   it("refuses a platform operator outright", async () => {
-    const operator = {
+    const operator: ResolvedMyraRequest = {
       principal: { kind: "operator", accountId: "op", sessionId: "s" },
       workspaceId: null,
       role: null,
-    } as ResolvedMyraRequest
+    }
 
     await expect(rateAssistantMessage(operator, "msg-1", "helpful")).rejects.toMatchObject({
       code: "FORBIDDEN",
@@ -110,18 +110,18 @@ const anonymousCtx: ResolvedMyraRequest = {
   role: null,
 }
 
-function userCtx(over: Record<string, unknown> = {}): ResolvedMyraRequest {
+function userCtx(over: { email?: string; emailVerified?: boolean } = {}): ResolvedMyraRequest {
+  const principal: Extract<ResolvedMyraRequest["principal"], { kind: "user" }> = {
+    kind: "user",
+    accountId: "acct-1",
+    sessionId: "sess-1",
+    email: over.email ?? "ankit@lyrashieldai.com",
+    emailVerified: over.emailVerified ?? true,
+    workspaceId: null,
+    role: null,
+  }
   return {
-    principal: {
-      kind: "user",
-      accountId: "acct-1",
-      sessionId: "sess-1",
-      email: "ankit@lyrashieldai.com",
-      emailVerified: true,
-      workspaceId: null,
-      role: null,
-      ...over,
-    } as ResolvedMyraRequest["principal"],
+    principal,
     workspaceId: null,
     role: null,
   }

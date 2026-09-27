@@ -255,8 +255,7 @@ describe("public WebMCP Security Lab", () => {
   })
 
   it("matches the visible file-limit UX", async () => {
-    const file = (name: string, size: number) =>
-      ({ name, size, text: async () => "x".repeat(size) }) as File
+    const file = (name: string, size: number) => new File(["x".repeat(size)], name)
 
     await expect(readFilesForWebMcp([file("source.txt", 1)])).rejects.toThrow("not a supported")
     await expect(readFilesForWebMcp([file("large.ts", 1024 * 1024 + 1)])).rejects.toThrow("1 MiB")

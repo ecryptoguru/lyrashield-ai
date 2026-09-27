@@ -167,19 +167,26 @@ describe("API key bearer auth", () => {
 })
 
 describe("browser-only boundary (assertBrowserSession)", () => {
-  const browser = { userId: "user-1" } as AuthSession
-  const apiKeySession = {
+  const baseSession = {
     userId: "user-1",
+    userEmail: "user@example.com",
+    userName: "User One",
+    userImage: null,
+    sessionId: "session-1",
+  }
+  const browser: AuthSession = { ...baseSession }
+  const apiKeySession: AuthSession = {
+    ...baseSession,
     apiKey: { keyId: "key-1", workspaceId: "ws-1", scopes: ["read", "write"], prefix: "lsk_x" },
-  } as unknown as AuthSession
-  const oauthSession = {
-    userId: "user-1",
+  }
+  const oauthSession: AuthSession = {
+    ...baseSession,
     oauth: {
       userId: "user-1",
       workspaceId: "ws-1",
       scopes: ["lyrashield.read", "lyrashield.write"],
     },
-  } as unknown as AuthSession
+  }
 
   it("passes for a browser session", () => {
     expect(() => assertBrowserSession(browser)).not.toThrow()

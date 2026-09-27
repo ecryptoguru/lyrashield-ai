@@ -27,8 +27,9 @@ function buildGuardFetch() {
     .replace(/export default/, "module.exports =")
 
   // Evaluate the module source in a CommonJS-shaped sandbox.
-  const sandbox = { exports: {} as { fetch: (r: Request) => Promise<Response> } }
+  const sandbox: { exports: { fetch?: (request: Request) => Promise<Response> } } = { exports: {} }
   new Function("module", "exports", wrapper)(sandbox, sandbox.exports)
+  if (!sandbox.exports.fetch) throw new Error("Scheme guard wrapper did not export fetch")
   return sandbox.exports.fetch
 }
 

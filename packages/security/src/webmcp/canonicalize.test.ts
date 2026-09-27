@@ -45,8 +45,8 @@ describe("canonical hashes", () => {
   })
 
   it("produces an inventory hash that is order-independent", async () => {
-    const a = { ...baseTool, name: "a" } as WebMcpToolSurface
-    const b = { ...baseTool, name: "b" } as WebMcpToolSurface
+    const a: WebMcpToolSurface = { ...baseTool, name: "a" }
+    const b: WebMcpToolSurface = { ...baseTool, name: "b" }
     a.definitionHash = await computeDefinitionHash(a, sha256)
     b.definitionHash = await computeDefinitionHash(b, sha256)
 

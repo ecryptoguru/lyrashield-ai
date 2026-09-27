@@ -105,10 +105,7 @@ export function computeAiSecurityScore(input: AISecurityScoreInput): AISecurityS
   const { coverage, ai03 } = input
   const candidates = input.candidates ?? candidatesFromSignals(input.signals ?? [])
 
-  const controlScores: Record<AIControlId, AIControlScore> = {} as Record<
-    AIControlId,
-    AIControlScore
-  >
+  const controlScores = new Map<AIControlId, AIControlScore>()
   const deductions = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
 
   const evidenceQuality: AIScoreEvidenceQuality = { complete: 0, partial: 0, inconclusive: 0 }
@@ -135,7 +132,7 @@ export function computeAiSecurityScore(input: AISecurityScoreInput): AISecurityS
 
     const totalDeduction = primaryDeduction + additionalDeduction
 
-    controlScores[controlId] = {
+    controlScores.set(controlId, {
       controlId,
       primaryDeduction,
       additionalDeduction,
@@ -143,7 +140,7 @@ export function computeAiSecurityScore(input: AISecurityScoreInput): AISecurityS
       assessed: controlCoverage.assessed,
       state: controlCoverage.state,
       distinctIdentities,
-    }
+    })
 
     if (primarySeverity) {
       deductions[primarySeverity] += totalDeduction
@@ -193,7 +190,7 @@ export function computeAiSecurityScore(input: AISecurityScoreInput): AISecurityS
     assessedCount,
     totalControls: coverage.totalControls,
     evidenceQuality,
-    controlScores,
+    controlScores: Object.fromEntries(controlScores),
     deductions,
     reason,
   }

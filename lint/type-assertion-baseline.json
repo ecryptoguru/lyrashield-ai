@@ -236,13 +236,6 @@
       "count": 1
     }
   ],
-  "packages/db/src/platform-admin-security.ts": [
-    {
-      "kind": "double-unknown",
-      "sha256": "7bd29855dd5a16602d9c0b7d64f7741a3d417425b2b0aa65c34e75cf43055e66",
-      "count": 1
-    }
-  ],
   "packages/db/src/scoping.ts": [
     {
       "kind": "double-unknown",

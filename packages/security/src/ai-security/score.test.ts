@@ -31,7 +31,10 @@ function signal(
 }
 
 function coverage(controlStates: Record<string, AISecuritySignal["state"]>): AISecurityCoverage {
-  const controls: AISecurityCoverage["controls"] = {} as AISecurityCoverage["controls"]
+  const controls = new Map<
+    AISecuritySignal["controlId"],
+    AISecurityCoverage["controls"][AISecuritySignal["controlId"]]
+  >()
   let assessedCount = 0
   let notAssessedCount = 0
   let detectedCount = 0
@@ -48,15 +51,16 @@ function coverage(controlStates: Record<string, AISecuritySignal["state"]>): AIS
     if (state === "NO_FINDING") noFindingCount++
     if (state === "INCONCLUSIVE") inconclusiveCount++
 
-    controls[controlId as AISecuritySignal["controlId"]] = {
-      controlId: controlId as AISecuritySignal["controlId"],
+    const typedControlId = controlId as AISecuritySignal["controlId"]
+    controls.set(typedControlId, {
+      controlId: typedControlId,
       state,
       assessed,
       evidenceSource: assessed ? "deterministic" : undefined,
       ruleIds: ["rule-1"],
       fileCount: 1,
       signalCount: 1,
-    }
+    })
   }
 
   return {
@@ -67,7 +71,7 @@ function coverage(controlStates: Record<string, AISecuritySignal["state"]>): AIS
     detectedCount,
     noFindingCount,
     inconclusiveCount,
-    controls,
+    controls: Object.fromEntries(controls),
     limitsReached: [],
     unsupportedFiles: [],
     truncatedFiles: [],

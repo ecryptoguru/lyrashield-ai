@@ -31,7 +31,7 @@ async function loadRegistry(): Promise<{
 }> {
   const mod = await import("@lyrashield/agent-registry")
     .then((m) => m as Record<string, unknown>)
-    .catch(() => ({}) as Record<string, unknown>)
+    .catch(() => ({}))
   const list =
     (mod.listAgents as (() => AgentEntry[]) | undefined) ??
     (() => ((mod.AGENTS as AgentEntry[] | undefined) ?? []) as AgentEntry[])

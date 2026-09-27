@@ -403,7 +403,6 @@ jobs:
               -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci"
           done
 
-
       - name: Size lint (advisory)
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.marketing == 'true'
         continue-on-error: true
@@ -417,7 +416,6 @@ jobs:
           docker exec -e PGPASSWORD=runtime-ci-only "${{ job.services.postgres.id }}" \
             psql -h 127.0.0.1 -U app_runtime_ci -d lyrashield -v ON_ERROR_STOP=1 \
             -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT DISTINCT c.table_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE' AND c.column_name IN ('workspaceId', 'accountId') LOOP EXECUTE format('SELECT 1 FROM public.%I LIMIT 0', item.table_name); RAISE NOTICE 'runtime SELECT smoke passed for %', item.table_name; END LOOP; END \$\$;"
-
 
       - name: Lint
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'

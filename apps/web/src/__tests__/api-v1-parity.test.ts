@@ -40,11 +40,13 @@ describe("/api/v1 parity", () => {
       // v1 scan deletion was never exposed; changing that public contract needs separate review.
       const omitted = path === "../app/api/v1/scans/[id]/route.ts" ? ["DELETE"] : []
       expect(reexport[1].split(", ").sort(), path).toEqual(
-        methods.filter(
-          (method) =>
-            new RegExp(`export (?:async )?(?:function|const) ${method}\\b`).test(twin) &&
-            !omitted.includes(method)
-        ).sort()
+        methods
+          .filter(
+            (method) =>
+              new RegExp(`export (?:async )?(?:function|const) ${method}\\b`).test(twin) &&
+              !omitted.includes(method)
+          )
+          .sort()
       )
     }
   })

@@ -168,7 +168,7 @@ describe("ScanExecutionPlanSchema", () => {
     })
 
     it.each(["baseRevision", "mergeBaseRevision"] as const)("rejects a missing %s", (field) => {
-      const source = { ...REVIEW_CHANGES_PLAN.source } as Record<string, string>
+      const source: Record<string, string> = { ...REVIEW_CHANGES_PLAN.source }
       delete source[field]
       expect(ScanExecutionPlanSchema.safeParse({ ...REVIEW_CHANGES_PLAN, source }).success).toBe(
         false
@@ -209,7 +209,7 @@ describe("ScanExecutionPlanSchema", () => {
     })
 
     it("rejects omitted optional ceilings", () => {
-      const limits = { ...AUTHENTICATED_PLAN.limits } as Record<string, unknown>
+      const limits: Record<string, unknown> = { ...AUTHENTICATED_PLAN.limits }
       delete limits["maxRequests"]
       expect(ScanExecutionPlanSchema.safeParse({ ...AUTHENTICATED_PLAN, limits }).success).toBe(
         false

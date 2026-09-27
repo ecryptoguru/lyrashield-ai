@@ -88,16 +88,16 @@ function createPrismaClient() {
             )
             const rest = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "workspace"))
 
-            return tx.auditLog.create({
-              data: {
-                ...rest,
-                workspaceId,
-                id,
-                createdAt,
-                prevHash,
-                hash,
-              } as Prisma.AuditLogUncheckedCreateInput,
-            })
+            const createData: Prisma.AuditLogUncheckedCreateInput = {
+              ...rest,
+              workspaceId,
+              id,
+              createdAt,
+              prevHash,
+              hash,
+            }
+
+            return tx.auditLog.create({ data: createData })
           })
         },
       },

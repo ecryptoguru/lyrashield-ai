@@ -9,8 +9,7 @@ import { readFileSync } from "node:fs"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { fetchMyraStatus } from "../components/myra/myra-session"
 
-const read = (path: string) =>
-  readFileSync(new URL(path, import.meta.url), "utf8")
+const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8")
 
 const API = "https://app.example.com"
 

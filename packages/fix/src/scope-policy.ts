@@ -10,8 +10,6 @@
  * rejected before it is ever shown to a human as viable.
  */
 
-type FixPlanTier = "STARTER" | "STANDARD"
-
 export interface PatchScopePolicy {
   /**
    * "current-file" — the diff may touch only the single file the finding is

@@ -195,10 +195,7 @@ export function summarizeAiSecurityCoverage(
     appendSignal(byControl, signal.controlId, signal)
   }
 
-  const controls: Record<AIControlId, AIControlCoverage> = {} as Record<
-    AIControlId,
-    AIControlCoverage
-  >
+  const controls = new Map<AIControlId, AIControlCoverage>()
   let assessedCount = 0
   let notAssessedCount = 0
   let detectedCount = 0
@@ -221,7 +218,7 @@ export function summarizeAiSecurityCoverage(
       signalCount: controlSignals.length,
     }
 
-    controls[controlId] = coverage
+    controls.set(controlId, coverage)
 
     if (state !== "NOT_ASSESSED") assessedCount++
     if (state === "NOT_ASSESSED") notAssessedCount++
@@ -238,7 +235,7 @@ export function summarizeAiSecurityCoverage(
     detectedCount,
     noFindingCount,
     inconclusiveCount,
-    controls,
+    controls: Object.fromEntries(controls),
     limitsReached: extra.limitsReached,
     unsupportedFiles: extra.unsupportedFiles,
     truncatedFiles: extra.truncatedFiles,

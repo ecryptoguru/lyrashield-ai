@@ -19,7 +19,8 @@ import { WEBHOOK_TRACK_MAX_ATTEMPTS } from "@lyrashield/billing"
 import { processWebhookTrackRetry } from "./webhook-track-retry.job"
 
 function job(data: Record<string, string>) {
-  return { data } as Parameters<typeof processWebhookTrackRetry>[0]
+  const fixture = { data }
+  return fixture as Parameters<typeof processWebhookTrackRetry>[0]
 }
 
 const handlers = { dispatchAffiliate: vi.fn() }

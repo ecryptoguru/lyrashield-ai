@@ -1,10 +1,5 @@
 import { z } from "zod"
-import {
-  ErrorCode,
-  McpError,
-  type CallToolResult,
-  type Task,
-} from "@modelcontextprotocol/sdk/types.js"
+import { ErrorCode, McpError, type Task } from "@modelcontextprotocol/sdk/types.js"
 import { LyraShieldClient, OperationStatusSchema } from "@lyrashield/sdk"
 import type { ToolHandlerContext } from "./tools"
 import {
@@ -312,7 +307,7 @@ export function createLocalTaskBackend(context: ToolHandlerContext): McpTaskBack
           content: [{ type: "text", text: JSON.stringify(payload) }],
           isError: true,
           structuredContent: payload,
-        } as CallToolResult
+        }
       }
       throw new McpError(ErrorCode.InvalidRequest, `Task ${taskId} has no result yet.`)
     },

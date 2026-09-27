@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { Integration } from "./generated/prisma"
 
 const {
   integrationFindFirst,
@@ -75,17 +76,22 @@ const tool: ConnectorToolSpec = {
   validateInput: (input) => ({ ok: true, value: input }),
 }
 
-function connection(overrides: Record<string, unknown> = {}) {
-  return {
+function connection(overrides: Partial<Integration> = {}): Integration {
+  const base: Integration = {
     id: "int-1",
     workspaceId: WORKSPACE,
     type: "GITHUB",
+    name: "GitHub",
     status: "active",
     capabilities: { scopes: ["repo:metadata"], tools: [tool.name] },
     metadata: {},
     configRef: "vault://cred",
-    ...overrides,
-  } as never
+    externalId: null,
+    deletedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }
+  return Object.assign(base, overrides)
 }
 
 function baseParams(overrides: Record<string, unknown> = {}) {

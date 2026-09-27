@@ -12,7 +12,6 @@
 import { logger } from "@lyrashield/logger"
 import {
   WEBHOOK_TRACK_IDS,
-  WEBHOOK_TRACK_MAX_ATTEMPTS,
   retryWebhookTrack,
   type WebhookTrackHandlers,
   type WebhookTrackId,

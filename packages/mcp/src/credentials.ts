@@ -10,7 +10,6 @@
  * LYRASHIELD_API_KEY environment variable from working.
  */
 import {
-  CREDENTIALS_FILE,
   refreshOAuthCredentials,
   resolveCredentials,
   tryReadCredentialsFile,

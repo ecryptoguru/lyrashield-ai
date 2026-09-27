@@ -41,9 +41,7 @@ export async function handleInit(args: string[], output: Output): Promise<number
       ? [parsed.agent]
       : []
 
-  const registry = await import("@lyrashield/agent-registry").catch(
-    () => ({}) as Record<string, unknown>
-  )
+  const registry = await import("@lyrashield/agent-registry").catch(() => ({}))
   const list = (registry as Record<string, unknown>).listAgents as (() => AgentEntry[]) | undefined
   const listPreferred = (registry as Record<string, unknown>).listPreferredAgents as
     (() => AgentEntry[]) | undefined

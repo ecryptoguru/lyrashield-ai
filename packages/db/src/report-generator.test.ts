@@ -503,9 +503,9 @@ describe("report-generator", () => {
             createdAt: new Date(),
             reviewedById: null,
             reviewedAt: null,
-          } as never,
+          },
         },
-      ])
+      ] as never)
       vi.mocked(aiAssuranceStateForVersion).mockImplementation((version) => {
         if (version && (version as { status: string }).status === "ACCEPTED")
           return "EVIDENCE_ACCEPTED"

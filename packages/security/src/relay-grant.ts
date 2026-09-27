@@ -82,6 +82,51 @@ export function mintRelayGrant(scope: RelayGrantScope, secret: string): string {
   return `${GRANT_PREFIX}${payloadB64}.${sign(payloadB64, secret)}`
 }
 
+function isRelayGrantScope(value: unknown): value is RelayGrantScope {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+
+  const scope = value as Record<string, unknown>
+  return (
+    scope.v === 1 &&
+    typeof scope.scanId === "string" &&
+    /^[A-Za-z0-9_-]{1,128}$/.test(scope.scanId) &&
+    Array.isArray(scope.hosts) &&
+    scope.hosts.length > 0 &&
+    scope.hosts.length <= 100 &&
+    scope.hosts.every(
+      (host) => typeof host === "string" && host.length <= 253 && normalizeRelayHost(host) !== null
+    ) &&
+    Array.isArray(scope.methods) &&
+    scope.methods.length > 0 &&
+    scope.methods.every(
+      (method) =>
+        typeof method === "string" && /^(GET|HEAD|OPTIONS|POST|PUT|PATCH|DELETE)$/.test(method)
+    ) &&
+    Array.isArray(scope.blockedPaths) &&
+    scope.blockedPaths.length <= 100 &&
+    scope.blockedPaths.every(
+      (path) => typeof path === "string" && path.startsWith("/") && path.length <= 2048
+    ) &&
+    [
+      scope.exp,
+      scope.maxRequests,
+      scope.maxBytes,
+      scope.ratePerMinute,
+      scope.perPathPerMinute,
+    ].every((number) => Number.isSafeInteger(number) && Number(number) > 0) &&
+    Number(scope.exp) <= Date.now() + MAX_RELAY_GRANT_TTL_MS &&
+    Number(scope.maxRequests) <= 100_000 &&
+    Number(scope.maxBytes) <= 1024 * 1024 * 1024 &&
+    Number(scope.ratePerMinute) <= 10_000 &&
+    Number(scope.perPathPerMinute) <= 10_000 &&
+    (scope.maxResponseBytes === undefined ||
+      (Number.isSafeInteger(scope.maxResponseBytes) &&
+        Number(scope.maxResponseBytes) > 0 &&
+        Number(scope.maxResponseBytes) <= 64 * 1024 * 1024)) &&
+    !("injectHeaders" in scope)
+  )
+}
+
 export function verifyRelayGrant(
   token: string | undefined,
   secret: string
@@ -107,56 +152,11 @@ export function verifyRelayGrant(
   } catch {
     return { ok: false, reason: "malformed" }
   }
+
   // A valid HMAC authenticates bytes, not their types or policy bounds.
-  if (!parsedScope || typeof parsedScope !== "object" || Array.isArray(parsedScope)) {
-    return { ok: false, reason: "malformed" }
-  }
-  const scope = parsedScope as Record<string, unknown>
-  if (
-    scope.v !== 1 ||
-    typeof scope.scanId !== "string" ||
-    !/^[A-Za-z0-9_-]{1,128}$/.test(scope.scanId) ||
-    !Array.isArray(scope.hosts) ||
-    scope.hosts.length === 0 ||
-    scope.hosts.length > 100 ||
-    !scope.hosts.every(
-      (host) => typeof host === "string" && host.length <= 253 && normalizeRelayHost(host) !== null
-    ) ||
-    !Array.isArray(scope.methods) ||
-    scope.methods.length === 0 ||
-    !scope.methods.every(
-      (method) =>
-        typeof method === "string" && /^(GET|HEAD|OPTIONS|POST|PUT|PATCH|DELETE)$/.test(method)
-    ) ||
-    !Array.isArray(scope.blockedPaths) ||
-    scope.blockedPaths.length > 100 ||
-    !scope.blockedPaths.every(
-      (path) => typeof path === "string" && path.startsWith("/") && path.length <= 2048
-    ) ||
-    ![
-      scope.exp,
-      scope.maxRequests,
-      scope.maxBytes,
-      scope.ratePerMinute,
-      scope.perPathPerMinute,
-    ].every((value) => Number.isSafeInteger(value) && Number(value) > 0) ||
-    Number(scope.exp) > Date.now() + MAX_RELAY_GRANT_TTL_MS ||
-    Number(scope.maxRequests) > 100_000 ||
-    Number(scope.maxBytes) > 1024 * 1024 * 1024 ||
-    Number(scope.ratePerMinute) > 10_000 ||
-    Number(scope.perPathPerMinute) > 10_000 ||
-    // Optional per-response cap: when present it must be a sane positive bound.
-    (scope.maxResponseBytes !== undefined &&
-      (!Number.isSafeInteger(scope.maxResponseBytes) ||
-        Number(scope.maxResponseBytes) <= 0 ||
-        Number(scope.maxResponseBytes) > 64 * 1024 * 1024)) ||
-    // Signed grants are readable by their bearer. Never put credentials in them.
-    "injectHeaders" in scope
-  ) {
-    return { ok: false, reason: "malformed" }
-  }
-  if (Number(scope.exp) <= Date.now()) return { ok: false, reason: "expired" }
-  return { ok: true, scope: scope as unknown as RelayGrantScope }
+  if (!isRelayGrantScope(parsedScope)) return { ok: false, reason: "malformed" }
+  if (parsedScope.exp <= Date.now()) return { ok: false, reason: "expired" }
+  return { ok: true, scope: parsedScope }
 }
 
 /** Normalize a hostname the same way the SSRF guard does. */

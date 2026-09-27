@@ -42,6 +42,7 @@ import {
   type AISecurityCoverage,
   type AISecuritySignal,
 } from "@lyrashield/security"
+import type { AIScanResult } from "@lyrashield/security/ai-security"
 import { resolve } from "path"
 import { mkdir } from "fs/promises"
 
@@ -591,7 +592,7 @@ export async function runScannerOrchestrator(
                   detectedCount: 0,
                   noFindingCount: 0,
                   inconclusiveCount: 0,
-                  controls: {} as Record<string, unknown>,
+                  controls: Object.fromEntries([]) satisfies AIScanResult["coverage"]["controls"],
                   limitsReached: [],
                   unsupportedFiles: [],
                   truncatedFiles: [],
@@ -603,7 +604,7 @@ export async function runScannerOrchestrator(
                   limitsReached: [],
                   detectorVersion: AI_SECURITY_DETECTOR_VERSION,
                 },
-              } as import("@lyrashield/security").AIScanResult,
+              } satisfies AIScanResult,
               ai03AdvisoryFresh: false,
               ai03Coverage: {
                 state: "NOT_ASSESSED",
@@ -642,7 +643,7 @@ export async function runScannerOrchestrator(
               },
               webMcpFindings: [],
               webMcpCoverage: null,
-            } as AiAppSecurityScanResult),
+            } satisfies AiAppSecurityScanResult),
         hasSourceCheckout
           ? runMlSupplyChainScan(scanId, absWorkspace, coverageIssues, signal, phaseDiscovery)
           : Promise.resolve([] as EngineVulnerability[]),

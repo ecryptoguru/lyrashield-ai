@@ -411,7 +411,7 @@ describe("command-builder", () => {
         const malformed = {
           ...diffPlan(),
           source: { revision: HEAD, baseRevision: BASE },
-        } as ScanExecutionPlan
+        }
 
         expect(() =>
           buildEngineCommand({
@@ -419,13 +419,13 @@ describe("command-builder", () => {
             goal: "CHECK_PR",
             mode: "STANDARD",
             target: REPO_TARGET,
-            executionPlan: malformed,
+            executionPlan: malformed as ScanExecutionPlan,
           })
         ).toThrow("SCAN_PLAN_INVALID")
       })
 
       it("fails closed when a DIFF plan arrives on a non-repository target", () => {
-        const mismatched = { ...diffPlan(), targetType: "WEB_APP" } as ScanExecutionPlan
+        const mismatched = { ...diffPlan(), targetType: "WEB_APP" }
 
         expect(() =>
           buildEngineCommand({
@@ -433,7 +433,7 @@ describe("command-builder", () => {
             goal: "CHECK_PR",
             mode: "STANDARD",
             target: WEB_TARGET,
-            executionPlan: mismatched,
+            executionPlan: mismatched as ScanExecutionPlan,
           })
         ).toThrow("SCAN_PLAN_INVALID")
       })

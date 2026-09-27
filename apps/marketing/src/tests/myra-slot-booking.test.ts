@@ -4,6 +4,7 @@
  * under the marketing Vitest suite against a minimal fake document.
  */
 import { beforeAll, describe, expect, it, vi } from "vitest"
+import { createMyraClient } from "@lyrashield/myra"
 
 interface FakeText {
   textContent: string
@@ -96,7 +97,7 @@ const SLOT = {
 
 function context(send: MyraDomRendererContext["send"]): MyraDomRendererContext {
   return {
-    client: {} as MyraDomRendererContext["client"],
+    client: createMyraClient({ apiBase: "https://app.lyrashieldai.com", surface: "MARKETING" }),
     apiBase: "https://app.lyrashieldai.com",
     announce: () => {},
     send,

@@ -173,9 +173,7 @@ export async function executePlatformAdminMutation<T>(
     if (
       !user ||
       !email ||
-      !APPROVED_PLATFORM_ADMIN_EMAILS.includes(
-        email as (typeof APPROVED_PLATFORM_ADMIN_EMAILS)[number]
-      ) ||
+      !APPROVED_PLATFORM_ADMIN_EMAILS.some((approvedEmail) => approvedEmail === email) ||
       !user.emailVerified ||
       user.platformRole !== "PLATFORM_OPERATOR" ||
       !user.twoFactorEnabled ||

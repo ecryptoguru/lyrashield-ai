@@ -126,6 +126,27 @@ export function sealEnvelope(plaintext: Buffer, kek: Buffer, keyRef: string): Bu
   return Buffer.concat([prefix, headerJson, body.ciphertext])
 }
 
+function isEnvelopeHeader(value: unknown): value is EnvelopeHeader {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+
+  const header = value as Record<string, unknown>
+  return (
+    header.v === 1 &&
+    header.alg === "A256GCM" &&
+    header.wrap === "A256GCM" &&
+    typeof header.keyRef === "string" &&
+    header.keyRef.length > 0 &&
+    typeof header.dek === "string" &&
+    header.dek.length > 0 &&
+    typeof header.wn === "string" &&
+    header.wn.length > 0 &&
+    typeof header.n === "string" &&
+    header.n.length > 0 &&
+    typeof header.t === "string" &&
+    header.t.length > 0
+  )
+}
+
 function parseEnvelope(buffer: Buffer): { header: EnvelopeHeader; ciphertext: Buffer } {
   if (!isEnvelope(buffer)) {
     throw new EvidenceEnvelopeError("Buffer is not an evidence envelope")
@@ -142,23 +163,10 @@ function parseEnvelope(buffer: Buffer): { header: EnvelopeHeader; ciphertext: Bu
   } catch (err) {
     throw new EvidenceEnvelopeError("Envelope header is not valid JSON", { cause: err })
   }
-  if (!parsedHeader || typeof parsedHeader !== "object" || Array.isArray(parsedHeader)) {
+  if (!isEnvelopeHeader(parsedHeader)) {
     throw new EvidenceEnvelopeError("Envelope header is missing required fields")
   }
-  const header = parsedHeader as Record<string, unknown>
-  if (
-    header.v !== 1 ||
-    header.alg !== "A256GCM" ||
-    header.wrap !== "A256GCM" ||
-    !header.keyRef ||
-    !header.dek ||
-    !header.wn ||
-    !header.n ||
-    !header.t
-  ) {
-    throw new EvidenceEnvelopeError("Envelope header is missing required fields")
-  }
-  return { header: header as unknown as EnvelopeHeader, ciphertext: buffer.subarray(headerEnd) }
+  return { header: parsedHeader, ciphertext: buffer.subarray(headerEnd) }
 }
 
 /** Read the untrusted key selector before authentication so callers can resolve its KEK. */

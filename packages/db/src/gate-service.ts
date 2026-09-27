@@ -822,23 +822,22 @@ export async function handleFixPrMergedAndReevaluate(
         // Scan.targetId is nullable in the schema; a scan row without a target
         // cannot anchor a retest. (Finding.targetId is already null-checked above.)
         if (!template.targetId) return null
+        const retestTemplate: {
+          id: string
+          goal: ScanGoal
+          mode: ScanMode
+          policyId: string | null
+          targetId: string
+        } = {
+          ...template,
+          targetId: template.targetId,
+        }
         return {
           findingId: finding.id,
           sourceScanId: finding.scan.id,
           sourceMode: finding.scan.mode,
           targetId: template.targetId,
-          // Prisma returns the enum values as strings; the asserted type carries
-          // the canonical union names so consumers satisfy ScanJobData directly.
-          template: {
-            ...template,
-            targetId: template.targetId,
-          } as {
-            id: string
-            goal: ScanGoal
-            mode: ScanMode
-            policyId: string | null
-            targetId: string
-          },
+          template: retestTemplate,
         }
       })
       if (!anchor) return null

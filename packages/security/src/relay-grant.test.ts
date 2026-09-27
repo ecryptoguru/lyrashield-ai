@@ -76,6 +76,7 @@ describe("relay grant", () => {
     null,
     [],
     { ...baseScope, hosts: [null] },
+    { ...baseScope, scanId: 123 },
     { ...baseScope, methods: [4] },
     { ...baseScope, blockedPaths: [null] },
     { ...baseScope, maxBytes: null },

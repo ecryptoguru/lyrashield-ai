@@ -80,9 +80,9 @@ vi.mock("./auth-session", () => ({
 import { buildScanExecutionPlan } from "@lyrashield/types"
 import { executeScanTarget, resolveEngineTerminalError } from "./execution"
 
-const relayConfig = { url: "https://relay.internal", token: "t" } as never
+const relayConfig = { url: "https://relay.internal", token: "t" }
 
-const target = {
+const targetFixture = {
   id: "target-1",
   type: "WEB_APP",
   name: "app",
@@ -93,10 +93,11 @@ const target = {
   environment: null,
   installationId: null,
   repoProvider: null,
-} as never
+}
+const target = targetFixture as Parameters<typeof executeScanTarget>[0]["target"]
 
 function params(over: Partial<Parameters<typeof executeScanTarget>[0]> = {}) {
-  return {
+  const fixture = {
     scanId: "scan-1",
     workspaceId: "ws-1",
     goal: "review",
@@ -115,7 +116,8 @@ function params(over: Partial<Parameters<typeof executeScanTarget>[0]> = {}) {
     urlEngineBacked: true,
     scanProfile: { canonicalMode: "DEEP" },
     ...over,
-  } as Parameters<typeof executeScanTarget>[0]
+  }
+  return fixture as Parameters<typeof executeScanTarget>[0]
 }
 
 const engineResult = {
@@ -130,7 +132,7 @@ const engineResult = {
     summary: "done",
     findingsComplete: true,
   },
-} as never
+}
 
 describe("executeScanTarget relay lifecycle", () => {
   beforeEach(() => {
@@ -195,12 +197,13 @@ describe("executeScanTarget relay lifecycle", () => {
       cleanup,
     })
     mocks.addScanEvent.mockRejectedValue(new Error("event storage unavailable"))
+    const repoTarget = { ...target, repoProvider: "github", repoFullName: "owner/repo" }
 
     await expect(
       executeScanTarget(
         params({
           deterministicRetest: true,
-          target: { ...target, repoProvider: "github", repoFullName: "owner/repo" } as never,
+          target: repoTarget as typeof target,
         })
       )
     ).rejects.toThrow("event storage unavailable")
@@ -258,13 +261,14 @@ describe("executeScanTarget relay lifecycle", () => {
         mergeBaseRevision: "c".repeat(40),
       },
     })
-    const repoTarget = {
+    const repoTargetFixture = {
       ...target,
       type: "REPO",
       url: null,
       repoFullName: "acme/app",
       repoProvider: "github",
-    } as never
+    }
+    const repoTarget = repoTargetFixture as typeof target
 
     const result = await executeScanTarget(
       params({
@@ -300,10 +304,11 @@ describe("executeScanTarget relay lifecycle", () => {
       },
     }
     mocks.resolveEngineRuntimeBudgetMs.mockReturnValue(200_000)
+    const repoTarget = { ...target, type: "REPO", repoFullName: "acme/app", url: null }
 
     const result = await executeScanTarget(
       params({
-        target: { ...target, type: "REPO", repoFullName: "acme/app", url: null } as never,
+        target: repoTarget as typeof target,
         urlEngineBacked: false,
         executionPlan: plan,
       })
@@ -328,7 +333,7 @@ describe("executeScanTarget authenticated staging beta", () => {
       mode: "DEEP",
       authorizationRef: "authz_1",
     })
-  const stagingTarget = { ...target, environment: "STAGING" } as never
+  const stagingTarget = { ...target, environment: "STAGING" }
   const authorization = {
     planId: "authz_1",
     approvedHost: "app.example.com",
@@ -374,11 +379,12 @@ describe("executeScanTarget authenticated staging beta", () => {
 
   it("mints a read-only beta grant with the exact plan ceilings and registers the session", async () => {
     const plan = betaPlan()
+    const policy = { blockedPaths: ["/internal"], destructiveTestsAllowed: false }
     const result = await executeScanTarget(
       params({
         target: stagingTarget,
         executionPlan: plan,
-        policy: { blockedPaths: ["/internal"], destructiveTestsAllowed: false } as never,
+        policy: policy as Parameters<typeof executeScanTarget>[0]["policy"],
       })
     )
 
@@ -478,15 +484,16 @@ describe("resolveEngineTerminalError runtime deadline mapping", () => {
   })
 
   it("keeps filed findings as PARTIAL when the engine reports a runtime deadline", async () => {
+    const engineResult = {
+      exitCode: 2,
+      output: {
+        vulnerabilities: [{ title: "finding" }],
+        runRecord: { terminal_reason: "runtime_deadline" },
+      },
+    }
     const result = await resolveEngineTerminalError({
       ...base,
-      engineResult: {
-        exitCode: 2,
-        output: {
-          vulnerabilities: [{ title: "finding" }],
-          runRecord: { terminal_reason: "runtime_deadline" },
-        },
-      } as never,
+      engineResult: engineResult as never,
       exitInterpretation: { status: "FAILED", category: "VULNERABILITIES_FOUND", message: "x" },
     })
 
@@ -500,15 +507,16 @@ describe("resolveEngineTerminalError runtime deadline mapping", () => {
   it("fails without findings when the engine reports a runtime deadline", async () => {
     // The engine exits 5 when the deadline fires before any finding is filed;
     // the run record, not the exit code, must decide the category.
+    const engineResult = {
+      exitCode: 5,
+      output: {
+        vulnerabilities: [],
+        runRecord: { terminal_reason: "runtime_deadline" },
+      },
+    }
     const result = await resolveEngineTerminalError({
       ...base,
-      engineResult: {
-        exitCode: 5,
-        output: {
-          vulnerabilities: [],
-          runRecord: { terminal_reason: "runtime_deadline" },
-        },
-      } as never,
+      engineResult: engineResult as never,
       exitInterpretation: { status: "FAILED", category: "ENGINE_INCOMPLETE", message: "x" },
     })
 
@@ -520,12 +528,13 @@ describe("resolveEngineTerminalError runtime deadline mapping", () => {
   })
 
   it("leaves the generic incomplete path for a run record without the deadline reason", async () => {
+    const engineResult = {
+      exitCode: 5,
+      output: { vulnerabilities: [], runRecord: { terminal_reason: "incomplete" } },
+    }
     const result = await resolveEngineTerminalError({
       ...base,
-      engineResult: {
-        exitCode: 5,
-        output: { vulnerabilities: [], runRecord: { terminal_reason: "incomplete" } },
-      } as never,
+      engineResult: engineResult as never,
       exitInterpretation: {
         status: "FAILED",
         category: "ENGINE_INCOMPLETE",
