@@ -129,7 +129,7 @@ describe("scan detail guided states", () => {
     expect(html).not.toContain("Create an assurance report")
   })
 
-  it("shows partial coverage with its retained findings and never routes it to a clean report", () => {
+  it("shows a same-target coverage action alongside retained findings", () => {
     const html = renderDetail({
       scan: {
         ...scan,
@@ -154,8 +154,10 @@ describe("scan detail guided states", () => {
 
     expect(html).toContain("Coverage: Partial")
     expect(html).toContain("Coverage is partial or has a recorded limitation.")
-    expect(html).toContain("Review highest-priority finding")
-    expect(html).toContain("/dashboard/findings?tab=issues&amp;finding=finding-1")
+    expect(html).toContain("Complete coverage")
+    expect(html).toContain(
+      "/dashboard/scans?new=1&amp;target=target-1&amp;goal=TEST_APP&amp;mode=STANDARD"
+    )
     expect(html).not.toContain("Create an assurance report")
   })
 
@@ -183,9 +185,7 @@ describe("scan detail guided states", () => {
 
     expect(html).toContain("Coverage: Complete")
     expect(html).toContain("Create an assurance report")
-    expect(html).toContain(
-      "/dashboard/findings?tab=reports&amp;scanId=scan-1&amp;targetId=target-1"
-    )
+    expect(html).toContain("/dashboard/reports?scanId=scan-1&amp;targetId=target-1")
   })
 
   it("routes an exhausted-minutes result to account usage instead of retrying", () => {
