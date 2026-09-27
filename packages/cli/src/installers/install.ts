@@ -11,7 +11,7 @@ import type {
   RenderedEntry,
   Transport,
 } from "@lyrashield/agent-registry"
-import { deriveMcpUrl } from "@lyrashield/agent-registry"
+import { deriveMcpUrl, MCP_PACKAGE_SPEC } from "@lyrashield/agent-registry"
 import { detectAgent, resolveLocation, findDetectedLocations } from "./detect.js"
 import { resolveSecretMode, secretWarning } from "./secret-mode.js"
 import { mergeFile } from "./merge.js"
@@ -44,7 +44,7 @@ const VENDOR_COMMAND_ALLOWLIST = new Set(["claude", "amp"])
 // registry change alone can never widen what runs.
 const VENDOR_CLI_ARGV_ALLOWLIST: Record<string, readonly (readonly string[])[]> = {
   claude: [["mcp", "add"]],
-  amp: [["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.10"]],
+  amp: [["mcp", "add", "lyrashield", "--", "npx", "-y", MCP_PACKAGE_SPEC]],
 }
 
 function vendorArgvAllowed(command: string, args: readonly string[]): boolean {
@@ -76,7 +76,7 @@ URL:            ${endpoint}
 Authentication: ${authentication}`
   }
   const command = "npx"
-  const args = ["-y", "@lyrashield/mcp@0.2.10"]
+  const args = ["-y", MCP_PACKAGE_SPEC]
   const env = opts.useCredentialStore
     ? {}
     : { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY", LYRASHIELD_API_URL: opts.apiUrl }

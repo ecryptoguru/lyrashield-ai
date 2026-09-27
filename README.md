@@ -56,7 +56,7 @@ Run `npx lyrashield doctor` any time to check what's configured and what's missi
 }
 ```
 
-`@lyrashield/mcp` is published on npm with a [tool catalog](packages/mcp/README.md) covering read and authorized write actions and both stdio and remote Streamable-HTTP transports. A connected OAuth client runs its authorized operations automatically within its connection grant. A caller without a connected client — an API key or a legacy OAuth bearer — receives one structured `connect_required` response pointing at OAuth connect; nothing is queued and nothing executes. Full per-agent setup is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The `@lyrashield/agent-plugin` package supports Cursor Streamable HTTP; `packages/agent-registry` owns the install entries and client mapping.
+`@lyrashield/mcp` is published on npm with 21 tools (read-only inspection plus scoped scan, attachment, fix and retest actions), both stdio and remote Streamable-HTTP transports and a [tool catalog](packages/mcp/README.md). A connected OAuth client runs its authorized operations automatically within its connection grant. A caller without a connected client — an API key or a legacy OAuth bearer — receives one structured `connect_required` response pointing at OAuth connect; nothing is queued and nothing executes. Full per-agent setup for 26 preferred client surfaces is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The `@lyrashield/agent-plugin` package is published at v0.1.29 with Cursor Streamable HTTP support and `packages/agent-registry` resolves 30 install entries into those preferred surfaces.
 
 **GitHub Action** — a diff-aware CI gate that needs no LyraShield account, using `action.yml` at the repository root:
 
@@ -76,8 +76,8 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `apps/marketing-motion` — deterministic Three.js assurance-world motion workspace; the Astro site consumes rendered posters and clips.
 - `apps/desktop` — Tauri v2 BYOK desktop app (LyraShield Local/Desktop). Rust core + React frontend, ed25519 license verification, OS keychain BYOK credentials, and optional cloud sync.
 - `packages/cli` — the published `lyrashield` command-line tool. (`@lyrashield/cli` is deprecated and will be removed in the next major release; use `lyrashield` instead.)
-- `packages/agent-registry` — the source of truth for supported client installation paths used by the CLI installers and docs site.
-- `packages/agent-plugin` — portable Agent Plugins package bundling the MCP server and a `lyrashield` skill. See the [agent registry](packages/agent-registry/README.md) for supported clients.
+- `packages/agent-registry` — the single source of truth for 30 install entries resolving to 26 preferred client surfaces, including three explicit config-file alternatives for plugin-preferred clients and one experimental VS Code plugin entry. The CLI installers and docs site are generated against it.
+- `packages/agent-plugin` — the portable Agent Plugins v1.0.0 package (published as v0.1.29 with Cursor Streamable HTTP support) that bundles the MCP server and a `lyrashield` skill for five preferred Agent Plugin clients (Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro). GitHub Copilot remains experimental until a retained client-runtime receipt exists.
 - `packages/agent-rules` — renders LyraShield's security policy into each agent's native rules/instructions format (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others).
 - `packages/mcp` — the published `@lyrashield/mcp` server.
 - `packages/sdk` — the typed REST client shared by the CLI and the MCP server, so their behavior can't drift apart.
@@ -104,7 +104,7 @@ Prerequisites: Node.js 24, pnpm 12.2.0 (pinned in `package.json`), Docker, and a
 pnpm install
 pnpm --filter @lyrashield/db generate
 pnpm db:migrate
-pnpm dev
+pnpm --filter @lyrashield/web dev
 ```
 
 For production-like local validation:

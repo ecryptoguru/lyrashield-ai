@@ -14,11 +14,12 @@ This release uses `@modelcontextprotocol/sdk` 1.30.1. Its latest stable protocol
 
 - Server identity includes a title, description, website, version and usage instructions.
 - Every tool publishes an input schema, output schema, title, safety annotations and structured content.
-- Tool calls currently publish `execution.taskSupport: "forbidden"`. A returned LyraShield scan ID is a durable product job that clients poll with `lyrashield_get_scan_status`; it is not an MCP protocol task.
+- Only `lyrashield_scan_target` supports task augmentation, and only when the `2025-11-25` protocol is negotiated. Stdio uses the local task backend; hosted Streamable HTTP enables tasks only for a connected OAuth client. Hosted API-key clients and older protocol versions keep immediate `tools/call` behavior.
+- An MCP task ID and a LyraShield scan ID are different identifiers. Poll supported tasks with `tasks/get` and `tasks/result`, cancel with `tasks/cancel`, and use `lyrashield_get_scan_status` when a call returns only the durable scan ID. Hosted task state is derived from the durable operation and scan rows and is re-authorized on each request; stdio task listing lasts only for the process session.
 - Hosted responses use `Cache-Control: no-store` and vary on authorization and MCP protocol version. The server does not advertise unsupported MCP list-cache metadata.
 - Call arguments are validated against each tool's advertised `inputSchema` before execution; violations return a structured `Invalid tool arguments` error naming the offending fields.
 - Tool results are capped at 256 KiB serialized (`MCP_RESULT_MAX_BYTES`). Oversized text content and `structuredContent` are truncated with an explicit `[… truncated]` marker / `truncated: true` flag so a partial result is never mistaken for a complete one.
-- The hosted transport remains stateless and fail-closed. It does not advertise durable MCP Tasks because an in-memory task store would make serverless polling, cancellation and replay unreliable.
+- The hosted transport remains stateless and fail-closed. Its per-request task adapter resolves durable operation and scan rows, binds them to the verified OAuth connection and checks authorization again for reads and cancellation.
 
 See [Protocol conformance](./docs/protocol-conformance.md) for tested behavior and unsupported draft gaps. Tool annotations are client hints only; the server always enforces prompt-injection checks and the connection's server-side authorization independently.
 

@@ -1,4 +1,4 @@
-# LyraShield CLI 0.2.12
+# LyraShield CLI 0.2.13
 
 The `lyrashield` command-line interface installs, configures, and drives LyraShield scans from a terminal or CI pipeline.
 
@@ -52,12 +52,13 @@ The default project is stored in `~/.lyrashield/project.json` (mode `0o600`). On
 
 ### Targets and scans
 
-- `scan [--target <targetId>] [--goal <goal>] [--mode <mode>] [--auto] [--repo <repo>] [--wait|--watch] [--timeout <s>] [--poll-interval <s>]` — start a scan
+- `scan [--target <targetId>] [--goal <goal>] [--mode <mode>] [--auto] [--repo <repo>] [--attachment <id>] [--wait|--watch] [--timeout <s>] [--poll-interval <s>]` — start a scan
   - Default mode is `STANDARD`; use `pr-scan` for a bounded `QUICK` pre-PR check. `SAFE` remains an accepted compatibility alias for repository targets.
   - Goals: `CHECK_PR`, `TEST_APP`, `LAUNCH_REVIEW`, `WEEKLY_MONITOR`, `FULL_PENTEST`, `COMPLIANCE_REVIEW`
   - Modes: `SAFE`, `QUICK`, `STANDARD`, `DEEP`, `CUSTOM`
   - With no target and no default project, pass `--auto` to detect the current git repo and create or reuse a target
   - Pass `--repo` as `owner/repo`, an HTTPS URL, or an SSH URL (e.g. `ecryptoguru/lyrashield-ai`, `https://github.com/ecryptoguru/lyrashield-ai.git`, `git@github.com:ecryptoguru/lyrashield-ai.git`)
+  - Pass one or more `--attachment <id>` flags to include already-uploaded workspace evidence in the immutable scan plan; upload and list files with `lyrashield attachments` first
   - `--wait`/`--watch` polls the scan until a terminal state; `--timeout` bounds the wait in seconds (default 1800, max 86400) and `--poll-interval` sets seconds between polls (default 5, minimum 1). The scan id is printed to stderr immediately on acceptance; status transitions go to stderr while waiting, including in `--json` mode (stdout stays a single final document). `Ctrl+C` stops waiting only — the scan keeps running and the printed `status <id> --watch` command resumes it. A scan that ends other than `COMPLETED` exits `7`; the deadline exits `8`; `SIGINT` exits `130`. `COMPLETED` means execution finished — it is not a security verdict.
 - `preflight [--target <targetId>] [--goal <goal>] [--mode <mode>] [--workspace <workspaceId>] [--workflow <workflow> --base <ref> --head <ref>] [--attachment <id>]` — advisory read-only check of whether `scan` would currently be admitted for the target. It evaluates the same permission, plan, domain-proof and entitlement gates server-side without starting a scan, claiming a trial, or consuming the free-URL allowance; the authoritative check still runs at scan creation. Exit `0` when allowed, exit `1` on an eligibility denial (`allowed:false` — a successful read), and the usual codes for usage (`2`), auth (`3`), network (`4`), rate-limit (`5`) and plan refusal (`6`). Supports `--json`; with no `--target`, the saved default project is used when it matches the workspace.
 - `pr-scan [--auto] [--repo <owner/repo>] [--mode <mode>] [--wait|--watch] [--timeout <s>]` — shortcut for `scan --goal CHECK_PR --mode QUICK`; supports the same wait flags

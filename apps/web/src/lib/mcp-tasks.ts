@@ -22,7 +22,10 @@ import {
 } from "@lyrashield/mcp"
 import {
   cancelScan,
+  claimOrGetAgentOperation,
   checkDelegatedOperationAuthorization,
+  completeAgentOperation,
+  failAgentOperation,
   getAgentOperation,
   listAgentOperationsForTasks,
   withWorkspaceRLS,
@@ -246,12 +249,6 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
 
       const { operation, scan } = resolved
       const view = resolveTaskView({ operation: toOperationRecord(operation), scan })
-      if (isTerminalTaskStatus(view.status)) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          `Cannot cancel task in terminal status: ${view.status}`
-        )
-      }
       if (!scan || scan.id !== extractScanIdFromOperation(toOperationRecord(operation))) {
         throw new McpError(
           ErrorCode.InvalidRequest,
@@ -274,6 +271,40 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
         )
       }
 
+      const cancelClaim = await claimOrGetAgentOperation({
+        workspaceId,
+        connectionId: connection.id,
+        authorizationVersion: connection.authorizationVersion,
+        operationName: CANONICAL_OPERATIONS.SCAN_CANCEL,
+        idempotencyKey: `mcp-task-cancel:${taskId}`,
+        input: { taskId, scanId: scan.id },
+      })
+      if (cancelClaim.status !== "NEW") {
+        const after = await resolve(taskId, PERMISSIONS.scan.view)
+        const afterView = after
+          ? resolveTaskView({ operation: toOperationRecord(after.operation), scan: after.scan })
+          : null
+        if (cancelClaim.status === "REPLAY" && after && afterView?.status === "cancelled") {
+          return toTask(taskId, after)
+        }
+        const reason =
+          cancelClaim.status === "CONFLICT"
+            ? cancelClaim.message
+            : `Cancellation operation is ${cancelClaim.status.toLowerCase()}; current task status is ${afterView?.status ?? "unavailable"}.`
+        throw new McpError(ErrorCode.InvalidRequest, reason)
+      }
+
+      if (isTerminalTaskStatus(view.status)) {
+        await failAgentOperation(cancelClaim.operation.id, workspaceId, {
+          error: "TASK_CANCELLATION_TERMINAL",
+          resultReference: scan.id,
+        }).catch(() => undefined)
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `Cannot cancel task in terminal status: ${view.status}`
+        )
+      }
+
       try {
         await cancelScan(scan.id, workspaceId)
       } catch {
@@ -284,6 +315,10 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
         const afterView = after
           ? resolveTaskView({ operation: toOperationRecord(after.operation), scan: after.scan })
           : null
+        await failAgentOperation(cancelClaim.operation.id, workspaceId, {
+          error: "TASK_CANCELLATION_FAILED",
+          resultReference: scan.id,
+        }).catch(() => undefined)
         throw new McpError(
           ErrorCode.InvalidRequest,
           `Task cancellation failed${afterView ? ` (current status: ${afterView.status})` : ""}.`
@@ -291,7 +326,30 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
       }
 
       const after = await resolve(taskId, PERMISSIONS.scan.view)
-      if (!after) throw notFound(taskId)
+      const afterView = after
+        ? resolveTaskView({ operation: toOperationRecord(after.operation), scan: after.scan })
+        : null
+      if (!after || !afterView) {
+        await failAgentOperation(cancelClaim.operation.id, workspaceId, {
+          error: "TASK_CANCELLATION_STATUS_UNAVAILABLE",
+          resultReference: scan.id,
+        }).catch(() => undefined)
+        throw notFound(taskId)
+      }
+      if (afterView.status !== "cancelled") {
+        await failAgentOperation(cancelClaim.operation.id, workspaceId, {
+          error: "TASK_CANCELLATION_NOT_CONFIRMED",
+          resultReference: scan.id,
+        }).catch(() => undefined)
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          `Task cancellation was not confirmed (current status: ${afterView.status}).`
+        )
+      }
+      await completeAgentOperation(cancelClaim.operation.id, workspaceId, {
+        resultReference: scan.id,
+        result: { taskId, scanId: scan.id, status: afterView.status.toUpperCase() },
+      })
       return toTask(taskId, after)
     },
 

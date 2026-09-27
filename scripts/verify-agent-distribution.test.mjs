@@ -241,9 +241,9 @@ describe("parseArgs (smoke CLI plumbing, no subprocesses)", () => {
 })
 
 describe("EXPECTED_MCP_TOOLS", () => {
-  it("covers the 15 published tool names documented in the MCP README", () => {
-    expect(EXPECTED_MCP_TOOLS).toHaveLength(15)
-    expect(new Set(EXPECTED_MCP_TOOLS).size).toBe(15)
+  it("covers all 21 published tool names documented in the MCP README", () => {
+    expect(EXPECTED_MCP_TOOLS).toHaveLength(21)
+    expect(new Set(EXPECTED_MCP_TOOLS).size).toBe(21)
     for (const name of EXPECTED_MCP_TOOLS) expect(name).toMatch(/^lyrashield_/)
     // The README tool table is the documented contract; every advertised tool
     // must appear in it (packages/mcp/src/readme-table.test.ts covers the

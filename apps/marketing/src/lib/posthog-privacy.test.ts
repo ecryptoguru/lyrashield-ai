@@ -5,6 +5,7 @@ import {
   marketingAnalyticsCookie,
   marketingAnalyticsPreference,
   MARKETING_EVENT_ALLOWLIST,
+  optionalTrackingCookieExpirations,
   privacyBoundedMarketingEvent,
   sanitizeMarketingProperties,
   type MarketingEventName,
@@ -35,6 +36,18 @@ describe("marketing analytics preference", () => {
     expect(marketingAnalyticsCookie(true, "preview.example.test", false)).toContain(
       "Max-Age=15552000"
     )
+  })
+
+  it("expires optional tracking cookies on the local and shared domains", () => {
+    const expirations = optionalTrackingCookieExpirations("app.lyrashieldai.com", true)
+    expect(expirations).toHaveLength(8)
+    expect(expirations).toContain(
+      "lyrashield-acq=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Domain=.lyrashieldai.com; Secure"
+    )
+    expect(expirations).toContain(
+      "ls_ref=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Domain=.lyrashieldai.com; Secure"
+    )
+    expect(optionalTrackingCookieExpirations("preview.example.test", false)).toHaveLength(4)
   })
 })
 
@@ -192,5 +205,6 @@ describe("Lite Check analytics source", () => {
     expect(base).toContain('credentials: "include"')
     expect(base).toContain("ph.opt_out_capturing()")
     expect(base).toContain("data-analytics-toggle")
+    expect(base).toContain("/api/privacy/analytics-opt-out")
   })
 })

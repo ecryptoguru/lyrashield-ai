@@ -5,6 +5,7 @@ const verifyOAuthBearer = vi.fn()
 const requirePermissionMock = vi.fn().mockResolvedValue({})
 const claimOrGetAgentOperationMock = vi.fn()
 const completeAgentOperationMock = vi.fn()
+const failAgentOperationMock = vi.fn()
 const getAgentOperationMock = vi.fn()
 const listAgentOperationsForTasksMock = vi.fn()
 const checkDelegatedOperationAuthorizationMock = vi.fn()
@@ -18,10 +19,10 @@ vi.mock("@lyrashield/db", () => ({
     lyrashield_scan_target: { canonicalOperation: "scan.create" },
     lyrashield_cancel_scan: { canonicalOperation: "scan.cancel" },
   },
-  CANONICAL_OPERATIONS: { SCAN_CREATE: "scan.create" },
+  CANONICAL_OPERATIONS: { SCAN_CREATE: "scan.create", SCAN_CANCEL: "scan.cancel" },
   claimOrGetAgentOperation: (...a: unknown[]) => claimOrGetAgentOperationMock(...a),
   completeAgentOperation: (...a: unknown[]) => completeAgentOperationMock(...a),
-  failAgentOperation: vi.fn(),
+  failAgentOperation: (...a: unknown[]) => failAgentOperationMock(...a),
   getAgentOperation: (...a: unknown[]) => getAgentOperationMock(...a),
   listAgentOperationsForTasks: (...a: unknown[]) => listAgentOperationsForTasksMock(...a),
   checkDelegatedOperationAuthorization: (...a: unknown[]) =>
@@ -178,6 +179,8 @@ beforeEach(() => {
   verifyApiKey.mockReset()
   verifyOAuthBearer.mockReset()
   claimOrGetAgentOperationMock.mockReset()
+  completeAgentOperationMock.mockReset()
+  failAgentOperationMock.mockReset()
   getAgentOperationMock.mockReset()
   listAgentOperationsForTasksMock.mockReset()
   cancelScanMock.mockReset()
@@ -475,6 +478,11 @@ describe("MCP tasks over the hosted endpoint", () => {
   it("routes tasks/cancel through the canonical scan.cancel path", async () => {
     oauthConnection()
     getAgentOperationMock.mockResolvedValue(makeOperation())
+    claimOrGetAgentOperationMock.mockResolvedValue({
+      status: "NEW",
+      operation: { id: "cancel-op-1" },
+    })
+    completeAgentOperationMock.mockResolvedValue(undefined)
     // Fetch order: SDK pre-check getTask → backend pre-cancel resolve →
     // post-cancel re-resolve sees the CANCELLED durable row.
     scanFindFirstMock
@@ -504,6 +512,81 @@ describe("MCP tasks over the hosted endpoint", () => {
       expect.objectContaining({ operationName: "lyrashield_cancel_scan", targetId: "t-1" })
     )
     expect(cancelScanMock).toHaveBeenCalledWith("scan-1", "ws-1")
+    expect(claimOrGetAgentOperationMock).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      connectionId: "conn-1",
+      authorizationVersion: 7,
+      operationName: "scan.cancel",
+      idempotencyKey: "mcp-task-cancel:lst_op-1",
+      input: { taskId: "lst_op-1", scanId: "scan-1" },
+    })
+    expect(completeAgentOperationMock).toHaveBeenCalledWith("cancel-op-1", "ws-1", {
+      resultReference: "scan-1",
+      result: { taskId: "lst_op-1", scanId: "scan-1", status: "CANCELLED" },
+    })
+  })
+
+  it("replays cancellation after the scan reached CANCELLED", async () => {
+    oauthConnection()
+    getAgentOperationMock.mockResolvedValue(makeOperation())
+    claimOrGetAgentOperationMock.mockResolvedValue({ status: "REPLAY", operation: makeOperation() })
+    // The SDK reads the task before calling cancelTask. The scan may be
+    // cancelled by a concurrent request before our idempotency claim resolves.
+    scanFindFirstMock
+      .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
+      .mockResolvedValue(makeScan({ status: "CANCELLED" }))
+    checkDelegatedOperationAuthorizationMock.mockReturnValue({
+      authorized: true,
+      canonicalOperation: "scan.cancel",
+    })
+
+    const res = await POST(
+      req({
+        method: "POST",
+        rpcMethod: "tasks/cancel",
+        rpcParams: { taskId: "lst_op-1" },
+        protocolHeader: PROTOCOL_2025,
+      })
+    )
+
+    const body = await readJson(res)
+    const task =
+      (body.result as { status?: string }) ?? (body.result as { task?: { status: string } }).task
+    expect(task.status).toBe("cancelled")
+    expect(claimOrGetAgentOperationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationName: "scan.cancel",
+        idempotencyKey: "mcp-task-cancel:lst_op-1",
+        input: { taskId: "lst_op-1", scanId: "scan-1" },
+      })
+    )
+    expect(cancelScanMock).not.toHaveBeenCalled()
+  })
+
+  it("does not cancel or record an operation outside the connection target grant", async () => {
+    oauthConnection({ allowedTargetIds: ["different-target"], allTargets: false })
+    getAgentOperationMock.mockResolvedValue(makeOperation())
+    scanFindFirstMock.mockResolvedValue(makeScan({ status: "RUNNING" }))
+    checkDelegatedOperationAuthorizationMock.mockReturnValue({
+      authorized: false,
+      reason: "TARGET_SCOPE_DENIED",
+    })
+
+    const res = await POST(
+      req({
+        method: "POST",
+        rpcMethod: "tasks/cancel",
+        rpcParams: { taskId: "lst_op-1" },
+        protocolHeader: PROTOCOL_2025,
+      })
+    )
+
+    expect((await readJson(res)).error).toBeTruthy()
+    expect(checkDelegatedOperationAuthorizationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ targetId: "t-1" })
+    )
+    expect(claimOrGetAgentOperationMock).not.toHaveBeenCalled()
+    expect(cancelScanMock).not.toHaveBeenCalled()
   })
 
   it("denies tasks/cancel when the delegated cancel grant is missing", async () => {

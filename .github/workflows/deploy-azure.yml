@@ -989,7 +989,7 @@ jobs:
             sleep 5
           done
           retry_app_update() {
-            local attempt output
+            local attempt output backoff=5 max_backoff=30
             for attempt in $(seq 1 24); do
               if output=$("$@" 2>&1); then
                 printf '%s\n' "$output"
@@ -1004,7 +1004,13 @@ jobs:
                 echo "::error::Container Apps operation did not release before the candidate update."
                 return 1
               fi
-              sleep 5
+              sleep "$backoff"
+              if [ "$backoff" -lt "$max_backoff" ]; then
+                backoff=$((backoff * 2))
+                if [ "$backoff" -gt "$max_backoff" ]; then
+                  backoff="$max_backoff"
+                fi
+              fi
             done
           }
           retry_app_update az containerapp update \

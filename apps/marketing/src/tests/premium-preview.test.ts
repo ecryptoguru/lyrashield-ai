@@ -43,7 +43,7 @@ describe("premium assurance-world homepage", () => {
     expect(hero).toContain("Release assurance for AI-built apps")
     expect(hero).toContain("Know what your AI-built app is ready to ship.")
     expect(hero).toContain(
-      "Review an authorized repository, URL or API. See what was checked, what needs attention, and"
+      "Review an authorized repository, URL or API. See what was checked, what needs attention and"
     )
     expect(hero.indexOf("landing_hero&cta=review_app")).toBeLessThan(
       hero.indexOf('href="#free-scan"')

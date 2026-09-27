@@ -41,7 +41,7 @@ describe("AI-05 excessive agency", () => {
     }
   })
 
-  it("still flags genuine destructive tool names, including snake_case", () => {
+  it("flags snake_case, camelCase and member-call destructive operations", () => {
     // `\b` cannot be used here: in `delete_file` the boundary after `delete` is
     // followed by `_`, itself a word character, so `delete\b` would not match
     // and this real case would be lost.
@@ -50,6 +50,11 @@ describe("AI-05 excessive agency", () => {
       '  name: "remove_user",',
       '  name: "rm_rf",',
       "await db.drop(table)",
+      "tool.deleteFile(path)",
+      "db.dropTable(name)",
+      "users.removeRecord(id)",
+      "fs.rmSync(path)",
+      "collection.deleteMany({ active: false })",
       "tool.truncate()",
       "overwrite(path)",
       "destroy()",
@@ -60,6 +65,7 @@ describe("AI-05 excessive agency", () => {
 
   it("stays clean when approval is required for a destructive tool", () => {
     expect(state('  name: "delete_file", requireApproval: true')).toBe("NO_FINDING")
+    expect(state("await tool.deleteFile(path, { requireApproval: true })")).toBe("NO_FINDING")
   })
 
   it("still flags auto-approve and auto-execute settings", () => {
