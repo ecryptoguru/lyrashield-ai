@@ -51,6 +51,7 @@
     "@lyrashield/credentials": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "@lyrashield/sdk": "workspace:*",
+    "@lyrashield/types": "workspace:*",
     "@types/iarna__toml": "^2.0.5",
     "@types/minimist": "^1.2.5",
     "@types/node": "^24.0.0",

@@ -2,12 +2,9 @@ import { access, readFile } from "node:fs/promises"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import * as TOML from "@iarna/toml"
+import { isJsonObject } from "@lyrashield/types"
 import { backupFile } from "./backup.js"
 import { atomicWrite } from "./atomic-write.js"
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === "object" && !Array.isArray(v)
-}
 
 function toTomlValue(v: unknown): string {
   if (typeof v === "string") return JSON.stringify(v)
@@ -23,13 +20,13 @@ function renderSectionHeader(prefix: string): string {
 function renderTable(prefix: string, value: Record<string, unknown>): string[] {
   const lines = [renderSectionHeader(prefix), ""]
   for (const [k, v] of Object.entries(value)) {
-    if (isPlainObject(v)) {
+    if (isJsonObject(v)) {
       continue
     }
     lines.push(`${k} = ${toTomlValue(v)}`)
   }
   for (const [k, v] of Object.entries(value)) {
-    if (isPlainObject(v)) {
+    if (isJsonObject(v)) {
       lines.push(...renderTable(`${prefix}.${k}`, v))
     }
   }
@@ -70,7 +67,7 @@ function findSectionRange(
 }
 
 function buildEntry(rootKey: string, serverName: string, value: unknown): string {
-  if (!isPlainObject(value)) {
+  if (!isJsonObject(value)) {
     return renderTable(`${rootKey}.${serverName}`, { value }).join("\n") + "\n"
   }
   return renderTable(`${rootKey}.${serverName}`, value).join("\n") + "\n"
