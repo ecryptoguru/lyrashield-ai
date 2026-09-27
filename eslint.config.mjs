@@ -1,5 +1,6 @@
 import nextVitals from "eslint-config-next/core-web-vitals"
 import securityPlugin from "eslint-plugin-security"
+import typeAssertionRatchet from "./lint/type-assertion-ratchet.mjs"
 
 const eslintConfig = [
   ...nextVitals,
@@ -44,18 +45,9 @@ const eslintConfig = [
   {
     files: ["apps/**/src/**/*.{ts,tsx,mts,cts}", "packages/**/src/**/*.{ts,tsx,mts,cts}"],
     ignores: ["**/*.test.{ts,tsx,mts,cts}", "**/__tests__/**"],
+    plugins: { "type-assertion-ratchet": typeAssertionRatchet },
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector: "TSAsExpression > TSAsExpression[typeAnnotation.type='TSUnknownKeyword']",
-          message: "Double assertion via unknown: add a guard or a reasoned disable.",
-        },
-        {
-          selector: "TSAsExpression[typeAnnotation.type='TSNeverKeyword']",
-          message: "Assertion to never: add a guard or a reasoned disable.",
-        },
-      ],
+      "type-assertion-ratchet/no-new-unsafe-assertion": "error",
     },
   },
   {

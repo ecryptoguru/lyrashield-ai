@@ -405,6 +405,11 @@ jobs:
               -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci"
           done
 
+      - name: Size lint (advisory)
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.marketing == 'true'
+        continue-on-error: true
+        run: pnpm lint:size
+
       - name: Lint
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm lint
