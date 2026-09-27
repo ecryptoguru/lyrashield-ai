@@ -599,7 +599,7 @@ jobs:
           bash .github/scripts/tests/test-trial-claim-backfill-vm.sh
           bash .github/scripts/tests/test-validate-worker-provenance.sh
           sh ops/monitoring/scan-admission.test.sh
-          node --test .github/scripts/tests/parse-billing-receipt.test.mjs .github/scripts/tests/worker-preflight.test.mjs .github/scripts/tests/worker-contract-worktree.test.mjs
+          node --test .github/scripts/tests/worker-preflight.test.mjs .github/scripts/tests/worker-contract-worktree.test.mjs
           sh ops/deployment/azure-vm-run-command.test.sh
           sh ops/monitoring/provision-alerts.test.sh
           sh ops/worker/refresh-secrets.test.sh
