@@ -116,7 +116,9 @@ export function beginScanSubmission(
     } {
   const requestIdentity = scanRequestIdentity(payload)
   const existing = readPendingScanSubmission(scope, storage)
-  if (existing) {
+  // Accepted scans are already retained by the caller. Only a pending request
+  // needs its original idempotency key for safe recovery after a lost response.
+  if (existing?.state === "pending") {
     return existing.requestIdentity === requestIdentity
       ? { kind: "existing", submission: existing }
       : { kind: "conflict", submission: existing }

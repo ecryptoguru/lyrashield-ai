@@ -49,7 +49,7 @@ describe("recoverable scan submissions", () => {
     expect(retried).toMatchObject({ kind: "existing", submission: { idempotencyKey: firstKey } })
   })
 
-  it("retains accepted scan and operation IDs after fast completion", () => {
+  it("starts a new attempt after the accepted scan is retained in the UI", () => {
     const storage = new MemoryStorage()
     const started = beginScanSubmission(scope, payload, storage, () => firstKey)
     expect(started.kind).toBe("created")
@@ -62,7 +62,23 @@ describe("recoverable scan submissions", () => {
       scanId: "scan-1",
       operationId: "operation-1",
     })
-    expect(retried).toMatchObject({ kind: "existing", submission: { idempotencyKey: firstKey } })
+    expect(retried).toMatchObject({
+      kind: "created",
+      submission: { idempotencyKey: secondKey, state: "pending" },
+    })
+  })
+
+  it("allows a different target after an accepted scan", () => {
+    const storage = new MemoryStorage()
+    beginScanSubmission(scope, payload, storage, () => firstKey)
+    recordAcceptedScan(scope, firstKey, "scan-1", undefined, storage)
+
+    expect(
+      beginScanSubmission(scope, { ...payload, targetId: "target-2" }, storage, () => secondKey)
+    ).toMatchObject({
+      kind: "created",
+      submission: { idempotencyKey: secondKey, state: "pending" },
+    })
   })
 
   it("does not reuse a key for changed input until the old submission is explicitly cleared", () => {
