@@ -32,10 +32,10 @@ const attachment = await uploadScanAttachment(client, {
   filename: "scope.md",
   mediaType: "text/markdown",
   content: "Authorized staging hosts: staging.example.com",
-  idempotencyKey: "scope-md-2026-09-27",
+  idempotencyKey: "upload-example",
 })
 await deleteScanAttachment(client, attachment.id, {
-  idempotencyKey: "remove-scope-md-2026-09-27",
+  idempotencyKey: "delete-example",
 })
 ```
 
