@@ -5,6 +5,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { authClient } from "@lyrashield/auth"
+import { invalidateAnalyticsPreference } from "@/lib/analytics"
 import { LogOut } from "lucide-react"
 import { Button, cn } from "@lyrashield/ui"
 import { WorkspaceSwitcher } from "./workspace-switcher"
@@ -138,7 +139,9 @@ export function V2Sidebar({
   }
 
   async function handleSignOut() {
-    await authClient.signOut()
+    const result = await authClient.signOut()
+    if (result.error) return
+    invalidateAnalyticsPreference()
     router.push("/sign-in")
     router.refresh()
   }

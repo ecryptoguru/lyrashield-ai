@@ -185,9 +185,20 @@ describe("scan detail guided states", () => {
 
     expect(html).toContain("Coverage: Complete")
     expect(html).toContain("Create an assurance report")
-    expect(html).toContain(
-      "/dashboard/findings?tab=reports&amp;scanId=scan-1&amp;targetId=target-1"
-    )
+    expect(html).toContain("/dashboard/reports?scanId=scan-1&amp;targetId=target-1")
+  })
+
+  it("uses a human target type label", () => {
+    const html = renderDetail({
+      scan: {
+        ...scan,
+        target: { id: "target-1", name: "Repo", type: "REPO", url: null, repoFullName: null },
+      },
+      findings: [],
+    })
+
+    expect(html).toContain("Repository")
+    expect(html).not.toContain(">REPO<")
   })
 
   it("routes an exhausted-minutes result to account usage instead of retrying", () => {

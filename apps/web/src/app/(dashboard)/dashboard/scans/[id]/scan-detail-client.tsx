@@ -28,6 +28,7 @@ import {
   getScanGoalLabel,
   getScanModeLabel,
   getScanTriggerLabel,
+  getTargetTypeLabel,
   getVerificationStatusLabel,
 } from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
@@ -37,7 +38,7 @@ import { severityLabel, humanizeToken } from "@/lib/labels"
 import { track } from "@/lib/analytics"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import { presentOperationFailure } from "@/lib/operation-failure"
-import { findingsHref } from "@/lib/finding-list-params"
+import { findingsHref, reportsHref } from "@/lib/finding-list-params"
 import { scanRecoveryHref } from "../scans-client.utils"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
 import type { CleanResultScorecard, FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
@@ -480,8 +481,7 @@ export function ScanDetailClient({
             ? {
                 kind: "link" as const,
                 label: "Create an assurance report",
-                href: findingsHref({
-                  tab: "reports",
+                href: reportsHref({
                   scanId: scan.id,
                   ...(scan.target ? { targetId: scan.target.id } : {}),
                 }),
@@ -593,7 +593,10 @@ export function ScanDetailClient({
                   {scan.target?.name ?? "Target details unavailable"}
                 </span>
                 {scan.target && (
-                  <span className="text-muted-foreground"> · {scan.target.type}</span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {getTargetTypeLabel(scan.target.type)}
+                  </span>
                 )}
               </span>
               <span className="inline-flex items-center gap-1.5">
@@ -772,7 +775,7 @@ export function ScanDetailClient({
               <h2 className="mb-2 text-sm font-semibold">Target</h2>
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <span className="font-medium">{scan.target.name}</span>
-                <Badge variant="muted">{scan.target.type}</Badge>
+                <Badge variant="muted">{getTargetTypeLabel(scan.target.type)}</Badge>
                 {scan.target.repoFullName && (
                   <span className="text-muted-foreground">{scan.target.repoFullName}</span>
                 )}
@@ -1573,8 +1576,7 @@ export function ScanDetailClient({
                         Package this completed scan and its retained scope into an immutable report.
                       </p>
                       <Link
-                        href={findingsHref({
-                          tab: "reports",
+                        href={reportsHref({
                           scanId: scan.id,
                           ...(scan.target ? { targetId: scan.target.id } : {}),
                         })}

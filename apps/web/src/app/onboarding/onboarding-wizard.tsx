@@ -600,7 +600,11 @@ export function OnboardingWizard({
     setStep(3)
   }
 
-  async function createTargetAndStart(startNewScan = false) {
+  async function createTargetAndStart(
+    startNewScan = false,
+    skipEligibilityCheck = false,
+    startTrial = false
+  ) {
     if (!data.workspaceId) {
       setError("Workspace is required.")
       return
@@ -700,9 +704,10 @@ export function OnboardingWizard({
         }
         const eligibilityKey = JSON.stringify([targetId, scanRequest.goal, scanRequest.mode])
         if (
-          checkedEligibilityKey !== eligibilityKey ||
-          scanEligibility.status !== "ready" ||
-          !scanEligibility.eligibility.allowed
+          !skipEligibilityCheck &&
+          (checkedEligibilityKey !== eligibilityKey ||
+            scanEligibility.status !== "ready" ||
+            !scanEligibility.eligibility.allowed)
         ) {
           // Read-only advisory preflight; the scan-create endpoint still makes
           // the authoritative decision on the explicit second click.
@@ -723,6 +728,10 @@ export function OnboardingWizard({
             setScanEligibility({ status: "error" })
           }
           return
+        }
+
+        if (startTrial) {
+          await apiPost("/api/billing/trial/start", { workspaceId })
         }
 
         const explicitlyStartingNew = startNewScan || startNewScanAfterPreflight.current
@@ -1046,7 +1055,10 @@ export function OnboardingWizard({
             onSelectGoal={setSelectedGoal}
             loading={loading || pendingScanSubmission?.state === "accepted"}
             onBack={() => setStep(pathNeedsRepo(path) ? 2 : 1)}
-            onStart={createTargetAndStart}
+            onStart={(skipEligibilityCheck) =>
+              void createTargetAndStart(false, skipEligibilityCheck)
+            }
+            onStartTrial={() => void createTargetAndStart(false, true, true)}
           />
         )}
 

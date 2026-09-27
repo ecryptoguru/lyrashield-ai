@@ -4,12 +4,15 @@ import { useRouter } from "next/navigation"
 import { LogOut } from "lucide-react"
 import { authClient } from "@lyrashield/auth"
 import { Button } from "@lyrashield/ui"
+import { invalidateAnalyticsPreference } from "@/lib/analytics"
 
 export function SignOutButton() {
   const router = useRouter()
 
   async function handleSignOut() {
-    await authClient.signOut()
+    const result = await authClient.signOut()
+    if (result.error) return
+    invalidateAnalyticsPreference()
     router.push("/sign-in")
     router.refresh()
   }

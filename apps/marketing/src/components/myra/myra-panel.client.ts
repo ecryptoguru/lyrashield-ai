@@ -221,6 +221,9 @@ export function initMyraPanel() {
     if (!open) return
     open = false
     conversation.stopStream()
+    inputEl.value = ""
+    setStreaming(false)
+    setActivity(null)
     suggestions.hideSuggest()
     panelEl.hidden = true
     launcherEl.hidden = false
