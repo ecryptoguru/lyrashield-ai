@@ -478,6 +478,7 @@ export function TargetDetailsView({
   loading,
   onBack,
   onStart,
+  onStartTrial,
 }: {
   eyebrow: string
   path: OnboardingPath
@@ -491,7 +492,8 @@ export function TargetDetailsView({
   onSelectGoal: (goal: string) => void
   loading: boolean
   onBack: () => void
-  onStart: () => void
+  onStart: (skipEligibilityCheck?: boolean) => void
+  onStartTrial: () => void
 }) {
   return (
     <div className="space-y-5">
@@ -622,7 +624,10 @@ export function TargetDetailsView({
               Eligibility could not be checked because the service is temporarily unavailable. No
               scan was started.
             </p>
-            <p className="text-muted-foreground mt-1">Try the check again before starting.</p>
+            <p className="text-muted-foreground mt-1">
+              You can retry this check or continue. The scan service checks eligibility again before
+              any scan starts.
+            </p>
           </div>
         )}
         {eligibility.status === "ready" && eligibility.eligibility.allowed && (
@@ -700,7 +705,15 @@ export function TargetDetailsView({
         )}
         <Button
           type="button"
-          onClick={onStart}
+          onClick={() =>
+            eligibility.status === "error"
+              ? onStart(true)
+              : eligibility.status === "ready" &&
+                  !eligibility.eligibility.allowed &&
+                  eligibility.eligibility.code === "TRIAL_AVAILABLE"
+                ? onStartTrial()
+                : onStart()
+          }
           disabled={loading || eligibility.status === "checking"}
         >
           <ShieldCheck className="size-4" aria-hidden="true" />
@@ -710,10 +723,13 @@ export function TargetDetailsView({
               : "Starting…"
             : eligibility.status === "ready" && eligibility.eligibility.allowed
               ? `Start ${selectedReview?.label.toLowerCase() ?? "review"}`
-              : eligibility.status === "error" ||
-                  (eligibility.status === "ready" && !eligibility.eligibility.allowed)
-                ? "Check eligibility again"
-                : "Check availability"}
+              : eligibility.status === "error"
+                ? `Continue to start ${selectedReview?.label.toLowerCase() ?? "review"}`
+                : eligibility.status === "ready" && !eligibility.eligibility.allowed
+                  ? eligibility.eligibility.code === "TRIAL_AVAILABLE"
+                    ? "Start your free trial"
+                    : "Check eligibility again"
+                  : "Check availability"}
         </Button>
       </div>
     </div>

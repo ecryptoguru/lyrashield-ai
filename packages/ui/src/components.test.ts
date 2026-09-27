@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest"
 import { buttonVariants } from "./button"
 import { badgeVariants } from "./badge"
 import { cn } from "./utils"
+import { Input, Select, Textarea } from "./form-field"
+import { renderToStaticMarkup } from "react-dom/server"
+import { createElement } from "react"
 
 describe("buttonVariants", () => {
   it("applies default variant classes", () => {
@@ -109,6 +112,14 @@ describe("badgeVariants", () => {
     const cls = badgeVariants({ variant: "muted" })
     expect(cls).toContain("bg-muted")
     expect(cls).toContain("text-muted-foreground")
+  })
+})
+
+describe("mobile form control text", () => {
+  it("keeps shared inputs, selects and textareas at 16px on narrow viewports", () => {
+    for (const element of [createElement(Input), createElement(Select), createElement(Textarea)]) {
+      expect(renderToStaticMarkup(element)).toContain("max-md:text-base")
+    }
   })
 })
 

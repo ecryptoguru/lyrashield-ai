@@ -144,4 +144,64 @@ describe("billing page plan label", () => {
     expect(html).toContain(">Pro</p>")
     expect(html).toContain("Minutes, plan access and billing status belong to your account.")
   })
+
+  it("forfeits expired FREE trial minutes without hiding purchased pack balance", async () => {
+    mockPlan("FREE")
+    getAccountTrialState.mockResolvedValue({ ...inactiveTrial, isExpired: true, minutesLeft: 37 })
+    getUsageBalance.mockResolvedValue({
+      poolConsumed: 9,
+      poolMinutes: 60,
+      packRemaining: 12,
+      totalRemaining: 12,
+      packs: [{ remainingMinutes: 12, expiresAt: null, purchasedAt: new Date("2026-09-01") }],
+    })
+
+    const html = renderToString(await BillingPage({ searchParams: Promise.resolve({}) }))
+
+    expect(html).toContain("Unused trial minutes were forfeited.")
+    expect(html).toContain("9<!-- --> used of<!-- --> <!-- -->60")
+    expect(html).toContain("12<!-- --> agent-minutes available")
+    expect(html).toContain('Minutes Left</p><p class="text-xl font-semibold">0')
+  })
+
+  it("preserves a paid account's pool balance when its historical trial is expired", async () => {
+    mockPlan("PRO")
+    getAccountTrialState.mockResolvedValue({ ...inactiveTrial, isExpired: true, minutesLeft: 37 })
+    getUsageBalance.mockResolvedValue({
+      poolConsumed: 20,
+      poolMinutes: 100,
+      packRemaining: 0,
+      totalRemaining: 80,
+      packs: [],
+    })
+
+    const html = renderToString(await BillingPage({ searchParams: Promise.resolve({}) }))
+
+    expect(html).toContain("80<!-- --> agent-minutes available")
+    expect(html).not.toContain("Unused trial minutes were forfeited.")
+  })
+
+  it("formats large minute counts and uses singular day wording", async () => {
+    mockPlan("FREE")
+    getAccountTrialState.mockResolvedValue({
+      ...inactiveTrial,
+      isActive: true,
+      daysLeft: 1,
+      minutesLeft: 4_500,
+    })
+    getUsageBalance.mockResolvedValue({
+      poolConsumed: 1_234,
+      poolMinutes: 4_500,
+      packRemaining: 0,
+      totalRemaining: 3_266,
+      packs: [],
+    })
+
+    const html = renderToString(await BillingPage({ searchParams: Promise.resolve({}) }))
+
+    expect(html).toContain("3,266<!-- --> agent-minutes available")
+    expect(html).toContain("Trial active · 1 day and 4,500 minutes remaining.")
+    expect(html).toContain("1,234<!-- --> used of<!-- --> <!-- -->4,500")
+    expect(html).not.toContain("1 days")
+  })
 })

@@ -10,8 +10,10 @@ import {
   track,
   flushQueuedAnalytics,
   setAnalyticsPreference,
+  invalidateAnalyticsPreference,
   analyticsPermissionAllowsOptionalCollection,
   clearOptionalTrackingCookiesInBrowser,
+  resolveAnalyticsPreference,
 } from "./analytics"
 
 beforeEach(() => {
@@ -142,9 +144,131 @@ describe("track", () => {
       else process.env.NEXT_PUBLIC_POSTHOG_KEY = previousKey
     }
   })
+
+  it("queues events until the account preference resolves, then delivers them", async () => {
+    const previousKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test"
+    const capture = vi.fn()
+    vi.stubGlobal("window", { posthog: { capture } })
+    vi.stubGlobal("document", { cookie: "" })
+    vi.stubGlobal("navigator", { doNotTrack: null, globalPrivacyControl: false })
+    let resolveResponse: ((response: Response) => void) | undefined
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveResponse = resolve
+          })
+      )
+    )
+    try {
+      track("results_viewed", { status: "COMPLETED" })
+      expect(capture).not.toHaveBeenCalled()
+      resolveResponse?.(
+        Response.json({ success: true, data: { analyticsEnabled: true } }, { status: 200 })
+      )
+      await expect(resolveAnalyticsPreference()).resolves.toBe(true)
+      expect(capture).toHaveBeenCalledWith("results_viewed", { status: "COMPLETED" })
+    } finally {
+      flushQueuedAnalytics()
+      vi.unstubAllGlobals()
+      if (previousKey === undefined) delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+      else process.env.NEXT_PUBLIC_POSTHOG_KEY = previousKey
+    }
+  })
+
+  it("discards queued events when preference resolution fails", async () => {
+    const previousKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test"
+    const capture = vi.fn()
+    vi.stubGlobal("window", { posthog: { capture } })
+    vi.stubGlobal("document", { cookie: "" })
+    vi.stubGlobal("navigator", { doNotTrack: null, globalPrivacyControl: false })
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 503 })))
+    try {
+      track("results_viewed", { status: "COMPLETED" })
+      await expect(resolveAnalyticsPreference()).resolves.toBe(null)
+      setAnalyticsPreference(true)
+      expect(capture).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+      if (previousKey === undefined) delete process.env.NEXT_PUBLIC_POSTHOG_KEY
+      else process.env.NEXT_PUBLIC_POSTHOG_KEY = previousKey
+    }
+  })
+
+  it("does not let a stale anonymous preference overwrite a signed-in opt-out", async () => {
+    vi.stubGlobal("window", {})
+    vi.stubGlobal("document", { cookie: "" })
+    vi.stubGlobal("navigator", { doNotTrack: null, globalPrivacyControl: false })
+    const responses: Array<(response: Response) => void> = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            responses.push(resolve)
+          })
+      )
+    )
+    try {
+      const anonymousRequest = resolveAnalyticsPreference()
+      invalidateAnalyticsPreference()
+      const accountRequest = resolveAnalyticsPreference()
+      responses[0]?.(new Response(null, { status: 401 }))
+      await anonymousRequest
+      responses[1]?.(
+        Response.json({ success: true, data: { analyticsEnabled: false } }, { status: 200 })
+      )
+      await expect(accountRequest).resolves.toBe(false)
+      expect(analyticsPermissionAllowsOptionalCollection()).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe("signup attribution", () => {
+  it("waits for preference resolution before writing the acquisition cookie", async () => {
+    let cookie = ""
+    const documentStub = {
+      get cookie() {
+        return cookie
+      },
+      set cookie(value: string) {
+        cookie = value
+      },
+    }
+    vi.stubGlobal("document", documentStub)
+    vi.stubGlobal("navigator", { doNotTrack: null, globalPrivacyControl: false })
+    vi.stubGlobal("window", {
+      location: { hostname: "app.lyrashieldai.com", protocol: "https:" },
+      posthog: { capture: vi.fn() },
+    })
+    let resolveResponse: ((response: Response) => void) | undefined
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveResponse = resolve
+          })
+      )
+    )
+    try {
+      rememberAcquisition({ source: "landing_hero" })
+      expect(cookie).toBe("")
+      resolveResponse?.(
+        Response.json({ success: true, data: { analyticsEnabled: true } }, { status: 200 })
+      )
+      await resolveAnalyticsPreference()
+      expect(cookie).toContain("landing_hero")
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("honors DNT/GPC and preserves the first valid acquisition cookie", () => {
     expect(analyticsOptedOut("1", false)).toBe(true)
     expect(analyticsOptedOut(null, true)).toBe(true)

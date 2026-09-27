@@ -63,6 +63,8 @@ export async function runGetMyContext(
       })
 
   const plan = summary.billing?.effectivePlan ?? "FREE"
+  const displayedTrialMinutesLeft =
+    plan === "FREE" && summary.trial.isExpired ? 0 : summary.trial.minutesLeft
   const cloudPlan = CLOUD_PLAN_MAP[plan as CloudPlanId]
 
   let targetCount: number | null = null
@@ -96,7 +98,7 @@ export async function runGetMyContext(
       isTrial: summary.trial.isActive,
       trialExpired: summary.trial.isExpired,
       trialDaysLeft: summary.trial.daysLeft,
-      minutesRemaining: summary.balance?.totalRemaining ?? summary.trial.minutesLeft,
+      minutesRemaining: summary.balance?.totalRemaining ?? displayedTrialMinutesLeft,
       targetCount,
       targetCap: summary.trial.isActive ? summary.trial.targetCap : (cloudPlan?.targetCaps ?? null),
       canScan,

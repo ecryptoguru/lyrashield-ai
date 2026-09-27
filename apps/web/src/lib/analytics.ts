@@ -53,6 +53,8 @@ const OPTIONAL_TRACKING_COOKIES = [
 ]
 let analyticsPreference: boolean | null = null
 let analyticsPreferenceRequest: Promise<boolean | null> | null = null
+let analyticsPreferenceEpoch = 0
+let pendingAcquisition: SignupAttribution | null = null
 
 const LANDING_ROUTES = new Set([
   "home",
@@ -186,10 +188,37 @@ function notifyAnalyticsPreferenceChange(): void {
   }
 }
 
-export function setAnalyticsPreference(enabled: boolean | null): void {
+function applyAnalyticsPreference(enabled: boolean | null): void {
   analyticsPreference = enabled
-  if (enabled === false) flushQueuedAnalytics()
+  if (enabled !== true) {
+    pendingEvents.length = 0
+    pendingAcquisition = null
+  } else {
+    flushQueuedAnalytics()
+    if (pendingAcquisition) {
+      const attribution = pendingAcquisition
+      pendingAcquisition = null
+      persistAcquisition(attribution)
+    }
+  }
   notifyAnalyticsPreferenceChange()
+}
+
+/** Apply a known account preference or explicitly reset the same-page cache. */
+export function setAnalyticsPreference(enabled: boolean | null): void {
+  analyticsPreferenceEpoch += 1
+  analyticsPreferenceRequest = null
+  applyAnalyticsPreference(enabled)
+}
+
+function discardPendingOptionalData(): void {
+  pendingEvents.length = 0
+  pendingAcquisition = null
+}
+
+/** Invalidate an anonymous or previous-account preference after auth changes. */
+export function invalidateAnalyticsPreference(): void {
+  setAnalyticsPreference(null)
 }
 
 export function writeAnalyticsPreferenceCookie(enabled: boolean): void {
@@ -225,7 +254,8 @@ export function resolveAnalyticsPreference(): Promise<boolean | null> {
   }
   if (typeof window === "undefined") return Promise.resolve(null)
 
-  analyticsPreferenceRequest = fetch("/api/account/preferences", { cache: "no-store" })
+  const epoch = analyticsPreferenceEpoch
+  const request = fetch("/api/account/preferences", { cache: "no-store" })
     .then(async (response) => {
       if (response.status === 401) return true // anonymous browser: default enabled
       if (!response.ok) return null
@@ -239,12 +269,14 @@ export function resolveAnalyticsPreference(): Promise<boolean | null> {
     })
     .catch(() => null)
     .then((enabled) => {
-      setAnalyticsPreference(enabled)
+      if (epoch !== analyticsPreferenceEpoch) return analyticsPreference
+      applyAnalyticsPreference(enabled)
       return enabled
     })
     .finally(() => {
-      analyticsPreferenceRequest = null
+      if (analyticsPreferenceRequest === request) analyticsPreferenceRequest = null
     })
+  analyticsPreferenceRequest = request
   return analyticsPreferenceRequest
 }
 
@@ -262,6 +294,24 @@ export function acquisitionCookieValue(attribution: SignupAttribution): string |
 
 /** Client-side: persist the bounded attribution snapshot until signup completes. */
 export function rememberAcquisition(attribution: SignupAttribution): void {
+  if (typeof document === "undefined") return
+  if (
+    browserPrivacySignalIsOff() ||
+    (typeof document !== "undefined" && analyticsCookiePreference(document.cookie) === "off")
+  ) {
+    discardPendingOptionalData()
+    return
+  }
+  if (analyticsPreference === null) {
+    pendingAcquisition ??= { ...attribution }
+    void resolveAnalyticsPreference()
+    return
+  }
+  if (!analyticsPermissionAllowsOptionalCollection()) return
+  persistAcquisition(attribution)
+}
+
+function persistAcquisition(attribution: SignupAttribution): void {
   if (typeof document === "undefined" || !analyticsPermissionAllowsOptionalCollection()) return
   const value = acquisitionCookieValue(attribution)
   if (!value) return
@@ -372,12 +422,22 @@ export function sanitizeProperties<T extends EventName>(
 
 export function track<T extends EventName>(event: T, properties?: Record<string, unknown>): void {
   if (typeof window === "undefined" || !process.env.NEXT_PUBLIC_POSTHOG_KEY) return
-  if (!analyticsPermissionAllowsOptionalCollection()) {
-    flushQueuedAnalytics()
+  if (
+    browserPrivacySignalIsOff() ||
+    (typeof document !== "undefined" && analyticsCookiePreference(document.cookie) === "off")
+  ) {
+    discardPendingOptionalData()
     return
   }
 
   const sanitized = sanitizeProperties(event, properties) ?? {}
+  if (analyticsPreference === null) {
+    if (pendingEvents.length < MAX_PENDING_EVENTS) pendingEvents.push([event, sanitized])
+    void resolveAnalyticsPreference()
+    return
+  }
+  if (!analyticsPermissionAllowsOptionalCollection()) return
+
   const posthog = window.posthog
   if (posthog?.capture) {
     posthog.capture(event, sanitized)
@@ -393,6 +453,16 @@ export function flushQueuedAnalytics(
     pendingEvents.length = 0
     return
   }
+  const posthog =
+    typeof window === "undefined"
+      ? undefined
+      : (
+          window as unknown as {
+            posthog?: { capture?: (name: EventName, props: Record<string, unknown>) => void }
+          }
+        ).posthog
+  const deliver = capture ?? posthog?.capture
+  if (!deliver) return
   const events = pendingEvents.splice(0)
-  if (capture) for (const [event, properties] of events) capture(event, properties)
+  for (const [event, properties] of events) deliver(event, properties)
 }

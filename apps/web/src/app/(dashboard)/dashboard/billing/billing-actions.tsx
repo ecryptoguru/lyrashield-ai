@@ -152,7 +152,8 @@ export function BillingActions({
                   <h3 className="font-medium">{label}</h3>
                   {definition && (
                     <p className="text-xs text-muted-foreground">
-                      {definition.agentMinutes} agent-minutes / month · {targets}
+                      {definition.agentMinutes.toLocaleString("en-US")} agent-minutes / month ·{" "}
+                      {targets}
                     </p>
                   )}
                 </div>

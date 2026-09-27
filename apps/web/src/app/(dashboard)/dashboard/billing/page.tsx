@@ -31,6 +31,8 @@ export const metadata: Metadata = {
   title: "Billing",
 }
 
+const NUMBER_FORMAT = new Intl.NumberFormat("en-US")
+
 export default async function BillingPage({
   searchParams,
 }: {
@@ -95,6 +97,9 @@ export default async function BillingPage({
   const cloudPlan =
     CLOUD_PLAN_MAP[(trialState.isActive ? "TRIAL" : plan) as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = trialState.isActive
+  const displayedTrialMinutesLeft =
+    plan === "FREE" && trialState.isExpired ? 0 : trialState.minutesLeft
+  const trialDaysLabel = `${NUMBER_FORMAT.format(trialState.daysLeft)} ${trialState.daysLeft === 1 ? "day" : "days"}`
   const isLaunchAssurance = plan === "LAUNCH_ASSURANCE"
   const isComplimentary = billingAccount?.provider === "complimentary"
   const accountHasPaidPlan = Boolean(
@@ -177,11 +182,12 @@ export default async function BillingPage({
               )}
               <div className="rounded-md border p-3 text-sm">
                 <p className="font-medium">
-                  Your account balance: {balance.totalRemaining} agent-minutes available
+                  Your account balance: {NUMBER_FORMAT.format(balance.totalRemaining)} agent-minutes
+                  available
                 </p>
                 <p className="mt-1 text-muted-foreground">
                   {isTrial
-                    ? `Trial active · ${trialState.daysLeft} days and ${trialState.minutesLeft} minutes remaining.`
+                    ? `Trial active · ${trialDaysLabel} and ${NUMBER_FORMAT.format(displayedTrialMinutesLeft)} minutes remaining.`
                     : "Minutes, plan access and billing status belong to your account."}
                 </p>
               </div>
@@ -217,16 +223,21 @@ export default async function BillingPage({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
                   <p className="text-sm text-muted-foreground">Days Left</p>
-                  <p className="text-xl font-semibold">{trialState.daysLeft}</p>
+                  <p className="text-xl font-semibold">
+                    {NUMBER_FORMAT.format(trialState.daysLeft)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Agent-minutes left</p>
-                  <p className="text-xl font-semibold">{trialState.minutesLeft}</p>
+                  <p className="text-xl font-semibold">
+                    {NUMBER_FORMAT.format(displayedTrialMinutesLeft)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Targets</p>
                   <p className="text-xl font-semibold">
-                    {trialState.targetsUsed} / {trialState.targetCap}
+                    {NUMBER_FORMAT.format(trialState.targetsUsed)} /{" "}
+                    {NUMBER_FORMAT.format(trialState.targetCap)}
                   </p>
                 </div>
               </div>
@@ -235,7 +246,7 @@ export default async function BillingPage({
                   <AlertCircle className="h-4 w-4" />
                   <span>
                     {purchasesAvailable
-                      ? "Your trial has expired. Upgrade to continue scanning."
+                      ? "Your trial has expired. Unused trial minutes were forfeited. Upgrade to continue scanning."
                       : "Your trial has expired. New purchases are temporarily unavailable."}
                   </span>
                 </div>
@@ -260,12 +271,15 @@ export default async function BillingPage({
               <div>
                 <p className="text-sm text-muted-foreground">Pool Minutes</p>
                 <p className="text-xl font-semibold">
-                  {balance.poolConsumed} / {balance.poolMinutes}
+                  {NUMBER_FORMAT.format(balance.poolConsumed)} used of{" "}
+                  {NUMBER_FORMAT.format(balance.poolMinutes)}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Pack Minutes</p>
-                <p className="text-xl font-semibold">{balance.packRemaining}</p>
+                <p className="text-xl font-semibold">
+                  {NUMBER_FORMAT.format(balance.packRemaining)}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Remaining</p>
@@ -309,7 +323,8 @@ export default async function BillingPage({
               <div className="flex items-center gap-2 rounded-md bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-400">
                 <AlertCircle className="h-4 w-4" />
                 <span>
-                  Grace period active: {Math.ceil(graceState.remainingMs / 60_000)} minutes
+                  Grace period active:{" "}
+                  {NUMBER_FORMAT.format(Math.ceil(graceState.remainingMs / 60_000))} minutes
                   remaining.
                 </span>
               </div>
@@ -337,7 +352,9 @@ export default async function BillingPage({
                     className="flex items-center justify-between rounded-md border p-3"
                   >
                     <div>
-                      <p className="font-medium">{pack.remainingMinutes} minutes remaining</p>
+                      <p className="font-medium">
+                        {NUMBER_FORMAT.format(pack.remainingMinutes)} minutes remaining
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         Purchased <LocalTime value={pack.purchasedAt} />
                         {pack.expiresAt && (

@@ -238,7 +238,7 @@ export function AiAssuranceClient({
         </label>
 
         <Link
-          href={`/dashboard/findings?tab=reports&targetId=${encodeURIComponent(targetId)}`}
+          href={`/dashboard/reports?targetId=${encodeURIComponent(targetId)}`}
           className={buttonVariants({ variant: "outline", size: "sm" })}
           aria-label="Generate an assurance report"
         >

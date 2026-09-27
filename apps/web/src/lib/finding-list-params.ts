@@ -89,6 +89,13 @@ export function findingsHref(params: {
   return `/dashboard/findings?${query.toString()}`
 }
 
+export function reportsHref(params: { scanId?: string; targetId?: string }): string {
+  const query = new URLSearchParams()
+  if (params.scanId !== undefined) query.set("scanId", params.scanId)
+  if (params.targetId !== undefined) query.set("targetId", params.targetId)
+  return `/dashboard/reports${query.size ? `?${query.toString()}` : ""}`
+}
+
 export function withPreservedSearchParams(
   href: string,
   current: URLSearchParams,

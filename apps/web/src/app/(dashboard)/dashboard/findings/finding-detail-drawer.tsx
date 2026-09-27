@@ -20,7 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { severityLabel, humanizeToken, evidenceTypeLabel } from "@/lib/labels"
-import { findingsHref } from "@/lib/finding-list-params"
+import { findingsHref, reportsHref } from "@/lib/finding-list-params"
 import { FINDING_STATUS_LABELS, getVerificationStatusLabel } from "@/lib/enum-labels"
 import {
   buildRemediationTimeline,
@@ -819,8 +819,7 @@ export function FindingDetailDrawer({
                         result.
                       </p>
                       <Link
-                        href={findingsHref({
-                          tab: "reports",
+                        href={reportsHref({
                           scanId: latestRetest.scanId,
                           ...(targetId ? { targetId } : {}),
                         })}

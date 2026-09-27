@@ -659,7 +659,7 @@ export function FindingsClient({
         <p>
           <span className="font-medium">Scope:</span>{" "}
           {targetFilter
-            ? `Target: ${targets.find((target) => target.id === targetFilter)?.name ?? targetFilter}`
+            ? `Target: ${targets.find((target) => target.id === targetFilter)?.name ?? "Selected target"}`
             : "All targets"}
           {scanId ? ` · Scan: ${scanId}` : ""}
           {!scanId && !targetFilter ? " · All workspace findings" : ""}

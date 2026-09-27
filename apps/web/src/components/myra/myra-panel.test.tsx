@@ -33,6 +33,7 @@ describe("MyraPanel shell", () => {
     // focus enters on open, Tab/Shift+Tab stay inside, Escape closes, and
     // focus returns to the launcher.
     const src = readFileSync(new URL("./myra-panel.tsx", import.meta.url), "utf8")
+    expect(src).toContain("lg:right-6 lg:left-auto")
     expect(src).toContain('role="dialog"')
     expect(src).toContain("aria-modal={isModal || undefined}")
     expect(src).toContain("mobileCloseRef.current?.focus()")
@@ -46,6 +47,8 @@ describe("MyraPanel shell", () => {
     expect(src).toContain("if (!isModal) return")
     expect(src).toContain("}, [isModal, closeMobile])")
     expect(src).not.toContain("}, [mobileOpen, closeMobile])")
+    expect(src).toContain("hidden={mobileOpen}")
+    expect(src).toContain("lg:right-6 lg:left-auto")
   })
 
   it("renders the header, log region, opener, and starter buttons", () => {

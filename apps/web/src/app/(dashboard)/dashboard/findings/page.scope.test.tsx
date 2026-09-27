@@ -1,4 +1,5 @@
 import { Children, isValidElement, type ReactElement } from "react"
+import { renderToString } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const state = vi.hoisted(() => ({
@@ -44,6 +45,16 @@ async function listBoundary(tab: string, target?: string, scanId?: string) {
 beforeEach(() => {
   state.workspaceId = "workspace-a"
   state.listFixProposals.mockResolvedValue({ items: [], nextCursor: null })
+})
+
+it("describes a scan-scoped findings view without exposing its database id", async () => {
+  const page = await FindingsPage({
+    searchParams: Promise.resolve({ tab: "evidence", scanId: "scan-secret-id" }),
+  })
+  const html = renderToString(page)
+
+  expect(html).toContain("Single scan")
+  expect(html).not.toContain("scan-secret-id")
 })
 
 describe.each(["evidence", "fixes"])("%s list navigation", (tab) => {

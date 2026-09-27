@@ -68,7 +68,7 @@ function FindingsScopeStrip({
         ) : scoped ? (
           <span>
             {targetName ? `Target: ${targetName}` : "All targets"}
-            {scanId ? ` · Scan: ${scanId}` : ""}
+            {scanId ? " · Single scan" : ""}
           </span>
         ) : (
           <span>All workspace findings</span>

@@ -40,6 +40,8 @@ vi.mock("@/lib/api-client", () => ({
   },
 }))
 import { OnboardingWizard } from "./onboarding-wizard"
+import { Button } from "@lyrashield/ui"
+import { getOnboardingReviewOptions } from "./onboarding-flow.utils"
 import { apiPost, apiPatch } from "@/lib/api-client"
 import {
   OnboardingAlerts,
@@ -56,7 +58,7 @@ type Element = ReactElement<{
   value?: string
   onChange?: (event: { target: { value?: string; checked?: boolean } }) => void
   onSubmit?: (event: { preventDefault: () => void }) => void
-  onClick?: () => unknown
+  onClick?: (...args: unknown[]) => unknown
 }>
 
 // Step views are plain presentational functions (no hooks). Descend into
@@ -151,6 +153,110 @@ it.each(["WEB_APP", "API"])(
   }
 )
 
+it("continues through a failed eligibility preflight without passing the click event", () => {
+  const onStart = vi.fn()
+  const onStartTrial = vi.fn()
+  const reviewOptions = getOnboardingReviewOptions("github")
+  const tree = TargetDetailsView({
+    eyebrow: "Step 3",
+    path: "github",
+    productName: "Project",
+    onProductNameChange: vi.fn(),
+    retryingExistingTarget: false,
+    reviewOptions,
+    selectedReview: reviewOptions[0],
+    eligibility: { status: "error" },
+    targetId: null,
+    onSelectGoal: vi.fn(),
+    loading: false,
+    onBack: vi.fn(),
+    onStart,
+    onStartTrial,
+  })
+  const primary = elements(tree)
+    .filter((element) => element.type === Button)
+    .at(-1)
+
+  primary?.props.onClick?.({ preventDefault: vi.fn() })
+
+  expect(String(primary?.props.children)).toContain("Continue to start")
+  expect(onStart).toHaveBeenCalledWith(true)
+  expect(onStartTrial).not.toHaveBeenCalled()
+})
+
+it("shows and invokes the start-trial action for TRIAL_AVAILABLE", () => {
+  const onStart = vi.fn()
+  const onStartTrial = vi.fn()
+  const reviewOptions = getOnboardingReviewOptions("github")
+  const tree = TargetDetailsView({
+    eyebrow: "Step 3",
+    path: "github",
+    productName: "Project",
+    onProductNameChange: vi.fn(),
+    retryingExistingTarget: false,
+    reviewOptions,
+    selectedReview: reviewOptions[0],
+    eligibility: {
+      status: "ready",
+      eligibility: {
+        allowed: false,
+        code: "TRIAL_AVAILABLE",
+        message: "Start your 7-day trial to receive 60 agent-minutes.",
+        plan: "FREE",
+        isTrial: false,
+        remainingMinutes: 0,
+      },
+    },
+    targetId: null,
+    onSelectGoal: vi.fn(),
+    loading: false,
+    onBack: vi.fn(),
+    onStart,
+    onStartTrial,
+  })
+  const primary = elements(tree)
+    .filter((element) => element.type === Button)
+    .at(-1)
+
+  primary?.props.onClick?.({ preventDefault: vi.fn() })
+
+  expect(String(primary?.props.children)).toContain("Start your free trial")
+  expect(onStartTrial).toHaveBeenCalledOnce()
+  expect(onStart).not.toHaveBeenCalled()
+})
+
+it("renders the Agency plan as a human-readable onboarding label", () => {
+  const reviewOptions = getOnboardingReviewOptions("github")
+  const tree = TargetDetailsView({
+    eyebrow: "Step 3",
+    path: "github",
+    productName: "Project",
+    onProductNameChange: vi.fn(),
+    retryingExistingTarget: true,
+    reviewOptions,
+    selectedReview: reviewOptions[0],
+    eligibility: {
+      status: "ready",
+      eligibility: {
+        allowed: true,
+        code: null,
+        message: null,
+        plan: "LAUNCH_ASSURANCE",
+        isTrial: false,
+        remainingMinutes: 4_500,
+      },
+    },
+    targetId: "target-1",
+    onSelectGoal: vi.fn(),
+    loading: false,
+    onBack: vi.fn(),
+    onStart: vi.fn(),
+    onStartTrial: vi.fn(),
+  })
+
+  expect(elements(tree).some((element) => element.props.children === "Agency")).toBe(true)
+})
+
 it("keeps an accepted scan and retries only the onboarding save after its PATCH fails", async () => {
   const storage = new Map<string, string>()
   vi.stubGlobal("window", {
@@ -182,6 +288,7 @@ it("keeps an accepted scan and retries only the onboarding save after its PATCH 
     )!.props.onClick!()
 
   await checkAvailability()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
   expect(api.get).toHaveBeenCalledOnce()
   expect(api.post).not.toHaveBeenCalled()
   const start = () =>
@@ -189,6 +296,7 @@ it("keeps an accepted scan and retries only the onboarding save after its PATCH 
       String(element.props.children).includes("Start release check")
     )!.props.onClick!()
   await start()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
   const accepted = render("REPO", initialState)
   expect(
     accepted.some(
@@ -244,10 +352,12 @@ it("retries an uncertain scan start with the same idempotency key", async () => 
     )!.props.onClick!()
 
   await checkAvailability()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
   const start = render("REPO", initialState).find((element) =>
     String(element.props.children).includes("Start release check")
   )!.props.onClick!
   await start()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
   const unresolved = render("REPO", initialState)
   expect(unresolved.some((element) => element.props.children === "Retry same details")).toBe(true)
   await unresolved.find((element) => element.props.children === "Retry same details")!.props
