@@ -654,7 +654,13 @@ jobs:
         # key-hash lookup). getSystemPrisma() uses this; without it the license
         # activation/connect/renew/verify flows can't read NULL-workspaceId or
         # cross-workspace License rows under FORCE RLS.
-        run: DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" DATABASE_SYSTEM_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public" pnpm exec playwright test
+        # This deterministic value is only for the disposable CI database; it
+        # is not a production secret or a deploy configuration source.
+        run: |
+          IP_HASH_SALT='ci-only-nonproduction-ip-hash-salt-32chars' \
+            DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" \
+            DATABASE_SYSTEM_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public" \
+            pnpm exec playwright test
 
       - name: Portable browser harness
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
