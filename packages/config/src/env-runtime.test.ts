@@ -7,6 +7,7 @@ const requiredProductionEnv = {
   NEXT_PUBLIC_APP_URL: "https://app.lyrashieldai.com",
   NODE_ENV: "production",
   TRUSTED_PROXY_IP_HEADER: "x-forwarded-for",
+  IP_HASH_SALT: "i".repeat(32),
   LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0",
   PLATFORM_ADMIN_EMAILS: "ecryptoguru@gmail.com,ankit@lyrashieldai.com",
 } as const
@@ -32,6 +33,19 @@ describe("runtime environment validation", () => {
   })
 
   it("allows the production web process to omit worker sandbox configuration", async () => {
+    await expect(import("./env")).resolves.toBeDefined()
+  })
+
+  it("requires a strong IP hash salt in production", async () => {
+    vi.stubEnv("IP_HASH_SALT", "")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+
+    vi.resetModules()
+    vi.stubEnv("IP_HASH_SALT", "too-short")
+    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+
+    vi.resetModules()
+    vi.stubEnv("IP_HASH_SALT", "i".repeat(32))
     await expect(import("./env")).resolves.toBeDefined()
   })
 

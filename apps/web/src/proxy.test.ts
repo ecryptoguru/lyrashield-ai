@@ -43,12 +43,14 @@ afterEach(() => {
 describe("app origin proxy boundary", () => {
   it("hashes only the trusted last hop for affiliate attribution", async () => {
     process.env.TRUSTED_PROXY_IP_HEADER = "x-forwarded-for"
-    process.env.IP_HASH_SALT = "test-salt"
+    process.env.IP_HASH_SALT = "t".repeat(32)
     const request = new NextRequest("https://app.lyrashieldai.com/?ref=test", {
       headers: { "x-forwarded-for": "spoofed, 203.0.113.4", "cf-connecting-ip": "spoofed-too" },
     })
     expect(await getAffiliateIpHash(request)).toBe(
-      createHash("sha256").update("203.0.113.4test-salt").digest("hex")
+      createHash("sha256")
+        .update(`203.0.113.4${"t".repeat(32)}`)
+        .digest("hex")
     )
     delete process.env.TRUSTED_PROXY_IP_HEADER
     expect(await getAffiliateIpHash(request)).toBeUndefined()

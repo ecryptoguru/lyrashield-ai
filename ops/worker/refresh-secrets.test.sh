@@ -38,6 +38,9 @@ case "$secret_name" in
   worker-evidence-kek-keyring-v1)
     printf '%s\n' '{}'
     ;;
+  ip-hash-salt)
+    printf '%s\n' "${FAKE_IP_HASH_SALT:-test-ip-hash-salt-for-worker-config-32-characters}"
+    ;;
   *)
     printf 'value-%s\n' "$secret_name"
     ;;
@@ -67,6 +70,7 @@ run_refresh "$config_env" FAKE_CONFIG_REF=v1/a6508cef8ba6
 grep -Fqx 'LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF=envkeystore/lyrashield-evidence-kek/v1' "$config_env"
 grep -Fqx 'LYRASHIELD_EVIDENCE_KEK=active-v1' "$config_env"
 grep -Fqx 'LYRASHIELD_EVIDENCE_KEK_KEYRING={"envkeystore/lyrashield-evidence-kek/v2":"future"}' "$config_env"
+grep -Fqx 'IP_HASH_SALT=test-ip-hash-salt-for-worker-config-32-characters' "$config_env"
 
 active_ref_env="$test_root/etc/active-ref.env"
 run_refresh "$active_ref_env" \
@@ -79,6 +83,15 @@ run_refresh "$legacy_env"
 grep -Fqx 'LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF=envkeystore/lyrashield-evidence-kek/v1' "$legacy_env"
 grep -Fqx 'LYRASHIELD_EVIDENCE_KEK=active-v1' "$legacy_env"
 grep -Fqx 'LYRASHIELD_EVIDENCE_KEK_KEYRING={}' "$legacy_env"
+
+short_salt_env="$test_root/etc/short-salt.env"
+printf '%s\n' 'PRESERVE=short-salt' >"$short_salt_env"
+if run_refresh "$short_salt_env" FAKE_IP_HASH_SALT=short 2>"$test_root/short-salt.stderr"; then
+  echo "Short IP hash salt unexpectedly succeeded" >&2
+  exit 1
+fi
+grep -Fqx 'IP hash salt must contain at least 32 characters' "$test_root/short-salt.stderr"
+grep -Fqx 'PRESERVE=short-salt' "$short_salt_env"
 
 invalid_env="$test_root/etc/invalid.env"
 printf '%s\n' 'PRESERVE=existing' >"$invalid_env"

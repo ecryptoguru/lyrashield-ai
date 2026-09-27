@@ -130,17 +130,23 @@ azure_secret_set_values_from_args() {
 # the reason.
 #
 # Tunables (env): AZURE_SECRET_SET_ATTEMPTS (default 4),
-# AZURE_SECRET_SET_BACKOFF seconds (default 5), AZURE_SECRET_SET_TIMEOUT
+# AZURE_SECRET_SET_BACKOFF seconds (default 5, doubles to a 60-second cap), AZURE_SECRET_SET_TIMEOUT
 # seconds per attempt (default 180).
 azure_containerapp_secret_set_retrying() {
   local attempt=1
   local max_attempts="${AZURE_SECRET_SET_ATTEMPTS:-4}"
   local backoff="${AZURE_SECRET_SET_BACKOFF:-5}"
+  local max_backoff=60
   local attempt_timeout="${AZURE_SECRET_SET_TIMEOUT:-180}"
   local output rc redacted
 
   if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || [ "$max_attempts" -lt 1 ]; then
     max_attempts=1
+  fi
+  if ! [[ "$backoff" =~ ^[0-9]+$ ]]; then
+    backoff=5
+  elif [ "$backoff" -gt "$max_backoff" ]; then
+    backoff="$max_backoff"
   fi
 
   # Capture the secret values once so every diagnostic path can redact them.
@@ -176,6 +182,11 @@ azure_containerapp_secret_set_retrying() {
     # a retry warning must never contaminate it.
     echo "::warning::az containerapp secret set failed (attempt ${attempt}/${max_attempts}, exit ${rc}); retrying in ${backoff}s. ${redacted%%$'\n'*}" >&2
     sleep "$backoff"
+    if [ "$backoff" -gt 30 ]; then
+      backoff="$max_backoff"
+    else
+      backoff=$((backoff * 2))
+    fi
     attempt=$((attempt + 1))
   done
 }

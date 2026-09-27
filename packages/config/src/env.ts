@@ -122,6 +122,7 @@ const envSchema = z
       .enum(["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"])
       .optional()
       .or(z.literal("")),
+    IP_HASH_SALT: z.string().min(32).optional().or(z.literal("")),
 
     // Scan Engine (Sprint 5+)
     LYRASHIELD_LLM: z.string().optional().or(z.literal("")),
@@ -573,6 +574,16 @@ const envSchema = z
     message:
       "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
   })
+  .refine(
+    (val) =>
+      val.NODE_ENV !== "production" ||
+      process.env.NEXT_PHASE === "phase-production-build" ||
+      Boolean(val.IP_HASH_SALT && val.IP_HASH_SALT.length >= 32),
+    {
+      path: ["IP_HASH_SALT"],
+      message: "IP_HASH_SALT must contain at least 32 characters in production",
+    }
+  )
   // The egress proxy authenticates the worker with the bearer token in
   // LYRASHIELD_EGRESS_PROXY_SECRET; an http:// proxy URL would transmit that
   // secret in cleartext. Dev/test keep http:// for local proxies. Unlike the
