@@ -106,7 +106,8 @@ interface ResolvedTask {
 }
 
 function toOperationRecord(operation: AgentOperation): TaskOperationRecord {
-  return operation as TaskOperationRecord
+  const record: TaskOperationRecord = operation
+  return record
 }
 
 function notFound(taskId: string): McpError {
@@ -236,11 +237,12 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
         }
       }
       const payload = { error: "The recorded task result is unavailable." }
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(payload) }],
+      const unavailableResult: CallToolResult = {
+        content: [{ type: "text", text: JSON.stringify(payload) }],
         isError: true,
         structuredContent: payload,
-      } as CallToolResult
+      }
+      return unavailableResult
     },
 
     async cancelTask(taskId) {

@@ -16,11 +16,6 @@
       "kind": "double-unknown",
       "sha256": "396307c9af104046dd4bdb3cecde4e0310b30b6d28ae2263349a33a2d2f59612",
       "count": 1
-    },
-    {
-      "kind": "double-unknown",
-      "sha256": "dced7cb2159c068c839bed7f55e81c0c04900d5333172c390cdec95d312fff1b",
-      "count": 1
     }
   ],
   "apps/web/src/app/(dashboard)/dashboard/scans/page.tsx": [
@@ -32,13 +27,6 @@
     {
       "kind": "never",
       "sha256": "4c1b88975ca3dfd87fe67575e9c39b72e089cfb59db5dbf04d74d82fb6ca5bd4",
-      "count": 1
-    }
-  ],
-  "apps/web/src/app/(dashboard)/dashboard/targets/[id]/page.tsx": [
-    {
-      "kind": "double-unknown",
-      "sha256": "8bb476b6589c0e61e305fc39ac55ea435c2b57b1cc087c6cdb949eba9f9a574d",
       "count": 1
     }
   ],
@@ -75,37 +63,6 @@
       "kind": "never",
       "sha256": "a7760b6065fb2e5f3da53b182a920d908766b5d670d98dbf514d590c55d52181",
       "count": 2
-    }
-  ],
-  "apps/web/src/app/api/targets/[id]/scorecard/route.ts": [
-    {
-      "kind": "double-unknown",
-      "sha256": "7d3389d0b62cf5561b13fa8364a590a18415d26a62659cc37b49a0c095b0fd28",
-      "count": 1
-    }
-  ],
-  "apps/web/src/components/posthog-provider.tsx": [
-    {
-      "kind": "double-unknown",
-      "sha256": "044062a041d9aaadf9f9d2e20f692a71ae5fe00d435a369f194a6d7f22ad881e",
-      "count": 1
-    },
-    {
-      "kind": "double-unknown",
-      "sha256": "37b35445d35a2740426c387cec00fae38de8e6a0ac8102398fbc72339c452f3f",
-      "count": 1
-    },
-    {
-      "kind": "double-unknown",
-      "sha256": "425480eca562643e15bda64510ace74b318f6e2b11a8ae45bdf4124e99e625b8",
-      "count": 1
-    }
-  ],
-  "apps/web/src/lib/analytics.ts": [
-    {
-      "kind": "double-unknown",
-      "sha256": "5c82996faf4ce15b5f5e9b24bb1b7b61282d3a5434a1549e6ca331f26b2f6583",
-      "count": 1
     }
   ],
   "apps/web/src/lib/launch-readiness-server.ts": [

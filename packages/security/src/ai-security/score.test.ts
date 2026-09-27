@@ -88,6 +88,25 @@ function score(
 }
 
 describe("computeAiSecurityScore", () => {
+  it("scores only controls present in partial coverage", () => {
+    const fullCoverage = coverage({})
+    const ai01 = fullCoverage.controls["AI-01"]
+    const ai02 = fullCoverage.controls["AI-02"]
+    if (!ai01 || !ai02) throw new Error("Expected AI-01 and AI-02 coverage")
+
+    const result = score({
+      signals: [],
+      coverage: {
+        ...fullCoverage,
+        totalControls: 2,
+        controls: { "AI-01": ai01, "AI-02": ai02 },
+      },
+    })
+
+    expect(result.score).toBeNull()
+    expect(Object.keys(result.controlScores)).toEqual(["AI-01", "AI-02"])
+  })
+
   it("returns null and a reason when fewer than 6 controls are assessed", () => {
     const states = Object.fromEntries(
       CONTROL_IDS.map((id, i) => [id, i < 4 ? "NO_FINDING" : "NOT_ASSESSED"])
@@ -130,8 +149,8 @@ describe("computeAiSecurityScore", () => {
     const result = score({ signals, coverage: coverage(states) })
 
     expect(result.score).toBe(100 - 12)
-    expect(result.controlScores["AI-01"].primaryDeduction).toBe(12)
-    expect(result.controlScores["AI-01"].totalDeduction).toBe(12)
+    expect(result.controlScores["AI-01"]?.primaryDeduction).toBe(12)
+    expect(result.controlScores["AI-01"]?.totalDeduction).toBe(12)
   })
 
   it("deducts the correct weight for CRITICAL, MEDIUM, and LOW findings", () => {
@@ -174,6 +193,7 @@ describe("computeAiSecurityScore", () => {
     const result = score({ signals, coverage: coverage(states) })
 
     const ai01 = result.controlScores["AI-01"]
+    if (!ai01) throw new Error("Expected AI-01 score")
     expect(ai01.distinctIdentities).toBe(4)
     expect(ai01.additionalDeduction).toBe(Math.round(ai01.primaryDeduction * 0.25))
     expect(ai01.totalDeduction).toBe(ai01.primaryDeduction + ai01.additionalDeduction)

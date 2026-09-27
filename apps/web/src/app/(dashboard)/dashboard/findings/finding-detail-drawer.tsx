@@ -529,14 +529,15 @@ export function FindingDetailDrawer({
       })
       setDetail((current) => {
         if (!current) return current
-        return {
+        const updated: FindingDetail = {
           ...current,
           [collection]: [...(current[collection] ?? []), ...page.items],
           historyPagination: {
             ...current.historyPagination!,
             [collection]: { total: page.total, nextCursor: page.nextCursor },
           },
-        } as FindingDetail
+        }
+        return updated
       })
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : "Could not load more history.")

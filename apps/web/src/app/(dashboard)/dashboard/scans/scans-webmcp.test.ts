@@ -13,7 +13,8 @@ import {
 } from "./scans-webmcp.utils"
 
 function target(partial: Partial<TargetItem> & { id: string; name: string }): TargetItem {
-  return { type: "REPO", ...partial } as TargetItem
+  const item = { type: "REPO", ...partial }
+  return item as TargetItem
 }
 
 const abortSignal = new AbortController().signal

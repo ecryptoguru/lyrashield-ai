@@ -1,4 +1,5 @@
 import { AI_SECURITY_SCORE_VERSION } from "./types"
+import { AI_SECURITY_CONTROL_IDS } from "./controls"
 import type {
   AIControlId,
   AISecurityCoverage,
@@ -51,7 +52,7 @@ export type AISecurityScoreResult = {
   assessedCount: number
   totalControls: number
   evidenceQuality: AIScoreEvidenceQuality
-  controlScores: Record<AIControlId, AIControlScore>
+  controlScores: Partial<Record<AIControlId, AIControlScore>>
   deductions: {
     CRITICAL: number
     HIGH: number
@@ -110,8 +111,9 @@ export function computeAiSecurityScore(input: AISecurityScoreInput): AISecurityS
 
   const evidenceQuality: AIScoreEvidenceQuality = { complete: 0, partial: 0, inconclusive: 0 }
 
-  for (const controlId of Object.keys(coverage.controls) as AIControlId[]) {
+  for (const controlId of AI_SECURITY_CONTROL_IDS) {
     const controlCoverage = coverage.controls[controlId]
+    if (!controlCoverage) continue
     const controlCandidates = candidates.filter((candidate) => candidate.controlId === controlId)
     const detectedCandidates = controlCandidates.filter(
       (candidate) =>

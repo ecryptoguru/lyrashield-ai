@@ -387,7 +387,7 @@ const jsonLd: unknown[] = [
     }
   }
 
-  const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
+  const $ = <T = HTMLElement,>(id: string) =>
     document.getElementById(id) as T | null
 
   const tzSelect = $<HTMLSelectElement>("demo-tz")

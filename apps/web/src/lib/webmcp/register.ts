@@ -14,8 +14,6 @@ import {
   type WebMcpJsonSchemaProperty,
 } from "./output"
 import {
-  createWebMcpReceiptStore,
-  redactToolInputs,
   safeDashboardHref,
   sanitizeReceiptReferences,
   type WebMcpActivityReceipt,

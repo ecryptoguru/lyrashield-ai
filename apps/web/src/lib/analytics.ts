@@ -453,14 +453,7 @@ export function flushQueuedAnalytics(
     pendingEvents.length = 0
     return
   }
-  const posthog =
-    typeof window === "undefined"
-      ? undefined
-      : (
-          window as unknown as {
-            posthog?: { capture?: (name: EventName, props: Record<string, unknown>) => void }
-          }
-        ).posthog
+  const posthog = typeof window === "undefined" ? undefined : window.posthog
   const deliver = capture ?? posthog?.capture
   if (!deliver) return
   const events = pendingEvents.splice(0)

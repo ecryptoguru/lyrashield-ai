@@ -200,9 +200,9 @@ export function createWebMcpReceiptStore(): WebMcpReceiptStore {
       const index = receipts.findIndex((r) => r.id === id)
       if (index === -1) return null
       const updated: WebMcpActivityReceipt = {
-        ...receipts[index],
+        ...receipts[index]!,
         ...patch,
-      } as WebMcpActivityReceipt
+      }
       receipts[index] = updated
       updateSnapshot()
       notify()

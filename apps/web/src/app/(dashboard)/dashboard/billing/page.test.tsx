@@ -160,10 +160,10 @@ describe("billing page plan label", () => {
 
     expect(html).toContain("Unused trial minutes were forfeited.")
     expect(html).toContain("9<!-- --> used of<!-- --> <!-- -->60")
-    expect(html).toContain("0<!-- --> agent-minutes available")
+    expect(html.replaceAll("<!-- -->", "")).toContain("0 agent-minutes available")
     expect(html).toContain('Pack Minutes</p><p class="text-xl font-semibold">12</p>')
     expect(html).toContain('Total Remaining</p><p class="text-xl font-semibold">0</p>')
-    expect(html).not.toContain("63<!-- --> agent-minutes available")
+    expect(html.replaceAll("<!-- -->", "")).not.toContain("63 agent-minutes available")
     expect(html).toContain('Minutes Left</p><p class="text-xl font-semibold">0')
   })
 
@@ -180,7 +180,7 @@ describe("billing page plan label", () => {
 
     const html = renderToString(await BillingPage({ searchParams: Promise.resolve({}) }))
 
-    expect(html).toContain("80<!-- --> agent-minutes available")
+    expect(html.replaceAll("<!-- -->", "")).toContain("80 agent-minutes available")
     expect(html).not.toContain("Unused trial minutes were forfeited.")
   })
 
@@ -208,7 +208,7 @@ describe("billing page plan label", () => {
     const html = renderToString(await BillingPage({ searchParams: Promise.resolve({}) }))
 
     expect(html).toContain("Your trial has expired.")
-    expect(html).toContain("0<!-- --> agent-minutes available")
+    expect(html.replaceAll("<!-- -->", "")).toContain("0 agent-minutes available")
     expect(html).toContain('Pack Minutes</p><p class="text-xl font-semibold">12</p>')
     expect(html).toContain('Total Remaining</p><p class="text-xl font-semibold">0</p>')
   })
@@ -231,7 +231,7 @@ describe("billing page plan label", () => {
 
     const html = renderToString(await BillingPage({ searchParams: Promise.resolve({}) }))
 
-    expect(html).toContain("3,266<!-- --> agent-minutes available")
+    expect(html.replaceAll("<!-- -->", "")).toContain("3,266 agent-minutes available")
     expect(html).toContain("Trial active · 1 day and 4,500 minutes remaining.")
     expect(html).toContain("1,234<!-- --> used of<!-- --> <!-- -->4,500")
     expect(html).not.toContain("1 days")

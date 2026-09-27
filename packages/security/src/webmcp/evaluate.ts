@@ -605,7 +605,10 @@ export function summarizeWebMcpCoverage(
     })
   }
 
-  const controlCoverage = Object.fromEntries(controls)
+  const controlCoverage = Object.fromEntries(controls) as Record<
+    WebMcpControlId,
+    WebMcpControlCoverage
+  >
   const allStates = Object.values(controlCoverage).map((control) => control.state)
   return {
     version: WEBMCP_DETECTOR_VERSION,

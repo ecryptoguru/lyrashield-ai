@@ -4,7 +4,6 @@ import { prisma } from "./client"
 import { logger } from "@lyrashield/logger"
 import { getSystemPrisma } from "./system-client"
 import { withWorkspaceRLS } from "./rls"
-import { Prisma } from "./generated/prisma"
 import { SCORECARD_REFERRAL_BONUS_MINUTES } from "@lyrashield/types"
 
 const SCORE_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -319,7 +318,7 @@ export async function completeScanWithScore(
  * driver/driver-version dependent (and localised), the code is contractual.
  */
 function isUniqueConstraintError(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+  return error instanceof Error && "code" in error && error.code === "P2002"
 }
 
 export async function getOrCreateReferralCode(userId: string) {

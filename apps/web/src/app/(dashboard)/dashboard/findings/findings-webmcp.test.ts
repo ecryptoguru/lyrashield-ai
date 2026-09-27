@@ -11,14 +11,15 @@ import {
 const abortSignal = new AbortController().signal
 
 function finding(partial: Partial<FindingListItem> & { id: string }): FindingListItem {
-  return {
+  const item = {
     title: "Finding",
     severity: "HIGH",
     status: "OPEN",
     verified: false,
     createdAt: "2026-01-01T00:00:00.000Z",
     ...partial,
-  } as FindingListItem
+  }
+  return item as FindingListItem
 }
 
 function jsonResponse(data: unknown) {
