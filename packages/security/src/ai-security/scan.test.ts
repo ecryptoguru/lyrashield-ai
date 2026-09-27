@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { AI_SECURITY_FIXTURES, getFixturesByControl } from "./fixtures"
+import { AI_SECURITY_FIXTURES } from "./fixtures"
 import { scanAiSecurityFiles, summarizeAiSecurityCoverage } from "./scan"
 import type { AIControlId, AIScanLimits } from "./types"
 
@@ -36,7 +36,7 @@ describe("scanAiSecurityFiles", () => {
   })
 
   it("excludes AI-03 when includeControls omits it", () => {
-    const fixture = getFixturesByControl("AI-01")[0]
+    const fixture = AI_SECURITY_FIXTURES.find((item) => item.controlId === "AI-01")
     if (!fixture) throw new Error("Missing AI-01 fixture")
 
     const result = scanAiSecurityFiles([fixture.file], {

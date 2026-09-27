@@ -5,7 +5,7 @@
  * secrets are screened before text reaches the model or persistence.
  */
 import { describe, expect, it } from "vitest"
-import { escapeHtml, sanitizeLinkHref, sanitizeMarkdown, screenSecrets } from "./sanitize"
+import { sanitizeLinkHref, sanitizeMarkdown, screenSecrets } from "./sanitize"
 
 describe("sanitizeLinkHref", () => {
   it("accepts https links on allowlisted LyraShield hosts", () => {
@@ -79,14 +79,6 @@ describe("sanitizeLinkHref", () => {
     for (const href of ["", "   ", "not a url", "https://", "?q=1", "#frag"]) {
       expect(sanitizeLinkHref(href), JSON.stringify(href)).toBeNull()
     }
-  })
-})
-
-describe("escapeHtml", () => {
-  it("escapes every HTML-significant character", () => {
-    expect(escapeHtml(`<img src=x onerror="alert('1')">&`)).toBe(
-      "&lt;img src=x onerror=&quot;alert(&#039;1&#039;)&quot;&gt;&amp;"
-    )
   })
 })
 

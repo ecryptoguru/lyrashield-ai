@@ -21,8 +21,6 @@ import {
   OAuthRefreshError,
 } from "@lyrashield/credentials"
 
-export { CREDENTIALS_FILE }
-
 export class NoApiKeyError extends Error {
   constructor() {
     super(

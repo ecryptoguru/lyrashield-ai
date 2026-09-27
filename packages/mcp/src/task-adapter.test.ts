@@ -16,7 +16,6 @@ import {
   scanRowToCallToolResult,
   serializeTaskId,
   storedResultToCallToolResult,
-  taskError,
   type TaskOperationRecord,
   type TaskScanRecord,
 } from "./task-adapter"
@@ -352,9 +351,8 @@ describe("task capable tools", () => {
 
   it("assertTaskCapableTool rejects unsupported tools with a bounded error", () => {
     expect(() => assertTaskCapableTool("lyrashield_scan_target")).not.toThrow()
-    const err = taskError(() => assertTaskCapableTool("lyrashield_cancel_scan"))
-    expect(err).toMatch(/does not support task/i)
-    expect(taskError(() => assertTaskCapableTool("bogus"))).toMatch(/does not support task/i)
+    expect(() => assertTaskCapableTool("lyrashield_cancel_scan")).toThrow(/does not support task/i)
+    expect(() => assertTaskCapableTool("bogus")).toThrow(/does not support task/i)
   })
 })
 

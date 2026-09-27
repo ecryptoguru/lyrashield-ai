@@ -75,16 +75,6 @@ export function parseTaskId(taskId: unknown): string | null {
   return operationIdSchema.safeParse(inner).success ? inner : null
 }
 
-/** Bounded JSON-RPC error for the task surface. */
-export function taskError(error: () => unknown): string {
-  try {
-    error()
-    return ""
-  } catch (err) {
-    return err instanceof Error ? err.message : String(err)
-  }
-}
-
 /** Throw when a tool is not registered as task-capable. */
 export function assertTaskCapableTool(toolName: string): void {
   if (!TASK_CAPABLE_TOOLS.has(toolName)) {
