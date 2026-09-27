@@ -28,7 +28,6 @@ import {
   getScanGoalLabel,
   getScanModeLabel,
   getScanTriggerLabel,
-  getTargetTypeLabel,
   getVerificationStatusLabel,
 } from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
@@ -594,10 +593,7 @@ export function ScanDetailClient({
                   {scan.target?.name ?? "Target details unavailable"}
                 </span>
                 {scan.target && (
-                  <span className="text-muted-foreground">
-                    {" "}
-                    · {getTargetTypeLabel(scan.target.type)}
-                  </span>
+                  <span className="text-muted-foreground"> · {scan.target.type}</span>
                 )}
               </span>
               <span className="inline-flex items-center gap-1.5">
@@ -776,7 +772,7 @@ export function ScanDetailClient({
               <h2 className="mb-2 text-sm font-semibold">Target</h2>
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <span className="font-medium">{scan.target.name}</span>
-                <Badge variant="muted">{getTargetTypeLabel(scan.target.type)}</Badge>
+                <Badge variant="muted">{scan.target.type}</Badge>
                 {scan.target.repoFullName && (
                   <span className="text-muted-foreground">{scan.target.repoFullName}</span>
                 )}
