@@ -28,6 +28,7 @@ import {
   getScanGoalLabel,
   getScanModeLabel,
   getScanTriggerLabel,
+  getTargetTypeLabel,
   getVerificationStatusLabel,
 } from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
@@ -581,7 +582,10 @@ export function ScanDetailClient({
                   {scan.target?.name ?? "Target details unavailable"}
                 </span>
                 {scan.target && (
-                  <span className="text-muted-foreground"> · {scan.target.type}</span>
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {getTargetTypeLabel(scan.target.type)}
+                  </span>
                 )}
               </span>
               <span className="inline-flex items-center gap-1.5">
@@ -760,7 +764,7 @@ export function ScanDetailClient({
               <h2 className="mb-2 text-sm font-semibold">Target</h2>
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <span className="font-medium">{scan.target.name}</span>
-                <Badge variant="muted">{scan.target.type}</Badge>
+                <Badge variant="muted">{getTargetTypeLabel(scan.target.type)}</Badge>
                 {scan.target.repoFullName && (
                   <span className="text-muted-foreground">{scan.target.repoFullName}</span>
                 )}
@@ -956,7 +960,7 @@ export function ScanDetailClient({
                           <span className="font-medium">
                             {SCANNER_LABELS[warning.scanner] ?? warning.scanner}
                           </span>
-                          <Badge variant="warning">{warning.status}</Badge>
+                          <Badge variant="warning">{humanizeToken(warning.status)}</Badge>
                           {warning.subject && (
                             <span className="text-muted-foreground wrap-break-word">
                               {warning.subject}
@@ -1540,6 +1544,7 @@ export function ScanDetailClient({
           {currentFindings.length === 0 && !isActive && presentation.assuranceAvailable && (
             <div className="space-y-4">
               <EmptyState
+                headingLevel="h3"
                 icon={ShieldCheck}
                 title="No findings were reported"
                 description={
@@ -1614,6 +1619,7 @@ export function ScanDetailClient({
           </div>
           {displayEvents.length === 0 ? (
             <EmptyState
+              headingLevel="h3"
               icon={Clock}
               title="No events"
               description="No scan events have been recorded yet."

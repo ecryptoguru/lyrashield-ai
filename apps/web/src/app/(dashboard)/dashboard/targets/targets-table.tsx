@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Plus, Crosshair, Bug, Globe, GitBranch, Trash2 } from "lucide-react"
 import { Button, Badge, EmptyState, cn } from "@lyrashield/ui"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
-import { TARGET_PLURAL, TARGET_SINGULAR, RUN_PLURAL, ISSUE_PLURAL } from "@/lib/terminology"
+import { TARGET_PLURAL, TARGET_SINGULAR, SCAN_PLURAL, FINDING_PLURAL } from "@/lib/terminology"
 import { getTargetTypeLabel } from "@/lib/enum-labels"
 import { humanizeToken } from "@/lib/labels"
 import type { Target } from "./targets-model"
@@ -98,10 +98,10 @@ export function TargetsTable({
                 Domain verification
               </th>
               <th scope="col" className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
-                {RUN_PLURAL}
+                {SCAN_PLURAL}
               </th>
               <th scope="col" className="hidden px-4 py-3 text-left font-semibold lg:table-cell">
-                {ISSUE_PLURAL}
+                {FINDING_PLURAL}
               </th>
               <th scope="col" className="px-4 py-3 text-left font-semibold">
                 Status
@@ -114,7 +114,7 @@ export function TargetsTable({
               </th>
               <th scope="col" className="sr-only">
                 <span className="sr-only">
-                  {RUN_PLURAL} and {ISSUE_PLURAL} summary
+                  {SCAN_PLURAL} and {FINDING_PLURAL} summary
                 </span>
               </th>
             </tr>
@@ -202,7 +202,7 @@ export function TargetsTable({
                     Status is visible at every width since UF-28, so it is not
                     repeated here. */}
                 <td className="sr-only">
-                  <span className="sr-only">{`${t.scanCount} ${RUN_PLURAL.toLowerCase()}, ${t.findingCount} ${ISSUE_PLURAL.toLowerCase()}`}</span>
+                  <span className="sr-only">{`${t.scanCount} ${SCAN_PLURAL.toLowerCase()}, ${t.findingCount} ${FINDING_PLURAL.toLowerCase()}`}</span>
                 </td>
               </tr>
             ))}

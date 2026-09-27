@@ -220,7 +220,7 @@ export default async function BillingPage({
                   <p className="text-xl font-semibold">{trialState.daysLeft}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Minutes Left</p>
+                  <p className="text-sm text-muted-foreground">Agent-minutes left</p>
                   <p className="text-xl font-semibold">{trialState.minutesLeft}</p>
                 </div>
                 <div>
@@ -252,7 +252,7 @@ export default async function BillingPage({
           <CardHeader>
             <CardTitle as="h2" className="flex items-center gap-2">
               <Zap className="h-5 w-5" />
-              Agent-Minute Usage
+              Agent-minute usage
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">

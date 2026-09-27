@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import type { ScanEvent } from "./scan-detail-types"
+import { formatDuration } from "@/lib/date-format"
 
 export const ELAPSED_TIME_INTERVAL_MS = 1_000
 export const COMPLETION_NOTICE_DISMISS_MS = 6_000
@@ -20,15 +21,7 @@ export function useElapsedTime(startedAt: string | null): string {
   return elapsed
 }
 
-export function formatDuration(start: string | null, end: string | null): string {
-  if (!start) return "—"
-  const startMs = new Date(start).getTime()
-  const endMs = end ? new Date(end).getTime() : Date.now()
-  const diffSec = Math.round((endMs - startMs) / 1000)
-  if (diffSec < 60) return `${diffSec}s`
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ${diffSec % 60}s`
-  return `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m`
-}
+export { formatDuration } from "@/lib/date-format"
 
 export function asIsoString(value: string | Date | null): string | null {
   if (value === null) return null

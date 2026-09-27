@@ -2,7 +2,6 @@ import type { Metadata } from "next"
 import { getCachedSession, getCachedWorkspaceId, getCachedWorkspaces } from "@/lib/cache"
 import { listApprovals, listRecentAgentOperations, withWorkspaceRLS } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
-import { APPROVAL_PLURAL } from "@/lib/terminology"
 import { ClipboardCheck, ShieldX } from "lucide-react"
 import { EmptyState } from "@lyrashield/ui"
 import { ApprovalsClient } from "./approvals-client"
@@ -32,7 +31,7 @@ export default async function ApprovalsPage() {
         />
         <NoWorkspaceState
           icon={ClipboardCheck}
-          description={`Create a workspace during onboarding to view ${APPROVAL_PLURAL.toLowerCase()}.`}
+          description="Create a workspace during onboarding to view activity."
         />
       </div>
     )

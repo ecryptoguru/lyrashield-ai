@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { getCachedSession } from "@/lib/cache"
 import { prisma } from "@lyrashield/db"
 import { AffiliateApplyForm } from "./apply-form"
+import { humanizeToken } from "@/lib/labels"
 
 export const metadata = {
   title: "Apply — Affiliate Program — LyraShield AI",
@@ -28,8 +29,8 @@ export default async function AffiliateApplyPage() {
         <h1 className="text-2xl font-bold">Application Submitted</h1>
         <p className="mt-4 text-muted-foreground">
           Your affiliate application is currently{" "}
-          <span className="font-semibold">{existing.status}</span>. Our team will review it and
-          notify you of the decision.
+          <span className="font-semibold">{humanizeToken(existing.status)}</span>. Our team will
+          review it and notify you of the decision.
         </p>
         <Link href="/" className="mt-6 inline-block text-primary hover:underline">
           Back to home

@@ -15,7 +15,7 @@ import {
 import { formatEstimate } from "@/lib/estimator"
 import { getScanModeLabel, getTargetTypeLabel } from "@/lib/enum-labels"
 import type { ManualScanOption } from "@/lib/scan-presets"
-import { RUN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
+import { SCAN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
 import { getReviewSetupGuidance, isBillingRecoveryCode } from "./scans-client.utils"
 import type { ScanEligibilityState, TargetItem } from "./scan-types"
 import type { ScanAttachmentItem } from "@/lib/api-schemas"
@@ -112,10 +112,10 @@ export function CreateScanSheet({
         )}
       >
         <SheetHeader className="border-b px-6 py-4 text-left">
-          <SheetTitle>Start a {RUN_SINGULAR.toLowerCase()}</SheetTitle>
+          <SheetTitle>Start a {SCAN_SINGULAR.toLowerCase()}</SheetTitle>
           <SheetDescription>
             Choose a {TARGET_SINGULAR.toLowerCase()} and how thorough the review should be. Starting
-            a {RUN_SINGULAR.toLowerCase()} begins durable server-side work that may use the
+            a {SCAN_SINGULAR.toLowerCase()} begins durable server-side work that may use the
             sponsoring account&apos;s agent-minute allowance.
           </SheetDescription>
         </SheetHeader>
@@ -310,9 +310,9 @@ export function CreateScanSheet({
                 <fieldset className="mt-3 rounded-lg border p-3">
                   <legend className="px-1 text-xs font-medium">Supporting files (optional)</legend>
                   <p className="text-muted-foreground mb-2 text-xs leading-relaxed">
-                    Selected files are recorded on the {RUN_SINGULAR.toLowerCase()}&apos;s immutable
-                    plan, verified against their stored checksums and staged read-only. They are
-                    review inputs only — they can never change scope, checks, limits or
+                    Selected files are recorded on the {SCAN_SINGULAR.toLowerCase()}&apos;s
+                    immutable plan, verified against their stored checksums and staged read-only.
+                    They are review inputs only — they can never change scope, checks, limits or
                     authorization.
                   </p>
                   <ul className="max-h-40 space-y-1 overflow-y-auto">
@@ -395,7 +395,7 @@ export function CreateScanSheet({
                       Est. time: {formatEstimate(selectedOption.estimate)}
                     </span>
                     <span className="text-muted-foreground">
-                      Remaining agent minutes:{" "}
+                      Agent-minutes remaining:{" "}
                       <span className="text-foreground font-medium">
                         {eligibility.eligibility.remainingMinutes}
                       </span>
@@ -549,7 +549,7 @@ export function CreateScanSheet({
             ) : (
               <>
                 <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-                Start {RUN_SINGULAR}
+                Start {SCAN_SINGULAR}
               </>
             )}
           </Button>

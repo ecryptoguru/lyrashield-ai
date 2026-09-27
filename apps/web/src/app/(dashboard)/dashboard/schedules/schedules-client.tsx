@@ -17,6 +17,7 @@ import {
 import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { formatDate, formatDateTime } from "@/lib/date-format"
+import { getGoalLabel, modeLabel } from "@/lib/labels"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getManualScanOptions } from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
@@ -431,8 +432,8 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex items-center gap-2">
                     <h3 className="truncate font-medium">{schedule.target.name}</h3>
-                    <Badge variant="info">{schedule.goal}</Badge>
-                    <Badge variant="muted">{schedule.mode}</Badge>
+                    <Badge variant="info">{getGoalLabel(schedule.goal)}</Badge>
+                    <Badge variant="muted">{modeLabel(schedule.mode)}</Badge>
                     <Badge variant={schedule.enabled ? "success" : "muted"}>
                       {schedule.enabled ? "active" : "disabled"}
                     </Badge>

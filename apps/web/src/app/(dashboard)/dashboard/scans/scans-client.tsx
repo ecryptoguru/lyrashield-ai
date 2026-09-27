@@ -18,7 +18,7 @@ import {
   type ScanAttachmentItem,
 } from "@/lib/api-schemas"
 import { ApiError, apiDelete, apiPost, apiGet, apiGetPaginated } from "@/lib/api-client"
-import { RUN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
+import { SCAN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
 import {
   findRecoveryPreset,
   getReviewSetupGuidance,
@@ -835,7 +835,7 @@ export function ScansClient({
           {targets.length > 0 && (
             <Button onClick={() => setShowCreate(true)}>
               <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-              New {RUN_SINGULAR}
+              New {SCAN_SINGULAR}
             </Button>
           )}
         </div>

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { EmailText } from "@/components/email-text"
 import { useRouter } from "next/navigation"
 import { Search, ShieldX, CheckCircle2, AlertTriangle } from "lucide-react"
+import { LocalTime } from "@/components/local-time"
 
 interface LicenseRow {
   id: string
@@ -185,7 +186,7 @@ export function LicensesClient({
                           />
                         )}
                         <span className={eligible ? "" : "text-muted-foreground"}>
-                          {new Date(license.updateEligibleUntil).toLocaleDateString()}
+                          <LocalTime value={license.updateEligibleUntil} />
                         </span>
                       </div>
                     </td>
