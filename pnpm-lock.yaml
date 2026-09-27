@@ -1049,9 +1049,6 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.8
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.2.8(react@19.2.8)
       tailwind-merge:
         specifier: ^3.0.0
         version: 3.6.0
