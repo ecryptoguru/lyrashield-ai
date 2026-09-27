@@ -136,6 +136,47 @@ describe("AnalyticsPreferences", () => {
     expect(toggle(tree).props.disabled).toBe(true)
   })
 
+  it("shows a retry after a failed load and applies the successful retry", async () => {
+    api.get.mockRejectedValueOnce(new Error("preference load failed"))
+    render()
+    await hooks.effects[0]?.()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const failed = render()
+    expect(failed.some((element) => element.props.role === "alert")).toBe(true)
+    const retry = failed.find((element) => element.type === controls.Button)
+    expect(retry?.props.children).toBe("Retry")
+
+    api.get.mockResolvedValueOnce({ analyticsEnabled: false })
+    if (typeof retry?.props.onClick !== "function")
+      throw new Error("Retry handler was not rendered")
+    await retry.props.onClick()
+
+    expect(status(render())).toBe("Disabled for this account across devices.")
+    expect(api.get).toHaveBeenCalledTimes(2)
+  })
+
+  it("keeps the loading state while the preference request is delayed", async () => {
+    let resolvePreference: ((value: { analyticsEnabled: boolean }) => void) | undefined
+    api.get.mockReturnValueOnce(
+      new Promise<{ analyticsEnabled: boolean }>((resolve) => {
+        resolvePreference = resolve
+      })
+    )
+    render()
+    await hooks.effects[0]?.()
+    await Promise.resolve()
+
+    const pending = render()
+    expect(pending.some((element) => element.props.role === "status")).toBe(true)
+    resolvePreference?.({ analyticsEnabled: true })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(status(render())).toBe("Enabled for this account and browser.")
+  })
+
   it("clears browser tracking immediately and preserves off through a failed save retry", async () => {
     await loadPreference(true)
     api.patch.mockRejectedValueOnce(new Error("save failed")).mockResolvedValueOnce({

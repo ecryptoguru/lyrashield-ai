@@ -1,6 +1,7 @@
 import { getSession } from "@lyrashield/auth/server"
 import { env } from "@lyrashield/config"
 import { withAccountRLS } from "@lyrashield/db"
+import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { withCookieMutation } from "../../../../lib/api-auth"
@@ -10,6 +11,101 @@ const PatchBody = z.object({ analyticsEnabled: z.boolean() }).strict()
 const PRIVATE_CACHE = "private, no-store"
 const PREFERENCE_COOKIE = "lyrashield-analytics"
 const PREFERENCE_MAX_AGE = 180 * 24 * 60 * 60
+
+type CauseClassification =
+  "connection_timeout" | "connection_interrupted" | "authentication" | "database" | "unknown"
+
+const ERROR_CLASSES = new Set([
+  "Error",
+  "AggregateError",
+  "PrismaClientKnownRequestError",
+  "PrismaClientUnknownRequestError",
+  "PrismaClientInitializationError",
+  "PrismaClientRustPanicError",
+  "PrismaClientValidationError",
+  "TimeoutError",
+])
+const POSTGRES_CODES = new Set([
+  "08000",
+  "08001",
+  "08003",
+  "08004",
+  "08006",
+  "08007",
+  "08P01",
+  "28P01",
+  "28000",
+  "40001",
+  "40P01",
+  "42501",
+  "42P01",
+  "53300",
+  "57P01",
+  "57P02",
+  "57P03",
+])
+
+function sanitizedDatabaseFailure(error: unknown): {
+  errorClass: string
+  databaseCode: string | null
+  causeClassification: CauseClassification
+} {
+  const chain: unknown[] = []
+  let current: unknown = error
+  for (let depth = 0; depth < 3 && current && typeof current === "object"; depth += 1) {
+    chain.push(current)
+    current = "cause" in current ? current.cause : null
+  }
+
+  const root = chain[0]
+  const name = root && typeof root === "object" && "name" in root ? root.name : null
+  const errorClass = typeof name === "string" && ERROR_CLASSES.has(name) ? name : "OtherError"
+  const codes = chain.map((item) =>
+    item && typeof item === "object" && "code" in item ? item.code : null
+  )
+  const databaseCode = codes.find(
+    (code): code is string =>
+      typeof code === "string" && (/^P\d{4}$/.test(code) || POSTGRES_CODES.has(code))
+  )
+  const safeCodes = new Set(codes.filter((code): code is string => typeof code === "string"))
+  const messages = chain.map((item) =>
+    item && typeof item === "object" && "message" in item && typeof item.message === "string"
+      ? item.message.toLowerCase()
+      : ""
+  )
+  let causeClassification: CauseClassification = "unknown"
+  if (
+    safeCodes.has("ETIMEDOUT") ||
+    safeCodes.has("P1001") ||
+    messages.some((message) => /timeout|timed out/.test(message))
+  ) {
+    causeClassification = "connection_timeout"
+  } else if (
+    ["ECONNRESET", "ECONNREFUSED", "08006", "08001", "57P01"].some((code) => safeCodes.has(code)) ||
+    messages.some((message) =>
+      /connection terminated|connection reset|socket hang up/.test(message)
+    )
+  ) {
+    causeClassification = "connection_interrupted"
+  } else if (
+    ["28P01", "28000", "P1000"].some((code) => safeCodes.has(code)) ||
+    messages.some((message) => /authentication failed|password authentication/.test(message))
+  ) {
+    causeClassification = "authentication"
+  } else if (databaseCode || chain.length > 0) {
+    causeClassification = "database"
+  }
+
+  return { errorClass, databaseCode: databaseCode ?? null, causeClassification }
+}
+
+function logPreferenceFailure(method: "GET" | "PATCH", error: unknown): void {
+  const action = method === "GET" ? "read" : "update"
+  logger.error(`Account preference ${action} failed`, {
+    eventCode: `ACCOUNT_PREFERENCE_${method}_FAILED`,
+    ...sanitizedDatabaseFailure(error),
+  })
+}
 
 function marketingOrigin(): string | null {
   const configured = env.NEXT_PUBLIC_MARKETING_URL?.trim()
@@ -80,7 +176,8 @@ export async function GET(request: Request): Promise<NextResponse> {
         data: { analyticsEnabled: preference?.analyticsEnabled ?? true },
       })
     )
-  } catch {
+  } catch (error) {
+    logPreferenceFailure("GET", error)
     return privateResponse(
       request,
       NextResponse.json(
@@ -126,7 +223,8 @@ async function patch(request: Request): Promise<NextResponse> {
       clearOptionalTrackingCookies(response, request)
     }
     return response
-  } catch {
+  } catch (error) {
+    logPreferenceFailure("PATCH", error)
     const response = privateResponse(
       request,
       NextResponse.json(
