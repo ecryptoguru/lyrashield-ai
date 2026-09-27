@@ -16,7 +16,7 @@
     "@lyrashield/logger": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.13.6",
     "typescript": "^6.0.0"
   }
 }
