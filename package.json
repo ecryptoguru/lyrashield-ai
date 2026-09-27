@@ -24,7 +24,7 @@
     "test:marketing": "pnpm --filter @lyrashield/marketing exec vitest run",
     "test:motion": "node --test apps/marketing-motion/tests/*.test.mjs",
     "test": "node run-all-tests.mjs",
-    "test:e2e": "playwright test --grep-invert '@visual'",
+    "test:e2e": "playwright test",
     "test:browser-harness": "playwright test -c e2e/browser/playwright.config.ts",
     "test:watch": "vitest --exclude '**/dist/**'",
     "verify:worker-image": "sh apps/worker/scripts/verify-worker-image.sh",
