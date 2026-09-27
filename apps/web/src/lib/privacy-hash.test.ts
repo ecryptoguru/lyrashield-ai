@@ -8,7 +8,9 @@ describe("hashPrivacyValue", () => {
   it("uses the configured salt for a stable SHA-256 hash", async () => {
     vi.stubEnv("IP_HASH_SALT", "s".repeat(32))
     await expect(hashPrivacyValue("203.0.113.8")).resolves.toBe(
-      createHash("sha256").update(`203.0.113.8${"s".repeat(32)}`).digest("hex")
+      createHash("sha256")
+        .update(`203.0.113.8${"s".repeat(32)}`)
+        .digest("hex")
     )
   })
 
