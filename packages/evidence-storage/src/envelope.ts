@@ -136,12 +136,16 @@ function parseEnvelope(buffer: Buffer): { header: EnvelopeHeader; ciphertext: Bu
   if (headerEnd > buffer.length) {
     throw new EvidenceEnvelopeError("Envelope header is truncated")
   }
-  let header: EnvelopeHeader
+  let parsedHeader: unknown
   try {
-    header = JSON.parse(buffer.subarray(headerStart, headerEnd).toString("utf8")) as EnvelopeHeader
+    parsedHeader = JSON.parse(buffer.subarray(headerStart, headerEnd).toString("utf8"))
   } catch (err) {
     throw new EvidenceEnvelopeError("Envelope header is not valid JSON", { cause: err })
   }
+  if (!parsedHeader || typeof parsedHeader !== "object" || Array.isArray(parsedHeader)) {
+    throw new EvidenceEnvelopeError("Envelope header is missing required fields")
+  }
+  const header = parsedHeader as Record<string, unknown>
   if (
     header.v !== 1 ||
     header.alg !== "A256GCM" ||
@@ -154,7 +158,7 @@ function parseEnvelope(buffer: Buffer): { header: EnvelopeHeader; ciphertext: Bu
   ) {
     throw new EvidenceEnvelopeError("Envelope header is missing required fields")
   }
-  return { header, ciphertext: buffer.subarray(headerEnd) }
+  return { header: header as unknown as EnvelopeHeader, ciphertext: buffer.subarray(headerEnd) }
 }
 
 /** Read the untrusted key selector before authentication so callers can resolve its KEK. */

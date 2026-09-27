@@ -425,7 +425,11 @@ export async function readCredentialsFile(): Promise<StoredCredentials | undefin
   }
 
   try {
-    return normalizeCredentials(JSON.parse(raw) as Partial<StoredCredentials>)
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Invalid credentials")
+    }
+    return normalizeCredentials(parsed as Partial<StoredCredentials>)
   } catch {
     throw new Error(`${CREDENTIALS_FILE} is not valid JSON. Delete it and run: lyrashield login`)
   }
