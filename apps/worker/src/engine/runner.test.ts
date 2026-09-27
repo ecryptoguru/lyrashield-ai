@@ -550,6 +550,8 @@ describe("buildEngineEnv", () => {
 
   beforeEach(() => {
     original.LYRASHIELD_LLM = process.env.LYRASHIELD_LLM
+    original.LYRASHIELD_ALLOW_CHATGPT_SUBSCRIPTION =
+      process.env.LYRASHIELD_ALLOW_CHATGPT_SUBSCRIPTION
     original.LYRASHIELD_ENGINE_SANDBOX_NETWORK = process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK
     original.LYRASHIELD_WEB_SEARCH_ENABLED = process.env.LYRASHIELD_WEB_SEARCH_ENABLED
     original.LYRASHIELD_WEB_SEARCH_API_KEY = process.env.LYRASHIELD_WEB_SEARCH_API_KEY
@@ -661,6 +663,14 @@ describe("buildEngineEnv", () => {
     })
 
     expect(engineEnv.TMPDIR).toBe(tmpdir())
+  })
+
+  it("disables ChatGPT subscription access for hosted engine runs", () => {
+    process.env.LYRASHIELD_ALLOW_CHATGPT_SUBSCRIPTION = "1"
+
+    const engineEnv = buildEngineEnv({ model: "azure/gpt-6-luna", reasoningEffort: "medium" })
+
+    expect(engineEnv.LYRASHIELD_ALLOW_CHATGPT_SUBSCRIPTION).toBe("0")
   })
 })
 
