@@ -10,6 +10,7 @@
     "lint:size": "eslint --config eslint.size.config.mjs \"apps/**/src/**/*.{ts,tsx,mts,cts}\" \"packages/**/src/**/*.{ts,tsx,mts,cts}\"",
     "lint:md": "markdownlint-cli2",
     "typecheck": "turbo typecheck",
+    "typecheck:web-tests": "pnpm --filter @lyrashield/web exec tsc --noEmit -p tsconfig.tests.json",
     "typecheck:e2e": "pnpm --filter @lyrashield/db exec tsc --noEmit -p ../../e2e/tsconfig.json",
     "typecheck:browser-harness": "pnpm --filter @lyrashield/web exec tsc --noEmit -p ../../e2e/browser/tsconfig.json",
     "lint:browser-harness": "pnpm exec eslint e2e/browser --max-warnings 0",

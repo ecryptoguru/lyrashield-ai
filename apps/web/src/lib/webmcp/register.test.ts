@@ -38,7 +38,7 @@ describe("WebMCP registration", () => {
     })
 
     expect(registerTool).toHaveBeenCalledOnce()
-    const [, options] = registerTool.mock.calls[0]
+    const [, options] = registerTool.mock.calls[0]!
     expect(options.signal).toBeInstanceOf(AbortSignal)
 
     cleanup()
@@ -136,7 +136,7 @@ describe("WebMCP registration", () => {
         humanConfirmationRequired: false,
         handler,
       })
-      const tool = registerTool.mock.calls[0][0] as {
+      const tool = registerTool.mock.calls[0]![0] as {
         execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
       }
       const controller = new AbortController()
@@ -178,7 +178,7 @@ describe("WebMCP registration", () => {
       handler,
     })
 
-    const tool = registerTool.mock.calls[0][0] as {
+    const tool = registerTool.mock.calls[0]![0] as {
       execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
     }
     const controller = new AbortController()
@@ -210,7 +210,7 @@ describe("WebMCP registration", () => {
       handler,
     })
 
-    const tool = registerTool.mock.calls[0][0] as {
+    const tool = registerTool.mock.calls[0]![0] as {
       execute: (input: unknown, options?: { signal: AbortSignal }) => Promise<unknown>
     }
     const result = await tool.execute({})
@@ -242,7 +242,7 @@ describe("WebMCP registration", () => {
       handler: vi.fn().mockResolvedValue({ ok: true }),
     })
 
-    const tool = registerTool.mock.calls[0][0] as {
+    const tool = registerTool.mock.calls[0]![0] as {
       execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
     }
     const result = await tool.execute(
@@ -274,7 +274,7 @@ describe("WebMCP registration", () => {
       humanConfirmationRequired: false,
       handler,
     })
-    const tool = registerTool.mock.calls[0][0] as {
+    const tool = registerTool.mock.calls[0]![0] as {
       execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
     }
 
@@ -332,7 +332,7 @@ describe("WebMCP registration", () => {
       humanConfirmationRequired: false,
       handler,
     })
-    const tool = registerTool.mock.calls[0][0] as {
+    const tool = registerTool.mock.calls[0]![0] as {
       execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
     }
 
@@ -360,7 +360,7 @@ describe("WebMCP registration", () => {
       humanConfirmationRequired: false,
       handler,
     })
-    const tool = registerTool.mock.calls[0][0] as {
+    const tool = registerTool.mock.calls[0]![0] as {
       execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
     }
     const controller = new AbortController()
@@ -391,7 +391,7 @@ describe("WebMCP registration", () => {
       handler: vi.fn(),
     })
 
-    const tool = registerTool.mock.calls[0][0] as { description: string }
+    const tool = registerTool.mock.calls[0]![0] as { description: string }
     expect(tool.description.length).toBeLessThanOrEqual(150)
 
     cleanup()
@@ -460,7 +460,7 @@ describe("WebMCP registration", () => {
 
     const firstCleanup = registerWebMcpTool(options("workspace A"))
     expect(registerTool).toHaveBeenCalledTimes(1)
-    const [, firstOptions] = registerTool.mock.calls[0]
+    const [, firstOptions] = registerTool.mock.calls[0]!
 
     // Navigating away (or switching workspace) runs the effect cleanup, which
     // aborts the registration signal and frees the tool name.
@@ -496,7 +496,7 @@ describe("WebMCP registration", () => {
       handler,
     })
 
-    const tool = registerTool.mock.calls[0][0] as {
+    const tool = registerTool.mock.calls[0]![0] as {
       execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
     }
     const controller = new AbortController()
@@ -557,7 +557,7 @@ describe("WebMCP registration", () => {
       handler,
     })
 
-    const tool = registerTool.mock.calls[0][0] as {
+    const tool = registerTool.mock.calls[0]![0] as {
       execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
     }
     await tool.execute({ requestId: "req-42" }, { signal: new AbortController().signal })
@@ -591,7 +591,7 @@ describe("WebMCP registration", () => {
       handler,
     })
 
-    const tool = registerTool.mock.calls[0][0] as {
+    const tool = registerTool.mock.calls[0]![0] as {
       execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
     }
     await tool.execute({}, { signal: new AbortController().signal })
@@ -623,7 +623,7 @@ describe("WebMCP registration", () => {
       handler,
     })
 
-    const tool = registerTool.mock.calls[0][0] as {
+    const tool = registerTool.mock.calls[0]![0] as {
       execute: (input: unknown, options: { signal: AbortSignal }) => Promise<unknown>
     }
     for (const key of ["workspaceId", "workspace", "userId", "user", "targetId", "evidence"]) {

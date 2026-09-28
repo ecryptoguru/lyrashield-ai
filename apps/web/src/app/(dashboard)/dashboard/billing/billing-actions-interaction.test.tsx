@@ -46,6 +46,7 @@ function render(purchasesAvailable = true, plan = "FREE") {
       plan,
       workspaceId: "ws",
       isLaunchAssurance: false,
+      isComplimentary: false,
       purchasesAvailable,
       trialAvailable: true,
     })

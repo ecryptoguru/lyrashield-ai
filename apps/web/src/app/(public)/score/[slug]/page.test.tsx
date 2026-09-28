@@ -43,7 +43,7 @@ describe("public scorecard metadata", () => {
   })
 
   it("keeps revoked or expired scorecards out of the public index", async () => {
-    getPublicScorecard.mockResolvedValue(null)
+    vi.mocked(getPublicScorecard).mockResolvedValue(null)
     const metadata = await generateMetadata({ params: Promise.resolve({ slug: "REVOKED" }) })
     expect(metadata.robots).toBe("noindex")
     expect(metadata.title).toBe("Scorecard unavailable | LyraShield AI")

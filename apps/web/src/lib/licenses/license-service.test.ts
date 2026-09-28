@@ -42,8 +42,8 @@ describe("requireInternalApiKey", () => {
     envState.NODE_ENV = "production"
     const result = requireInternalApiKey(requestWithKey(EXPECTED_KEY))
     expect(result).toBeInstanceOf(Response)
-    expect(result.status).toBe(403)
-    expect(await bodyOf(result)).toContain("invalid internal API key")
+    expect(result!.status).toBe(403)
+    expect(await bodyOf(result!)).toContain("invalid internal API key")
     expect(loggerMocks.error).toHaveBeenCalledWith(expect.any(String), {
       reason: "internal_key_missing",
     })
@@ -54,7 +54,7 @@ describe("requireInternalApiKey", () => {
     envState.LYRASHIELD_INTERNAL_API_KEY = ""
     const result = requireInternalApiKey(requestWithKey(EXPECTED_KEY))
     expect(result).toBeInstanceOf(Response)
-    expect(result.status).toBe(403)
+    expect(result!.status).toBe(403)
     // Empty config is an "internal_key_missing" reason, not a mismatch.
     expect(loggerMocks.error).toHaveBeenCalledWith(expect.any(String), {
       reason: "internal_key_missing",
@@ -84,8 +84,8 @@ describe("requireInternalApiKey", () => {
     for (const provided of [undefined, "", "wrong-key"]) {
       const result = requireInternalApiKey(requestWithKey(provided))
       expect(result).toBeInstanceOf(Response)
-      expect(result.status).toBe(403)
-      expect(await bodyOf(result)).toContain("invalid internal API key")
+      expect(result!.status).toBe(403)
+      expect(await bodyOf(result!)).toContain("invalid internal API key")
     }
 
     expect(loggerMocks.warn).toHaveBeenCalledWith(
@@ -104,7 +104,7 @@ describe("requireInternalApiKey", () => {
     envState.LYRASHIELD_INTERNAL_API_KEY = EXPECTED_KEY
     // Hashing makes both sides fixed-length so timingSafeEqual never throws
     // on differing raw lengths.
-    expect(requireInternalApiKey(requestWithKey("x")).status).toBe(403)
-    expect(requireInternalApiKey(requestWithKey("x".repeat(500))).status).toBe(403)
+    expect(requireInternalApiKey(requestWithKey("x"))!.status).toBe(403)
+    expect(requireInternalApiKey(requestWithKey("x".repeat(500)))!.status).toBe(403)
   })
 })

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process"
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import { test } from "node:test"
 
 const script = ".github/scripts/verify-myra-deployment-config.mjs"
@@ -50,6 +51,24 @@ const googleEnv = {
   MYRA_GOOGLE_CLIENT_SECRET: "secret",
   MYRA_GOOGLE_REFRESH_TOKEN: "refresh",
 }
+
+test("runtime deployment mapping omits retired deployment name and keeps source-read variables", () => {
+  const workflow = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
+  assert.doesNotMatch(workflow, /MYRA_AZURE_OPENAI_DEPLOYMENT/)
+  for (const name of [
+    "MYRA_GENERATION_ENABLED",
+    "MYRA_PROVIDER",
+    "MYRA_MODEL",
+    "MYRA_AZURE_OPENAI_ENDPOINT",
+    "MYRA_AZURE_OPENAI_API_KEY",
+    "MYRA_CALENDAR_PROVIDER",
+    "MYRA_GOOGLE_CLIENT_ID",
+    "MYRA_GOOGLE_CLIENT_SECRET",
+    "MYRA_GOOGLE_REFRESH_TOKEN",
+  ]) {
+    assert.match(workflow, new RegExp(`\\b${name}:`), `${name} must remain mapped`)
+  }
+})
 
 test("accepts the google provider with complete credentials when writes are enabled", () => {
   assert.match(run(googleEnv), /Myra deployment configuration is valid/)

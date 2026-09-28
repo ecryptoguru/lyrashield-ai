@@ -31,6 +31,7 @@ import {
   getSession,
   requireWorkspaceAccess,
   requirePermission,
+  requireOAuthPermission,
   type AuthSession,
 } from "./session"
 
@@ -375,6 +376,103 @@ describe("scorecard:publish via requirePermission", () => {
     stubMembership("DEVELOPER")
 
     await expect(requirePermission("ws-1", "scorecard:publish")).rejects.toThrow("FORBIDDEN")
+  })
+
+  it("denies a removed OAuth principal even when a different owner cookie is present", async () => {
+    withHeaders({
+      authorization: "Bearer oauth-token",
+      cookie: "better-auth.session_token=valid-cookie-session",
+    })
+    getSessionApi.mockResolvedValue({
+      user: { id: "cookie-user", email: "owner@example.com", name: "Owner", image: null },
+      session: { id: "cookie-session" },
+    })
+    memberFindUnique.mockImplementation(
+      async (args: { where: { workspaceId_userId: { workspaceId: string; userId: string } } }) =>
+        args.where.workspaceId_userId.userId === "cookie-user"
+          ? { id: "cookie-member", role: "OWNER", status: "active" }
+          : null
+    )
+
+    await expect(
+      requireOAuthPermission(
+        {
+          userId: "bearer-user",
+          workspaceId: "ws-1",
+          scopes: ["lyrashield.read"],
+          connectionId: "conn-1",
+        },
+        "scan:view"
+      )
+    ).rejects.toThrow("FORBIDDEN")
+
+    expect(memberFindUnique).toHaveBeenCalledOnce()
+    expect(memberFindUnique).toHaveBeenCalledWith({
+      where: { workspaceId_userId: { workspaceId: "ws-1", userId: "bearer-user" } },
+    })
+    expect(getSessionApi).not.toHaveBeenCalled()
+  })
+
+  it("denies a bearer member demoted below scorecard:publish even when an owner cookie is present", async () => {
+    withHeaders({
+      authorization: "Bearer oauth-token",
+      cookie: "better-auth.session_token=valid-cookie-session",
+    })
+    getSessionApi.mockResolvedValue({
+      user: { id: "cookie-user", email: "owner@example.com", name: "Owner", image: null },
+      session: { id: "cookie-session" },
+    })
+    stubMembership("BILLING_ADMIN")
+
+    await expect(
+      requireOAuthPermission(
+        {
+          userId: "user-1",
+          workspaceId: "ws-1",
+          scopes: ["lyrashield.read", "lyrashield.write"],
+          connectionId: "conn-1",
+        },
+        "scorecard:publish"
+      )
+    ).rejects.toThrow("FORBIDDEN")
+    expect(memberFindUnique).toHaveBeenCalledWith({
+      where: { workspaceId_userId: { workspaceId: "ws-1", userId: "user-1" } },
+    })
+    expect(getSessionApi).not.toHaveBeenCalled()
+  })
+
+  it("allows a still-active bearer principal and preserves OAuth scope and grant checks", async () => {
+    withHeaders({
+      authorization: "Bearer oauth-token",
+      cookie: "better-auth.session_token=valid-cookie-session",
+    })
+    getSessionApi.mockResolvedValue({
+      user: { id: "cookie-user", email: "owner@example.com", name: "Owner", image: null },
+      session: { id: "cookie-session" },
+    })
+    stubMembership("DEVELOPER")
+
+    const oauth = {
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan.cancel"],
+    }
+    await expect(requireOAuthPermission(oauth, "scan:view")).resolves.toMatchObject({
+      workspace: { role: "DEVELOPER" },
+    })
+    await expect(
+      requireOAuthPermission(
+        { ...oauth, scopes: ["lyrashield.read", "lyrashield.write"] },
+        "scan:cancel"
+      )
+    ).resolves.toMatchObject({ workspace: { role: "DEVELOPER" } })
+    await expect(requireOAuthPermission(oauth, "scan:cancel")).rejects.toThrow("FORBIDDEN")
+    expect(memberFindUnique).toHaveBeenCalledWith({
+      where: { workspaceId_userId: { workspaceId: "ws-1", userId: "user-1" } },
+    })
+    expect(getSessionApi).not.toHaveBeenCalled()
   })
 })
 

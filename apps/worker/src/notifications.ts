@@ -34,6 +34,7 @@ export async function notifyScanCompleted(
     })
   } catch (error) {
     logger.error("Failed to send scan completed notification", { error: String(error), scanId })
+    throw error
   }
 }
 
@@ -61,6 +62,7 @@ export async function notifyScanFailed(
     })
   } catch (error) {
     logger.error("Failed to send scan failed notification", { error: String(error), scanId })
+    throw error
   }
 }
 
@@ -88,5 +90,6 @@ export async function notifyCriticalFinding(
       error: String(error),
       findingId,
     })
+    throw error
   }
 }

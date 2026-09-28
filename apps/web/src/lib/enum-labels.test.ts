@@ -22,7 +22,7 @@ describe("enum labels", () => {
     expect(getScanGoalLabel("LAUNCH_REVIEW")).toBe("Release check")
     expect(getScanGoalLabel("SECURITY_REVIEW")).toBe("Security scan")
     expect(getScanGoalLabel("TEST_APP")).toBe("Code scan")
-    expect(getScanGoalLabel("NOT_A_GOAL")).toBe("NOT_A_GOAL")
+    expect(getScanGoalLabel("NOT_A_GOAL")).toBe("Not a goal")
   })
 
   it("labels scan modes", () => {

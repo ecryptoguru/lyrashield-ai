@@ -345,25 +345,100 @@ describe("notification-service", () => {
       }
     })
 
-    it("marks notifications as failed when sendFn returns false", async () => {
+    it("persists failed delivery before surfacing sendFn false", async () => {
       mockPrisma.notification.update.mockResolvedValue({ status: "failed" })
 
       const sendFn = vi.fn().mockResolvedValue(false)
 
-      await createAndSendNotification({
-        workspaceId: "ws-1",
-        type: "scan.failed",
-        title: "Scan Failed",
-        body: "Bad",
-        sendFn,
-      })
+      await expect(
+        createAndSendNotification({
+          workspaceId: "ws-1",
+          type: "scan.failed",
+          title: "Scan Failed",
+          body: "Bad",
+          channels: ["slack"],
+          sendFn,
+        })
+      ).rejects.toThrow("Notification delivery failed for channel slack")
 
       const updateCalls = mockPrisma.notification.updateMany.mock.calls.filter(
         (call) => call[0].data.status === "failed"
       )
-      for (const call of updateCalls) {
-        expect(call[0].data.status).toBe("failed")
-      }
+      expect(updateCalls).toHaveLength(1)
+      expect(updateCalls[0]?.[0]).toEqual({
+        where: { id: "notif-1", status: "sending" },
+        data: { status: "failed", deliveryLeaseExpiresAt: null },
+      })
+    })
+
+    it("persists failed delivery before surfacing a sendFn rejection", async () => {
+      const providerFailure = new Error("Slack unavailable")
+      const sendFn = vi.fn().mockRejectedValue(providerFailure)
+
+      await expect(
+        createAndSendNotification({
+          workspaceId: "ws-1",
+          type: "scan.failed",
+          title: "Scan Failed",
+          body: "Bad",
+          channels: ["slack"],
+          sendFn,
+        })
+      ).rejects.toMatchObject({
+        message: "Notification delivery failed for channel slack",
+        cause: providerFailure,
+      })
+
+      expect(mockPrisma.notification.updateMany).toHaveBeenCalledWith({
+        where: { id: "notif-1", status: "sending" },
+        data: { status: "failed", deliveryLeaseExpiresAt: null },
+      })
+    })
+
+    it("continues delivery to later channels before surfacing an earlier failure", async () => {
+      const sendFn = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+
+      await expect(
+        createAndSendNotification({
+          workspaceId: "ws-1",
+          type: "scan.failed",
+          title: "Scan Failed",
+          body: "Bad",
+          channels: ["slack", "discord"],
+          sendFn,
+        })
+      ).rejects.toThrow("Notification delivery failed for channel slack")
+
+      expect(sendFn.mock.calls.map(([channel]) => channel)).toEqual(["slack", "discord"])
+      expect(
+        mockPrisma.notification.updateMany.mock.calls.map(([call]) => call.data.status)
+      ).toEqual(["sending", "failed", "sending", "sent"])
+    })
+
+    it("aggregates multiple delivery failures with their channel names", async () => {
+      const sendFn = vi.fn().mockResolvedValue(false)
+
+      const failure = await createAndSendNotification({
+        workspaceId: "ws-1",
+        type: "scan.failed",
+        title: "Scan Failed",
+        body: "Bad",
+        channels: ["slack", "discord"],
+        sendFn,
+      }).catch((error: unknown) => error)
+
+      expect(failure).toBeInstanceOf(AggregateError)
+      expect(failure.message).toBe("Notification delivery failed for channels: slack, discord")
+      expect(failure.errors).toEqual([
+        expect.objectContaining({ message: "Notification delivery failed for channel slack" }),
+        expect.objectContaining({ message: "Notification delivery failed for channel discord" }),
+      ])
+      expect(sendFn.mock.calls.map(([channel]) => channel)).toEqual(["slack", "discord"])
+      expect(
+        mockPrisma.notification.updateMany.mock.calls.filter(
+          ([call]) => call.data.status === "failed"
+        )
+      ).toHaveLength(2)
     })
 
     it("respects custom channels", async () => {

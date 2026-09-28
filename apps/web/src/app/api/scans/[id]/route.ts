@@ -13,13 +13,17 @@ import { ScanIdSchema } from "@lyrashield/types"
 import { revalidateDashboardAggregates } from "../../../../lib/cache"
 import { recordedOperation } from "../../../../lib/recorded-operation"
 
-function scanEtag(scan: NonNullable<Awaited<ReturnType<typeof getScanWithEvents>>>): string {
+function scanEtag(
+  scan: NonNullable<Awaited<ReturnType<typeof getScanWithEvents>>>,
+  queuePosition: Awaited<ReturnType<typeof getScanQueuePosition>> | null
+): string {
   const events = scan.events ?? []
   const lastEvent = events[events.length - 1]
   const payload = JSON.stringify({
     id: scan.id,
     status: scan.status,
     updatedAt: scan.updatedAt,
+    queuePosition,
     eventsCount: events.length,
     lastEventAt: lastEvent?.createdAt,
     // Included so a cursor-scoped response can never collide with the full
@@ -58,16 +62,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
 
-    const etag = scanEtag(scan)
+    // Queue position can change without a scan row or event update.
+    const queuePosition = scan.status === "QUEUED" ? await getScanQueuePosition(id) : null
+    const etag = scanEtag(scan, queuePosition)
     const ifNoneMatch = request.headers.get("if-none-match")
     if (ifNoneMatch && ifNoneMatch === etag) {
       return new Response(null, { status: 304, headers: { ETag: etag } })
     }
-
-    // Surface the scan's place in the run queue so the dashboard can tell the
-    // user how far from the front they are. Only meaningful while QUEUED; the
-    // helper returns null for a scan that is already running or done.
-    const queuePosition = scan.status === "QUEUED" ? await getScanQueuePosition(id) : null
 
     return NextResponse.json(
       { success: true, data: { ...scan, queuePosition } },

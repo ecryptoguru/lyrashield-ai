@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "files": [
+    "src/app/.well-known/oauth-authorization-server/api/auth/route.test.ts",
+    "src/app/.well-known/oauth-authorization-server/route.test.ts",
+    "src/app/.well-known/openai-apps-challenge/route.test.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".next",
+    ".turbo",
+    "../../packages/**/*.test.ts",
+    "../../packages/**/*.test.tsx",
+    "vitest.config.ts"
+  ]
+}

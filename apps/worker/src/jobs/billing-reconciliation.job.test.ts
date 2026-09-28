@@ -300,7 +300,7 @@ describe("billing-reconciliation.job", () => {
   it("logs provider drift as an operator alert without replaying or mutating billing state", async () => {
     const page = {
       result: {
-        items: [{ id: "ord_missing", paid: true, createdAt: new Date() }],
+        items: [{ id: "ord_missing", paid: true, createdAt: new Date(Date.now() - 60_000) }],
         pagination: { totalCount: 1, maxPage: 1 },
       },
       next: vi.fn().mockResolvedValue(null),

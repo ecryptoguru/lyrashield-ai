@@ -24,11 +24,12 @@ function request(body: unknown, origin = "http://localhost:4321") {
 describe("POST /api/lite-scan", () => {
   afterAll(() => {
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
   beforeEach(() => {
     vi.clearAllMocks()
-    process.env.NODE_ENV = "test"
+    vi.stubEnv("NODE_ENV", "test")
     process.env.NEXT_PUBLIC_MARKETING_URL = "http://localhost:4321"
     delete process.env.TURNSTILE_SECRET_KEY
     checkScanUrlSafe.mockResolvedValue({ safe: true })
@@ -73,7 +74,7 @@ describe("POST /api/lite-scan", () => {
   })
 
   it("fails closed in production when Turnstile is not configured", async () => {
-    process.env.NODE_ENV = "production"
+    vi.stubEnv("NODE_ENV", "production")
     delete process.env.TURNSTILE_SECRET_KEY
 
     const response = await POST(request({ url: "https://example.com", authorized: true }))

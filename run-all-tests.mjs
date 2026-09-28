@@ -61,8 +61,26 @@ function run(name, command) {
 }
 
 const results = await Promise.all(suites.map((suite) => run(suite.name, suite.command)))
+const coreResult = results.find((r) => r.name === "core")
 
-if (coreReportPath && results.find((r) => r.name === "core")?.code === 0) {
+if (coreReportPath && coreResult && coreResult.code !== 0) {
+  try {
+    const report = JSON.parse(readFileSync(coreReportPath, "utf8"))
+    for (const file of report.testResults ?? []) {
+      for (const test of file.assertionResults ?? []) {
+        if (test.status === "failed") {
+          console.error(`\n==> ${test.fullName || test.title || file.name}`)
+          for (const message of test.failureMessages ?? []) console.error(message)
+        }
+      }
+      if (file.message) console.error(`\n==> ${file.name}\n${file.message}`)
+    }
+  } catch (error) {
+    console.error(`\n==> Could not read core Vitest report at ${coreReportPath}: ${error.message}`)
+  }
+}
+
+if (coreReportPath && coreResult?.code === 0) {
   try {
     const report = JSON.parse(readFileSync(coreReportPath, "utf8"))
     assertNamedTestsPassed(report, [

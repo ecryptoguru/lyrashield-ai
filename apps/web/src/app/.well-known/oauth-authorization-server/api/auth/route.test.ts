@@ -14,7 +14,9 @@ import { GET } from "./route"
 
 describe("GET /.well-known/oauth-authorization-server/api/auth", () => {
   it("serves authorization-server metadata at Better Auth's path-based issuer location", async () => {
-    const response = await GET()
+    const response = await GET(
+      new Request("https://app.lyrashieldai.com/.well-known/oauth-authorization-server/api/auth")
+    )
 
     expect(metadataHandler).toHaveBeenCalledOnce()
     expect(response.status).toBe(200)

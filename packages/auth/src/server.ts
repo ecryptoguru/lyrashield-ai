@@ -7,6 +7,7 @@ export {
   getWorkspaceMembership,
   requireWorkspaceAccess,
   requirePermission,
+  requireOAuthPermission,
   assertBrowserSession,
   assertOAuthDelegatedScope,
   getPlatformAdminNavigationState,

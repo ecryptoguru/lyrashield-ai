@@ -7,16 +7,31 @@ const repoRoot = path.resolve(new URL("../../../../", import.meta.url).pathname)
 const marketplaceRoot = path.join(repoRoot, "docs", "marketplace")
 
 describe("marketplace fixtures", () => {
-  it("restricts the Codebuff review agent to read-only MCP tools", async () => {
+  it("keeps Codebuff's curated MCP allowlist read-only", async () => {
     const { default: agent } =
       await import("../../../../docs/marketplace/codebuff/lyrashield-review")
     const names = agent.toolNames ?? []
     const mcpNames = names.filter((name) => name.startsWith("lyrashield/"))
+    const curatedTools = [
+      "get_findings",
+      "get_launch_readiness",
+      "list_workspaces",
+      "list_targets",
+      "get_scan_status",
+      "get_scan_quality",
+      "check_diff",
+      "explain_finding",
+      "generate_fix_plan",
+      "create_pr_security_recap",
+    ]
+    expect(mcpNames).toEqual(curatedTools.map((name) => "lyrashield/lyrashield_" + name))
+
     const tools = createAllTools({ apiBaseUrl: "", apiKey: "" })
-    expect(mcpNames).toHaveLength(tools.filter((tool) => !tool.mutating).length)
-    for (const tool of tools) {
-      expect(mcpNames.includes(`lyrashield/${tool.name}`)).toBe(!tool.mutating)
+    for (const name of curatedTools) {
+      expect(tools.find((tool) => tool.name === "lyrashield_" + name)?.mutating).toBe(false)
     }
+    expect(mcpNames).not.toContain("lyrashield/lyrashield_get_scan_eligibility")
+    expect(mcpNames).not.toContain("lyrashield/lyrashield_list_scan_attachments")
     expect(names).not.toContain("run_terminal_command")
   })
   it("keeps Gemini and Cline contracts machine-readable", async () => {
@@ -29,7 +44,7 @@ describe("marketplace fixtures", () => {
     const cline = JSON.parse(
       await readFile(path.join(marketplaceRoot, "cline", "submission.json"), "utf8")
     ) as Record<string, unknown>
-    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.29" })
+    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.30" })
     expect(gemini.mcpServers).toBeTruthy()
     expect(cline).toMatchObject({
       license: "Apache-2.0",

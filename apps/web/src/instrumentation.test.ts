@@ -22,6 +22,7 @@ describe("request instrumentation", () => {
         routePath: "/api/test",
         routeType: "route",
         renderSource: "react-server-components",
+        revalidateReason: undefined,
       }
     )
     expect(error).toHaveBeenCalledWith(

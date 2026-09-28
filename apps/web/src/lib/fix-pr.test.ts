@@ -44,6 +44,7 @@ vi.mock("@lyrashield/logger", () => ({
 import { requestFixPrApproval, executeApprovedFixPr, type FixPrRequest } from "./fix-pr"
 const request: FixPrRequest & { approvalId: string } = {
   workspaceId: "ws-1",
+  targetId: "target-1",
   fixProposalId: "proposal-1",
   diff: "stored patch",
   anchorFile: "src/app.ts",

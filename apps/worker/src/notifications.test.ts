@@ -14,7 +14,7 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/integrations", () => ({ sendNotification: mocks.sendNotification }))
 vi.mock("@lyrashield/logger", () => ({ logger: mocks.logger }))
 
-import { notifyCriticalFinding, notifyScanCompleted } from "./notifications"
+import { notifyCriticalFinding, notifyScanCompleted, notifyScanFailed } from "./notifications"
 
 describe("completion notifications", () => {
   beforeEach(() => {
@@ -35,5 +35,26 @@ describe("completion notifications", () => {
       2,
       expect.objectContaining({ workspaceName: "Workspace One" })
     )
+  })
+
+  it("logs delivery failure and rejects so callers can observe it", async () => {
+    const failure = new Error("notification provider unavailable")
+    mocks.createAndSendNotification.mockRejectedValue(failure)
+    mocks.findWorkspace.mockResolvedValue({ name: "Workspace One" })
+
+    const results = await Promise.allSettled([
+      notifyScanCompleted("ws-1", "scan-1", "Completed", 1),
+      notifyCriticalFinding("ws-1", "finding-1", "Critical", "Target One"),
+      notifyScanFailed("ws-1", "scan-1", "Failure"),
+    ])
+
+    expect(results).toEqual(
+      Array.from({ length: 3 }, () => ({ status: "rejected", reason: failure }))
+    )
+    expect(mocks.logger.error).toHaveBeenCalledTimes(3)
+    expect(mocks.logger.error).toHaveBeenCalledWith("Failed to send scan completed notification", {
+      error: String(failure),
+      scanId: "scan-1",
+    })
   })
 })

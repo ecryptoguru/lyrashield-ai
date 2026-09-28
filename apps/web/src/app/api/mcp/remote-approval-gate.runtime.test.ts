@@ -2,8 +2,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { randomUUID } from "node:crypto"
 
 const requirePermissionMock = vi.hoisted(() => vi.fn().mockResolvedValue({}))
+const requireOAuthPermissionMock = vi.hoisted(() => vi.fn().mockResolvedValue({}))
 vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: requirePermissionMock,
+  requireOAuthPermission: requireOAuthPermissionMock,
 }))
 vi.mock("@lyrashield/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/config")>()
@@ -95,7 +97,7 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
         authorizationVersion: 4,
         input: originalInput,
       })
-      expect(claim.status).toBe("NEW")
+      if (claim.status !== "NEW") throw new Error(`Unexpected claim status: ${claim.status}`)
       operationId = claim.operation.id
       expect(claim.operation.inputHash).toBe(
         hashOperationInput(CANONICAL_OPERATIONS.SCAN_CREATE, originalInput)
@@ -130,7 +132,19 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
           createdById: userId,
           keyId: `key-${suffix}`,
         },
-        connection,
+        connection: { ...connection, status: "ACTIVE" },
+        oauthContext: {
+          userId,
+          workspaceId,
+          scopes: ["lyrashield.read", "lyrashield.write"],
+          connectionId: connection.id,
+          authorizationVersion: connection.authorizationVersion,
+          allowedOperations: connection.allowedOperations,
+          allowedTargetIds: connection.allowedTargetIds,
+          allTargets: connection.allTargets,
+          allowedProfiles: connection.allowedProfiles,
+          expiresAt: connection.expiresAt,
+        },
         toolContext: { apiBaseUrl: "http://localhost:3001", apiKey: "runtime-test" },
       })
 
@@ -143,7 +157,11 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
       })
       const after = await owner.agentOperation.findUniqueOrThrow({ where: { id: operationId } })
 
-      expect(requirePermissionMock).toHaveBeenCalledWith(workspaceId, "scan:create")
+      expect(requireOAuthPermissionMock).toHaveBeenCalledWith(
+        expect.objectContaining({ userId, workspaceId, connectionId }),
+        "scan:create"
+      )
+      expect(requirePermissionMock).not.toHaveBeenCalled()
       expect(decision).toMatchObject({
         approved: false,
         reason: expect.stringContaining("Idempotency conflict"),
