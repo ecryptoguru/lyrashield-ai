@@ -65,6 +65,7 @@ step_deploy-app-container-app() {
       MYRA_MODEL_FAST \
       MYRA_MODEL_DEEP \
       MYRA_EMBED_MODEL \
+      MYRA_AZURE_OPENAI_DEPLOYMENT \
     --set-env-vars \
       "NEXT_PUBLIC_APP_URL=${APP_URL}" \
       "NEXT_PUBLIC_MARKETING_URL=${MARKETING_URL}" \
@@ -172,6 +173,7 @@ step_deploy-scanner-container-app() {
       GITHUB_WEBHOOK_SECRET \
       GITHUB_APP_CLIENT_ID \
       GITHUB_APP_CLIENT_SECRET \
+      MYRA_AZURE_OPENAI_DEPLOYMENT \
     --set-env-vars \
       "NEXT_PUBLIC_APP_URL=${SCANNER_URL}" \
       "NEXT_PUBLIC_MARKETING_URL=${MARKETING_URL}" \

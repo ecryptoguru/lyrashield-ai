@@ -236,6 +236,7 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "MYRA_MODEL_FAST",
     "MYRA_MODEL_DEEP",
     "MYRA_EMBED_MODEL",
+    "MYRA_AZURE_OPENAI_DEPLOYMENT",
   ])
   assert.deepEqual(envKeys(scanner, "--remove-env-vars"), [
     "LYRASHIELD_DEPLOYMENT_ENVIRONMENT",
@@ -248,6 +249,7 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "GITHUB_WEBHOOK_SECRET",
     "GITHUB_APP_CLIENT_ID",
     "GITHUB_APP_CLIENT_SECRET",
+    "MYRA_AZURE_OPENAI_DEPLOYMENT",
   ])
   assert.deepEqual(envKeys(app, "--set-env-vars"), [
     "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_MARKETING_URL", "BETTER_AUTH_URL", "PLATFORM_ADMIN_EMAILS",
