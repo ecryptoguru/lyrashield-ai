@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   candidates: vi.fn(),
   event: vi.fn(),
   audit: vi.fn(),
+  revalidate: vi.fn(),
 }))
 vi.mock("@lyrashield/db", () => ({
   prisma: { scan: { findFirst: mocks.scan }, auditLog: { create: mocks.audit } },
@@ -30,6 +31,9 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission: mocks.permission }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { scan: { create: "scan:create" } } }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("../../../../../../lib/cache", () => ({
+  revalidateDashboardAggregates: mocks.revalidate,
+}))
 import { POST } from "./route"
 import { parseSarifReport } from "@lyrashield/security"
 
@@ -89,6 +93,7 @@ describe("SARIF import route", () => {
     mocks.permission.mockRejectedValue(new Error("FORBIDDEN"))
     expect((await POST(request(), params)).status).toBe(403)
     expect(mocks.scan).not.toHaveBeenCalled()
+    expect(mocks.revalidate).not.toHaveBeenCalled()
   })
   it("does not extend scan-create OAuth grants to arbitrary imports", async () => {
     mocks.permission.mockResolvedValue({
@@ -134,6 +139,7 @@ describe("SARIF import route", () => {
     )
     expect(mocks.audit).toHaveBeenCalled()
     expect(mocks.gate).toHaveBeenCalledWith("ws-1", "target-1")
+    expect(mocks.revalidate).toHaveBeenCalledWith("ws-1")
   })
   it("coalesces same-import duplicates to the highest severity without placeholder updates", async () => {
     const body = {

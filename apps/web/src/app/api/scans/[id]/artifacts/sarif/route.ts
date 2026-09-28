@@ -5,6 +5,7 @@ import { parseSarifReport, SARIF_IMPORT_VERSION } from "@lyrashield/security"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse, withCookieMutation } from "../../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../../lib/api-response"
+import { revalidateDashboardAggregates } from "../../../../../../lib/cache"
 import { z } from "zod"
 import { createHash } from "node:crypto"
 
@@ -378,6 +379,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
     })
     // Terminal scans already have cached verdicts; imported blockers must be visible.
     await evaluateGateForTarget(workspaceId, targetId)
+    revalidateDashboardAggregates(workspaceId)
     const response = apiSuccess({
       importVersion: SARIF_IMPORT_VERSION,
       toolName: parsed.toolName,

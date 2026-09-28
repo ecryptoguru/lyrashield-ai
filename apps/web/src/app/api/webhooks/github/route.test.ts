@@ -18,6 +18,7 @@ const assertScanWorkerAvailable = vi.fn()
 const enqueueScanJob = vi.fn()
 const recordDeferredLoopClosure = vi.fn(() => Promise.resolve())
 const completeLoopClosure = vi.fn(() => Promise.resolve())
+const revalidateDashboardAggregates = vi.fn()
 
 vi.mock("@lyrashield/db", () => ({
   getSystemPrisma: () => systemPrisma,
@@ -45,6 +46,7 @@ vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
   logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }))
+vi.mock("@/lib/cache", () => ({ revalidateDashboardAggregates }))
 
 const { POST } = await import("./route")
 
@@ -120,6 +122,7 @@ describe("GitHub installation webhook", () => {
     expect(tx.integration.update).toHaveBeenCalled()
     expect(tx.target.updateMany).toHaveBeenCalled()
     expect(prisma.auditLog.create).toHaveBeenCalled()
+    expect(revalidateDashboardAggregates).toHaveBeenCalledWith("workspace-1")
   })
 
   it("treats a concurrent delivery as an idempotent success", async () => {
@@ -129,6 +132,7 @@ describe("GitHub installation webhook", () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ data: { duplicate: true } })
+    expect(revalidateDashboardAggregates).not.toHaveBeenCalled()
   })
 
   it("removes the delivery marker and retries when audit retention fails", async () => {
@@ -217,6 +221,7 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
       expect.objectContaining({ scanId: "scan-retest", workspaceId: "workspace-1" })
     )
     expect(completeLoopClosure).toHaveBeenCalledWith("workspace-1", "test/repo", 7)
+    expect(revalidateDashboardAggregates).toHaveBeenCalledWith("workspace-1")
   })
 
   it("replays a duplicate delivery without enqueueing a second retest", async () => {
