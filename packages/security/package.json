@@ -71,6 +71,6 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "webmcp-types": "^0.1.5"
+    "webmcp-types": "^0.1.9"
   }
 }

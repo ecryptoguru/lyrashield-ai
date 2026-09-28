@@ -53,10 +53,10 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "postcss": "^8.5.26",
+    "postcss": "^8.5.28",
     "tailwindcss": "catalog:",
     "tw-animate-css": "^1.2.0",
     "typescript": "catalog:",
-    "webmcp-types": "^0.1.5"
+    "webmcp-types": "^0.1.9"
   }
 }
