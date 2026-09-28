@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const verifyApiKey = vi.fn()
 const verifyOAuthBearer = vi.fn()
 const requirePermissionMock = vi.fn().mockResolvedValue({})
+const requireOAuthPermissionMock = vi.fn().mockResolvedValue({})
 const claimOrGetAgentOperationMock = vi.fn()
 const retryScanCancellationMock = vi.fn()
 const completeAgentOperationMock = vi.fn()
@@ -39,6 +40,7 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/auth/server", () => ({
   verifyOAuthBearer: (...a: unknown[]) => verifyOAuthBearer(...a),
   requirePermission: (...a: unknown[]) => requirePermissionMock(...a),
+  requireOAuthPermission: (...a: unknown[]) => requireOAuthPermissionMock(...a),
 }))
 vi.mock("@lyrashield/config", () => ({ env: { NEXT_PUBLIC_APP_URL: "https://app.example.com" } }))
 vi.mock("@lyrashield/logger", () => ({
@@ -47,6 +49,7 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import { POST } from "./route"
+import { makeHostedMcpTaskBackend } from "@/lib/mcp-tasks"
 
 const OAUTH = "Bearer oauth-token"
 const PROTOCOL_2025 = "2025-11-25"
@@ -76,6 +79,7 @@ function req(params: {
   id?: number
   protocolHeader?: string
   auth?: string
+  cookie?: string
 }) {
   const body: Record<string, unknown> = {
     jsonrpc: "2.0",
@@ -90,6 +94,7 @@ function req(params: {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
       ...(params.protocolHeader ? { "mcp-protocol-version": params.protocolHeader } : {}),
+      ...(params.cookie ? { cookie: params.cookie } : {}),
     },
     body: JSON.stringify(body),
   })
@@ -190,6 +195,7 @@ beforeEach(() => {
   listAgentOperationsForTasksMock.mockReset()
   cancelScanMock.mockReset()
   requirePermissionMock.mockResolvedValue({})
+  requireOAuthPermissionMock.mockResolvedValue({})
   scanFindFirstMock.mockResolvedValue(makeScan())
   scanFindManyMock.mockResolvedValue([makeScan()])
   checkDelegatedOperationAuthorizationMock.mockReturnValue({
@@ -394,7 +400,10 @@ describe("MCP tasks over the hosted endpoint", () => {
       (body.result as { task: { status: string } }).task
     expect(task.status).toBe("working")
     // Membership/permission re-check ran for this request, not at binding time.
-    expect(requirePermissionMock).toHaveBeenCalledWith("ws-1", "scan:view")
+    expect(requireOAuthPermissionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-1", workspaceId: "ws-1", connectionId: "conn-1" }),
+      "scan:view"
+    )
   })
 
   it("denies a foreign task id (principal mismatch) with a uniform error", async () => {
@@ -512,7 +521,10 @@ describe("MCP tasks over the hosted endpoint", () => {
       (body.result as { status?: string }) ?? (body.result as { task?: { status: string } }).task
     expect(task.status).toBe("cancelled")
     // Cancel-scope permission and delegated grant were rechecked for this request.
-    expect(requirePermissionMock).toHaveBeenCalledWith("ws-1", "scan:cancel")
+    expect(requireOAuthPermissionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-1", workspaceId: "ws-1", connectionId: "conn-1" }),
+      "scan:cancel"
+    )
     expect(checkDelegatedOperationAuthorizationMock).toHaveBeenCalledWith(
       expect.objectContaining({ operationName: "lyrashield_cancel_scan", targetId: "t-1" })
     )
@@ -868,6 +880,7 @@ describe("MCP tasks over the hosted endpoint", () => {
           rpcMethod: "tasks/list",
           rpcParams: {},
           protocolHeader: PROTOCOL_2025,
+          cookie: "better-auth.session_token=cookie-user-b",
         })
       )
     const before = await readJson(await request())
@@ -876,13 +889,56 @@ describe("MCP tasks over the hosted endpoint", () => {
     )
 
     listAgentOperationsForTasksMock.mockClear()
-    requirePermissionMock.mockRejectedValue(new Error(denial))
+    requireOAuthPermissionMock.mockRejectedValue(new Error(denial))
     const after = await readJson(await request())
     expect(after.error).toBeTruthy()
     expect(JSON.stringify(after)).not.toMatch(/lst_op-1|scan-1|COMPLETED/)
-    expect(requirePermissionMock).toHaveBeenCalledWith("ws-1", "scan:view")
+    expect(requireOAuthPermissionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-1", workspaceId: "ws-1", connectionId: "conn-1" }),
+      "scan:view"
+    )
     expect(listAgentOperationsForTasksMock).not.toHaveBeenCalled()
     expect(verifyOAuthBearer).toHaveBeenCalledTimes(3)
+  })
+
+  it("rechecks the verified bearer user before every task accessor queries operations", async () => {
+    const oauth = {
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      authorizationVersion: 7,
+      allowedOperations: ["scan.create", "scan.cancel"],
+    }
+    const backend = makeHostedMcpTaskBackend({
+      oauth,
+      connection: {
+        id: "conn-1",
+        workspaceId: "ws-1",
+        status: "ACTIVE",
+        authorizationVersion: 7,
+        allowedOperations: ["scan.create", "scan.cancel"],
+        allowedTargetIds: [],
+        allTargets: true,
+        allowedProfiles: ["STANDARD"],
+        expiresAt: null,
+      },
+    })
+    requireOAuthPermissionMock.mockRejectedValue(new Error("FORBIDDEN"))
+
+    await expect(backend.getTask("lst_op-1")).resolves.toBeNull()
+    await expect(backend.getTaskResult("lst_op-1")).rejects.toThrow(/task not found/i)
+    await expect(backend.cancelTask("lst_op-1")).rejects.toThrow(/task not found/i)
+    await expect(backend.listTasks()).rejects.toThrow("Tasks are unavailable.")
+
+    expect(requireOAuthPermissionMock).toHaveBeenCalledTimes(4)
+    expect(requireOAuthPermissionMock).toHaveBeenNthCalledWith(1, oauth, "scan:view")
+    expect(requireOAuthPermissionMock).toHaveBeenNthCalledWith(2, oauth, "scan:view")
+    expect(requireOAuthPermissionMock).toHaveBeenNthCalledWith(3, oauth, "scan:cancel")
+    expect(requireOAuthPermissionMock).toHaveBeenNthCalledWith(4, oauth, "scan:view")
+    expect(getAgentOperationMock).not.toHaveBeenCalled()
+    expect(listAgentOperationsForTasksMock).not.toHaveBeenCalled()
+    expect(cancelScanMock).not.toHaveBeenCalled()
   })
 
   it("keeps the immediate result path for a non-augmented call on 2025-11-25", async () => {

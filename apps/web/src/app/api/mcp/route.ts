@@ -4,7 +4,7 @@ import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { makeRemoteApprovalGate } from "./remote-approval-gate"
 import { makeHostedMcpTaskBackend } from "@/lib/mcp-tasks"
-import { verifyOAuthBearer } from "@lyrashield/auth/server"
+import { verifyOAuthBearer, type OAuthAuthContext } from "@lyrashield/auth/server"
 
 /**
  * Remote LyraShield MCP endpoint (Streamable HTTP) at /api/mcp.
@@ -55,6 +55,7 @@ export interface RemoteAuthInfo {
   keyId: string
   prefix: string
   kind: "api-key" | "oauth"
+  oauthContext?: OAuthAuthContext
   connection?: {
     id: string
     workspaceId: string
@@ -88,6 +89,7 @@ async function authenticate(request: Request): Promise<RemoteAuthInfo | null> {
     keyId: `oauth:${oauth.clientId ?? "client"}`,
     prefix: "oauth",
     kind: "oauth",
+    oauthContext: oauth,
     connection: oauth.connectionId
       ? {
           id: oauth.connectionId,
@@ -163,7 +165,8 @@ async function handle(request: Request): Promise<Response> {
       protocolVersion !== undefined &&
       protocolVersion >= MCP_TASK_PROTOCOL_VERSION &&
       authInfo.kind === "oauth" &&
-      authInfo.connection !== undefined
+      authInfo.connection !== undefined &&
+      authInfo.oauthContext !== undefined
 
     return await handleRemoteMcpRequest(mcpRequest, {
       toolContext,
@@ -182,11 +185,11 @@ async function handle(request: Request): Promise<Response> {
         connection: authInfo.connection,
         toolContext,
       }),
-      ...(tasksEnabled && authInfo.connection
+      ...(tasksEnabled && authInfo.connection && authInfo.oauthContext
         ? {
             tasks: {
               backend: makeHostedMcpTaskBackend({
-                workspaceId: authInfo.workspaceId,
+                oauth: authInfo.oauthContext,
                 connection: authInfo.connection,
               }),
             },

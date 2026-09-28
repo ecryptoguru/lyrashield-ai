@@ -62,9 +62,8 @@ export type PlatformAdminIdentity = AuthSession & {
 }
 
 /**
- * Permissions a read-only ("read" scope) API key may exercise. Everything not
- * listed requires the "write" scope — fail-closed for any newly added
- * permission.
+ * Permissions a read-scoped credential may exercise. Everything not listed
+ * requires the write scope — fail-closed for any newly added permission.
  */
 const READ_SCOPE_PERMISSIONS: ReadonlySet<string> = new Set([
   "scan:view",
@@ -364,34 +363,35 @@ export function assertBrowserSession(session: AuthSession): void {
   }
 }
 
-export async function requirePermission(
-  workspaceId: string,
-  permission: Permission
-): Promise<{ session: AuthSession; workspace: WorkspaceContext }> {
-  const { session, workspace } = await requireWorkspaceAccess(workspaceId)
+type PermissionCredentialContext = Pick<AuthSession, "apiKey" | "oauth">
 
-  if (!hasPermission(workspace.role, permission)) {
+function assertWorkspacePermission(
+  workspaceId: string,
+  permission: Permission,
+  credentials: PermissionCredentialContext,
+  workspace: WorkspaceContext
+): void {
+  if (!hasPermission(workspace.role, permission)) throw new Error("FORBIDDEN")
+  if (credentials.apiKey && credentials.apiKey.workspaceId !== workspaceId) {
+    throw new Error("FORBIDDEN")
+  }
+  if (credentials.oauth && credentials.oauth.workspaceId !== workspaceId) {
     throw new Error("FORBIDDEN")
   }
 
-  // Scope enforcement for API-key auth: read-only keys may exercise only the
-  // explicit read allowlist; everything else requires the "write" scope.
   const hasWriteScope =
-    session.apiKey?.scopes.includes("write") ?? session.oauth?.scopes.includes("lyrashield.write")
-  if ((session.apiKey || session.oauth) && !hasWriteScope) {
-    if (!READ_SCOPE_PERMISSIONS.has(permission)) {
-      throw new Error("FORBIDDEN")
-    }
+    credentials.apiKey?.scopes.includes("write") ??
+    credentials.oauth?.scopes.includes("lyrashield.write")
+  if ((credentials.apiKey || credentials.oauth) && !hasWriteScope) {
+    if (!READ_SCOPE_PERMISSIONS.has(permission)) throw new Error("FORBIDDEN")
   }
 
-  // Delegated connection enforcement: mutating actions require delegated grant
-  if (session.oauth?.connectionId && !READ_SCOPE_PERMISSIONS.has(permission)) {
+  if (credentials.oauth?.connectionId && !READ_SCOPE_PERMISSIONS.has(permission)) {
     const requiredOps: Partial<Record<string, string[]>> = {
       [PERMISSIONS.scan.create]: [CANONICAL_OPERATIONS.SCAN_CREATE],
       [PERMISSIONS.scan.cancel]: [CANONICAL_OPERATIONS.SCAN_CANCEL],
       [PERMISSIONS.attachment.upload]: [CANONICAL_OPERATIONS.ATTACHMENT_UPLOAD],
       [PERMISSIONS.attachment.delete]: [CANONICAL_OPERATIONS.ATTACHMENT_DELETE],
-
       [PERMISSIONS.retest.create]: [CANONICAL_OPERATIONS.RETEST_CREATE],
       [PERMISSIONS.fix.create]: [CANONICAL_OPERATIONS.FIX_PROPOSAL_CREATE],
       [PERMISSIONS.fix.createPr]: [CANONICAL_OPERATIONS.FIX_PR_CREATE],
@@ -399,10 +399,30 @@ export async function requirePermission(
       [PERMISSIONS.report.create]: [CANONICAL_OPERATIONS.REPORT_CREATE],
     }
     const ops = requiredOps[permission]
-    if (!ops || !ops.some((op) => session.oauth!.allowedOperations?.includes(op))) {
+    if (!ops || !ops.some((op) => credentials.oauth!.allowedOperations?.includes(op))) {
       throw new Error("FORBIDDEN")
     }
   }
+}
 
+/** Authorize a verified hosted OAuth principal without consulting cookie-first request auth. */
+export async function requireOAuthPermission(
+  oauth: OAuthAuthContext,
+  permission: Permission
+): Promise<{ workspace: WorkspaceContext }> {
+  const workspace = await getWorkspaceMembership(oauth.workspaceId, oauth.userId)
+  if (!workspace) throw new Error("FORBIDDEN")
+
+  assertWorkspacePermission(oauth.workspaceId, permission, { oauth }, workspace)
+  setWorkspaceContext(oauth.workspaceId)
+  return { workspace }
+}
+
+export async function requirePermission(
+  workspaceId: string,
+  permission: Permission
+): Promise<{ session: AuthSession; workspace: WorkspaceContext }> {
+  const { session, workspace } = await requireWorkspaceAccess(workspaceId)
+  assertWorkspacePermission(workspaceId, permission, session, workspace)
   return { session, workspace }
 }
