@@ -1,4 +1,8 @@
-import { requirePermission } from "@lyrashield/auth/server"
+import {
+  requireOAuthPermission,
+  requirePermission,
+  type OAuthAuthContext,
+} from "@lyrashield/auth/server"
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
 import {
   claimOrGetAgentOperation,
@@ -215,6 +219,7 @@ interface RemoteApprovalGateOptions {
     allowedProfiles: string[]
     expiresAt: Date | null
   }
+  oauthContext?: OAuthAuthContext
   toolContext: { apiBaseUrl: string; apiKey: string; fetchFn?: typeof fetch }
 }
 
@@ -234,7 +239,19 @@ export function makeRemoteApprovalGate(
     const permission = operationPermissions[TOOL_OPERATION_MAP[toolName]?.canonicalOperation ?? ""]
     if (!permission) return denied("This operation has no supported permission binding.")
     try {
-      await requirePermission(workspaceId, permission)
+      if (options.oauthContext) {
+        if (
+          options.oauthContext.userId !== apiKeyInfo.createdById ||
+          options.oauthContext.workspaceId !== workspaceId ||
+          (options.connection && options.oauthContext.connectionId !== options.connection.id)
+        ) {
+          throw new Error("FORBIDDEN")
+        }
+        await requireOAuthPermission(options.oauthContext, permission)
+      } else {
+        if (options.connection) throw new Error("FORBIDDEN")
+        await requirePermission(workspaceId, permission)
+      }
     } catch {
       return denied("Current workspace access does not authorize this operation.")
     }

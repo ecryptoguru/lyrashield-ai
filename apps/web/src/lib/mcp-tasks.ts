@@ -186,6 +186,15 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
   return {
     async createTask({ toolName, toolResult }) {
       assertTaskCapableTool(toolName)
+      try {
+        await requireOAuthPermission(oauth, PERMISSIONS.scan.view)
+      } catch {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          "Task creation was not authorized for this call."
+        )
+      }
+
       const operationId = extractOperationIdFromToolResult(toolResult)
       if (!operationId) {
         if (toolResult.isError) {

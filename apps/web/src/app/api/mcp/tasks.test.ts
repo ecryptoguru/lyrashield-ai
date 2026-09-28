@@ -339,6 +339,60 @@ describe("MCP tasks over the hosted endpoint", () => {
     }
   })
 
+  it("denies a replay for a removed bearer user despite an owner cookie session", async () => {
+    oauthConnection({ userId: "bearer-user-a" })
+    claimOrGetAgentOperationMock.mockResolvedValue({
+      status: "REPLAY",
+      operation: {
+        id: "private-operation-a",
+        result: {
+          content: [{ type: "text", text: '{"scanId":"private-scan-a"}' }],
+          structuredContent: {
+            operationId: "private-operation-a",
+            scanId: "private-scan-a",
+          },
+        },
+      },
+    })
+    // The browser cookie belongs to a valid same-workspace owner, but OAuth's
+    // bearer principal has lost membership. Cookie-session authorization must
+    // never revive the bearer request.
+    requirePermissionMock.mockResolvedValue({
+      session: { userId: "owner-cookie-user-b" },
+      workspace: { role: "OWNER" },
+    })
+    requireOAuthPermissionMock.mockRejectedValue(new Error("WORKSPACE_NOT_FOUND"))
+
+    const res = await POST(
+      req({
+        method: "POST",
+        rpcMethod: "tools/call",
+        rpcParams: {
+          name: "lyrashield_scan_target",
+          arguments: { workspaceId: "ws-1", targetId: "t-1", idempotencyKey: "old-key" },
+          task: {},
+        },
+        protocolHeader: PROTOCOL_2025,
+        cookie: "better-auth.session_token=owner-cookie-user-b",
+      })
+    )
+    const body = await readJson(res)
+
+    expect(JSON.stringify(body)).toContain("Task creation was not authorized for this call.")
+    expect(JSON.stringify(body)).not.toMatch(/private-operation-a|private-scan-a|lst_/)
+    expect(requireOAuthPermissionMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ userId: "bearer-user-a", workspaceId: "ws-1" }),
+      "scan:create"
+    )
+    expect(requirePermissionMock).not.toHaveBeenCalled()
+    expect(claimOrGetAgentOperationMock).not.toHaveBeenCalled()
+    expect(getAgentOperationMock).not.toHaveBeenCalled()
+    expect(listAgentOperationsForTasksMock).not.toHaveBeenCalled()
+    expect(scanFindFirstMock).not.toHaveBeenCalled()
+    expect(scanFindManyMock).not.toHaveBeenCalled()
+  })
+
   it("denies a task-augmented call when the mutation itself is denied (no task fabricated)", async () => {
     oauthConnection({ allowedOperations: [] })
     checkDelegatedOperationAuthorizationMock.mockReturnValue({
@@ -939,6 +993,47 @@ describe("MCP tasks over the hosted endpoint", () => {
     expect(getAgentOperationMock).not.toHaveBeenCalled()
     expect(listAgentOperationsForTasksMock).not.toHaveBeenCalled()
     expect(cancelScanMock).not.toHaveBeenCalled()
+  })
+
+  it("checks the bearer principal before createTask reads its operation or scan", async () => {
+    const oauth = {
+      userId: "bearer-user-a",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      authorizationVersion: 7,
+      allowedOperations: ["scan.create", "scan.cancel"],
+    }
+    const backend = makeHostedMcpTaskBackend({
+      oauth,
+      connection: {
+        id: "conn-1",
+        workspaceId: "ws-1",
+        status: "ACTIVE",
+        authorizationVersion: 7,
+        allowedOperations: ["scan.create", "scan.cancel"],
+        allowedTargetIds: [],
+        allTargets: true,
+        allowedProfiles: ["STANDARD"],
+        expiresAt: null,
+      },
+    })
+    requireOAuthPermissionMock.mockRejectedValue(new Error("WORKSPACE_NOT_FOUND"))
+
+    await expect(
+      backend.createTask({
+        toolName: "lyrashield_scan_target",
+        toolResult: {
+          content: [{ type: "text", text: '{"operationId":"private-operation-a"}' }],
+          structuredContent: { operationId: "private-operation-a" },
+        },
+      })
+    ).rejects.toThrow("Task creation was not authorized for this call.")
+
+    expect(requireOAuthPermissionMock).toHaveBeenCalledWith(oauth, "scan:view")
+    expect(getAgentOperationMock).not.toHaveBeenCalled()
+    expect(scanFindFirstMock).not.toHaveBeenCalled()
+    expect(scanFindManyMock).not.toHaveBeenCalled()
   })
 
   it("keeps the immediate result path for a non-augmented call on 2025-11-25", async () => {

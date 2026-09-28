@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const requirePermissionMock = vi.fn().mockResolvedValue({})
+const requireOAuthPermissionMock = vi.fn((...args: unknown[]) => {
+  const [oauth, permission] = args as [{ workspaceId: string }, string]
+  return requirePermissionMock(oauth.workspaceId, permission)
+})
 const withWorkspaceRLSMock = vi.fn()
 const checkDelegatedOperationAuthorizationMock = vi.fn()
 vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: (...args: unknown[]) => requirePermissionMock(...args),
+  requireOAuthPermission: (...args: unknown[]) => requireOAuthPermissionMock(...args),
 }))
 
 const createApprovalMock = vi.fn()
@@ -69,6 +74,22 @@ function makeGate(
       keyId: "key-1",
     },
     connection,
+    ...(connection
+      ? {
+          oauthContext: {
+            userId: "user-1",
+            workspaceId: connection.workspaceId,
+            scopes: ["lyrashield.read", "lyrashield.write"],
+            connectionId: connection.id,
+            authorizationVersion: connection.authorizationVersion,
+            allowedOperations: connection.allowedOperations,
+            allowedTargetIds: connection.allowedTargetIds,
+            allTargets: connection.allTargets,
+            allowedProfiles: connection.allowedProfiles,
+            expiresAt: connection.expiresAt,
+          },
+        }
+      : {}),
     toolContext: { apiBaseUrl: "https://app.example.com", apiKey: "lsk_test" },
   })
 }

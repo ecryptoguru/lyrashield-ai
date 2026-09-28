@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const requirePermissionMock = vi.fn().mockResolvedValue({})
+const requireOAuthPermissionMock = vi.fn((...args: unknown[]) => {
+  const [oauth, permission] = args as [{ workspaceId: string }, string]
+  return requirePermissionMock(oauth.workspaceId, permission)
+})
 vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: (...args: unknown[]) => requirePermissionMock(...args),
+  requireOAuthPermission: (...args: unknown[]) => requireOAuthPermissionMock(...args),
 }))
 
 const createApprovalMock = vi.fn()
@@ -121,7 +126,27 @@ vi.mock("../../../lib/rate-limit", () => ({
   checkApprovalCreateRateLimit: vi.fn().mockResolvedValue({ limited: false, retryAfter: 0 }),
 }))
 
-import { makeRemoteApprovalGate } from "./remote-approval-gate"
+import { makeRemoteApprovalGate as createRemoteApprovalGate } from "./remote-approval-gate"
+
+function makeRemoteApprovalGate(options: Parameters<typeof createRemoteApprovalGate>[0]) {
+  if (options.oauthContext || !options.connection) return createRemoteApprovalGate(options)
+
+  return createRemoteApprovalGate({
+    ...options,
+    oauthContext: {
+      userId: options.apiKeyInfo.createdById,
+      workspaceId: options.apiKeyInfo.workspaceId,
+      scopes: options.apiKeyInfo.scopes,
+      connectionId: options.connection.id,
+      authorizationVersion: options.connection.authorizationVersion,
+      allowedOperations: options.connection.allowedOperations,
+      allowedTargetIds: options.connection.allowedTargetIds,
+      allTargets: options.connection.allTargets,
+      allowedProfiles: options.connection.allowedProfiles,
+      expiresAt: options.connection.expiresAt,
+    },
+  })
+}
 
 describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
   const apiKeyInfo = {
@@ -171,6 +196,63 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
       approved: false,
       reason: "Current workspace access does not authorize this operation.",
     })
+    expect(claimOrGetAgentOperationMock).not.toHaveBeenCalled()
+    expect(callToolMock).not.toHaveBeenCalled()
+  })
+
+  it("denies an idempotent replay for a removed bearer user despite an owner cookie session", async () => {
+    const oauthContext = {
+      userId: "bearer-user-a",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      authorizationVersion: 7,
+      allowedOperations: ["scan.create"],
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["STANDARD"],
+      expiresAt: null,
+    }
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      authorizationVersion: 7,
+      allowedOperations: ["scan.create"],
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["STANDARD"],
+      expiresAt: null,
+    }
+    const authInfo = { ...apiKeyInfo, createdById: oauthContext.userId }
+    requirePermissionMock.mockResolvedValueOnce({
+      session: { userId: "owner-cookie-user-b" },
+      workspace: { role: "OWNER" },
+    })
+    requireOAuthPermissionMock.mockRejectedValueOnce(new Error("FORBIDDEN"))
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "REPLAY",
+      operation: { id: "old-op", result: { private: "stored" } },
+    })
+
+    const gate = createRemoteApprovalGate({
+      apiKeyInfo: authInfo,
+      oauthContext,
+      connection,
+      toolContext,
+    })
+    const result = await gate("lyrashield_scan_target", {
+      targetId: "target-1",
+      mode: "STANDARD",
+      idempotencyKey: "old-operation-key",
+    })
+
+    expect(result).toEqual({
+      approved: false,
+      reason: "Current workspace access does not authorize this operation.",
+    })
+    expect(requireOAuthPermissionMock).toHaveBeenCalledWith(oauthContext, "scan:create")
+    expect(requirePermissionMock).not.toHaveBeenCalled()
     expect(claimOrGetAgentOperationMock).not.toHaveBeenCalled()
     expect(callToolMock).not.toHaveBeenCalled()
   })

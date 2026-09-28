@@ -183,6 +183,7 @@ async function handle(request: Request): Promise<Response> {
       remoteApprovalGate: makeRemoteApprovalGate({
         apiKeyInfo: authInfo,
         connection: authInfo.connection,
+        oauthContext: authInfo.oauthContext,
         toolContext,
       }),
       ...(tasksEnabled && authInfo.connection && authInfo.oauthContext
