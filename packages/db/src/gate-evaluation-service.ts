@@ -109,6 +109,7 @@ export async function evaluateGateForTarget(
         dispositionAt: true,
         canonicalFindingId: true,
         verificationReceipts: {
+          where: { status: { in: ["VALIDATED", "VERIFIED"] } },
           select: {
             status: true,
             method: true,
