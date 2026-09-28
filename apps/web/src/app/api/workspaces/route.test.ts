@@ -4,6 +4,7 @@ const tx = {
   workspace: { create: vi.fn() },
   workspaceMember: { create: vi.fn() },
   policy: { create: vi.fn() },
+  user: { findUnique: vi.fn() },
 }
 
 vi.mock("@lyrashield/db", () => ({
@@ -84,6 +85,28 @@ describe("POST /api/workspaces", () => {
       trialStarted: false,
       trialAlreadyUsed: true,
       trialEndsAt: null,
+    })
+  })
+  it("creates a workspace for a paid account without granting a trial", async () => {
+    vi.mocked(startTrial).mockRejectedValueOnce(new Error("TRIAL_PAID_PLAN"))
+    tx.user.findUnique.mockResolvedValueOnce({ trialStartedAt: null })
+
+    const response = await POST(
+      new Request("http://localhost/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "Paid account workspace", mode: "VIBE" }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect((await response.json()).data).toMatchObject({
+      trialStarted: false,
+      trialAlreadyUsed: false,
+      trialEndsAt: null,
+    })
+    expect(tx.user.findUnique).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { trialStartedAt: true },
     })
   })
   it("fails the creation transaction when trial provisioning fails", async () => {
