@@ -27,7 +27,11 @@ case "$1 $2 $3" in
       *) exit 91 ;;
     esac ;;
   "keyvault show --name") printf '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/vault\\n' ;;
-  "role assignment list") printf '%s\\n' "$FAKE_ROLE_COUNT" ;;
+  "role assignment list")
+    case "$*" in
+      *"--scope /subscriptions/sub/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/vault/secrets/worker-egress-proxy-secret"*"--assignee-object-id proxy-principal"*) printf '%s\\n' "$FAKE_ROLE_COUNT" ;;
+      *) exit 93 ;;
+    esac ;;
   *) exit 92 ;;
 esac
 `,
