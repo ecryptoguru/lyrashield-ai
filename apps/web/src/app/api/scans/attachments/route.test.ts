@@ -35,6 +35,7 @@ vi.mock("@lyrashield/auth/server", () => ({
     session: { userId: "user-1" },
     workspace: { id: "ws-1" },
   }),
+  assertOAuthDelegatedScope: vi.fn(),
 }))
 
 vi.mock("@lyrashield/auth", () => ({
@@ -58,7 +59,7 @@ import {
   prisma,
 } from "@lyrashield/db"
 import { deleteEncryptedArtifact, uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 
 const SHA = "a".repeat(64)
 
@@ -103,6 +104,7 @@ describe("POST /api/scans/attachments", () => {
     const json = await res.json()
     expect(json.data.id).toBe("att-1")
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "attachment:upload")
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(expect.anything(), null)
     expect(uploadEncryptedArtifact).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: "ws-1", type: "scan-attachment" })
     )

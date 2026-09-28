@@ -70,6 +70,15 @@ describe("automatic operational access for every member role", () => {
     expect(new Set(getRolePermissions(role)).size).toBe(getRolePermissions(role).length)
   })
 
+  it.each(ALL_ROLES)(
+    "keeps scan removal with the current scan cancellation roles for %s",
+    (role) => {
+      expect(getRolePermissions(role).includes("scan:remove" as never)).toBe(
+        hasPermission(role, PERMISSIONS.scan.cancel)
+      )
+    }
+  )
+
   it.each(["VIEWER", "AUDITOR", "MEMBER", "DEVELOPER", "EXTERNAL_PENTESTER"] as const)(
     "does not promote %s to workspace or credential administrator",
     (role) => {

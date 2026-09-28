@@ -39,7 +39,6 @@ import { MyraPanel } from "./myra-panel"
 
 // The Enter-to-send guard lives in the useMyraPanel hook, which cannot be
 // driven to a streaming state without a DOM. Pin it at the source here.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const hookSource = readFileSync(new URL("./use-myra-panel.ts", import.meta.url), "utf8")
 
 describe("MyraPanel while Myra is answering", () => {

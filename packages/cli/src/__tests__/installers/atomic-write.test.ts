@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile, readFile } from "node:fs/promises"
 import { tmpdir as osTmpdir } from "node:os"

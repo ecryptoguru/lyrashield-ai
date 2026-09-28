@@ -27,6 +27,7 @@ import {
   getConnectorTool,
 } from "@lyrashield/integrations"
 import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
+import { isJsonObject } from "@lyrashield/types"
 
 export interface ScanConnectorInvocationParams {
   workspaceId: string
@@ -47,10 +48,6 @@ export interface ScanConnectorInvocationParams {
   fetchFn?: typeof fetch
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
-}
-
 /**
  * Resolve the provider credential for a bound connection. GitHub resolves to
  * the App installation id (the per-call installation token is minted by the
@@ -64,7 +61,7 @@ async function resolveConnectorCredential(
   connection: Integration
 ): Promise<ConnectorCredentialShape | null> {
   if (provider === "github") {
-    const metadata = isRecord(connection.metadata) ? connection.metadata : {}
+    const metadata = isJsonObject(connection.metadata) ? connection.metadata : {}
     const installationId =
       typeof metadata.installationId === "number"
         ? metadata.installationId
@@ -80,7 +77,7 @@ async function resolveConnectorCredential(
     // configRef is a sealed artifact URI, never the token itself.
     const artifact = await readEncryptedArtifact(connection.configRef, workspaceId)
     const parsed: unknown = JSON.parse(artifact.content.toString("utf8"))
-    if (!isRecord(parsed) || typeof parsed.botToken !== "string" || !parsed.botToken) {
+    if (!isJsonObject(parsed) || typeof parsed.botToken !== "string" || !parsed.botToken) {
       return null
     }
     return { kind: "slack_bot", botToken: parsed.botToken }

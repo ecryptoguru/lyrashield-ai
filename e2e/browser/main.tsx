@@ -1,7 +1,11 @@
 import { createRoot } from "react-dom/client"
 
 const root = createRoot(document.getElementById("root")!)
-if (new URLSearchParams(location.search).get("myra") === "marketing") {
+if (new URLSearchParams(location.search).has("forms")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: FormsHarness } = await import("./forms-harness")
+  root.render(<FormsHarness />)
+} else if (new URLSearchParams(location.search).get("myra") === "marketing") {
   const { createMyraClient } = await import("../../packages/myra/src/client")
   const { renderMyraProposalActions } =
     await import("../../apps/marketing/src/components/myra/myra-dom-renderer")
@@ -28,7 +32,10 @@ if (new URLSearchParams(location.search).get("myra") === "marketing") {
   await import("../../apps/web/src/app/globals.css")
   const { default: FindingsHarness } = await import("./findings-harness")
   root.render(<FindingsHarness />)
-} else if (new URLSearchParams(location.search).get("tab") === "reports") {
+} else if (
+  location.pathname === "/dashboard/reports" ||
+  new URLSearchParams(location.search).get("tab") === "reports"
+) {
   await import("../../apps/web/src/app/globals.css")
   const { default: ReportsHarness } = await import("./reports-harness")
   root.render(<ReportsHarness />)

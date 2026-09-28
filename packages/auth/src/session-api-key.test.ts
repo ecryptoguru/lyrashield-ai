@@ -167,19 +167,26 @@ describe("API key bearer auth", () => {
 })
 
 describe("browser-only boundary (assertBrowserSession)", () => {
-  const browser = { userId: "user-1" } as AuthSession
-  const apiKeySession = {
+  const baseSession = {
     userId: "user-1",
+    userEmail: "user@example.com",
+    userName: "User One",
+    userImage: null,
+    sessionId: "session-1",
+  }
+  const browser: AuthSession = { ...baseSession }
+  const apiKeySession: AuthSession = {
+    ...baseSession,
     apiKey: { keyId: "key-1", workspaceId: "ws-1", scopes: ["read", "write"], prefix: "lsk_x" },
-  } as unknown as AuthSession
-  const oauthSession = {
-    userId: "user-1",
+  }
+  const oauthSession: AuthSession = {
+    ...baseSession,
     oauth: {
       userId: "user-1",
       workspaceId: "ws-1",
       scopes: ["lyrashield.read", "lyrashield.write"],
     },
-  } as unknown as AuthSession
+  }
 
   it("passes for a browser session", () => {
     expect(() => assertBrowserSession(browser)).not.toThrow()
@@ -253,6 +260,20 @@ describe("scorecard:publish via requirePermission", () => {
     stubMembership("DEVELOPER")
 
     await expect(requirePermission("ws-1", "scan:cancel")).resolves.toBeTruthy()
+  })
+
+  it("never maps a delegated grant to scan removal", async () => {
+    withHeaders({ authorization: "Bearer oauth-token" })
+    vi.mocked(verifyOAuthBearer).mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      allowedOperations: ["scan.cancel"],
+    })
+    stubMembership("OWNER")
+
+    await expect(requirePermission("ws-1", "scan:remove" as never)).rejects.toThrow("FORBIDDEN")
   })
 
   it("rejects scan:cancel for a delegated connection that granted only scan.create", async () => {

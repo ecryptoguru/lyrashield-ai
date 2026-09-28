@@ -13,7 +13,8 @@ import {
 } from "./scans-webmcp.utils"
 
 function target(partial: Partial<TargetItem> & { id: string; name: string }): TargetItem {
-  return { type: "REPO", ...partial } as TargetItem
+  const item = { type: "REPO", ...partial }
+  return item as TargetItem
 }
 
 const abortSignal = new AbortController().signal
@@ -189,8 +190,7 @@ describe("scans page tool registrations", () => {
 
   beforeEach(() => {
     registerTool = vi.fn()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(globalThis as any).document = { modelContext: { registerTool } }
+    vi.stubGlobal("document", { modelContext: { registerTool } })
     fetchMock = vi.fn()
     vi.stubGlobal("fetch", fetchMock)
   })
@@ -199,8 +199,6 @@ describe("scans page tool registrations", () => {
 
   afterEach(() => {
     for (const cleanup of cleanups.splice(0)) cleanup()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (globalThis as any).document
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
@@ -437,7 +435,6 @@ describe("scans page tool registrations", () => {
     // The disclosure lives in the sheet's persistent description — always
     // rendered while the Start button is visible, not behind the 150-char
     // tool-description budget.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const src = readFileSync(new URL("./create-scan-sheet.tsx", import.meta.url), "utf8")
     expect(src).toMatch(/durable/i)
     expect(src).toMatch(/sponsoring account|agent-minute allowance/i)

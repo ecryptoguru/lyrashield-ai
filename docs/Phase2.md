@@ -17,7 +17,7 @@ This overlay records the current Phase 2 direction as of 2026-09-25 and supersed
 1. Merge and deploy the scorecard canonical-origin fix, then repeat live canonical/OG readback.
 2. Retain longer-window Redis command/capacity evidence; provision RazorpayX and Payoneer payout API access plus the tax-form workflow.
 3. Triage the 25 findings from the accepted Standard scan and obtain independent verification where warranted.
-4. Select and authorize a controlled Deep/Terra target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
+4. Select and authorize a controlled Deep/Sol target, then retain separate routing, cost, receipt, image, and terminal-state evidence.
 5. Capture authenticated client-matrix receipts plus webmaster indexing and answer-engine citation observations.
 
 ### Current Phase 2 direction (aligned with `docs/whitepaper.md` §10)

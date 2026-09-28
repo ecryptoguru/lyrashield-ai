@@ -12,7 +12,6 @@
 import { logger } from "@lyrashield/logger"
 import {
   WEBHOOK_TRACK_IDS,
-  WEBHOOK_TRACK_MAX_ATTEMPTS,
   retryWebhookTrack,
   type WebhookTrackHandlers,
   type WebhookTrackId,
@@ -71,5 +70,3 @@ export async function processWebhookTrackRetry(
 
   return { outcome, reEnqueued }
 }
-
-export { WEBHOOK_TRACK_MAX_ATTEMPTS }

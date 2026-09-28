@@ -31,10 +31,8 @@ const DASHBOARD_ROOT = join(__dirname, "dashboard")
 
 function collectPageFiles(dir: string): string[] {
   const found: string[] = []
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     if (statSync(full).isDirectory()) {
       found.push(...collectPageFiles(full))
     } else if (entry === "page.tsx") {
@@ -45,7 +43,6 @@ function collectPageFiles(dir: string): string[] {
 }
 
 function readSource(file: string): string {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   return readFileSync(file, "utf8")
 }
 

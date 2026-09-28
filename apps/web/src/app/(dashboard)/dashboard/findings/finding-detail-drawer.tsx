@@ -19,8 +19,8 @@ import {
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { severityLabel, humanizeToken } from "@/lib/labels"
-import { findingsHref } from "@/lib/finding-list-params"
+import { severityLabel, humanizeToken, evidenceTypeLabel } from "@/lib/labels"
+import { findingsHref, reportsHref } from "@/lib/finding-list-params"
 import { FINDING_STATUS_LABELS, getVerificationStatusLabel } from "@/lib/enum-labels"
 import {
   buildRemediationTimeline,
@@ -529,14 +529,15 @@ export function FindingDetailDrawer({
       })
       setDetail((current) => {
         if (!current) return current
-        return {
+        const updated: FindingDetail = {
           ...current,
           [collection]: [...(current[collection] ?? []), ...page.items],
           historyPagination: {
             ...current.historyPagination!,
             [collection]: { total: page.total, nextCursor: page.nextCursor },
           },
-        } as FindingDetail
+        }
+        return updated
       })
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : "Could not load more history.")
@@ -819,8 +820,7 @@ export function FindingDetailDrawer({
                         result.
                       </p>
                       <Link
-                        href={findingsHref({
-                          tab: "reports",
+                        href={reportsHref({
                           scanId: latestRetest.scanId,
                           ...(targetId ? { targetId } : {}),
                         })}
@@ -1153,7 +1153,9 @@ export function FindingDetailDrawer({
                     {detail.cvssScore != null && (
                       <Badge variant="warning">CVSS {detail.cvssScore}</Badge>
                     )}
-                    {detail.category && <Badge variant="muted">{detail.category}</Badge>}
+                    {detail.category && (
+                      <Badge variant="muted">{humanizeToken(detail.category)}</Badge>
+                    )}
                   </div>
                 )}
 
@@ -1204,7 +1206,7 @@ export function FindingDetailDrawer({
                           className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm"
                         >
                           <div className="flex items-center gap-2">
-                            <Badge variant="muted">{ev.type}</Badge>
+                            <Badge variant="muted">{evidenceTypeLabel(ev.type)}</Badge>
                           </div>
                           <Badge
                             variant={ev.redactionStatus === "complete" ? "success" : "warning"}
@@ -1400,7 +1402,7 @@ export function FindingDetailDrawer({
                                   : "info"
                             }
                           >
-                            {rt.status}
+                            {humanizeToken(rt.status)}
                           </Badge>
                           <Link
                             href={`/dashboard/scans/${encodeURIComponent(rt.scanId)}`}

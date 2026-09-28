@@ -3,12 +3,9 @@ import { describe, expect, it } from "vitest"
 
 // The screen spans its keyed route boundary, coordinator, and presentational views.
 function screenSource(): string {
-  return (
-    ["page.tsx", "reports-client.tsx", "reports-views.tsx"]
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
-      .map((file) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8"))
-      .join("\n")
-  )
+  return ["page.tsx", "reports-client.tsx", "reports-views.tsx"]
+    .map((file) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8"))
+    .join("\n")
 }
 
 describe("report share state", () => {

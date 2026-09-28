@@ -28,14 +28,7 @@ import {
   patchScopeForPlan,
 } from "@lyrashield/fix"
 import { withWorkspaceRLS } from "@lyrashield/db"
-import { FIX_GENERATE_QUEUE_NAME } from "@lyrashield/integrations"
-
-export const FIX_GENERATE_QUEUE = FIX_GENERATE_QUEUE_NAME
-
-export interface FixGenerateJobData {
-  workspaceId: string
-  fixProposalId: string
-}
+import type { FixGenerateJobData } from "@lyrashield/integrations"
 
 export interface FixGenerateJobResult {
   status: "stored" | "rejected" | "skipped"

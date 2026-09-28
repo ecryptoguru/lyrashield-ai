@@ -283,6 +283,7 @@ export default async function DashboardPage() {
         ) : (
           <div className="px-5 py-6 sm:px-6">
             <EmptyState
+              headingLevel="h3"
               icon={Activity}
               title="No scan activity yet"
               description={

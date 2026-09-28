@@ -16,6 +16,7 @@ import {
 import type { PublicControlEvidenceItem } from "@/lib/ai-assurance"
 import { apiPost } from "@/lib/api-client"
 import { AssuranceInventory, type AssuranceInventoryProps } from "./assurance-inventory"
+import { LocalTime } from "@/components/local-time"
 
 interface TargetOption {
   id: string
@@ -237,7 +238,7 @@ export function AiAssuranceClient({
         </label>
 
         <Link
-          href={`/dashboard/findings?tab=reports&targetId=${encodeURIComponent(targetId)}`}
+          href={`/dashboard/reports?targetId=${encodeURIComponent(targetId)}`}
           className={buttonVariants({ variant: "outline", size: "sm" })}
           aria-label="Generate an assurance report"
         >
@@ -353,7 +354,9 @@ export function AiAssuranceClient({
                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                       <span>Version {item.version}</span>
                       {item.expiresAt && (
-                        <span>Expires {new Date(item.expiresAt).toLocaleDateString()}</span>
+                        <span>
+                          Expires <LocalTime value={item.expiresAt} />
+                        </span>
                       )}
                     </div>
                   )}

@@ -14,8 +14,6 @@ import {
   type WebMcpJsonSchemaProperty,
 } from "./output"
 import {
-  createWebMcpReceiptStore,
-  redactToolInputs,
   safeDashboardHref,
   sanitizeReceiptReferences,
   type WebMcpActivityReceipt,
@@ -373,6 +371,4 @@ function buildZodProperty(property: WebMcpJsonSchemaProperty): z.ZodType {
     : schema
 }
 
-// Convenience re-exports so the dashboard imports a single webmcp entry point.
-export { createWebMcpReceiptStore, redactToolInputs }
 export type { WebMcpActivityReceipt, WebMcpReceiptStore }

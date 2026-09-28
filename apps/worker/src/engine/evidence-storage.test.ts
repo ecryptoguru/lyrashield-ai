@@ -83,7 +83,6 @@ describe("uploadEvidence", () => {
       content: "sensitive proof",
     })
 
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- result URI is produced by uploadEvidence
     const encrypted = await readFile(fileURLToPath(result.storageUri))
     expect(encrypted.toString("utf8")).not.toContain("sensitive proof")
     const key = Buffer.from(
@@ -115,9 +114,7 @@ describe("uploadEvidence", () => {
     })
 
     expect(first.storageUri).not.toBe(second.storageUri)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- both URIs are produced by uploadEvidence
     expect(await readFile(fileURLToPath(first.storageUri))).not.toEqual(
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- both URIs are produced by uploadEvidence
       await readFile(fileURLToPath(second.storageUri))
     )
   })
@@ -252,7 +249,6 @@ describe("uploadScanArtifact", () => {
     expect(result.storageUri).toContain("scan-9")
     expect(result.byteLength).toBeGreaterThan(0)
     expect(result.checksum).toMatch(/^[0-9a-f]{64}$/)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- result URI is produced by uploadScanArtifact
     const encrypted = await readFile(fileURLToPath(result.storageUri))
     expect(encrypted.toString("utf8")).not.toContain('"exchanges"')
   })

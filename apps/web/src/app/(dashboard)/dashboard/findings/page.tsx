@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
-import { ISSUE_PLURAL, RUN_PLURAL } from "@/lib/terminology"
+import { FINDING_PLURAL, SCAN_PLURAL } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { prisma, listFindings, findingScopeWhere, validateFindingScope } from "@lyrashield/db"
 import { ShieldAlert } from "lucide-react"
@@ -19,12 +19,13 @@ import {
 import { listFixProposals } from "@lyrashield/db"
 import Link from "next/link"
 import { EmptyState, buttonVariants } from "@lyrashield/ui"
+import { SEVERITY_ORDER } from "@/lib/severity-presentation"
 
 const FINDINGS_TABS: SectionTab[] = [
   // The `issues` tab value is a compatibility URL parameter; the visible label
   // uses the canonical "Findings" noun. Reports are a direct destination at
   // /dashboard/reports (W2-10); the old tab route forwards its query scope.
-  { value: "issues", label: ISSUE_PLURAL, href: "/dashboard/findings?tab=issues" },
+  { value: "issues", label: FINDING_PLURAL, href: "/dashboard/findings?tab=issues" },
   { value: "evidence", label: "Evidence", href: "/dashboard/findings?tab=evidence" },
   // Deep Review v16 3.2: proposed fixes are a view of findings, not an
   // independent destination. /dashboard/fixes forwards here.
@@ -41,7 +42,7 @@ function normalizeTab(value: string | undefined): FindingsTab {
 }
 
 export const metadata: Metadata = {
-  title: ISSUE_PLURAL,
+  title: FINDING_PLURAL,
 }
 
 function FindingsScopeStrip({
@@ -67,7 +68,7 @@ function FindingsScopeStrip({
         ) : scoped ? (
           <span>
             {targetName ? `Target: ${targetName}` : "All targets"}
-            {scanId ? ` · Scan: ${scanId}` : ""}
+            {scanId ? " · Single scan" : ""}
           </span>
         ) : (
           <span>All workspace findings</span>
@@ -107,12 +108,12 @@ export default async function FindingsPage({
     return (
       <div>
         <PageHeader
-          title={ISSUE_PLURAL}
-          description={`Potential and verified security ${ISSUE_PLURAL.toLowerCase()} reported by your ${RUN_PLURAL.toLowerCase()}`}
+          title={FINDING_PLURAL}
+          description={`Potential and verified security ${FINDING_PLURAL.toLowerCase()} reported by your ${SCAN_PLURAL.toLowerCase()}`}
         />
         <NoWorkspaceState
           icon={ShieldAlert}
-          description={`Create a workspace during onboarding to view ${ISSUE_PLURAL.toLowerCase()}.`}
+          description={`Create a workspace during onboarding to view ${FINDING_PLURAL.toLowerCase()}.`}
         />
       </div>
     )
@@ -144,7 +145,7 @@ export default async function FindingsPage({
   const renderHeader = (description: string) => (
     <>
       <DashboardSectionTabs
-        title={ISSUE_PLURAL}
+        title={FINDING_PLURAL}
         description={description}
         tabs={tabs}
         activeTab={tab}
@@ -161,7 +162,7 @@ export default async function FindingsPage({
     </>
   )
 
-  const description = `Potential and verified security ${ISSUE_PLURAL.toLowerCase()} reported by your ${RUN_PLURAL.toLowerCase()}`
+  const description = `Potential and verified security ${FINDING_PLURAL.toLowerCase()} reported by your ${SCAN_PLURAL.toLowerCase()}`
 
   if (!scope.available) {
     return (
@@ -371,12 +372,4 @@ export default async function FindingsPage({
       />
     </div>
   )
-}
-
-const SEVERITY_ORDER: Record<string, number> = {
-  CRITICAL: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3,
-  INFO: 4,
 }

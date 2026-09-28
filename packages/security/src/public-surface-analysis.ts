@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto"
-import { redactUrlForLogs } from "./ssrf"
 import type { SurfaceCollection, SurfaceSubject } from "./public-surface"
 
 export type SurfaceSignalState = "DETECTED" | "OBSERVED"
@@ -366,7 +365,10 @@ function sourceMapSignals(subject: SurfaceSubject): SurfaceSignal[] {
   ]
 }
 
-function dataLayerSignals(text: string, subject: SurfaceSubject): SurfaceSignal[] {
+function dataLayerSignals(
+  text: string,
+  subject: Pick<SurfaceSubject, "requestedUrl">
+): SurfaceSignal[] {
   const hasSupabase = /(?:supabase\.co|createClient\s*\()/i.test(text)
   const hasFirebase = /(?:firebaseConfig|firebaseapp\.com|initializeApp\s*\()/i.test(text)
   if (!hasSupabase && !hasFirebase) return []
@@ -386,7 +388,10 @@ function dataLayerSignals(text: string, subject: SurfaceSubject): SurfaceSignal[
   ]
 }
 
-function frameworkSignals(text: string, subject: SurfaceSubject): SurfaceSignal[] {
+function frameworkSignals(
+  text: string,
+  subject: Pick<SurfaceSubject, "requestedUrl">
+): SurfaceSignal[] {
   const frameworks = detectFramework(text)
   const hasSourceMap = /sourceMappingURL\s*=\s*[^\s]+\.map(?:\s|$)/i.test(text)
   return [
@@ -408,7 +413,10 @@ function frameworkSignals(text: string, subject: SurfaceSubject): SurfaceSignal[
   ]
 }
 
-function privilegedSecretSignals(text: string, subject: SurfaceSubject): SurfaceSignal[] {
+function privilegedSecretSignals(
+  text: string,
+  subject: Pick<SurfaceSubject, "requestedUrl">
+): SurfaceSignal[] {
   if (!containsGenuineSecret(text)) return []
   return [
     {
@@ -446,8 +454,8 @@ export function analyzePublicSurface(collection: SurfaceCollection): SurfaceSign
     signals.push(...sourceMapSignals(subject))
   }
 
-  const primarySubject =
-    document ?? collection.subjects[0] ?? ({ requestedUrl: collection.seedUrl } as SurfaceSubject)
+  const primarySubject: Pick<SurfaceSubject, "requestedUrl"> = document ??
+    collection.subjects[0] ?? { requestedUrl: collection.seedUrl }
   const fullText = collectionText(collection)
   signals.push(...privilegedSecretSignals(fullText, primarySubject))
   signals.push(...dataLayerSignals(fullText, primarySubject))
@@ -460,12 +468,4 @@ export function analyzePublicSurface(collection: SurfaceCollection): SurfaceSign
     seen.add(signal.id)
     return true
   })
-}
-
-/**
- * Light adapter: derive a human-readable subject name from a normalized URL.
- * Useful when the real subject is not available.
- */
-export function redactedSubjectName(url: string): string {
-  return redactUrlForLogs(url)
 }

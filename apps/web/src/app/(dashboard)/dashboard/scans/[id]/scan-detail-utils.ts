@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react"
 import type { ScanEvent } from "./scan-detail-types"
+import { formatDuration } from "@/lib/date-format"
 
-export const ELAPSED_TIME_INTERVAL_MS = 1_000
+const ELAPSED_TIME_INTERVAL_MS = 1_000
 export const COMPLETION_NOTICE_DISMISS_MS = 6_000
 /** Matches the service's event window cap (getScanWithEvents take: 200). */
-export const MAX_EVENT_WINDOW = 200
+const MAX_EVENT_WINDOW = 200
 
 /** Ticking elapsed time from a start timestamp, returning a formatted string. */
 export function useElapsedTime(startedAt: string | null): string {
@@ -20,15 +21,7 @@ export function useElapsedTime(startedAt: string | null): string {
   return elapsed
 }
 
-export function formatDuration(start: string | null, end: string | null): string {
-  if (!start) return "—"
-  const startMs = new Date(start).getTime()
-  const endMs = end ? new Date(end).getTime() : Date.now()
-  const diffSec = Math.round((endMs - startMs) / 1000)
-  if (diffSec < 60) return `${diffSec}s`
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ${diffSec % 60}s`
-  return `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m`
-}
+export { formatDuration } from "@/lib/date-format"
 
 export function asIsoString(value: string | Date | null): string | null {
   if (value === null) return null
@@ -38,10 +31,7 @@ export function asIsoString(value: string | Date | null): string | null {
 // Event ordering for the incremental merge. The API returns events newest-first
 // and the client stores them ascending; a stale full window and a fresh
 // incremental tail can interleave, so comparisons never assume response order.
-export function isEventAtOrAfterCursor(
-  event: { createdAt: string; id: string },
-  cursor: ScanEvent
-) {
+function isEventAtOrAfterCursor(event: { createdAt: string; id: string }, cursor: ScanEvent) {
   if (event.createdAt > cursor.createdAt) return true
   if (event.createdAt < cursor.createdAt) return false
   return event.id >= cursor.id

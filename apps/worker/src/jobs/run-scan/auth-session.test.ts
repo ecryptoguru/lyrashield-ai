@@ -19,7 +19,7 @@ const options = {
   grantExpiresAtMs: new Date("2026-09-19T12:15:00.000Z").getTime(),
   runtimeEnv: {
     LYRASHIELD_TEST_SESSION_ACME: "test-session-material",
-  } as NodeJS.ProcessEnv,
+  } satisfies NodeJS.ProcessEnv,
 }
 
 describe("resolveRelaySessionBinding", () => {
@@ -79,7 +79,7 @@ describe("resolveRelaySessionBinding", () => {
     expect(() =>
       resolveRelaySessionBinding(baseAuthorization, {
         ...options,
-        runtimeEnv: {} as NodeJS.ProcessEnv,
+        runtimeEnv: {},
       })
     ).toThrowError(expect.objectContaining({ code: "AUTH_SESSION_UNAVAILABLE" }))
     expect(() =>
@@ -87,7 +87,7 @@ describe("resolveRelaySessionBinding", () => {
         ...options,
         runtimeEnv: {
           LYRASHIELD_TEST_SESSION_ACME: "line1\r\ninjected: yes",
-        } as NodeJS.ProcessEnv,
+        },
       })
     ).toThrowError(expect.objectContaining({ code: "AUTH_SESSION_MATERIAL_INVALID" }))
   })

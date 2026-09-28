@@ -1,11 +1,8 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const headers = readFileSync(new URL("../../public/_headers", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const middleware = readFileSync(new URL("../middleware.ts", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const wrangler = readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8")
 
 describe("Cloudflare marketing security headers", () => {

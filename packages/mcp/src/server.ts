@@ -179,8 +179,10 @@ export class McpServer {
     let safeArgs = args
     if (guardResult.sanitizedInput) {
       try {
-        const parsed = JSON.parse(guardResult.sanitizedInput)
-        safeArgs = parsed.args ?? args
+        const parsed: unknown = JSON.parse(guardResult.sanitizedInput)
+        if (parsed && typeof parsed === "object" && "args" in parsed) {
+          safeArgs = (parsed.args ?? args) as Record<string, unknown>
+        }
       } catch {
         logger.warn("MCP sanitization produced invalid JSON, using original args", { tool: name })
       }
@@ -189,7 +191,17 @@ export class McpServer {
     // Validate the exact (sanitized) arguments against the tool's advertised
     // inputSchema before any approval or execution. Structured errors name
     // the offending fields so agents can correct the call.
-    const argErrors = validateToolArgs(safeArgs, tool.inputSchema as Record<string, unknown>)
+    const inputSchema = tool.mutating
+      ? {
+          ...tool.inputSchema,
+          properties: {
+            ...tool.inputSchema.properties,
+            idempotencyKey: { type: "string", minLength: 1, maxLength: 128 },
+            approvalId: { type: "string", minLength: 1, maxLength: 128 },
+          },
+        }
+      : tool.inputSchema
+    const argErrors = validateToolArgs(safeArgs, inputSchema as Record<string, unknown>)
     if (argErrors.length > 0) {
       logger.warn("MCP tool call failed argument validation", { tool: name, argErrors })
       const error = {

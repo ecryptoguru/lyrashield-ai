@@ -19,6 +19,7 @@
 
 import { env } from "@lyrashield/config"
 
+export const AFFILIATE_COOKIE_NAME = "__ls_aff"
 export const AFFILIATE_COOKIE_MAX_AGE = 5_184_000 // 60 days in seconds
 
 export interface AffiliateCookieOptions {
@@ -40,7 +41,7 @@ export function buildAffiliateCookie(token: string, options: AffiliateCookieOpti
   const secure = options.secure ?? env.NODE_ENV === "production"
 
   const parts = [
-    `${"__ls_aff"}=${encodeURIComponent(token)}`,
+    `${AFFILIATE_COOKIE_NAME}=${encodeURIComponent(token)}`,
     `Max-Age=${maxAge}`,
     `Path=/`,
     `Domain=${domain}`,
@@ -64,7 +65,7 @@ export function parseAffiliateCookie(cookieHeader: string | null | undefined): s
 
   for (const part of cookieHeader.split(";")) {
     const [name, ...valueParts] = part.trim().split("=")
-    if (name === "__ls_aff") {
+    if (name === AFFILIATE_COOKIE_NAME) {
       const value = valueParts.join("=")
       try {
         return decodeURIComponent(value)

@@ -136,6 +136,10 @@ assert_eq "ops+app: app" "true" "$(get_field "$out" "app")"
 assert_eq "ops+app: shared" "true" "$(get_field "$out" "shared")"
 assert_eq "ops+app: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
 
+# CI test and script changes must select the shared suite, which includes ops.
+out=$(run_classify $'.github/scripts/tests/verify-myra-deployment-config.test.mjs')
+assert_eq "CI test file: shared" "true" "$(get_field "$out" "shared")"
+
 # --- Test 7: agent config dirs are docs-only ---
 out=$(run_classify $'.devin/rules/AGENTS.md\n.claude/skills/foo/SKILL.md')
 assert_eq "agent-config: docs-only" "true" "$(get_field "$out" "docs-only")"

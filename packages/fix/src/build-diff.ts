@@ -11,8 +11,6 @@
  * diff that the validator and the approval binding then consume.
  */
 
-import { createHash } from "node:crypto"
-
 function splitLines(text: string): string[] {
   return text.split("\n")
 }
@@ -88,9 +86,4 @@ export function buildUnifiedDiff(path: string, before: string, after: string): s
   const body = slice.map((op) => `${op.type}${op.line}`).join("\n")
 
   return [header, `--- a/${path}`, `+++ b/${path}`, ranges, body].join("\n")
-}
-
-/** SHA-256 over the engine's proposed fix content (provenance). */
-export function fixContentChecksum(content: string): string {
-  return createHash("sha256").update(content, "utf8").digest("hex")
 }

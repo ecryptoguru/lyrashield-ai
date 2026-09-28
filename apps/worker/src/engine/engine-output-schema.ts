@@ -19,27 +19,27 @@ const nullableBoundedString = z
 // finding carrying oversized or unbounded evidence fails validation instead of
 // being silently truncated into durable storage.
 export const MAX_HTTP_EXCHANGE_IDS = 10
-export const MAX_HTTP_EXCHANGE_ID_CHARS = 128
+const MAX_HTTP_EXCHANGE_ID_CHARS = 128
 export const MAX_FINDING_REVISIONS = 50
-export const MAX_REVISION_FIELD_LIST = 64
+const MAX_REVISION_FIELD_LIST = 64
 // Matches upstream MAX_UPDATE_REASON_CHARS — a revision reason is a bounded
 // attribution line, not prose.
-export const MAX_REVISION_STRING_CHARS = 500
+const MAX_REVISION_STRING_CHARS = 500
 // Matches upstream COVERAGE_ENTRY_LIMIT — the writer truncates at 500, so a
 // larger reader bound would only accept contract violations.
 export const MAX_SCOPED_COVERAGE_ENTRIES = 500
 export const MAX_COVERAGE_GAPS = 50
-export const MAX_COVERAGE_PREVIOUS_OUTCOMES = 40
-export const MAX_COVERAGE_STRING_CHARS = 4096
+const MAX_COVERAGE_PREVIOUS_OUTCOMES = 40
+const MAX_COVERAGE_STRING_CHARS = 4096
 export const MAX_THREAT_MODELS = 20
-export const MAX_THREAT_MODEL_AMENDMENTS = 40
-export const MAX_THREAT_MODEL_CONTENT_CHARS = 64_000
-export const MAX_THREAT_MODEL_AMENDMENT_CHARS = 8_000
-export const MAX_HTTP_EXCHANGE_ENTRIES = 500
+const MAX_THREAT_MODEL_AMENDMENTS = 40
+const MAX_THREAT_MODEL_CONTENT_CHARS = 64_000
+const MAX_THREAT_MODEL_AMENDMENT_CHARS = 8_000
+const MAX_HTTP_EXCHANGE_ENTRIES = 500
 // Reader-side slack over the writer's 4096-byte decoded body-sample budget —
 // redaction can alter length slightly, but an 8 KiB cap keeps a hostile
 // artifact from inflating durable evidence.
-export const MAX_HTTP_EXCHANGE_BODY_CHARS = 8 * 1024
+const MAX_HTTP_EXCHANGE_BODY_CHARS = 8 * 1024
 export const MAX_METADATA_ENTRIES = 32
 export const MAX_METADATA_VALUE_CHARS = 4096
 export const MAX_METADATA_NESTED_ENTRIES = 16
@@ -51,7 +51,7 @@ export const MAX_INGESTION_ISSUE_CHARS = 500
 // admitting text the writer contract would never emit.
 export const MAX_EVIDENCE_FIELD_CHARS = 10_000
 // Matches upstream MAX_METRIC_REASONING_CHARS for advisory_cvss reasoning.
-export const MAX_METRIC_REASONING_CHARS = 4_000
+const MAX_METRIC_REASONING_CHARS = 4_000
 
 const severitySchema = z
   .string()
@@ -80,7 +80,7 @@ const codeLocationSchema = z
  * `engine_confidence` so nothing downstream can mistake it for the app-owned
  * `Finding.confidence` column.
  */
-export const engineConfidenceSchema = z.enum(["high", "medium", "low"])
+const engineConfidenceSchema = z.enum(["high", "medium", "low"])
 
 /**
  * Structured advisory CVSS (upstream `{score, vector, source,
@@ -146,7 +146,7 @@ export const findingRevisionSchema = z
   .strip()
 
 /** Numeric-ASCII proxy request id, ≤128 chars (upstream `_MAX_HTTP_EXCHANGE_ID_CHARS`). */
-export const httpExchangeIdSchema = z
+const httpExchangeIdSchema = z
   .string()
   .regex(/^[0-9]{1,128}$/, "http_exchange_ids entries must be numeric ASCII ids")
 
@@ -156,7 +156,7 @@ export const httpExchangeIdSchema = z
  * score). Values are bounded: short strings, finite numbers, booleans, or a
  * one-level string→string map for metric breakdowns — never deep JSON.
  */
-export const engineMetadataValueSchema = z.union([
+const engineMetadataValueSchema = z.union([
   z.string().max(MAX_METADATA_VALUE_CHARS),
   z.number().finite(),
   z.boolean(),

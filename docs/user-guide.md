@@ -113,19 +113,9 @@ Review the workspace, target and goal, choose an available review depth, then st
 
 Home is one adaptive dashboard. It leads with the workspace's next action (add a target, run a first review, review the highest-priority issue or generate a report), then shows current posture with the exact evidence scope behind each number, the latest run when it needs attention, four compact metrics, recent activity and secondary analytics. Technical depth — coverage receipts, manifests, priority reasoning, CWE/CVSS — stays available through progressive disclosure instead of a mode switch. Presentation never changes permissions, targets, scan depth, evidence state or launch verdict.
 
-The primary navigation contains four lifecycle destinations:
+The primary navigation has Home, Targets, Scans, Findings and Reports. Reports appears in the desktop navigation and in More on mobile. Scans has Runs and Monitoring tabs; Monitoring holds recurring schedules. Findings has the finding queue, evidence and proposed fixes.
 
-- **Home** — current launch verdict, assurance progress, risk posture, remediation flow, retained finding mix, recent scans and monthly usage.
-- **Targets** — repository, web-application and API targets.
-- **Trust Runs** — create, monitor, cancel and inspect scans. Two tabs:
-  - **Runs** — one-off and manual scans.
-  - **Monitoring** — scheduled recurring scans (formerly the Schedules page).
-- **Issues** — filter and work through detected risks. Three tabs:
-  - **Issues** — the finding queue.
-  - **Evidence** — independently verified evidence behind findings (formerly the Evidence page).
-  - **Reports** — create, download, share and revoke assurance reports (formerly the Reports page).
-
-**Review Queue** appears in the Workspace section of the sidebar and mobile More sheet only when pending agent approvals or fix proposals exist. It carries a count badge and links to the approval page. The route remains reachable by URL for authorized users even when the queue is empty.
+**Activity** appears in the Workspace section of the sidebar and mobile More sheet when pending agent approvals or fix proposals exist. It carries a count badge and links to the approval page. The route remains reachable by URL for authorized users when the queue is empty.
 
 Open **More** (mobile) or the **Workspace** sidebar group (desktop) for Integrations, Team, Notifications and Settings. The **Integrations** page is tabbed: **Services** (GitHub, MCP, CLI) and **Agents** (coding-agent setup). Use the workspace switcher above the navigation to change the active workspace. Every page and action is evaluated against the active workspace and your role.
 
@@ -142,9 +132,9 @@ To create one:
 
 When adding a target, select the project or leave **No project**. A project card shows its target, scan and finding counts.
 
-## 7. Targets (Assets)
+## 7. Targets
 
-Open **Assets** to add and review targets.
+Open **Targets** to add and review targets.
 
 ### 7.1 Repository target
 
@@ -223,7 +213,7 @@ LyraShield applies protected internal run limits automatically. The dashboard do
 
 ## 9. Start and monitor a scan
 
-1. Open **Trust Runs → Runs**.
+1. Open **Scans → Runs**.
 2. Select **New Scan**.
 3. Choose a target.
 4. Choose a review depth that is available for that target type. Locked options explain why they are unavailable (for example, Contract Review requires an OpenAPI document on an API target).
@@ -262,7 +252,7 @@ The Vibe Security 50 ledger contains one receipt for each control. Read `NO_FIND
 
 ## 11. Findings
 
-Open **Issues → Issues** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed and Verified. Findings are ranked by a page-local **Priority** heuristic by default; switch to severity or newest ordering with the sort control. Priority combines severity, status, verification state, confidence, target environment and available business-impact/exploitability context. It is triage context for review order — not proof that a finding is reachable or exploitable — and the reason and limitations behind each rank are shown in an expandable note on every finding card.
+Open **Findings** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed and Verified. Findings are ranked by a page-local **Priority** heuristic by default; switch to severity or newest ordering with the sort control. Priority combines severity, status, verification state, confidence, target environment and available business-impact/exploitability context. It is triage context for review order — not proof that a finding is reachable or exploitable — and the reason and limitations behind each rank are shown in an expandable note on every finding card.
 
 A finding may contain:
 
@@ -319,7 +309,7 @@ Open the new scan from the finding drawer to follow progress and retained events
 
 Eligible completed Standard or Deep scans can create a versioned LyraShield Score from retained evidence. The score is 0–100 with a grade and methodology version. It is scoped to the completed scan and is not a security guarantee.
 
-Open **Overview** or the launch-readiness surface to see:
+Open **Home** or **Launch Readiness** to see:
 
 - `INSUFFICIENT_EVIDENCE` when no completed scan or required coverage exists;
 - `READY` or `NOT_READY` based on retained findings;
@@ -350,7 +340,7 @@ A newer score may supersede an older card. Revocation disables the public page, 
 
 ## 16. Reports
 
-Open **Issues → Reports → Generate Report** and choose:
+Open **Reports → Generate Report** and choose:
 
 - **Executive** — decision-first posture, score trajectory, release conditions and priority actions.
 - **Developer** — technical findings, remediation state, retest outcomes and fix guidance.
@@ -370,7 +360,7 @@ Private report links expire after 30 days. Shared report pages are noindex and u
 
 ## 17. Monitoring schedules
 
-Open **Trust Runs → Monitoring → New Schedule** and configure:
+Open **Scans → Monitoring → New Schedule** and configure:
 
 - target;
 - UTC cron expression;
@@ -414,13 +404,13 @@ The **Integrations** page has two tabs:
 - **Services** — GitHub, MCP and CLI connections.
 - **Agents** — coding-agent setup (Claude, Cursor, VS Code and others) with install commands and rules files.
 
-### GitHub
+### 20.1 GitHub
 
 The current dashboard integration supports connecting the GitHub App, loading authorized repositories and creating repository targets. Installation identifiers are globally unique and provider ownership must be proven before a fresh callback can create a workspace integration.
 
 Other integration types exist in the internal schema and roadmap, but the current dashboard should not be read as offering active Jira, Linear, Teams, ServiceNow, SIEM or compliance-platform connections. Delegated outbound connectors (GitHub and Slack) do exist as a gated API-level capability: they are limited to Agency-tier workspaces, admission is fail-closed (`off`/`canary`/`public` with a workspace allowlist), outputs are capped and connections are managed through workspace APIs — they are not yet a dashboard tab.
 
-### 20.5 Billing and plans (Cloud Mode)
+### 20.2 Billing and plans (Cloud Mode)
 
 These are the approved public commercial terms. Cloud checkout availability is resolved by region and rechecked by the server before redirecting to a provider. A charge occurs only when the customer deliberately completes the provider checkout; publishing these terms does not itself authorize a test or production charge.
 
@@ -442,7 +432,7 @@ LyraShield Cloud offers a 7-day free trial: 60 agent-minutes, Safe, Quick and St
 - **Refunds:** Cloud subscriptions are non-refundable except where required by law or for duplicate collection, unauthorized payment or a confirmed payment error.
 - **Billing page:** manage your own subscription, buy minute packs, view usage and set a spend limit (Agency). In an Agency workspace, up to five members share the buyer's 4,500 monthly minutes for scans in that workspace.
 
-### 20.6 Affiliate program
+### 20.3 Affiliate program
 
 - Apply at `/affiliates/apply` (requires a LyraShield account).
 - Manual approval by the LyraShield team.
@@ -462,10 +452,10 @@ Payouts:
 
 - $100 minimum, monthly net-30 on the 15th, with a 30-day hold.
 - Tax form required (W-9 or W-8BEN).
-- New affiliates carry a 20–30% reserve for the first 90 days.
+- New affiliates carry a 25% reserve for the first 90 days. See [affiliate terms](../PRD.md#affiliate-terms).
 - Rails: RazorpayX (India, IMPS/UPI) or Payoneer (global).
 
-### 20.7 LyraShield Local/Desktop (BYOK)
+### 20.4 LyraShield Local/Desktop (BYOK)
 
 LyraShield Local is a desktop app for macOS and Windows. It is a one-time 1-year license with BYOK — you bring your own AI.
 
@@ -495,6 +485,10 @@ Pricing:
 
 After a Local license purchase (Polar or Razorpay), you receive an email with a **one-time retrieval link** (expires in 7 days, single use). The email never contains the raw license key itself. Open the link or `POST {"token":"..."}` to `/api/licenses/retrieve` to retrieve your license key and signed license file **once**. The link expires after first retrieval or after 7 days and then returns a generic `404 Not Found` (no oracle). The retrieval token is stored only as a SHA-256 hash with an expiry and single-use marker and is never logged. If email delivery fails, the system marks the fulfillment as `DELIVERY_FAILED` and retries automatically via the webhook-track queue before the webhook is considered complete; concurrent webhook deliveries mint only one license. If your link expired or was already used, contact support to re-issue.
 
+### 20.5 Cloud sync (Local to Cloud)
+
+Cloud Sync is optional and binds a Local/Desktop license to one workspace. The desktop stores the license key in the OS keychain and uses a short-lived connection session; access is checked on each sync request. Sync copies findings as unverified observations and never marks them fixed without a trusted retest. Reports sync with their findings as one batch. If a connection expires or the server reports a stale cursor, refresh the connection state and retry; the desktop reconciles its cursor with the server. Revocation stops sync. See [the implementation contract](../codebase.md#licenses-and-localdesktop) for sequencing and failure behavior.
+
 ## 21. Settings and account deletion
 
 The Settings page displays:
@@ -504,7 +498,7 @@ The Settings page displays:
 - retention period;
 - product-telemetry state;
 - active security-control summary;
-- shortcuts to Team, Integrations, Notifications and Schedules (Trust Runs → Monitoring).
+- shortcuts to Team, Integrations, Notifications and Monitoring (Scans → Monitoring).
 
 The current settings surface reports retention and telemetry configuration but does not provide self-service editors for every field.
 
@@ -537,7 +531,7 @@ npx lyrashield gate                # CI-friendly diff-aware security gate
 
 `login --oauth` opens hosted consent with PKCE, then saves tokens and the selected workspace to `~/.lyrashield/credentials.json` with `0o600` permissions. Failed login preserves existing credentials. `login` accepts an API key instead. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com`. Shared credential storage keeps refresh, logout and profile changes consistent between the local CLI and stdio MCP. A hosted OAuth client authenticates in that client and does not need this local login step.
 
-`init` configures detected clients; `install <agent>` deliberately selects one client. `packages/agent-registry` contains 30 entries resolving to 26 preferred documented client workflows. The source CLI, MCP and plugin packages target Node 24 or newer. Check the installed package's published engine requirement until new package versions are released. A successful installer or `doctor` result does not prove the client loaded a tool; restart the client and make a read call.
+`init` configures detected clients; `install <agent>` deliberately selects one client. `packages/agent-registry` owns the current client install paths. The source CLI, MCP and plugin packages target Node 24 or newer. Check the installed package's published engine requirement until new package versions are released. A successful installer or `doctor` result does not prove the client loaded a tool; restart the client and make a read call.
 
 - **Agent Plugin package** — Cursor accepts the generated local plugin directly. OpenAI Codex, Claude Code and GitHub Copilot require their marketplace install commands; the Codex installer registers `ecryptoguru/lyrashield-marketplace` before adding `lyrashield@lyrashield-ai`. Kiro uses the generated stdio entry through `.kiro/settings/mcp.json` or `~/.kiro/settings/mcp.json`; copying a plugin directory alone is not an install. Plugin files never inline a raw API key. VS Code stays on its config-file strategy.
 - **Config-file** — the registry describes supported client paths and formats, including explicit legacy alternatives for some plugin-preferred clients. The CLI updates its own entry while retaining unrelated settings and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
@@ -564,27 +558,7 @@ Other commands mirror the dashboard and the MCP tools below: `scan`, `status`, `
 
 ### MCP
 
-LyraShield exposes an MCP server for local editors and a hosted remote endpoint. The full tool catalog lives in `packages/mcp/README.md`; the current set is:
-
-#### Read tools
-
-- `lyrashield_list_workspaces` — list workspaces the credential can access;
-- `lyrashield_list_targets` — list targets in a workspace;
-- `lyrashield_get_scan_status` — status and events for a scan;
-- `lyrashield_get_findings` — list findings with target, scan, severity, status or verification filters; use the returned cursor to continue a bounded result page;
-- `lyrashield_explain_finding` — full detail and plain-language explanation of a finding;
-- `lyrashield_generate_fix_plan` — assemble a remediation plan from a finding;
-- `lyrashield_get_launch_readiness` — retrieve the current scoped launch-readiness gate result (`READY`, `NOT_READY` or `INSUFFICIENT_EVIDENCE`);
-- `lyrashield_create_pr_security_recap` — generate a markdown security recap for a PR comment;
-- `lyrashield_check_diff` — fast **advisory** heuristic pre-filter on a diff (not a full recorded scan).
-
-#### Write tools
-
-- `lyrashield_scan_target` — start a scan on a registered target. Pass `targetId` directly or pass `repo` (e.g. `ecryptoguru/lyrashield-ai`) to create or reuse a target; `auto: true` detects the current git repo only for local stdio MCP;
-- `lyrashield_run_pr_scan` — start a PR-focused (CHECK_PR) scan. It has the same `repo` support and local-stdio-only `auto` support, as `lyrashield_scan_target`;
-- `lyrashield_record_fix_proposal` — record a fix proposal on a finding;
-- `lyrashield_verify_fix` — queue a retest to verify a fix;
-- `lyrashield_create_report` — create an executive, developer or assurance report. (The internal type value is still `compliance` for backward compatibility; the UI label is "Assurance.")
+LyraShield exposes an MCP server for local editors and a hosted remote endpoint. See the maintained [MCP tool catalog](../packages/mcp/README.md) for every read and authorized write tool, including scan eligibility, quality, attachments, cancellation and fix PR requests.
 
 Read actions follow credential scope and workspace permissions. Local stdio and direct REST calls authenticated by write-scoped API keys use the REST API's authorization without another LyraShield review prompt. Read-only credentials cannot mutate data.
 
@@ -616,7 +590,7 @@ Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna
 
 LyraShield does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework) or "adversarial robustness proven." Each requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate. See `docs/whitepaper.md` §9 for the claims boundary.
 
-## AI assurance workspace
+### AI assurance workspace
 
 The private AI assurance workspace keeps operational evidence, an AI system profile and a threat model per target. Profile and threat-model values are explicitly **Customer-declared**: completing required fields records an inventory version, not verified lineage, compliance or certification. High and critical threat scenarios require a mitigation, test plan and owner before a version can be created. Private reports freeze the evidence/profile/threat-model state present at creation; shared reports omit the entire AI assurance projection.
 
@@ -672,14 +646,3 @@ For users who prefer to run scans on their own AI and keep everything local:
 2. Configure BYOK — connect a ChatGPT/OpenAI subscription (OAuth) or Azure OpenAI.
 3. Scan locally; all depths are available with zero agent-minute metering.
 4. Optionally connect your LyraShield account to sync findings to the cloud.
-
-### 20.8 Cloud sync (Local → Cloud) — authenticated monotonic evidence sync
-
-- **Device-bound proof:** the raw license key is stored only in the OS keychain (Rust native). It never lives in React state or browser localStorage and is never returned in API responses. `/api/sync/connect` is the only raw-key exchange; it returns a 15-minute session token held only in Rust process memory. Findings and cursor calls recheck the authenticated session, license revocation, workspace binding and current sync entitlement. Older Desktop builds may use the deprecated raw-key path until its `Sunset: Thu, 01 Oct 2026 00:00:00 GMT` cutoff, after which reconnecting is required.
-- **Workspace binding:** sync is bound to a single workspace via `withWorkspaceRLS`. Direct-purchase licenses (`workspaceId = NULL`) become bound on first `POST /api/sync/connect`; subsequent calls are rejected unless the caller is a member of that workspace. Under a `NOBYPASSRLS` DB role the binding is enforced at the DB layer.
-- **Monotonic sequence:** `SyncCursor.seq` (BIGINT, `20260822190000_sync_cursor_sequence`) is the sole ordering primitive. Every `POST /api/sync/findings` must send `expectedSeq` (current trusted seq). The server does a CAS (`updateMany where seq = expectedSeq` inside `withWorkspaceRLS`); concurrent batches with the same expected seq — exactly one wins, the other gets `409 CURSOR_STALE`. Stale or reordered distinct batches are rejected; exact replays of the same findings at `expectedSeq = currentSeq` or `currentSeq-1` are idempotent (`duplicate:true`, seq unchanged).
-- **Detection-state-only:** the server forces `verified = false` and maps `FIXED → FIXED_PENDING_RETEST`; any `verified:true`, `status = FIXED` (unless mapped) or unknown status is rejected (`400 FORGED_VERIFICATION / INVALID_STATUS / FORGED_TERMINAL_STATUS`). Only `OPEN` (and the mapped `FIXED_PENDING_RETEST`) traverse the boundary.
-- **Reports atomic:** `reports[]` (max 50, 500 kB each) are persisted atomically in the same `withWorkspaceRLS` transaction as findings, via the `Report` model (`contentJson` holds the local evidence payload). Either all findings + reports + seq advance commit or none do. Discarded/bounded input is never counted (`reportsPersisted` vs `reportsReceived`).
-- **Trusted native cursor:** the desktop keeps one trusted cursor row (`sync_state` id=1, `seq` INTEGER) in native SQLite. It is the only source of `expectedSeq`; the server's `GET /api/sync/cursor` (`seq` / `cursor` alias, `lastSyncedFindingId`, `lastSyncedAt`) is the authoritative source on restart or `409` rewind. The client parses the actual envelope `data.seq` / `data.cursor`, not a top-level `cursor` string heuristic and adopts the server seq on conflict.
-- **Restart & rewind recovery:** after a crash or `409 CURSOR_REWIND`, call `GET /api/sync/cursor` (or `fetch_and_adopt_cursor` in Rust) to adopt the server seq before retrying. `PUT /api/sync/cursor` cannot advance seq — only `POST /api/sync/findings` CAS can.
-- **Logout / revoke:** revoked licenses are rejected on every sync endpoint; `disconnect` clears the native `sync_state` row (keychain license remains for activation).

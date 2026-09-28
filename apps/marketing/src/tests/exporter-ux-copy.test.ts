@@ -1,9 +1,7 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const scanPage = readFileSync(new URL("../pages/scan.astro", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const waitlistForm = readFileSync(
   new URL("../components/WaitlistForm.astro", import.meta.url),
   "utf8"

@@ -34,7 +34,7 @@ env:
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
-  REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}
+  REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '1' }}
   PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
   # Cloud modes are protected azure-production variables. Local purchases stay
   # hard-off independently of Cloud launch state.
@@ -354,7 +354,6 @@ jobs:
           POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
           POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
           POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
-          POLAR_ORG_ID: ${{ vars.POLAR_ORG_ID }}
           POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
           POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
           RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
@@ -841,7 +840,7 @@ jobs:
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
         run: |
           if [ -z "${GITHUB_APP_ID}" ] || [ -z "${GITHUB_APP_SLUG}" ] || [ -z "${GITHUB_APP_PRIVATE_KEY}" ] || [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
-            echo "::warning::GITHUB_APP_ID / GITHUB_APP_SLUG / GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET are not all set. GitHub connect path will 500 CONFIG_ERROR until they are. F1's four-way onboarding (URL/API/Skip) keeps signups alive in the meantime — see PRODUCTION_DEPLOYMENT.md #6 for runbook."
+            echo "::warning::GITHUB_APP_ID / GITHUB_APP_SLUG / GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET are not all set. GitHub connect path will 500 CONFIG_ERROR until they are. F1's four-way onboarding (URL/API/Skip) keeps signups alive in the meantime."
           else
             if ! echo "${GITHUB_APP_PRIVATE_KEY}" | grep -q "BEGIN"; then
               echo "::error::GITHUB_APP_PRIVATE_KEY must be a PEM-formatted key starting with -----BEGIN."
@@ -855,7 +854,7 @@ jobs:
           # already-connected workspaces keep working, so this warns and never
           # blocks a deploy.
           if [ -z "${GITHUB_APP_CLIENT_ID}" ] || [ -z "${GITHUB_APP_CLIENT_SECRET}" ]; then
-            echo "::warning::GITHUB_APP_CLIENT_ID / GITHUB_APP_CLIENT_SECRET are not set. No new workspace can complete a GitHub install — the callback cannot verify installation ownership and fails closed. See PRODUCTION_DEPLOYMENT.md #6."
+            echo "::warning::GITHUB_APP_CLIENT_ID / GITHUB_APP_CLIENT_SECRET are not set. No new workspace can complete a GitHub install — the callback cannot verify installation ownership and fails closed."
           else
             echo "GitHub App OAuth credentials present."
           fi
@@ -911,7 +910,6 @@ jobs:
           GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
           EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
-          POLAR_ORG_ID: ${{ vars.POLAR_ORG_ID }}
           POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
           POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
           RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
@@ -991,7 +989,7 @@ jobs:
             sleep 5
           done
           retry_app_update() {
-            local attempt output
+            local attempt output backoff=5 max_backoff=30
             for attempt in $(seq 1 24); do
               if output=$("$@" 2>&1); then
                 printf '%s\n' "$output"
@@ -1006,7 +1004,13 @@ jobs:
                 echo "::error::Container Apps operation did not release before the candidate update."
                 return 1
               fi
-              sleep 5
+              sleep "$backoff"
+              if [ "$backoff" -lt "$max_backoff" ]; then
+                backoff=$((backoff * 2))
+                if [ "$backoff" -gt "$max_backoff" ]; then
+                  backoff="$max_backoff"
+                fi
+              fi
             done
           }
           retry_app_update az containerapp update \
@@ -1030,7 +1034,6 @@ jobs:
               "DEPLOY_PROBE_CERT_SHA256=${DEPLOY_PROBE_CERT_SHA256}" \
               "POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}" \
               "POLAR_ACCESS_TOKEN=secretref:polar-access-token" \
-              "POLAR_ORG_ID=${POLAR_ORG_ID}" \
               "POLAR_WEBHOOK_SECRET=secretref:polar-webhook-secret" \
               "POLAR_PRODUCT_IDS=${POLAR_PRODUCT_IDS}" \
               "POLAR_LOCAL_PRODUCT_IDS=${POLAR_LOCAL_PRODUCT_IDS}" \
@@ -1068,7 +1071,6 @@ jobs:
               "MYRA_CALENDAR_PROVIDER=${{ vars.MYRA_CALENDAR_PROVIDER }}" \
               "MYRA_AZURE_OPENAI_ENDPOINT=${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}" \
               "MYRA_MODEL=${{ vars.MYRA_MODEL }}" \
-              "MYRA_EMBED_MODEL=${{ vars.MYRA_EMBED_MODEL }}" \
               "MYRA_MONTHLY_BUDGET_USD=${{ vars.MYRA_MONTHLY_BUDGET_USD }}" \
               "MYRA_GOOGLE_CLIENT_ID=${{ vars.MYRA_GOOGLE_CLIENT_ID }}" \
               "MYRA_GOOGLE_CALENDAR_ID=${{ vars.MYRA_GOOGLE_CALENDAR_ID }}" \

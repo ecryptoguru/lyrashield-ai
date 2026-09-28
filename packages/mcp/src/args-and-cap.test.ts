@@ -64,9 +64,8 @@ describe("MCP argument validation (v17)", () => {
     const { context, fetchSpy } = makeCtx()
     const gate = vi.fn(async () => ({ approved: true }))
     const server = new McpServer({ toolContext: context, approvalGate: gate })
-    // idempotencyKey and approvalId are injected into the advertised schema
-    // for mutating tools; no tool sets additionalProperties:false, so they
-    // must reach the approval gate unmodified rather than fail validation.
+    // Server control arguments remain valid even when the tool rejects
+    // undeclared arguments.
     const res = await server.callTool("lyrashield_scan_target", {
       workspaceId: "w1",
       targetId: "t1",
@@ -79,6 +78,14 @@ describe("MCP argument validation (v17)", () => {
       expect.objectContaining({ idempotencyKey: "idem-123", approvalId: "approval-456" })
     )
     expect(fetchSpy).toHaveBeenCalled()
+
+    const invalid = await server.callTool("lyrashield_scan_target", {
+      workspaceId: "w1",
+      targetId: "t1",
+      unrecognized: true,
+    })
+    expect(invalid.isError).toBe(true)
+    expect(gate).toHaveBeenCalledTimes(1)
   })
 })
 

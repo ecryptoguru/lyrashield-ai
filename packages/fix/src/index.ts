@@ -7,7 +7,7 @@
  * lives in the service layer that consumes this package.
  */
 
-export { patchScopeForPlan, type FixPlanTier, type PatchScopePolicy } from "./scope-policy"
+export { patchScopeForPlan, type PatchScopePolicy } from "./scope-policy"
 export {
   validatePatchDiff,
   type DiffValidation,
@@ -17,4 +17,4 @@ export {
 } from "./diff-validator"
 export { diffChecksum } from "./checksum"
 export { applyUnifiedDiff, extractFileDiff } from "./apply-diff"
-export { buildUnifiedDiff, fixContentChecksum } from "./build-diff"
+export { buildUnifiedDiff } from "./build-diff"

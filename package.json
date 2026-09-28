@@ -7,6 +7,7 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
+    "lint:size": "eslint --config eslint.size.config.mjs \"apps/**/src/**/*.{ts,tsx,mts,cts}\" \"packages/**/src/**/*.{ts,tsx,mts,cts}\"",
     "lint:md": "markdownlint-cli2",
     "typecheck": "turbo typecheck",
     "typecheck:e2e": "pnpm --filter @lyrashield/db exec tsc --noEmit -p ../../e2e/tsconfig.json",
@@ -24,7 +25,7 @@
     "test:marketing": "pnpm --filter @lyrashield/marketing exec vitest run",
     "test:motion": "node --test apps/marketing-motion/tests/*.test.mjs",
     "test": "node run-all-tests.mjs",
-    "test:e2e": "playwright test --grep-invert '@visual'",
+    "test:e2e": "playwright test",
     "test:browser-harness": "playwright test -c e2e/browser/playwright.config.ts",
     "test:watch": "vitest --exclude '**/dist/**'",
     "verify:worker-image": "sh apps/worker/scripts/verify-worker-image.sh",
@@ -32,19 +33,17 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
-    "eslint": "^9.39.5",
+    "eslint": "catalog:",
     "eslint-config-next": "^16.3.3",
     "eslint-plugin-security": "^4.0.1",
+    "knip": "6.37.0",
     "markdownlint-cli2": "0.23.2",
     "prettier": "^3.9.6",
     "turbo": "^2.10.11",
-    "vitest": "^4.1.11"
+    "vitest": "catalog:"
   },
   "packageManager": "pnpm@12.2.0",
   "engines": {
     "node": ">=24.0.0"
-  },
-  "dependencies": {
-    "@prisma/client-runtime-utils": "7.9.1"
   }
 }

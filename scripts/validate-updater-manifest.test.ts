@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { validateUpdaterManifest } from "./validate-updater-manifest.mjs";
 
 const validManifest = {
@@ -22,6 +23,16 @@ const validManifest = {
 };
 
 describe("validateUpdaterManifest", () => {
+  it("runs on the assembled release manifest before draft publication", () => {
+    const workflow = readFileSync(new URL("../.github/workflows/release-tauri.yml", import.meta.url), "utf8");
+    expect(workflow.indexOf("node scripts/validate-updater-manifest.mjs latest.json")).toBeGreaterThan(
+      workflow.indexOf("python3 .github/scripts/desktop_release.py manifest")
+    );
+    expect(workflow.indexOf("node scripts/validate-updater-manifest.mjs latest.json")).toBeLessThan(
+      workflow.indexOf("- name: Create signed draft release")
+    );
+  });
+
   it("accepts valid manifest with matching expected version", () => {
     expect(() => validateUpdaterManifest(validManifest, { expectedVersion: "0.1.0" })).not.toThrow();
   });

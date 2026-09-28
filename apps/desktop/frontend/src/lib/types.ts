@@ -6,17 +6,6 @@ export type LicenseSku =
   | "renewal"
   | "sync_addon"
 
-export interface LicenseFile {
-  sku: LicenseSku
-  seatCount: number
-  machineIds: string[]
-  updateEligibleUntil: string
-  perpetualFallbackBuild: string | null
-  signingKeyId: string
-  signature: string
-  issuedAt: string
-}
-
 export type LicenseStatus =
   | {
       state: "active"

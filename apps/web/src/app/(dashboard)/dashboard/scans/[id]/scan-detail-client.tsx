@@ -28,6 +28,7 @@ import {
   getScanGoalLabel,
   getScanModeLabel,
   getScanTriggerLabel,
+  getTargetTypeLabel,
   getVerificationStatusLabel,
 } from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
@@ -37,7 +38,7 @@ import { severityLabel, humanizeToken } from "@/lib/labels"
 import { track } from "@/lib/analytics"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import { presentOperationFailure } from "@/lib/operation-failure"
-import { findingsHref } from "@/lib/finding-list-params"
+import { findingsHref, reportsHref } from "@/lib/finding-list-params"
 import { scanRecoveryHref } from "../scans-client.utils"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
 import type { CleanResultScorecard, FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
@@ -431,60 +432,71 @@ export function ScanDetailClient({
         label: "Refresh scan status",
         description: "Read the latest accepted scan status. This does not start another scan.",
       }
-    : currentFindings.length > 0
+    : scan.status === "PARTIAL" && scan.target
       ? {
           kind: "link" as const,
-          label: "Review highest-priority finding",
-          href: findingsHref({
-            tab: "issues",
-            finding: topFinding!.id,
-            scanId: scan.id,
-            ...(scan.target ? { target: scan.target.id } : {}),
+          label: "Complete coverage",
+          href: scanRecoveryHref({
+            targetId: scan.target.id,
+            goal: scan.goal,
+            mode: scan.mode,
           }),
           description:
-            "Review the retained evidence first. Detection is not verification; propose a fix only after reviewing its scope.",
+            "Review the recorded limitations, then use the existing scan flow to request another scan for this target.",
         }
-      : scanRecovery
+      : currentFindings.length > 0
         ? {
             kind: "link" as const,
-            label:
-              presentation.recoveryAction === "usage"
-                ? "Review account usage"
-                : "Review scan recovery",
-            href:
-              presentation.recoveryAction === "usage"
-                ? "/dashboard/billing"
-                : (scanRecovery.recoveryHref ??
-                  (scan.target
-                    ? scanRecoveryHref({
-                        targetId: scan.target.id,
-                        goal: scan.goal,
-                        mode: scan.mode,
-                      })
-                    : "/dashboard/scans")),
-            description: scanRecovery.recovery,
+            label: "Review highest-priority finding",
+            href: findingsHref({
+              tab: "issues",
+              finding: topFinding!.id,
+              scanId: scan.id,
+              ...(scan.target ? { target: scan.target.id } : {}),
+            }),
+            description:
+              "Review the retained evidence first. Detection is not verification; propose a fix only after reviewing its scope.",
           }
-        : scan.status === "COMPLETED" && runCoverageState === "Complete" && !hasLimitedCoverage
+        : scanRecovery
           ? {
               kind: "link" as const,
-              label: "Create an assurance report",
-              href: findingsHref({
-                tab: "reports",
-                scanId: scan.id,
-                ...(scan.target ? { targetId: scan.target.id } : {}),
-              }),
-              description:
-                "Package this scan and its recorded scope into an immutable report for your team.",
+              label:
+                presentation.recoveryAction === "usage"
+                  ? "Review account usage"
+                  : "Review scan recovery",
+              href:
+                presentation.recoveryAction === "usage"
+                  ? "/dashboard/billing"
+                  : (scanRecovery.recoveryHref ??
+                    (scan.target
+                      ? scanRecoveryHref({
+                          targetId: scan.target.id,
+                          goal: scan.goal,
+                          mode: scan.mode,
+                        })
+                      : "/dashboard/scans")),
+              description: scanRecovery.recovery,
             }
-          : {
-              kind: "link" as const,
-              label: scan.target ? "Review target setup" : "Review scans",
-              href: scan.target
-                ? `/dashboard/targets/${encodeURIComponent(scan.target.id)}`
-                : "/dashboard/scans",
-              description:
-                "This scan does not have complete usable coverage. Review the visible limitations before deciding what to do next.",
-            }
+          : scan.status === "COMPLETED" && runCoverageState === "Complete" && !hasLimitedCoverage
+            ? {
+                kind: "link" as const,
+                label: "Create an assurance report",
+                href: reportsHref({
+                  scanId: scan.id,
+                  ...(scan.target ? { targetId: scan.target.id } : {}),
+                }),
+                description:
+                  "Package this scan and its recorded scope into an immutable report for your team.",
+              }
+            : {
+                kind: "link" as const,
+                label: scan.target ? "Review target setup" : "Review scans",
+                href: scan.target
+                  ? `/dashboard/targets/${encodeURIComponent(scan.target.id)}`
+                  : "/dashboard/scans",
+                description:
+                  "This scan does not have complete usable coverage. Review the visible limitations before deciding what to do next.",
+              }
   const coverageSummary = isActive
     ? "Coverage is still being recorded; this is not a completed result."
     : scan.status === "COMPLETED" && runCoverageState === "Complete" && !hasLimitedCoverage
@@ -581,7 +593,10 @@ export function ScanDetailClient({
                   {scan.target?.name ?? "Target details unavailable"}
                 </span>
                 {scan.target && (
-                  <span className="text-muted-foreground"> · {scan.target.type}</span>
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {getTargetTypeLabel(scan.target.type)}
+                  </span>
                 )}
               </span>
               <span className="inline-flex items-center gap-1.5">
@@ -760,7 +775,7 @@ export function ScanDetailClient({
               <h2 className="mb-2 text-sm font-semibold">Target</h2>
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <span className="font-medium">{scan.target.name}</span>
-                <Badge variant="muted">{scan.target.type}</Badge>
+                <Badge variant="muted">{getTargetTypeLabel(scan.target.type)}</Badge>
                 {scan.target.repoFullName && (
                   <span className="text-muted-foreground">{scan.target.repoFullName}</span>
                 )}
@@ -956,7 +971,7 @@ export function ScanDetailClient({
                           <span className="font-medium">
                             {SCANNER_LABELS[warning.scanner] ?? warning.scanner}
                           </span>
-                          <Badge variant="warning">{warning.status}</Badge>
+                          <Badge variant="warning">{humanizeToken(warning.status)}</Badge>
                           {warning.subject && (
                             <span className="text-muted-foreground wrap-break-word">
                               {warning.subject}
@@ -1540,6 +1555,7 @@ export function ScanDetailClient({
           {currentFindings.length === 0 && !isActive && presentation.assuranceAvailable && (
             <div className="space-y-4">
               <EmptyState
+                headingLevel="h3"
                 icon={ShieldCheck}
                 title="No findings were reported"
                 description={
@@ -1561,8 +1577,7 @@ export function ScanDetailClient({
                         Package this completed scan and its retained scope into an immutable report.
                       </p>
                       <Link
-                        href={findingsHref({
-                          tab: "reports",
+                        href={reportsHref({
                           scanId: scan.id,
                           ...(scan.target ? { targetId: scan.target.id } : {}),
                         })}
@@ -1614,6 +1629,7 @@ export function ScanDetailClient({
           </div>
           {displayEvents.length === 0 ? (
             <EmptyState
+              headingLevel="h3"
               icon={Clock}
               title="No events"
               description="No scan events have been recorded yet."

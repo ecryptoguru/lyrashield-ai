@@ -1,5 +1,6 @@
 import type { AgentEntry, RegistryAgentEntry } from "./types"
 import { API_URL_PLACEHOLDER } from "./render"
+import { MCP_PACKAGE_SPEC } from "./versions"
 
 const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-09-09"
 
@@ -361,7 +362,7 @@ const amp: AgentEntry = {
   credential: { kind: "shell-env" },
   vendorCli: {
     command: "amp",
-    args: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp@0.2.10"],
+    args: ["mcp", "add", "lyrashield", "--", "npx", "-y", MCP_PACKAGE_SPEC],
   },
   rulesFiles: ["AGENTS.md"],
   source: {

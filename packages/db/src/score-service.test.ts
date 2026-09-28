@@ -669,7 +669,7 @@ describe("score-service", () => {
         modelVersion: "test",
       })
       mockPrisma.referralCode.findUnique.mockResolvedValue({ id: "ref-b", code: "CODEBBBB" })
-      mockPrisma.finding.count.mockResolvedValue(0)
+      mockPrisma.finding.count.mockResolvedValue(4)
       mockPrisma.scorecardEvent.count = vi.fn().mockResolvedValue(0)
       mockPrisma.referralAttribution.count = vi.fn().mockResolvedValue(0)
       const tx = {
@@ -680,6 +680,7 @@ describe("score-service", () => {
             snapshotId: "snapshot-1",
             referralCodeId: "ref-a",
             referralCode: { code: "CODEAAAA" },
+            publicPayload: LEGACY_FIVE_KEY_PAYLOAD,
           }),
           create: vi.fn(),
         },
@@ -695,6 +696,7 @@ describe("score-service", () => {
       expect(result).toMatchObject({
         share: { id: "share-1" },
         referralCode: "CODEAAAA",
+        publicPayload: { resolvedFindings: 2 },
       })
       expect(tx.scorecardShare.create).not.toHaveBeenCalled()
       expect(mockPrisma.auditLog.create).not.toHaveBeenCalled()

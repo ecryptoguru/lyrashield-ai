@@ -78,7 +78,7 @@ export type AISecurityCoverage = {
   detectedCount: number
   noFindingCount: number
   inconclusiveCount: number
-  controls: Record<AIControlId, AIControlCoverage>
+  controls: Partial<Record<AIControlId, AIControlCoverage>>
   limitsReached: AIScanLimit[]
   unsupportedFiles: string[]
   truncatedFiles: string[]

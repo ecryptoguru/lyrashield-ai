@@ -31,13 +31,14 @@ Every claim below is executable; the cited test files are the evidence.
 
 ### Transport behaviors
 
-| Guarantee                                                                                                                                                                                                                                                | Evidence                                                                                 |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `initialize` returns server metadata (name, title, version, description, website) and usage instructions                                                                                                                                                 | `src/create-server.test.ts`, `src/http-transport.test.ts`, `src/packed-stdio.test.ts`    |
-| `tools/list` returns all 21 tools, each with title, input/output JSON schemas, safety annotations and `execution.taskSupport: "forbidden"`                                                                                                               | `src/create-server.test.ts`, `src/http-transport.test.ts`, `src/packed-stdio.test.ts`    |
-| `tools/call` runs read-only tools; mutating tools fail closed without an approval path (stateless HTTP denies by default; `allowMutations` is explicit opt-in only)                                                                                      | `src/http-transport.test.ts`, `src/create-server.test.ts`, `src/server-approval.test.ts` |
-| JSON-RPC batching is supported and bounded: a 2-message batch returns both answers; a batch over 100 messages is refused with HTTP 400 `-32600`; a batch containing `initialize` plus other messages is refused with HTTP 400 `-32600`                   | `src/http-transport.test.ts`                                                             |
-| Malformed JSON bodies and non-JSON-RPC payloads fail closed with HTTP 400 `-32700`; non-JSON `Content-Type` → 415; `Accept` missing either required media type → 406; request bodies over the 4 MiB SDK bound → 413; verbs outside POST/GET/DELETE → 405 | `src/http-transport.test.ts`                                                             |
+| Guarantee                                                                                                                                                                                                                                                | Evidence                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `initialize` returns server metadata (name, title, version, description, website) and usage instructions                                                                                                                                                 | `src/create-server.test.ts`, `src/http-transport.test.ts`, `src/packed-stdio.test.ts`                                           |
+| `tools/list` returns all 21 tools with schemas and safety annotations; without task support all declare `execution.taskSupport: "forbidden"`, while a task-enabled server advertises only `lyrashield_scan_target` as `"optional"`                       | `src/create-server.test.ts`, `src/http-transport.test.ts`, `src/packed-stdio.test.ts`, `apps/web/src/app/api/mcp/tasks.test.ts` |
+| Stdio supports task augmentation for `lyrashield_scan_target`; hosted HTTP enables it only for a verified connected OAuth client using protocol `2025-11-25`                                                                                             | `src/local-task-backend.test.ts`, `apps/web/src/app/api/mcp/tasks.test.ts`                                                      |
+| `tools/call` runs read-only tools; mutating tools fail closed without an approval path (stateless HTTP denies by default; `allowMutations` is explicit opt-in only)                                                                                      | `src/http-transport.test.ts`, `src/create-server.test.ts`, `src/server-approval.test.ts`                                        |
+| JSON-RPC batching is supported and bounded: a 2-message batch returns both answers; a batch over 100 messages is refused with HTTP 400 `-32600`; a batch containing `initialize` plus other messages is refused with HTTP 400 `-32600`                   | `src/http-transport.test.ts`                                                                                                    |
+| Malformed JSON bodies and non-JSON-RPC payloads fail closed with HTTP 400 `-32700`; non-JSON `Content-Type` → 415; `Accept` missing either required media type → 406; request bodies over the 4 MiB SDK bound → 413; verbs outside POST/GET/DELETE → 405 | `src/http-transport.test.ts`                                                                                                    |
 
 ### Request metadata and routing headers
 
@@ -66,15 +67,15 @@ checks.
 
 ### Unsupported methods and features
 
-| Item                                                               | Behavior                                                                                                           | Reason unsupported                                                                                                         |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `server/discover`                                                  | JSON-RPC `-32601 Method not found`                                                                                 | No stable SDK ≤1.30.1 — `src/http-transport.test.ts`, `src/packed-stdio.test.ts`                                           |
-| `resources/list`, `prompts/list`, `completion/complete`, `tasks/*` | JSON-RPC `-32601 Method not found`                                                                                 | Intentionally not enabled — no such server capability is registered (`src/create-server.ts`); `src/http-transport.test.ts` |
-| MRTR retry/input-response exchange                                 | Not implemented                                                                                                    | No stable SDK ≤1.30.1 exposes it; not emulated (`src/protocol.test.ts`)                                                    |
-| `Mcp-Method` / `Mcp-Name` transport headers                        | Not consumed                                                                                                       | No stable SDK ≤1.30.1 reads them (`src/protocol.test.ts`)                                                                  |
-| List-result `ttlMs` / `cacheScope`                                 | Not advertised                                                                                                     | No stable SDK ≤1.30.1 schema (`src/protocol.test.ts`)                                                                      |
-| Protocol version `2026-07-28`                                      | **Blocked — recorded, not emulated** (see receipt below)                                                           | No stable SDK ≤1.30.1 supports it                                                                                          |
-| MCP Tasks (`experimental/tasks`, protocol `2025-11-25`)            | Intentionally not enabled; tools declare `execution.taskSupport: "forbidden"` and server capabilities omit `tasks` | `src/create-server.test.ts`; rationale below                                                                               |
+| Item                                                    | Behavior                                                                                                                   | Reason unsupported                                                                                                         |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `server/discover`                                       | JSON-RPC `-32601 Method not found`                                                                                         | No stable SDK ≤1.30.1 — `src/http-transport.test.ts`, `src/packed-stdio.test.ts`                                           |
+| `resources/list`, `prompts/list`, `completion/complete` | JSON-RPC `-32601 Method not found`                                                                                         | Intentionally not enabled — no such server capability is registered (`src/create-server.ts`); `src/http-transport.test.ts` |
+| MRTR retry/input-response exchange                      | Not implemented                                                                                                            | No stable SDK ≤1.30.1 exposes it; not emulated (`src/protocol.test.ts`)                                                    |
+| `Mcp-Method` / `Mcp-Name` transport headers             | Not consumed                                                                                                               | No stable SDK ≤1.30.1 reads them (`src/protocol.test.ts`)                                                                  |
+| List-result `ttlMs` / `cacheScope`                      | Not advertised                                                                                                             | No stable SDK ≤1.30.1 schema (`src/protocol.test.ts`)                                                                      |
+| Protocol version `2026-07-28`                           | **Blocked — recorded, not emulated** (see receipt below)                                                                   | No stable SDK ≤1.30.1 supports it                                                                                          |
+| MCP Tasks (`experimental/tasks`, protocol `2025-11-25`) | Conditional: stdio; hosted connected OAuth only. Other credentials/protocols omit task capability and keep immediate calls | `src/local-task-backend.test.ts`, `apps/web/src/app/api/mcp/tasks.test.ts`; rationale below                                |
 
 ## Blocked feature receipt: protocol `2026-07-28`
 
@@ -94,15 +95,20 @@ This stays blocked until a stable SDK release negotiates `2026-07-28`; the
 parameterized matrix above then picks it up automatically from
 `SUPPORTED_PROTOCOL_VERSIONS`.
 
-## Intentionally deferred: MCP Tasks
+## Task behavior
 
-SDK 1.30.x ships `experimental/tasks` for protocol `2025-11-25`. LyraShield does not
-enable it: local in-memory task storage would not survive process exit, while the
-hosted endpoint creates a fresh server per request. Existing scans already return a
-durable LyraShield scan ID and expose safe polling through `lyrashield_get_scan_status`.
-Protocol task support waits on a shared durable task adapter and explicit cancellation
-semantics that never replay ambiguous paid work (`src/create-server.test.ts`,
-`src/server.ts`).
+Task augmentation is limited to `lyrashield_scan_target`. Stdio resolves task state
+through the REST operation and scan ledger; `tasks/list` is limited to that running
+process session. The hosted endpoint enables task support only for a connected OAuth
+client on protocol `2025-11-25`, derives state from durable operation and scan records
+and rechecks the connection, authorization version and target scope for every read or
+cancellation. Task IDs are not bearer capabilities and expire after 24 hours. A
+`tasks/cancel` request uses the normal `scan:cancel` permission and cannot replay a
+scan. Clients using older protocol versions or hosted API keys receive ordinary
+immediate-call behavior and poll a returned scan ID with `lyrashield_get_scan_status`.
+
+Evidence: `src/task-adapter.test.ts`, `src/local-task-backend.test.ts`,
+`apps/web/src/app/api/mcp/tasks.test.ts` and `apps/web/src/lib/mcp-tasks.ts`.
 
 ## Test evidence
 

@@ -5,10 +5,11 @@ async function mockMyra(
   booking = true,
   interactive = false,
   statusTimeout = false,
-  iframeChallenge = false
+  iframeChallenge = false,
+  hangingMessage = false
 ) {
   await page.addInitScript(
-    ({ bookingOpen, interactiveChallenge, statusTimeout, iframeChallenge }) => {
+    ({ bookingOpen, interactiveChallenge, statusTimeout, iframeChallenge, hangingMessage }) => {
       const calls: { path: string; credentials?: RequestCredentials }[] = []
       Object.assign(window, { __myraCalls: calls })
       const originalFetch = window.fetch.bind(window)
@@ -59,6 +60,17 @@ async function mockMyra(
           })
         }
         if (url.pathname === "/api/myra/message") {
+          if (hangingMessage) {
+            const encoder = new TextEncoder()
+            const body = new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(
+                  encoder.encode('data: {"type":"activity","label":"Searching"}\n\n')
+                )
+              },
+            })
+            return new Response(body, { headers: { "content-type": "text/event-stream" } })
+          }
           return new Response('data: {"type":"done"}\n\n', {
             headers: { "content-type": "text/event-stream" },
           })
@@ -93,9 +105,43 @@ async function mockMyra(
         },
       })
     },
-    { bookingOpen: booking, interactiveChallenge: interactive, statusTimeout, iframeChallenge }
+    {
+      bookingOpen: booking,
+      interactiveChallenge: interactive,
+      statusTimeout,
+      iframeChallenge,
+      hangingMessage,
+    }
   )
 }
+
+test("closing Myra during a stream clears composer and streaming state on reopen", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockMyra(page, true, false, false, false, true)
+  await page.goto("/")
+
+  const launcher = page.getByRole("button", { name: "Ask Myra" })
+  const panel = page.getByRole("dialog", { name: "Myra support" })
+  const input = page.getByLabel("Message Myra")
+  await launcher.click()
+  await input.fill("Check my current setup")
+  await page.getByRole("button", { name: "Send" }).click()
+  await expect(page.locator("#myra-activity")).toHaveText("Searching")
+  await expect(page.locator("#myra-stop")).toBeVisible()
+  await expect(page.locator("#myra-send")).toBeHidden()
+
+  await page.getByRole("button", { name: "Close Myra" }).click()
+  await expect(panel).toBeHidden()
+  await launcher.click()
+
+  await expect(input).toHaveValue("")
+  await expect(page.locator("#myra-activity")).toBeHidden()
+  await expect(page.locator("#myra-stop")).toBeHidden()
+  await expect(page.locator("#myra-send")).toBeVisible()
+  await expect(page.locator("#myra-log")).not.toHaveAttribute("aria-busy")
+})
 
 test("mobile Myra contains focus and restores page interaction after close and resize", async ({
   page,

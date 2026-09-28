@@ -46,7 +46,7 @@ export function isUnsupportedOrTruncated(file: AIScanFile): boolean {
   return !isSupportedFile(file)
 }
 
-export function getLineNumber(content: string, index: number): number {
+function getLineNumber(content: string, index: number): number {
   let line = 1
   for (let i = 0; i < index && i < content.length; i++) {
     if (content[i] === "\n") line++
@@ -54,17 +54,17 @@ export function getLineNumber(content: string, index: number): number {
   return line
 }
 
-export function getLineAt(content: string, lineNumber: number): string {
+function getLineAt(content: string, lineNumber: number): string {
   const lines = content.split("\n")
   return lines[lineNumber - 1] ?? ""
 }
 
-export function getSnippet(content: string, start: number, end: number, max = 120): string {
+function getSnippet(content: string, start: number, end: number, max = 120): string {
   const snippet = content.slice(Math.max(0, start), Math.min(content.length, end))
   return snippet.length > max ? `${snippet.slice(0, max)}…` : snippet
 }
 
-export function computeEvidenceChecksum(
+function computeEvidenceChecksum(
   file: AIScanFile,
   state: AISecuritySignalState,
   line?: number

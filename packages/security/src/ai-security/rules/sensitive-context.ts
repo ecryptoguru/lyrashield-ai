@@ -6,7 +6,7 @@ import {
 } from "../utils"
 import type { AIScanFile, AISecuritySignal } from "../types"
 
-export const AI_02_RULE_ID = "AI-02.sensitive-context" as const
+const AI_02_RULE_ID = "AI-02.sensitive-context" as const
 
 const SENSITIVE_ENV_PATTERNS = [
   /process\.env\.[A-Z_]*(?:SECRET|KEY|TOKEN|PRIVATE|PASSWORD|DATABASE_URL|AWS_|AZURE_|GCP_)/i,

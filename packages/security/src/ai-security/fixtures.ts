@@ -575,7 +575,3 @@ export const AI_SECURITY_FIXTURES: FixtureCase[] = [
     description: "Truncated file cannot produce a clean NO_FINDING.",
   },
 ]
-
-export function getFixturesByControl(controlId: AIControlId): FixtureCase[] {
-  return AI_SECURITY_FIXTURES.filter((fixture) => fixture.controlId === controlId)
-}

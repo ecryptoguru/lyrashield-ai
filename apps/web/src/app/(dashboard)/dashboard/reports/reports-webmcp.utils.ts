@@ -27,7 +27,7 @@ import {
  * foreign resource ids and secret-shaped keys. `reportId`/`scanId` are
  * legitimate — they resolve against the page's own visible list.
  */
-export const REPORTS_WEBMCP_FORBIDDEN_INPUT_KEYS = [
+const REPORTS_WEBMCP_FORBIDDEN_INPUT_KEYS = [
   "workspaceId",
   "workspace",
   "userId",
@@ -52,7 +52,7 @@ const reportInputSchema: WebMcpInputSchema = {
 
 /** Resolve an optional agent-supplied identifier against the page's own
  * visible report list — never a foreign or server-side id space. */
-export function resolveVisibleReport(
+function resolveVisibleReport(
   reports: ReportItem[],
   input: { reportId?: string; scanId?: string }
 ): ReportItem {
@@ -132,7 +132,7 @@ const MAX_REASON_CODES = 4
  * metadata and summary counts survive — never `shareUrl`, `storageUri`,
  * `contentJson`, narratives or anything URL-shaped.
  */
-export function buildScanReportOutput(row: ReportItem, detail: ShareableReport): ScanReportOutput {
+function buildScanReportOutput(row: ReportItem, detail: ShareableReport): ScanReportOutput {
   const launchProvenance =
     detail.launchReport?.provenance ??
     (row.type === "launch_readiness" ? (row.provenance ?? null) : null)

@@ -63,9 +63,7 @@ export async function handleDoctor(_args: string[], output: Output): Promise<num
     ]
   }
 
-  const registry = await import("@lyrashield/agent-registry").catch(
-    () => ({}) as Record<string, unknown>
-  )
+  const registry = await import("@lyrashield/agent-registry").catch(() => ({}))
   const list = (registry as Record<string, unknown>).listAgents as (() => AgentEntry[]) | undefined
   const arr = (registry as Record<string, unknown>).AGENTS as AgentEntry[] | undefined
   const agents = list?.() ?? arr ?? []

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { formatDate, formatDateTime, formatTime } from "./date-format"
+import { formatAge, formatDate, formatDateTime, formatDuration, formatTime } from "./date-format"
 
 describe("deterministic date formatting", () => {
   const value = "2026-07-14T09:05:06.000Z"
@@ -19,5 +19,14 @@ describe("deterministic date formatting", () => {
       if (previousTimezone === undefined) delete process.env.TZ
       else process.env.TZ = previousTimezone
     }
+  })
+})
+
+describe("elapsed time formatting", () => {
+  it("keeps scan durations and relative ages readable", () => {
+    expect(formatDuration(null, null)).toBe("—")
+    expect(formatDuration("2026-07-14T09:05:00Z", "2026-07-14T10:06:00Z")).toBe("1h 1m")
+    expect(formatDuration("2026-07-14T09:05:00Z", "2026-07-14T09:06:02Z")).toBe("1m 2s")
+    expect(formatAge(new Date(Date.now() - 2 * 3_600_000).toISOString())).toBe("2h")
   })
 })

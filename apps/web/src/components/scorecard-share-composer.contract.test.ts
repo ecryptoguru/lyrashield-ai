@@ -12,7 +12,6 @@ vi.mock("../lib/analytics", () => ({
 }))
 
 // The web package uses Node for component tests; assert the small interaction contracts here.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const source = readFileSync(new URL("./scorecard-share-composer.tsx", import.meta.url), "utf8")
 
 describe("scorecard share composer contracts", () => {

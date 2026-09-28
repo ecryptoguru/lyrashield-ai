@@ -76,6 +76,7 @@ describe("relay grant", () => {
     null,
     [],
     { ...baseScope, hosts: [null] },
+    { ...baseScope, scanId: 123 },
     { ...baseScope, methods: [4] },
     { ...baseScope, blockedPaths: [null] },
     { ...baseScope, maxBytes: null },
@@ -263,8 +264,9 @@ describe("connector relay scope", () => {
   })
 
   it("rejects unknown providers", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(() => connectorRelayScope("s1", "ftp" as any, 60_000)).toThrow()
+    expect(() =>
+      connectorRelayScope("s1", "ftp" as Parameters<typeof connectorRelayScope>[1], 60_000)
+    ).toThrow()
     expect(isConnectorRelayProvider("github")).toBe(true)
     expect(isConnectorRelayProvider("ftp")).toBe(false)
   })

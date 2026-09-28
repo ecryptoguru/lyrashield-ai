@@ -16,19 +16,12 @@ import {
   runWithWorkspaceContext,
 } from "./scoping"
 
-// Re-export the request-context helpers + policy sets so existing import sites
+// Re-export the request-context helpers so existing import sites
 // (`@lyrashield/db`) keep working.
 export {
-  ACCOUNT_OWNED_MODELS,
-  SOFT_DELETE_MODELS,
-  WORKSPACE_SCOPED_MODELS,
   getAccountContext,
-  getExplicitAccountId,
-  getExplicitWorkspaceId,
   getWorkspaceContext,
-  isDatabaseRLSContextBound,
   runWithAccountContext,
-  runWithDatabaseRLSContext,
   setAccountContext,
   setWorkspaceContext,
   runWithWorkspaceContext,

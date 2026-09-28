@@ -5,6 +5,7 @@ import type {
   RenderedConfig,
   RenderedEntry,
 } from "./types"
+import { MCP_PACKAGE_SPEC } from "./versions"
 
 export const API_URL_PLACEHOLDER = "<apiUrl>"
 
@@ -72,7 +73,7 @@ function buildStdioEntry(agent: AgentEntry, opts: InstallOptions): Record<string
   // Code) instead of the standard command string + args + env triple.
   if (agent.stdioStyle === "array-command-environment") {
     const entry: Record<string, unknown> = {
-      command: ["npx", "-y", "@lyrashield/mcp@0.2.10"],
+      command: ["npx", "-y", MCP_PACKAGE_SPEC],
       environment: env,
       enabled: true,
     }
@@ -88,14 +89,14 @@ function buildStdioEntry(agent: AgentEntry, opts: InstallOptions): Record<string
     entry = {
       [agent.commandWrapperKey]: {
         path: "npx",
-        args: ["-y", "@lyrashield/mcp@0.2.10"],
+        args: ["-y", MCP_PACKAGE_SPEC],
         env,
       },
     }
   } else {
     entry = {
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.10"],
+      args: ["-y", MCP_PACKAGE_SPEC],
     }
     if (agent.credential.kind === "env-names") {
       entry[agent.credential.field] = env

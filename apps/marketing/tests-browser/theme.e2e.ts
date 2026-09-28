@@ -1,5 +1,35 @@
 import { expect, test } from "@playwright/test"
 
+test("narrow header fixes stay scoped and target dropdown summaries", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 })
+  await page.goto("/")
+
+  const narrowLayout = await page.evaluate(() => {
+    const unrelatedHeader = document.createElement("header")
+    const row = document.createElement("div")
+    row.style.display = "flex"
+    row.style.gap = "24px"
+    unrelatedHeader.append(row)
+    document.body.append(unrelatedHeader)
+    const unrelatedGap = getComputedStyle(row).gap
+    unrelatedHeader.remove()
+    return {
+      width: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      unrelatedGap,
+    }
+  })
+
+  expect(narrowLayout.scrollWidth).toBeLessThanOrEqual(narrowLayout.width)
+  expect(narrowLayout.unrelatedGap).toBe("24px")
+
+  await page.setViewportSize({ width: 1100, height: 900 })
+  const summary = page
+    .locator('#site-header nav[aria-label="Main"] > ul > li > details > summary')
+    .first()
+  await expect(summary).toHaveCSS("padding-left", "8px")
+})
+
 test("cycles and synchronizes the rendered marketing theme", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" })
   await page.goto("/")

@@ -6,7 +6,7 @@ import {
 } from "../utils"
 import type { AIScanFile, AISecuritySignal } from "../types"
 
-export const AI_06_RULE_ID = "AI-06.system-prompt" as const
+const AI_06_RULE_ID = "AI-06.system-prompt" as const
 
 const CLIENT_EXTENSIONS = new Set([".jsx", ".tsx", ".vue", ".svelte", ".html", ".astro"])
 

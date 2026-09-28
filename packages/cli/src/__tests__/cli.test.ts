@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { redactKey } from "../output.js"
 import { resolveSecretMode } from "../installers/secret-mode.js"

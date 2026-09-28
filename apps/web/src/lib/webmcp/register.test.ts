@@ -7,17 +7,15 @@ describe("WebMCP registration", () => {
 
   beforeEach(() => {
     registerTool = vi.fn()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(globalThis as any).document = {
+    vi.stubGlobal("document", {
       modelContext: {
         registerTool,
       },
-    }
+    })
   })
 
   afterEach(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (globalThis as any).document
+    vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
 
@@ -401,8 +399,7 @@ describe("WebMCP registration", () => {
 
   it("returns cleanly when the browser has no modelContext — the page stays functional", () => {
     // Unsupported browser: document exists but document.modelContext does not.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(globalThis as any).document = {}
+    vi.stubGlobal("document", {})
     const store = createWebMcpReceiptStore()
     const handler = vi.fn().mockResolvedValue({ ok: true })
 

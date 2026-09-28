@@ -9,7 +9,6 @@ import { describe, expect, it } from "vitest"
  * exact wrapper source the build emits — not a copy.
  */
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const script = readFileSync(
   new URL("../../scripts/apply-worker-scheme-guard.mjs", import.meta.url),
   "utf8"
@@ -28,8 +27,9 @@ function buildGuardFetch() {
     .replace(/export default/, "module.exports =")
 
   // Evaluate the module source in a CommonJS-shaped sandbox.
-  const sandbox = { exports: {} as { fetch: (r: Request) => Promise<Response> } }
+  const sandbox: { exports: { fetch?: (request: Request) => Promise<Response> } } = { exports: {} }
   new Function("module", "exports", wrapper)(sandbox, sandbox.exports)
+  if (!sandbox.exports.fetch) throw new Error("Scheme guard wrapper did not export fetch")
   return sandbox.exports.fetch
 }
 

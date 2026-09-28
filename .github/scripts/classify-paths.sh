@@ -25,7 +25,7 @@ docs_pattern='^(\.gitignore|\.prettierignore|\.prettierrc\.json|\.editorconfig|\
 marketing_pattern='^apps/(marketing|marketing-motion)/'
 app_pattern='^apps/(web|worker)/'
 desktop_pattern='^apps/desktop/'
-shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|playwright\.marketing\.config\.ts|docker-compose\.yml|Dockerfile|action\.yml|\.gitleaks\.toml|\.env\.example|ops/|e2e/|run-all-tests\.mjs|\.github/)'
+shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|docker-compose\.yml|Dockerfile|action\.yml|\.gitleaks\.toml|\.env\.example|ops/|e2e/|run-all-tests\.mjs|\.github/)'
 # CI validation is deliberately broader than release routing. Workflow, test,
 # Action, and tooling changes must be checked, but do not alter a production
 # artifact. Unknown paths remain fail-closed below.

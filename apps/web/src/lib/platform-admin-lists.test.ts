@@ -18,7 +18,8 @@ import {
   parseAdminCursor,
 } from "./platform-admin-lists"
 
-const identity = {} as PlatformAdminIdentity
+const identityFixture = {}
+const identity = identityFixture as PlatformAdminIdentity
 
 describe("platform admin lists", () => {
   beforeEach(() => vi.clearAllMocks())

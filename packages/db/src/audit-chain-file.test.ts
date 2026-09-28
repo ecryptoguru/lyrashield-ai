@@ -31,7 +31,6 @@ function verify(entries: unknown) {
   const directory = mkdtempSync(join(tmpdir(), "lyrashield-audit-export-"))
   try {
     const file = join(directory, "audit.json")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- isolated generated test fixture
     writeFileSync(file, JSON.stringify(entries))
     return spawnSync(
       process.execPath,

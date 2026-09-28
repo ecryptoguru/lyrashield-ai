@@ -108,7 +108,7 @@ describe("ai-security-score-service", () => {
     mockPrisma.aiSecurityScoreSnapshot.findFirst.mockResolvedValueOnce(null)
     mockPrisma.aiSecurityScoreSnapshot.create.mockResolvedValue({ id: "snapshot-3" })
 
-    const coverage = {
+    const coverage: AISecurityCoverage = {
       version: "ai-app-security/2026-08-13.1",
       totalControls: 0,
       assessedCount: 0,
@@ -120,7 +120,7 @@ describe("ai-security-score-service", () => {
       limitsReached: [],
       unsupportedFiles: [],
       truncatedFiles: [],
-    } as AISecurityCoverage
+    }
     const input = {
       coverage,
       detectorVersion: "detector/test",

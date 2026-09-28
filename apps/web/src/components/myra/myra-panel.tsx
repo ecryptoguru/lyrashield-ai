@@ -279,7 +279,7 @@ export function MyraPanel({
               placeholder="Subject"
               aria-label="Case subject"
               onChange={(e) => setCaseForm((f) => f && { ...f, subject: e.target.value })}
-              className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+              className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm max-md:text-base focus-visible:ring-2 focus-visible:outline-none"
             />
             <textarea
               value={caseForm.summary}
@@ -288,7 +288,7 @@ export function MyraPanel({
               placeholder="What happened? What were you trying to do?"
               aria-label="Case details"
               onChange={(e) => setCaseForm((f) => f && { ...f, summary: e.target.value })}
-              className="border-input bg-background focus-visible:ring-ring w-full resize-none rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+              className="border-input bg-background focus-visible:ring-ring w-full resize-none rounded-md border px-3 py-2 text-sm max-md:text-base focus-visible:ring-2 focus-visible:outline-none"
             />
             <label className="text-muted-foreground flex items-center gap-2 text-xs">
               <input
@@ -350,7 +350,7 @@ export function MyraPanel({
             aria-activedescendant={
               suggestActive >= 0 ? `myra-dash-suggest-${suggestActive}` : undefined
             }
-            className="border-input bg-background focus-visible:ring-ring w-full resize-none rounded-xl border px-3 py-2.5 text-sm focus-visible:ring-2 focus-visible:outline-none"
+            className="border-input bg-background focus-visible:ring-ring w-full resize-none rounded-xl border px-3 py-2.5 text-sm max-md:text-base focus-visible:ring-2 focus-visible:outline-none"
           />
           {suggestions.length ? (
             <ul
@@ -418,6 +418,7 @@ export function MyraPanel({
         type="button"
         size="sm"
         variant="secondary"
+        hidden={mobileOpen}
         aria-expanded={mobileOpen}
         aria-controls="myra-dash-panel"
         onClick={() => setMobileOpen(true)}
@@ -441,7 +442,7 @@ export function MyraPanel({
               // table, a long URL in an answer) push the panel wider than the
               // screen, which scrolled the whole page sideways instead of scrolling
               // inside the message log. The log itself keeps overflow-y-auto.
-              "bg-background fixed inset-0 z-50 flex w-screen max-w-full flex-col overflow-hidden lg:inset-auto lg:bottom-6 lg:left-6 lg:h-[min(650px,calc(100dvh-3rem))] lg:w-[min(420px,calc(100vw-3rem))] lg:rounded-2xl lg:border lg:border-border/80 lg:shadow-[0_28px_90px_-30px_rgba(0,0,0,0.65)]"
+              "bg-background fixed inset-0 z-50 flex w-screen max-w-full flex-col overflow-hidden lg:inset-auto lg:bottom-6 lg:right-6 lg:left-auto lg:h-[min(650px,calc(100dvh-3rem))] lg:w-[min(420px,calc(100vw-3rem))] lg:rounded-2xl lg:border lg:border-border/80 lg:shadow-[0_28px_90px_-30px_rgba(0,0,0,0.65)]"
             : "hidden"
         }
       >

@@ -173,9 +173,7 @@ export async function executePlatformAdminMutation<T>(
     if (
       !user ||
       !email ||
-      !APPROVED_PLATFORM_ADMIN_EMAILS.includes(
-        email as (typeof APPROVED_PLATFORM_ADMIN_EMAILS)[number]
-      ) ||
+      !APPROVED_PLATFORM_ADMIN_EMAILS.some((approvedEmail) => approvedEmail === email) ||
       !user.emailVerified ||
       user.platformRole !== "PLATFORM_OPERATOR" ||
       !user.twoFactorEnabled ||
@@ -201,7 +199,7 @@ export async function executePlatformAdminMutation<T>(
     })
     if (consumed.count !== 1) throw new Error("ADMIN_ELEVATION_INVALID")
 
-    const result = await mutate(tx as unknown as ScopedTransaction)
+    const result = await mutate(tx)
     await tx.platformAdminAudit.create({
       data: {
         actorUserId: input.userId,

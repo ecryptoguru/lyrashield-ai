@@ -21,10 +21,11 @@ vi.mock("@lyrashield/db", () => ({
 
 vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
+  assertOAuthDelegatedScope: vi.fn(),
 }))
 
 vi.mock("@lyrashield/auth", () => ({
-  PERMISSIONS: { scan: { view: "scan:view", cancel: "scan:cancel" } },
+  PERMISSIONS: { scan: { view: "scan:view", cancel: "scan:cancel", remove: "scan:remove" } },
 }))
 
 vi.mock("@lyrashield/logger", () => ({
@@ -42,7 +43,7 @@ import {
   prisma,
   removeScan,
 } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 
 const routeParams = { params: Promise.resolve({ id: "scan-1" }) }
 
@@ -85,7 +86,11 @@ describe("/api/scans/[id] workspace boundary", () => {
   })
 
   it("binds cancellation to the authorized workspace", async () => {
-    vi.mocked(getScanWithEvents).mockResolvedValue({ id: "scan-1", workspaceId: "ws-1" } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+    } as never)
     vi.mocked(cancelScan).mockResolvedValue({
       id: "scan-1",
       status: "CANCELLED",
@@ -103,7 +108,31 @@ describe("/api/scans/[id] workspace boundary", () => {
 
     expect(response.status).toBe(200)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:cancel")
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(expect.anything(), "target-1")
     expect(cancelScan).toHaveBeenCalledWith("scan-1", "ws-1")
+  })
+
+  it("does not cancel when delegated target scope rejects the scan target", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-2",
+    } as never)
+    vi.mocked(assertOAuthDelegatedScope).mockImplementationOnce(() => {
+      throw new Error("FORBIDDEN")
+    })
+
+    const response = await POST(
+      new Request("http://localhost/api/scans/scan-1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: "ws-1" }),
+      }),
+      routeParams
+    )
+
+    expect(response.status).toBe(403)
+    expect(cancelScan).not.toHaveBeenCalled()
   })
 
   it("replays a keyed cancellation without submitting it twice", async () => {
@@ -192,6 +221,11 @@ describe("/api/scans/[id] workspace boundary", () => {
   })
 
   it("removes a terminal scan from the authorized workspace", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+    } as never)
     vi.mocked(removeScan).mockResolvedValue({ id: "scan-1" } as never)
 
     const response = await DELETE(
@@ -200,7 +234,8 @@ describe("/api/scans/[id] workspace boundary", () => {
     )
 
     expect(response.status).toBe(200)
-    expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:cancel")
+    expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:remove")
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(expect.anything(), "target-1")
     expect(removeScan).toHaveBeenCalledWith("scan-1", "ws-1")
     expect(prisma.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -216,7 +251,7 @@ describe("/api/scans/[id] workspace boundary", () => {
   })
 
   it("returns SCAN_NOT_FOUND when the scan is not in the authorized workspace", async () => {
-    vi.mocked(removeScan).mockRejectedValue(new Error("Scan not found: scan-1"))
+    vi.mocked(getScanWithEvents).mockResolvedValue(null as never)
 
     const response = await DELETE(
       new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1", { method: "DELETE" }),
@@ -228,9 +263,15 @@ describe("/api/scans/[id] workspace boundary", () => {
       error: { code: "SCAN_NOT_FOUND" },
     })
     expect(prisma.auditLog.create).not.toHaveBeenCalled()
+    expect(removeScan).not.toHaveBeenCalled()
   })
 
   it("returns SCAN_ACTIVE without removing an active scan", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+    } as never)
     vi.mocked(removeScan).mockRejectedValue(new Error("Cannot remove an active scan"))
 
     const response = await DELETE(

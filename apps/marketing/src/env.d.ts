@@ -11,8 +11,7 @@ declare const __MARKETING_GOOGLE_VERIFICATION__: string
 declare const __MARKETING_BING_VERIFICATION__: string
 
 interface Window {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  posthog?: any
+  posthog?: typeof import("posthog-js").default
 }
 
 interface ImportMetaEnv {

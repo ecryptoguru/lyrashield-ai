@@ -13,13 +13,12 @@
  * in-app notification — never a silent loss.
  */
 
-import { Prisma } from "./generated/prisma"
 import { getSystemPrisma } from "./system-client"
 import { withWorkspaceRLS } from "./rls"
 import { logger } from "@lyrashield/logger"
 
 function isUniqueConstraintError(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+  return error instanceof Error && "code" in error && error.code === "P2002"
 }
 
 export const LOOP_CLOSURE_MAX_ATTEMPTS = 5

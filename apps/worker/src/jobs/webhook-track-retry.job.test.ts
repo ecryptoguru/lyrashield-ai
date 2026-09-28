@@ -15,10 +15,12 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 
-import { processWebhookTrackRetry, WEBHOOK_TRACK_MAX_ATTEMPTS } from "./webhook-track-retry.job"
+import { WEBHOOK_TRACK_MAX_ATTEMPTS } from "@lyrashield/billing"
+import { processWebhookTrackRetry } from "./webhook-track-retry.job"
 
 function job(data: Record<string, string>) {
-  return { data } as Parameters<typeof processWebhookTrackRetry>[0]
+  const fixture = { data }
+  return fixture as Parameters<typeof processWebhookTrackRetry>[0]
 }
 
 const handlers = { dispatchAffiliate: vi.fn() }

@@ -18,7 +18,7 @@ import {
   type ScanAttachmentItem,
 } from "@/lib/api-schemas"
 import { ApiError, apiDelete, apiPost, apiGet, apiGetPaginated } from "@/lib/api-client"
-import { RUN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
+import { SCAN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
 import {
   findRecoveryPreset,
   getReviewSetupGuidance,
@@ -356,6 +356,17 @@ export function ScansClient({
           )
         }
         setScans((prev) => (prev.some((scan) => scan.id === result.id) ? prev : [result, ...prev]))
+        try {
+          clearPendingScanSubmission(scanSubmissionScope, submission.idempotencyKey)
+          setPendingScanSubmission(null)
+        } catch (cause) {
+          setScanRecoveryUnavailable(true)
+          setScanRecoveryError(
+            cause instanceof Error
+              ? cause.message
+              : "Saved scan recovery data could not be cleared."
+          )
+        }
         setShowCreate(false)
         setSelectedFocus(null)
         setBaseRef("")
@@ -835,13 +846,13 @@ export function ScansClient({
           {targets.length > 0 && (
             <Button onClick={() => setShowCreate(true)}>
               <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-              New {RUN_SINGULAR}
+              New {SCAN_SINGULAR}
             </Button>
           )}
         </div>
       </div>
 
-      {error && (
+      {error && !showCreate && (
         <div
           role="alert"
           className="border-destructive/50 bg-destructive/10 text-destructive mb-4 rounded-lg border p-3 text-sm"
@@ -855,7 +866,7 @@ export function ScansClient({
         </div>
       )}
 
-      {scanRecoveryUnavailable && (
+      {scanRecoveryUnavailable && !showCreate && (
         <div
           role="alert"
           className="border-amber-500/50 bg-amber-500/10 mb-4 rounded-lg border p-3 text-sm"
@@ -887,7 +898,8 @@ export function ScansClient({
         </div>
       )}
 
-      {pendingScanSubmission &&
+      {!showCreate &&
+        pendingScanSubmission &&
         pendingScanSubmission.principalId === principalId &&
         pendingScanSubmission.workspaceId === workspaceId && (
           <div
@@ -1012,6 +1024,13 @@ export function ScansClient({
         onOpenChange={setShowCreate}
         isDesktop={isDesktop}
         errorCode={errorCode}
+        errorMessage={error ? safeApiErrorMessage(error) : null}
+        scanRecoveryError={
+          scanRecoveryError ??
+          (scanRecoveryUnavailable
+            ? "Saved scan recovery data could not be read. Starting again may create a second scan."
+            : null)
+        }
         targets={targets}
         selectedTarget={selectedTarget}
         handleSelectTarget={handleSelectTarget}

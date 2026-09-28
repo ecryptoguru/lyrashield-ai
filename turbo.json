@@ -32,7 +32,7 @@
     "BETTER_AUTH_COOKIE_DOMAIN",
     "LYRASHIELD_LLM",
     "LYRASHIELD_LUNA_LLM",
-    "LYRASHIELD_TERRA_LLM",
+    "LYRASHIELD_SOL_LLM",
     "LLM_API_KEY",
     "LYRASHIELD_IMAGE",
     "LYRASHIELD_ENGINE_PATH",
@@ -64,7 +64,6 @@
     "DISCORD_WEBHOOK_URL",
     "POLAR_ACCESS_TOKEN",
     "POLAR_ENVIRONMENT",
-    "POLAR_ORG_ID",
     "POLAR_WEBHOOK_SECRET",
     "POLAR_WEBHOOK_TOLERANCE_MS",
     "POLAR_PRODUCT_IDS",
@@ -96,7 +95,6 @@
     "PAYONEER_API_KEY",
     "PAYONEER_API_SECRET",
     "PAYONEER_PARTNER_ID",
-    "PAYONEER_PAYOUT_ADMISSION",
     "AFFILIATE_DEFAULT_PROGRAM_SLUG",
     "AFFILIATE_COOKIE_DOMAIN",
     "AFFILIATE_ATTRIBUTION_WINDOW_DAYS",
@@ -120,39 +118,17 @@
       "persistent": true
     },
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "^generate"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "lint": {
       "dependsOn": ["^build"]
     },
-    "test": {
-      "dependsOn": ["^build", "generate"],
-      "cache": false
-    },
     "typecheck": {
-      "dependsOn": ["^build", "^generate", "pretypecheck", "generate"]
-    },
-    "pretypecheck": {
-      "cache": false,
-      "outputs": ["worker-configuration.d.ts"]
+      "dependsOn": ["^build", "^generate", "generate"]
     },
     "generate": {
-      "cache": false,
-      "outputs": ["node_modules/.prisma/**", "src/generated/**"]
-    },
-    "migrate": {
       "cache": false
-    },
-    "push": {
-      "cache": false
-    },
-    "seed": {
-      "cache": false
-    },
-    "studio": {
-      "cache": false,
-      "persistent": true
     }
   }
 }

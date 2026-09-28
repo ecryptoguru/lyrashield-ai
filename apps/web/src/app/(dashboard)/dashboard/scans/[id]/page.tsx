@@ -4,6 +4,7 @@ import {
   getScanQualitySurface,
   getScanWithEvents,
   getScanResultManifestDetail,
+  normalizeScorecardPayload,
   prisma,
 } from "@lyrashield/db"
 import { ScanExecutionPlanSchema } from "@lyrashield/types"
@@ -13,7 +14,7 @@ import { Radar } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
-import { RUN_SINGULAR } from "@/lib/terminology"
+import { SCAN_SINGULAR } from "@/lib/terminology"
 import { ScanDetailClient } from "./scan-detail-client"
 
 /** Shared by generateMetadata and the page so a dead link costs one lookup. */
@@ -51,10 +52,10 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
   if (!workspaceId) {
     return (
       <div>
-        <PageHeader title={RUN_SINGULAR} />
+        <PageHeader title={SCAN_SINGULAR} />
         <NoWorkspaceState
           icon={Radar}
-          description={`Create a workspace before viewing ${RUN_SINGULAR.toLowerCase()}.`}
+          description={`Create a workspace before viewing ${SCAN_SINGULAR.toLowerCase()}.`}
         />
       </div>
     )
@@ -275,9 +276,8 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
             ? {
                 id: existingShare.id,
                 slug: existingShare.slug,
-                resolvedFindings: (
-                  existingShare.publicPayload as unknown as { resolvedFindings: number }
-                ).resolvedFindings,
+                resolvedFindings:
+                  normalizeScorecardPayload(existingShare.publicPayload)?.resolvedFindings ?? 0,
                 views: existingShare.viewCount,
                 shareHandoffs: existingShare._count.events,
                 referredSignups: existingShare.referralCode?._count.attributions ?? 0,

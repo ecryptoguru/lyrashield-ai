@@ -1,3 +1,4 @@
+import { isJsonObject } from "@lyrashield/types"
 import type { AISecuritySignal, AISecurityTriage } from "./types"
 
 export const ENGINE_TRIAGE_SCHEMA_VERSION = "ai-security-triage/1.0" as const
@@ -29,10 +30,6 @@ export type EngineTriageArtifact = {
   }>
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
 function isSha256(value: unknown): value is string {
   return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value)
 }
@@ -47,7 +44,7 @@ function isDisposition(value: unknown): value is AISecurityTriage["disposition"]
 
 /** Validates the engine artifact before its non-authoritative overlay is exposed. */
 export function parseEngineTriageArtifact(value: unknown): EngineTriageArtifact | null {
-  if (!isRecord(value) || value.schemaVersion !== ENGINE_TRIAGE_SCHEMA_VERSION) return null
+  if (!isJsonObject(value) || value.schemaVersion !== ENGINE_TRIAGE_SCHEMA_VERSION) return null
   if (
     !["COMPLETED", "DISABLED", "FAILED", "BUDGET_STOPPED"].includes(String(value.status)) ||
     (value.terminalReason !== null && !isBoundedString(value.terminalReason, 128)) ||
@@ -57,7 +54,7 @@ export function parseEngineTriageArtifact(value: unknown): EngineTriageArtifact 
     !isSha256(value.cacheKey) ||
     !Array.isArray(value.results) ||
     value.results.length > 20 ||
-    !isRecord(value.redactionReceipt)
+    !isJsonObject(value.redactionReceipt)
   ) {
     return null
   }
@@ -72,7 +69,7 @@ export function parseEngineTriageArtifact(value: unknown): EngineTriageArtifact 
     !Number.isInteger(boundedExcerptBytes) ||
     boundedExcerptBytes < 1 ||
     boundedExcerptBytes > 4096 ||
-    !isRecord(redactedFieldCounts)
+    !isJsonObject(redactedFieldCounts)
   ) {
     return null
   }
@@ -92,7 +89,7 @@ export function parseEngineTriageArtifact(value: unknown): EngineTriageArtifact 
   const results: EngineTriageArtifact["results"] = []
   for (const result of value.results) {
     if (
-      !isRecord(result) ||
+      !isJsonObject(result) ||
       !isSha256(result.findingIdentity) ||
       !isDisposition(result.disposition) ||
       typeof result.confidence !== "number" ||

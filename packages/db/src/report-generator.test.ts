@@ -182,6 +182,122 @@ describe("report-generator", () => {
   })
 
   describe("gatherReportData", () => {
+    it.each([
+      ["COMPLETED", "critical", "NO_GO"],
+      ["COMPLETED", "high", "GO_WITH_CONDITIONS"],
+      ["COMPLETED", "none", "GO"],
+      ["PARTIAL", "critical", "NO_GO"],
+      ["PARTIAL", "high", "GO_WITH_CONDITIONS"],
+      ["PARTIAL", "none", "GO_WITH_CONDITIONS"],
+      ["FAILED", "critical", "NOT_EVALUATED"],
+      ["FAILED", "high", "NOT_EVALUATED"],
+      ["FAILED", "none", "NOT_EVALUATED"],
+      ["CANCELLED", "critical", "NOT_EVALUATED"],
+      ["CANCELLED", "high", "NOT_EVALUATED"],
+      ["CANCELLED", "none", "NOT_EVALUATED"],
+      ["RUNNING", "critical", "NOT_EVALUATED"],
+      ["RUNNING", "high", "NOT_EVALUATED"],
+      ["RUNNING", "none", "NOT_EVALUATED"],
+      ["completed", "critical", "NO_GO"],
+      ["completed", "high", "GO_WITH_CONDITIONS"],
+      ["completed", "none", "GO"],
+    ] as const)("maps %s with %s findings to %s", async (status, severity, verdict) => {
+      mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme Inc" })
+      mockPrisma.scan.findFirst.mockResolvedValue({
+        id: "scan-1",
+        goal: "TEST_APP",
+        mode: "STANDARD",
+        status,
+        summary: null,
+        target: { name: "example.com", type: "WEB_APP", url: "https://example.com" },
+        startedAt: new Date("2026-01-01"),
+        endedAt: new Date("2026-01-02"),
+        targetId: "target-1",
+        resultManifest: { checksum: "manifest-checksum", manifest: { version: 5 } },
+        coverageReceipts: [
+          { controlId: "vibe-03", scanner: "engine", status: "LIMITED" },
+          { controlId: "vibe-14", scanner: "secrets", status: "FAILED" },
+        ],
+      })
+      mockPrisma.finding.findMany.mockResolvedValue(
+        severity === "none"
+          ? []
+          : [
+              {
+                id: "finding-1",
+                title: "Finding",
+                severity: severity === "critical" ? "CRITICAL" : "HIGH",
+                status: "OPEN",
+                verified: false,
+                verificationStatus: "DETECTED",
+                confidence: "high",
+                cwe: null,
+                owaspCategory: null,
+                cvssScore: null,
+                category: null,
+                summary: "Observed behavior",
+                exploitability: null,
+                recommendedFix: null,
+                firstSeenAt: null,
+                candidates: [],
+                fixProposals: [],
+                retests: [],
+              },
+            ]
+      )
+
+      const data = await gatherReportData("ws-1", "scan-1")
+
+      expect(data.assurance?.verdict).toBe(verdict)
+      if (status === "PARTIAL") {
+        expect(data.assurance?.narrative).toContain("Coverage is incomplete")
+        expect(data.assurance?.narrative).toContain("engine")
+        expect(data.scanInfo?.targetId).toBe("target-1")
+        const html = generateReportHTML(data)
+        expect(html).toContain("Complete coverage")
+        expect(html).toContain(
+          "/dashboard/scans?new=1&amp;target=target-1&amp;goal=TEST_APP&amp;mode=STANDARD"
+        )
+      }
+    })
+
+    it.each(["critical", "high", "none"] as const)(
+      "does not evaluate workspace findings without a scan (%s)",
+      async (severity) => {
+        mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme Inc" })
+        mockPrisma.finding.findMany.mockResolvedValue(
+          severity === "none"
+            ? []
+            : [
+                {
+                  id: "finding-1",
+                  title: "Finding",
+                  severity: severity === "critical" ? "CRITICAL" : "HIGH",
+                  status: "OPEN",
+                  verified: false,
+                  confidence: "high",
+                  cwe: null,
+                  owaspCategory: null,
+                  cvssScore: null,
+                  category: null,
+                  summary: "Observed behavior",
+                  exploitability: null,
+                  recommendedFix: null,
+                  firstSeenAt: null,
+                  candidates: [],
+                  fixProposals: [],
+                  retests: [],
+                },
+              ]
+        )
+
+        const data = await gatherReportData("ws-1")
+
+        expect(data.assurance?.verdict).toBe("NOT_EVALUATED")
+        expect(data.assurance?.narrative).toContain("No completed scan is attached")
+      }
+    )
+
     it("gathers report data without scanId", async () => {
       mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme Inc" })
       mockPrisma.finding.findMany.mockResolvedValue([])
@@ -387,9 +503,9 @@ describe("report-generator", () => {
             createdAt: new Date(),
             reviewedById: null,
             reviewedAt: null,
-          } as never,
+          },
         },
-      ])
+      ] as never)
       vi.mocked(aiAssuranceStateForVersion).mockImplementation((version) => {
         if (version && (version as { status: string }).status === "ACCEPTED")
           return "EVIDENCE_ACCEPTED"

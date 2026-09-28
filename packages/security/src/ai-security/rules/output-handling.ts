@@ -7,7 +7,7 @@ import {
 } from "../utils"
 import type { AIScanFile, AISecuritySignal } from "../types"
 
-export const AI_04_RULE_ID = "AI-04.output-handling" as const
+const AI_04_RULE_ID = "AI-04.output-handling" as const
 
 const LLM_OUTPUT_ASSIGNMENT = /(?:const|let|var)\s+(\w+)\s*=\s*/
 

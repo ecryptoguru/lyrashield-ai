@@ -25,7 +25,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testIgnore: [/marketing-/, /browser\//],
+      testIgnore: [/browser\//],
       use: { ...devices["Desktop Chrome"] },
     },
   ],

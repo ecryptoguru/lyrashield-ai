@@ -189,6 +189,7 @@ export interface McpTool {
     type: "object"
     properties: Record<string, unknown>
     required?: string[]
+    additionalProperties?: boolean
   }
   handler: (args: Record<string, unknown>) => Promise<McpToolResult>
 }
@@ -458,6 +459,7 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
       "Trigger a security scan on a registered target. Provide targetId or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target. Workflow REVIEW_CHANGES on a repository target requires baseRef and records an immutable diff-scope plan.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: { type: "string", description: "Target ID to scan (or use repo/auto instead)" },
@@ -514,6 +516,7 @@ export function createCancelScanTool(context: ToolHandlerContext): McpTool {
       "Request cancellation of a queued or running scan. Stops further engine work and billing shortly after the request lands; already-recorded findings are preserved. If the scan is already terminal or its finalization has started, the API returns a conflict — inspect the result with lyrashield_get_scan_status.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         scanId: { type: "string", description: "Scan ID to cancel" },
@@ -630,6 +633,7 @@ export function createCreateReportTool(context: ToolHandlerContext): McpTool {
       "Generate a shareable security report from scan findings. Pass targetId to use that target's latest completed scan or pass scanId for an exact scan.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         scanId: { type: "string", description: "Optional scan ID to report on" },
@@ -1063,6 +1067,7 @@ export function createRunPrScanTool(context: ToolHandlerContext): McpTool {
       "Start a PR-focused security scan (goal CHECK_PR) on a registered target. Provide targetId or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target. Pass baseRef/headRef for a recorded Review Changes diff run — distinct from the advisory lyrashield_check_diff pre-filter, which records nothing.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: {
@@ -1189,6 +1194,7 @@ export function createRecordFixProposalTool(context: ToolHandlerContext): McpToo
       "Record a fix proposal on a finding (the remediation summary you intend to apply). Requires write scope; current connection permissions apply.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         findingId: { type: "string", description: "Finding ID" },
@@ -1232,6 +1238,7 @@ export function createVerifyFixTool(context: ToolHandlerContext): McpTool {
       "Queue a retest of a finding to verify a fix. The retest re-runs against the finding's original target and mode. Returns the retest/scan reference to poll.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         findingId: { type: "string", description: "Finding ID to retest" },
@@ -1450,6 +1457,7 @@ export function createUploadScanAttachmentTool(context: ToolHandlerContext): Mcp
       "Upload a UTF-8 text attachment as workspace input evidence for future scans. `content` is the attachment's literal text — never a local file path, URL, or binary (NUL bytes are rejected). Allowed types: plain text, Markdown, JSON, YAML and OpenAPI documents. This MCP tool bounds content to ~100 KB; larger files up to 1 MiB upload via the CLI (lyrashield attachments upload), SDK, or REST. Returns the attachment id to pass as attachmentIds on scan runs.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         filename: {
@@ -1515,6 +1523,7 @@ export function createDeleteScanAttachmentTool(context: ToolHandlerContext): Mcp
       "Delete a workspace scan attachment by id. The row is removed so it can never be attached to a new scan; the stored encrypted object is removed durably. Deleting is permanent.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         attachmentId: { type: "string", description: "Attachment ID to delete" },
@@ -1544,6 +1553,7 @@ export function createRequestFixPrTool(context: ToolHandlerContext): McpTool {
       "Request a pull request for a recorded fix proposal's server-generated patch. Nothing is merged automatically. The outcome is honest: `pending_approval` returns an approval URL for a human to confirm, `opened` returns the PR coordinates, `failed`/`rejected` explain why no PR exists.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         proposalId: {

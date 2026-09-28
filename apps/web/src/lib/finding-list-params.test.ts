@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   findingFilterToApiQuery,
   findingsHref,
+  reportsHref,
   parseFindingListParams,
   withPreservedSearchParams,
 } from "./finding-list-params"
@@ -92,6 +93,15 @@ describe("findingFilterToApiQuery", () => {
     expect(findingFilterToApiQuery("CRITICAL")).toEqual({ severity: "CRITICAL" })
     expect(findingFilterToApiQuery("VERIFIED")).toEqual({ verified: "true" })
     expect(findingFilterToApiQuery("FIXED")).toEqual({ status: "FIXED" })
+  })
+})
+
+describe("reportsHref", () => {
+  it("opens the direct Reports route while preserving scan and target scope", () => {
+    expect(reportsHref({ scanId: "scan 1", targetId: "target/1" })).toBe(
+      "/dashboard/reports?scanId=scan+1&targetId=target%2F1"
+    )
+    expect(reportsHref({})).toBe("/dashboard/reports")
   })
 })
 

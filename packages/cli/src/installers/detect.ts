@@ -13,7 +13,7 @@ export interface DetectedLocation {
   rootKeyCorrect?: boolean
 }
 
-export function expandTilde(p: string): string {
+function expandTilde(p: string): string {
   if (p === "~" || p.startsWith("~/")) return path.join(homedir(), p.slice(1))
   if (p === "~\\" || p.startsWith("~\\")) return path.join(homedir(), p.slice(1))
   return p
@@ -94,7 +94,7 @@ export async function detectAgent(
   return false
 }
 
-export async function detectLocation(
+async function detectLocation(
   agent: AgentEntry,
   loc: ConfigLocation,
   opts?: { scope?: "project" | "global"; cwd?: string }

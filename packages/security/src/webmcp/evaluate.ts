@@ -566,19 +566,16 @@ export function summarizeWebMcpCoverage(
   signals: WebMcpSignal[],
   limits: WebMcpScanLimit[] = []
 ): WebMcpCoverageSummary {
-  const controls: Record<WebMcpControlId, WebMcpControlCoverage> = {} as Record<
-    WebMcpControlId,
-    WebMcpControlCoverage
-  >
+  const controls = new Map<WebMcpControlId, WebMcpControlCoverage>()
   for (const control of WEBMCP_CONTROLS) {
-    controls[control.id] = {
+    controls.set(control.id, {
       controlId: control.id,
       state: "NOT_ASSESSED",
       assessed: false,
       ruleIds: [],
       fileCount: 0,
       signalCount: 0,
-    }
+    })
   }
 
   const byControl = new Map<WebMcpControlId, WebMcpSignal[]>()
@@ -598,26 +595,30 @@ export function summarizeWebMcpCoverage(
     else if (list.some((s) => s.state === "NO_FINDING")) state = "NO_FINDING"
     else if (list.some((s) => s.state === "NOT_ASSESSED")) state = "NOT_ASSESSED"
 
-    controls[controlId] = {
+    controls.set(controlId, {
       controlId,
       state,
       assessed: state !== "NOT_ASSESSED",
       ruleIds,
       fileCount: files.size,
       signalCount: list.length,
-    }
+    })
   }
 
-  const allStates = Object.values(controls).map((c) => c.state)
+  const controlCoverage = Object.fromEntries(controls) as Record<
+    WebMcpControlId,
+    WebMcpControlCoverage
+  >
+  const allStates = Object.values(controlCoverage).map((control) => control.state)
   return {
     version: WEBMCP_DETECTOR_VERSION,
     totalControls: WEBMCP_CONTROL_IDS.length,
-    assessedCount: Object.values(controls).filter((c) => c.assessed).length,
-    notAssessedCount: allStates.filter((s) => s === "NOT_ASSESSED").length,
-    detectedCount: allStates.filter((s) => s === "DETECTED").length,
-    noFindingCount: allStates.filter((s) => s === "NO_FINDING").length,
-    inconclusiveCount: allStates.filter((s) => s === "INCONCLUSIVE").length,
-    controls,
+    assessedCount: Object.values(controlCoverage).filter((control) => control.assessed).length,
+    notAssessedCount: allStates.filter((state) => state === "NOT_ASSESSED").length,
+    detectedCount: allStates.filter((state) => state === "DETECTED").length,
+    noFindingCount: allStates.filter((state) => state === "NO_FINDING").length,
+    inconclusiveCount: allStates.filter((state) => state === "INCONCLUSIVE").length,
+    controls: controlCoverage,
     limitsReached: [...new Set(limits)],
     unsupportedFiles: [],
     truncatedFiles: [],

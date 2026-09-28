@@ -62,3 +62,21 @@ function formatLocalTime(value: DateInput) {
 export function formatLocalDateTime(value: DateInput) {
   return `${formatLocalDate(value)}, ${formatLocalTime(value)}`
 }
+
+export function formatDuration(start: string | null, end: string | null): string {
+  if (!start) return "—"
+  const startMs = new Date(start).getTime()
+  const endMs = end ? new Date(end).getTime() : Date.now()
+  const diffSec = Math.round((endMs - startMs) / 1000)
+  if (diffSec < 60) return `${diffSec}s`
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ${diffSec % 60}s`
+  return `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m`
+}
+
+export function formatAge(value: string): string {
+  const ms = Date.now() - new Date(value).getTime()
+  if (ms < 60_000) return "just now"
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m`
+  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h`
+  return `${Math.floor(ms / 86_400_000)}d`
+}

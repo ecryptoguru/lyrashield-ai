@@ -48,17 +48,11 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
     let importing = false
     const initialize = async () => {
       if (!active || !analyticsCollectionAllowed() || importing) return
-      const win = window as unknown as {
-        posthog?: {
-          __loaded?: boolean
-          opt_in_capturing?: () => void
-          opt_out_capturing?: () => void
-        }
-      }
-      if (win.posthog?.__loaded) {
-        win.posthog.opt_in_capturing?.()
+      const loadedPosthog = window.posthog
+      if (loadedPosthog?.__loaded) {
+        loadedPosthog.opt_in_capturing()
         flushQueuedAnalytics((event, properties) => {
-          ;(win.posthog as typeof import("posthog-js").default).capture(event, properties)
+          loadedPosthog.capture(event, properties)
         })
         return
       }
@@ -93,7 +87,7 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
         } else {
           posthog.opt_in_capturing()
         }
-        ;(window as unknown as { posthog?: typeof posthog }).posthog = posthog
+        window.posthog = posthog
       } catch {
         // Silently skip analytics if posthog-js fails to load.
       } finally {
@@ -102,8 +96,7 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
     }
 
     const synchronize = () => {
-      const posthog = (window as unknown as { posthog?: typeof import("posthog-js").default })
-        .posthog
+      const posthog = window.posthog
       if (!analyticsCollectionAllowed()) {
         posthog?.opt_out_capturing()
         flushQueuedAnalytics()

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import mcpManifest from "../../../mcp/package.json" with { type: "json" }
 import {
   AGENTS,
   agentEntrySchema,
@@ -7,6 +8,8 @@ import {
   listAgents,
   listPreferredAgents,
   agentsByStrategy,
+  MCP_PACKAGE_SPEC,
+  MCP_PACKAGE_VERSION,
   renderConfig,
   renderEntry,
 } from "../index.js"
@@ -15,6 +18,11 @@ import type { AgentEntry, InstallOptions, Transport } from "../types.js"
 const TEST_BASE_URL = "https://app.lyrashieldai.com"
 const TEST_MCP_URL = "https://app.lyrashieldai.com/api/mcp"
 const TEST_API_KEY = "lsk_test_lyrashield_api_key"
+
+it("keeps the registry MCP pin at the current MCP package version", () => {
+  expect(MCP_PACKAGE_VERSION).toBe(mcpManifest.version)
+  expect(MCP_PACKAGE_SPEC).toBe(`@lyrashield/mcp@${mcpManifest.version}`)
+})
 
 it("keeps OAuth config free of credential provenance overrides", () => {
   const agent = getAgent("claude-code")!

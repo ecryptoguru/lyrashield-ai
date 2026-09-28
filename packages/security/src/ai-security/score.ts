@@ -1,4 +1,5 @@
 import { AI_SECURITY_SCORE_VERSION } from "./types"
+import { AI_SECURITY_CONTROL_IDS } from "./controls"
 import type {
   AIControlId,
   AISecurityCoverage,
@@ -51,7 +52,7 @@ export type AISecurityScoreResult = {
   assessedCount: number
   totalControls: number
   evidenceQuality: AIScoreEvidenceQuality
-  controlScores: Record<AIControlId, AIControlScore>
+  controlScores: Partial<Record<AIControlId, AIControlScore>>
   deductions: {
     CRITICAL: number
     HIGH: number
@@ -105,16 +106,14 @@ export function computeAiSecurityScore(input: AISecurityScoreInput): AISecurityS
   const { coverage, ai03 } = input
   const candidates = input.candidates ?? candidatesFromSignals(input.signals ?? [])
 
-  const controlScores: Record<AIControlId, AIControlScore> = {} as Record<
-    AIControlId,
-    AIControlScore
-  >
+  const controlScores = new Map<AIControlId, AIControlScore>()
   const deductions = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
 
   const evidenceQuality: AIScoreEvidenceQuality = { complete: 0, partial: 0, inconclusive: 0 }
 
-  for (const controlId of Object.keys(coverage.controls) as AIControlId[]) {
+  for (const controlId of AI_SECURITY_CONTROL_IDS) {
     const controlCoverage = coverage.controls[controlId]
+    if (!controlCoverage) continue
     const controlCandidates = candidates.filter((candidate) => candidate.controlId === controlId)
     const detectedCandidates = controlCandidates.filter(
       (candidate) =>
@@ -135,7 +134,7 @@ export function computeAiSecurityScore(input: AISecurityScoreInput): AISecurityS
 
     const totalDeduction = primaryDeduction + additionalDeduction
 
-    controlScores[controlId] = {
+    controlScores.set(controlId, {
       controlId,
       primaryDeduction,
       additionalDeduction,
@@ -143,7 +142,7 @@ export function computeAiSecurityScore(input: AISecurityScoreInput): AISecurityS
       assessed: controlCoverage.assessed,
       state: controlCoverage.state,
       distinctIdentities,
-    }
+    })
 
     if (primarySeverity) {
       deductions[primarySeverity] += totalDeduction
@@ -193,7 +192,7 @@ export function computeAiSecurityScore(input: AISecurityScoreInput): AISecurityS
     assessedCount,
     totalControls: coverage.totalControls,
     evidenceQuality,
-    controlScores,
+    controlScores: Object.fromEntries(controlScores),
     deductions,
     reason,
   }

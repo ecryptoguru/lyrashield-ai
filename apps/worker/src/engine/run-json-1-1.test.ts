@@ -1,8 +1,7 @@
-/* eslint-disable security/detect-non-literal-fs-filename -- checked-in fixture paths only. */
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, it, expect } from "vitest"
-import { parseEngineOutput, parseVulnerabilitiesJson } from "./output-parser"
+import { parseEngineOutput } from "./output-parser"
 
 const FIXTURE_DIR = join(__dirname, "fixtures")
 
@@ -170,7 +169,7 @@ describe("run.json 1.1 golden fixture", () => {
   it("carries declared refs without validation when no artifact context exists", () => {
     // Standalone parse (no artifact context): refs are engine-asserted
     // evidence, carried but never treated as verified.
-    const vulns = parseVulnerabilitiesJson(V1_1_VULNS())
+    const vulns = parseEngineOutput(V1_1_VULNS(), V1_1_RUN()).vulnerabilities
     const finding = vulns.find((v) => v.id === "vuln-1-1-0002")
     expect(finding?.http_exchange_ids).toEqual(["999999"])
     expect(finding?.http_exchange_refs_dropped).toBeUndefined()

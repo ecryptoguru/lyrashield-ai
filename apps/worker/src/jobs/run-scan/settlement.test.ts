@@ -32,7 +32,8 @@ vi.mock("./usage", () => ({
 
 import { createEngineMinuteMeter } from "./settlement"
 
-const runRecord = { run_id: "scan-1", run_name: "scan-1", status: "completed" } as never
+const runRecordFixture = { run_id: "scan-1", run_name: "scan-1", status: "completed" }
+const runRecord = runRecordFixture as Parameters<typeof createEngineMinuteMeter>[0]["runRecord"]
 
 function meter(over: Partial<Parameters<typeof createEngineMinuteMeter>[0]> = {}) {
   return createEngineMinuteMeter({

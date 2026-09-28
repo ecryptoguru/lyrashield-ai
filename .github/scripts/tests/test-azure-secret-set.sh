@@ -33,6 +33,20 @@ text="${line#*|}"
 exit "${code:-0}"
 FAKE
 chmod +x "$tmp/bin/az"
+
+# GNU timeout is present on the Ubuntu deploy runner but not on macOS. Keep
+# this unit test portable by providing a pass-through when the host lacks it;
+# the fake az still exercises exit 124 and retry behavior below.
+if ! command -v timeout >/dev/null 2>&1; then
+  cat > "$tmp/bin/timeout" <<'FAKE_TIMEOUT'
+#!/usr/bin/env bash
+[[ "$1" == "--foreground" ]] && shift
+shift
+exec "$@"
+FAKE_TIMEOUT
+  chmod +x "$tmp/bin/timeout"
+fi
+
 export PATH="$tmp/bin:$PATH"
 export FAKE_CALLS="$calls"
 

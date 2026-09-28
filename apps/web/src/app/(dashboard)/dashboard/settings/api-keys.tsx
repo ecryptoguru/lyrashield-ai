@@ -116,6 +116,7 @@ export function ApiKeysSection({
         </CardHeader>
         <CardContent>
           <EmptyState
+            headingLevel="h3"
             icon={KeyRound}
             title="API keys are admin-only"
             description="Only workspace owners and admins can create or manage API keys. Contact an admin if you need access."

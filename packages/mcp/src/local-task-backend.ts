@@ -1,10 +1,5 @@
 import { z } from "zod"
-import {
-  ErrorCode,
-  McpError,
-  type CallToolResult,
-  type Task,
-} from "@modelcontextprotocol/sdk/types.js"
+import { ErrorCode, McpError, type Task } from "@modelcontextprotocol/sdk/types.js"
 import { LyraShieldClient, OperationStatusSchema } from "@lyrashield/sdk"
 import type { ToolHandlerContext } from "./tools"
 import {
@@ -44,6 +39,19 @@ interface LocalTaskEntry {
 }
 
 const workspacesSchema = z.array(z.object({ id: z.string() })).max(50)
+const KNOWN_SCAN_STATUSES = new Set([
+  "QUEUED",
+  "PREFLIGHT",
+  "RUNNING",
+  "VERIFYING",
+  "REQUIRES_APPROVAL",
+  "COMPLETED",
+  "PARTIAL",
+  "FAILED",
+  "STOPPED_BUDGET",
+  "TIMED_OUT",
+  "CANCELLED",
+])
 
 const restScanSchema = z.object({
   id: z.string().min(1),
@@ -312,7 +320,7 @@ export function createLocalTaskBackend(context: ToolHandlerContext): McpTaskBack
           content: [{ type: "text", text: JSON.stringify(payload) }],
           isError: true,
           structuredContent: payload,
-        } as CallToolResult
+        }
       }
       throw new McpError(ErrorCode.InvalidRequest, `Task ${taskId} has no result yet.`)
     },
@@ -339,14 +347,32 @@ export function createLocalTaskBackend(context: ToolHandlerContext): McpTaskBack
         body: { workspaceId: entry.workspaceId },
         headers: { "Idempotency-Key": `mcp-task-cancel:${taskId}` },
       })
-      const cancelled = restScanSchema.safeParse(data)
-      const status = cancelled.success ? cancelled.data.status : "CANCELLED"
+      const parsedResponse = restScanSchema.safeParse(data)
+      const currentScan = parsedResponse.success
+        ? parsedResponse.data
+        : await fetchScan(scan.id, entry.workspaceId)
+      if (!currentScan || !KNOWN_SCAN_STATUSES.has(currentScan.status)) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          "Scan cancellation status could not be verified. Check the scan status before retrying."
+        )
+      }
+      if (!isTerminalTaskStatus(mapScanStatusToTaskStatus(currentScan.status))) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Scan cancellation was not confirmed (current status: ${currentScan.status}). Check scan status before retrying.`
+        )
+      }
+      const status = currentScan.status
       entry.scanId = scan.id
       return buildTask({
         taskId,
         view: {
           status: mapScanStatusToTaskStatus(status),
-          statusMessage: "Scan cancelled",
+          statusMessage:
+            status === "CANCELLED"
+              ? "Scan cancelled"
+              : `Scan reached ${status} before cancellation completed.`,
           lastUpdatedAt: new Date().toISOString(),
         },
         createdAt: new Date(entry.createdAtMs),

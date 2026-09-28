@@ -8,14 +8,11 @@
  * here.
  */
 import { randomUUID } from "node:crypto"
-import { unlink, access } from "node:fs/promises"
+import { unlink } from "node:fs/promises"
 import {
-  CREDENTIALS_DIR,
   CREDENTIALS_FILE,
   DEFAULT_API_URL,
-  getEnvApiKey,
   getEnvApiUrl,
-  getEnvOAuthAccessToken,
   readCredentialsFile,
   refreshOAuthCredentials,
   resolveCredentials,
@@ -28,14 +25,7 @@ import {
   type StoredCredentials,
 } from "@lyrashield/credentials"
 
-export {
-  CREDENTIALS_DIR,
-  CREDENTIALS_FILE,
-  DEFAULT_API_URL,
-  getEnvApiKey,
-  getEnvApiUrl,
-  getEnvOAuthAccessToken,
-}
+export { DEFAULT_API_URL, getEnvApiUrl }
 
 export type Credentials = StoredCredentials
 export type EffectiveCredentials = ResolvedCredentials
@@ -64,15 +54,6 @@ export async function removeCredentials(): Promise<void> {
       throw err
     }
   })
-}
-
-export async function credentialsFileExists(): Promise<boolean> {
-  try {
-    await access(CREDENTIALS_FILE)
-    return true
-  } catch {
-    return false
-  }
 }
 
 export async function getEffectiveCredentials(): Promise<EffectiveCredentials> {

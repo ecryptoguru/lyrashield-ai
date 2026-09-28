@@ -17,8 +17,6 @@
     "typecheck": "astro check",
     "lint": "eslint src --max-warnings 0",
     "test:browser": "playwright test --config playwright.config.ts",
-    "deploy": "astro build && node scripts/apply-worker-scheme-guard.mjs && wrangler deploy --config dist/server/wrangler.json",
-    "deploy:preview": "astro build && node scripts/apply-worker-scheme-guard.mjs && wrangler versions upload --config dist/server/wrangler.json",
     "blog:validate": "node scripts/validate-blog-content.mjs",
     "blog:validate:images": "node scripts/validate-blog-images.mjs",
     "blog:validate:mdx": "node scripts/validate-blog-mdx.mjs",
@@ -46,21 +44,23 @@
     "@lyrashield/pricing": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
-    "@tailwindcss/vite": "^4.3.3",
-    "astro": "~7.2.8",
+    "@tailwindcss/vite": "catalog:",
+    "astro": "^7.2.8",
     "posthog-js": "^1.418.1",
-    "tailwindcss": "^4.3.3",
-    "zod": "^4.4.3"
+    "tailwindcss": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@astrojs/check": "^0.9.10",
     "@cloudflare/workers-types": "^5.20260823.1",
     "@tailwindcss/typography": "^0.5.20",
-    "@types/node": "^24.0.0",
-    "tsx": "^4.23.12",
-    "typescript": "^6.0.0",
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
     "webmcp-types": "^0.1.5",
-    "wrangler": "^4.125.0"
+    "wrangler": "^4.125.0",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=24.0.0"

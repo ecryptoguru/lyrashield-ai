@@ -35,7 +35,7 @@ function githubConnection(metadata: Record<string, unknown> = {}) {
     externalId: "777",
     metadata,
     configRef: null,
-  } as never
+  }
 }
 
 describe("invokeScanConnectorTool", () => {
@@ -101,7 +101,7 @@ describe("invokeScanConnectorTool", () => {
       idempotencyKey: "k3",
     })
     const args = invokeConnectorTool.mock.calls[0]![0] as {
-      resolveCredential: (conn: never) => Promise<unknown>
+      resolveCredential: (conn: Record<string, unknown>) => Promise<unknown>
     }
     const cred = await args.resolveCredential(githubConnection({ installationId: 4242 }))
     expect(cred).toEqual({ kind: "github_installation", installationId: 4242 })
@@ -115,15 +115,15 @@ describe("invokeScanConnectorTool", () => {
       idempotencyKey: "k4",
     })
     const args = invokeConnectorTool.mock.calls[0]![0] as {
-      resolveCredential: (conn: never) => Promise<unknown>
+      resolveCredential: (conn: Record<string, unknown>) => Promise<unknown>
     }
     // metadata.installationId wins; numeric externalId is the fallback.
     const cred = await args.resolveCredential(githubConnection())
     expect(cred).toEqual({ kind: "github_installation", installationId: 777 })
-    const missing = await args.resolveCredential(
-      githubConnection({ installationId: undefined }) &&
-        ({ ...githubConnection(), externalId: "not-a-number" } as never)
-    )
+    const missing = await args.resolveCredential({
+      ...githubConnection(),
+      externalId: "not-a-number",
+    })
     expect(missing).toBeNull()
   })
 
@@ -138,7 +138,7 @@ describe("invokeScanConnectorTool", () => {
       idempotencyKey: "k5",
     })
     const args = invokeConnectorTool.mock.calls[0]![0] as {
-      resolveCredential: (conn: never) => Promise<unknown>
+      resolveCredential: (conn: Record<string, unknown>) => Promise<unknown>
     }
     const connection = {
       id: "int-slack",
@@ -147,7 +147,7 @@ describe("invokeScanConnectorTool", () => {
       externalId: "T1",
       metadata: { teamId: "T1" },
       configRef: "s3://bucket/evidence/ws-1/connector",
-    } as never
+    }
     const cred = await args.resolveCredential(connection)
     expect(cred).toEqual({ kind: "slack_bot", botToken: "xoxb-real" })
     expect(readEncryptedArtifact).toHaveBeenCalledWith(
@@ -164,7 +164,7 @@ describe("invokeScanConnectorTool", () => {
       idempotencyKey: "k6",
     })
     const args = invokeConnectorTool.mock.calls[0]![0] as {
-      resolveCredential: (conn: never) => Promise<unknown>
+      resolveCredential: (conn: Record<string, unknown>) => Promise<unknown>
     }
     const connection = {
       id: "int-slack",
@@ -173,7 +173,7 @@ describe("invokeScanConnectorTool", () => {
       externalId: "T1",
       metadata: {},
       configRef: null,
-    } as never
+    }
     expect(await args.resolveCredential(connection)).toBeNull()
     expect(readEncryptedArtifact).not.toHaveBeenCalled()
   })
