@@ -14,7 +14,7 @@ import { z } from "zod"
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { ACQUISITION_COOKIE, track } from "@/lib/analytics"
 import { presentOperationFailure, type OperationFailurePresentation } from "@/lib/operation-failure"
-import { planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
+import { rememberPlanIntent } from "@/lib/plan-intent"
 import {
   beginScanSubmission,
   clearPendingScanSubmission,
@@ -32,12 +32,20 @@ import {
 import { TARGET_SINGULAR } from "@/lib/terminology"
 import { OnboardingScanRecovery } from "./onboarding-scan-recovery"
 import {
+  bucketCount,
+  bucketDuration,
+  friendlyTargetError,
+  initialOnboardingSelection,
+  onboardingCompletionPath,
+  type OnboardingData,
+  type OnboardingWizardProps,
+} from "./onboarding-wizard-model"
+import {
   buildUrlTargetPayload,
   displayStepForPath,
   ensureOnboardingTargetId,
   getOnboardingReviewOptions,
   nextStepForPath,
-  onboardingPathForTargetType,
   pathNeedsRepo,
   stepModelForPath,
   targetNameFromUrl,
@@ -54,19 +62,6 @@ import {
   type Repo,
 } from "./onboarding-step-views"
 
-interface OnboardingData {
-  updatedAt?: string
-  currentStep: number
-  completed: boolean
-  skipped: boolean
-  workspaceId: string | null
-  targetId: string | null
-  selectedGoal: string | null
-  buildTool?: string | null
-  targetType?: string | null
-  targetName?: string | null
-}
-
 export function OnboardingWizard({
   principalId,
   initialState,
@@ -76,34 +71,7 @@ export function OnboardingWizard({
   oauthReturnState,
   acquisitionCookiePresent,
   targetTypeHint,
-}: {
-  principalId: string
-  initialState: OnboardingData
-  selectedPlan?: string | null
-  /** Used to name a default workspace when the user has none (W2-01). */
-  suggestedWorkspaceName?: string
-  /**
-   * Whether the sign-up acquisition cookie was still present when the page
-   * rendered — the server already claimed it; this only drives client-side
-   * cookie cleanup.
-   */
-  acquisitionCookiePresent?: boolean
-  /**
-   * Bounded target-type hint carried through signup (e.g. a Lite Check user
-   * arrives wanting a URL review). Preselects the chooser path only when the
-   * user has not already progressed — never a redirect, never a raw URL.
-   */
-  targetTypeHint?: "url" | "api" | null
-  /**
-   * W2-05: server-verified OAuth return state. When present, onboarding
-   * completion returns the user to /oauth/consent with the preserved
-   * authorization request instead of the dashboard. The destination is a
-   * fixed route — the query is the only thing carried — and the signature,
-   * expiry, and user binding were verified by the server page.
-   */
-  oauthReturnState?: string
-  oauthReturnQuery?: string | null
-}) {
+}: OnboardingWizardProps) {
   const router = useRouter()
   useEffect(() => {
     rememberPlanIntent(selectedPlan)
@@ -113,30 +81,9 @@ export function OnboardingWizard({
       document.cookie = `${ACQUISITION_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`
     }
   }, [selectedPlan, acquisitionCookiePresent])
-  // W2-05: where completion lands. An OAuth-arriving user returns to the
-  // consent screen (their memberships are re-checked there); everyone else
-  // keeps the existing destinations. The plan intent is dropped on the OAuth
-  // return path — the consent flow, not billing, is the pending task.
-  const completionPath = oauthReturnQuery
-    ? `/oauth/consent?${oauthReturnQuery}`
-    : selectedPlan
-      ? planIntentPath("/dashboard/billing", selectedPlan)
-      : "/dashboard"
-  // W2-01: workspace naming left the critical path. The wizard starts at the
-  // target chooser; a workspace is created lazily (with a sensible default
-  // name) only when the user picks a path that needs one. A stale persisted
-  // step 0 cannot reappear.
-  // A lite-check arrival (targetTypeHint) preselects its path and lands
-  // straight on target details — the chooser stays one Back away. Never
-  // overrides a persisted step or an existing target.
-  const hintedPath: OnboardingPath =
-    targetTypeHint && !initialState.targetId && !initialState.targetType ? targetTypeHint : null
-  const persistedStep = Math.max(initialState.currentStep ?? 1, 1)
-  const [step, setStep] = useState(
-    hintedPath && persistedStep <= 1
-      ? (nextStepForPath(hintedPath) ?? persistedStep)
-      : persistedStep
-  )
+  const completionPath = onboardingCompletionPath(oauthReturnQuery, selectedPlan)
+  const initialSelection = initialOnboardingSelection(initialState, targetTypeHint)
+  const [step, setStep] = useState(initialSelection.step)
   const [data, setData] = useState(initialState)
   const persistedState = useRef(initialState)
   const [loading, setLoading] = useState(false)
@@ -175,9 +122,7 @@ export function OnboardingWizard({
   // Four-way step 2: which way the user chose to add their first target.
   // If the user already created a target (targetId is set) but we don't know
   // which path they took, leave path null — the step is already past step 2.
-  const [path, setPath] = useState<OnboardingPath>(
-    onboardingPathForTargetType(initialState.targetType ?? null) ?? hintedPath
-  )
+  const [path, setPath] = useState<OnboardingPath>(initialSelection.path)
   const [githubUnavailable, setGithubUnavailable] = useState(false)
   const [urlForm, setUrlForm] = useState({ url: "", ownershipAttested: false })
   const [buildTool, setBuildTool] = useState<string | null>(initialState.buildTool ?? null)
@@ -313,39 +258,6 @@ export function OnboardingWizard({
     router.push(oauthReturnQuery ? completionPath : `/dashboard/scans/${scanId}`)
     router.refresh()
     setLoading(false)
-  }
-
-  function bucketCount(n: number): string {
-    if (n <= 0) return "0"
-    if (n <= 3) return "1-3"
-    if (n <= 10) return "4-10"
-    if (n <= 50) return "11-50"
-    return "50+"
-  }
-
-  function bucketDuration(ms: number): string {
-    if (ms < 250) return "under_250ms"
-    if (ms < 1000) return "250ms_1s"
-    if (ms < 3000) return "1s_3s"
-    if (ms < 10000) return "3s_10s"
-    return "10s_plus"
-  }
-
-  function friendlyTargetError(cause: unknown): string {
-    if (cause instanceof ApiError) {
-      if (cause.code === "SSRF_BLOCKED") {
-        return "That URL isn't allowed because it points to an internal, private or unresolvable address. Use a public target you own or are authorized to scan."
-      }
-      if (cause.code === "VALIDATION_ERROR") {
-        return "We couldn't save your target. Please check the name and URL and try again."
-      }
-      // W2-02: a same-source retry continues with the target that already
-      // exists instead of creating a second one.
-      if (cause.code === "TARGET_EXISTS") {
-        return "A target for this source already exists in your workspace. Open Targets to continue with it — no duplicate was created."
-      }
-    }
-    return cause instanceof Error ? cause.message : "Could not start the review."
   }
 
   /**
