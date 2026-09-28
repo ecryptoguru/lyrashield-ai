@@ -8,7 +8,7 @@ describe("scan retry setup", () => {
     const scan: ScanItem = {
       id: "scan-1",
       status: "FAILED",
-      goal: "TEST_APP",
+      goal: "CHECK_PR",
       mode: "STANDARD",
       triggerType: "MANUAL",
       startedAt: null,
@@ -46,6 +46,7 @@ describe("scan retry setup", () => {
     )
 
     expect(html).toMatch(/<button[^>]*aria-label="Retry setup for Example"/)
+    expect(html).toContain("Check a PR")
     expect(html).not.toContain("/dashboard/scans?new=1")
   })
 })

@@ -86,6 +86,12 @@ function renderDetail(props: {
 const html = renderDetail({ scan, findings: [finding] })
 
 describe("scan detail badge labels", () => {
+  it("uses the same goal label as the scan list", () => {
+    const html = renderDetail({ scan: { ...scan, goal: "CHECK_PR" }, findings: [] })
+    expect(html).toContain("Check a PR")
+    expect(html).not.toContain("Check PR")
+  })
+
   it("humanises the coverage receipt status and control outcome badges", () => {
     expect(html).toContain(">Not applicable<")
     expect(html).toContain(">No finding<")
