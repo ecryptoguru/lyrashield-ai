@@ -68,7 +68,7 @@ describe("egress proxy fetch client", () => {
         })
       },
       async (baseUrl) => {
-        const proxyFetch = createEgressProxyFetchFn({ url: baseUrl, secret: "proxy-only-secret" })!
+        const proxyFetch = createEgressProxyFetchFn({ url: baseUrl, secret: "proxy" })!
         const response = await proxyFetch("https://target.example/page", {
           headers: { "user-agent": "LyraShield-Test", authorization: "target-header" },
           timeoutMs: 250,
@@ -80,14 +80,14 @@ describe("egress proxy fetch client", () => {
     )
     expect(received.path).toBe("/v1/fetch")
     expect(received.method).toBe("POST")
-    expect(received.authorization).toBe("Bearer proxy-only-secret")
+    expect(received.authorization).toBe("Bearer proxy")
     expect(JSON.parse(received.body!)).toEqual({
       url: "https://target.example/page",
       userAgent: "LyraShield-Test",
       timeoutMs: 250,
       maxBytes: 14,
     })
-    expect(received.body).not.toContain("proxy-only-secret")
+    expect(received.body).not.toContain("proxy")
     expect(received.body).not.toContain("target-header")
   })
 
@@ -139,7 +139,7 @@ describe("egress proxy response boundary", () => {
   afterEach(() => vi.restoreAllMocks())
 
   const createFetch = () =>
-    createEgressProxyFetchFn({ url: "https://proxy.example.com", secret: "test-token" })!
+    createEgressProxyFetchFn({ url: "https://proxy.example.com", secret: "proxy" })!
 
   it("returns a validated proxy response", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(

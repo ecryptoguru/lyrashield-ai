@@ -112,11 +112,11 @@ describe("security settings request bodies", () => {
 
     renderTwoFactor()
       .find((element) => element.type === controls.PasswordInput)
-      ?.props.onChange?.({ target: { value: "current-password" } })
+      ?.props.onChange?.({ target: { value: "example" } })
     const begin = renderTwoFactor().find((element) => element.type === "form")
     await begin?.props.onSubmit?.({ preventDefault: vi.fn() })
     expect(auth.enable).toHaveBeenCalledExactlyOnceWith({
-      password: "current-password",
+      password: "example",
       method: "totp",
     })
 
