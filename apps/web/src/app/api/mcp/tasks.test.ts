@@ -831,6 +831,60 @@ describe("MCP tasks over the hosted endpoint", () => {
     )
   })
 
+  it.each([
+    ["removed workspace membership", "WORKSPACE_NOT_FOUND"],
+    ["revoked scan.view permission", "FORBIDDEN"],
+  ])("tasks/list hides operations after %s", async (_reason, denial) => {
+    oauthConnection() // The OAuth connection remains active after access changes.
+    claimOrGetAgentOperationMock.mockResolvedValue({ status: "NEW", operation: { id: "op-1" } })
+    completeAgentOperationMock.mockResolvedValue(undefined)
+    getAgentOperationMock.mockResolvedValue(makeOperation())
+    vi.stubGlobal("fetch", scanFetchStub())
+    try {
+      const created = await readJson(
+        await POST(
+          req({
+            method: "POST",
+            rpcMethod: "tools/call",
+            rpcParams: {
+              name: "lyrashield_scan_target",
+              arguments: { workspaceId: "ws-1", targetId: "t-1", idempotencyKey: "idem-1" },
+              task: {},
+            },
+            protocolHeader: PROTOCOL_2025,
+          })
+        )
+      )
+      expect((created.result as { task: { taskId: string } }).task.taskId).toBe("lst_op-1")
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    listAgentOperationsForTasksMock.mockResolvedValue([makeOperation()])
+
+    const request = () =>
+      POST(
+        req({
+          method: "POST",
+          rpcMethod: "tasks/list",
+          rpcParams: {},
+          protocolHeader: PROTOCOL_2025,
+        })
+      )
+    const before = await readJson(await request())
+    expect((before.result as { tasks: Array<{ taskId: string }> }).tasks[0]?.taskId).toBe(
+      "lst_op-1"
+    )
+
+    listAgentOperationsForTasksMock.mockClear()
+    requirePermissionMock.mockRejectedValue(new Error(denial))
+    const after = await readJson(await request())
+    expect(after.error).toBeTruthy()
+    expect(JSON.stringify(after)).not.toMatch(/lst_op-1|scan-1|COMPLETED/)
+    expect(requirePermissionMock).toHaveBeenCalledWith("ws-1", "scan:view")
+    expect(listAgentOperationsForTasksMock).not.toHaveBeenCalled()
+    expect(verifyOAuthBearer).toHaveBeenCalledTimes(3)
+  })
+
   it("keeps the immediate result path for a non-augmented call on 2025-11-25", async () => {
     oauthConnection()
     claimOrGetAgentOperationMock.mockResolvedValue({ status: "NEW", operation: { id: "op-1" } })

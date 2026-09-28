@@ -407,6 +407,12 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
     },
 
     async listTasks(cursor) {
+      try {
+        await requirePermission(workspaceId, PERMISSIONS.scan.view)
+      } catch {
+        throw new McpError(ErrorCode.InvalidRequest, "Tasks are unavailable.")
+      }
+
       const page = await listAgentOperationsForTasks({
         workspaceId,
         principalType: principal.principalType,
