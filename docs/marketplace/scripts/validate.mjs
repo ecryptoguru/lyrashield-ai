@@ -373,6 +373,14 @@ assert(
 )
 
 const expectedPackage = "@lyrashield/mcp@0.2.10"
+const publishedMcpVerifier = await readFile(
+  path.join(root, "scripts/verify-published-mcp.mjs"),
+  "utf8"
+)
+assert(
+  publishedMcpVerifier.includes('npm_config_ignore_scripts: "true"'),
+  "published MCP runtime verification must disable npm lifecycle scripts"
+)
 const kiro = (await readJson(".mcp.kiro.json")).mcpServers?.lyrashield
 assert(
   kiro?.command === "npx" && JSON.stringify(kiro.args) === JSON.stringify(["-y", expectedPackage]),
@@ -394,11 +402,11 @@ for (const file of [
   if (file.endsWith(".rs")) {
     assert(
       text.includes('const PACKAGE_VERSION: &str = "0.2.10";'),
-      "Zed must pin the release-candidate MCP version"
+      "Zed must pin the published MCP version"
     )
     assert(!text.includes("npm_package_latest_version"), "Zed must not install a floating release")
   } else {
-    assert(text.includes(expectedPackage), `${file} must pin the release-candidate MCP version`)
+    assert(text.includes(expectedPackage), `${file} must pin the published MCP version`)
   }
 }
 assert(
@@ -472,6 +480,23 @@ assert(
   "Codebuff executable pin differs"
 )
 const codebuffTools = codebuffDefinition.toolNames ?? []
+const expectedCodebuffMcpTools = [
+  "lyrashield/lyrashield_get_findings",
+  "lyrashield/lyrashield_get_launch_readiness",
+  "lyrashield/lyrashield_list_workspaces",
+  "lyrashield/lyrashield_list_targets",
+  "lyrashield/lyrashield_get_scan_status",
+  "lyrashield/lyrashield_get_scan_quality",
+  "lyrashield/lyrashield_check_diff",
+  "lyrashield/lyrashield_explain_finding",
+  "lyrashield/lyrashield_generate_fix_plan",
+  "lyrashield/lyrashield_create_pr_security_recap",
+]
+assert(
+  JSON.stringify(codebuffTools.filter((name) => name.startsWith("lyrashield/"))) ===
+    JSON.stringify(expectedCodebuffMcpTools),
+  "Codebuff MCP tools must match the validated curated allowlist"
+)
 assert(
   !codebuffTools.includes("run_terminal_command") &&
     manifest.mutatingTools.every((name) => !codebuffTools.includes(`lyrashield/${name}`)) &&

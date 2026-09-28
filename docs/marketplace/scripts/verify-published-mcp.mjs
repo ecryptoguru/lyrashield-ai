@@ -60,6 +60,7 @@ try {
       env: {
         ...process.env,
         HOME: directory,
+        npm_config_ignore_scripts: "true",
         LYRASHIELD_API_KEY: `lsk_${"A".repeat(24)}`,
         LYRASHIELD_API_URL: "http://127.0.0.1:9",
       },
