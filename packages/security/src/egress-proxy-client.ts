@@ -145,9 +145,13 @@ export function createEgressProxyFetchFn(
     }
 
     const { result } = outcome
-    return new Response(result.html, {
-      status: result.status,
-      headers: result.headers,
-    })
+    try {
+      return new Response(result.html, {
+        status: result.status,
+        headers: result.headers,
+      })
+    } catch {
+      throw new EgressProxyError("invalid_response", "proxy response could not be constructed")
+    }
   }
 }

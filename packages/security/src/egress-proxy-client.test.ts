@@ -22,6 +22,8 @@ describe("createEgressProxyFetchFn response boundary", () => {
 
   it.each([
     { ok: true, result: { html: "ok", status: 999, headers: {} } },
+    { ok: true, result: { html: "ok", status: 204, headers: {} } },
+    { ok: true, result: { html: "ok", status: 200, headers: { "bad name": "x" } } },
     { ok: true, result: { html: "ok", status: 200, headers: { broken: 42 } } },
     { ok: false, reason: "unknown_reason" },
     { ok: true },
