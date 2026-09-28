@@ -13,7 +13,7 @@ function createSystemPrismaClient() {
     throw new Error("DATABASE_SYSTEM_URL is required for privileged system database operations")
   }
   const client = new PrismaClient({
-    adapter: createBoundedPgAdapter(env.DATABASE_SYSTEM_URL),
+    adapter: createBoundedPgAdapter(env.DATABASE_SYSTEM_URL, "db:system"),
     // Same stdout level as before (errors only), plus a query event emitter
     // consumed by the slow-query logger below; query events are never printed
     // wholesale.
