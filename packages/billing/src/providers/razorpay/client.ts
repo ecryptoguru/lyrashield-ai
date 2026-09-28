@@ -43,6 +43,19 @@ export function getRazorpayClient(): Razorpay | null {
   return clientInstance
 }
 
+function validPaymentLinkResponse(value: unknown): value is { id: string; short_url: string } {
+  if (!value || typeof value !== "object") return false
+  const link = value as Record<string, unknown>
+  if (typeof link.id !== "string" || !link.id.startsWith("plink_")) return false
+  if (typeof link.short_url !== "string") return false
+  try {
+    const url = new URL(link.short_url)
+    return url.origin === "https://rzp.io" && !url.username && !url.password
+  } catch {
+    return false
+  }
+}
+
 /**
  * Create a Razorpay subscription.
  *
@@ -93,22 +106,9 @@ export async function createRazorpayPaymentLink(params: {
   if (!client) return null
 
   try {
-    const paymentLink = await (
-      client as unknown as {
-        paymentLink: {
-          create: (params: {
-            amount: number
-            currency: string
-            description: string
-            notes?: Record<string, string>
-            callback_url: string
-            callback_method: string
-            reference_id?: string
-            accept_partial?: false
-          }) => Promise<{ id: string; short_url: string }>
-        }
-      }
-    ).paymentLink.create({
+    // Razorpay's SDK marks `customer` required although the hosted-link API
+    // accepts links without one. Keep that mismatch scoped to the request.
+    const request = {
       amount: params.amount,
       currency: "INR",
       description: params.description,
@@ -117,7 +117,15 @@ export async function createRazorpayPaymentLink(params: {
       callback_method: "get",
       ...(params.referenceId ? { reference_id: params.referenceId } : {}),
       ...(params.partialPayment === false ? { accept_partial: false } : {}),
-    })
+    }
+    const paymentLink: unknown = await client.paymentLink.create(
+      request as Parameters<typeof client.paymentLink.create>[0]
+    )
+
+    if (!validPaymentLinkResponse(paymentLink)) {
+      logger.error("Invalid Razorpay payment link response")
+      return null
+    }
 
     return { id: paymentLink.id, url: paymentLink.short_url }
   } catch (error) {
@@ -169,15 +177,13 @@ export async function cancelRazorpayPaymentLink(paymentLinkId: string): Promise<
 /**
  * Fetch a Razorpay subscription by ID.
  */
-export async function getRazorpaySubscription(
-  subscriptionId: string
-): Promise<Record<string, unknown> | null> {
+export async function getRazorpaySubscription(subscriptionId: string) {
   const client = getRazorpayClient()
   if (!client) return null
 
   try {
     const subscription = await client.subscriptions.fetch(subscriptionId)
-    return subscription as unknown as Record<string, unknown>
+    return subscription
   } catch (error) {
     logger.error("Failed to fetch Razorpay subscription", {
       subscriptionId,

@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
+import { revalidateDashboardAggregates } from "../../../../lib/cache"
 import { hasSyncFindingWriteRole, hasSyncWriteAccess } from "../../../../lib/sync-auth"
 import { markLegacySyncResponse, resolveSyncCredential } from "../../../../lib/sync-license-auth"
 
@@ -376,6 +377,10 @@ async function post(request: Request) {
       reportsCount: result.reportsPersisted,
       seq: result.seq,
     })
+
+    if (result.persistedFindings > 0 || result.reportsPersisted > 0) {
+      revalidateDashboardAggregates(workspaceId)
+    }
 
     return markLegacySyncResponse(
       apiSuccess(

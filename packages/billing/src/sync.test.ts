@@ -64,6 +64,16 @@ beforeEach(() => {
 })
 
 describe("syncSubscription paid-event durability", () => {
+  it("rejects a provider TRIAL event before writing an invalid workspace plan", async () => {
+    await expect(syncSubscription({ ...activeSubscription, plan: "TRIAL" })).rejects.toThrow(
+      "trial_plan_not_provider_subscription"
+    )
+
+    expect(transactionMock).not.toHaveBeenCalled()
+    expect(txBillingUpsert).not.toHaveBeenCalled()
+    expect(grantMonthlyPoolMock).not.toHaveBeenCalled()
+  })
+
   it.each([
     ["minute grant", grantMonthlyPoolMock],
     ["grace reset", resetGraceMock],

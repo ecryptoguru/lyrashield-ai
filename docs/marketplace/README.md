@@ -1,7 +1,7 @@
 # LyraShield AI marketplace release source
 
-Prepared Agent Plugin version: `0.1.30` (unpublished release candidate). Channel-specific listing
-versions and review states below may lag this source candidate.
+Agent Plugin `0.1.30` is published on npm. This marketplace export awaits its matching
+release; channel-specific listing versions and review states may lag this source.
 
 ## Install from this repository
 
@@ -39,7 +39,7 @@ decision instead, add this to `.claude/settings.json` or `.github/copilot/settin
 
 Neither marketplace path inlines a credential. Their remote MCP connection completes hosted OAuth
 inside the client. The Kiro stdio adapter is the path that reads
-`~/.lyrashield/credentials.json` after `npx -y lyrashield@0.2.12 login --oauth`.
+`~/.lyrashield/credentials.json` after `npx -y lyrashield@0.2.13 login --oauth`.
 
 For local stdio clients (Kiro, Gemini CLI, Zed and Codebuff), use Node.js 24 and run the pinned
 CLI login command above before starting the client. Select one workspace in the browser. First
