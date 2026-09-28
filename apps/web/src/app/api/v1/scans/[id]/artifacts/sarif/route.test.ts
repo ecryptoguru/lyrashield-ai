@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   candidates: vi.fn(),
   event: vi.fn(),
   audit: vi.fn(),
+  revalidate: vi.fn(),
 }))
 vi.mock("@lyrashield/db", () => ({
   prisma: { scan: { findFirst: mocks.scan }, auditLog: { create: mocks.audit } },
@@ -29,6 +30,7 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission: mocks.permission }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { scan: { create: "scan:create" } } }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@/lib/cache", () => ({ revalidateDashboardAggregates: mocks.revalidate }))
 
 import { POST } from "./route"
 import { POST as DashboardPOST } from "../../../../../scans/[id]/artifacts/sarif/route"
@@ -74,6 +76,7 @@ describe("v1 SARIF import route", () => {
     const response = await POST(bearerRequest(), params)
     expect(response.status).toBe(200)
     expect(mocks.permission).toHaveBeenCalledWith("ws-1", "scan:create")
+    expect(mocks.revalidate).toHaveBeenCalledWith("ws-1")
     const body = await response.json()
     expect(body.success).toBe(true)
     expect(body.data.imported).toBe(1)
