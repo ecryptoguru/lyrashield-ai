@@ -37,7 +37,42 @@ import {
   exchangeInstallUserCode,
   userCanAdminInstallation,
   GitHubOwnershipError,
+  parseCachedToken,
+  parseInstallationTokenResponse,
 } from "./github"
+
+describe("GitHub installation token boundaries", () => {
+  it("ignores a corrupted Redis token instead of using it for API authentication", () => {
+    const future = Date.now() + 60 * 60 * 1000
+    expect(parseCachedToken(JSON.stringify({ token: 42, expiresAt: future }))).toBeNull()
+    expect(parseCachedToken(JSON.stringify({ token: "ghs_1", expiresAt: "later" }))).toBeNull()
+    expect(parseCachedToken(JSON.stringify({ token: "ghs_1\n", expiresAt: future }))).toBeNull()
+    expect(parseCachedToken("null")).toBeNull()
+    expect(parseCachedToken("{")).toBeNull()
+    expect(parseCachedToken(JSON.stringify({ token: "ghs_1", expiresAt: future }))).toEqual({
+      token: "ghs_1",
+      expiresAt: future,
+    })
+  })
+
+  it("rejects malformed fresh token responses before caching them", () => {
+    expect(() => parseInstallationTokenResponse({ expires_at: "2030-01-01T00:00:00Z" })).toThrow(
+      "Invalid GitHub installation token response"
+    )
+    expect(() =>
+      parseInstallationTokenResponse({ token: "ghs_1", expires_at: "not-a-date" })
+    ).toThrow("Invalid GitHub installation token response")
+    expect(() => parseInstallationTokenResponse({ token: "ghs_1", expires_at: 123 })).toThrow(
+      "Invalid GitHub installation token response"
+    )
+    const expiry = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    expect(parseInstallationTokenResponse({ token: "ghs_1", expires_at: expiry })).toEqual({
+      token: "ghs_1",
+      expiresAt: Date.parse(expiry),
+    })
+    expect(parseInstallationTokenResponse({ token: "ghs_1" }).token).toBe("ghs_1")
+  })
+})
 
 describe("verifyWebhookSignature", () => {
   const payload = JSON.stringify({

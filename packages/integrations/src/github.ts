@@ -94,14 +94,49 @@ const TOKEN_SKEW_MS = 5 * 60 * 1000
 const TOKEN_TTL_MS = 55 * 60 * 1000
 const TOKEN_CACHE_KEY = (installationId: number) => `github:token:${installationId}`
 
+function validToken(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && !/\s/.test(value)
+}
+
+export function parseCachedToken(raw: string): CachedToken | null {
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  if (!("token" in value) || !("expiresAt" in value)) return null
+  if (!validToken(value.token)) return null
+  if (typeof value.expiresAt !== "number" || !Number.isSafeInteger(value.expiresAt)) return null
+  if (value.expiresAt <= 0) return null
+  return { token: value.token, expiresAt: value.expiresAt }
+}
+
+export function parseInstallationTokenResponse(value: unknown): CachedToken {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !("token" in value)) {
+    throw new Error("Invalid GitHub installation token response")
+  }
+  if (!validToken(value.token)) throw new Error("Invalid GitHub installation token response")
+  const rawExpiry = "expires_at" in value ? value.expires_at : undefined
+  if (rawExpiry !== undefined && typeof rawExpiry !== "string") {
+    throw new Error("Invalid GitHub installation token response")
+  }
+  const expiresAt = rawExpiry ? Date.parse(rawExpiry) : Date.now() + TOKEN_TTL_MS
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= Date.now()) {
+    throw new Error("Invalid GitHub installation token response")
+  }
+  return { token: value.token, expiresAt }
+}
+
 async function getCachedToken(installationId: number): Promise<CachedToken | null> {
   const redis = getRedis()
   if (redis) {
     try {
       const raw = await redis.get(TOKEN_CACHE_KEY(installationId))
       if (raw) {
-        const parsed = JSON.parse(raw) as CachedToken
-        if (parsed.expiresAt - Date.now() > TOKEN_SKEW_MS) {
+        const parsed = parseCachedToken(raw)
+        if (parsed && parsed.expiresAt - Date.now() > TOKEN_SKEW_MS) {
           return parsed
         }
       }
@@ -173,9 +208,8 @@ export async function getInstallationToken(installationId: number): Promise<stri
     throw new Error(`Failed to get installation token: ${res.status}`)
   }
 
-  const data = (await res.json()) as { token: string; expires_at?: string }
-  const expiresAt = data.expires_at ? Date.parse(data.expires_at) : Date.now() + TOKEN_TTL_MS
-  await setCachedToken(installationId, data.token, expiresAt)
+  const data = parseInstallationTokenResponse(await res.json())
+  await setCachedToken(installationId, data.token, data.expiresAt)
   return data.token
 }
 
