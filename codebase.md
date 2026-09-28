@@ -216,7 +216,7 @@ Alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved), `CAN
 
 ### Engine boundary
 
-Cloud and Desktop release workflows pin engine `32544b928069dfcb3d387359ba1e126f6fbf23cd`. Product branch protection requires the `Pinned Engine / Worker Contract` job alongside security and lint/typecheck/test/build. Engine CI separately tests its exact `.lyrashield-worker-pin` consumer; refresh that reverse pin after the reviewed product merge. Source compatibility, production promotion and signed Desktop publication remain separate gates. Desktop launch work remains deferred.
+Cloud and Desktop release workflows pin engine `f120b11a3f1524b88d0020cf825a390d950f2851`, including the request-bounded model-stream idle guard for Lyra's custom provider. Product branch protection requires the `Pinned Engine / Worker Contract` job alongside security and lint/typecheck/test/build. Engine CI separately tests its exact `.lyrashield-worker-pin` consumer; refresh that reverse pin after the reviewed product merge. Source compatibility, production promotion and signed Desktop publication remain separate gates. Desktop launch work remains deferred.
 
 - Product code lives in engine `lyrashield/**` and `lyrashield_adapter/**`; upstream `strix/**` retains only hard-gated generic seams.
 - Stable upstream releases enter through reviewed PRs; never force-push or auto-resolve conflicts.
