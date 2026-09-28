@@ -20,6 +20,7 @@
  */
 
 import { createId } from "@paralleldrive/cuid2"
+import { realpathSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 
 export const BACKFILL_CONFIRMATION = "backfill-clear-wrong-trial-claims"
@@ -173,11 +174,11 @@ export async function runTrialClaimBackfill(
 }
 
 async function main() {
-  // `--apply` writes; the pinned `--apply=<slug>` spelling makes the intent
-  // explicit in runbooks and shell history.
-  const apply = process.argv.some(
-    (arg) => arg === "--apply" || arg === `--apply=${BACKFILL_CONFIRMATION}`
-  )
+  const args = process.argv.slice(2)
+  if (args.length > 1 || (args.length === 1 && args[0] !== `--apply=${BACKFILL_CONFIRMATION}`)) {
+    throw new Error(`Usage: backfill-clear-wrong-trial-claims [--apply=${BACKFILL_CONFIRMATION}]`)
+  }
+  const apply = args.length === 1
   const databaseSystemUrl = process.env.DATABASE_SYSTEM_URL
   if (!databaseSystemUrl) {
     throw new Error("DATABASE_SYSTEM_URL is required; ordinary runtime credentials are refused")
@@ -208,7 +209,9 @@ async function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Resolve only the CLI entry path; pnpm exposes this package through a symlink.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error))
     process.exitCode = 1

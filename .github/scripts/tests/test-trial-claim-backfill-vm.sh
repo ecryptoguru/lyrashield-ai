@@ -86,4 +86,39 @@ set -e
 grep -Fq 'Usage: lyrashield-trial-claim-backfill' <<< "$invalid_output"
 [ ! -s "$tmp/docker.log" ]
 
+# The deployed db package is reached through a pnpm symlink. A silent exit is
+# a failure: even without DB credentials, the script must enter main().
+ln -s "$repo/packages/db/scripts/backfill-clear-wrong-trial-claims.ts" \
+  "$tmp/backfill-clear-wrong-trial-claims.ts"
+run_script() {
+  env -u DATABASE_SYSTEM_URL node \
+    --import "$repo/apps/worker/node_modules/tsx/dist/loader.mjs" \
+    --input-type=module --eval 'await import(process.argv[1])' \
+    "$tmp/backfill-clear-wrong-trial-claims.ts" "$@"
+}
+
+set +e
+script_output=$(run_script 2>&1)
+script_status=$?
+set -e
+[ "$script_status" -ne 0 ]
+grep -Fq 'DATABASE_SYSTEM_URL is required' <<< "$script_output"
+
+for invalid in --apply --unknown --apply=wrong; do
+  set +e
+  script_output=$(run_script "$invalid" 2>&1)
+  script_status=$?
+  set -e
+  [ "$script_status" -ne 0 ]
+  grep -Fq 'Usage: backfill-clear-wrong-trial-claims' <<< "$script_output"
+  ! grep -Fq 'DATABASE_SYSTEM_URL is required' <<< "$script_output"
+done
+
+set +e
+script_output=$(run_script --unknown --unknown 2>&1)
+script_status=$?
+set -e
+[ "$script_status" -ne 0 ]
+grep -Fq 'Usage: backfill-clear-wrong-trial-claims' <<< "$script_output"
+
 echo "Trial-claim VM backfill runner proof passed."
