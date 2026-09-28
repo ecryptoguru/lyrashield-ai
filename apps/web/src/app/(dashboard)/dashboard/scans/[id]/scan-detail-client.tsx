@@ -18,8 +18,9 @@ import { Card, Badge, Button, EmptyState, buttonVariants } from "@lyrashield/ui"
 import { formatTime, formatDateTime } from "@/lib/date-format"
 import { getScannerCoverageWarnings } from "@/lib/scan-coverage"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
+import { ScanQualitySurfaceSchema } from "@lyrashield/types"
 import { findingDetailItemsPaginatedSchema, scanPollDataSchema } from "@/lib/api-schemas"
-import { apiGetConditional, apiGetPaginated } from "@/lib/api-client"
+import { apiGet, apiGetConditional, apiGetPaginated } from "@/lib/api-client"
 import {
   getScanGoalLabel,
   getScanModeLabel,
@@ -212,6 +213,7 @@ export function ScanDetailClient({
           aiSecurity: scanRef.current.aiSecurity,
         }
         let refreshedFindings: FindingItem[] | null = null
+        let refreshedQuality: ScanData["integrity"]["quality"] = null
         if (
           ["COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(
             updated.status
@@ -225,6 +227,18 @@ export function ScanDetailClient({
             { signal, schema: findingDetailItemsPaginatedSchema }
           )
           refreshedFindings = page.items
+          // The poll carries coverage receipts but the evidence-quality
+          // projection is server-rendered. Refresh it after persistence so a
+          // live page cannot show the pre-scan zero beside terminal receipts.
+          try {
+            refreshedQuality = await apiGet(
+              `/api/scans/${scan.id}/quality?workspaceId=${encodeURIComponent(updated.workspaceId)}`,
+              { signal, schema: ScanQualitySurfaceSchema }
+            )
+          } catch {
+            // Keep the terminal outcome visible; omit a stale quality snapshot.
+          }
+          nextScan.integrity.quality = refreshedQuality
         }
         if (!signal.aborted) {
           // Commit the terminal status and its finding list together. If the
