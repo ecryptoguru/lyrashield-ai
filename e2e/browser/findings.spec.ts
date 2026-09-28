@@ -400,6 +400,50 @@ test("scoped finding drawer keeps keyboard and report handoff context at respons
   ).toBe(true)
 })
 
+test("saving a fix proposal keeps the finding detail scoped to the selected scan and target", async ({
+  page,
+}) => {
+  const detailRequests: string[] = []
+  await page.route("**/api/findings/initial?**", (route) => {
+    detailRequests.push(route.request().url())
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          id: "initial",
+          title: "Initial finding",
+          summary: "Initial summary",
+          scanId: "scan-test",
+        },
+      }),
+    })
+  })
+  await page.route("**/api/findings/initial/fix-proposals", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { id: "fix-1" } }),
+    })
+  )
+
+  await page.goto("?findings&scanId=scan-test&target=target-test")
+  await page.getByRole("button", { name: /Initial finding/ }).click()
+  const drawer = page.getByRole("dialog", { name: "Initial finding" })
+  await drawer.getByRole("button", { name: "Create fix proposal" }).click()
+  await drawer.getByRole("textbox", { name: "Fix summary" }).fill("Apply the scoped fix")
+  await drawer.getByRole("button", { name: "Save proposal" }).click()
+
+  await expect.poll(() => detailRequests.length).toBe(2)
+  for (const request of detailRequests) {
+    const params = new URL(request).searchParams
+    expect(params.get("workspaceId")).toBe("workspace-test")
+    expect(params.get("targetId")).toBe("target-test")
+    expect(params.get("observedInScanId")).toBe("scan-test")
+  }
+})
+
 test("failed page revalidation keeps fresh first-page results and a usable cursor", async ({
   page,
 }) => {

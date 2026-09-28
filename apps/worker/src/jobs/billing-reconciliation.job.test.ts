@@ -4,6 +4,7 @@ const getPolarClientMock = vi.hoisted(() => vi.fn(() => null as unknown))
 const getRazorpayClientMock = vi.hoisted(() => vi.fn(() => null as unknown))
 const rawQueryMock = vi.hoisted(() => vi.fn())
 const rawExecuteMock = vi.hoisted(() => vi.fn())
+const lookupResults: Array<Array<{ id: string }>> = []
 const loggerMock = vi.hoisted(() => ({
   info: vi.fn(),
   debug: vi.fn(),
@@ -47,13 +48,19 @@ describe("billing-reconciliation.job", () => {
     vi.mocked(prisma.webhookEvent.findFirst).mockReset().mockResolvedValue(null)
     vi.mocked(prisma.webhookEvent.findMany).mockReset().mockResolvedValue([])
     vi.mocked(prisma.webhookEvent.count).mockReset().mockResolvedValue(0)
-    rawQueryMock.mockResolvedValue([
-      {
-        checked_through: new Date(),
-        coverage_from: new Date(Date.now() - 24 * 24 * 60 * 60 * 1000),
-        last_completed_at: null,
-      },
-    ])
+    lookupResults.length = 0
+    rawQueryMock.mockImplementation((strings: TemplateStringsArray) => {
+      if (strings.join("").includes('SELECT id FROM "WebhookEvent"')) {
+        return Promise.resolve(lookupResults.shift() ?? [])
+      }
+      return Promise.resolve([
+        {
+          checked_through: new Date(),
+          coverage_from: new Date(Date.now() - 24 * 24 * 60 * 60 * 1000),
+          last_completed_at: null,
+        },
+      ])
+    })
     rawExecuteMock.mockResolvedValue(1)
     getPolarClientMock.mockReturnValue({
       orders: {
@@ -124,32 +131,20 @@ describe("billing-reconciliation.job", () => {
     getPolarClientMock.mockReturnValue({
       orders: { list },
     })
-    const { prisma } = await import("@lyrashield/db")
-    const findFirst = vi.mocked(prisma.webhookEvent.findFirst)
-    findFirst
-      .mockResolvedValueOnce({ id: "evt_1", processed: true } as never)
-      .mockResolvedValueOnce(null)
+    lookupResults.push([{ id: "evt_1" }], [])
 
     const result = await runBillingReconciliation()
 
     expect(list).toHaveBeenCalledWith({ limit: 100, sorting: ["-created_at"] })
-    expect(findFirst).toHaveBeenCalledWith({
-      where: {
-        provider: "polar",
-        eventType: "order.paid",
-        payload: { path: ["data", "id"], equals: "ord_1" },
-      },
-      select: { id: true },
-    })
-    expect(findFirst).toHaveBeenCalledTimes(2)
-    expect(findFirst).toHaveBeenLastCalledWith({
-      where: {
-        provider: "polar",
-        eventType: "order.paid",
-        payload: { path: ["data", "id"], equals: "ord_late_paid" },
-      },
-      select: { id: true },
-    })
+    const lookups = rawQueryMock.mock.calls.filter(([strings]) =>
+      (strings as TemplateStringsArray).join("").includes('SELECT id FROM "WebhookEvent"')
+    )
+    expect(lookups).toHaveLength(2)
+    expect(lookups.map(([, objectId]) => objectId)).toEqual(["ord_1", "ord_late_paid"])
+    expect(lookups[0]?.[0].join("")).toContain(
+      "provider = 'polar' AND \"eventType\" = 'order.paid'"
+    )
+    expect(lookups[0]?.[0].join("")).toContain("payload #> '{data,id}'")
     expect(result).toMatchObject({ polarChecked: 2, driftAlerts: 1, replayed: 0 })
   })
 
@@ -171,38 +166,20 @@ describe("billing-reconciliation.job", () => {
     getRazorpayClientMock.mockReturnValue({
       payments: { all },
     })
-    const { prisma } = await import("@lyrashield/db")
-    const findFirst = vi.mocked(prisma.webhookEvent.findFirst)
-    findFirst
-      .mockResolvedValueOnce({ id: "evt_1", processed: true } as never)
-      .mockResolvedValueOnce(null)
+    lookupResults.push([{ id: "evt_1" }], [])
 
     const result = await runBillingReconciliation()
 
     expect(all).toHaveBeenCalledWith({ count: 50, skip: 0, from: sinceSeconds, to: nowSeconds })
-    expect(findFirst).toHaveBeenCalledWith({
-      where: {
-        provider: "razorpay",
-        eventType: "payment.captured",
-        payload: {
-          path: ["payload", "payment", "entity", "id"],
-          equals: "pay_1",
-        },
-      },
-      select: { id: true },
-    })
-    expect(findFirst).toHaveBeenCalledTimes(2)
-    expect(findFirst).toHaveBeenLastCalledWith({
-      where: {
-        provider: "razorpay",
-        eventType: "payment.captured",
-        payload: {
-          path: ["payload", "payment", "entity", "id"],
-          equals: "pay_late_captured",
-        },
-      },
-      select: { id: true },
-    })
+    const lookups = rawQueryMock.mock.calls.filter(([strings]) =>
+      (strings as TemplateStringsArray).join("").includes('SELECT id FROM "WebhookEvent"')
+    )
+    expect(lookups).toHaveLength(2)
+    expect(lookups.map(([, objectId]) => objectId)).toEqual(["pay_1", "pay_late_captured"])
+    expect(lookups[0]?.[0].join("")).toContain(
+      "provider = 'razorpay' AND \"eventType\" = 'payment.captured'"
+    )
+    expect(lookups[0]?.[0].join("")).toContain("payload #> '{payload,payment,entity,id}'")
     expect(result).toMatchObject({ razorpayChecked: 2, driftAlerts: 1, replayed: 0 })
     expect(result.completed).toBe(true)
     expect(loggerMock.info).toHaveBeenCalledWith(
@@ -310,7 +287,6 @@ describe("billing-reconciliation.job", () => {
     }
     getPolarClientMock.mockReturnValue({ orders: { list: vi.fn().mockResolvedValue(page) } })
     const { prisma } = await import("@lyrashield/db")
-    vi.mocked(prisma.webhookEvent.findFirst).mockResolvedValue(null)
 
     const result = await runBillingReconciliation()
 
@@ -323,7 +299,11 @@ describe("billing-reconciliation.job", () => {
         alertSamples: [expect.objectContaining({ provider: "polar" })],
       })
     )
-    expect(prisma.webhookEvent.findFirst).toHaveBeenCalledTimes(1)
+    expect(
+      rawQueryMock.mock.calls.filter(([strings]) =>
+        (strings as TemplateStringsArray).join("").includes('SELECT id FROM "WebhookEvent"')
+      )
+    ).toHaveLength(1)
     expect(prisma.webhookEvent.findMany).toHaveBeenCalledTimes(1)
   })
 
@@ -340,7 +320,7 @@ describe("billing-reconciliation.job", () => {
     }
     getPolarClientMock.mockReturnValue({ orders: { list: vi.fn().mockResolvedValue(page) } })
     const { prisma } = await import("@lyrashield/db")
-    vi.mocked(prisma.webhookEvent.findFirst).mockResolvedValue({ id: "evt_pending" } as never)
+    lookupResults.push([{ id: "evt_pending" }])
     vi.mocked(prisma.webhookEvent.count).mockResolvedValue(1)
     vi.mocked(prisma.webhookEvent.findMany).mockResolvedValue([
       {

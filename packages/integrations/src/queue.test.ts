@@ -43,6 +43,8 @@ const mocks = vi.hoisted(() => {
     commandErrors,
     queueAdd: vi.fn(),
     queueWorkersCount: vi.fn(),
+    queueGetRanges: vi.fn(),
+    queueGetJob: vi.fn(),
     setExistsError(error: Error | null) {
       existsError = error
     },
@@ -54,11 +56,14 @@ vi.mock("bullmq", () => ({
   Queue: class {
     add = mocks.queueAdd
     getWorkersCount = mocks.queueWorkersCount
+    getRanges = mocks.queueGetRanges
+    getJob = mocks.queueGetJob
   },
 }))
 
 import {
   enqueueScan,
+  getScanQueuePosition,
   isScanWorkerAvailable,
   registerScanWorker,
   SCAN_WORKER_HEARTBEAT_MS,
@@ -77,6 +82,8 @@ describe("scan worker availability", () => {
     mocks.setExistsError(null)
     mocks.queueAdd.mockReset()
     mocks.queueWorkersCount.mockReset()
+    mocks.queueGetRanges.mockReset()
+    mocks.queueGetJob.mockReset()
     mocks.queueWorkersCount.mockResolvedValue(1)
   })
 
@@ -184,6 +191,36 @@ describe("scan worker availability", () => {
       })
     ).rejects.toBeInstanceOf(ScanWorkerUnavailableError)
     expect(mocks.queueAdd).not.toHaveBeenCalled()
+  })
+})
+
+describe("scan queue position", () => {
+  beforeEach(() => {
+    mocks.queueGetRanges.mockReset()
+    mocks.queueGetJob.mockReset()
+  })
+
+  it("reads queue IDs in the same state order without hydrating every job", async () => {
+    mocks.queueGetRanges.mockResolvedValue(["scan-1", "scan-2", "scan-3"])
+    mocks.queueGetJob.mockResolvedValue({ id: "scan-2" })
+
+    expect(await getScanQueuePosition("scan-2")).toEqual({ position: 2, waiting: 3 })
+    expect(mocks.queueGetRanges).toHaveBeenCalledWith(["wait", "delayed", "prioritized"], 0, -1)
+    expect(mocks.queueGetJob).toHaveBeenCalledExactlyOnceWith("scan-2")
+  })
+
+  it("returns no position for absent or removed jobs", async () => {
+    mocks.queueGetRanges.mockResolvedValue(["scan-1", "scan-2"])
+    expect(await getScanQueuePosition("scan-3")).toBeNull()
+    expect(mocks.queueGetJob).not.toHaveBeenCalled()
+
+    mocks.queueGetJob.mockResolvedValue(null)
+    expect(await getScanQueuePosition("scan-2")).toBeNull()
+  })
+
+  it("returns no position when the queue read fails", async () => {
+    mocks.queueGetRanges.mockRejectedValue(new Error("Redis unavailable"))
+    expect(await getScanQueuePosition("scan-1")).toBeNull()
   })
 })
 

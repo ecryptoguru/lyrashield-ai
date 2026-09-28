@@ -593,7 +593,6 @@ jobs:
           bash .github/scripts/tests/test-check-engine-revision-parity.sh
           bash .github/scripts/tests/test-configure-cloud-billing-admission.sh
           bash .github/scripts/tests/test-azure-secret-set.sh
-          bash .github/scripts/tests/test-trial-claim-backfill-vm.sh
           bash .github/scripts/tests/test-validate-worker-provenance.sh
           sh ops/monitoring/scan-admission.test.sh
           node --test .github/scripts/tests/worker-preflight.test.mjs .github/scripts/tests/worker-contract-worktree.test.mjs

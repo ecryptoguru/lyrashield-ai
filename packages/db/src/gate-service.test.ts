@@ -68,8 +68,12 @@ vi.mock("./scan-service", () => ({
 }))
 
 import { prisma } from "./client"
+import { computeGateVerdict } from "@lyrashield/gate"
 import { createScan, WorkspaceScanConcurrencyLimitError } from "./scan-service"
-import { handleFixPrMergedAndReevaluate as handleMerge } from "./gate-service"
+import {
+  evaluateGateForTarget,
+  handleFixPrMergedAndReevaluate as handleMerge,
+} from "./gate-service"
 const admission = vi.fn(async () => {})
 const handleFixPrMergedAndReevaluate = (workspaceId: string, branch: string, prNumber?: number) =>
   handleMerge(workspaceId, branch, prNumber, admission)
@@ -150,6 +154,64 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
       rlsTransactionNestingGuard.enabled = false
       rlsTransactionNestingGuard.depth = 0
     }
+  })
+
+  it("loads only verdict-relevant verification receipts", async () => {
+    mockPrisma.scan.findFirst.mockReset().mockResolvedValue(null)
+    const receipts = [
+      { status: "DETECTED", method: "RETEST", scanId: "retest-scan" },
+      { status: "INCONCLUSIVE", method: "RETEST", scanId: "retest-scan" },
+      {
+        status: "VALIDATED",
+        method: "RETEST",
+        scanId: "retest-scan",
+        verifierVersion: "result-integrity-1",
+        evidence: { baseline: { scanId: "source-scan" }, retest: { scanId: "retest-scan" } },
+      },
+    ]
+    mockPrisma.finding.findMany.mockImplementation(async ({ select }) => [
+      {
+        id: "finding-1",
+        severity: "HIGH",
+        status: "FIXED",
+        verificationStatus: "VALIDATED",
+        lastSeenAt: new Date(),
+        scanId: "source-scan",
+        disposition: null,
+        dispositionActorUserId: null,
+        dispositionReason: null,
+        dispositionAssessmentId: null,
+        dispositionAt: null,
+        canonicalFindingId: null,
+        verificationReceipts: receipts.filter((receipt) =>
+          select.verificationReceipts.where.status.in.includes(receipt.status)
+        ),
+      },
+    ])
+
+    await evaluateGateForTarget("workspace-1", "target-1")
+
+    expect(mockPrisma.finding.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { workspaceId: "workspace-1", targetId: "target-1", deletedAt: null },
+        select: expect.objectContaining({
+          verificationReceipts: expect.objectContaining({
+            where: { status: { in: ["VALIDATED", "VERIFIED"] } },
+          }),
+        }),
+      })
+    )
+    expect(vi.mocked(computeGateVerdict).mock.lastCall?.[0].findings[0]).toMatchObject({
+      hasPositiveEvidence: true,
+      retestConfirmedResolved: true,
+    })
+
+    receipts.pop()
+    await evaluateGateForTarget("workspace-1", "target-1")
+    expect(vi.mocked(computeGateVerdict).mock.lastCall?.[0].findings[0]).toMatchObject({
+      hasPositiveEvidence: false,
+      retestConfirmedResolved: false,
+    })
   })
 
   it("binds the Retest to a NEW retest scan, never the finding's original terminal scan", async () => {

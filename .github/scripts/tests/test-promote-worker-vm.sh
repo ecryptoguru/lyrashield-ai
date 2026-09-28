@@ -22,8 +22,6 @@ write_mocks() {
     refresh-secrets.sh \
     refresh-egress.sh \
     capture-stop-provenance.sh \
-    trial-claim-backfill.sh \
-    backfill-clear-wrong-trial-claims.ts \
     lyrashield-worker.service \
     lyrashield-worker-secrets.service \
     lyrashield-worker-egress.service \
@@ -253,6 +251,10 @@ run_case() {
     printf 'LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES=%s\n' "$floor_bytes" >> "$case_dir/runtime.conf"
   fi
   printf 'GHCR_TOKEN=test-token\nREDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\n' > "$case_dir/worker.env"
+  if [ "$name" = rolls-back-maintenance-assets ] || [ "$name" = removes-legacy-maintenance-assets ]; then
+    printf 'legacy maintenance runner\n' > "$case_dir/host/libexec/lyrashield-trial-claim-backfill"
+    printf 'legacy maintenance source\n' > "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts"
+  fi
 
   set +e
   output=$(
@@ -342,8 +344,8 @@ run_case() {
     [ -n "$restart_line" ] && [ -n "$claim_line" ] && [ -n "$queue_line" ]
     [ "$restart_line" -gt "$claim_line" ] && [ "$restart_line" -gt "$queue_line" ]
     [ -f "$case_dir/host/assets/worker-env.sh" ]
-    [ -x "$case_dir/host/libexec/lyrashield-trial-claim-backfill" ]
-    [ -f "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts" ]
+    [ ! -e "$case_dir/host/libexec/lyrashield-trial-claim-backfill" ]
+    [ ! -e "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts" ]
     if [ "$name" = missing-rollback-image ]; then
       grep -Fq 'No local rollback image' <<< "$output"
     fi
@@ -352,10 +354,14 @@ run_case() {
       grep -Fq '2147483648-byte floor' <<< "$output"
     fi
   else
-    # A failed first deployment must not strand a privileged maintenance
-    # runner or its source on the VM after host-asset rollback.
-    [ ! -e "$case_dir/host/libexec/lyrashield-trial-claim-backfill" ]
-    [ ! -e "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts" ]
+    # A rollback must restore legacy assets if the previous image needs them.
+    if [ "$name" = rolls-back-maintenance-assets ]; then
+      grep -Fxq 'legacy maintenance runner' "$case_dir/host/libexec/lyrashield-trial-claim-backfill"
+      grep -Fxq 'legacy maintenance source' "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts"
+    else
+      [ ! -e "$case_dir/host/libexec/lyrashield-trial-claim-backfill" ]
+      [ ! -e "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts" ]
+    fi
   fi
   if [ -n "$replacement_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
@@ -389,6 +395,7 @@ run_case() {
 }
 
 run_case healthy 1 1 1 success
+run_case removes-legacy-maintenance-assets 1 1 1 success
 run_case repairs-inactive-timer 0 1 1 success
 run_case repairs-disabled-units 1 0 0 success
 run_case repairs-inactive-service 1 1 1 success 0

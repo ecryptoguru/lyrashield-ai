@@ -936,6 +936,45 @@ describe("report-generator", () => {
       expect(html).toContain("No findings")
     })
 
+    it("escapes severity labels supplied directly to the HTML renderer", () => {
+      const html = generateReportHTML({
+        title: "Test",
+        type: "developer",
+        workspaceName: "Test",
+        scanInfo: null,
+        findings: [
+          {
+            id: "f-1",
+            title: "Test finding",
+            severity: '<img src=x onerror="alert(1)">',
+            status: '<svg onload="alert(2)">',
+            verified: false,
+            confidence: "low",
+            cwe: null,
+            cvssScore: null,
+            category: null,
+            summary: "Test summary",
+            exploitability: null,
+            recommendedFix: null,
+            fixStatus: "none",
+            retestStatus: null,
+          },
+        ],
+        findingsBySeverity: { '<img src=x onerror="alert(1)">': 1 },
+        totalFindings: 1,
+        verifiedCount: 0,
+        fixedCount: 0,
+        retestSummary: { passed: 0, failed: 0, pending: 0 },
+        findingsTruncated: false,
+        generatedAt: new Date("2026-07-06"),
+      })
+
+      expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;")
+      expect(html).not.toContain('<img src=x onerror="alert(1)">')
+      expect(html).toContain("&lt;svg onload=&quot;alert(2)&quot;&gt;")
+      expect(html).not.toContain('<svg onload="alert(2)">')
+    })
+
     it("escapes HTML in user content", () => {
       const html = generateReportHTML({
         title: "Test",

@@ -1,6 +1,6 @@
 # ─── Stage 1: Install deps ─────────────────────────────────────────────────────
 FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS deps
-RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
+RUN corepack enable && corepack prepare pnpm@12.2.0 --activate
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 WORKDIR /app
@@ -31,7 +31,7 @@ RUN pnpm install --frozen-lockfile
 
 # ─── Stage 2: Build ────────────────────────────────────────────────────────────
 FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS workspace-builder
-RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
+RUN corepack enable && corepack prepare pnpm@12.2.0 --activate
 
 WORKDIR /app
 
@@ -180,8 +180,6 @@ COPY ops/worker/worker-env.sh /opt/lyrashield-worker-host/worker-env.sh
 COPY ops/worker/refresh-secrets.sh /opt/lyrashield-worker-host/refresh-secrets.sh
 COPY ops/worker/refresh-egress.sh /opt/lyrashield-worker-host/refresh-egress.sh
 COPY ops/worker/capture-stop-provenance.sh /opt/lyrashield-worker-host/capture-stop-provenance.sh
-COPY ops/worker/trial-claim-backfill.sh /opt/lyrashield-worker-host/trial-claim-backfill.sh
-COPY packages/db/scripts/backfill-clear-wrong-trial-claims.ts /opt/lyrashield-worker-host/backfill-clear-wrong-trial-claims.ts
 COPY ops/worker/lyrashield-worker.service /opt/lyrashield-worker-host/lyrashield-worker.service
 COPY ops/worker/lyrashield-worker-secrets.service /opt/lyrashield-worker-host/lyrashield-worker-secrets.service
 COPY ops/worker/lyrashield-worker-egress.service /opt/lyrashield-worker-host/lyrashield-worker-egress.service

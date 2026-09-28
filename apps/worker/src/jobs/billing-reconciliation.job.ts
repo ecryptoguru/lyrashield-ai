@@ -59,6 +59,28 @@ class ReconciliationLeaseLostError extends Error {
   }
 }
 
+async function hasProviderWebhookEvent(provider: "polar" | "razorpay", objectId: string) {
+  // Keep the cross-workspace check on the system client. These exact JSONB
+  // expressions are backed by the provider-specific partial indexes in
+  // 20260928140000_webhook_provider_object_lookup.
+  const rows =
+    provider === "polar"
+      ? await getSystemPrisma().$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM "WebhookEvent"
+          WHERE provider = 'polar' AND "eventType" = 'order.paid'
+            AND (payload #> '{data,id}') = to_jsonb(${objectId}::text)
+          LIMIT 1
+        `
+      : await getSystemPrisma().$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM "WebhookEvent"
+          WHERE provider = 'razorpay' AND "eventType" = 'payment.captured'
+            AND (payload #> '{payload,payment,entity,id}') = to_jsonb(${objectId}::text)
+          LIMIT 1
+        `
+
+  return rows.length > 0
+}
+
 async function acquireReconciliationLease(): Promise<ReconciliationLease | null> {
   const token = randomUUID()
   const rows = await getSystemPrisma().$queryRaw<
@@ -246,14 +268,7 @@ async function reconcilePolar(
         // GitHub webhook route) — the plain client returns empty rows under
         // the NOBYPASSRLS runtime role and every order false-flags as
         // "webhook may have been missed".
-        const existing = await getSystemPrisma().webhookEvent.findFirst({
-          where: {
-            provider: "polar",
-            eventType: "order.paid",
-            payload: { path: ["data", "id"], equals: order.id },
-          },
-          select: { id: true },
-        })
+        const existing = await hasProviderWebhookEvent("polar", order.id)
 
         if (!existing) {
           result.driftAlerts++
@@ -329,17 +344,7 @@ async function reconcileRazorpay(
 
         // Cross-workspace provider reconciliation — system client (see the
         // Polar note above: WebhookEvent is FORCE RLS strict).
-        const existing = await getSystemPrisma().webhookEvent.findFirst({
-          where: {
-            provider: "razorpay",
-            eventType: "payment.captured",
-            payload: {
-              path: ["payload", "payment", "entity", "id"],
-              equals: payment.id,
-            },
-          },
-          select: { id: true },
-        })
+        const existing = await hasProviderWebhookEvent("razorpay", payment.id)
 
         if (!existing) {
           result.driftAlerts++

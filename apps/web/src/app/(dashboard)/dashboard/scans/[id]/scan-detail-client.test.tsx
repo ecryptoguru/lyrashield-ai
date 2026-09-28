@@ -192,11 +192,27 @@ describe("scan detail guided states", () => {
         },
       },
       findings: [],
+      scorecard: { targetId: target.id, grade: "A", canPublish: true },
     })
 
     expect(html).toContain("Coverage: Complete")
     expect(html).toContain("Create an assurance report")
     expect(html).toContain("/dashboard/reports?scanId=scan-1&amp;targetId=target-1")
+    expect(html).toContain("Share this review")
+    expect(html).toContain("Create public scorecard")
+    expect(html).toContain("Absence of findings is not verification.")
+  })
+
+  it("withholds report and scorecard actions for a partial clean result", () => {
+    const html = renderDetail({
+      scan: { ...scan, status: "PARTIAL", target },
+      findings: [],
+      scorecard: { targetId: target.id, grade: "A", canPublish: true },
+    })
+
+    expect(html).not.toContain("Create an assurance report")
+    expect(html).not.toContain("Share this review")
+    expect(html).not.toContain("Create public scorecard")
   })
 
   it("uses a human target type label", () => {

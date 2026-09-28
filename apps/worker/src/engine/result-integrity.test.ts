@@ -636,6 +636,9 @@ describe("result integrity", () => {
       version: 7,
       manifest: { version: 7, terminalOutcome: { status: "COMPLETED" } },
     })
+    expect(completed.checksum).toBe(
+      "be36bd890f745f953915827c154f9cd8da0de970fe2a2c0c6e967a76c2aa98a7"
+    )
     expect(failed.checksum).not.toBe(completed.checksum)
   })
 

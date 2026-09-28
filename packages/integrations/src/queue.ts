@@ -218,9 +218,13 @@ export async function getScanQueuePosition(scanId: string): Promise<ScanQueuePos
     const queue = getScanQueue()
     // v6 removed 'paused' from the JobType union; the scan queue is never
     // paused by the app, so only the active waiting states are queried.
-    const waiting = await queue.getJobs(["wait", "delayed", "prioritized"])
-    const index = waiting.findIndex((job) => job.id === scanId)
+    // The status poll needs only IDs. getJobs hydrates every waiting job,
+    // making each poll read every job hash as well as the queue ranges.
+    const waiting = await queue.getRanges(["wait", "delayed", "prioritized"], 0, -1)
+    const index = waiting.indexOf(scanId)
     if (index === -1) return null
+    // A stale queue entry must not present a removed job as waiting.
+    if (!(await queue.getJob(scanId))) return null
     return { position: index + 1, waiting: waiting.length }
   } catch {
     return null

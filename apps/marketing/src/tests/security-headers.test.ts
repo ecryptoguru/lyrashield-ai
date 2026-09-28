@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
+import marketingCsp from "../lib/marketing-csp.json"
 
 const headers = readFileSync(new URL("../../public/_headers", import.meta.url), "utf8")
 const middleware = readFileSync(new URL("../middleware.ts", import.meta.url), "utf8")
 const wrangler = readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8")
+const csp = marketingCsp.directives.join("; ")
 
 describe("Cloudflare marketing security headers", () => {
   it("applies a defensive browser policy to every public route", () => {
@@ -29,6 +31,15 @@ describe("Cloudflare marketing security headers", () => {
     expect(wrangler).toContain('"PUBLIC_POSTHOG_HOST": "https://us.i.posthog.com"')
   })
 
+  it("uses one script policy for static assets and Worker responses without inline execution", () => {
+    expect(headers).toContain(`  Content-Security-Policy: ${csp}\n`)
+    const scriptDirective = marketingCsp.directives.find((directive) =>
+      directive.startsWith("script-src ")
+    )
+    expect(scriptDirective).not.toContain("'unsafe-inline'")
+    expect(middleware).toContain('marketingCsp.directives.join("; ")')
+  })
+
   it("applies the same defensive policy and no-store indexing boundary to Worker API responses", () => {
     expect(middleware).toContain('"Content-Security-Policy"')
     expect(middleware).toContain('"Strict-Transport-Security"')
@@ -50,6 +61,7 @@ describe("Cloudflare marketing security headers", () => {
       const separator = line.indexOf(":")
       const name = line.slice(0, separator)
       const value = line.slice(separator + 1).trim()
+      if (name === "Content-Security-Policy") continue // checked against the imported policy above
       expect(middleware).toContain(JSON.stringify(name))
       expect(middleware).toContain(JSON.stringify(value))
     }

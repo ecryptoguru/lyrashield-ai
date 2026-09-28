@@ -553,6 +553,11 @@ export default defineConfig({
   },
   vite: {
     plugins: [tailwindcss()],
+    // Astro otherwise inlines small processed scripts into prerendered HTML.
+    // Keep executable scripts as same-origin assets for the production CSP.
+    build: {
+      assetsInlineLimit: (filePath) => (filePath.endsWith(".js") ? false : undefined),
+    },
     define: {
       __MARKETING_INDEXABLE__: JSON.stringify(indexable),
       __MARKETING_LOCAL_PREVIEW__: JSON.stringify(localPreview),

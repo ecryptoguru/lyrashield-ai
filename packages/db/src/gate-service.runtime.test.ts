@@ -16,7 +16,11 @@ vi.mock("@lyrashield/config", async (original) => {
 import { createReport } from "./report-service"
 import * as reportGenerator from "./report-generator"
 import { createApproval, claimApprovalExecution } from "./agent-approval-service"
-import { handleFixPrMergedAndReevaluate, getCurrentGateVerdicts } from "./gate-service"
+import {
+  handleFixPrMergedAndReevaluate,
+  getCurrentGateVerdict,
+  getCurrentGateVerdicts,
+} from "./gate-service"
 import { prisma as runtime } from "./client"
 import {
   recordAgentMinutes,
@@ -719,16 +723,69 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
       },
     })
 
+    // A legacy verdict has no assessment snapshot. The single-target read
+    // skips drift checks even if findings were added after its evaluation.
+    const legacyTarget = await owner.target.create({
+      data: {
+        workspaceId: id,
+        name: "Batch legacy",
+        type: "REPO",
+        repoFullName: "test/batch-legacy",
+      },
+    })
+    await owner.gateVerdict.create({
+      data: {
+        workspaceId: id,
+        targetId: legacyTarget.id,
+        standardVersion: "lyrashield-gate/1.0.0",
+        state: "READY",
+        coverageStatement: {},
+        nonCoverage: {},
+        blockingReasons: [],
+        evidenceSummary: {},
+        staleness: {},
+        inputChecksum: "fixture",
+        verdictChecksum: "fixture",
+        evaluatedAt: new Date(now - 60_000),
+      },
+    })
+    const legacyScan = await owner.scan.create({
+      data: {
+        workspaceId: id,
+        targetId: legacyTarget.id,
+        goal: "LAUNCH_REVIEW",
+        mode: "SAFE",
+        status: "COMPLETED",
+        createdById: id,
+        endedAt: new Date(),
+      },
+    })
+    await owner.finding.create({
+      data: {
+        workspaceId: id,
+        scanId: legacyScan.id,
+        targetId: legacyTarget.id,
+        title: "Post-verdict finding",
+        summary: "Test",
+        severity: "HIGH",
+        dedupeKey: `batch-legacy-${id}`,
+      },
+    })
+
     const batch = await getCurrentGateVerdicts(id, [
       cleanTarget.id,
       driftedTarget.id,
+      legacyTarget.id,
       verdictlessTarget.id,
     ])
 
     // The verdictless target is absent from the map (the caller renders
     // NO_GATE_VERDICT), never a fabricated entry.
-    expect(batch.size).toBe(2)
+    expect(batch.size).toBe(3)
     expect(batch.has(verdictlessTarget.id)).toBe(false)
+    expect(batch.get(legacyTarget.id)?.applicability.reasons.map((reason) => reason.code)).toEqual([
+      "ASSESSMENT_UNAVAILABLE",
+    ])
 
     // Clean target: read mode applies the assessment's own identity, READY.
     const verdict = batch.get(cleanTarget.id)
@@ -760,5 +817,20 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
     expect(
       strict.get(cleanTarget.id)?.applicability.reasons.map((reason) => reason.code)
     ).toContain("IDENTITY_MISMATCH")
+
+    const targetIds = [cleanTarget.id, driftedTarget.id, legacyTarget.id, verdictlessTarget.id]
+    for (const options of [
+      { now: new Date(now) },
+      { expectedCommit: commit, now: new Date(now) },
+      { expectedCommit: "d".repeat(40), now: new Date(now) },
+      { expectedCommit: commit, now: new Date(now + 48 * 60 * 60 * 1000) },
+    ]) {
+      const current = await getCurrentGateVerdicts(id, targetIds, options)
+      for (const currentTargetId of targetIds) {
+        expect(current.get(currentTargetId) ?? null).toEqual(
+          await getCurrentGateVerdict(id, currentTargetId, options)
+        )
+      }
+    }
   })
 })
