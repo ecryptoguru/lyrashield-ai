@@ -29,6 +29,8 @@ vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: { scan: { view: "scan:view", cancel: "scan:cancel", remove: "scan:remove" } },
 }))
 
+vi.mock("@lyrashield/integrations", () => ({ getScanQueuePosition: vi.fn() }))
+
 vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
   setRequestIdResolver: vi.fn(),
@@ -45,6 +47,7 @@ import {
   removeScan,
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
+import { getScanQueuePosition } from "@lyrashield/integrations"
 import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const routeParams = { params: Promise.resolve({ id: "scan-1" }) }
@@ -73,6 +76,51 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:view")
     // No `eventsAfter` param = no cursor: the full event window is returned.
     expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1", { eventsAfter: undefined })
+  })
+
+  it("returns an updated queued position when the scan row and events are unchanged", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      status: "QUEUED",
+      updatedAt: new Date("2026-09-28T00:00:00.000Z"),
+      events: [],
+    } as never)
+    vi.mocked(getScanQueuePosition)
+      .mockResolvedValueOnce({ position: 3, waiting: 3 })
+      .mockResolvedValueOnce({ position: 2, waiting: 2 })
+    const url = "http://localhost/api/scans/scan-1?workspaceId=ws-1"
+
+    const first = await GET(new Request(url), routeParams)
+    const second = await GET(
+      new Request(url, { headers: { "If-None-Match": first.headers.get("ETag")! } }),
+      routeParams
+    )
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    expect(second.headers.get("ETag")).not.toBe(first.headers.get("ETag"))
+    expect((await second.json()).data.queuePosition).toEqual({ position: 2, waiting: 2 })
+    expect(getScanQueuePosition).toHaveBeenCalledTimes(2)
+  })
+
+  it("returns 304 for an unchanged completed scan", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      status: "COMPLETED",
+      updatedAt: new Date("2026-09-28T00:00:00.000Z"),
+      events: [],
+    } as never)
+    const url = "http://localhost/api/scans/scan-1?workspaceId=ws-1"
+    const first = await GET(new Request(url), routeParams)
+    const second = await GET(
+      new Request(url, { headers: { "If-None-Match": first.headers.get("ETag")! } }),
+      routeParams
+    )
+
+    expect(second.status).toBe(304)
+    expect(getScanQueuePosition).not.toHaveBeenCalled()
   })
 
   it("denies reading a scan without scan:view", async () => {

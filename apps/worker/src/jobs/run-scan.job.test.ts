@@ -2064,6 +2064,10 @@ describe("processScanJob", () => {
       "Scan completed with 0 findings"
     )
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+    expect(logger.warn).toHaveBeenCalledWith("Some scan completion notifications failed", {
+      scanId: "scan-1",
+      failures: ["notification provider unavailable"],
+    })
   })
 
   it("delivers every critical completion notification with one workspace read and bounded concurrency", async () => {
