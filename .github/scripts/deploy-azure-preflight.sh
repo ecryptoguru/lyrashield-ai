@@ -28,7 +28,56 @@ step_ensure-app-and-scanner-system-identities() {
 }
 
 # Workflow step: Prepare private registry and zero-downtime rollout
+verify_egress_proxy_key_vault_access() {
+  if [ -z "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" ]; then
+    return 0
+  fi
+
+  local principal_id vault_id role_count secret_ref secret_identity
+  principal_id=$(az containerapp show \
+    --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --query identity.principalId \
+    --output tsv)
+  if [ -z "$principal_id" ] || [ "$principal_id" = "None" ]; then
+    echo "::error::${AZURE_EGRESS_PROXY_CONTAINER_APP_NAME} needs a system-assigned identity for its Key Vault secret."
+    exit 1
+  fi
+
+  vault_id=$(az keyvault show --name "$AZURE_KEY_VAULT_NAME" --query id --output tsv)
+  if [ -z "$vault_id" ] || [ "$vault_id" = "None" ]; then
+    echo "::error::Could not resolve the egress proxy Key Vault resource ID."
+    exit 1
+  fi
+  role_count=$(az role assignment list \
+    --scope "${vault_id}/secrets/worker-egress-proxy-secret" \
+    --include-inherited \
+    --assignee-object-id "$principal_id" \
+    --query "[?roleDefinitionName=='Key Vault Secrets User'] | length(@)" \
+    --output tsv)
+  if ! [[ "$role_count" =~ ^[0-9]+$ ]] || [ "$role_count" -lt 1 ]; then
+    echo "::error::${AZURE_EGRESS_PROXY_CONTAINER_APP_NAME} needs Key Vault Secrets User on worker-egress-proxy-secret or an inherited scope before rollout."
+    exit 1
+  fi
+
+  secret_ref=$(az containerapp show \
+    --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --query "properties.configuration.secrets[?name=='egress-proxy-secret'] | [0].keyVaultUrl" \
+    --output tsv)
+  secret_identity=$(az containerapp show \
+    --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --query "properties.configuration.secrets[?name=='egress-proxy-secret'] | [0].identity" \
+    --output tsv)
+  if [ "$secret_ref" != "https://${AZURE_KEY_VAULT_NAME}.vault.azure.net/secrets/worker-egress-proxy-secret" ] || [ "$secret_identity" != "system" ]; then
+    echo "::error::${AZURE_EGRESS_PROXY_CONTAINER_APP_NAME} must reference worker-egress-proxy-secret through its system identity."
+    exit 1
+  fi
+}
+
 step_prepare-private-registry-and-zero-downtime-rollout() {
+  verify_egress_proxy_key_vault_access
   GHCR_TOKEN=$(az keyvault secret show \
     --vault-name "$AZURE_KEY_VAULT_NAME" \
     --name ghcr-token \
@@ -542,6 +591,7 @@ step_sync-github-app-secrets-to-app-container-app() {
 step="${1:-}"
 case "$step" in
   ensure-app-and-scanner-system-identities) step_ensure-app-and-scanner-system-identities ;;
+  verify-egress-proxy-key-vault-access) verify_egress_proxy_key_vault_access ;;
   prepare-private-registry-and-zero-downtime-rollout) step_prepare-private-registry-and-zero-downtime-rollout ;;
   run-database-migrations) step_run-database-migrations ;;
   verify-shared-rate-limiting-credentials) step_verify-shared-rate-limiting-credentials ;;
