@@ -12,6 +12,12 @@ describe("scanAiDataExposure", () => {
     expect(
       scanAiDataExposure({ path: "client.ts", content: "import OpenAI from 'openai'" })
     ).toEqual([])
+    expect(
+      scanAiDataExposure({
+        path: "get_console_errors.ts",
+        content: 'console.log("Could not read response text")',
+      })
+    ).toEqual([])
   })
 
   it("flags direct wildcard MCP permissions and command execution without approval", () => {
@@ -29,6 +35,17 @@ describe("scanAiDataExposure", () => {
         expect.objectContaining({ controlIds: [44] }),
       ])
     )
+  })
+
+  it("does not turn documentation, dependency names or UI shells into command findings", () => {
+    for (const [path, content] of [
+      ["docs/runbook.md", "| Task | Command |"],
+      ["package-lock.json", '"node_modules/shell-quote": {'],
+      ["app/dashboard/layout.tsx", "const shell = <Sidebar />"],
+      ["tests/e2e/error-boundary.spec.ts", 'test("Dashboard shell renders", () => {})'],
+    ]) {
+      expect(scanAiDataExposure({ path, content })).toEqual([])
+    }
   })
 
   it("flags declared RAG ingestion with no access-control field", () => {

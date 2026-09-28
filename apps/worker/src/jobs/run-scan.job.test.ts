@@ -259,7 +259,11 @@ vi.mock("../engine/scanner-orchestrator", () => ({
     secretsFindings: [],
     urlFindings: [],
     agentConfigFindings: [],
+    mlSupplyChainFindings: [],
+    sastFindings: [],
+    iacFindings: [],
     aiAppSecurityFindings: [],
+    webMcpFindings: [],
     coverageIssues: [],
     stats: {
       total: 0,
@@ -1132,6 +1136,11 @@ describe("processScanJob", () => {
       secretsFindings: [],
       urlFindings: [],
       agentConfigFindings: [],
+      mlSupplyChainFindings: [],
+      sastFindings: [],
+      iacFindings: [],
+      aiAppSecurityFindings: [],
+      webMcpFindings: [],
       coverageIssues: [],
       stats: {
         total: 0,
@@ -1262,6 +1271,13 @@ describe("processScanJob", () => {
       "info",
       expect.stringContaining("43 code/URL review controls"),
       expect.objectContaining({ totalControls: 50, evidenceControlsRequired: 7 })
+    )
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "scanners_complete",
+      "info",
+      expect.stringContaining("ai_app_security=0"),
+      expect.objectContaining({ aiAppSecurity: 0 })
     )
   })
 

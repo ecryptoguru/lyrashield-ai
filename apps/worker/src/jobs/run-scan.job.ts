@@ -572,7 +572,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           scanId,
           "scanners_complete",
           "info",
-          `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, url=${orchestratorResult.urlFindings.length}, agent_config=${orchestratorResult.agentConfigFindings.length}, sast=${orchestratorResult.sastFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
+          `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, url=${orchestratorResult.urlFindings.length}, agent_config=${orchestratorResult.agentConfigFindings.length}, sast=${orchestratorResult.sastFindings.length}, iac=${orchestratorResult.iacFindings.length}, ml_supply_chain=${orchestratorResult.mlSupplyChainFindings.length}, ai_app_security=${orchestratorResult.aiAppSecurityFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
           {
             engine: orchestratorResult.engineFindings.length,
             sca: orchestratorResult.scaFindings.length,
@@ -580,6 +580,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             url: orchestratorResult.urlFindings.length,
             agentConfig: orchestratorResult.agentConfigFindings.length,
             sast: orchestratorResult.sastFindings.length,
+            iac: orchestratorResult.iacFindings.length,
+            mlSupplyChain: orchestratorResult.mlSupplyChainFindings.length,
+            aiAppSecurity: orchestratorResult.aiAppSecurityFindings.length,
             falsePositivesFiltered: orchestratorResult.filteredFalsePositives,
             stats: orchestratorResult.stats,
           }

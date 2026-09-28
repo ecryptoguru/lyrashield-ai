@@ -556,7 +556,7 @@ export async function executeScanTarget(params: {
           apiSpecUrl: target.type === "API" ? target.apiSpecUrl : null,
           instruction:
             target.type === "REPO"
-              ? buildVibeSecurityInstruction(goal)
+              ? buildVibeSecurityInstruction(goal, mode)
               : buildUrlTargetInstruction(goal, {
                   host: target.url ? new URL(target.url).hostname : "",
                   targetType: target.type as "WEB_APP" | "API",
