@@ -36,13 +36,6 @@ env:
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
   REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '1' }}
   PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
-  # Cloud modes are protected azure-production variables. Local purchases stay
-  # hard-off independently of Cloud launch state.
-  POLAR_BILLING_ADMISSION: ${{ vars.POLAR_BILLING_ADMISSION || 'off' }}
-  POLAR_LOCAL_BILLING_ADMISSION: "off"
-  RAZORPAY_BILLING_ADMISSION: ${{ vars.RAZORPAY_BILLING_ADMISSION || 'off' }}
-  RAZORPAY_LOCAL_BILLING_ADMISSION: "off"
-  BILLING_CANARY_WORKSPACE_IDS: ${{ vars.BILLING_CANARY_WORKSPACE_IDS || '' }}
   CLOUDFLARE_ORIGIN_MTLS: ${{ vars.CLOUDFLARE_ORIGIN_MTLS || 'off' }}
   CLOUDFLARE_AOP_CERT_SHA256: ${{ vars.CLOUDFLARE_AOP_CERT_SHA256 || '' }}
 

@@ -44,11 +44,13 @@ env:
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
   REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '1' }}
   PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
-  POLAR_BILLING_ADMISSION: ${{ vars.POLAR_BILLING_ADMISSION || 'off' }}
+  # Scanner-only deployments remain closed; app deployments replace these
+  # defaults with the validated 100%-traffic app revision before rollout.
+  POLAR_BILLING_ADMISSION: "off"
   POLAR_LOCAL_BILLING_ADMISSION: "off"
-  RAZORPAY_BILLING_ADMISSION: ${{ vars.RAZORPAY_BILLING_ADMISSION || 'off' }}
+  RAZORPAY_BILLING_ADMISSION: "off"
   RAZORPAY_LOCAL_BILLING_ADMISSION: "off"
-  BILLING_CANARY_WORKSPACE_IDS: ${{ vars.BILLING_CANARY_WORKSPACE_IDS || '' }}
+  BILLING_CANARY_WORKSPACE_IDS: ""
   CLOUDFLARE_ORIGIN_MTLS: ${{ vars.CLOUDFLARE_ORIGIN_MTLS || 'off' }}
   CLOUDFLARE_AOP_CERT_SHA256: ${{ vars.CLOUDFLARE_AOP_CERT_SHA256 || '' }}
   MYRA_PUBLIC_ENABLED: ${{ vars.MYRA_PUBLIC_ENABLED || '0' }}
@@ -90,31 +92,11 @@ jobs:
       (vars.AZURE_RESOURCE_GROUP != '') &&
       ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
     steps:
-      # The billing configuration check below runs an extracted repo script, so
-      # the workspace must exist before the deploy job's first step.
+      # Deployment checks and the live admission reader use repository scripts.
       - name: Checkout for deployment checks
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.DEPLOY_SHA }}
-
-      - name: Verify billing provider deployment configuration
-        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
-        env:
-          POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
-          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
-          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
-          POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
-          POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
-          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
-          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
-          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
-          RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
-          POLAR_BILLING_ADMISSION: ${{ env.POLAR_BILLING_ADMISSION }}
-          RAZORPAY_BILLING_ADMISSION: ${{ env.RAZORPAY_BILLING_ADMISSION }}
-          BILLING_CANARY_WORKSPACE_IDS: ${{ env.BILLING_CANARY_WORKSPACE_IDS }}
-          CLOUDFLARE_ORIGIN_MTLS: ${{ env.CLOUDFLARE_ORIGIN_MTLS }}
-          CLOUDFLARE_AOP_CERT_SHA256: ${{ env.CLOUDFLARE_AOP_CERT_SHA256 }}
-        run: node .github/scripts/verify-billing-deployment-config.mjs
 
       # Myra fail-closed check (Deep Review v18): confirmed writes require the
       # Google calendar provider and usable credentials; the mock adapter and
@@ -152,6 +134,29 @@ jobs:
 
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
+
+      - name: Preserve live Cloud billing admission
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/read-cloud-billing-admission.sh >> "$GITHUB_ENV"
+
+      - name: Verify billing provider deployment configuration
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
+          POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
+          POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
+          CLOUDFLARE_ORIGIN_MTLS: ${{ env.CLOUDFLARE_ORIGIN_MTLS }}
+          CLOUDFLARE_AOP_CERT_SHA256: ${{ env.CLOUDFLARE_AOP_CERT_SHA256 }}
+        run: node .github/scripts/verify-billing-deployment-config.mjs
 
       - name: Ensure app and scanner system identities
         env:
