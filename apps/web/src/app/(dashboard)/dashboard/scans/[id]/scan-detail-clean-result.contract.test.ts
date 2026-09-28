@@ -1,15 +1,11 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
-// apps/web has no component test harness; preserve the clean-result action contract here.
+// Polling runs in an effect, so server rendering cannot exercise this refresh path.
 const source = readFileSync(new URL("./scan-detail-client.tsx", import.meta.url), "utf8")
 
-describe("completed clean-result payoff", () => {
-  it("keeps report and scorecard actions exclusive to completed scans", () => {
-    expect(source).toContain('scan.status === "COMPLETED" && (')
-    expect(source).toContain("Generate report")
-    expect(source).toContain("<ScorecardControls")
-    expect(source).toContain("Absence of findings is not verification.")
+describe("completed clean-result refresh", () => {
+  it("refreshes the page when polling discovers a completed scan with no findings", () => {
     expect(source).toContain('updated.status === "COMPLETED" && refreshedFindings?.length === 0')
     expect(source).toContain("router.refresh()")
   })
