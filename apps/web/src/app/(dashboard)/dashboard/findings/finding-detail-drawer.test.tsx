@@ -8,6 +8,7 @@ import { FindingStatusBadge } from "./finding-detail-drawer"
 // helpers cannot regress back to raw token replaces.
 const source = readFileSync(new URL("./finding-detail-drawer.tsx", import.meta.url), "utf8")
 const tabsSource = readFileSync(new URL("./finding-detail-tabs.tsx", import.meta.url), "utf8")
+const actionSource = readFileSync(new URL("./finding-action-tab.tsx", import.meta.url), "utf8")
 
 describe("FindingStatusBadge", () => {
   it("labels FIX_READY as a human phrase not a raw token", () => {
@@ -24,7 +25,9 @@ describe("finding detail drawer enum labels", () => {
     expect(source).not.toContain('replaceAll("_", " ")')
     expect(tabsSource).not.toContain('replace(/_/g, " ")')
     expect(tabsSource).not.toContain('replaceAll("_", " ")')
-    expect(source).toContain("FINDING_STATUS_LABELS[finding.status]")
+    expect(actionSource).not.toContain('replace(/_/g, " ")')
+    expect(actionSource).not.toContain('replaceAll("_", " ")')
+    expect(actionSource).toContain("FINDING_STATUS_LABELS[finding.status]")
     expect(source).toContain("getVerificationStatusLabel(finding.verificationStatus)")
     expect(tabsSource).toContain("getVerificationStatusLabel(receipt.status)")
     expect(tabsSource).toContain("humanizeToken(receipt.method)")
