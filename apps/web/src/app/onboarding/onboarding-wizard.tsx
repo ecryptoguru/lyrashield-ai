@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { Button } from "@lyrashield/ui"
 import {
   githubReposSchema,
@@ -31,6 +30,7 @@ import {
   type ScanSubmissionScope,
 } from "@/lib/scan-submission"
 import { TARGET_SINGULAR } from "@/lib/terminology"
+import { OnboardingScanRecovery } from "./onboarding-scan-recovery"
 import {
   buildUrlTargetPayload,
   displayStepForPath,
@@ -847,137 +847,43 @@ export function OnboardingWizard({
         }}
       />
 
-      {scanRecoveryUnavailable && (
-        <div
-          className="bg-warning/10 border-warning/50 mb-4 rounded-lg border p-3 text-sm"
-          role="alert"
-        >
-          <p>
-            {scanRecoveryError ??
-              "Saved scan recovery data could not be read. Starting again may create a second scan."}
-          </p>
-          {data.workspaceId && (
-            <Button
-              className="mt-2"
-              type="button"
-              variant="outline"
-              disabled={loading}
-              onClick={() => {
-                try {
-                  clearPendingScanSubmission({
-                    principalId,
-                    workspaceId: data.workspaceId!,
-                    surface: "onboarding",
-                  })
-                  setScanRecoveryUnavailable(false)
-                  setScanRecoveryError(null)
-                  void createTargetAndStart(true)
-                } catch (cause) {
-                  setScanRecoveryError(
-                    cause instanceof Error ? cause.message : "Could not clear scan recovery data."
-                  )
-                }
-              }}
-            >
-              Start another scan anyway
-            </Button>
-          )}
-        </div>
-      )}
-
-      {pendingScanSubmission &&
-        pendingScanSubmission.principalId === principalId &&
-        pendingScanSubmission.workspaceId === data.workspaceId && (
-          <div
-            className="bg-muted/40 mb-4 flex flex-col gap-2 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-            role={pendingScanSubmission.state === "accepted" ? "status" : "alert"}
-            aria-live="polite"
-          >
-            <div className="space-y-1">
-              {pendingScanSubmission.state === "accepted" && pendingScanSubmission.scanId ? (
-                <>
-                  <p className="font-medium">
-                    {data.completed
-                      ? "Your scan started."
-                      : "Your scan started; onboarding could not be saved."}
-                  </p>
-                  <Link
-                    className="text-primary underline underline-offset-4"
-                    href={`/dashboard/scans/${encodeURIComponent(pendingScanSubmission.scanId)}`}
-                  >
-                    Open scan
-                  </Link>
-                </>
-              ) : (
-                <p>
-                  A previous scan may still be starting. Retrying the same details reuses its key.
-                </p>
-              )}
-              {pendingScanSubmission.state !== "accepted" && !pendingScanMatchesCurrent && (
-                <p>
-                  The current request has changed. Start a new scan explicitly to use these details.
-                </p>
-              )}
-              {scanRecoveryError && <p>{scanRecoveryError}</p>}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {pendingScanSubmission.state === "accepted" && pendingScanSubmission.scanId ? (
-                !data.completed && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={loading}
-                    onClick={() =>
-                      void runScanSubmission(scanSubmissionLock, () =>
-                        finishAcceptedOnboarding(
-                          pendingScanSubmission.scanId!,
-                          data.selectedGoal ?? selectedReview?.goal ?? "LAUNCH_REVIEW"
-                        )
-                      )
-                    }
-                  >
-                    Retry saving onboarding
-                  </Button>
-                )
-              ) : (
-                <>
-                  {pendingScanSubmission.operationId && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={checkingScanOperation}
-                      onClick={() => void checkPendingScanOperation(pendingScanSubmission)}
-                    >
-                      {checkingScanOperation ? "Checking status…" : "Check scan status"}
-                    </Button>
-                  )}
-                  {pendingScanMatchesCurrent &&
-                    scanOperationStatus?.recovery !== "retry_new_key" && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={loading}
-                        onClick={() => void createTargetAndStart()}
-                      >
-                        Retry same details
-                      </Button>
-                    )}
-                  {(!pendingScanMatchesCurrent ||
-                    scanOperationStatus?.recovery === "retry_new_key") && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={loading}
-                      onClick={() => void createTargetAndStart(true)}
-                    >
-                      Start a new scan anyway
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
+      <OnboardingScanRecovery
+        unavailable={scanRecoveryUnavailable}
+        recoveryError={scanRecoveryError}
+        workspaceId={data.workspaceId}
+        principalId={principalId}
+        pendingScanSubmission={pendingScanSubmission}
+        pendingScanMatchesCurrent={pendingScanMatchesCurrent}
+        scanOperationStatus={scanOperationStatus}
+        completed={data.completed}
+        selectedGoal={data.selectedGoal}
+        selectedReviewGoal={selectedReview?.goal}
+        loading={loading}
+        checkingScanOperation={checkingScanOperation}
+        onStartAnotherAfterUnavailable={() => {
+          if (!data.workspaceId) return
+          try {
+            clearPendingScanSubmission({
+              principalId,
+              workspaceId: data.workspaceId,
+              surface: "onboarding",
+            })
+            setScanRecoveryUnavailable(false)
+            setScanRecoveryError(null)
+            void createTargetAndStart(true)
+          } catch (cause) {
+            setScanRecoveryError(
+              cause instanceof Error ? cause.message : "Could not clear scan recovery data."
+            )
+          }
+        }}
+        onRetrySave={(scanId, goal) =>
+          void runScanSubmission(scanSubmissionLock, () => finishAcceptedOnboarding(scanId, goal))
+        }
+        onCheckPending={(submission) => void checkPendingScanOperation(submission)}
+        onRetrySame={() => void createTargetAndStart()}
+        onStartNew={() => void createTargetAndStart(true)}
+      />
 
       <section className="rounded-xl border p-5 sm:p-7" aria-live="polite">
         {step === 1 && path !== "url" && path !== "api" && (

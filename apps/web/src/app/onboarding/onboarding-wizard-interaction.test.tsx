@@ -40,6 +40,7 @@ vi.mock("@/lib/api-client", () => ({
   },
 }))
 import { OnboardingWizard } from "./onboarding-wizard"
+import { OnboardingScanRecovery } from "./onboarding-scan-recovery"
 import { Button } from "@lyrashield/ui"
 import { getOnboardingReviewOptions } from "./onboarding-flow.utils"
 import { apiPost, apiPatch } from "@/lib/api-client"
@@ -62,11 +63,12 @@ type Element = ReactElement<{
   onClick?: (...args: unknown[]) => unknown
 }>
 
-// Step views are plain presentational functions (no hooks). Descend into
+// Onboarding views are plain presentational functions (no hooks). Descend into
 // exactly those so assertions still see the inputs they render; library
 // components (Button/Input/etc.) stay opaque leaf elements.
 const VIEW_COMPONENTS = new Set<unknown>([
   OnboardingAlerts,
+  OnboardingScanRecovery,
   PathChooserView,
   RepoSelectView,
   StepProgress,
