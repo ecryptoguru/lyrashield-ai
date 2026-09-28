@@ -90,6 +90,7 @@ describe("scan detail badge labels", () => {
     for (const [goal, label] of [
       ["CHECK_PR", "Check a PR"],
       ["SECURITY_REVIEW", "Security scan"],
+      ["FUTURE_REVIEW", "Future review"],
     ]) {
       const html = renderDetail({ scan: { ...scan, goal }, findings: [] })
       expect(html).toContain(label)

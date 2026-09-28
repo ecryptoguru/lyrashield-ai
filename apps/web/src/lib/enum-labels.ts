@@ -81,7 +81,7 @@ const WORKSPACE_PLAN_LABELS: Record<string, string> = {
 }
 
 export function getScanGoalLabel(value: string): string {
-  return SCAN_GOAL_LABELS[value] ?? getGoalLabel(value)
+  return getGoalLabel(value)
 }
 
 export function getScanModeLabel(value: string): string {

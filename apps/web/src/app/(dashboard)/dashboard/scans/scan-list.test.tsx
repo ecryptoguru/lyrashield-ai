@@ -25,9 +25,14 @@ describe("scan retry setup", () => {
       },
       createdAt: "2026-09-23T00:00:00.000Z",
     }
+    const scans = [
+      scan,
+      { ...scan, id: "scan-2", goal: "CHECK_PR" },
+      { ...scan, id: "scan-3", goal: "FUTURE_REVIEW" },
+    ]
     const html = renderToStaticMarkup(
       <ScanList
-        scans={[scan]}
+        scans={scans}
         refreshing={false}
         nextCursor={null}
         loadingMore={false}
@@ -47,6 +52,8 @@ describe("scan retry setup", () => {
 
     expect(html).toMatch(/<button[^>]*aria-label="Retry setup for Example"/)
     expect(html).toContain("Security scan")
+    expect(html).toContain("Check a PR")
+    expect(html).toContain("Future review")
     expect(html).not.toContain("/dashboard/scans?new=1")
   })
 })
