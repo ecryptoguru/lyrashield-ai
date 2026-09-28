@@ -51,6 +51,17 @@ export async function scanOpenApi(options: {
   const subjects: SurfaceSubject[] = []
   const issues: SurfaceCollectionIssue[] = []
   const attemptedOperations: OpenApiOperationAttempt[] = []
+  const emptyResult = (): OpenApiScannerResult => ({
+    findings: [],
+    signals,
+    subjects,
+    issues,
+    attemptedOperations,
+    execution: buildEmptyExecution(
+      profile,
+      issues.map((issue) => issue.code)
+    ),
+  })
 
   if (signal?.aborted) {
     issues.push({
@@ -58,17 +69,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "Scan was cancelled before the OpenAPI contract could be fetched.",
     })
-    return {
-      findings: [],
-      signals,
-      subjects,
-      issues,
-      attemptedOperations,
-      execution: buildEmptyExecution(
-        profile,
-        issues.map((i) => i.code)
-      ),
-    }
+    return emptyResult()
   }
 
   const specOutcome = await safeFetchDetailed(apiSpecUrl, {
@@ -85,17 +86,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: `Could not fetch OpenAPI spec: ${specOutcome.reason}`,
     })
-    return {
-      findings: [],
-      signals,
-      subjects,
-      issues,
-      attemptedOperations,
-      execution: buildEmptyExecution(
-        profile,
-        issues.map((i) => i.code)
-      ),
-    }
+    return emptyResult()
   }
 
   const rawBody = specOutcome.result.html.trim()
@@ -105,17 +96,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec response body was empty.",
     })
-    return {
-      findings: [],
-      signals,
-      subjects,
-      issues,
-      attemptedOperations,
-      execution: buildEmptyExecution(
-        profile,
-        issues.map((i) => i.code)
-      ),
-    }
+    return emptyResult()
   }
 
   let parsed: unknown
@@ -127,17 +108,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec could not be parsed as JSON or YAML.",
     })
-    return {
-      findings: [],
-      signals,
-      subjects,
-      issues,
-      attemptedOperations,
-      execution: buildEmptyExecution(
-        profile,
-        issues.map((i) => i.code)
-      ),
-    }
+    return emptyResult()
   }
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -146,17 +117,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec must be a JSON or YAML object.",
     })
-    return {
-      findings: [],
-      signals,
-      subjects,
-      issues,
-      attemptedOperations,
-      execution: buildEmptyExecution(
-        profile,
-        issues.map((i) => i.code)
-      ),
-    }
+    return emptyResult()
   }
 
   const spec = parsed as OpenApiSpec
@@ -167,17 +128,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec must be version 3.x.",
     })
-    return {
-      findings: [],
-      signals,
-      subjects,
-      issues,
-      attemptedOperations,
-      execution: buildEmptyExecution(
-        profile,
-        issues.map((i) => i.code)
-      ),
-    }
+    return emptyResult()
   }
 
   const paths = spec.paths ?? {}
@@ -188,17 +139,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: `OpenAPI spec declares ${pathNames.length} paths; the maximum supported is 500.`,
     })
-    return {
-      findings: [],
-      signals,
-      subjects,
-      issues,
-      attemptedOperations,
-      execution: buildEmptyExecution(
-        profile,
-        issues.map((i) => i.code)
-      ),
-    }
+    return emptyResult()
   }
 
   const baseServer = resolveServer(spec, targetUrl)
@@ -209,17 +150,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(baseServer),
       reason: "OpenAPI server URL is not on the same origin as the target.",
     })
-    return {
-      findings: [],
-      signals,
-      subjects,
-      issues,
-      attemptedOperations,
-      execution: buildEmptyExecution(
-        profile,
-        issues.map((i) => i.code)
-      ),
-    }
+    return emptyResult()
   }
 
   // Build a sorted list of candidate operations. Safe methods fall back to the
