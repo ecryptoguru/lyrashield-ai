@@ -84,7 +84,7 @@
       "project": ["src/**/*.ts"]
     },
     "packages/db": {
-      "entry": ["src/**/*.test.ts", "scripts/backfill-account-billing.ts"],
+      "entry": ["src/**/*.test.ts"],
       "project": ["src/**/*.{js,mjs,ts}", "scripts/**/*.ts"]
     },
     "packages/egress-proxy": {
