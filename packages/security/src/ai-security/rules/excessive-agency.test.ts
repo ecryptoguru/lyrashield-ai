@@ -58,6 +58,7 @@ describe("AI-05 excessive agency", () => {
       "const removeLoading = (id) => setLoadingIds((prev) => prev.delete(id))",
       "await db.drop(table)",
       "collection.deleteMany({ active: false })",
+      "toolbar.deleteFile(path)",
     ]) {
       expect(state(line), `false agent permission finding on: ${line}`).toBe("NO_FINDING")
     }

@@ -18,6 +18,9 @@ describe("scanAiDataExposure", () => {
         content: 'console.log("Could not read response text")',
       })
     ).toEqual([])
+    expect(
+      scanAiDataExposure({ path: "chat.ts", content: 'console.log(prompt + " suffix")' })
+    ).toContainEqual(expect.objectContaining({ title: "Raw AI prompt or response logged" }))
   })
 
   it("flags direct wildcard MCP permissions and command execution without approval", () => {
@@ -46,6 +49,15 @@ describe("scanAiDataExposure", () => {
     ]) {
       expect(scanAiDataExposure({ path, content })).toEqual([])
     }
+  })
+
+  it("does not borrow an execution flag from a separate object", () => {
+    expect(
+      scanAiDataExposure({
+        path: "tools.ts",
+        content: 'const tool = { command: "ls" }; const options = { execute: true }',
+      })
+    ).toEqual([])
   })
 
   it("flags declared RAG ingestion with no access-control field", () => {

@@ -49,7 +49,7 @@ export function scanAiDataExposure(source: AiDataExposureSource): AiDataExposure
     const withoutQuotedStrings = logArguments.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, "")
     if (
       isLogger &&
-      /\b(?:prompt|messages?|response|completion)\b(?=\s*[:.)\],}]|\s*$)/i.test(
+      /\b(?:prompt|messages?|response|completion)\b(?=\s*[:+.)\],}]|\s*$)/i.test(
         withoutQuotedStrings
       )
     ) {
@@ -84,10 +84,12 @@ export function scanAiDataExposure(source: AiDataExposureSource): AiDataExposure
         )
       )
     }
+    const toolDeclaration = /\btool\w*\s*=\s*\{([^}]*)\}/i.exec(line)?.[1]
     if (
-      /\btool\w*\s*=\s*\{[^}]*\b(?:command|exec|shell)\s*:/i.test(line) &&
-      /\b(?:execute|autoExecute|autoApprove)\s*:\s*true\b/i.test(line) &&
-      !/\b(?:require_?approval|approvalRequired)\s*[:=]\s*true\b/i.test(line)
+      toolDeclaration &&
+      /\b(?:command|exec|shell)\s*:/i.test(toolDeclaration) &&
+      /\b(?:execute|autoExecute|autoApprove)\s*:\s*true\b/i.test(toolDeclaration) &&
+      !/\b(?:require_?approval|approvalRequired)\s*[:=]\s*true\b/i.test(toolDeclaration)
     ) {
       findings.push(
         finding(
