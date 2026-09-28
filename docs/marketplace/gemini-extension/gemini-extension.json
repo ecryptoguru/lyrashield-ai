@@ -16,7 +16,7 @@
       "args": [
         "-y",
         "--node-options=--require=\"${extensionPath}/mcp-env.cjs\"",
-        "@lyrashield/mcp@0.2.10"
+        "@lyrashield/mcp@0.2.11"
       ],
       "env": {
         "LYRASHIELD_EXTENSION_CRED": "${GEMINI_LYRASHIELD_CRED}"

@@ -2,7 +2,7 @@
 
 ## 0.1.30 (release candidate)
 
-- Pin the published MCP 0.2.10 tool catalog and align generated client manifests.
+- Pin the published MCP 0.2.11 tool catalog and align generated client manifests.
 - Retain Codebuff's curated read-only tool list; new tools require separate client validation.
 
 ## 0.1.29
