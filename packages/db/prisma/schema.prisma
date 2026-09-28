@@ -1862,6 +1862,7 @@ model AgentConnection {
   @@index([workspaceId])
   @@index([userId])
   @@index([status])
+  @@unique([id, workspaceId])
   @@map("agent_connections")
 }
 
@@ -1900,7 +1901,7 @@ model AgentOperation {
   updatedAt            DateTime             @updatedAt
 
   workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  connection AgentConnection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  connection AgentConnection? @relation(fields: [connectionId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
 
   @@unique([connectionId, operationName, idempotencyKey])
   @@unique([workspaceId, principalType, principalId, operationName, idempotencyKey])
