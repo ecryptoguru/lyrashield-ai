@@ -166,6 +166,26 @@ describe("createLocalTaskBackend", () => {
     expect(posted).toMatchObject({ workspaceId: "ws_1" })
   })
 
+  it("does not report cancellation when the response and status re-read are unreadable", async () => {
+    let scanReads = 0
+    const fetchFn = restFetch({
+      "/api/scans/scan_1": () => {
+        scanReads += 1
+        return scanReads === 1 ? { id: "scan_1", status: "RUNNING" } : undefined
+      },
+      "POST /api/scans/scan_1": { unexpected: true },
+    })
+    const backend = createLocalTaskBackend(context(fetchFn))
+    const task = await backend.createTask({
+      toolName: "lyrashield_scan_target",
+      args: { workspaceId: "ws_1" },
+      taskParams: {},
+      toolResult: triggered(),
+    })
+
+    await expect(backend.cancelTask(task.taskId)).rejects.toThrow(/status could not be verified/i)
+  })
+
   it("lists only the tasks this process created (bounded, session-lifetime)", async () => {
     const backend = createLocalTaskBackend(context(restFetch({})))
     const task = await backend.createTask({

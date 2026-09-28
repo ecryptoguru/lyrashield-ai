@@ -20,6 +20,7 @@ import { PasswordInput } from "@/components/password-input"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   attributionProps,
+  invalidateAnalyticsPreference,
   readSignupAttribution,
   rememberAcquisition,
   signupErrorUrl,
@@ -147,6 +148,7 @@ export default function SignUpPage() {
       // When email verification is required the server returns token: null;
       // otherwise Better Auth signs the new user in immediately.
       if (data?.token) {
+        invalidateAnalyticsPreference()
         router.push(planIntentPath("/onboarding", selectedPlan.current))
         router.refresh()
         return
@@ -178,6 +180,8 @@ export default function SignUpPage() {
       })
       if (socialError) {
         setError(getAuthErrorMessage(socialError) ?? "GitHub sign up failed. Please try again.")
+      } else {
+        invalidateAnalyticsPreference()
       }
     } catch {
       setError("GitHub sign up failed. Please try again.")
@@ -198,6 +202,8 @@ export default function SignUpPage() {
       })
       if (socialError) {
         setError(getAuthErrorMessage(socialError) ?? "Google sign up failed. Please try again.")
+      } else {
+        invalidateAnalyticsPreference()
       }
     } catch {
       setError("Google sign up failed. Please try again.")
@@ -218,6 +224,8 @@ export default function SignUpPage() {
       })
       if (socialError) {
         setError(getAuthErrorMessage(socialError) ?? "Microsoft sign up failed. Please try again.")
+      } else {
+        invalidateAnalyticsPreference()
       }
     } catch {
       setError("Microsoft sign up failed. Please try again.")

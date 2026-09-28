@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
 import { describe, expect, it } from "vitest"
 import { buildPlugin } from "../build.js"
 import { getPluginDir } from "../index.js"

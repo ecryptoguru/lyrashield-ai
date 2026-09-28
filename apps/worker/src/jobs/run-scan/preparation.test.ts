@@ -56,13 +56,14 @@ const diffPlan = () =>
   })
 
 function params(over: Partial<Parameters<typeof prepareScanExecution>[0]> = {}) {
-  return {
+  const fixture = {
     scanId: "scan-1",
     targetId: "target-1",
     goal: "CHECK_PR",
     mode: "STANDARD",
     ...over,
-  } as Parameters<typeof prepareScanExecution>[0]
+  }
+  return fixture as Parameters<typeof prepareScanExecution>[0]
 }
 
 describe("prepareScanExecution Review Changes guard", () => {
@@ -86,10 +87,11 @@ describe("prepareScanExecution Review Changes guard", () => {
     // Schema validation normally rejects this; the worker boundary still
     // fails closed rather than scanning a different change set than the plan
     // recorded.
-    const malformed = {
+    const malformedFixture = {
       ...diffPlan(),
       source: { revision: HEAD, baseRevision: BASE },
-    } as ScanExecutionPlan
+    }
+    const malformed = malformedFixture as ScanExecutionPlan
 
     const result = await prepareScanExecution(params({ executionPlan: malformed }))
 

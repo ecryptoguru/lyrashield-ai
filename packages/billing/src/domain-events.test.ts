@@ -5,12 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest"
  * the real zod-validated config. parseLocalProductIds() reads
  * env.POLAR_LOCAL_PRODUCT_IDS at call time.
  */
-const envState = vi.hoisted(
-  () =>
-    ({
-      NODE_ENV: "test",
-    }) as Record<string, string | undefined>
-)
+const envState: Record<string, string | undefined> = vi.hoisted(() => ({
+  NODE_ENV: "test",
+}))
 
 vi.mock("@lyrashield/config", () => ({ env: envState }))
 vi.mock("@lyrashield/db", () => ({

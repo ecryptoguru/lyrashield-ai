@@ -5,7 +5,7 @@ if [ "${1:-}" = "--" ]; then
   shift
 fi
 
-image="${1:-lyrashieldai-worker:latest}"
+image="${1:-lyrashield-worker:local}"
 expected_app_revision="${2:-}"
 expected_engine_revision="${3:-}"
 configured_user="$(docker image inspect "$image" --format '{{.Config.User}}')"

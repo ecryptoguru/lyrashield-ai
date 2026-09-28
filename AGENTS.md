@@ -28,54 +28,14 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 - Cloud and Desktop release workflows pin engine `21ce6688b8bc39c88822a0e1792b9be08dca8a07`, which includes the GPT-6-only model boundary and Local scan integrity/viewer fixes. A source pin does not establish a completed deployment or signed Desktop release; verify the exact release run separately.
 - Product `main` requires `SCA & Secret Scan`, `Lint, Typecheck, Test & Build` and `Pinned Engine / Worker Contract`, with strict up-to-date branch checks. Update the engine's reverse `.lyrashield-worker-pin` only to an exact merged product commit after compatibility verification.
 
-## Earlier verified runtime snapshot — 2026-09-14
-
-- PR #677 merged growth attribution and checkout-readiness work into main `9cde77d2`. It adds account-owned first-touch acquisition under forced RLS and user-delete cascade, DNT/GPC opt-out, corrected 30-day cancellation counting, and a read-only checkout configuration verifier. Main CI `34841775897` and production release `34842662910` passed on the merged SHA. The release applied migration `20260914000000_account_acquisition`, passed candidate and production smoke, and promoted worker digest `sha256:bf87b85d6fe93bfa4fa7178e0ec52f0b9dfefd6537663294e83e8fc2399b62da`; no live payment proof followed.
-- Direct Azure readback on 2026-09-14 found app `lyrashield-app--0000358`, scanner `lyrashield-scanner--0000333`, and egress proxy `lyrashield-egress-proxy--0000199` on `9cde77d2`, each at 100% traffic. Polar and Razorpay Cloud purchase admissions were both `public`, both Local admissions `off`, and the canary allowlist empty. Live `/api/ready/scans` returned `200` with worker ready. `docs/operations.md` §Live checkout verification is the controlled canary/live runbook. Refresh deployed flags before any action. The protected Cloud-admission workflow changes both providers together.
-
-- Open beta with open registration at `https://app.lyrashieldai.com/sign-up`; never call it pre-launch or a waitlist.
-- Marketing, passive Lite Scanner, authenticated app origin, Cloudflare bindings, TLS, sitemap/robots/`llms.txt`, security headers, and open-registration CTAs are live.
-- Core Sprints 0–10 are merged: auth/tenancy, scan pipeline, findings/evidence/retests/reports, notifications/schedules, scorecards/referrals, agent/MCP/CLI/plugin, Polar/Razorpay billing, Local/Desktop, and affiliates.
-- The launch-assurance wave (WP1–WP7) and Deep Review v14 remediation are merged (main `ae205163`): WP1 two-line repricing (Scan: Trial/Starter/Pro; Agency $499 self-serve, Enterprise from $1,500 contact-led; failed scans never billed), WP2 Launch Gate (`lyrashield-gate/2.3.0`, append-only `GateVerdict` under RLS, verdict refreshed after every terminal scan state), WP3 fix-PR pipeline fully wired (deterministic `fix-generate` producer, `baseCommit` stamping, real retest loop-closure on merged fix branches), WP4 signed shareable Launch Readiness Report (allowlisted payload, ed25519, public verify), WP5 CLI `gate --verdict` (exit codes 0/1/2), WP6 AI-Built Failure Taxonomy (public at `/api/taxonomy/ai-built-failures`), WP7 WebMCP-11/12 (embedded-secret and prompt-injection-surface detection). v14 also fixed: uncovered-target-types never READY, GateVerdict RLS + WORKSPACE_SCOPED_MODELS, honest medium/low disclosure in launch reports, fail-closed patch scope (PRO+ only get implicated-set/200), engine stream-tail capture on failed runs, eligibility preflight/POST parity, and CI rollback resilience. The engine worker pin is advanced to web `ae205163` (engine `2c8fccc`).
-- Engine version 1.2.1 over pinned Strix v1.5.3. Safe/Quick/Standard use Luna/medium; Deep/Custom use Terra/medium root plus Luna/high specialists. Caps: $1.20/$1.20/$3.20/$5/$5.
-- Current Standard acceptance: scan `cmt9el7p7000001hdjnjo90wk`, `OnboardingAI2@1689f3607d68764e09769535df8e368c4d5ad2fe`, completed in 10m 9s. All 189 requests used Luna/medium; the per-request model buckets and engine total reconciled to $0.578800 under the $3.20 cap; 10 Standard minutes were debited at 1×; 25 findings were retained; zero were independently verified.
-- The current acceptance sealed manifest v5 checksum `ebfa3fb0ba19d97d8d9393432f8dbe37078b4bcf0367a7b91c21fe54a78e5687`. It bound the exact source revision, product/worker/engine/sandbox digests, successful sandbox cleanup, and `sourceCheckoutAvailable=true`. Engine, SCA, secrets, agent configuration, ML supply-chain, and AI App Security family receipts completed; URL was not applicable. AI App Security scanned all 217 eligible files (1,956,360 bytes) with zero skips or limits.
-- CI `34273883372` and release `34274737832` deployed product `9b8d395012ce82e2792f9a7548e59406301e9cc7`: app `lyrashield-app--0000327`, scanner `lyrashield-scanner--0000300`, and egress proxy `lyrashield-egress-proxy--0000168` are healthy at 100% traffic. Worker digest `sha256:2f831eb6372a6eaa4513b6927ceba8c8db564469c4cee4865f333b8adfe84083` runs that product with engine `4b8db2eec617541f591834999693b7dba407fc05`; candidate and production smoke, queue-empty promotion, worker readiness, Cloudflare deployment, and live integration-guide readback passed.
-- Production includes Redis/egress efficiency work and the secure source-checkout recovery from PR #450. The former isolated billing test deployment, runtime exceptions, GitHub environment, Azure resources, and Azure AD identity were removed on 2026-09-08 after the accepted provider receipts were retained.
-- Upstash authenticated TLS BullMQ Redis is live; public Azure `6379` rule is removed; legacy Redis is stopped/restart-disabled for rollback only.
-- Production egress proof passed: direct arbitrary public fetch denied, authenticated proxy fetch allowed, loopback denied `ssrf_blocked`. During the accepted scan, an OSV pin change paused new admission and removed readiness while the paid job drained; it did not interrupt or replay the scan. The next timer restarted the exact worker digest, and readiness returned `200`. This bounded drain interval produced an expected temporary `503`; alerting must distinguish planned drain from an unexpected worker outage.
-- Redis/egress efficiency code is deployed: slower idle BullMQ polling, single-key Lua heartbeat/readiness operations, DB-first reconciliation, proxy-only CISA enrichment, and drain-safe pin rotation. Live Redis command metrics and longer-window capacity evidence remain required.
-- Encrypted backup and isolated restore verified schema, RLS, audit chain, and application startup.
-- Production runtime DB role `app_runtime_prod` was queried on 2026-08-22 and verified `rolsuper=false`, `rolbypassrls=false`.
-- Provider readiness remains bounded. Restricted Polar Sandbox and Razorpay Test Mode proof completed in isolated Azure staging on product `5e6c68ba` under run `33438477364`, including hosted checkout, provider-delivered signed webhooks, application/database effects, replay idempotency, immediate cancellation, redacted receipts, and cleanup. A read-only Brave review on 2026-08-26 confirmed Razorpay Live activation, six matching INR Cloud plans, and one enabled eight-event production webhook. Polar Live has an active production token, fifteen private Cloud/pack/Local products, and an enabled lifecycle webhook. Razorpay hosted-checkout methods above INR 15,000, Polar settlement readiness, and all live entitlement/usage events remain unproven. Staging proof does not establish a live charge, settlement, payout, tax, or universal payment-method coverage.
-- CLI and GitHub Action classify added `eval()`/`exec()` as `HIGH`, so the default `--fail-on HIGH` gate blocks them.
-- Dashboard is one adaptive authenticated surface: a state-derived next action, posture with exact evidence scope, compact metrics, recent activity, and progressive disclosure for technical depth. `GET /api/scans/eligibility` provides an advisory read-only preflight; `POST /api/scans` remains the authoritative gate. No mode switch changes permissions or scan behavior.
-- Platform administration is implemented as a hidden, noindex, cross-workspace read console for overview, users, workspaces, scans, audit, and affiliates. Access requires an allowlisted, verified `PLATFORM_OPERATOR` browser session with recent TOTP; bearer credentials and workspace roles never grant access.
-- Production configuration accepts exactly `ecryptoguru@gmail.com,ankit@lyrashieldai.com` as platform administrators. Preflight `32925726620` and apply `32925979621` passed; both accounts are unique, verified, TOTP-enrolled `PLATFORM_OPERATOR`s. Fresh independent Google-plus-TOTP sessions opened every bounded admin destination for both users. Unauthenticated, bearer-only, and workspace-header-only admin requests returned `401` with private/no-store caching.
-- Account-owned billing merged in PR #657 (`71aa4db3`) and deployed through production release `34552773295` to app revision `lyrashield-app--0000343` at 100% traffic. The coordinated cutover mapped every retained legacy billing/usage row, deleted the 12 non-admin test accounts, retained exactly the two platform administrators, and granted each an account-only, no-charge 6,000-minute Launch Assurance allowance. Historical minute amounts were preserved. PR #658 (`3b289a43`) extended the bounded account-deletion transaction for the largest test workspace. Runtime-role readback confirmed account isolation and zero unmapped billing, usage, or pack rows.
-- Repository secrets `AZURE_DEPLOY_CLIENT_ID`, `AZURE_DEPLOY_TENANT_ID`, and `AZURE_DEPLOY_SUBSCRIPTION_ID` and the Azure federated credential are operational. Production release `34552773295` logged successful Azure CLI OIDC login, closing the former v16 provisioning action.
-- The six final platform security evidence gates are closed: all production
-  GitHub environments require review; app ingress requires mTLS while the direct
-  Azure scanner trusts only Azure's documented rightmost forwarded IP; payout
-  providers remain credential-free and disabled; the engine is intentionally
-  public; scanner GitHub App secrets are removed; and Cloud admission uses a
-  run-scoped GitHub token instead of a PAT.
-- Production evidence-storage round-trip and missing-KEK fail-closed probes passed. Key Vault managed-identity license signing, denied-identity failure, Desktop fingerprint parity, and missing-secret failure passed; this is secret retrieval, not non-exportable remote signing.
-- Both administrators acknowledged the Azure test notification. Exact zero-request provider evidence cleared the historical terminal-cost alert under receipt `f952706e6ced8105f8d12f530186939f33b0074b6ff17f4eb17a04afd81eeb84` without changing money columns.
-- The controlled orphan drill moved synthetic scan `cmta574d50004fef1nbydufai` to `FAILED/QUEUE_ORPHANED` without engine execution or replay, retained verification/cleanup audits, restored the exact worker digest, reconciled both queues to zero, and resumed admission.
-- A temporary internal scorecard passed page, referral, privacy, deduplication, DNT/GPC, three-card, badge, LinkedIn unfurl, and revocation checks. The pass found canonical/OG metadata baked to the scanner origin; this change fixes it with a regression test. Exact-SHA deployment and live canonical readback remain required.
-- Platform-affiliate mutations remain disabled until each write is connected to the one-time action elevation and atomic platform-audit transaction. The current admin console is read-only.
-- Agent distribution publishes CLI `0.2.12`, MCP `0.2.10` on MCP SDK `1.30`, and Agent Plugin `0.1.29`, with Node 24 support; live client activation remains a separate gate, hosted OAuth with connection-bound delegated workflows, and 30 registry entries representing 26 preferred client surfaces. Installers follow each client's documented config, marketplace, or manual activation path and dry runs execute no vendor command. Native OAuth clients receive no bearer placeholder. OpenCode supports its documented global and project config locations. Codex registration uses its marketplace manager; copying the package directory alone does not activate it. Do not update Node 26 types, ESLint 10, ioredis 6, or TypeScript 7 until compatibility migrations are planned.
-- Marketing ships indexability-gated `robots.txt`, sitemap, dated `llms.txt`, `agents.md`, structured data, canonical integration guides, comparison/research pages, and explicit answer-engine crawler policy. These are SEO/AEO/GEO foundations, not proof of webmaster indexing or answer-engine citation.
-
-Claims boundary: this is bounded runtime/accounting evidence for one target and revision, not proof of universal coverage, independently verified findings, or security.
+Current release and runtime evidence lives in [PRD §8](./PRD.md#8-current-production-evidence) and [codebase §11](./codebase.md#11-production-topology-and-accepted-evidence). Refresh deployed state before operational action.
 
 ## Immediate execution queue
 
 1. Merge and deploy the scorecard canonical-origin fix, then repeat live canonical and OG readback on the exact SHA.
 2. Retain longer-window Redis command/capacity evidence and complete RazorpayX/Payoneer payout plus tax-form operations before paid scale.
 3. Triage the 25 findings retained by current Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted. Keep all unverified results `DETECTED` or `INCONCLUSIVE`.
-4. After founder authorization, run separate controlled Deep/Terra acceptance with exact image, routing, cost, receipts, and terminal proof.
+4. After founder authorization, run separate controlled Deep/Sol acceptance with exact image, routing, cost, receipts, and terminal proof.
 
 ## Founder decisions
 
@@ -152,7 +112,7 @@ Decided on 2026-09-22: retain and publish the existing Cloud and minute-pack pri
 
 - Routing authority: `resolveEngineProfile()`; budget authority: `resolveScanBudgetUsd()`; price authority: `gpt56-pricing.ts`.
 - Keep validated fallback model and positive policy checks.
-- Deep/Custom are Terra-root/Luna-specialist profiles, not a Luna-to-Terra cascade.
+- Deep/Custom use GPT-6 Sol/medium root and Luna/high specialists; see [model routing](./codebase.md#model-routing-and-accounting).
 - Model-facing inputs use `normalizeInput()` and `PromptInjectionGuard`; no ad hoc regex replacement.
 - Workspace API keys are managed by Owners and Admins with browser sessions. The raw key is shown once and only its hash is stored; verification remains bound to the workspace, active creator membership, scope, and current permission. Use read-only scope where possible and never place a key in shared client configuration.
 - Remote OAuth is read-only by default. A valid browser-confirmed delegation may authorize only its recorded workflows, targets, and scan profiles; revalidate membership, permission, connection state, scope, expiry, and idempotency at execution. Hosted remote MCP mutations without that grant, including API-key and legacy `approvalId` calls, receive `connect_required`; direct REST and local stdio use the separate credential-scope and workspace-permission path.
@@ -177,7 +137,7 @@ Local gates — run the ones a change touches before opening a PR:
 - `pnpm test:core` (vitest unit suite), `pnpm test:marketing`, `pnpm test:motion`, `pnpm test` (full runner), `pnpm test:e2e` (Playwright; needs the test database).
 - `pnpm db:generate`, `pnpm db:migrate`, `pnpm prisma:migrate:check` (migration drift).
 - `pnpm verify:worker-image` — worker image contract on the checked-out Dockerfile and host assets.
-- Deploy-script suites: `node --test .github/scripts/tests/*.test.mjs` and `bash .github/scripts/tests/*.sh`. These mock `docker`/`systemctl`/`curl` and never touch a real VM.
+- Deploy-script suites: `node --test .github/scripts/tests/*.test.mjs` and `for t in .github/scripts/tests/*.sh; do bash "$t" || exit 1; done`. These mock `docker`/`systemctl`/`curl` and never touch a real VM.
 
 Release pipeline — GitHub Actions only; production steps are founder-dispatched:
 
@@ -196,13 +156,6 @@ Release pipeline — GitHub Actions only; production steps are founder-dispatche
 
 ## Documentation ownership
 
-- [PRD.md](./PRD.md): strategy, scope, release status, backlog, founder decisions.
-- [codebase.md](./codebase.md): architecture, code map, runtime contracts, compact history.
-- [AGENTS.md](./AGENTS.md): current handoff, queue, rules, landmines.
-- [docs/whitepaper.md](./docs/whitepaper.md): consolidated product, commercial, claims, and Phase 2 roadmap reference.
-- [docs/yellowpaper.md](./docs/yellowpaper.md): technical specification and contract registry.
-- [docs/user-guide.md](./docs/user-guide.md): user workflows and limitations.
-- Deployment and operational runbooks were removed on 2026-09-09; Git history is the recovery path.
-- [docs/README.md](./docs/README.md): document ownership and retention map.
+See [docs/README.md](./docs/README.md) for the current document map, including [operator runbooks](./docs/operations.md) and retention rules.
 
 After merge, remove branch-only wording and update all affected truth documents. Keep historical detail in Git/PRs, not copied into current summaries.

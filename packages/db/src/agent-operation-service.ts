@@ -223,18 +223,81 @@ export async function completeAgentOperation(
 export async function failAgentOperation(
   operationId: string,
   workspaceId: string,
-  params: { error: string; resultReference?: string }
+  params: { error: string; resultReference?: string; expectedUpdatedAt?: Date }
 ): Promise<AgentOperation> {
-  return withWorkspaceRLS(workspaceId, (tx) =>
-    tx.agentOperation.update({
-      where: { id: operationId },
-      data: {
-        status: "FAILED",
-        error: params.error,
-        resultReference: params.resultReference,
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const data = {
+      status: "FAILED",
+      error: params.error,
+      resultReference: params.resultReference,
+    } as const
+    if (params.expectedUpdatedAt) {
+      await tx.agentOperation.updateMany({
+        where: {
+          id: operationId,
+          workspaceId,
+          status: "EXECUTING",
+          updatedAt: params.expectedUpdatedAt,
+        },
+        data,
+      })
+      const operation = await tx.agentOperation.findFirst({
+        where: { id: operationId, workspaceId },
+      })
+      if (!operation) throw new Error("Agent operation not found")
+      return operation
+    }
+    return tx.agentOperation.update({ where: { id: operationId }, data })
+  })
+}
+
+/**
+ * Retry a failed or abandoned hosted scan cancellation after its caller has
+ * verified the scan is still active. The conditional update makes retries
+ * single-writer; other failed or external operations stay final.
+ */
+export async function retryScanCancellation(
+  operationId: string,
+  workspaceId: string,
+  staleBefore: Date
+): Promise<ClaimOperationResult | null> {
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const claimed = await tx.agentOperation.updateMany({
+      where: {
+        id: operationId,
+        workspaceId,
+        operationName: "scan.cancel",
+        OR: [
+          {
+            status: "FAILED",
+            error: {
+              in: [
+                "TASK_CANCELLATION_FAILED",
+                "TASK_CANCELLATION_NOT_CONFIRMED",
+                "TASK_CANCELLATION_STATUS_UNAVAILABLE",
+              ],
+            },
+          },
+          {
+            status: { in: ["PENDING", "EXECUTING"] },
+            error: null,
+            updatedAt: { lt: staleBefore },
+          },
+        ],
       },
+      data: { status: "EXECUTING", error: null },
     })
-  )
+    const operation = await tx.agentOperation.findFirst({
+      where: { id: operationId, workspaceId, operationName: "scan.cancel" },
+    })
+    if (!operation) return null
+    if (claimed.count === 1) return { status: "NEW", operation }
+    if (operation.status === "COMPLETED") return { status: "REPLAY", operation }
+    if (operation.status === "FAILED" || operation.status === "CONFLICT") {
+      return { status: "FAILED", operation }
+    }
+    return { status: "IN_PROGRESS", operation }
+  })
 }
 
 export async function getAgentOperation(

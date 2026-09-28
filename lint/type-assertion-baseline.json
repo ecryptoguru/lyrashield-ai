@@ -1,0 +1,260 @@
+{
+  "apps/web/src/app/(dashboard)/dashboard/ai-assurance/page.tsx": [
+    {
+      "kind": "never",
+      "sha256": "16b439714b8ff8d27922b764df9ec5311a2c51cad4e9ad2290f4aae9c04a9ecd",
+      "count": 1
+    },
+    {
+      "kind": "never",
+      "sha256": "fd0327495f4f2b97be3b37daa5044f21982919c2f710d581f87c71d06da9ca97",
+      "count": 1
+    }
+  ],
+  "apps/web/src/app/(dashboard)/dashboard/scans/[id]/page.tsx": [
+    {
+      "kind": "double-unknown",
+      "sha256": "396307c9af104046dd4bdb3cecde4e0310b30b6d28ae2263349a33a2d2f59612",
+      "count": 1
+    }
+  ],
+  "apps/web/src/app/(dashboard)/dashboard/scans/page.tsx": [
+    {
+      "kind": "never",
+      "sha256": "486f21f06c98101540af396438d683ad10aa1b76fa3300760b66796ddbdaf6c1",
+      "count": 1
+    },
+    {
+      "kind": "never",
+      "sha256": "4c1b88975ca3dfd87fe67575e9c39b72e089cfb59db5dbf04d74d82fb6ca5bd4",
+      "count": 1
+    }
+  ],
+  "apps/web/src/app/api/mcp/remote-approval-gate.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "1e056843bd6a1484469b56e93b98fb5f9a75f80445b6106908aaafa20d6369ef",
+      "count": 1
+    }
+  ],
+  "apps/web/src/app/api/reports/[id]/download/route.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "1f7f6f37a0540904d774054c66156eef80990f7cf8975cb01dd773d7a49ec311",
+      "count": 1
+    }
+  ],
+  "apps/web/src/app/api/scans/[id]/artifacts/sarif/route.ts": [
+    {
+      "kind": "never",
+      "sha256": "2bdaf82dcf557276bd82ba85340ae2f2a5604098a3346d946e68ac39df071c04",
+      "count": 2
+    }
+  ],
+  "apps/web/src/app/api/scans/route.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "d3524289436f326c0947b9652fc0c238351d12370fae2c8ad025658aeb1a2afe",
+      "count": 1
+    }
+  ],
+  "apps/web/src/app/api/sync/findings/route.ts": [
+    {
+      "kind": "never",
+      "sha256": "a7760b6065fb2e5f3da53b182a920d908766b5d670d98dbf514d590c55d52181",
+      "count": 2
+    }
+  ],
+  "apps/web/src/lib/launch-readiness-server.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "d0ff2dd8681b8a66d8cb76a95919337b43cd38b5d4acf8bab2421c4d5258a608",
+      "count": 1
+    }
+  ],
+  "apps/web/src/lib/oauth-consent-state.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "0fa46e551cf88b48a67228ab55f9a9ee328c157fb3d92b9fdb2792bac26eaa38",
+      "count": 1
+    }
+  ],
+  "apps/worker/src/engine/connector-context.ts": [
+    {
+      "kind": "never",
+      "sha256": "a6772f7c3d22b34b82ec6ba1c0f7b41565f3cdee0f7a095936b13ce2590c0a39",
+      "count": 1
+    }
+  ],
+  "apps/worker/src/jobs/billing-reconciliation.job.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "3835e1f1f1ad10b7ce7fba30acc7685846182e4c2392165ef81d767dddc80b42",
+      "count": 1
+    },
+    {
+      "kind": "double-unknown",
+      "sha256": "eaedea727928e3bf93d3fcae21251859476d11bdcfebd746860c727df3e6a06c",
+      "count": 1
+    }
+  ],
+  "apps/worker/src/operations/verify-queue-orphan-fixture.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "75340edcf4c75afaf8573168055e49e45acbc3541c71c31e6e6fafea411afbca",
+      "count": 1
+    }
+  ],
+  "packages/auth/src/auth.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "be698d8439c3f20b565a824790aa8113428bf2b3e28f4728cb571dab0abab5aa",
+      "count": 1
+    }
+  ],
+  "packages/billing/src/license-fulfillment.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "e46dfe9ad24a76a8e8c386154d4e8dd1368e04e6f62c088fc4412b8595c541a1",
+      "count": 1
+    }
+  ],
+  "packages/billing/src/providers/razorpay/adapter.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "36703ae4c2db3a13451ea271d09ca9a8e561a0f6f0315aa71f825e6f3c3d75f3",
+      "count": 3
+    }
+  ],
+  "packages/billing/src/providers/razorpay/client.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "ab6289ebb712d5daf18e705fb0942fb6033a6e7daf96e1865b97643f71abd07c",
+      "count": 1
+    },
+    {
+      "kind": "double-unknown",
+      "sha256": "ea9a9290330d530246e65477c1607735dc16b724bfb4069f2b5c7764b8f86f5a",
+      "count": 1
+    }
+  ],
+  "packages/billing/src/sync.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "1d17fb4c9acfe1306f3bdbdbbe18c93861f373b5c2315986bcb9bb5e57a69584",
+      "count": 1
+    }
+  ],
+  "packages/cli/src/commands/approvals.ts": [
+    {
+      "kind": "never",
+      "sha256": "940bf031d0fdcd4adbe873cfe2c36aca564a21e46587fc8f4fed679629ddcc83",
+      "count": 1
+    }
+  ],
+  "packages/db/src/ai-assurance-service.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "2342d9dc30bae8b8142e90a45b27973757ca0e6d98ea4d2d489212306f270257",
+      "count": 3
+    },
+    {
+      "kind": "double-unknown",
+      "sha256": "af4ffeed4bfd9c49c5c8a9ca0332d59fb1dab68b7744cc942c58578d1bd13d86",
+      "count": 5
+    },
+    {
+      "kind": "double-unknown",
+      "sha256": "f17986af1599b893359ffe2c20cc01a8582e873839d6cd43a002a2f173ffa68e",
+      "count": 1
+    }
+  ],
+  "packages/db/src/client.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "1cc3312db8c1a2174d8f5ececba13d8c503ba0f5244b48ecdc8685304264fa1d",
+      "count": 1
+    }
+  ],
+  "packages/db/src/launch-report-service.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "2d8bb98b3e365d93cabb1e0b4484fecc1be0ac8a8850f389be7a5c58f79f58bb",
+      "count": 1
+    },
+    {
+      "kind": "double-unknown",
+      "sha256": "8eade955f61b4133cdaea4a1b39660417e9f058f3c2ada3a23271fcdb39a677d",
+      "count": 1
+    },
+    {
+      "kind": "double-unknown",
+      "sha256": "dc39fb1f8c21af5f9070799c3a88b663be6def73f6d249b796c3cfd565b0dddb",
+      "count": 1
+    }
+  ],
+  "packages/db/src/scoping.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "368da0096c5c0e5fb1aab8fa8b5dd3440b2dafd7c99750187b0eb58b5985d9a5",
+      "count": 1
+    }
+  ],
+  "packages/db/src/system-client.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "9ac93c9c7ad0ae58d9805d27b4cde279d76feb1e8a7fb58679425bccd0a1abc7",
+      "count": 1
+    },
+    {
+      "kind": "double-unknown",
+      "sha256": "e8e1c18cb5e0a528c9f74c6cb2f29bc04509d29d925204299928b18b398fa343",
+      "count": 1
+    }
+  ],
+  "packages/egress-proxy/src/relay.ts": [
+    {
+      "kind": "never",
+      "sha256": "cec9e1302f0c92f8b4f035917740986b076e5e395616c544b54f81bed53d16ee",
+      "count": 1
+    }
+  ],
+  "packages/logger/src/index.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "63130e6c9ff9fb5743c944126fb735fd103a1a1a1a20f6fc92888bbb99e0a58e",
+      "count": 1
+    }
+  ],
+  "packages/sdk/src/client.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "74f2cb4d0e681167ce960508b837a2863e508f0ab7191db33354cc0f55e7891d",
+      "count": 1
+    }
+  ],
+  "packages/security/src/safe-fetch.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "dc10a275b9f0d1e8e9760190acc3c2e280ebaaf463109b4cfa83c223835aed55",
+      "count": 1
+    },
+    {
+      "kind": "never",
+      "sha256": "440710e1389c79e5a91f4b47fc1c048280c6e2e2acdc60a5d0389dd549bde172",
+      "count": 1
+    }
+  ],
+  "packages/security/src/webmcp/canonicalize.ts": [
+    {
+      "kind": "double-unknown",
+      "sha256": "524ee915dbb9b860d411f844e44df537a728250782188ea7c001da4ac37724d7",
+      "count": 1
+    },
+    {
+      "kind": "double-unknown",
+      "sha256": "80bacaf6938d871114871f4ec30ea48c09d77b0400b53f4c75020497cff3f926",
+      "count": 1
+    }
+  ]
+}

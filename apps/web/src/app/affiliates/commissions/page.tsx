@@ -3,6 +3,7 @@ import { prisma } from "@lyrashield/db"
 import { getCachedSession } from "@/lib/cache"
 import { PageHeader } from "@/components/page-header"
 import { LocalTime } from "@/components/local-time"
+import { humanizeToken } from "@/lib/labels"
 
 export const metadata = {
   title: "Commissions — Affiliate Dashboard — LyraShield AI",
@@ -114,10 +115,10 @@ export default async function AffiliateCommissionsPage() {
                                   : "bg-muted"
                       }`}
                     >
-                      {c.status}
+                      {humanizeToken(c.status)}
                     </span>
                   </td>
-                  <td className="py-2 pr-4">{c.conversion.method}</td>
+                  <td className="py-2 pr-4">{humanizeToken(c.conversion.method)}</td>
                   <td className="py-2 pr-4">
                     {c.reversalOfId ? (
                       <span className="text-xs text-red-600">

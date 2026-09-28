@@ -11,11 +11,11 @@ export interface Output {
   fail(error: string, exitCode?: number): never
 }
 
-export function isTTY(): boolean {
+function isTTY(): boolean {
   return !!process.stdout.isTTY && !process.env.CI
 }
 
-export function noColor(): boolean {
+function noColor(): boolean {
   return !!process.env.NO_COLOR || !isTTY()
 }
 
@@ -23,24 +23,12 @@ function fmt(c: string, s: string): string {
   return noColor() ? s : `${c}${s}\x1b[0m`
 }
 
-export function red(s: string): string {
+function red(s: string): string {
   return fmt("\x1b[31m", s)
 }
 
-export function yellow(s: string): string {
+function yellow(s: string): string {
   return fmt("\x1b[33m", s)
-}
-
-export function green(s: string): string {
-  return fmt("\x1b[32m", s)
-}
-
-export function cyan(s: string): string {
-  return fmt("\x1b[36m", s)
-}
-
-export function dim(s: string): string {
-  return fmt("\x1b[2m", s)
 }
 
 export function redactKey(key: string | undefined): string {
@@ -96,13 +84,4 @@ export function createOutput({ json, quiet = false }: { json: boolean; quiet?: b
       process.exit(exitCode)
     },
   }
-}
-
-export function printJsonError(error: string, exitCode = 1): never {
-  console.log(JSON.stringify({ ok: false, error }, null, 2))
-  process.exit(exitCode)
-}
-
-export function printJsonResult(data: unknown): void {
-  console.log(JSON.stringify({ ok: true, data }, null, 2))
 }

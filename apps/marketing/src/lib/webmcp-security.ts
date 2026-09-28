@@ -114,10 +114,6 @@ export const SAFE_EXAMPLE = `<!DOCTYPE html>
 </html>
 `
 
-export async function runLightweightWebMcpDiscovery(_files: WebMcpScanFile[]): Promise<never> {
-  throw new Error("Shared WebMCP analyzer unavailable; no fallback result was produced.")
-}
-
 function toLanguage(extension: string): WebMcpScanFile["language"] {
   switch (extension.toLowerCase()) {
     case ".js":

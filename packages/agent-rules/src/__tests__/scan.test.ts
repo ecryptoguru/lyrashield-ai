@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createHash } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
@@ -8,6 +7,7 @@ import { listAgents } from "@lyrashield/agent-registry"
 import { renderRuleForAgent } from "../renderers/index.js"
 import { scanAgentConfig } from "../../../../apps/worker/src/engine/scanners/agent-config-scanner.js"
 
+// The worker-owned scanner logs through this package; keep its test output quiet.
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn() } }))
 
 describe("rendered rules must pass the agent-config scanner", () => {

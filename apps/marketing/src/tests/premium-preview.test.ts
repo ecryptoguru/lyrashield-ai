@@ -2,24 +2,19 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { createMotionMediaManifest } from "../lib/motion-manifest"
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const homepage = readFileSync(new URL("../pages/index.astro", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const hero = readFileSync(
   new URL("../components/landing/PremiumHero.astro", import.meta.url),
   "utf8"
 )
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const world = readFileSync(
   new URL("../components/landing/EvidenceWorld.astro", import.meta.url),
   "utf8"
 )
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const worldModule = readFileSync(
   new URL("../components/landing/evidence-world.ts", import.meta.url),
   "utf8"
 )
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const astroConfig = readFileSync(new URL("../../astro.config.mjs", import.meta.url), "utf8")
 
 describe("premium assurance-world homepage", () => {
@@ -48,7 +43,7 @@ describe("premium assurance-world homepage", () => {
     expect(hero).toContain("Release assurance for AI-built apps")
     expect(hero).toContain("Know what your AI-built app is ready to ship.")
     expect(hero).toContain(
-      "Review an authorized repository, URL or API. See what was checked, what needs attention, and"
+      "Review an authorized repository, URL or API. See what was checked, what needs attention and"
     )
     expect(hero.indexOf("landing_hero&cta=review_app")).toBeLessThan(
       hero.indexOf('href="#free-scan"')

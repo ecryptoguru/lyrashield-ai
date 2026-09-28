@@ -58,20 +58,19 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --max-warnings 0",
-    "test": "vitest run"
+    "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "@noble/hashes": "2.2.0",
     "parse5": "^8.0.1",
-    "typescript": "^6.0.0",
+    "typescript": "catalog:",
     "undici": "8.10.0",
-    "zod": "^4.0.0"
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "catalog:",
     "webmcp-types": "^0.1.5"
   }
 }

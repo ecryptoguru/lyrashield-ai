@@ -47,6 +47,8 @@ export async function GET(request: Request) {
       getAccountTrialState(accountId),
       getGraceState(accountId, billingAccount),
     ])
+    const expiredFreeTrial =
+      (billingAccount?.effectivePlan ?? "FREE") === "FREE" && trialState.isExpired
 
     return apiSuccess(
       {
@@ -59,9 +61,9 @@ export async function GET(request: Request) {
         usage: {
           poolMinutes: balance.poolMinutes,
           poolConsumed: balance.poolConsumed,
-          poolRemaining: balance.poolRemaining,
+          poolRemaining: expiredFreeTrial ? 0 : balance.poolRemaining,
           packRemaining: balance.packRemaining,
-          totalRemaining: balance.totalRemaining,
+          totalRemaining: expiredFreeTrial ? 0 : balance.totalRemaining,
           packs: balance.packs.map((p) => ({
             id: p.id,
             remainingMinutes: p.remainingMinutes,
@@ -75,7 +77,7 @@ export async function GET(request: Request) {
           startedAt: trialState.startedAt?.toISOString() ?? null,
           endsAt: trialState.endsAt?.toISOString() ?? null,
           daysLeft: trialState.daysLeft,
-          minutesLeft: trialState.minutesLeft,
+          minutesLeft: expiredFreeTrial ? 0 : trialState.minutesLeft,
           targetsUsed: trialState.targetsUsed,
           targetCap: trialState.targetCap,
         },

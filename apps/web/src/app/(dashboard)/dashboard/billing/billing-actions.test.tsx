@@ -45,6 +45,7 @@ describe("BillingActions", () => {
       for (const interval of ["monthly", "annual"])
         expect(html).toContain(`Choose ${label}, ${interval} billing`)
     }
+    expect(html).toContain("4,500<!-- --> agent-minutes / month")
   })
   it("labels prices in the server-resolved catalog currency without touching checkout", () => {
     // The chooser displays the catalog for the region the server resolved —

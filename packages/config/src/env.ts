@@ -283,7 +283,6 @@ const envSchema = z
     // implicit production default: every configured credential must name its
     // target environment explicitly.
     POLAR_ENVIRONMENT: z.enum(["production", "sandbox"]).optional(),
-    POLAR_ORG_ID: z.string().optional().or(z.literal("")),
     POLAR_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
     // JSON maps of app catalog keys to provider-assigned IDs.
     POLAR_PRODUCT_IDS: z.string().optional().or(z.literal("")),
@@ -404,7 +403,6 @@ const envSchema = z
     PAYONEER_API_KEY: z.string().optional().or(z.literal("")),
     PAYONEER_API_SECRET: z.string().optional().or(z.literal("")),
     PAYONEER_PARTNER_ID: z.string().optional().or(z.literal("")),
-    PAYONEER_PAYOUT_ADMISSION: z.literal("off").default("off"),
     AFFILIATE_DEFAULT_PROGRAM_SLUG: z.string().optional().or(z.literal("")).default("default"),
     AFFILIATE_COOKIE_DOMAIN: z.string().optional().or(z.literal("")).default(".lyrashieldai.com"),
     AFFILIATE_ATTRIBUTION_WINDOW_DAYS: z.coerce.number().int().positive().max(365).default(60),
@@ -446,7 +444,6 @@ const envSchema = z
     MYRA_AZURE_OPENAI_API_KEY: z.string().optional().or(z.literal("")),
     // One approved Azure generation deployment for all support turns.
     MYRA_MODEL: z.string().optional().or(z.literal("")),
-    MYRA_EMBED_MODEL: z.string().optional().or(z.literal("")),
     // Server-enforced monthly generation spend cap (USD). Optional; when set it
     // bounds model calls alongside the per-turn caps.
     MYRA_MONTHLY_BUDGET_USD: z.string().optional().or(z.literal("")),

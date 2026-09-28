@@ -196,7 +196,7 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
       eyebrow: "Next step",
       title: "Generate an assurance report",
       description:
-        "Every active target's current gate state is READY. Package the retained evidence into an immutable report you can share with your team.",
+        "Every active target's current gate state is ready. Package the retained evidence into an immutable report you can share with your team.",
       href: HOME_REPORT_HREF,
       cta: "Create a report",
     }

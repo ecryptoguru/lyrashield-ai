@@ -49,7 +49,6 @@ import {
   isTimeoutError,
   MAX_SCAN_RUNTIME_MS,
   reportInterruptedSettlement,
-  resolveEngineRuntimeBudgetMs,
   resolveScanRuntimeBudgetMs,
   resolveScannerPhaseTimeoutMs,
   timeoutErrorMessage,
@@ -57,19 +56,13 @@ import {
 import {
   engineRoutingCoverageIssue,
   engineRuntimeDeadlineCoverageIssue,
-  extractActualCostUsd,
-  extractUsageSummary,
   persistEngineUsageCheckpoint,
   shouldRecordAgentMinutes,
 } from "./run-scan/usage"
 
 export {
   engineRoutingCoverageIssue,
-  engineRuntimeDeadlineCoverageIssue,
-  extractActualCostUsd,
-  extractUsageSummary,
   persistEngineUsageCheckpoint,
-  resolveEngineRuntimeBudgetMs,
   resolveScanRuntimeBudgetMs,
   resolveScannerPhaseTimeoutMs,
   shouldRecordAgentMinutes,

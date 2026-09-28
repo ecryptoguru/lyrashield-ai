@@ -25,7 +25,7 @@ import { computeScanExecutionPlanHash } from "@lyrashield/db/src/scan-execution-
 import { verifyScanJobAuthority } from "./authority"
 
 function makeJob(overrides: { id?: string; data?: Record<string, unknown> } = {}) {
-  return {
+  const fixture = {
     id: "scan-1",
     data: {
       scanId: "scan-1",
@@ -36,7 +36,8 @@ function makeJob(overrides: { id?: string; data?: Record<string, unknown> } = {}
       ...overrides.data,
     },
     ...("id" in overrides ? { id: overrides.id } : {}),
-  } as never
+  }
+  return fixture as Parameters<typeof verifyScanJobAuthority>[0]
 }
 
 function storedScan(overrides: Record<string, unknown> = {}) {

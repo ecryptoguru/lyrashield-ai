@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react"
 import { Card, cn } from "@lyrashield/ui"
 import { getTrendPointX } from "./security-visuals.utils"
+import { severityLabel } from "@/lib/labels"
 
 const severityColors: Record<string, string> = {
   CRITICAL: "var(--color-critical)",
@@ -151,7 +152,7 @@ export function SeverityDonut({ values }: { values: Record<string, number> }) {
                 style={{ background: severityColors[entry.severity] }}
                 aria-hidden="true"
               />
-              {entry.severity}
+              {severityLabel(entry.severity)}
             </span>
             <span className="metric-number font-semibold">{entry.count}</span>
           </div>

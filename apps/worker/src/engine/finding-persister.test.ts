@@ -41,7 +41,8 @@ describe("persistFindings", () => {
     })
     vi.mocked(prisma.finding.create).mockImplementation(async () => {
       await inFlight
-      return { id: "finding-1" } as never
+      const finding = { id: "finding-1" }
+      return finding as never
     })
     vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
     let settled = false

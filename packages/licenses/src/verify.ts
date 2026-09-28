@@ -134,8 +134,9 @@ export function verifyLicense(
 }
 
 /**
- * Check whether a given build version is installable under a verified license.
+ * Canonical TypeScript contract for Desktop Rust's `is_build_installable` port.
  *
+ * Keep parity tests here while the Desktop app enforces the mirrored rule in Rust.
  * - If the license is still update-eligible, any build is allowed.
  * - If eligibility has expired, only builds <= `perpetualFallbackBuild` are
  *   allowed (the client never deactivates — it just refuses newer updates).

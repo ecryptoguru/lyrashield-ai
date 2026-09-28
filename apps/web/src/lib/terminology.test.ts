@@ -3,22 +3,18 @@ import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import {
   HOME_LABEL,
-  ISSUE_PLURAL,
-  ISSUE_SINGULAR,
-  RUN_PLURAL,
-  RUN_SINGULAR,
+  FINDING_PLURAL,
+  FINDING_SINGULAR,
   SCAN_PLURAL,
   SCAN_SINGULAR,
 } from "./terminology"
 
 describe("user-facing terminology", () => {
   it("uses the canonical Scan and Finding nouns", () => {
-    expect(RUN_SINGULAR).toBe("Scan")
-    expect(RUN_PLURAL).toBe("Scans")
     expect(SCAN_SINGULAR).toBe("Scan")
     expect(SCAN_PLURAL).toBe("Scans")
-    expect(ISSUE_SINGULAR).toBe("Finding")
-    expect(ISSUE_PLURAL).toBe("Findings")
+    expect(FINDING_SINGULAR).toBe("Finding")
+    expect(FINDING_PLURAL).toBe("Findings")
     expect(HOME_LABEL).toBe("Home")
   })
 
@@ -70,9 +66,6 @@ describe("user-facing terminology", () => {
       const relative = filePath.replaceAll("\\", "/")
       if (relative.includes("/onboarding/")) return false
       if (relative.includes("/app/api/")) return false
-      // terminology.ts is the label definition module: PRODUCT_SINGULAR lives
-      // there and is consumed only by onboarding, which the sibling task owns.
-      if (relative.endsWith("/lib/terminology.ts")) return false
       return /\bProducts?\b/.test(text)
     })
     expect(offenders, `retired noun found in: ${offenders.join(", ")}`).toEqual([])
@@ -89,15 +82,12 @@ function scanWebSource(match: (text: string, filePath: string) => boolean): stri
   const roots = [join(__dirname, "..", "app"), join(__dirname, "..", "components"), __dirname]
   const offenders: string[] = []
   const walk = (dir: string) => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry)
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const stat = statSync(full)
       if (stat.isDirectory()) {
         walk(full)
       } else if (/\.tsx?$/.test(entry) && !/\.test\./.test(entry)) {
-        // eslint-disable-next-line security/detect-non-literal-fs-filename
         const text = readFileSync(full, "utf8")
         const hit = collectStringLiterals(text).some((literal) => match(literal, full))
         if (hit) offenders.push(full)
@@ -116,15 +106,12 @@ function scanTsxText(match: (text: string, filePath: string) => boolean): string
   const roots = [join(__dirname, "..", "app"), join(__dirname, "..", "components")]
   const offenders: string[] = []
   const walk = (dir: string) => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry)
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const stat = statSync(full)
       if (stat.isDirectory()) {
         walk(full)
       } else if (/\.tsx$/.test(entry) && !/\.test\./.test(entry)) {
-        // eslint-disable-next-line security/detect-non-literal-fs-filename
         const text = readFileSync(full, "utf8")
           .replace(/\/\*[\s\S]*?\*\//g, " ")
           .replace(/(^|[^:])\/\/[^\n]*/g, "$1 ")

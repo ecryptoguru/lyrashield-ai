@@ -14,7 +14,7 @@ import { z } from "zod"
 
 export const SARIF_IMPORT_VERSION = "sarif-import/1.0.0" as const
 
-export const MAX_SARIF_BYTES = 5 * 1024 * 1024
+const MAX_SARIF_BYTES = 5 * 1024 * 1024
 const MAX_RESULTS = 2_000
 
 export interface SarifParseResult {

@@ -9,6 +9,20 @@ const URL_PROPERTIES = [
 
 export const ANALYTICS_PREFERENCE_COOKIE = "lyrashield-analytics"
 export const ANALYTICS_PREFERENCE_MAX_AGE = 180 * 24 * 60 * 60
+const OPTIONAL_TRACKING_COOKIES = [
+  "lyrashield-acq",
+  "ls_ref",
+  "ls_ref_source",
+  "ls_scorecard_visitor",
+] as const
+
+function sharedCookieDomain(hostname: string): string {
+  return ["lyrashieldai.com", "www.lyrashieldai.com", "app.lyrashieldai.com"].includes(
+    hostname.toLowerCase()
+  )
+    ? "; Domain=.lyrashieldai.com"
+    : ""
+}
 
 export function marketingAnalyticsPreference(cookie: string): "on" | "off" | null {
   const match = cookie.match(/(?:^|;\s*)lyrashield-analytics=(on|off)(?:;|$)/)
@@ -35,12 +49,20 @@ export function marketingAnalyticsAllowed({
 }
 
 export function marketingAnalyticsCookie(enabled: boolean, hostname: string, secure: boolean) {
-  const domain = ["lyrashieldai.com", "www.lyrashieldai.com", "app.lyrashieldai.com"].includes(
-    hostname.toLowerCase()
-  )
-    ? "; Domain=.lyrashieldai.com"
-    : ""
+  const domain = sharedCookieDomain(hostname)
   return `${ANALYTICS_PREFERENCE_COOKIE}=${enabled ? "on" : "off"}; Path=/; Max-Age=${ANALYTICS_PREFERENCE_MAX_AGE}; SameSite=Lax${domain}${secure ? "; Secure" : ""}`
+}
+
+export function optionalTrackingCookieExpirations(hostname: string, secure: boolean): string[] {
+  const domain = sharedCookieDomain(hostname)
+  const domains = ["", ...(domain ? [domain] : [])]
+  const secureAttribute = secure ? "; Secure" : ""
+  return OPTIONAL_TRACKING_COOKIES.flatMap((name) =>
+    domains.map(
+      (cookieDomain) =>
+        `${name}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${cookieDomain}${secureAttribute}`
+    )
+  )
 }
 
 // Property keys that must never reach analytics, regardless of event.

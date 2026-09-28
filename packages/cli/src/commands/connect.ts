@@ -36,9 +36,7 @@ Options:
     return 2
   }
 
-  const registry = await import("@lyrashield/agent-registry").catch(
-    () => ({}) as Record<string, unknown>
-  )
+  const registry = await import("@lyrashield/agent-registry").catch(() => ({}))
   const list = (registry as Record<string, unknown>).listAgents as (() => AgentEntry[]) | undefined
   const preferred = (registry as Record<string, unknown>).getPreferredAgent as
     ((id: string) => AgentEntry | undefined) | undefined

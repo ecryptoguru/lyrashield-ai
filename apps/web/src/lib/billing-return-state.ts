@@ -7,7 +7,7 @@ export type BillingReturnState =
   | { kind: "account-current"; shouldRefresh: false }
 
 export const MAX_PROVIDER_RETURN_REFRESHES = 3
-export const PROVIDER_RETURN_REFRESH_INTERVAL_MS = 2_000
+const PROVIDER_RETURN_REFRESH_INTERVAL_MS = 2_000
 
 export function parseProviderReturnOutcome(
   value: string | undefined

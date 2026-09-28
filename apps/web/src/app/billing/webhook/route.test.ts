@@ -358,9 +358,10 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     expect(viaHeader).toEqual({ externalId: "evt_ABC123", identitySource: "delivery" })
 
     // No derivable inputs → null (never a random id).
+    const emptyPayload = {}
     expect(
       resolveRazorpayEventIdentity(
-        { event: "payout.created", created_at: 123, payload: {} as never },
+        { event: "payout.created", created_at: 123, payload: emptyPayload as never },
         undefined
       )
     ).toBeNull()

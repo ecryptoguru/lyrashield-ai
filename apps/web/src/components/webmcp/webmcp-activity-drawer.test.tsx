@@ -3,15 +3,13 @@ import { describe, expect, it, vi, afterAll } from "vitest"
 import { renderToString } from "react-dom/server"
 import { WebMcpReceiptProvider, useWebMcpReceiptStore } from "./webmcp-receipt-provider"
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-;(globalThis as any).window = {
+vi.stubGlobal("window", {
   addEventListener: vi.fn(),
   removeEventListener: vi.fn(),
-}
+})
 
 afterAll(() => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  delete (globalThis as any).window
+  vi.unstubAllGlobals()
 })
 
 function Consumer() {
@@ -48,7 +46,6 @@ describe("WebMcpActivityDrawer", () => {
     // The expanded panel only mounts on interaction, so the link markup lives
     // in source: it is conditional on `receipt.href`, which only ever holds a
     // sanitized `/dashboard/...` path (see safeDashboardHref).
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const src = readFileSync(new URL("./webmcp-activity-drawer.tsx", import.meta.url), "utf8")
     expect(src).toContain("receipt.href")
     expect(src).toContain("href={receipt.href}")
@@ -71,7 +68,6 @@ describe("WebMcpActivityDrawer", () => {
 
     // The expanded panel only mounts on interaction, so its class lives in
     // source: it must clear the raised chip (bottom-32 + chip height + gap).
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const src = readFileSync(new URL("./webmcp-activity-drawer.tsx", import.meta.url), "utf8")
     expect(src).toContain("bottom-44")
   })

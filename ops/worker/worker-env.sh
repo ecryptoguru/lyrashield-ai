@@ -55,6 +55,8 @@ lyrashield_worker_env_args() {
     fi
   fi
 
+  # Worker serves no authentication routes. Keep its email flag off so it does
+  # not require the app's Brevo credential; app deployment defaults to on.
   printf '%s\n' \
     "--env NODE_ENV=production" \
     "--env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com" \

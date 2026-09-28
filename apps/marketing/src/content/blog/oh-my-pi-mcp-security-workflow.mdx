@@ -2,7 +2,7 @@
 title: Oh My Pi MCP security workflow
 description: "Set up LyraShield MCP in Oh My Pi step by step: CLI setup, manual config, verification, inline scan, GitHub Action diff gate and agent rules."
 pubDate: "2026-08-07"
-updatedDate: 2026-09-22
+updatedDate: 2026-09-27
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, supply-chain]
 draft: false
@@ -49,7 +49,7 @@ If you must edit by hand, add an entry under `mcpServers` in `.omp/mcp.json`. Th
 }
 ```
 
-Never commit a real token. Keep the literal in the user level file or environment and commit only a redacted structure. The [CWE-798](https://cwe.mitre.org/data/definitions/798.html) hard coded credentials pattern is the exact risk. If you use `/mcp add` inside an Oh My Pi session, it writes this structure atomically with restrictive permissions. If you prefer a local stdio server instead of the remote endpoint, swap the entry for a stdio server with `command: "npx"`, `args: ["-y", "@lyrashield/mcp@0.2.8", "stdio"]` and an `env` map that injects your token; the `type` field is optional and defaults to stdio. The CLI writes the remote form by default because it avoids running a local process and keeps the token out of a command line that process listings could expose, but both shapes are valid. Whichever you choose, confirm with `npx lyrashield doctor` that the agent session actually receives the scan tools, since a config path mistake is the most common failure and produces no error.
+Never commit a real token. Keep the literal in the user level file or environment and commit only a redacted structure. The [CWE-798](https://cwe.mitre.org/data/definitions/798.html) hard coded credentials pattern is the exact risk. If you use `/mcp add` inside an Oh My Pi session, it writes this structure atomically with restrictive permissions. If you prefer a local stdio server instead of the remote endpoint, swap the entry for a stdio server with `command: "npx"`, `args: ["-y", "@lyrashield/mcp@0.2.10", "stdio"]` and an `env` map that injects your token; the `type` field is optional and defaults to stdio. The CLI writes the remote form by default because it avoids running a local process and keeps the token out of a command line that process listings could expose, but both shapes are valid. Whichever you choose, confirm with `npx lyrashield doctor` that the agent session actually receives the scan tools, since a config path mistake is the most common failure and produces no error.
 
 ## 4. Verify the connection and run an inline check
 

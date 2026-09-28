@@ -6,6 +6,8 @@ import { Badge, buttonVariants } from "@lyrashield/ui"
 import { PageHeader } from "@/components/page-header"
 import { getPlatformAdminScans, parseAdminCursor } from "@/lib/platform-admin-lists"
 import { LocalTime } from "@/components/local-time"
+import { getScanStatusLabel } from "@/lib/enum-labels"
+import { modeLabel } from "@/lib/labels"
 
 export const dynamic = "force-dynamic"
 
@@ -64,9 +66,9 @@ export default async function PlatformAdminScansPage({
               <tr key={scan.id}>
                 <td className="px-4 py-3 font-mono text-xs break-all select-all">{scan.id}</td>
                 <td className="px-4 py-3">
-                  <Badge variant="muted">{scan.status}</Badge>
+                  <Badge variant="muted">{getScanStatusLabel(scan.status)}</Badge>
                 </td>
-                <td className="px-4 py-3">{scan.mode}</td>
+                <td className="px-4 py-3">{modeLabel(scan.mode)}</td>
                 <td className="px-4 py-3">{scan.workspace.name}</td>
                 <td className="px-4 py-3">{scan.target?.name ?? "Deleted target"}</td>
                 <td className="px-4 py-3">

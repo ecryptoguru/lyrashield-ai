@@ -51,6 +51,8 @@ output/playwright/
 # Local build/runtime scratch (regenerate on build/test)
 apps/agent/
 tmp-*-test/
+__pycache__/
+*.pyc
 lyrashield_runs/
 .lyrashield-worker-tmp/
 packages/mcp/.packed-stdio-*/

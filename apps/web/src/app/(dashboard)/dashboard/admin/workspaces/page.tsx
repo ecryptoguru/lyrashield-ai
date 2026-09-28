@@ -6,6 +6,7 @@ import { Badge, buttonVariants } from "@lyrashield/ui"
 import { PageHeader } from "@/components/page-header"
 import { getPlatformAdminWorkspaces, parseAdminCursor } from "@/lib/platform-admin-lists"
 import { LocalTime } from "@/components/local-time"
+import { getWorkspacePlanLabel } from "@/lib/enum-labels"
 
 export const dynamic = "force-dynamic"
 
@@ -55,7 +56,7 @@ export default async function PlatformAdminWorkspacesPage({
               <tr key={workspace.id}>
                 <td className="px-4 py-3">{workspace.name}</td>
                 <td className="px-4 py-3">
-                  <Badge variant="muted">{workspace.plan}</Badge>
+                  <Badge variant="muted">{getWorkspacePlanLabel(workspace.plan)}</Badge>
                 </td>
                 <td className="px-4 py-3 tabular-nums">{workspace.memberCount}</td>
                 <td className="px-4 py-3 tabular-nums">{workspace.targetCount}</td>

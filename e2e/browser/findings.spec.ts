@@ -285,14 +285,14 @@ test("scoped finding drawer keeps keyboard and report handoff context at respons
       body: JSON.stringify({ success: true, data: { items: [], nextCursor: null } }),
     })
   })
-  await page.route("**/dashboard/findings?tab=reports**", async (route) => {
+  await page.route("**/*", async (route) => {
     const destination = new URL(route.request().url())
+    if (destination.pathname !== "/dashboard/reports") return route.fallback()
     reportRouteUrl = destination.toString()
-    await route.continue({
+    return route.continue({
       url: new URL(`/e2e/browser/index.html${destination.search}`, destination.origin).toString(),
     })
   })
-
   for (const width of [390, 768, 1440, 320]) {
     await page.setViewportSize({ width, height: 900 })
     await page.goto("?findings&scanId=origin-scan&target=target-test&withPassingRetest=1")
@@ -328,7 +328,7 @@ test("scoped finding drawer keeps keyboard and report handoff context at respons
     const reportLink = drawer.getByRole("link", { name: "Generate report" })
     await expect(reportLink).toHaveAttribute(
       "href",
-      "/dashboard/findings?tab=reports&scanId=retest-scan&targetId=target-test"
+      "/dashboard/reports?scanId=retest-scan&targetId=target-test"
     )
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
@@ -353,7 +353,9 @@ test("scoped finding drawer keeps keyboard and report handoff context at respons
     await expect(drawer).toBeVisible()
     await reportLink.focus()
     await page.keyboard.press("Enter")
-    await expect(page).toHaveURL(/tab=reports&scanId=retest-scan&targetId=target-test/)
+    await expect(page).toHaveURL(/\/dashboard\/reports\?scanId=retest-scan&targetId=target-test$/)
+    expect(reportRouteUrl).toContain("scanId=retest-scan")
+    expect(reportRouteUrl).toContain("targetId=target-test")
     await expect(page.getByRole("heading", { name: "Reports", exact: true })).toBeVisible()
     const reportScope = page.getByRole("combobox", { name: "Report scope" })
     await expect(reportScope).toHaveValue("scan:retest-scan")
@@ -386,8 +388,6 @@ test("scoped finding drawer keeps keyboard and report handoff context at respons
           new URL(request).searchParams.get("targetId") === "target-test"
       )
     ).toBe(true)
-    expect(reportRouteUrl).toContain("scanId=retest-scan")
-    expect(reportRouteUrl).toContain("targetId=target-test")
     expect(
       findingsRequests.every(
         (request) => new URL(request).searchParams.get("targetId") === "target-test"

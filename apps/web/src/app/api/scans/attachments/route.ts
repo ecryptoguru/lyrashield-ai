@@ -7,7 +7,7 @@ import {
   ScanAttachmentError,
 } from "@lyrashield/db"
 import { deleteEncryptedArtifact, uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "@/lib/api-auth"
@@ -93,6 +93,7 @@ async function post(request: Request) {
 
     // Authenticate before reading the potentially large upload stream.
     const { session } = await requirePermission(workspaceId, PERMISSIONS.attachment.upload)
+    assertOAuthDelegatedScope(session, null)
 
     const filename = filenameFromRequest(request)
     if (!SCAN_ATTACHMENT_FILENAME_PATTERN.test(filename)) {

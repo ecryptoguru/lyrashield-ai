@@ -8,7 +8,6 @@ const models = "referralCode|referralAttribution|scorecardShare|scorecardEvent"
 const access = new RegExp(`\\b(?:prisma|tx)\\.(?:${models})\\b`)
 
 function sourceFiles(directory: string): string[] {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- test scans only repo source roots.
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name)
     if (entry.isDirectory()) return sourceFiles(path)
@@ -24,7 +23,6 @@ describe("growth-loop ownership", () => {
         .map((file) => relative(repoRoot, file))
         .filter((file) => !file.includes("/generated/"))
         .filter((file) => !allowed.has(file))
-        // eslint-disable-next-line security/detect-non-literal-fs-filename -- file originates from sourceFiles.
         .filter((file) => access.test(readFileSync(join(repoRoot, file), "utf8")))
     )
     expect(

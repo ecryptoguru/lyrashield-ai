@@ -61,9 +61,7 @@ describe("platform admin overview page", () => {
 
   it("ships a LoadingShell route loading state", () => {
     const loadingPath = new URL("./loading.tsx", import.meta.url)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     expect(existsSync(loadingPath)).toBe(true)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const source = readFileSync(loadingPath, "utf8")
     expect(source).toContain("LoadingShell")
   })

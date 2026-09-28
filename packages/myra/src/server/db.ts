@@ -28,7 +28,7 @@ export function ownerWhere(
  * scheduled sweep, user-initiated erasure) is the gate; binding the operator
  * context only declares the path so a context-free statement fails closed.
  */
-export const MYRA_TRUSTED_OPERATOR = "myra:operator"
+const MYRA_TRUSTED_OPERATOR = "myra:operator"
 export const MYRA_TRUSTED_MANAGE_TOKEN = "myra:manage-token"
 export const MYRA_TRUSTED_INTERNAL = "myra:internal"
 export const MYRA_TRUSTED_RETENTION = "myra:retention"

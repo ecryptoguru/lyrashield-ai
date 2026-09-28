@@ -3,9 +3,7 @@ import { detectAgent, findDetectedLocations } from "../installers/detect.js"
 import type { Output } from "../output.js"
 
 export async function handleAgents(_args: string[], output: Output): Promise<number> {
-  const registry = await import("@lyrashield/agent-registry").catch(
-    () => ({}) as Record<string, unknown>
-  )
+  const registry = await import("@lyrashield/agent-registry").catch(() => ({}))
   const list = (registry as Record<string, unknown>).listAgents as (() => AgentEntry[]) | undefined
   const arr = (registry as Record<string, unknown>).AGENTS as AgentEntry[] | undefined
   const agents = list?.() ?? arr ?? []

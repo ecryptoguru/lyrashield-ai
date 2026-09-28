@@ -35,13 +35,17 @@ text="${line#*|}"
 exit "${code:-0}"
 FAKE
 chmod +x "$tmp/bin/az"
-cat > "$tmp/bin/timeout" <<'FAKE_TIMEOUT'
+# GNU timeout is absent on macOS; provide a pass-through there. Linux retains
+# the real timeout implementation while fake sleep keeps backoff assertions fast.
+if ! command -v timeout >/dev/null 2>&1; then
+  cat > "$tmp/bin/timeout" <<'FAKE_TIMEOUT'
 #!/usr/bin/env bash
-[ "${1:-}" = "--foreground" ] || exit 2
-shift 2
-"$@"
+[[ "${1:-}" == "--foreground" ]] && shift
+shift
+exec "$@"
 FAKE_TIMEOUT
-chmod +x "$tmp/bin/timeout"
+  chmod +x "$tmp/bin/timeout"
+fi
 cat > "$tmp/bin/sleep" <<'FAKE_SLEEP'
 #!/usr/bin/env bash
 printf '%s\n' "$1" >> "${FAKE_SLEEPS:?}"

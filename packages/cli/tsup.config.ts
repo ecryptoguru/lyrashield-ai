@@ -19,6 +19,7 @@ export default defineConfig({
   clean: true,
   splitting: false,
   noExternal: [/^@lyrashield\/(?!agent-plugin$)/],
+  // Keep TypeScript external: bundled @lyrashield/security uses it for AST parsing.
   external: [
     "@lyrashield/agent-plugin",
     "jsonc-parser",

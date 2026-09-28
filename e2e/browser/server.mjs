@@ -33,4 +33,7 @@ const server = await createServer({
   oxc: { jsx: { runtime: "automatic" } },
   server: { host: "127.0.0.1", port: 3101, strictPort: true },
 })
+// The first desktop page pays a cold Tailwind transform that exceeds Playwright's
+// default assertion timeout. Warm it before the browser harness reports ready.
+await server.transformRequest("/apps/desktop/frontend/src/styles/globals.css")
 await server.listen()

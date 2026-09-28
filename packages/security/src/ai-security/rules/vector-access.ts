@@ -7,7 +7,7 @@ import {
 } from "../utils"
 import type { AIScanFile, AISecuritySignal } from "../types"
 
-export const AI_07_RULE_ID = "AI-07.vector-access" as const
+const AI_07_RULE_ID = "AI-07.vector-access" as const
 
 const VECTOR_CLIENT_PATTERNS = [
   /new\s+Pinecone\s*\(/i,

@@ -405,6 +405,23 @@ describe("cancel", () => {
     expect(output.error).toHaveBeenCalledWith(expect.stringContaining("COMPLETED"), 1)
   })
 
+  it("does not assume cancellation when the conflict status cannot be read", async () => {
+    const conflict = new LyraShieldError({ status: 409, message: "conflict" })
+    client.request
+      .mockRejectedValueOnce(conflict)
+      .mockRejectedValueOnce(new Error("status offline"))
+    const output = makeOutput()
+
+    const code = await handleCancel(["s-123"], output)
+
+    expect(code).not.toBe(0)
+    expect(output.result).not.toHaveBeenCalled()
+    expect(output.error).toHaveBeenCalledWith(
+      expect.stringContaining("status re-read failed"),
+      expect.any(Number)
+    )
+  })
+
   it("maps API errors through the shared failure table", async () => {
     const denied = new LyraShieldError({ status: 403, message: "forbidden" })
     client.request.mockRejectedValueOnce(denied)

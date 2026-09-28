@@ -43,7 +43,7 @@ vi.mock("./lifecycle-utils", () => ({
 import { buildScanExecutionPlan } from "@lyrashield/types"
 import { verifyScanAdmission } from "./admission"
 
-const scanRecord = {
+const scanRecordFixture = {
   id: "scan-1",
   workspaceId: "ws-1",
   targetId: "target-1",
@@ -55,10 +55,11 @@ const scanRecord = {
   createdById: "user-1",
   sponsorAccountId: "sponsor-1",
   triggerType: "manual",
-} as never
+}
+const scanRecord = scanRecordFixture as Parameters<typeof verifyScanAdmission>[0]["scanRecord"]
 
 function params(over: Partial<Parameters<typeof verifyScanAdmission>[0]> = {}) {
-  return {
+  const fixture = {
     scanId: "scan-1",
     workspaceId: "ws-1",
     targetId: "target-1",
@@ -67,7 +68,8 @@ function params(over: Partial<Parameters<typeof verifyScanAdmission>[0]> = {}) {
     deterministicRetest: false,
     scanRecord,
     ...over,
-  } as Parameters<typeof verifyScanAdmission>[0]
+  }
+  return fixture as Parameters<typeof verifyScanAdmission>[0]
 }
 
 describe("verifyScanAdmission", () => {
@@ -118,7 +120,7 @@ describe("verifyScanAdmission", () => {
     const scheduled = {
       ...scanRecord,
       triggerType: "schedule",
-    } as never
+    }
 
     await verifyScanAdmission(params({ scanRecord: scheduled }))
 
@@ -154,7 +156,7 @@ describe("verifyScanAdmission", () => {
   })
 
   it("falls back to the creator when no sponsor was recorded", async () => {
-    const unsponsored = { ...scanRecord, sponsorAccountId: null } as never
+    const unsponsored = { ...scanRecord, sponsorAccountId: null }
     mocks.evaluateScanEntitlement.mockResolvedValue({
       allowed: true,
       accountId: "someone-else",

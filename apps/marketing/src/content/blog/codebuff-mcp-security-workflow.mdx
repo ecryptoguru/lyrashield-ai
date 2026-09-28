@@ -2,7 +2,7 @@
 title: Connect Codebuff to LyraShield via MCP
 description: A step by step workflow to configure LyraShield MCP in the Codebuff terminal agent using the CLI, verify the connection, run a scan and gate pull requests.
 pubDate: "2026-08-07"
-updatedDate: 2026-09-22
+updatedDate: 2026-09-27
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -48,7 +48,7 @@ If the CLI is unavailable, add the entry manually. This is the manual path and i
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.8"],
+      "args": ["-y", "@lyrashield/mcp@0.2.10"],
       "env": { "LYRASHIELD_API_KEY": "$LYRASHIELD_API_KEY" }
     }
   }

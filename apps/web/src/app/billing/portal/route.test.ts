@@ -1,18 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const state = vi.hoisted(() => ({
-  env: {
+const state = vi.hoisted(() => {
+  const env: Record<string, string | undefined> = {
     NEXT_PUBLIC_APP_URL: "https://app.lyrashieldai.com",
     NEXT_PUBLIC_MARKETING_URL: "https://lyrashieldai.com",
-  } as Record<string, string | undefined>,
-  provider: "razorpay",
-  requirePermission: vi.fn(),
-  findBillingAccount: vi.fn().mockImplementation(async () => ({
-    externalId: "cust_1",
+  }
+  return {
+    env,
     provider: "razorpay",
-  })),
-  getPolarPortalUrl: vi.fn().mockResolvedValue("https://polar.example/portal"),
-}))
+    requirePermission: vi.fn(),
+    findBillingAccount: vi.fn().mockImplementation(async () => ({
+      externalId: "cust_1",
+      provider: "razorpay",
+    })),
+    getPolarPortalUrl: vi.fn().mockResolvedValue("https://polar.example/portal"),
+  }
+})
 
 vi.mock("@lyrashield/config", () => ({ env: state.env }))
 vi.mock("@lyrashield/auth", () => ({

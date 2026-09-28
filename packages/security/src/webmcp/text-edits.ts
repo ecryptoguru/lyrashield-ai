@@ -1,6 +1,6 @@
 import type { WebMcpTextEdit } from "./types"
 
-export function sortedByPosition(edits: WebMcpTextEdit[]): WebMcpTextEdit[] {
+function sortedByPosition(edits: WebMcpTextEdit[]): WebMcpTextEdit[] {
   return [...edits].sort((a, b) => {
     if (a.startLine !== b.startLine) return a.startLine - b.startLine
     return a.startColumn - b.startColumn

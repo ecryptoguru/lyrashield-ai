@@ -48,6 +48,29 @@ describe("evidence envelope", () => {
     expect(() => openEnvelope(envelope, TEST_KEK)).toThrow(EvidenceEnvelopeError)
   })
 
+  it("rejects envelope headers whose required fields have non-string values", () => {
+    const envelope = sealEnvelope(Buffer.from("payload"), TEST_KEK, ENVELOPE_KEY_REF)
+    const headerLengthOffset = 5 // The LSEV1 magic occupies the first five bytes.
+    const headerStart = headerLengthOffset + 2
+    const headerLength = envelope.readUInt16BE(headerLengthOffset)
+    const header = JSON.parse(
+      envelope.subarray(headerStart, headerStart + headerLength).toString("utf8")
+    ) as Record<string, unknown>
+    header.keyRef = 42
+
+    const headerBytes = Buffer.from(JSON.stringify(header), "utf8")
+    const prefix = Buffer.from(envelope.subarray(0, headerStart))
+    prefix.writeUInt16BE(headerBytes.length, headerLengthOffset)
+    const malformed = Buffer.concat([
+      prefix,
+      headerBytes,
+      envelope.subarray(headerStart + headerLength),
+    ])
+
+    expect(verifyEnvelopeShape(malformed)).toBe(false)
+    expect(() => openEnvelope(malformed, TEST_KEK)).toThrow(EvidenceEnvelopeError)
+  })
+
   it("fails closed when opened with the wrong KEK", () => {
     const envelope = sealEnvelope(Buffer.from("payload"), TEST_KEK, ENVELOPE_KEY_REF)
     expect(() => openEnvelope(envelope, OTHER_KEK)).toThrow(EvidenceEnvelopeError)

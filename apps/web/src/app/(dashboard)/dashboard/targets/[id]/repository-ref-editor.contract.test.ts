@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest"
 
 describe("repository ref editor", () => {
   // apps/web has no component test harness; preserve the zero-scan editor contract here.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const source = readFileSync(new URL("./repository-ref-editor.tsx", import.meta.url), "utf8")
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const pageSource = readFileSync(new URL("./page.tsx", import.meta.url), "utf8")
 
   it("renders only for authorized REPO targets with zero scans", () => {

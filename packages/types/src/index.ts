@@ -3,6 +3,7 @@ import { ScanWorkflowSchema } from "./scan-execution-plan"
 
 export * from "./ai-safety-tests"
 export * from "./agent-operations"
+export * from "./json"
 
 /**
  * Maximum simultaneously-active scans per workspace. Enforced by the scan-create

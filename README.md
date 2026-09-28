@@ -19,7 +19,7 @@ LyraShield AI is live in **open beta with open registration** — anyone can cre
 - User guide: [docs/user-guide.md](docs/user-guide.md)
 - LyraShield Local/Desktop: the BYOK desktop implementation supports a one-time 1-year license with perpetual fallback and customer-supplied ChatGPT/OpenAI or Azure OpenAI credentials. Public production distribution remains a separate signing and release gate.
 
-The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. Repository scans are admitted only while the dedicated production worker holds a live lease. The current Standard/Luna acceptance is complete; broader exposure still requires the evidence-storage, monitoring/capacity, failure-recovery, and separate authorized Deep/Terra gates in `PRD.md`.
+The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. Repository scans are admitted only while the dedicated production worker holds a live lease. The current Standard/Luna acceptance is complete; broader exposure still requires the evidence-storage, monitoring/capacity, failure-recovery, and separate authorized Deep/Sol gates in `PRD.md`.
 
 ## Use it from your coding agent
 
@@ -33,11 +33,11 @@ npx lyrashield init                # detect installed agents and configure them
 npx lyrashield gate                # CI-friendly diff-aware security gate
 ```
 
-`lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`, now deprecated). It installs via three strategies, all driven by the same `packages/agent-registry` source of truth:
+`lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`, now deprecated). It installs through the paths defined in `packages/agent-registry`:
 
-- **Agent Plugin** — for the 5 preferred clients with Agent Plugins v1.0.0 support today (Claude Code, Cursor, OpenAI Codex, GitHub Copilot, Kiro), `npx lyrashield init` and `npx lyrashield install <agent>` prefer a portable plugin install from `@lyrashield/agent-plugin`. Plugin files land in the client-specific plugin directory and never inline a raw API key.
-- **Config-file** — for 17 clients whose settings can be safely written, the CLI merges into the existing file, never overwrites and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
-- **Guided manual** — for 6 clients whose tooling has no writable config file (Devin, JetBrains, PiCode, OpenClaw, Goose, Aider), the CLI prints exact copy-paste command/argument/env values.
+- **Agent Plugin** — for supported plugin-capable clients, `npx lyrashield init` and `npx lyrashield install <agent>` prefer a portable plugin install from `@lyrashield/agent-plugin`. Plugin files land in the client-specific plugin directory and never inline a raw API key.
+- **Config-file** — for clients whose settings can be safely written, the CLI merges into the existing file, never overwrites and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
+- **Guided manual** — for clients whose tooling has no writable config file, the CLI prints exact copy-paste command/argument/env values.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
 
 Run `npx lyrashield doctor` any time to check what's configured and what's missing.
@@ -56,7 +56,7 @@ Run `npx lyrashield doctor` any time to check what's configured and what's missi
 }
 ```
 
-`@lyrashield/mcp` is published on npm with 14 tools (read-only inspection plus scan/fix/retest actions) and both stdio and remote Streamable-HTTP transports. A connected OAuth client runs its authorized operations automatically within its connection grant. A caller without a connected client — an API key or a legacy OAuth bearer — receives one structured `connect_required` response pointing at OAuth connect; nothing is queued and nothing executes. Full per-agent setup for 26 preferred client surfaces is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The `@lyrashield/agent-plugin` package is now v0.1.27 with Cursor streamable-http support and the `packages/agent-registry` resolves its 30 install entries into those preferred surfaces.
+`@lyrashield/mcp` is published on npm with 21 tools (read-only inspection plus scoped scan, attachment, fix and retest actions), both stdio and remote Streamable-HTTP transports and a [tool catalog](packages/mcp/README.md). A connected OAuth client runs its authorized operations automatically within its connection grant. A caller without a connected client — an API key or a legacy OAuth bearer — receives one structured `connect_required` response pointing at OAuth connect; nothing is queued and nothing executes. Full per-agent setup for 26 preferred client surfaces is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The `@lyrashield/agent-plugin` package is published at v0.1.29 with Cursor Streamable HTTP support and `packages/agent-registry` resolves 30 install entries into those preferred surfaces.
 
 **GitHub Action** — a diff-aware CI gate that needs no LyraShield account, using `action.yml` at the repository root:
 
@@ -76,30 +76,25 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `apps/marketing-motion` — deterministic Three.js assurance-world motion workspace; the Astro site consumes rendered posters and clips.
 - `apps/desktop` — Tauri v2 BYOK desktop app (LyraShield Local/Desktop). Rust core + React frontend, ed25519 license verification, OS keychain BYOK credentials, and optional cloud sync.
 - `packages/cli` — the published `lyrashield` command-line tool. (`@lyrashield/cli` is deprecated and will be removed in the next major release; use `lyrashield` instead.)
-- `packages/agent-registry` — the single source of truth for 30 install entries resolving to 26 preferred client surfaces. It retains three explicit config-file alternatives for plugin-preferred clients plus one experimental VS Code plugin entry. The CLI installers and the docs site are both generated against it.
-- `packages/agent-plugin` — the portable Agent Plugins v1.0.0 package (now v0.1.27 with Cursor streamable-http support) that bundles the MCP server and a `lyrashield` skill for the five preferred Agent Plugin clients (Claude Code, Cursor, OpenAI Codex, GitHub Copilot, Kiro). GitHub Copilot remains experimental until a retained client-runtime receipt exists.
+- `packages/agent-registry` — the single source of truth for 30 install entries resolving to 26 preferred client surfaces, including three explicit config-file alternatives for plugin-preferred clients and one experimental VS Code plugin entry. The CLI installers and docs site are generated against it.
+- `packages/agent-plugin` — the portable Agent Plugins v1.0.0 package (published as v0.1.29 with Cursor Streamable HTTP support) that bundles the MCP server and a `lyrashield` skill for five preferred Agent Plugin clients (Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro). GitHub Copilot remains experimental until a retained client-runtime receipt exists.
 - `packages/agent-rules` — renders LyraShield's security policy into each agent's native rules/instructions format (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others).
 - `packages/mcp` — the published `@lyrashield/mcp` server.
 - `packages/sdk` — the typed REST client shared by the CLI and the MCP server, so their behavior can't drift apart.
 - `packages/billing` — Polar + Razorpay dual-gateway billing, usage metering, entitlement gating, trial lifecycle, and grace period handling.
-- `packages/pricing` — cloud plan definitions (Trial, Starter $29, Pro $99, Agency $499, Enterprise from $1,500), minute packs, and local SKUs.
+- `packages/pricing` — cloud plan definitions, minute packs, and local SKUs. See [commercial terms](PRD.md#5-commercial-model).
 - `packages/licenses` — ed25519 signed license sign/verify for the Local/Desktop app.
 - `packages/affiliate` — commission engine, attribution, fraud controls, and payout ledger (RazorpayX/Payoneer).
 - `packages/evidence-storage` — envelope encryption (AES-256-GCM) for scan artifacts.
 - `packages/*` (remaining) — auth, configuration, credentials, database, integrations, logger, score, security, types, UI.
 
-The former `packages/eval-ai-safety` runner was removed as unused. Its versioned 2026-08-13 result artifact remains in `apps/marketing/src/data/ai-safety-results.json`; the current fixed live AI safety catalog lives in `packages/types/src/ai-safety-tests.ts`.
+The fixed live AI safety catalog lives in `packages/types/src/ai-safety-tests.ts`; historical result provenance is recorded in [codebase.md](codebase.md#3-repository-map).
 
 The authenticated workflow supports project targets, findings, deterministic receipts, immutable manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution runs through a server-generated patch pipeline that is bound to explicit human approval and never merges.
 
 ## Evidence states
 
-| State                  | Meaning                                                        |
-| ---------------------- | -------------------------------------------------------------- |
-| Detected               | A scanner observed a candidate finding.                        |
-| Independently verified | Separate verification evidence exists.                         |
-| Retest-confirmed       | A clean deterministic retest had complete applicable coverage. |
-| Inconclusive           | Available evidence cannot establish the claim.                 |
+See [PRD §3](PRD.md#3-scan-and-evidence-contract) for the evidence-state vocabulary and claims boundary.
 
 ## Local setup
 
@@ -109,7 +104,7 @@ Prerequisites: Node.js 24, pnpm 12.2.0 (pinned in `package.json`), Docker, and a
 pnpm install
 pnpm --filter @lyrashield/db generate
 pnpm db:migrate
-pnpm dev
+pnpm --filter @lyrashield/web dev
 ```
 
 For production-like local validation:
@@ -156,7 +151,7 @@ Requires Rust 1.77+ and Docker for scans.
 
 ### Azure AI Foundry runtime configuration
 
-Repository scans accept only GPT-5.6 Terra or Luna deployments. Configure `LYRASHIELD_LUNA_LLM` and `LYRASHIELD_TERRA_LLM` for the normal routes, or set `LYRASHIELD_LLM` as their explicit fallback. Keep `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, and `AZURE_API_VERSION` tied to the same Foundry project/resource. Empty routed values are intentionally omitted from the engine process so fallback selection remains deterministic.
+Repository scans require GPT-6 Luna for Safe/Quick/Standard and GPT-6 Sol with Luna specialists for Deep/Custom. Configure `LYRASHIELD_LUNA_LLM` and `LYRASHIELD_SOL_LLM`; `LYRASHIELD_LLM` remains an explicit fallback for non-Deep routes. Keep `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, and `AZURE_API_VERSION` tied to the same Foundry project/resource. Empty routed values are intentionally omitted from the engine process so fallback selection remains deterministic.
 
 The configured Azure Foundry endpoint supports baseline Responses requests and `previous_response_id`, but it rejects the `programmatic_tool_calling` tool type. Production therefore uses direct JSON function tools. Leave `LYRASHIELD_PROGRAMMATIC_TOOL_CALLING` unset unless the engine's bounded `lyrashield provider-contract --require-programmatic-tool-calling` gate succeeds for the exact deployment. `previous_response_id` alone does not enable persistent scan reasoning: the engine currently uses SQLite session persistence, which the Agents SDK does not permit alongside `previous_response_id`.
 
@@ -168,7 +163,7 @@ Repository scans can optionally call Parallel Search for real-time OSINT. Set `L
 
 Repository reviews run through [LyraShield Engine](https://github.com/ecryptoguru/lyrashield-engine), the separately versioned sandboxed analysis process used by the worker. It is a controlled derivative of [Strix](https://github.com/usestrix/strix), not a claim that upstream results or benchmarks apply to LyraShield.
 
-LyraShield owns the product-critical execution contract: GPT-5.6 model policy, bounded context/output/agent/spend controls, non-interactive lifecycle and telemetry-off behavior, deterministic finding identity, evidence/control metadata, and the bounded worker artifacts. The upstream substrate remains responsible for reviewed generic sandbox, tool, agent-SDK, and vulnerability-skill plumbing. Read the engine's [ownership boundary](https://github.com/ecryptoguru/lyrashield-engine#ownership-boundary) and [upstream-import ledger](https://github.com/ecryptoguru/lyrashield-engine/blob/main/UPGRADES.md) for the exact line.
+LyraShield owns the product-critical execution contract: GPT-6 model policy, bounded context/output/agent/spend controls, non-interactive lifecycle and telemetry-off behavior, deterministic finding identity, evidence/control metadata, and the bounded worker artifacts. The upstream substrate remains responsible for reviewed generic sandbox, tool, agent-SDK, and vulnerability-skill plumbing. Read the engine's [ownership boundary](https://github.com/ecryptoguru/lyrashield-engine#ownership-boundary) and [upstream-import ledger](https://github.com/ecryptoguru/lyrashield-engine/blob/main/UPGRADES.md) for the exact line.
 
 Upgrades are deliberately review-gated: the engine records its incorporated Strix base, compares stable releases, prepares a review PR, and requires human approval plus its read-only CI gate. It never auto-resolves conflicts, force-pushes history, or deploys from the sync workflow. The [engine verification and upgrade guidance](https://github.com/ecryptoguru/lyrashield-engine#verification) describes the checks; they prove implementation compatibility, not scan accuracy or universal coverage.
 
@@ -189,14 +184,7 @@ See [PRD release status](PRD.md#9-release-status) for the current deployment and
 
 ## Further reading
 
-- [AGENTS.md](AGENTS.md) — current implementation state, execution queue, and non-negotiable rules for anyone (human or AI) working in this codebase.
-- [codebase.md](codebase.md) — the architecture and implementation map.
-- [PRD.md](PRD.md) — product strategy and the release-readiness backlog.
-- [docs/litepaper.md](docs/litepaper.md) — executive overview.
-- [docs/whitepaper.md](docs/whitepaper.md) — product, evidence model, commercial model, claims boundary, roadmap.
-- [docs/yellowpaper.md](docs/yellowpaper.md) — technical specification.
-- [docs/README.md](docs/README.md) — documentation ownership, categories, and retention policy.
-- The former desktop-release and license-signing runbooks were removed on 2026-09-09; git history is the recovery path.
+See the [documentation map](docs/README.md) for current owners, including the [operator runbook](docs/operations.md).
 
 ## License
 

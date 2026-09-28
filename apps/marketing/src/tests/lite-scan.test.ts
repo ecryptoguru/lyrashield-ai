@@ -2,22 +2,15 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { normalizePublicHttpUrl } from "../lib/public-url"
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const page = readFileSync(new URL("../pages/scan.astro", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const home = readFileSync(new URL("../pages/index.astro", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const homeScan = readFileSync(
   new URL("../components/landing/HomeLiteScan.astro", import.meta.url),
   "utf8"
 )
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const motionManifest = readFileSync(new URL("../lib/motion-manifest.ts", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const toolsIndex = readFileSync(new URL("../pages/tools/index.astro", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const toolLayout = readFileSync(new URL("../layouts/ToolLayout.astro", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const globalStyles = readFileSync(new URL("../styles/global.css", import.meta.url), "utf8")
 
 describe("Lite Check marketing surface", () => {

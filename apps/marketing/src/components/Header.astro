@@ -4,7 +4,7 @@ import { tools, toolUrl } from "../lib/tools"
 const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "")
 ---
 
-<header class="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur-xl">
+<header id="site-header" class="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur-xl">
   <div class="mx-auto flex min-h-16 max-w-[80rem] items-center justify-between gap-3 px-4 sm:px-6 lg:px-6">
     <a href="/" class="flex min-h-11 shrink-0 items-center gap-2 rounded-lg text-sm font-semibold tracking-tight whitespace-nowrap text-text hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:gap-2.5 sm:text-base">
       <span class="flex size-9 items-center justify-center rounded-xl border border-border bg-(--logo-void) p-1 shadow-sm" aria-hidden="true">
@@ -277,23 +277,23 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
 
 <style is:global>
   @media (max-width: 359px) {
-    .header-beta-badge {
+    #site-header .header-beta-badge {
       display: none;
     }
 
-    header > div {
+    #site-header > div {
       gap: 8px;
       padding-inline: 16px;
     }
 
-    header > div > a[href="/"] {
+    #site-header > div > a[href="/"] {
       flex: 1 1 auto;
       gap: 8px;
       min-width: 0;
       white-space: normal;
     }
 
-    header > div > a[href="/"] > span:first-child {
+    #site-header > div > a[href="/"] > span:first-child {
       box-sizing: border-box;
       width: 36px;
       height: 36px;
@@ -301,12 +301,12 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       padding: 4px;
     }
 
-    header > div > a[href="/"] > span:first-child img {
+    #site-header > div > a[href="/"] > span:first-child img {
       width: 32px;
       height: 32px;
     }
 
-    nav[aria-label="Main"] {
+    #site-header nav[aria-label="Main"] {
       gap: 4px;
     }
 
@@ -405,16 +405,16 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
    * If these values are loosened, re-measure at 1024x768 before shipping.
    */
   @media (min-width: 1024px) and (max-width: 1279px) {
-    nav[aria-label="Main"] {
+    #site-header nav[aria-label="Main"] {
       gap: 0.25rem;
     }
 
-    nav[aria-label="Main"] > ul {
+    #site-header nav[aria-label="Main"] > ul {
       gap: 0.25rem;
     }
 
-    nav[aria-label="Main"] > ul > li > a,
-    nav[aria-label="Main"] > ul > li > summary {
+    #site-header nav[aria-label="Main"] > ul > li > a,
+    #site-header nav[aria-label="Main"] > ul > li > details > summary {
       padding-left: 0.5rem;
       padding-right: 0.5rem;
     }

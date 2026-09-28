@@ -1,5 +1,5 @@
 ---
-import { getAgent, renderConfig, renderEntry } from "@lyrashield/agent-registry"
+import { getAgent, MCP_PACKAGE_SPEC, renderConfig, renderEntry } from "@lyrashield/agent-registry"
 import type { AgentEntry, InstallOptions, Transport } from "@lyrashield/agent-registry"
 
 interface Props {
@@ -59,7 +59,7 @@ function buildKeyNote(snippet: string): string {
 }
 
 function buildManualCommand(): string {
-  return `LYRASHIELD_API_KEY=${apiKey} LYRASHIELD_API_URL=${API_URL} npx -y @lyrashield/mcp@0.2.8`
+  return `LYRASHIELD_API_KEY=${apiKey} LYRASHIELD_API_URL=${API_URL} npx -y ${MCP_PACKAGE_SPEC}`
 }
 
 function buildRemoteManualCommand(agent: AgentEntry): string {

@@ -20,6 +20,7 @@ export default defineConfig({
   clean: true,
   splitting: false,
   noExternal: [/^@lyrashield\//],
+  // Keep TypeScript external: bundled @lyrashield/security uses it for AST parsing.
   external: ["@modelcontextprotocol/sdk", "zod", "typescript"],
   banner: { js: "#!/usr/bin/env node" },
 })

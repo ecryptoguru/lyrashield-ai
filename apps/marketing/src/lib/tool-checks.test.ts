@@ -32,6 +32,8 @@ describe("browser-local security tool checks", () => {
       ["MYSQL_PASSWORD=abcdefghijklmnopqrst", "abcdefghijklmnopqrst"],
       ['{"db_password": "correcthorsebatterystaple"}', "correcthorsebatterystaple"],
       ['{"apiKey": "verysecretvalue123456"}', "verysecretvalue123456"],
+      ["API_KEY                 = verysecretvalue123456", "verysecretvalue123456"],
+      [`API_KEY${" ".repeat(40)}=verysecretvalue123456`, "verysecretvalue123456"],
     ]
 
     for (const [text, secret] of cases) {
@@ -50,6 +52,8 @@ describe("browser-local security tool checks", () => {
       "if (password.length < 8) throw new Error('too short')",
       "apiKey: short",
       "The password field is validated.",
+      "secret: process.env.MYRA_API_SECRET",
+      "API_KEY\n=verysecretvalue123456",
     ]
     for (const text of clean) {
       expect(scanTextForSecrets(text), `false positive on: ${text}`).toEqual([])

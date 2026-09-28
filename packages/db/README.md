@@ -26,5 +26,5 @@ pnpm --filter @lyrashield/db studio
 
 ## See also
 
-- The former `docs/deployment/LOCAL_SETUP.md` runbook was retired on 2026-09-09 and remains recoverable from git history (e.g. `git show <history>`).
+- [Local setup](../../README.md#local-setup) for current database setup guidance.
 - `codebase.md` for schema and migration notes.

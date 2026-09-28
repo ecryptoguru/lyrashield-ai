@@ -39,5 +39,7 @@ export function getSystemPrisma(): typeof prisma {
 
   const client = globalForSystemPrisma.systemPrisma ?? createSystemPrismaClient()
   if (!globalForSystemPrisma.systemPrisma) globalForSystemPrisma.systemPrisma = client
+  // Keep the shared client type for callers. The configured system client is plain PrismaClient,
+  // without workspace or audit query extensions.
   return client as unknown as typeof prisma
 }

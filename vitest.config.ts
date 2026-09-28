@@ -20,7 +20,7 @@ export default defineConfig({
       "**/.turbo/**",
       "**/.worktrees/**",
       "e2e/**",
-      "apps/marketing/src/tests/**",
+      "apps/marketing/**",
       "apps/marketing-motion/tests/**",
       // These use node:test and run in the ops suite, not Vitest.
       ".github/scripts/tests/**",

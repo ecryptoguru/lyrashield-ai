@@ -996,7 +996,18 @@ export function mergeLlmUsage(
     const record = bucket as Record<string, unknown>
     const model = boundedPricedModel(record.model)?.trim()
     if (!model) return undefined
-    const current = byModel.get(model) ?? ({} as Record<(typeof USAGE_BUCKET_KEYS)[number], number>)
+    const current =
+      byModel.get(model) ??
+      ({
+        standard_input_tokens: 0,
+        standard_cached_input_tokens: 0,
+        standard_cache_write_input_tokens: 0,
+        standard_output_tokens: 0,
+        long_input_tokens: 0,
+        long_cached_input_tokens: 0,
+        long_cache_write_input_tokens: 0,
+        long_output_tokens: 0,
+      } satisfies Record<(typeof USAGE_BUCKET_KEYS)[number], number>)
     for (const key of USAGE_BUCKET_KEYS) {
       const value = usageInteger(record[key])
       if (value === undefined) return undefined
@@ -1369,10 +1380,6 @@ function parseVulnerabilitiesArtifact(
     })
     return { vulnerabilities: [], complete: false }
   }
-}
-
-export function parseVulnerabilitiesJson(raw: string): EngineVulnerability[] {
-  return parseVulnerabilitiesArtifact(raw).vulnerabilities
 }
 
 export function parseRunJson(raw: string): EngineRunRecord | null {

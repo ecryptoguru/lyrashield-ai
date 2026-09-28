@@ -13,5 +13,8 @@
     "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "rust:build": "cargo build --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
   }
 }

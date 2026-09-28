@@ -6,7 +6,6 @@ import { decryptRetrievalKey, encryptRetrievalKey } from "./license-fulfillment"
 describe("license fulfillment retrieval custody", () => {
   it("uses statically traced Azure Key Vault modules in the standalone web build", async () => {
     // Fixed sibling source file; never test input.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const source = await readFile(
       fileURLToPath(new URL("./license-fulfillment.ts", import.meta.url)),
       "utf8"
@@ -20,7 +19,6 @@ describe("license fulfillment retrieval custody", () => {
 
   it("puts retrieval tokens in URL fragments instead of request URLs", async () => {
     // Fixed sibling source file; never test input.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const source = await readFile(
       fileURLToPath(new URL("./license-fulfillment.ts", import.meta.url)),
       "utf8"

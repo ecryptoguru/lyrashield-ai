@@ -73,8 +73,7 @@ describe("review_scan_report registration", () => {
 
   beforeEach(() => {
     registerTool = vi.fn()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(globalThis as any).document = { modelContext: { registerTool } }
+    vi.stubGlobal("document", { modelContext: { registerTool } })
     fetchMock = vi.fn()
     vi.stubGlobal("fetch", fetchMock)
   })
@@ -83,8 +82,6 @@ describe("review_scan_report registration", () => {
 
   afterEach(() => {
     for (const cleanup of cleanups.splice(0)) cleanup()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (globalThis as any).document
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })

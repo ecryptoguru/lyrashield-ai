@@ -11,21 +11,29 @@ updates:
       dev-dependencies:
         dependency-type: "development"
         update-types: ["minor", "patch"]
+        exclude-patterns: ["better-auth", "@better-auth/*", "prisma", "@prisma/*", "pg", "bullmq"]
       production-minor-patch:
         dependency-type: "production"
         update-types: ["minor", "patch"]
-    # Security-sensitive packages: keep major bumps as individual, reviewed PRs.
-    # (better-auth, @prisma/*, pg, bullmq are intentionally NOT grouped so a
-    # major/behavioral change is never buried in a batch.)
-    # Only these compatibility migrations defer routine major versions.
+        exclude-patterns: ["better-auth", "@better-auth/*", "prisma", "@prisma/*", "pg", "bullmq"]
+      # Keep the Prisma client, CLI, engines and runtime helpers version-aligned.
+      prisma:
+        patterns: ["prisma", "@prisma/*"]
+    # Keep sensitive updates out of broad minor/patch groups; Prisma versions
+    # move together in their own explicit review group below.
+    # update-types limits these reviewed compatibility holds to routine majors;
     # update-types does not suppress Dependabot security updates.
     ignore:
+      # Tracks the repository's engines.node 24 contract.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # eslint-config-next's React, import and jsx-a11y plugins do not yet admit ESLint 10.
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
+      # ioredis 6 needs a planned BullMQ/Redis compatibility migration.
       - dependency-name: "ioredis"
         update-types: ["version-update:semver-major"]
+      # TypeScript 7's native compiler migration is tracked separately.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
 
@@ -35,3 +43,14 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+
+  # Tauri Rust dependencies and pinned container base images.
+  - package-ecosystem: "cargo"
+    directory: "/apps/desktop/src-tauri"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
+import { posix } from "node:path"
 
 // Export parity does not exercise auth. Avoid initializing OAuth/database resources.
 vi.mock("../../../../packages/auth/src/server", () => ({
@@ -13,6 +14,44 @@ vi.mock("../../../../packages/auth/src/server", () => ({
 // Each v1 route must re-export the same HTTP method handlers as its unversioned twin.
 
 describe("/api/v1 parity", () => {
+  it("discovers every alias and matches its supported methods", () => {
+    const aliases = import.meta.glob("../app/api/v1/**/route.ts", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    }) as Record<string, string>
+    const routes = import.meta.glob("../app/api/**/route.ts", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    }) as Record<string, string>
+    const methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+    expect(Object.keys(aliases).length).toBeGreaterThan(1)
+
+    for (const [path, alias] of Object.entries(aliases)) {
+      if (path.endsWith("/v1/openapi.json/route.ts")) continue
+      const twinPath = path.replace("/api/v1/", "/api/")
+      const twin = routes[twinPath]
+      if (!twin) throw new Error(`Missing unversioned route for ${path}`)
+      const reexport = alias.trim().match(/^export \{ ([A-Z, ]+) \} from "([^"]+)";?$/)
+      if (!reexport) throw new Error(`Expected direct method re-export in ${path}`)
+      const expectedSource = posix.relative(posix.dirname(path), twinPath).replace(/\.ts$/, "")
+      expect(reexport[2], path).toBe(expectedSource)
+      // v1 scan deletion was never exposed; changing that public contract needs separate review.
+      const omitted = path === "../app/api/v1/scans/[id]/route.ts" ? ["DELETE"] : []
+      const exportedMethods = new Set(
+        [
+          ...twin.matchAll(
+            /\bexport (?:async )?(?:function|const) (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g
+          ),
+        ].map((match) => match[1])
+      )
+      expect(reexport[1].split(", ").sort(), path).toEqual(
+        methods.filter((method) => exportedMethods.has(method) && !omitted.includes(method)).sort()
+      )
+    }
+  })
+
   it("target-domain-verifications (GET, POST, PUT)", async () => {
     const v1 = await import("../app/api/v1/target-domain-verifications/route")
     const twin = await import("../app/api/target-domain-verifications/route")

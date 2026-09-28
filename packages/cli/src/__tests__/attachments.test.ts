@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename -- isolated tmpdir fixture files */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"

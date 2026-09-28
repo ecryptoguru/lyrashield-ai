@@ -216,6 +216,7 @@ export {
   attributeReferral,
   qualifyReferralForWorkspace,
   buildScorecardPayload,
+  normalizeScorecardPayload,
   type ScorecardPayload,
   type ScorecardEventInput,
 } from "./score-service"
@@ -227,7 +228,6 @@ export {
   acceptRisk,
   getFindingStats,
   listEvidenceFindings,
-  listFindingsByScan,
   getFindingReference,
   getFindingHistoryPage,
   findingScopeWhere,
@@ -487,6 +487,7 @@ export {
   claimOrGetAgentOperation,
   completeAgentOperation,
   failAgentOperation,
+  retryScanCancellation,
   getAgentOperation,
   getOperationStatus,
   toOperationStatusView,

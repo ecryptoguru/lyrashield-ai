@@ -18,8 +18,8 @@ import {
 import {
   HOME_LABEL,
   TARGET_PLURAL,
-  RUN_PLURAL,
-  ISSUE_PLURAL,
+  SCAN_PLURAL,
+  FINDING_PLURAL,
   NOTIFICATION_PLURAL,
   TEAM_PLURAL,
   SETTINGS_PLURAL,
@@ -75,7 +75,7 @@ const LIFECYCLE_NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/dashboard/scans",
-    label: RUN_PLURAL,
+    label: SCAN_PLURAL,
     shortLabel: "Scans",
     icon: Radar,
     primary: true,
@@ -83,8 +83,8 @@ const LIFECYCLE_NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/dashboard/findings",
-    label: ISSUE_PLURAL,
-    shortLabel: ISSUE_PLURAL,
+    label: FINDING_PLURAL,
+    shortLabel: FINDING_PLURAL,
     icon: Bug,
     primary: true,
     mobilePrimary: true,

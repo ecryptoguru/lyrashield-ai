@@ -154,7 +154,7 @@ export function ScorecardControls({
           </div>
           <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
             Both the referring account and the new account can receive{" "}
-            {SCORECARD_REFERRAL_BONUS_MINUTES} agent minutes after the new workspace completes its
+            {SCORECARD_REFERRAL_BONUS_MINUTES} agent-minutes after the new workspace completes its
             first real scan. The reward stays pending until then. A referral must be claimed within
             seven days of account creation; existing accounts outside that window and self-referrals
             do not qualify. Attributed signups include pending and credited referrals. External

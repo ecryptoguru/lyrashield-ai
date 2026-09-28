@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { Output } from "../output.js"
+import { createOutput } from "../output.js"
 
 const mocks = vi.hoisted(() => ({ handleScan: vi.fn() }))
 vi.mock("../commands/scan.js", () => ({ handleScan: mocks.handleScan }))
 
 import { handlePrScan } from "../commands/pr-scan.js"
 
-const output = {} as Output
+const output = createOutput({ json: false, quiet: true })
 
 describe("handlePrScan", () => {
   beforeEach(() => {

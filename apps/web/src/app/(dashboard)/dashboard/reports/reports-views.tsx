@@ -17,6 +17,7 @@ import Link from "next/link"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import { LocalTime } from "@/components/local-time"
 import { formatDateTime } from "@/lib/date-format"
+import { humanizeToken } from "@/lib/labels"
 import { gateReasonSentence } from "@/lib/launch-readiness"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
@@ -32,7 +33,7 @@ import {
  * Private issue-time provenance for a launch_readiness report. This surface is
  * authenticated-only; the shared public page never receives these fields.
  */
-export function LaunchReportProvenanceBlock({
+function LaunchReportProvenanceBlock({
   provenance,
 }: {
   provenance: LaunchReportProvenance | null
@@ -382,7 +383,7 @@ export function ReportCard({
                   : "muted"
               }
             >
-              {report.status}
+              {humanizeToken(report.status)}
             </Badge>
             {report.revokedAt && <Badge variant="muted">revoked</Badge>}
           </div>

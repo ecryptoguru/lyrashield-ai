@@ -18,7 +18,7 @@ import type { TargetItem } from "./scan-types"
  * foreign resource ids and secret-shaped keys are bound to the page's own
  * session and workspace, never to tool input.
  */
-export const SCANS_WEBMCP_FORBIDDEN_INPUT_KEYS = [
+const SCANS_WEBMCP_FORBIDDEN_INPUT_KEYS = [
   "workspaceId",
   "workspace",
   "userId",

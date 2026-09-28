@@ -7,6 +7,7 @@ import { PayoutMethodForm } from "./payout-method-form"
 import { checkPayoutEligibility, computeReserve } from "@lyrashield/affiliate"
 import { env } from "@lyrashield/config"
 import { LocalTime } from "@/components/local-time"
+import { humanizeToken } from "@/lib/labels"
 
 export const metadata = {
   title: "Payouts — Affiliate Dashboard — LyraShield AI",
@@ -206,7 +207,7 @@ export default async function AffiliatePayoutsPage() {
                                 : "bg-muted"
                         }`}
                       >
-                        {p.status}
+                        {humanizeToken(p.status)}
                       </span>
                     </td>
                     <td className="py-2 pr-4">{p.paidAt ? <LocalTime value={p.paidAt} /> : "—"}</td>

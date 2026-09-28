@@ -112,9 +112,10 @@ describe("scan operation route regressions", () => {
       retryAfter: 0,
     })
     vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1", type: "REPO" } as never)
-    vi.mocked(prisma.policy.findFirst).mockImplementation(
-      async (args) => ({ id: args?.where?.id ?? "policy-a" }) as never
-    )
+    vi.mocked(prisma.policy.findFirst).mockImplementation(async (args) => {
+      const policy = { id: args?.where?.id ?? "policy-a" }
+      return policy as never
+    })
     vi.mocked(prisma.scan.count).mockResolvedValue(0)
     vi.mocked(assertScanAllowed).mockResolvedValue({ allowed: true } as never)
     vi.mocked(createScan).mockResolvedValue({ id: "new-scan", createdAt: new Date() } as never)

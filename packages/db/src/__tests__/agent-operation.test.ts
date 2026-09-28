@@ -12,6 +12,7 @@ vi.mock("../client", () => ({
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       findFirst: vi.fn(),
     },
   },
@@ -177,6 +178,163 @@ describe("WP-03 Agent Operation Durable Execution and Idempotency", () => {
     })
 
     expect(result.status).toBe("CONFLICT")
+  })
+
+  it("reopens a failed scan cancellation with an atomic status check", async () => {
+    const service = (await import("../agent-operation-service")) as unknown as {
+      retryScanCancellation?: (
+        operationId: string,
+        workspaceId: string,
+        staleBefore: Date
+      ) => Promise<{ status: string; operation?: { id: string } } | null>
+    }
+    expect(service.retryScanCancellation).toBeTypeOf("function")
+    if (!service.retryScanCancellation) return
+
+    vi.mocked(prisma.agentOperation.updateMany).mockResolvedValueOnce({ count: 1 } as never)
+    vi.mocked(prisma.agentOperation.findFirst).mockResolvedValueOnce({
+      id: "cancel-op-1",
+      workspaceId: "ws-1",
+      operationName: "scan.cancel",
+      status: "EXECUTING",
+    } as never)
+
+    const staleBefore = new Date("2026-09-28T00:00:00Z")
+    const result = await service.retryScanCancellation("cancel-op-1", "ws-1", staleBefore)
+
+    expect(prisma.agentOperation.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "cancel-op-1",
+        workspaceId: "ws-1",
+        operationName: "scan.cancel",
+        OR: [
+          {
+            status: "FAILED",
+            error: {
+              in: [
+                "TASK_CANCELLATION_FAILED",
+                "TASK_CANCELLATION_NOT_CONFIRMED",
+                "TASK_CANCELLATION_STATUS_UNAVAILABLE",
+              ],
+            },
+          },
+          {
+            status: { in: ["PENDING", "EXECUTING"] },
+            error: null,
+            updatedAt: { lt: staleBefore },
+          },
+        ],
+      },
+      data: { status: "EXECUTING", error: null },
+    })
+    expect(result).toMatchObject({ status: "NEW", operation: { id: "cancel-op-1" } })
+  })
+
+  it("returns in-progress when another cancellation retry already claimed the row", async () => {
+    const service = (await import("../agent-operation-service")) as unknown as {
+      retryScanCancellation?: (
+        operationId: string,
+        workspaceId: string,
+        staleBefore: Date
+      ) => Promise<{ status: string; operation?: { id: string } } | null>
+    }
+    expect(service.retryScanCancellation).toBeTypeOf("function")
+    if (!service.retryScanCancellation) return
+
+    vi.mocked(prisma.agentOperation.updateMany).mockResolvedValueOnce({ count: 0 } as never)
+    vi.mocked(prisma.agentOperation.findFirst).mockResolvedValueOnce({
+      id: "cancel-op-1",
+      workspaceId: "ws-1",
+      operationName: "scan.cancel",
+      status: "EXECUTING",
+    } as never)
+
+    const result = await service.retryScanCancellation(
+      "cancel-op-1",
+      "ws-1",
+      new Date("2026-09-28T00:00:00Z")
+    )
+
+    expect(result).toMatchObject({ status: "IN_PROGRESS", operation: { id: "cancel-op-1" } })
+  })
+
+  it("reclaims only scan cancellations older than the supplied cutoff", async () => {
+    const service = (await import("../agent-operation-service")) as unknown as {
+      retryScanCancellation?: (
+        operationId: string,
+        workspaceId: string,
+        staleBefore: Date
+      ) => Promise<{ status: string; operation?: { id: string } } | null>
+    }
+    expect(service.retryScanCancellation).toBeTypeOf("function")
+    if (!service.retryScanCancellation) return
+
+    const staleBefore = new Date("2026-09-28T00:00:00Z")
+    vi.mocked(prisma.agentOperation.updateMany).mockResolvedValueOnce({ count: 1 } as never)
+    vi.mocked(prisma.agentOperation.findFirst).mockResolvedValueOnce({
+      id: "cancel-op-1",
+      workspaceId: "ws-1",
+      operationName: "scan.cancel",
+      status: "EXECUTING",
+    } as never)
+
+    const result = await service.retryScanCancellation("cancel-op-1", "ws-1", staleBefore)
+
+    expect(prisma.agentOperation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          operationName: "scan.cancel",
+          OR: expect.arrayContaining([
+            expect.objectContaining({
+              status: { in: ["PENDING", "EXECUTING"] },
+              error: null,
+              updatedAt: { lt: staleBefore },
+            }),
+          ]),
+        }),
+      })
+    )
+    expect(result).toMatchObject({ status: "NEW", operation: { id: "cancel-op-1" } })
+  })
+
+  it("does not fail a cancellation after another attempt has taken over", async () => {
+    const service = (await import("../agent-operation-service")) as unknown as {
+      failAgentOperation: (
+        operationId: string,
+        workspaceId: string,
+        params: { error: string; expectedUpdatedAt: Date }
+      ) => Promise<{ id: string; status: string; error: string | null }>
+    }
+    const oldAttempt = new Date("2026-09-28T00:00:00Z")
+    const currentAttempt = new Date("2026-09-28T00:03:00Z")
+    vi.mocked(prisma.agentOperation.updateMany).mockResolvedValueOnce({ count: 0 } as never)
+    vi.mocked(prisma.agentOperation.findFirst).mockResolvedValueOnce({
+      id: "cancel-op-1",
+      workspaceId: "ws-1",
+      status: "EXECUTING",
+      error: null,
+      updatedAt: currentAttempt,
+    } as never)
+
+    const result = await service.failAgentOperation("cancel-op-1", "ws-1", {
+      error: "TASK_CANCELLATION_FAILED",
+      expectedUpdatedAt: oldAttempt,
+    })
+
+    expect(prisma.agentOperation.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "cancel-op-1",
+        workspaceId: "ws-1",
+        status: "EXECUTING",
+        updatedAt: oldAttempt,
+      },
+      data: {
+        status: "FAILED",
+        error: "TASK_CANCELLATION_FAILED",
+        resultReference: undefined,
+      },
+    })
+    expect(result).toMatchObject({ status: "EXECUTING", error: null, updatedAt: currentAttempt })
   })
 })
 

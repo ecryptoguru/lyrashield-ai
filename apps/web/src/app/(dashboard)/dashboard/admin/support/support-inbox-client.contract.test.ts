@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const source = readFileSync(new URL("./support-inbox-client.tsx", import.meta.url), "utf8")
 
 describe("support inbox fetch lifecycle", () => {

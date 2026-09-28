@@ -24,7 +24,7 @@ export const TRIAL_AGENT_MINUTES = 60
 export const TRIAL_TARGET_CAP = 3
 
 /** Provider label for account-owned trial marker rows (not a real provider). */
-export const TRIAL_PROVIDER = "trial"
+const TRIAL_PROVIDER = "trial"
 
 type TrialTransaction = ScopedTransaction
 

@@ -15,9 +15,7 @@ export async function handleUninstall(args: string[], output: Output): Promise<n
 
   const scope = parsed.global ? "global" : parsed.project ? "project" : undefined
 
-  const registry = await import("@lyrashield/agent-registry").catch(
-    () => ({}) as Record<string, unknown>
-  )
+  const registry = await import("@lyrashield/agent-registry").catch(() => ({}))
   const getPreferredAgent = (registry as Record<string, unknown>).getPreferredAgent as
     ((id: string) => AgentEntry | undefined) | undefined
   const list = (registry as Record<string, unknown>).listAgents as (() => AgentEntry[]) | undefined

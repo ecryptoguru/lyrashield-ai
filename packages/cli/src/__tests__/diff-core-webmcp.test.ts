@@ -27,7 +27,7 @@ function mockGit(files: string[], content: string): void {
       stderr: string
     ) => void
     done(null, stdout, "")
-    return {} as ReturnType<typeof execFile>
+    return {}
   }) as typeof execFile)
 }
 

@@ -26,6 +26,7 @@ import { PasswordInput } from "@/components/password-input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { storePendingInvitation } from "@/lib/pending-invitation"
 import { setPendingAuthCallback } from "@/lib/auth-callback"
+import { invalidateAnalyticsPreference } from "@/lib/analytics"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -184,6 +185,8 @@ export default function SignInPage() {
         return
       }
 
+      invalidateAnalyticsPreference()
+
       // Better Auth's redirect plugin has already started a full navigation.
       // Starting an RSC navigation too races it and aborts the response stream.
       if (authClientWillRedirect(data)) return
@@ -208,6 +211,8 @@ export default function SignInPage() {
       })
       if (socialError) {
         setError(getAuthErrorMessage(socialError) ?? "GitHub sign in failed. Please try again.")
+      } else {
+        invalidateAnalyticsPreference()
       }
     } catch {
       setError("GitHub sign in failed. Please try again.")
@@ -227,6 +232,8 @@ export default function SignInPage() {
       })
       if (socialError) {
         setError(getAuthErrorMessage(socialError) ?? "Google sign in failed. Please try again.")
+      } else {
+        invalidateAnalyticsPreference()
       }
     } catch {
       setError("Google sign in failed. Please try again.")
@@ -246,6 +253,8 @@ export default function SignInPage() {
       })
       if (socialError) {
         setError(getAuthErrorMessage(socialError) ?? "Microsoft sign in failed. Please try again.")
+      } else {
+        invalidateAnalyticsPreference()
       }
     } catch {
       setError("Microsoft sign in failed. Please try again.")

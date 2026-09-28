@@ -2,9 +2,7 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 // apps/web has no component test harness; preserve server-navigation and request-volume behavior.
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const client = readFileSync(new URL("./licenses-client.tsx", import.meta.url), "utf8")
-// eslint-disable-next-line security/detect-non-literal-fs-filename
 const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8")
 
 describe("platform licenses filters", () => {

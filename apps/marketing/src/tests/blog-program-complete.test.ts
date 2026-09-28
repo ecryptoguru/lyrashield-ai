@@ -11,7 +11,6 @@ describe("complete blog program", () => {
       .filter((file) => file.endsWith(".mdx"))
       .map((file) => ({
         id: file.replace(/\.mdx$/, ""),
-        // eslint-disable-next-line security/detect-non-literal-fs-filename -- The file name is enumerated from the repository-owned blog content directory above.
         data: parseArticle(readFileSync(resolve(blogDirectory, file), "utf8")).data as {
           draft?: boolean
         },

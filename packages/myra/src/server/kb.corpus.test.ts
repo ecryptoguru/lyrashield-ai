@@ -9,7 +9,6 @@ import { searchKnowledge } from "./kb"
 
 const corpus = JSON.parse(
   // The path is a fixed, repository-owned test fixture resolved from this module.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
   readFileSync(new URL("../../../../evals/myra/knowledge-v1.json", import.meta.url), "utf8")
 ) as {
   version: string
