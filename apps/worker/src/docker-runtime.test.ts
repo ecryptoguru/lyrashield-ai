@@ -361,7 +361,7 @@ describe("worker Docker runtime", () => {
     ]) {
       expect(evidenceSync).toContain(binding)
     }
-    expect(evidenceSync).not.toContain("az keyvault secret show")
+    expect(evidenceSync).not.toMatch(/az keyvault secret show[^\n]*--query\s+value/)
     for (const binding of [
       '"S3_ENDPOINT=secretref:evidence-s3-endpoint"',
       '"S3_BUCKET=secretref:evidence-s3-bucket"',
@@ -373,6 +373,18 @@ describe("worker Docker runtime", () => {
       expect(scannerDeployment).not.toContain(binding)
     }
     expect(scannerDeployment).not.toContain("LYRASHIELD_EVIDENCE_KEK")
+  })
+
+  it("checks the IP hash salt using Key Vault metadata only", () => {
+    const ipHashSaltSync = deployWorkflow.slice(
+      deployWorkflow.indexOf("- name: Sync IP hash salt Key Vault reference"),
+      deployWorkflow.indexOf("# Myra support agent")
+    )
+
+    expect(ipHashSaltSync).toContain("az keyvault secret list")
+    expect(ipHashSaltSync).toContain("[?name=='ip-hash-salt' && attributes.enabled].name | [0]")
+    expect(ipHashSaltSync).not.toContain("az keyvault secret show")
+    expect(ipHashSaltSync).not.toContain("--query value")
   })
 
   it("shares engine work and temp paths with the host Docker daemon", () => {

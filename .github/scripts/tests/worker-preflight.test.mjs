@@ -85,6 +85,7 @@ const preflightEnvFile = [
   `BETTER_AUTH_SECRET=${"a".repeat(32)}`,
   "BETTER_AUTH_URL=https://app.lyrashieldai.com",
   "NEXT_PUBLIC_APP_URL=https://app.lyrashieldai.com",
+  `IP_HASH_SALT=${"t".repeat(40)}`,
   "TRUSTED_PROXY_IP_HEADER=cf-connecting-ip",
   "LYRASHIELD_WEB_SEARCH_API_KEY=test-search-key",
   "GHCR_TOKEN=test-token",

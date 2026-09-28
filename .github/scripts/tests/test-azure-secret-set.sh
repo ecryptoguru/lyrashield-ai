@@ -17,7 +17,9 @@ trap 'rm -rf "$tmp"' EXIT
 
 mkdir -p "$tmp/bin"
 calls="$tmp/calls.txt"
+sleeps="$tmp/sleeps.txt"
 : > "$calls"
+: > "$sleeps"
 
 # A fake `az` driven by a scenario file: each invocation pops the next scripted
 # response. Scenario lines are "<exit-code>|<stdout+stderr text>".
@@ -33,22 +35,25 @@ text="${line#*|}"
 exit "${code:-0}"
 FAKE
 chmod +x "$tmp/bin/az"
-
-# GNU timeout is present on the Ubuntu deploy runner but not on macOS. Keep
-# this unit test portable by providing a pass-through when the host lacks it;
-# the fake az still exercises exit 124 and retry behavior below.
+# GNU timeout is absent on macOS; provide a pass-through there. Linux retains
+# the real timeout implementation while fake sleep keeps backoff assertions fast.
 if ! command -v timeout >/dev/null 2>&1; then
   cat > "$tmp/bin/timeout" <<'FAKE_TIMEOUT'
 #!/usr/bin/env bash
-[[ "$1" == "--foreground" ]] && shift
+[[ "${1:-}" == "--foreground" ]] && shift
 shift
 exec "$@"
 FAKE_TIMEOUT
   chmod +x "$tmp/bin/timeout"
 fi
-
+cat > "$tmp/bin/sleep" <<'FAKE_SLEEP'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >> "${FAKE_SLEEPS:?}"
+FAKE_SLEEP
+chmod +x "$tmp/bin/sleep"
 export PATH="$tmp/bin:$PATH"
 export FAKE_CALLS="$calls"
+export FAKE_SLEEPS="$sleeps"
 
 scenario() {
   printf '%s\n' "$@" > "$tmp/scenario"
@@ -105,12 +110,18 @@ fi
 grep -Fq "failed after 3 attempt(s)" "$tmp/err" || fail "expected a final failure message"
 
 # 6. Backoff is honoured between attempts (guards against a hot loop hammering ARM).
-scenario "1|ERROR: ServiceUnavailable" "0|"
-start=$(date +%s)
-AZURE_SECRET_SET_BACKOFF=2 azure_containerapp_secret_set_retrying \
+scenario "1|ERROR: ServiceUnavailable" "1|ERROR: ServiceUnavailable" "1|ERROR: ServiceUnavailable" "1|ERROR: ServiceUnavailable" "0|"
+: > "$sleeps"
+AZURE_SECRET_SET_ATTEMPTS=5 AZURE_SECRET_SET_BACKOFF=5 azure_containerapp_secret_set_retrying \
   --name app --resource-group rg --secrets "k=v" >/dev/null 2>&1 || fail "expected eventual success"
-elapsed=$(( $(date +%s) - start ))
-[ "$elapsed" -ge 2 ] || fail "expected >=2s backoff, took ${elapsed}s"
+[ "$(cat "$sleeps")" = $'5\n10\n20\n40' ] || fail "expected exponential delays 5, 10, 20 and 40 seconds"
+
+# 6b. Large configured delays clamp to 60 seconds and stay capped.
+scenario "1|ERROR: ServiceUnavailable" "1|ERROR: ServiceUnavailable" "1|ERROR: ServiceUnavailable" "0|"
+: > "$sleeps"
+AZURE_SECRET_SET_ATTEMPTS=4 AZURE_SECRET_SET_BACKOFF=40 azure_containerapp_secret_set_retrying \
+  --name app --resource-group rg --secrets "k=v" >/dev/null 2>&1 || fail "expected eventual success after capped delays"
+[ "$(cat "$sleeps")" = $'40\n60\n60' ] || fail "expected the exponential delay to cap at 60 seconds"
 
 # 7. Attempts env is validated — a junk value must not spin.
 scenario "1|ERROR: TooManyRequests"

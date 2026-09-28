@@ -17,7 +17,7 @@ describe("affiliate click privacy signals", () => {
 
   it("uses the trusted final hop despite spoofed affiliate IP headers", async () => {
     vi.stubEnv("TRUSTED_PROXY_IP_HEADER", "x-forwarded-for")
-    vi.stubEnv("IP_HASH_SALT", "affiliate-test")
+    vi.stubEnv("IP_HASH_SALT", "a".repeat(32))
     detectAttribution.mockResolvedValue({ attributed: false })
     const response = await POST(
       new NextRequest("https://app.example.com/affiliates/api/click", {
@@ -34,7 +34,9 @@ describe("affiliate click privacy signals", () => {
     expect(response.status).toBe(200)
     expect(detectAttribution).toHaveBeenCalledWith(
       expect.objectContaining({
-        ipHash: createHash("sha256").update("203.0.113.8affiliate-test").digest("hex"),
+        ipHash: createHash("sha256")
+          .update(`203.0.113.8${"a".repeat(32)}`)
+          .digest("hex"),
       })
     )
   })
