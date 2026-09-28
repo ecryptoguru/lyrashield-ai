@@ -82,6 +82,7 @@ jobs:
       web_image: ${{ steps.meta.outputs.web_image }}
       worker_image: ${{ steps.meta.outputs.worker_image }}
       egress_proxy_image: ${{ steps.meta.outputs.egress_proxy_image }}
+      engine_revision: ${{ steps.meta.outputs.engine_revision }}
       web_digest: ${{ steps.build-web.outputs.digest }}
       worker_digest: ${{ steps.build-worker.outputs.digest }}
       egress_proxy_digest: ${{ steps.build-egress-proxy.outputs.digest }}
@@ -153,6 +154,7 @@ jobs:
             echo "web_image=${{ env.WEB_IMAGE }}:${{ env.DEPLOY_SHA }}"
             echo "worker_image=${{ env.WORKER_IMAGE }}:${{ env.DEPLOY_SHA }}"
             echo "egress_proxy_image=${{ env.EGRESS_PROXY_IMAGE }}:${{ env.DEPLOY_SHA }}"
+            echo "engine_revision=${{ env.ENGINE_REVISION }}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Verify production analytics project key
@@ -328,8 +330,8 @@ jobs:
       id-token: write
     uses: ./.github/workflows/deploy-azure-runtime.yml
     with:
-      source_sha: ${{ env.DEPLOY_SHA }}
-      engine_revision: ${{ env.ENGINE_REVISION }}
+      source_sha: ${{ inputs.source_sha || github.sha }}
+      engine_revision: ${{ needs.build.outputs.engine_revision }}
       web_image: ${{ needs.build.outputs.web_image }}
       web_digest: ${{ needs.build.outputs.web_digest }}
       worker_image: ${{ needs.build.outputs.worker_image }}

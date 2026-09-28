@@ -6,6 +6,7 @@ import path from "node:path"
 import test from "node:test"
 
 const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
+const caller = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
 const rollout = readFileSync(".github/scripts/deploy-azure-rollout.sh", "utf8")
 const containerAppHelper = path.resolve("ops/deployment/containerapp.sh")
 
@@ -33,6 +34,21 @@ const normalizedIf = (name) => {
   assert.ok(folded, `expected an if condition on ${name}`)
   return folded[1].trim().replace(/\s+/g, " ")
 }
+
+test("Azure caller passes reusable-workflow inputs through supported contexts", () => {
+  const deploy = caller.slice(caller.indexOf("\n  deploy:"))
+  const inputsStart = deploy.indexOf("\n    with:\n")
+  const inputsEnd = deploy.indexOf("\n    secrets:", inputsStart)
+  assert.notEqual(inputsStart, -1, "expected reusable runtime inputs")
+  assert.notEqual(inputsEnd, -1, "expected reusable runtime secrets")
+
+  const reusableInputs = deploy.slice(inputsStart, inputsEnd)
+  assert.match(reusableInputs, /source_sha: \$\{\{ inputs\.source_sha \|\| github\.sha \}\}/)
+  assert.match(reusableInputs, /engine_revision: \$\{\{ needs\.build\.outputs\.engine_revision \}\}/)
+  assert.doesNotMatch(reusableInputs, /\$\{\{\s*env\./)
+  assert.match(caller, /engine_revision: \$\{\{ steps\.meta\.outputs\.engine_revision \}\}/)
+  assert.match(caller, /echo "engine_revision=\$\{\{ env\.ENGINE_REVISION \}\}"/)
+})
 
 test("Container Apps helpers preserve Azure call sequences and guarded failure behavior", (t) => {
   const directory = mkdtempSync(path.join(tmpdir(), "lyra-ca-characterization-"))
