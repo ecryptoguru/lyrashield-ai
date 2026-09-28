@@ -296,7 +296,9 @@ printf '%s\n' \
   'api.first.org 8.8.8.8 443' \
   'api.github.com 8.8.8.8 443' \
   'api.osv.dev 8.8.8.8 443' \
+  'api.polar.sh 8.8.8.8 443' \
   'api.parallel.ai 8.8.8.8 443' \
+  'api.razorpay.com 8.8.8.8 443' \
   'db.test 8.8.8.8 5432' \
   'github.com 8.8.8.8 443' \
   'proxy.test 8.8.4.4 443' \
