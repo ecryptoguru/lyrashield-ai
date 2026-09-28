@@ -2,33 +2,25 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useScansWebMcp } from "./scans-webmcp"
-import { useActiveScansPolling } from "./use-active-scans-polling"
+import { useScanListState } from "./use-scan-list-state"
 import { CreateScanSheet } from "./create-scan-sheet"
 import { ScanList } from "./scan-list"
-import Link from "next/link"
+import { ScanStatusNotices } from "./scan-status-notices"
 import { Play, RefreshCw } from "lucide-react"
 import { z } from "zod"
 import { Button, Select } from "@lyrashield/ui"
 import {
   scanAttachmentListSchema,
-  scanCancelSchema,
   scanEligibilitySchema,
   scanItemSchema,
   scansPaginatedSchema,
   type ScanAttachmentItem,
 } from "@/lib/api-schemas"
-import { ApiError, apiDelete, apiPost, apiGet, apiGetPaginated } from "@/lib/api-client"
+import { ApiError, apiPost, apiGet } from "@/lib/api-client"
 import { SCAN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
+import { findRecoveryPreset, getReviewSetupGuidance, scanRecoveryHref } from "./scans-client.utils"
 import {
-  findRecoveryPreset,
-  getReviewSetupGuidance,
-  isBillingRecoveryCode,
-  scanRecoveryHref,
-} from "./scans-client.utils"
-import {
-  isActiveScan,
   SCAN_STATE_FILTERS,
-  parseScanStateFilter,
   scanStateStatusLabel,
   type ScanStateFilter,
 } from "@/lib/scan-presentation"
@@ -102,10 +94,6 @@ export function ScansClient({
   initialTargetFilter = "",
   canManageBilling = false,
 }: ScansClientProps) {
-  const [scans, setScans] = useState<ScanItem[]>(initialData)
-  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
   const [showCreate, setShowCreate] = useState(initialShowCreate)
   const reviewChoiceVersion = useRef(0)
   // One active target and no explicit selection: preselect it. Choosing among
@@ -137,12 +125,33 @@ export function ScansClient({
     initialRecoveryUnavailable ? "This target is no longer available. Choose another target." : null
   )
   const [errorCode, setErrorCode] = useState<string | null>(null)
-  const [cancelling, setCancelling] = useState<string | null>(null)
-  const [removing, setRemoving] = useState<string | null>(null)
-  const [pollStale, setPollStale] = useState(false)
-  // Server-parsed URL filters; updated via replaceState and refetch.
-  const [targetFilter, setTargetFilter] = useState(initialTargetFilter)
-  const [stateFilter, setStateFilter] = useState<ScanStateFilter>(initialStateFilter)
+  const {
+    scans,
+    setScans,
+    nextCursor,
+    loadingMore,
+    refreshing,
+    pollStale,
+    targetFilter,
+    stateFilter,
+    cancelling,
+    removing,
+    handleTargetFilterChange,
+    handleStateFilterChange,
+    handleClearFilters,
+    handleCancelScan,
+    handleRemoveScan,
+    handleLoadMore,
+    handleRefresh,
+  } = useScanListState({
+    workspaceId,
+    initialData,
+    initialNextCursor,
+    initialTargetFilter,
+    initialStateFilter,
+    setError,
+    setErrorCode,
+  })
   const [eligibility, setEligibility] = useState<ScanEligibilityState>({ status: "idle" })
   const [eligibilityAttempt, setEligibilityAttempt] = useState(0)
   const [startingTrial, setStartingTrial] = useState(false)
@@ -167,88 +176,6 @@ export function ScansClient({
     setShowCreate,
     setModeResetNotice,
   })
-  const scansRef = useRef(scans)
-  const firstPageIdsRef = useRef(new Set(initialData.map((scan) => scan.id)))
-  const firstPageHasMoreRef = useRef(initialNextCursor !== null)
-
-  useEffect(() => {
-    scansRef.current = scans
-  }, [scans])
-
-  const listParams = useCallback(
-    (extra: Record<string, string> = {}) => ({
-      workspaceId,
-      ...(targetFilter ? { targetId: targetFilter } : {}),
-      ...(stateFilter !== "ALL" ? { state: stateFilter } : {}),
-      ...extra,
-    }),
-    [workspaceId, targetFilter, stateFilter]
-  )
-
-  function updateFilterUrl(next: { target?: string; state?: ScanStateFilter }) {
-    if (typeof window === "undefined") return
-    const params = new URLSearchParams(window.location.search)
-    const nextTarget = next.target ?? targetFilter
-    const nextState = next.state ?? stateFilter
-    if (nextTarget) params.set("target", nextTarget)
-    else params.delete("target")
-    if (nextState !== "ALL") params.set("state", nextState)
-    else params.delete("state")
-    const search = params.toString()
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${search ? `?${search}` : ""}`
-    )
-  }
-
-  async function refetchFirstPage(
-    nextTarget = targetFilter,
-    nextState: ScanStateFilter = stateFilter
-  ) {
-    const result = await apiGetPaginated<ScanItem>(
-      "/api/scans",
-      {
-        workspaceId,
-        ...(nextTarget ? { targetId: nextTarget } : {}),
-        ...(nextState !== "ALL" ? { state: nextState } : {}),
-      },
-      {
-        schema: scansPaginatedSchema,
-      }
-    )
-    setScans(result.items)
-    setNextCursor(result.nextCursor)
-    firstPageIdsRef.current = new Set(result.items.map((scan) => scan.id))
-    firstPageHasMoreRef.current = result.nextCursor !== null
-  }
-
-  function handleTargetFilterChange(value: string) {
-    setTargetFilter(value)
-    updateFilterUrl({ target: value })
-    setError(null)
-    setErrorCode(null)
-    refetchFirstPage(value, stateFilter).catch(() => setPollStale(true))
-  }
-
-  function handleStateFilterChange(value: string) {
-    const next = parseScanStateFilter(value)
-    setStateFilter(next)
-    updateFilterUrl({ state: next })
-    setError(null)
-    setErrorCode(null)
-    refetchFirstPage(targetFilter, next).catch(() => setPollStale(true))
-  }
-
-  function handleClearFilters() {
-    setTargetFilter("")
-    setStateFilter("ALL")
-    updateFilterUrl({ target: "", state: "ALL" })
-    setError(null)
-    setErrorCode(null)
-    refetchFirstPage("", "ALL").catch(() => setPollStale(true))
-  }
-
   async function handleCreateScan(startNewScan = false) {
     setErrorCode(null)
     if (!selectedTarget) {
@@ -407,76 +334,6 @@ export function ScansClient({
     }
   }
 
-  async function handleCancelScan(scanId: string) {
-    setCancelling(scanId)
-    setError(null)
-    setErrorCode(null)
-    try {
-      const result = await apiPost(
-        `/api/scans/${scanId}`,
-        { workspaceId },
-        { schema: scanCancelSchema }
-      )
-      setScans((prev) =>
-        prev.map((s) =>
-          s.id === scanId ? { ...s, status: result.status, endedAt: result.endedAt } : s
-        )
-      )
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to cancel scan")
-    } finally {
-      setCancelling(null)
-    }
-  }
-
-  async function handleRemoveScan(scanId: string) {
-    setRemoving(scanId)
-    setError(null)
-    setErrorCode(null)
-    try {
-      await apiDelete(`/api/scans/${scanId}?workspaceId=${encodeURIComponent(workspaceId)}`)
-      setScans((prev) => prev.filter((scan) => scan.id !== scanId))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to remove scan")
-    } finally {
-      setRemoving(null)
-    }
-  }
-
-  async function handleLoadMore() {
-    if (!nextCursor) return
-    setLoadingMore(true)
-    setErrorCode(null)
-    try {
-      const result = await apiGetPaginated<ScanItem>(
-        "/api/scans",
-        listParams({ cursor: nextCursor }),
-        { schema: scansPaginatedSchema }
-      )
-      setScans((prev) => [...prev, ...result.items])
-      setNextCursor(result.nextCursor)
-    } catch {
-      setError("Failed to load more scans")
-    } finally {
-      setLoadingMore(false)
-    }
-  }
-
-  async function handleRefresh() {
-    setRefreshing(true)
-    setError(null)
-    setErrorCode(null)
-    try {
-      await refetchFirstPage()
-      setPollStale(false)
-    } catch {
-      setPollStale(true)
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
-  const hasActiveScans = scans.some((scan) => isActiveScan(scan.status))
   const selectedTargetDetails = targets.find((target) => target.id === selectedTarget)
   const selectedTargetType = selectedTargetDetails?.type ?? ""
   const availableOptions = getManualScanOptions({
@@ -792,19 +649,6 @@ export function ScansClient({
     setShowCreate(true)
   }
 
-  useActiveScansPolling({
-    hasActiveScans,
-    workspaceId,
-    listParams,
-    stateFilter,
-    targetFilter,
-    scansRef,
-    firstPageIdsRef,
-    firstPageHasMoreRef,
-    setScans,
-    setPollStale,
-  })
-
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -852,171 +696,33 @@ export function ScansClient({
         </div>
       </div>
 
-      {error && !showCreate && (
-        <div
-          role="alert"
-          className="border-destructive/50 bg-destructive/10 text-destructive mb-4 rounded-lg border p-3 text-sm"
-        >
-          <span>{safeApiErrorMessage(error)}</span>
-          {(isBillingRecoveryCode(errorCode) ||
-            (eligibilityBlocked &&
-              isBillingRecoveryCode(
-                eligibility.status === "ready" ? eligibility.eligibility.code : null
-              ))) && <BillingRecoveryLink canManageBilling={canManageBilling} />}
-        </div>
-      )}
-
-      {scanRecoveryUnavailable && !showCreate && (
-        <div
-          role="alert"
-          className="border-amber-500/50 bg-amber-500/10 mb-4 rounded-lg border p-3 text-sm"
-        >
-          <p>
-            {scanRecoveryError ??
-              "Saved scan recovery data could not be read. Starting again may create a second scan."}
-          </p>
-          <Button
-            className="mt-2"
-            type="button"
-            variant="outline"
-            onClick={() => {
-              try {
-                clearPendingScanSubmission(scanSubmissionScope)
-                setScanRecoveryUnavailable(false)
-                setScanRecoveryError(null)
-                setForceNewAfterRecovery(true)
-                setShowCreate(true)
-              } catch (cause) {
-                setScanRecoveryError(
-                  cause instanceof Error ? cause.message : "Could not clear scan recovery data."
-                )
-              }
-            }}
-          >
-            Discard recovery data and continue
-          </Button>
-        </div>
-      )}
-
-      {!showCreate &&
-        pendingScanSubmission &&
-        pendingScanSubmission.principalId === principalId &&
-        pendingScanSubmission.workspaceId === workspaceId && (
-          <div
-            className="border-amber-500/50 bg-amber-500/10 mb-4 flex flex-col gap-3 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-            role={pendingScanSubmission.state === "accepted" ? "status" : "alert"}
-            aria-live="polite"
-          >
-            <div className="space-y-1">
-              {pendingScanSubmission.state === "accepted" && pendingScanSubmission.scanId ? (
-                <p>
-                  Scan accepted.{" "}
-                  <Link
-                    className="text-primary underline underline-offset-4"
-                    href={`/dashboard/scans/${encodeURIComponent(pendingScanSubmission.scanId)}`}
-                  >
-                    View scan
-                  </Link>
-                </p>
-              ) : (
-                <p>
-                  {pendingScanMatchesCurrent
-                    ? "A previous scan start is unresolved. Retrying the same details reuses its key."
-                    : "A previous scan start is unresolved, and the current details differ. Restore the same request or explicitly start a new scan."}
-                </p>
-              )}
-              {scanRecoveryError && <p>{scanRecoveryError}</p>}
-              {scanOperationStatus?.recovery === "poll" && (
-                <p>The scan operation is still processing.</p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {pendingScanSubmission.state === "accepted" && pendingScanSubmission.scanId ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    try {
-                      clearPendingScanSubmission(
-                        scanSubmissionScope,
-                        pendingScanSubmission.idempotencyKey
-                      )
-                      setPendingScanSubmission(null)
-                      setScanOperationStatus(null)
-                      setForceNewAfterRecovery(false)
-                      setShowCreate(true)
-                    } catch (cause) {
-                      setScanRecoveryUnavailable(true)
-                      setScanRecoveryError(
-                        cause instanceof Error
-                          ? cause.message
-                          : "Could not clear scan recovery data."
-                      )
-                    }
-                  }}
-                >
-                  Start another scan
-                </Button>
-              ) : (
-                <>
-                  {pendingScanSubmission.operationId && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={checkingScanOperation}
-                      onClick={() => void checkPendingScanOperation(pendingScanSubmission)}
-                    >
-                      {checkingScanOperation ? "Checking status…" : "Check previous scan"}
-                    </Button>
-                  )}
-                  {scanOperationStatus?.recovery !== "retry_new_key" && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setForceNewAfterRecovery(false)
-                        setShowCreate(true)
-                      }}
-                    >
-                      {pendingScanMatchesCurrent ? "Review same request" : "Review current request"}
-                    </Button>
-                  )}
-                  {(!pendingScanMatchesCurrent ||
-                    scanOperationStatus?.recovery === "retry_new_key") && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setForceNewAfterRecovery(true)
-                        setShowCreate(true)
-                      }}
-                    >
-                      Review details for a new scan
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-      {pollStale && (
-        <div
-          role="status"
-          className="border-amber-500/50 bg-amber-500/10 mb-4 flex flex-col gap-3 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-        >
-          <span>Updates are paused. The displayed scan status may be stale.</span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => void handleRefresh()}
-            disabled={refreshing}
-          >
-            {refreshing ? "Refreshing" : "Try again"}
-          </Button>
-        </div>
-      )}
+      <ScanStatusNotices
+        showCreate={showCreate}
+        error={error}
+        errorCode={errorCode}
+        eligibilityBlocked={eligibilityBlocked}
+        eligibilityCode={eligibility.status === "ready" ? eligibility.eligibility.code : null}
+        canManageBilling={canManageBilling}
+        scanRecoveryUnavailable={scanRecoveryUnavailable}
+        scanRecoveryError={scanRecoveryError}
+        scanSubmissionScope={scanSubmissionScope}
+        setScanRecoveryUnavailable={setScanRecoveryUnavailable}
+        setScanRecoveryError={setScanRecoveryError}
+        setForceNewAfterRecovery={setForceNewAfterRecovery}
+        setShowCreate={setShowCreate}
+        pendingScanSubmission={pendingScanSubmission}
+        principalId={principalId}
+        workspaceId={workspaceId}
+        pendingScanMatchesCurrent={pendingScanMatchesCurrent}
+        scanOperationStatus={scanOperationStatus}
+        checkingScanOperation={checkingScanOperation}
+        checkPendingScanOperation={checkPendingScanOperation}
+        setPendingScanSubmission={setPendingScanSubmission}
+        setScanOperationStatus={setScanOperationStatus}
+        pollStale={pollStale}
+        handleRefresh={handleRefresh}
+        refreshing={refreshing}
+      />
 
       {/* Composer sheet: right-side on desktop, full-height bottom sheet on mobile. */}
       <CreateScanSheet
@@ -1079,20 +785,5 @@ export function ScansClient({
         onLoadMore={handleLoadMore}
       />
     </div>
-  )
-}
-
-function BillingRecoveryLink({ canManageBilling }: { canManageBilling: boolean }) {
-  if (canManageBilling) {
-    return (
-      <Link href="/dashboard/billing" className="ml-2 underline underline-offset-4">
-        Review billing options
-      </Link>
-    )
-  }
-  return (
-    <span className="text-muted-foreground ml-2">
-      Ask a workspace owner to review billing options.
-    </span>
   )
 }
