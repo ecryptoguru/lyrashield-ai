@@ -196,12 +196,13 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
 
   it("creates exactly one scan for concurrent deliveries and resumes it after queue failure", async () => {
     const guard = vi.fn(async () => {})
-    const outcomes = await Promise.all([
-      handleFixPrMergedAndReevaluate(id, branch, 1, guard),
-      handleFixPrMergedAndReevaluate(id, branch, 1, guard),
-    ])
+    const outcomes = await Promise.all(
+      Array.from({ length: 5 }, () => handleFixPrMergedAndReevaluate(id, branch, 1, guard))
+    )
     expect(outcomes[0]?.retestScanId).toBeTruthy()
-    expect(outcomes[1]?.retestScanId).toBe(outcomes[0]?.retestScanId)
+    expect(outcomes.every((outcome) => outcome?.retestScanId === outcomes[0]?.retestScanId)).toBe(
+      true
+    )
     expect(await owner.scan.count({ where: { workspaceId: id, triggerType: "retest" } })).toBe(1)
     expect(await owner.retest.count({ where: { workspaceId: id, findingId } })).toBe(1)
     expect((await handleFixPrMergedAndReevaluate(id, branch, 1, guard))?.retestScanId).toBe(

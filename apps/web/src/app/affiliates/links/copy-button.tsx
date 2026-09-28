@@ -16,12 +16,17 @@ export function CopyButton({ text }: { text: string }) {
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
-    >
-      {copied ? "Copied!" : "Copy"}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="min-h-11 min-w-11 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+      >
+        {copied ? "Copied!" : "Copy"}
+      </button>
+      <span role="status" aria-live="polite" className="sr-only">
+        {copied ? "Link copied to clipboard." : ""}
+      </span>
+    </>
   )
 }

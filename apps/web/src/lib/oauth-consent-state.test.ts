@@ -1,4 +1,6 @@
+import { createHmac } from "crypto"
 import { describe, expect, it } from "vitest"
+import { env } from "@lyrashield/config"
 import {
   connectionGrantMatchesConsent,
   createOAuthConsentState,
@@ -9,6 +11,12 @@ const base = {
   clientId: "client-cursor",
   scopes: ["lyrashield.read", "lyrashield.write"],
   userId: "user-1",
+}
+
+function signPayloadJson(payloadJson: string): string {
+  const encoded = Buffer.from(payloadJson).toString("base64url")
+  const signature = createHmac("sha256", env.BETTER_AUTH_SECRET).update(encoded).digest("base64url")
+  return `${encoded}.${signature}`
 }
 
 describe("oauth consent state", () => {
@@ -44,6 +52,24 @@ describe("oauth consent state", () => {
   it("rejects malformed input", () => {
     expect(verifyOAuthConsentState("not-a-state").valid).toBe(false)
     expect(verifyOAuthConsentState("a.b.c").valid).toBe(false)
+  })
+
+  it("rejects correctly signed payloads with an empty nonce or non-finite expiry", () => {
+    const emptyNonce = signPayloadJson(
+      JSON.stringify({ clientId: "client", scopes: [], userId: "user", nonce: "", exp: 5_000 })
+    )
+    const nonFiniteExpiry = signPayloadJson(
+      '{"clientId":"client","scopes":[],"userId":"user","nonce":"nonce","exp":1e999}'
+    )
+
+    expect(verifyOAuthConsentState(emptyNonce, 1_000)).toEqual({
+      valid: false,
+      reason: "malformed",
+    })
+    expect(verifyOAuthConsentState(nonFiniteExpiry, 1_000)).toEqual({
+      valid: false,
+      reason: "malformed",
+    })
   })
 
   it("binds the grant to the consented client and requested scopes", () => {

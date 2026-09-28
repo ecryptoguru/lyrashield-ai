@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto"
 import { logger } from "@lyrashield/logger"
+import { z } from "zod"
 import { prisma } from "./client"
+import type { ControlEvidenceVersion } from "./generated/prisma"
 import { withWorkspaceRLS } from "./rls"
 
 export const AI_ASSURANCE_CONTROL_IDS = [
@@ -32,15 +34,19 @@ export const CONTROL_EVIDENCE_VERSION_STATUSES = [
 
 export type ControlEvidenceVersionStatus = (typeof CONTROL_EVIDENCE_VERSION_STATUSES)[number]
 
-export interface ArtifactManifestItem {
-  id: string
-  filename: string
-  mediaType: string
-  byteLength: number
-  storageUri: string
-  checksum: string
-  encryptionKeyRef: string
-}
+export const ArtifactManifestItemSchema = z
+  .object({
+    id: z.string().min(1),
+    filename: z.string().min(1),
+    mediaType: z.string().min(1),
+    byteLength: z.number().int().positive().safe(),
+    storageUri: z.string().min(1),
+    checksum: z.string().min(1),
+    encryptionKeyRef: z.string().min(1),
+  })
+  .strict()
+
+export type ArtifactManifestItem = z.infer<typeof ArtifactManifestItemSchema>
 
 export interface ControlEvidenceVersionSummary {
   id: string
@@ -231,6 +237,29 @@ function buildVersionChecksum(
   })
 }
 
+function toVersionSummary(row: ControlEvidenceVersion): ControlEvidenceVersionSummary {
+  const status = CONTROL_EVIDENCE_VERSION_STATUSES.find((value) => value === row.status)
+  if (!status) throw new Error("EVIDENCE_VERSION_CORRUPT")
+
+  const artifactManifest = ArtifactManifestItemSchema.array().safeParse(row.artifactManifest)
+  if (!artifactManifest.success) throw new Error("EVIDENCE_MANIFEST_CORRUPT")
+
+  return {
+    id: row.id,
+    controlEvidenceId: row.controlEvidenceId,
+    version: row.version,
+    status,
+    attestation: row.attestation,
+    reviewedById: row.reviewedById,
+    reviewedAt: row.reviewedAt,
+    expiresAt: row.expiresAt,
+    artifactManifest: artifactManifest.data,
+    checksum: row.checksum,
+    createdById: row.createdById,
+    createdAt: row.createdAt,
+  }
+}
+
 export async function createControlEvidence(
   input: CreateControlEvidenceInput
 ): Promise<ControlEvidenceVersionSummary> {
@@ -304,7 +333,7 @@ export async function createControlEvidence(
     { versionId: version.id, controlId: input.controlId }
   )
 
-  return version as unknown as ControlEvidenceVersionSummary
+  return toVersionSummary(version)
 }
 
 /**
@@ -377,7 +406,7 @@ export async function markControlEvidenceNotApplicable(
     evidenceId,
     { versionId: version.id, controlId: input.controlId }
   )
-  return version as unknown as ControlEvidenceVersionSummary
+  return toVersionSummary(version)
 }
 
 export async function reviseControlEvidence(
@@ -412,7 +441,7 @@ export async function reviseControlEvidence(
           where: { controlEvidenceId: evidence.id },
         })) + 1
 
-      const artifactManifest = (current.artifactManifest as unknown as ArtifactManifestItem[]) ?? []
+      const artifactManifest = toVersionSummary(current).artifactManifest
 
       const checksum = buildVersionChecksum(
         nextVersion,
@@ -459,7 +488,7 @@ export async function reviseControlEvidence(
     { versionId: version.id, previousVersionId }
   )
 
-  return version as unknown as ControlEvidenceVersionSummary
+  return toVersionSummary(version)
 }
 
 export async function reviewControlEvidence(
@@ -501,7 +530,7 @@ export async function reviewControlEvidence(
       })) + 1
 
     const reviewedAt = new Date()
-    const artifactManifest = (current.artifactManifest as unknown as ArtifactManifestItem[]) ?? []
+    const artifactManifest = toVersionSummary(current).artifactManifest
 
     const checksum = buildVersionChecksum(
       nextVersion,
@@ -545,7 +574,7 @@ export async function reviewControlEvidence(
     { versionId: version.id, status: input.status }
   )
 
-  return version as unknown as ControlEvidenceVersionSummary
+  return toVersionSummary(version)
 }
 
 export async function acceptControlEvidence(input: {
@@ -595,17 +624,14 @@ export async function listControlEvidence(
             where: { id: { in: versionIds } },
           })
 
-    const versionById = new Map(versions.map((v) => [v.id, v]))
+    const versionById = new Map(versions.map((version) => [version.id, toVersionSummary(version)]))
 
     return evidences.map((e) => ({
       id: e.id,
       workspaceId: e.workspaceId,
       targetId: e.targetId,
       controlId: e.controlId,
-      currentVersion: e.currentVersionId
-        ? ((versionById.get(e.currentVersionId) as unknown as
-            ControlEvidenceVersionSummary | undefined) ?? null)
-        : null,
+      currentVersion: e.currentVersionId ? (versionById.get(e.currentVersionId) ?? null) : null,
     }))
   })
 }
@@ -640,7 +666,7 @@ export async function addControlEvidenceArtifacts(
         where: { controlEvidenceId: evidence.id },
       })) + 1
 
-    const existingManifest = (current.artifactManifest as unknown as ArtifactManifestItem[]) ?? []
+    const existingManifest = toVersionSummary(current).artifactManifest
     validateControlEvidenceArtifacts(existingManifest, input.manifestItems)
     const artifactManifest = [...existingManifest, ...input.manifestItems]
 
@@ -686,7 +712,7 @@ export async function addControlEvidenceArtifacts(
     { versionId: version.id, artifactCount: input.manifestItems.length }
   )
 
-  return version as unknown as ControlEvidenceVersionSummary
+  return toVersionSummary(version)
 }
 
 export function aiAssuranceStateForVersion(

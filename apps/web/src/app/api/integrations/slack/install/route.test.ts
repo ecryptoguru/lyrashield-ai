@@ -23,7 +23,11 @@ const {
 
 vi.mock("../../../../../lib/api-auth", () => ({
   withCookieMutation: (handler: unknown) => handler,
-  authErrorResponse: vi.fn(() => null),
+  authErrorResponse: vi.fn((error: unknown) =>
+    error instanceof Error && error.message === "FORBIDDEN"
+      ? Response.json({ success: false, error: { code: "FORBIDDEN" } }, { status: 403 })
+      : null
+  ),
 }))
 
 vi.mock("@lyrashield/config", () => ({
@@ -73,7 +77,8 @@ vi.mock("../../../../../lib/github-install-state", () => ({
   verifyInstallState,
 }))
 
-import { GET } from "./route"
+import { GET, POST } from "./route"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 function callback(query: string): NextRequest {
   return new NextRequest(`https://app.test/api/integrations/slack/install?${query}`)
@@ -140,5 +145,43 @@ describe("GET /api/integrations/slack/install", () => {
         capabilities: { scopes: ["channels:read", "team:read"] },
       })
     )
+  })
+
+  it("denies an OAuth callback without integration:manage", async () => {
+    requirePermission.mockRejectedValueOnce(new Error("FORBIDDEN"))
+
+    const res = await GET(callback("code=c1&state=signed-state"))
+
+    expectPermissionDenied(
+      res,
+      requirePermission.mock.calls,
+      "ws-1",
+      "/api/integrations/slack/install",
+      "GET"
+    )
+    expect(exchangeSlackOAuthCode).not.toHaveBeenCalled()
+    expect(uploadEncryptedArtifact).not.toHaveBeenCalled()
+    expect(upsertConnectorConnection).not.toHaveBeenCalled()
+  })
+
+  it("denies starting an OAuth flow without integration:manage", async () => {
+    requirePermission.mockRejectedValueOnce(new Error("FORBIDDEN"))
+    const request = new NextRequest("https://app.test/api/integrations/slack/install", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId: "ws-1" }),
+    })
+
+    const res = await POST(request)
+
+    expectPermissionDenied(
+      res,
+      requirePermission.mock.calls,
+      "ws-1",
+      "/api/integrations/slack/install",
+      "POST"
+    )
+    expect(getSlackAuthorizeUrl).not.toHaveBeenCalled()
+    expect(auditLogCreate).not.toHaveBeenCalled()
   })
 })

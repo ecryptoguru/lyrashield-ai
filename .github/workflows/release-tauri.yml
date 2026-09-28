@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ENGINE_REVISION: 21ce6688b8bc39c88822a0e1792b9be08dca8a07
+  ENGINE_REVISION: e4b62a7877a7a5e5a9c530418e55381da1bbf354
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:

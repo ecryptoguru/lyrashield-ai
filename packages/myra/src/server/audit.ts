@@ -26,7 +26,7 @@ const MAX_META_BYTES = 4000
 /** Drop sensitive keys, cap lengths, screen residual secrets — recursively. */
 function sanitizeValue(key: string, value: unknown, depth: number): unknown {
   if (SENSITIVE_KEY.test(key)) return undefined
-  if (typeof value === "string") return value.slice(0, 200)
+  if (typeof value === "string") return screenSecrets(value).text.slice(0, 200)
   if (typeof value === "number" || typeof value === "boolean" || value === null) return value
   if (value instanceof Date) return value.toISOString()
   if (depth >= 4) return undefined
@@ -47,6 +47,35 @@ function sanitizeValue(key: string, value: unknown, depth: number): unknown {
   return undefined
 }
 
+function trimLastMetadataEntry(value: Record<string, unknown> | unknown[]): boolean {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return false
+    const last = value[value.length - 1]
+    if (
+      last !== null &&
+      typeof last === "object" &&
+      trimLastMetadataEntry(last as Record<string, unknown> | unknown[])
+    ) {
+      return true
+    }
+    value.pop()
+    return true
+  }
+
+  const lastKey = Object.keys(value).at(-1)
+  if (lastKey === undefined) return false
+  const last = value[lastKey]
+  if (
+    last !== null &&
+    typeof last === "object" &&
+    trimLastMetadataEntry(last as Record<string, unknown> | unknown[])
+  ) {
+    return true
+  }
+  delete value[lastKey]
+  return true
+}
+
 function sanitizeMetadata(
   meta: Record<string, unknown> | undefined
 ): Record<string, unknown> | null {
@@ -56,9 +85,25 @@ function sanitizeMetadata(
     const clean = sanitizeValue(k, v, 0)
     if (clean !== undefined) out[k] = clean
   }
-  let json = screenSecrets(JSON.stringify(out)).text
-  if (json.length > MAX_META_BYTES) json = json.slice(0, MAX_META_BYTES)
-  return JSON.parse(json) as Record<string, unknown>
+  if (Buffer.byteLength(JSON.stringify(out), "utf8") <= MAX_META_BYTES) return out
+
+  out.truncated = true
+  while (Buffer.byteLength(JSON.stringify(out), "utf8") > MAX_META_BYTES) {
+    const lastKey = Object.keys(out)
+      .filter((key) => key !== "truncated")
+      .at(-1)
+    if (lastKey === undefined) return { truncated: true }
+    const last = out[lastKey]
+    if (
+      last !== null &&
+      typeof last === "object" &&
+      trimLastMetadataEntry(last as Record<string, unknown> | unknown[])
+    ) {
+      continue
+    }
+    delete out[lastKey]
+  }
+  return out
 }
 
 export async function auditEvent(

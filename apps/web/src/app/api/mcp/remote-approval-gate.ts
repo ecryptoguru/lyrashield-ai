@@ -5,11 +5,13 @@ import {
   checkDelegatedOperationAuthorization,
   completeAgentOperation,
   failAgentOperation,
+  toJsonObject,
   withWorkspaceRLS,
   TOOL_OPERATION_MAP,
 } from "@lyrashield/db"
 import {
   McpServer,
+  McpToolResultSchema,
   extractScanIdFromToolResult,
   type McpToolResult,
   type RemoteApprovalGate,
@@ -289,17 +291,15 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
         })
 
         if (claim.status === "REPLAY") {
-          if (!claim.operation.result) {
+          const storedResult = McpToolResultSchema.safeParse(claim.operation.result)
+          if (!storedResult.success) {
             return denied(
               "The completed operation result is unavailable; the action will not be rerun."
             )
           }
           return {
             approved: true,
-            result: withOperationId(
-              claim.operation.result as unknown as McpToolResult,
-              claim.operation.id
-            ),
+            result: withOperationId(storedResult.data, claim.operation.id),
           }
         }
 
@@ -355,11 +355,11 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
           // one — task recovery resolves the scan via this reference without
           // ever re-executing the tool.
           resultReference: extractScanIdFromToolResult(toolResult) ?? undefined,
-          result: {
+          result: toJsonObject({
             content: stampedResult.content,
             isError: stampedResult.isError,
             structuredContent: stampedResult.structuredContent,
-          },
+          }),
         })
 
         return { approved: true, result: stampedResult }

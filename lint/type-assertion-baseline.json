@@ -30,38 +30,10 @@
       "count": 1
     }
   ],
-  "apps/web/src/app/api/mcp/remote-approval-gate.ts": [
-    {
-      "kind": "double-unknown",
-      "sha256": "1e056843bd6a1484469b56e93b98fb5f9a75f80445b6106908aaafa20d6369ef",
-      "count": 1
-    }
-  ],
-  "apps/web/src/app/api/reports/[id]/download/route.ts": [
-    {
-      "kind": "double-unknown",
-      "sha256": "1f7f6f37a0540904d774054c66156eef80990f7cf8975cb01dd773d7a49ec311",
-      "count": 1
-    }
-  ],
   "apps/web/src/app/api/scans/[id]/artifacts/sarif/route.ts": [
     {
       "kind": "never",
       "sha256": "2bdaf82dcf557276bd82ba85340ae2f2a5604098a3346d946e68ac39df071c04",
-      "count": 2
-    }
-  ],
-  "apps/web/src/app/api/scans/route.ts": [
-    {
-      "kind": "double-unknown",
-      "sha256": "d3524289436f326c0947b9652fc0c238351d12370fae2c8ad025658aeb1a2afe",
-      "count": 1
-    }
-  ],
-  "apps/web/src/app/api/sync/findings/route.ts": [
-    {
-      "kind": "never",
-      "sha256": "a7760b6065fb2e5f3da53b182a920d908766b5d670d98dbf514d590c55d52181",
       "count": 2
     }
   ],
@@ -72,29 +44,10 @@
       "count": 1
     }
   ],
-  "apps/web/src/lib/oauth-consent-state.ts": [
-    {
-      "kind": "double-unknown",
-      "sha256": "0fa46e551cf88b48a67228ab55f9a9ee328c157fb3d92b9fdb2792bac26eaa38",
-      "count": 1
-    }
-  ],
   "apps/worker/src/engine/connector-context.ts": [
     {
       "kind": "never",
       "sha256": "a6772f7c3d22b34b82ec6ba1c0f7b41565f3cdee0f7a095936b13ce2590c0a39",
-      "count": 1
-    }
-  ],
-  "apps/worker/src/jobs/billing-reconciliation.job.ts": [
-    {
-      "kind": "double-unknown",
-      "sha256": "3835e1f1f1ad10b7ce7fba30acc7685846182e4c2392165ef81d767dddc80b42",
-      "count": 1
-    },
-    {
-      "kind": "double-unknown",
-      "sha256": "eaedea727928e3bf93d3fcae21251859476d11bdcfebd746860c727df3e6a06c",
       "count": 1
     }
   ],
@@ -152,23 +105,6 @@
       "count": 1
     }
   ],
-  "packages/db/src/ai-assurance-service.ts": [
-    {
-      "kind": "double-unknown",
-      "sha256": "2342d9dc30bae8b8142e90a45b27973757ca0e6d98ea4d2d489212306f270257",
-      "count": 3
-    },
-    {
-      "kind": "double-unknown",
-      "sha256": "af4ffeed4bfd9c49c5c8a9ca0332d59fb1dab68b7744cc942c58578d1bd13d86",
-      "count": 5
-    },
-    {
-      "kind": "double-unknown",
-      "sha256": "f17986af1599b893359ffe2c20cc01a8582e873839d6cd43a002a2f173ffa68e",
-      "count": 1
-    }
-  ],
   "packages/db/src/client.ts": [
     {
       "kind": "double-unknown",
@@ -177,11 +113,6 @@
     }
   ],
   "packages/db/src/launch-report-service.ts": [
-    {
-      "kind": "double-unknown",
-      "sha256": "2d8bb98b3e365d93cabb1e0b4484fecc1be0ac8a8850f389be7a5c58f79f58bb",
-      "count": 1
-    },
     {
       "kind": "double-unknown",
       "sha256": "8eade955f61b4133cdaea4a1b39660417e9f058f3c2ada3a23271fcdb39a677d",

@@ -15,7 +15,8 @@ vi.mock("@lyrashield/db", () => ({
   listScanAttachments: vi.fn(),
   claimOrGetAgentOperation: vi.fn(),
   completeAgentOperation: vi.fn(),
-  failAgentOperation: vi.fn(),
+  failAgentOperation: vi.fn().mockResolvedValue({}),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   ScanAttachmentError: class ScanAttachmentError extends Error {
     code: string
     constructor(code: string, message: string) {

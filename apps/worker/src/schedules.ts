@@ -1,4 +1,5 @@
 import {
+  ACTIVE_SCAN_STATUSES,
   createScan,
   claimDueSchedule,
   getDueSchedules,
@@ -10,14 +11,6 @@ import {
 import { logger } from "@lyrashield/logger"
 import { MAX_CONCURRENT_WORKSPACE_SCANS, resolveTargetScanMode } from "@lyrashield/types"
 import { assertScanWorkerAvailable, enqueueScan } from "./queue"
-
-const ACTIVE_SCAN_STATUSES = [
-  "QUEUED",
-  "PREFLIGHT",
-  "RUNNING",
-  "VERIFYING",
-  "REQUIRES_APPROVAL",
-] as const
 
 export async function processDueSchedules(now = new Date()): Promise<number> {
   const schedules = await getDueSchedules(now)

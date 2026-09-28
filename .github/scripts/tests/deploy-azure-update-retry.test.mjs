@@ -6,9 +6,8 @@ import { join } from "node:path"
 import test from "node:test"
 
 test("Container Apps update retry uses bounded exponential backoff", (t) => {
-  const workflow = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
-  const match = workflow.match(/retry_app_update\(\) \{([\s\S]*?)\n          \}/)
-  assert.ok(match, "retry_app_update function exists in deploy-azure workflow")
+  const containerAppHelper = readFileSync("ops/deployment/containerapp.sh", "utf8")
+  assert.match(containerAppHelper, /ca_retry_update\(\) \{/)
 
   const directory = mkdtempSync(join(tmpdir(), "lyra-azure-update-retry-"))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
@@ -42,17 +41,12 @@ printf '%s\\n' "$1" >> "$AZURE_UPDATE_RETRY_SLEEPS"
     { mode: 0o755 }
   )
 
-  const functionBody = match[1]
-    .split("\n")
-    .map((line) => line.replace(/^          /, ""))
-    .join("\n")
   writeFileSync(
     scriptPath,
     `#!/usr/bin/env bash
 set -euo pipefail
-retry_app_update() {${functionBody}
-}
-retry_app_update fakeaz update
+source "$CONTAINER_APP_HELPER"
+ca_retry_update fakeaz update
 `
   )
 
@@ -63,6 +57,7 @@ retry_app_update fakeaz update
       PATH: `${mockBin}:${process.env.PATH}`,
       AZURE_UPDATE_RETRY_CALLS: callsPath,
       AZURE_UPDATE_RETRY_SLEEPS: sleepsPath,
+      CONTAINER_APP_HELPER: process.cwd() + "/ops/deployment/containerapp.sh",
     },
   })
 

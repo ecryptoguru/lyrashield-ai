@@ -16,6 +16,7 @@ vi.mock("@lyrashield/db", () => ({
   claimOrGetAgentOperation: vi.fn(),
   completeAgentOperation: vi.fn(),
   failAgentOperation: vi.fn(),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   prisma: { auditLog: { create: vi.fn() } },
 }))
 
@@ -44,6 +45,7 @@ import {
   removeScan,
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const routeParams = { params: Promise.resolve({ id: "scan-1" }) }
 
@@ -71,6 +73,24 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:view")
     // No `eventsAfter` param = no cursor: the full event window is returned.
     expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1", { eventsAfter: undefined })
+  })
+
+  it("denies reading a scan without scan:view", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/scans/[id]",
+      "GET"
+    )
+    expect(getScanWithEvents).not.toHaveBeenCalled()
   })
 
   it("passes a well-formed eventsAfter cursor through to the service", async () => {
@@ -110,6 +130,29 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:cancel")
     expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(expect.anything(), "target-1")
     expect(cancelScan).toHaveBeenCalledWith("scan-1", "ws-1")
+  })
+
+  it("denies cancellation without scan:cancel", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+
+    const response = await POST(
+      new Request("http://localhost/api/scans/scan-1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: "ws-1" }),
+      }),
+      routeParams
+    )
+
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/scans/[id]",
+      "POST"
+    )
+    expect(getScanWithEvents).not.toHaveBeenCalled()
+    expect(cancelScan).not.toHaveBeenCalled()
   })
 
   it("does not cancel when delegated target scope rejects the scan target", async () => {
@@ -248,6 +291,25 @@ describe("/api/scans/[id] workspace boundary", () => {
         }),
       })
     )
+  })
+
+  it("denies removal without scan:remove", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+
+    const response = await DELETE(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1", { method: "DELETE" }),
+      routeParams
+    )
+
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/scans/[id]",
+      "DELETE"
+    )
+    expect(getScanWithEvents).not.toHaveBeenCalled()
+    expect(removeScan).not.toHaveBeenCalled()
   })
 
   it("returns SCAN_NOT_FOUND when the scan is not in the authorized workspace", async () => {

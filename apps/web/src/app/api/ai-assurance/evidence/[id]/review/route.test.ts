@@ -26,6 +26,8 @@ vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: v
 
 import { POST } from "./route"
 import { reviewControlEvidence, prisma } from "@lyrashield/db"
+import { requirePermission } from "@lyrashield/auth/server"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const mockPrisma = prisma as unknown as {
   controlEvidence: { findFirst: ReturnType<typeof vi.fn> }
@@ -97,5 +99,24 @@ describe("POST /api/ai-assurance/evidence/[id]/review", () => {
     )
 
     expect(response.status).toBe(409)
+  })
+
+  it("denies evidence review without aiAssurance:review", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await POST(
+      new Request("http://localhost/api/ai-assurance/evidence/ev-1/review?workspaceId=ws-1", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: "ws-1", versionId: "v-1", status: "ACCEPTED" }),
+      }),
+      { params: Promise.resolve({ id: "ev-1" }) }
+    )
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/ai-assurance/evidence/[id]/review",
+      "POST"
+    )
+    expect(reviewControlEvidence).not.toHaveBeenCalled()
   })
 })

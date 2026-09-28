@@ -25,7 +25,8 @@
     "@lyrashield/gate": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
-    "@paralleldrive/cuid2": "^3.3.0"
+    "@paralleldrive/cuid2": "^3.3.0",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "prisma": "7.9.1",

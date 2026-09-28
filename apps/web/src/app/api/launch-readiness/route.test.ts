@@ -19,7 +19,7 @@ vi.mock("@lyrashield/auth/server", () => ({
   }),
 }))
 vi.mock("@lyrashield/auth", () => ({
-  PERMISSIONS: { finding: { view: "finding.view" } },
+  PERMISSIONS: { finding: { view: "finding:view" } },
 }))
 vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
@@ -27,6 +27,8 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import { GET } from "./route"
+import { requirePermission } from "@lyrashield/auth/server"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const COMMIT_A = "a".repeat(40)
 const COMMIT_B = "b".repeat(40)
@@ -211,5 +213,18 @@ describe("GET /api/launch-readiness — release check contract", () => {
     const body = await response.json()
     expect(body.data.releaseCheck.match).toBe("cannot_confirm")
     expect(body.data.releaseCheck.assessed).toBeNull()
+  })
+
+  it("denies readiness reads without finding:view", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await GET(request("workspaceId=ws-1"))
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/launch-readiness",
+      "GET"
+    )
+    expect(mocks.getGateReadinessTargets).not.toHaveBeenCalled()
   })
 })

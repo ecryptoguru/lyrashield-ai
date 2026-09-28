@@ -15,6 +15,7 @@ vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { finding: { view: "finding:vi
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { GET } from "./route"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 describe("GET /api/findings/evidence", () => {
   beforeEach(() => {
@@ -56,6 +57,21 @@ describe("GET /api/findings/evidence", () => {
     )
 
     expect(response.status).toBe(400)
+    expect(mocks.listEvidenceFindings).not.toHaveBeenCalled()
+  })
+
+  it("denies evidence-finding reads without finding:view", async () => {
+    mocks.requirePermission.mockRejectedValueOnce(new Error("FORBIDDEN"))
+    const response = await GET(
+      new Request("http://localhost/api/findings/evidence?workspaceId=ws-1")
+    )
+    expectPermissionDenied(
+      response,
+      mocks.requirePermission.mock.calls,
+      "ws-1",
+      "/api/findings/evidence",
+      "GET"
+    )
     expect(mocks.listEvidenceFindings).not.toHaveBeenCalled()
   })
 })

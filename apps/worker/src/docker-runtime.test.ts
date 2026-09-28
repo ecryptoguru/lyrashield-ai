@@ -18,8 +18,38 @@ const dockerIgnore = readFileSync(
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
-const deployWorkflow = readFileSync(
+const deployCallerWorkflow = readFileSync(
   fileURLToPath(new URL("../../../.github/workflows/deploy-azure.yml", import.meta.url)),
+  "utf8"
+)
+const deployRuntimeWorkflow = readFileSync(
+  fileURLToPath(new URL("../../../.github/workflows/deploy-azure-runtime.yml", import.meta.url)),
+  "utf8"
+)
+const deployPreflightScript = readFileSync(
+  fileURLToPath(new URL("../../../.github/scripts/deploy-azure-preflight.sh", import.meta.url)),
+  "utf8"
+)
+const deployRolloutScript = readFileSync(
+  fileURLToPath(new URL("../../../.github/scripts/deploy-azure-rollout.sh", import.meta.url)),
+  "utf8"
+)
+const deployWorkflow = [
+  deployCallerWorkflow,
+  deployRuntimeWorkflow,
+  deployPreflightScript,
+  deployRolloutScript,
+].join("\n")
+const workflowStepBody = (script: string, slug: string) => {
+  const marker = `step_${slug}() {\n`
+  const start = script.indexOf(marker)
+  if (start < 0) return ""
+  const end = script.indexOf("\n}\n", start + marker.length)
+  return end < 0 ? "" : script.slice(start + marker.length, end)
+}
+// The Desktop bundle and Cloud worker must build from the same reviewed engine revision.
+const desktopReleaseWorkflow = readFileSync(
+  fileURLToPath(new URL("../../../.github/workflows/release-tauri.yml", import.meta.url)),
   "utf8"
 )
 // The path is anchored to this test module rather than derived from external input.
@@ -140,7 +170,9 @@ describe("worker Docker runtime", () => {
   })
 
   it("pins and records the exact engine revision used by production workers", () => {
-    expect(deployWorkflow).toMatch(/ENGINE_REVISION: [0-9a-f]{40}/)
+    const reviewedEngineRevision = "e4b62a7877a7a5e5a9c530418e55381da1bbf354"
+    expect(deployWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
+    expect(desktopReleaseWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(deployWorkflow).toContain("ref: ${{ env.ENGINE_REVISION }}")
     expect(deployWorkflow).toContain("io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}")
     expect(deployWorkflow).not.toContain("continue-on-error: true")
@@ -158,11 +190,12 @@ describe("worker Docker runtime", () => {
     expect(cleanupStart).toBeGreaterThan(buildStart)
     const buildJob = deployWorkflow.slice(buildStart, cleanupStart)
     expect(buildJob).not.toContain("id-token: write")
-    const deployStart = deployWorkflow.indexOf("  deploy:")
+    const deployStart = deployCallerWorkflow.indexOf("  deploy:")
     expect(deployStart).toBeGreaterThanOrEqual(0)
-    const deployJob = deployWorkflow.slice(deployStart)
+    const deployJob = deployCallerWorkflow.slice(deployStart)
     expect(deployJob.match(/id-token: write/g) ?? []).toHaveLength(1)
-    expect(deployJob).toContain("client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}")
+    expect(deployRuntimeWorkflow).toContain("client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}")
+    expect(deployRuntimeWorkflow).toContain("id-token: write")
     expect(deployWorkflow).not.toContain("creds: ${{ secrets.AZURE_CREDENTIALS }}")
     expect(deployWorkflow).toContain("actions/setup-node@820762786026740c76f36085b0efc47a31fe5020")
     expect(deployWorkflow).toContain(
@@ -189,7 +222,9 @@ describe("worker Docker runtime", () => {
       deployWorkflow.indexOf("- name: Deploy scanner Container App")
     )
     expect(deployAppStep).toContain("POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}")
-    expect(deployAppStep).toContain('"POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}"')
+    expect(workflowStepBody(deployRolloutScript, "deploy-app-container-app")).toContain(
+      '"POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}"'
+    )
     expect(deployWorkflow.match(/--remove-env-vars/g) ?? []).toHaveLength(2)
     for (const legacyName of [
       "LYRASHIELD_DEPLOYMENT_ENVIRONMENT",
@@ -200,7 +235,7 @@ describe("worker Docker runtime", () => {
       expect(deployWorkflow.split(`${legacyName} \\`).length - 1).toBe(2)
     }
     expect(
-      deployWorkflow.match(/"PLATFORM_ADMIN_EMAILS=\$\{\{ env\.PLATFORM_ADMIN_EMAILS \}\}"/g) ?? []
+      deployWorkflow.match(/"PLATFORM_ADMIN_EMAILS=\$\{PLATFORM_ADMIN_EMAILS\}"/g) ?? []
     ).toHaveLength(2)
     expect(ciWorkflow).toContain(
       'PLATFORM_ADMIN_EMAILS: "ecryptoguru@gmail.com,ankit@lyrashieldai.com"'
@@ -245,6 +280,28 @@ describe("worker Docker runtime", () => {
       'smoke_candidate scanner "$SCANNER_NAME" "$SCANNER_REVISION" "$SCANNER_FQDN" /api/ready'
     )
     expect(deployWorkflow).toContain("failed after one bounded revision restart")
+  })
+
+  it("removes obsolete Myra environment names from the app while preserving the active provider and model", () => {
+    const appDeployStep = workflowStepBody(deployRolloutScript, "deploy-app-container-app")
+    const scannerDeployStep = workflowStepBody(deployRolloutScript, "deploy-scanner-container-app")
+
+    const appRemovedEnv = appDeployStep?.split("--remove-env-vars")[1]?.split("--set-env-vars")[0]
+    const scannerRemovedEnv = scannerDeployStep
+      ?.split("--remove-env-vars")[1]
+      ?.split("--set-env-vars")[0]
+    for (const staleName of [
+      "MYRA_ALLOWED_EMAILS",
+      "MYRA_MODEL_FAST",
+      "MYRA_MODEL_DEEP",
+      "MYRA_EMBED_MODEL",
+    ]) {
+      expect(appRemovedEnv).toContain(staleName)
+      expect(scannerRemovedEnv).not.toContain(staleName)
+    }
+    expect(appDeployStep).toContain('"MYRA_PROVIDER=')
+    expect(appDeployStep).toContain('"MYRA_MODEL=')
+    expect(appDeployStep).toContain('"MYRA_AZURE_OPENAI_ENDPOINT=')
   })
 
   it("audits private-key content without rejecting public certificate bundles", () => {
@@ -330,28 +387,29 @@ describe("worker Docker runtime", () => {
       'evidence_kek_keyring_secret_name="worker-evidence-kek-keyring-$evidence_kek_keyring_digest"'
     )
     expect(workerSecretRefresh).toContain("Evidence KEK keyring digest does not match config ref")
-    expect(deployWorkflow).toContain(
+    const appDeployStep = workflowStepBody(deployRolloutScript, "deploy-app-container-app")
+    const evidenceSync = workflowStepBody(
+      deployPreflightScript,
+      "sync-evidence-envelope-key-to-app-container-app"
+    )
+    expect(appDeployStep).toContain(
       '"LYRASHIELD_EVIDENCE_KEK_KEYRING=secretref:${LYRASHIELD_EVIDENCE_KEK_KEYRING_SECRET}"'
     )
     expect(deployWorkflow).not.toContain('"lyrashield-evidence-kek=${LYRASHIELD_EVIDENCE_KEK}"')
-    expect(deployWorkflow).toContain("az containerapp secret list")
-    expect(deployWorkflow).toContain("Immutable active evidence secret already exists")
-    expect(deployWorkflow).toContain("Immutable evidence keyring secret already exists")
+    expect(evidenceSync).toContain("azure_keyvault_sync_env_group")
+    expect(evidenceSync).toContain(
+      "keyring_digest=$(printf '%s' \"$LYRASHIELD_EVIDENCE_KEK_KEYRING\""
+    )
+    expect(evidenceSync).toContain("keyvaultref:${app_vault_base}/${active_name}")
   })
 
   it("binds evidence storage only to the web app runtime", () => {
-    const evidenceSync = deployWorkflow.slice(
-      deployWorkflow.indexOf("- name: Sync evidence storage credentials to app Container App"),
-      deployWorkflow.indexOf("- name: Sync Upstash secrets to Container Apps")
+    const evidenceSync = workflowStepBody(
+      deployPreflightScript,
+      "sync-evidence-storage-credentials-to-app-container-app"
     )
-    const appDeployment = deployWorkflow.slice(
-      deployWorkflow.indexOf("- name: Deploy app Container App"),
-      deployWorkflow.indexOf("- name: Deploy scanner Container App")
-    )
-    const scannerDeployment = deployWorkflow.slice(
-      deployWorkflow.indexOf("- name: Deploy scanner Container App"),
-      deployWorkflow.indexOf("- name: Deploy egress-proxy Container App")
-    )
+    const appDeployment = workflowStepBody(deployRolloutScript, "deploy-app-container-app")
+    const scannerDeployment = workflowStepBody(deployRolloutScript, "deploy-scanner-container-app")
 
     for (const binding of [
       "evidence-s3-endpoint=keyvaultref:${vault_base}/worker-r2-endpoint,identityref:system",
@@ -376,15 +434,74 @@ describe("worker Docker runtime", () => {
   })
 
   it("checks the IP hash salt using Key Vault metadata only", () => {
-    const ipHashSaltSync = deployWorkflow.slice(
-      deployWorkflow.indexOf("- name: Sync IP hash salt Key Vault reference"),
-      deployWorkflow.indexOf("# Myra support agent")
+    const ipHashSaltSync = workflowStepBody(
+      deployPreflightScript,
+      "sync-ip-hash-salt-key-vault-reference"
     )
 
     expect(ipHashSaltSync).toContain("az keyvault secret list")
     expect(ipHashSaltSync).toContain("[?name=='ip-hash-salt' && attributes.enabled].name | [0]")
     expect(ipHashSaltSync).not.toContain("az keyvault secret show")
     expect(ipHashSaltSync).not.toContain("--query value")
+  })
+
+  it("syncs provider credentials before worker promotion and keeps them out of engine env", () => {
+    const providerKeySync =
+      deployRuntimeWorkflow
+        .split("      - name: Sync billing reconciliation credentials to worker Key Vault\n")[1]
+        ?.split("\n      - name:")[0] +
+      workflowStepBody(
+        deployPreflightScript,
+        "sync-billing-reconciliation-credentials-to-worker-key-vault"
+      )
+
+    for (const binding of [
+      "POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}",
+      "POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}",
+      "RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}",
+      "RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}",
+      "worker-polar-environment",
+      "worker-polar-access-token",
+      "worker-razorpay-key-id",
+      "worker-razorpay-key-secret",
+    ]) {
+      expect(providerKeySync).toContain(binding)
+    }
+
+    for (const environmentName of [
+      "POLAR_ENVIRONMENT",
+      "POLAR_ACCESS_TOKEN",
+      "RAZORPAY_KEY_ID",
+      "RAZORPAY_KEY_SECRET",
+    ]) {
+      expect(workerSecretRefresh).toContain(`write_secret ${environmentName} `)
+    }
+  })
+
+  it("ensures app and scanner identities and verifies the salt's least-privilege role before syncing references", () => {
+    const identityStep = workflowStepBody(
+      deployPreflightScript,
+      "ensure-app-and-scanner-system-identities"
+    )
+    expect(identityStep).toContain("az containerapp identity assign")
+    expect(identityStep).toContain("--system-assigned")
+    expect(identityStep).toContain("AZURE_APP_CONTAINER_APP_NAME")
+    expect(identityStep).toContain("AZURE_SCANNER_CONTAINER_APP_NAME")
+
+    const ipHashSaltSync = workflowStepBody(
+      deployPreflightScript,
+      "sync-ip-hash-salt-key-vault-reference"
+    )
+    expect(ipHashSaltSync).toContain("az role assignment list")
+    expect(ipHashSaltSync).toContain("--assignee-object-id")
+    expect(ipHashSaltSync).toContain("Key Vault Secrets User")
+    expect(ipHashSaltSync).toContain("/secrets/ip-hash-salt")
+    expect(ipHashSaltSync).toContain("Provision the required role assignment separately")
+    expect(ipHashSaltSync).not.toContain("az role assignment create")
+    expect(ipHashSaltSync).not.toContain("az keyvault secret show")
+    expect(ipHashSaltSync.indexOf("az role assignment list")).toBeLessThan(
+      ipHashSaltSync.indexOf("azure_containerapp_secret_set_retrying")
+    )
   })
 
   it("shares engine work and temp paths with the host Docker daemon", () => {

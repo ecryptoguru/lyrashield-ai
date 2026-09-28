@@ -809,15 +809,27 @@ export async function completeRetestsForScan(params: {
       candidateSourcesByFinding.set(candidate.findingId, sources)
     }
 
+    const evidenceScanIds = [...new Set([params.scanId, ...baselineScanIds])]
+    const [manifestRows, coverageRows] = await Promise.all([
+      tx.scanResultManifest.findMany({
+        where: { scanId: { in: evidenceScanIds } },
+      }),
+      tx.scanCoverageReceipt.findMany({
+        where: { scanId: { in: evidenceScanIds } },
+        select: { id: true, scanId: true, controlId: true, status: true },
+      }),
+    ])
+    const manifestRowsByScanId = new Map(
+      manifestRows.map((manifest) => [manifest.scanId, manifest])
+    )
     const manifests = new Map<string, { checksum: string; manifest: unknown } | null>()
     const coverageByScan = new Map<string, { id: string; controlId: string; status: string }[]>()
-    for (const scanId of new Set([params.scanId, ...baselineScanIds])) {
-      const [manifest, coverage] = await Promise.all([
-        tx.scanResultManifest.findUnique({ where: { scanId } }),
-        tx.scanCoverageReceipt.findMany({ where: { scanId } }),
-      ])
-      manifests.set(scanId, manifest)
-      coverageByScan.set(scanId, coverage)
+    for (const scanId of evidenceScanIds) {
+      manifests.set(scanId, manifestRowsByScanId.get(scanId) ?? null)
+      coverageByScan.set(scanId, [])
+    }
+    for (const receipt of coverageRows) {
+      coverageByScan.get(receipt.scanId)?.push(receipt)
     }
 
     for (const retest of retests) {

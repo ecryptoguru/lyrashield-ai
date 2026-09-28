@@ -3,13 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   permission: vi.fn(),
   gate: vi.fn(),
-  lock: vi.fn(),
+  raw: vi.fn(),
   scan: vi.fn(),
-  find: vi.fn(),
-  upsert: vi.fn(),
-  candidate: vi.fn(),
+  findings: vi.fn(),
+  createFindings: vi.fn(),
+  createCandidates: vi.fn(),
   candidates: vi.fn(),
-  legacyCandidate: vi.fn(),
   event: vi.fn(),
   audit: vi.fn(),
 }))
@@ -17,12 +16,11 @@ vi.mock("@lyrashield/db", () => ({
   prisma: { scan: { findFirst: mocks.scan }, auditLog: { create: mocks.audit } },
   withWorkspaceRLS: async (_workspace: string, fn: (tx: unknown) => Promise<unknown>) =>
     fn({
-      $executeRaw: mocks.lock,
-      finding: { findFirst: mocks.find, upsert: mocks.upsert },
+      $executeRaw: mocks.raw,
+      finding: { findMany: mocks.findings, createManyAndReturn: mocks.createFindings },
       findingCandidate: {
-        upsert: mocks.candidate,
+        createMany: mocks.createCandidates,
         findMany: mocks.candidates,
-        findFirst: mocks.legacyCandidate,
       },
       scanEvent: { create: mocks.event },
     }),
@@ -53,6 +51,7 @@ function bearerRequest(body: unknown = sarif) {
 describe("v1 SARIF import route", () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    mocks.raw.mockResolvedValue(1)
     mocks.permission.mockResolvedValue({ session: { userId: "user-1", apiKey: {} } })
     mocks.scan.mockResolvedValue({
       id: "scan-1",
@@ -60,8 +59,11 @@ describe("v1 SARIF import route", () => {
       createdAt: new Date("2026-09-13T00:00:00Z"),
     })
     mocks.candidates.mockResolvedValue([])
-    mocks.find.mockResolvedValue(null)
-    mocks.upsert.mockResolvedValue({ id: "finding-1" })
+    mocks.findings.mockResolvedValue([])
+    mocks.createFindings.mockImplementation(async ({ data }: { data: { dedupeKey: string }[] }) =>
+      data.map((finding, index) => ({ id: `finding-${index + 1}`, dedupeKey: finding.dedupeKey }))
+    )
+    mocks.createCandidates.mockResolvedValue({ count: 1 })
   })
 
   it("exports the same POST handler the dashboard route serves", () => {

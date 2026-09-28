@@ -21,7 +21,8 @@ vi.mock("@lyrashield/db", () => ({
   },
   claimOrGetAgentOperation: vi.fn(),
   completeAgentOperation: vi.fn(),
-  failAgentOperation: vi.fn(),
+  failAgentOperation: vi.fn().mockResolvedValue({}),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   createScan: vi.fn(),
   listScans: vi.fn(),
   updateScanStatus: vi.fn(),
@@ -105,6 +106,7 @@ function defaultAuthMock() {
 describe("scan operation route regressions", () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    vi.mocked(failAgentOperation).mockResolvedValue({} as never)
     defaultAuthMock()
     vi.mocked(checkScanCreateRateLimit).mockResolvedValue({
       limited: false,

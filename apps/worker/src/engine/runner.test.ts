@@ -527,6 +527,12 @@ describe("repository scan runtime configuration", () => {
 
 describe("buildEngineEnv", () => {
   const original: Record<string, string | undefined> = {}
+  const billingCredentialNames = [
+    "POLAR_ENVIRONMENT",
+    "POLAR_ACCESS_TOKEN",
+    "RAZORPAY_KEY_ID",
+    "RAZORPAY_KEY_SECRET",
+  ] as const
 
   beforeEach(() => {
     original.LYRASHIELD_LLM = process.env.LYRASHIELD_LLM
@@ -545,6 +551,7 @@ describe("buildEngineEnv", () => {
     original.LYRASHIELD_WEB_SEARCH_BUDGET_USD = process.env.LYRASHIELD_WEB_SEARCH_BUDGET_USD
     original.LYRASHIELD_PROMPT_CACHE_EXPLICIT = process.env.LYRASHIELD_PROMPT_CACHE_EXPLICIT
     original.LYRASHIELD_PROMPT_CACHE = process.env.LYRASHIELD_PROMPT_CACHE
+    for (const name of billingCredentialNames) original[name] = process.env[name]
     process.env.LYRASHIELD_LLM = "azure/gpt-6-luna"
     process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK = "lyrashield-sandbox"
     // Remove all web-search variables from the live environment so these tests
@@ -559,6 +566,7 @@ describe("buildEngineEnv", () => {
     delete process.env.LYRASHIELD_WEB_SEARCH_BUDGET_USD
     delete process.env.LYRASHIELD_PROMPT_CACHE_EXPLICIT
     delete process.env.LYRASHIELD_PROMPT_CACHE
+    for (const name of billingCredentialNames) delete process.env[name]
   })
 
   afterEach(() => {
@@ -651,6 +659,17 @@ describe("buildEngineEnv", () => {
     const engineEnv = buildEngineEnv({ model: "azure/gpt-6-luna", reasoningEffort: "medium" })
 
     expect(engineEnv.LYRASHIELD_ALLOW_CHATGPT_SUBSCRIPTION).toBe("0")
+  })
+
+  it("never forwards billing provider credentials into scan engine containers", () => {
+    process.env.POLAR_ENVIRONMENT = "production"
+    process.env.POLAR_ACCESS_TOKEN = "polar-secret"
+    process.env.RAZORPAY_KEY_ID = "razorpay-key"
+    process.env.RAZORPAY_KEY_SECRET = "razorpay-secret"
+
+    const engineEnv = buildEngineEnv({ model: "azure/gpt-6-luna", reasoningEffort: "medium" })
+
+    for (const name of billingCredentialNames) expect(engineEnv[name]).toBeUndefined()
   })
 })
 

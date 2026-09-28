@@ -4,6 +4,7 @@ import { test } from "node:test"
 
 const lockfile = readFileSync("pnpm-lock.yaml", "utf8")
 const workflow = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
+const runtimeWorkflow = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
 
 const isPatchedDevalue = (version) => {
   const [major, minor, patch] = version.split(".").map(Number)
@@ -80,14 +81,8 @@ test("release summary records each image digest as both runtime identity and SBO
     workflow,
     /bash \.github\/scripts\/validate-worker-provenance\.sh \\\n\s+"\$\{\{ steps\.build-worker\.outputs\.digest \}\}"/
   )
+  assert.ok(runtimeWorkflow.includes("IMAGE: ${{ inputs.web_image }}@${{ inputs.web_digest }}"))
   assert.ok(
-    workflow.includes(
-      "IMAGE: ${{ needs.build.outputs.web_image }}@${{ needs.build.outputs.web_digest }}"
-    )
-  )
-  assert.ok(
-    workflow.includes(
-      "IMAGE: ${{ needs.build.outputs.egress_proxy_image }}@${{ needs.build.outputs.egress_proxy_digest }}"
-    )
+    runtimeWorkflow.includes("IMAGE: ${{ inputs.egress_proxy_image }}@${{ inputs.egress_proxy_digest }}")
   )
 })

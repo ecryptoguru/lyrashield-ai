@@ -4,6 +4,7 @@ import { unlink, writeFile } from "node:fs/promises"
 import { Worker } from "bullmq"
 import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
+import { resolveDbPoolMax } from "@lyrashield/db"
 import {
   registerScanWorker,
   unregisterScanWorker,
@@ -37,7 +38,7 @@ import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
 import { drainArtifactDeletionTasks } from "@lyrashield/evidence-storage"
 import { assertEngineTempRootReady } from "./engine/workspace-path"
 import { reapStaleScanResources } from "./engine/stale-resource-reaper"
-import { observeWorkerRun } from "./worker-lifecycle"
+import { assertWorkerDbPoolCapacity, observeWorkerRun } from "./worker-lifecycle"
 import { collectOperationalHealthSnapshot, evaluateOperationalHealth } from "./operational-health"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
@@ -343,6 +344,7 @@ export function assertWorkerStartupProvenance() {
 }
 
 async function main(): Promise<void> {
+  assertWorkerDbPoolCapacity(env.LYRASHIELD_WORKER_CONCURRENCY, resolveDbPoolMax())
   await initSentry()
   // Gate readiness BEFORE the worker can claim anything: missing or malformed
   // provenance throws, main() rejects, and the process exits without ever

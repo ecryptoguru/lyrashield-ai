@@ -18,7 +18,7 @@ const {
   receiptUpsert: vi.fn(),
   claimOrGetAgentOperation: vi.fn(),
   completeAgentOperation: vi.fn(),
-  failAgentOperation: vi.fn(),
+  failAgentOperation: vi.fn().mockResolvedValue({}),
 }))
 
 vi.mock("./client", () => ({
@@ -43,6 +43,7 @@ vi.mock("./agent-operation-service", () => ({
   claimOrGetAgentOperation,
   completeAgentOperation,
   failAgentOperation,
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
 }))
 
 vi.mock("@lyrashield/config", () => ({

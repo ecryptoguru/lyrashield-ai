@@ -244,6 +244,7 @@ export async function handleFixPrMerged(params: {
     throw new Error("Invalid GitHub repository identity")
   }
   return withWorkspaceRLS(params.workspaceId, async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`fix-loop:${params.workspaceId}:${params.branchName}`}, 0))`
     const pr = await tx.pullRequest.findFirst({
       where: {
         branchName: params.branchName,

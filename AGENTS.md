@@ -25,7 +25,7 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 
 ## Release contract — 2026-09-25
 
-- Cloud and Desktop release workflows pin engine `21ce6688b8bc39c88822a0e1792b9be08dca8a07`, which includes the GPT-6-only model boundary and Local scan integrity/viewer fixes. A source pin does not establish a completed deployment or signed Desktop release; verify the exact release run separately.
+- Cloud and Desktop release workflows pin engine `e4b62a7877a7a5e5a9c530418e55381da1bbf354`, which includes the GPT-6-only model boundary and Local scan integrity/viewer fixes. A source pin does not establish a completed deployment or signed Desktop release; verify the exact release run separately. Desktop launch work remains deferred.
 - Product `main` requires `SCA & Secret Scan`, `Lint, Typecheck, Test & Build` and `Pinned Engine / Worker Contract`, with strict up-to-date branch checks. Update the engine's reverse `.lyrashield-worker-pin` only to an exact merged product commit after compatibility verification.
 
 Current release and runtime evidence lives in [PRD §8](./PRD.md#8-current-production-evidence) and [codebase §11](./codebase.md#11-production-topology-and-accepted-evidence). Refresh deployed state before operational action.

@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "crypto"
 import { env } from "@lyrashield/config"
+import { z } from "zod"
 
 /**
  * Signed, expiring consent-context token for delegated OAuth connections.
@@ -17,13 +18,14 @@ import { env } from "@lyrashield/config"
 
 const TTL_MS = 15 * 60 * 1000 // 15 minutes — one consent interaction
 
-interface OAuthConsentStatePayload {
-  clientId: string
-  scopes: string[]
-  userId: string
-  nonce: string
-  exp: number
-}
+const OAuthConsentStatePayloadSchema = z.object({
+  clientId: z.string().min(1),
+  scopes: z.array(z.string()),
+  userId: z.string().min(1),
+  nonce: z.string().min(1),
+  exp: z.number().finite(),
+})
+type OAuthConsentStatePayload = z.infer<typeof OAuthConsentStatePayloadSchema>
 
 function sign(payload: string): string {
   return createHmac("sha256", env.BETTER_AUTH_SECRET).update(payload).digest("base64url")
@@ -67,30 +69,14 @@ export function verifyOAuthConsentState(
   let payload: OAuthConsentStatePayload
   try {
     const parsed: unknown = JSON.parse(Buffer.from(encoded, "base64url").toString("utf-8"))
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { valid: false, reason: "malformed" }
-    }
-    const candidate = parsed as Record<string, unknown>
-    if (
-      typeof candidate.clientId !== "string" ||
-      !candidate.clientId ||
-      !Array.isArray(candidate.scopes) ||
-      !candidate.scopes.every((scope) => typeof scope === "string") ||
-      typeof candidate.userId !== "string" ||
-      !candidate.userId ||
-      typeof candidate.nonce !== "string" ||
-      typeof candidate.exp !== "number"
-    ) {
-      return { valid: false, reason: "malformed" }
-    }
-    payload = candidate as unknown as OAuthConsentStatePayload
+    const result = OAuthConsentStatePayloadSchema.safeParse(parsed)
+    if (!result.success) return { valid: false, reason: "malformed" }
+    payload = result.data
   } catch {
     return { valid: false, reason: "malformed" }
   }
 
-  if (!Number.isFinite(payload.exp) || now > payload.exp) {
-    return { valid: false, reason: "expired" }
-  }
+  if (now > payload.exp) return { valid: false, reason: "expired" }
 
   return { valid: true, payload }
 }

@@ -49,6 +49,7 @@ function sanitizedDatabaseFailure(error: unknown): {
   errorClass: string
   databaseCode: string | null
   causeClassification: CauseClassification
+  transportCode?: "ETIMEDOUT"
 } {
   const chain: unknown[] = []
   let current: unknown = error
@@ -67,6 +68,7 @@ function sanitizedDatabaseFailure(error: unknown): {
     (code): code is string =>
       typeof code === "string" && (/^P\d{4}$/.test(code) || POSTGRES_CODES.has(code))
   )
+  const transportCode = codes.some((code) => code === "ETIMEDOUT") ? "ETIMEDOUT" : null
   const safeCodes = new Set(codes.filter((code): code is string => typeof code === "string"))
   const messages = chain.map((item) =>
     item && typeof item === "object" && "message" in item && typeof item.message === "string"
@@ -96,13 +98,23 @@ function sanitizedDatabaseFailure(error: unknown): {
     causeClassification = "database"
   }
 
-  return { errorClass, databaseCode: databaseCode ?? null, causeClassification }
+  return {
+    errorClass,
+    databaseCode: databaseCode ?? null,
+    causeClassification,
+    ...(transportCode ? { transportCode } : {}),
+  }
 }
 
-function logPreferenceFailure(method: "GET" | "PATCH", error: unknown): void {
+function logPreferenceFailure(
+  method: "GET" | "PATCH",
+  phase: "session_lookup" | "preference_read" | "preference_write",
+  error: unknown
+): void {
   const action = method === "GET" ? "read" : "update"
   logger.error(`Account preference ${action} failed`, {
     eventCode: `ACCOUNT_PREFERENCE_${method}_FAILED`,
+    phase,
     ...sanitizedDatabaseFailure(error),
   })
 }
@@ -158,11 +170,13 @@ function setPreferenceCookie(response: NextResponse, request: Request, enabled: 
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
+  let phase: "session_lookup" | "preference_read" = "session_lookup"
   try {
     const session = await getSession()
     if (!session) return privateResponse(request, unauthorized())
     if (session.apiKey || session.oauth) return privateResponse(request, unauthorized(403))
 
+    phase = "preference_read"
     const preference = await withAccountRLS(session.userId, (tx) =>
       tx.accountPreference.findUnique({
         where: { accountId: session.userId },
@@ -177,7 +191,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       })
     )
   } catch (error) {
-    logPreferenceFailure("GET", error)
+    logPreferenceFailure("GET", phase, error)
     return privateResponse(
       request,
       NextResponse.json(
@@ -189,6 +203,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 }
 
 async function patch(request: Request): Promise<NextResponse> {
+  let phase: "session_lookup" | "preference_write" = "session_lookup"
   try {
     const session = await getSession()
     if (!session) return privateResponse(request, unauthorized())
@@ -206,6 +221,7 @@ async function patch(request: Request): Promise<NextResponse> {
       )
     }
 
+    phase = "preference_write"
     const preference = await withAccountRLS(session.userId, (tx) =>
       tx.accountPreference.upsert({
         where: { accountId: session.userId },
@@ -224,7 +240,7 @@ async function patch(request: Request): Promise<NextResponse> {
     }
     return response
   } catch (error) {
-    logPreferenceFailure("PATCH", error)
+    logPreferenceFailure("PATCH", phase, error)
     const response = privateResponse(
       request,
       NextResponse.json(

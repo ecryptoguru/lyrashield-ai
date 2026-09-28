@@ -29,6 +29,7 @@ vi.mock("@lyrashield/db", () => ({
   claimOrGetAgentOperation,
   completeAgentOperation,
   failAgentOperation,
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
 }))
 vi.mock("@lyrashield/evidence-storage", () => ({ readEncryptedArtifact }))
 vi.mock("@lyrashield/logger", () => ({
@@ -57,6 +58,7 @@ function call(body: unknown = { workspaceId: "workspace-1" }, idempotencyKey?: s
 describe("POST /api/fix-proposals/[id]/create-pr", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    failAgentOperation.mockResolvedValue({})
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
   })
 

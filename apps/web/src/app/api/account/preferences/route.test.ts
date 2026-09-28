@@ -82,14 +82,35 @@ describe("/api/account/preferences", () => {
     expect(response.status).toBe(500)
     expect(logError).toHaveBeenCalledWith("Account preference read failed", {
       eventCode: "ACCOUNT_PREFERENCE_GET_FAILED",
+      phase: "preference_read",
       errorClass: "Error",
       databaseCode: "08001",
       causeClassification: "connection_timeout",
+      transportCode: "ETIMEDOUT",
     })
     const logged = JSON.stringify(logError.mock.calls)
     expect(logged).not.toContain("postgres://")
     expect(logged).not.toContain("password")
     expect(logged).not.toContain("account-1")
+  })
+
+  it("tags session lookup failures separately from preference reads", async () => {
+    getSession.mockRejectedValueOnce(
+      Object.assign(new Error("connection timeout"), { code: "ETIMEDOUT" })
+    )
+
+    const response = await GET(new Request("https://app.lyrashieldai.com/api/account/preferences"))
+
+    expect(response.status).toBe(500)
+    expect(logError).toHaveBeenCalledWith("Account preference read failed", {
+      eventCode: "ACCOUNT_PREFERENCE_GET_FAILED",
+      phase: "session_lookup",
+      errorClass: "Error",
+      databaseCode: null,
+      causeClassification: "connection_timeout",
+      transportCode: "ETIMEDOUT",
+    })
+    expect(withAccountRLS).not.toHaveBeenCalled()
   })
 
   it("logs sanitized metadata on failed saves while keeping the local opt-out", async () => {
@@ -100,6 +121,7 @@ describe("/api/account/preferences", () => {
     expect(response.status).toBe(500)
     expect(logError).toHaveBeenCalledWith("Account preference update failed", {
       eventCode: "ACCOUNT_PREFERENCE_PATCH_FAILED",
+      phase: "preference_write",
       errorClass: "Error",
       databaseCode: "08006",
       causeClassification: "connection_interrupted",

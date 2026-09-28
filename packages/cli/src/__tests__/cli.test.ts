@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { redactKey } from "../output.js"
 import { resolveSecretMode } from "../installers/secret-mode.js"
-import { mergeJson } from "../installers/json.js"
+import { mergeJson, removeJson } from "../installers/json.js"
 import { mergeFile, removeFile } from "../installers/merge.js"
 import { mkdtemp, writeFile, rm, readFile, access, realpath } from "node:fs/promises"
 import path from "node:path"
@@ -187,6 +187,31 @@ describe("json merge", () => {
       args: ["other.js"],
     })
     expect((parsed.mcpServers as Record<string, unknown>).lyrashield).toEqual({ command: "npx" })
+  })
+
+  it.each(["null", "[]"])("rejects non-object JSON on merge: %s", async (content) => {
+    const file = path.join(tmp, `non-object-merge-${content === "null" ? "null" : "array"}.json`)
+    await writeFile(file, content, "utf-8")
+
+    await expect(
+      mergeJson({
+        filePath: file,
+        rootKey: "mcpServers",
+        serverName: "lyrashield",
+        value: { command: "npx" },
+      })
+    ).rejects.toThrow(`${file} is not a JSON object`)
+    expect(await readFile(file, "utf-8")).toBe(content)
+  })
+
+  it.each(["null", "[]"])("rejects non-object JSON on removal: %s", async (content) => {
+    const file = path.join(tmp, `non-object-remove-${content === "null" ? "null" : "array"}.json`)
+    await writeFile(file, content, "utf-8")
+
+    await expect(
+      removeJson({ filePath: file, rootKey: "mcpServers", serverName: "lyrashield" })
+    ).rejects.toThrow(`${file} is not a JSON object`)
+    expect(await readFile(file, "utf-8")).toBe(content)
   })
 
   it("removes only the lyrashield entry", async () => {

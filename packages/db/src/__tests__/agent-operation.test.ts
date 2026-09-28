@@ -3,6 +3,7 @@ import {
   claimOrGetAgentOperation,
   getOperationStatus,
   hashOperationInput,
+  toJsonObject,
 } from "../agent-operation-service"
 import { prisma } from "../client"
 
@@ -41,6 +42,22 @@ describe("WP-03 Agent Operation Durable Execution and Idempotency", () => {
     })
 
     expect(hash1).toBe(hash2)
+  })
+
+  it("normalizes dates and omitted values into a Prisma JSON object", () => {
+    expect(
+      toJsonObject({
+        createdAt: new Date("2026-09-28T00:00:00.000Z"),
+        nested: { enabled: true, omitted: undefined },
+      })
+    ).toEqual({
+      createdAt: "2026-09-28T00:00:00.000Z",
+      nested: { enabled: true },
+    })
+  })
+
+  it("rejects operation results that cannot be represented as JSON", () => {
+    expect(() => toJsonObject({ value: BigInt(1) })).toThrow()
   })
 
   it("creates a NEW operation when key has never been seen", async () => {

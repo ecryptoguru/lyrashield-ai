@@ -1760,6 +1760,19 @@ model WebhookEventTrack {
   @@index([track, status])
 }
 
+/// Global checkpoint and lease for the report-only provider reconciliation job.
+/// Access is restricted to the dedicated system database role by migration RLS.
+model BillingReconciliationState {
+  id              String    @id @default("singleton")
+  coverageFrom    DateTime  @map("coverage_from") @db.Timestamptz(3)
+  lastCompletedAt DateTime? @map("last_completed_at") @db.Timestamptz(3)
+  leaseToken      String?   @map("lease_token")
+  leaseExpiresAt  DateTime? @map("lease_expires_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("billing_reconciliation_state")
+}
+
 model Retest {
   id           String   @id @default(cuid())
   workspaceId  String

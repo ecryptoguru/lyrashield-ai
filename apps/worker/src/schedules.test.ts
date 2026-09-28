@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => ({
+  ACTIVE_SCAN_STATUSES: ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"],
   createScan: vi.fn(),
   claimDueSchedule: vi.fn(),
   getDueSchedules: vi.fn(),

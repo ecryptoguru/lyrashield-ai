@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const rlsTransactionNestingGuard = vi.hoisted(() => ({ enabled: false, depth: 0 }))
+
 vi.mock("./client", () => ({
   prisma: {
     $executeRaw: vi.fn(),
@@ -18,9 +20,17 @@ vi.mock("./client", () => ({
 }))
 
 vi.mock("./rls", () => ({
-  withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
-    fn(prisma)
-  ),
+  withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) => {
+    if (rlsTransactionNestingGuard.enabled && rlsTransactionNestingGuard.depth > 0) {
+      throw new Error("nested withWorkspaceRLS transaction")
+    }
+    rlsTransactionNestingGuard.depth++
+    try {
+      return await fn(prisma)
+    } finally {
+      rlsTransactionNestingGuard.depth--
+    }
+  }),
   bindAccountRLSContext: vi.fn(async () => {}),
 }))
 
@@ -65,6 +75,7 @@ const handleFixPrMergedAndReevaluate = (workspaceId: string, branch: string, prN
   handleMerge(workspaceId, branch, prNumber, admission)
 
 const mockPrisma = prisma as unknown as {
+  $executeRaw: ReturnType<typeof vi.fn>
   pullRequest: { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
   scan: { findFirst: ReturnType<typeof vi.fn> }
   workspaceMember: { findFirst: ReturnType<typeof vi.fn> }
@@ -79,6 +90,8 @@ const mockPrisma = prisma as unknown as {
 describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    rlsTransactionNestingGuard.enabled = false
+    rlsTransactionNestingGuard.depth = 0
     admission.mockResolvedValue(undefined)
     vi.mocked(prisma.retest.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.findingCandidate.findMany).mockResolvedValue([])
@@ -120,6 +133,23 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
     mockPrisma.target.findFirst.mockResolvedValue({ id: "target-1", type: "REPO" })
     mockPrisma.finding.findMany.mockResolvedValue([])
     mockPrisma.scanCoverageReceipt.findMany.mockResolvedValue([])
+  })
+
+  it("does not open nested workspace transactions while handling a merge", async () => {
+    rlsTransactionNestingGuard.enabled = true
+    try {
+      await expect(
+        handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+      ).resolves.not.toBeNull()
+      const advisoryKeys = mockPrisma.$executeRaw.mock.calls.map((call) => call[1])
+      expect(advisoryKeys).toEqual([
+        "fix-loop:workspace-1:lyrashield/fix-abc123",
+        "fix-loop:workspace-1:lyrashield/fix-abc123",
+      ])
+    } finally {
+      rlsTransactionNestingGuard.enabled = false
+      rlsTransactionNestingGuard.depth = 0
+    }
   })
 
   it("binds the Retest to a NEW retest scan, never the finding's original terminal scan", async () => {

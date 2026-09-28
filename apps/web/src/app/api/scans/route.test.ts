@@ -255,27 +255,8 @@ describe("POST /api/scans", () => {
     expect(json.error.code).toBe("POLICY_NOT_FOUND")
   })
 
-  it("returns 409 when scan already in progress", async () => {
+  it("uses createScan's atomic guard instead of preflight concurrency counts", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
-    vi.mocked(prisma.scan.count).mockResolvedValue(1 as never)
-
-    const res = await POST(
-      makeRequest({
-        workspaceId: "ws-1",
-        targetId: "t1",
-        goal: "TEST_APP",
-        mode: "SAFE",
-      })
-    )
-
-    expect(res.status).toBe(409)
-    const json = await res.json()
-    expect(json.error.code).toBe("SCAN_IN_PROGRESS")
-  })
-
-  it("returns 409 when a concurrent request wins the active-scan constraint", async () => {
-    vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
-    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
     vi.mocked(createScan).mockRejectedValue(new Error("Target already has an active scan") as never)
 
     const res = await POST(
@@ -289,6 +270,7 @@ describe("POST /api/scans", () => {
 
     expect(res.status).toBe(409)
     expect((await res.json()).error.code).toBe("SCAN_IN_PROGRESS")
+    expect(prisma.scan.count).not.toHaveBeenCalled()
   })
 
   it("creates scan and enqueues job successfully", async () => {
@@ -551,6 +533,7 @@ describe("POST /api/scans", () => {
     expect(res.status).toBe(409)
     expect((await res.json()).error.code).toBe("SCAN_CONCURRENCY_LIMIT")
     expect(enqueueScanJob).not.toHaveBeenCalled()
+    expect(prisma.scan.count).not.toHaveBeenCalled()
   })
 
   it("returns 503 when enqueue fails", async () => {
