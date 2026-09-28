@@ -44,8 +44,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       html = generateLaunchReportHTML(reportRecord.contentJson)
     } else if (isReportData(reportRecord?.contentJson)) {
       if (
-        !reportRecord.scanId ||
-        reportRecord.contentJson.scanInfo?.scanId !== reportRecord.scanId
+        (reportRecord.scanId === null && reportRecord.contentJson.scanInfo !== null) ||
+        (reportRecord.scanId !== null &&
+          reportRecord.contentJson.scanInfo?.scanId !== reportRecord.scanId)
       ) {
         return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
       }

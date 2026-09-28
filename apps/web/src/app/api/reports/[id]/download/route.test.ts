@@ -126,6 +126,25 @@ describe("GET /api/reports/[id]/download", () => {
     expect(update).not.toHaveBeenCalled()
   })
 
+  it("renders scanless workspace report snapshots", async () => {
+    const snapshot = { findings: [], scanInfo: null }
+    findFirst.mockResolvedValue({
+      contentJson: snapshot,
+      scanId: null,
+      title: "Workspace report",
+      type: "executive",
+    })
+
+    const response = await GET(
+      new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "report-1" }) }
+    )
+
+    expect(response.status).toBe(200)
+    expect(generateReportHTML).toHaveBeenCalledWith(snapshot)
+    expect(gatherReportData).not.toHaveBeenCalled()
+  })
+
   it("rejects a valid snapshot bound to a different source scan", async () => {
     const snapshot = { findings: [], scanInfo: { scanId: "scan-2" } }
     findFirst.mockResolvedValue({
