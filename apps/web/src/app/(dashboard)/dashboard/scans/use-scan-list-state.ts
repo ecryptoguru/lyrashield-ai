@@ -39,6 +39,7 @@ export function useScanListState({
   const scansRef = useRef(scans)
   const firstPageIdsRef = useRef(new Set(initialData.map((scan) => scan.id)))
   const firstPageHasMoreRef = useRef(initialNextCursor !== null)
+  const listRequestRef = useRef(0)
 
   useEffect(() => {
     scansRef.current = scans
@@ -75,21 +76,27 @@ export function useScanListState({
     nextTarget = targetFilter,
     nextState: ScanStateFilter = stateFilter
   ) {
-    const result = await apiGetPaginated<ScanItem>(
-      "/api/scans",
-      {
-        workspaceId,
-        ...(nextTarget ? { targetId: nextTarget } : {}),
-        ...(nextState !== "ALL" ? { state: nextState } : {}),
-      },
-      {
-        schema: scansPaginatedSchema,
-      }
-    )
-    setScans(result.items)
-    setNextCursor(result.nextCursor)
-    firstPageIdsRef.current = new Set(result.items.map((scan) => scan.id))
-    firstPageHasMoreRef.current = result.nextCursor !== null
+    const requestId = ++listRequestRef.current
+    try {
+      const result = await apiGetPaginated<ScanItem>(
+        "/api/scans",
+        {
+          workspaceId,
+          ...(nextTarget ? { targetId: nextTarget } : {}),
+          ...(nextState !== "ALL" ? { state: nextState } : {}),
+        },
+        { schema: scansPaginatedSchema }
+      )
+      if (requestId !== listRequestRef.current) return false
+      setScans(result.items)
+      setNextCursor(result.nextCursor)
+      firstPageIdsRef.current = new Set(result.items.map((scan) => scan.id))
+      firstPageHasMoreRef.current = result.nextCursor !== null
+      return true
+    } catch (error) {
+      if (requestId !== listRequestRef.current) return false
+      throw error
+    }
   }
 
   function handleTargetFilterChange(value: string) {
@@ -156,6 +163,7 @@ export function useScanListState({
 
   async function handleLoadMore() {
     if (!nextCursor) return
+    const requestId = listRequestRef.current
     setLoadingMore(true)
     setErrorCode(null)
     try {
@@ -164,10 +172,11 @@ export function useScanListState({
         listParams({ cursor: nextCursor }),
         { schema: scansPaginatedSchema }
       )
+      if (requestId !== listRequestRef.current) return
       setScans((prev) => [...prev, ...result.items])
       setNextCursor(result.nextCursor)
     } catch {
-      setError("Failed to load more scans")
+      if (requestId === listRequestRef.current) setError("Failed to load more scans")
     } finally {
       setLoadingMore(false)
     }
@@ -178,8 +187,7 @@ export function useScanListState({
     setError(null)
     setErrorCode(null)
     try {
-      await refetchFirstPage()
-      setPollStale(false)
+      if (await refetchFirstPage()) setPollStale(false)
     } catch {
       setPollStale(true)
     } finally {

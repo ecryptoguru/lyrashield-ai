@@ -420,7 +420,7 @@ export function FindingDetailDrawer({
       })
       setShowFixForm(false)
       setFixSummary("")
-      const res = await apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+      const res = await apiGet(detailUrl, {
         schema: findingDetailSchema,
       })
       setDetail(res ?? null)
