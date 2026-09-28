@@ -117,8 +117,8 @@ export async function getCurrentGateVerdicts(
         tx.$queryRaw<Array<{ targetId: string }>>`
           SELECT v."targetId"
           FROM unnest(
-            ${verdicts.map((v) => v.targetId)}::text[],
-            ${verdicts.map((v) => v.evaluatedAt)}::timestamptz[]
+            ${rowsWithSnapshot.map((v) => v.targetId)}::text[],
+            ${rowsWithSnapshot.map((v) => v.evaluatedAt)}::timestamptz[]
           ) AS v("targetId", "evaluatedAt")
           JOIN "Finding" f
             ON f."workspaceId" = ${workspaceId}
@@ -129,8 +129,8 @@ export async function getCurrentGateVerdicts(
         tx.$queryRaw<Array<{ targetId: string }>>`
           SELECT v."targetId"
           FROM unnest(
-            ${verdicts.map((v) => v.targetId)}::text[],
-            ${verdicts.map((v) => v.evaluatedAt)}::timestamptz[]
+            ${rowsWithSnapshot.map((v) => v.targetId)}::text[],
+            ${rowsWithSnapshot.map((v) => v.evaluatedAt)}::timestamptz[]
           ) AS v("targetId", "evaluatedAt")
           JOIN "FindingVerification" fv
             ON fv."workspaceId" = ${workspaceId}

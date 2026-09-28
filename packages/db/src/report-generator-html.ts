@@ -25,7 +25,7 @@ export function generateReportHTML(data: ReportData): string {
       return `
         <tr>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">
-            <span style="display:inline-block;padding:2px 8px;border-radius:4px;color:#fff;background:${sevColor};font-size:11px;font-weight:600;">${f.severity}</span>
+            <span style="display:inline-block;padding:2px 8px;border-radius:4px;color:#fff;background:${sevColor};font-size:11px;font-weight:600;">${escapeHtml(f.severity)}</span>
           </td>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">
             <strong>${escapeHtml(f.title)}</strong>
@@ -35,7 +35,7 @@ export function generateReportHTML(data: ReportData): string {
             ${escapeHtml(f.summary).slice(0, 120)}${f.summary.length > 120 ? "…" : ""}
           </td>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">
-            <span style="display:inline-block;padding:2px 8px;border-radius:4px;color:#fff;background:${statusColor};font-size:11px;font-weight:600;">${f.status}</span>
+            <span style="display:inline-block;padding:2px 8px;border-radius:4px;color:#fff;background:${statusColor};font-size:11px;font-weight:600;">${escapeHtml(f.status)}</span>
           </td>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;">
             ${f.verified ? "✅ Verified" : `⚠️ ${escapeHtml((f.verificationStatus ?? "DETECTED").replaceAll("_", " "))}`}<br>
@@ -55,7 +55,7 @@ export function generateReportHTML(data: ReportData): string {
     .map(([sev, count]) => {
       const color = SEVERITY_COLORS[sev] ?? "#6b7280"
       return `<div class="bar-row">
-        <span class="bar-label" style="color:${color};">${sev}</span>
+        <span class="bar-label" style="color:${color};">${escapeHtml(sev)}</span>
         <span class="bar-track"><span class="bar-fill" style="width:${Math.max(4, (count / severityMax) * 100)}%;background:${color};"></span></span>
         <span class="bar-value">${count}</span>
       </div>`
