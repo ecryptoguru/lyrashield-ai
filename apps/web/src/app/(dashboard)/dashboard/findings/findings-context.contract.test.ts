@@ -12,11 +12,12 @@ import { describe, expect, it } from "vitest"
 describe("findings list context preservation contract", () => {
   const client = readFileSync(new URL("./findings-client.tsx", import.meta.url), "utf8")
   const context = readFileSync(new URL("./findings-list-context.ts", import.meta.url), "utf8")
+  const drawer = readFileSync(new URL("./use-finding-drawer.ts", import.meta.url), "utf8")
 
   it("keeps filter/sort/target/query in the URL", () => {
     expect(client).toContain('params.set("filter", updates.filter)')
     expect(client).toContain('params.set("target", updates.target)')
-    expect(client).toContain('url.searchParams.set("finding", finding.id)')
+    expect(drawer).toContain('url.searchParams.set("finding", finding.id)')
   })
 
   it("revalidates saved pages and restores scroll after mount, not during hydration", () => {
@@ -38,7 +39,7 @@ describe("findings list context preservation contract", () => {
   })
 
   it("keeps drawer focus restoration and never touches filter state on drawer close", () => {
-    expect(client).toContain("opener?.focus()")
-    expect(client).toContain("Filter/sort/search state is never touched")
+    expect(drawer).toContain("opener?.focus()")
+    expect(drawer).toContain("Filter/sort/search state is never touched")
   })
 })
