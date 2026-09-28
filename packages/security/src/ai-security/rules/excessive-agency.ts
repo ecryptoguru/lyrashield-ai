@@ -37,6 +37,9 @@ const AUTO_APPROVE_PATTERNS = [
 ]
 
 function hasDestructiveToolWithoutApproval(line: string): boolean {
+  // A destructive application call (for example Set.delete or db.drop) is not
+  // evidence that an AI agent can invoke it. Require a tool declaration or call.
+  if (!/\bname\s*:\s*["'`]|\btool\s*\./i.test(line)) return false
   if (!DESTRUCTIVE_NAME_PATTERN.test(line) && !CAMEL_CASE_DESTRUCTIVE_NAME_PATTERN.test(line)) {
     return false
   }

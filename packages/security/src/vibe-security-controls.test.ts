@@ -27,6 +27,13 @@ describe("Vibe Security 50 coverage contract", () => {
     expect(instruction).toContain("Every reported finding must include")
   })
 
+  it("bounds Quick investigation without treating unassessed controls as clean", () => {
+    const instruction = buildVibeSecurityInstruction("FULL_PENTEST", "QUICK")
+    expect(instruction).toContain("Quick runtime: prioritize")
+    expect(instruction).toContain("Record unassessed controls as incomplete")
+    expect(buildVibeSecurityInstruction("FULL_PENTEST", "STANDARD")).not.toContain("Quick runtime:")
+  })
+
   it("keeps findings separate from controls that require external evidence", () => {
     const summary = summarizeVibeSecurityCoverage([
       { title: "SQL injection in search", control_ids: [11] },

@@ -333,7 +333,7 @@ export interface VibeCoverageFinding {
   control_ids?: readonly number[]
 }
 
-export function buildVibeSecurityInstruction(goal: string): string {
+export function buildVibeSecurityInstruction(goal: string, mode?: string): string {
   const safety = checkInstructionSafety(goal)
   if (!safety.safe) {
     throw new Error(`Unsafe scan goal rejected: ${safety.reason}`)
@@ -349,6 +349,11 @@ export function buildVibeSecurityInstruction(goal: string): string {
     `Goal: ${goal}`,
     `LyraShield control version: ${VIBE_SECURITY_COVERAGE_VERSION}`,
     "Assess each applicable control below. Report only evidence-backed findings; absence of evidence is not a vulnerability.",
+    ...(mode?.toUpperCase() === "QUICK" || mode?.toUpperCase() === "SAFE"
+      ? [
+          "Quick runtime: prioritize the highest-risk trust boundaries, file supported findings as soon as they are established, then finish before the deadline. Record unassessed controls as incomplete; do not spend the full run trying to prove an absence of findings.",
+        ]
+      : []),
     "Every reported finding must include the applicable numeric ranks in control_ids.",
     checklist,
     `Controls ${evidenceControls.map((control) => control.rank).join(", ")} require separate deployment, operational or accountable-human evidence and must not be inferred from source alone.`,
