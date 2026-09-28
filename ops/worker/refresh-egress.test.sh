@@ -215,10 +215,13 @@ if grep -Fq 'www.cisa.gov' "$container_hosts"; then
   exit 1
 fi
 grep -Fqx 'proxy.test 8.8.4.4 443' "$pin_file"
+grep -Fqx 'api.polar.sh 8.8.8.8 443' "$pin_file"
+grep -Fqx 'api.razorpay.com 8.8.8.8 443' "$pin_file"
 grep -q '^CALL 1$' "$iptables_log"
 grep -q '^CALL 2$' "$iptables_log"
 first_rules=$(sed -n '/^CALL 1$/,/^CALL 2$/p' "$iptables_log")
 printf '%s\n' "$first_rules" | grep -q -- '-d 8.8.4.4 --dport 443 -j ACCEPT'
+printf '%s\n' "$first_rules" | grep -q -- '-d 8.8.8.8 --dport 443 -j ACCEPT'
 printf '%s\n' "$first_rules" | grep -q -- '-d 9.9.9.9 --dport 443 -j ACCEPT'
 second_rules=$(sed -n '/^CALL 2$/,$p' "$iptables_log")
 printf '%s\n' "$second_rules" | grep -q -- '-d 8.8.4.4 --dport 443 -j ACCEPT'

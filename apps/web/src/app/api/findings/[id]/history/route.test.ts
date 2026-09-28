@@ -14,6 +14,7 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { GET } from "./route"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 describe("finding history route", () => {
   beforeEach(() => {
@@ -42,6 +43,27 @@ describe("finding history route", () => {
         limit: 100,
       }
     )
+  })
+
+  it("denies history reads without finding:view", async () => {
+    mocks.requirePermission.mockRejectedValueOnce(new Error("FORBIDDEN"))
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/findings/finding-1/history?workspaceId=workspace-1&collection=evidence"
+      ),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+
+    expectPermissionDenied(
+      response,
+      mocks.requirePermission.mock.calls,
+      "workspace-1",
+      "/api/findings/[id]/history",
+      "GET"
+    )
+    expect(mocks.validateFindingScope).not.toHaveBeenCalled()
+    expect(mocks.getFindingHistoryPage).not.toHaveBeenCalled()
   })
 
   it("rejects limits above 100", async () => {

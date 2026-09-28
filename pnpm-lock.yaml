@@ -808,6 +808,9 @@ importers:
       pg:
         specifier: ^8.23.0
         version: 8.23.0
+      zod:
+        specifier: 'catalog:'
+        version: 4.5.4
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

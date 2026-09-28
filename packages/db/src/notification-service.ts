@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import { prisma } from "./client"
+import { withWorkspaceRLS } from "./rls"
 import type { Notification } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import {
@@ -293,7 +294,7 @@ export async function createAndSendNotification(params: {
       // overwriting, so earlier events in the window are not erased. The
       // list stays bounded with an explicit overflow note.
       if (grouped) {
-        notification = await prisma.$transaction(async (tx) => {
+        notification = await withWorkspaceRLS(params.workspaceId, async (tx) => {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`notification:${channel}:${dedupeKey}`}, 0))`
           const current = await tx.notification.findUnique({
             where: { channel_dedupeKey: { channel, dedupeKey } },

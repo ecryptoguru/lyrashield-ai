@@ -24,6 +24,8 @@ vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: v
 
 import { markControlEvidenceNotApplicable, prisma } from "@lyrashield/db"
 import { POST } from "./route"
+import { requirePermission } from "@lyrashield/auth/server"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const mockPrisma = prisma as unknown as {
   target: { findFirst: ReturnType<typeof vi.fn> }
@@ -86,5 +88,28 @@ describe("POST /api/ai-assurance/evidence/not-applicable", () => {
       expect.objectContaining({ reason: "No external model endpoint", createdById: "user-1" })
     )
     expect((await response.json()).data.state).toBe("NOT_APPLICABLE")
+  })
+
+  it("denies not-applicable transitions without aiAssurance:manage", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await POST(
+      new Request("http://localhost/api/ai-assurance/evidence/not-applicable", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          targetId: "target-1",
+          controlId: "vibe-34",
+          reason: "No external model endpoint",
+        }),
+      })
+    )
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/ai-assurance/evidence/not-applicable",
+      "POST"
+    )
+    expect(markControlEvidenceNotApplicable).not.toHaveBeenCalled()
   })
 })

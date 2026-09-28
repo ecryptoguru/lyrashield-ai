@@ -1,9 +1,6 @@
 import { randomUUID } from "crypto"
 import { prisma } from "@lyrashield/db"
 
-const MAX_FIND_RETRIES = 10
-const FIND_RETRY_MS = 25
-
 /**
  * Ensure a user has exactly one onboarding row even when the server component
  * and the onboarding API initialize it at the same time. The raw
@@ -21,16 +18,13 @@ export async function getOrCreateOnboardingState(userId: string) {
     ON CONFLICT ("userId") DO NOTHING
   `
 
-  // The winning row should now be committed. In the unlikely case it is still
-  // invisible to our read, retry briefly.
-  for (let i = 0; i < MAX_FIND_RETRIES; i++) {
-    const state = await prisma.onboardingState.findUnique({
-      where: { userId },
-    })
-    if (state) {
-      return state
-    }
-    await new Promise((resolve) => setTimeout(resolve, FIND_RETRY_MS))
+  // PostgreSQL waits for a concurrent conflicting insert to commit before
+  // this statement completes, and the following autocommit read sees that row.
+  const state = await prisma.onboardingState.findUnique({
+    where: { userId },
+  })
+  if (state) {
+    return state
   }
 
   throw new Error(`Onboarding state not found for user ${userId}`)

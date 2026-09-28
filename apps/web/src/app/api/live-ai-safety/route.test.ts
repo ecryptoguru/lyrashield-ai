@@ -19,7 +19,7 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: {
     agent: { view: "agent:view", act: "agent:act" },
-    aiAssurance: { manage: "ai-assurance:manage" },
+    aiAssurance: { manage: "aiAssurance:manage" },
   },
 }))
 vi.mock("@lyrashield/auth/server", () => ({
@@ -34,6 +34,8 @@ import {
   upsertLiveAiSafetySettings,
 } from "@lyrashield/db"
 import { GET, POST, PUT } from "./route"
+import { requirePermission } from "@lyrashield/auth/server"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const jsonRequest = (method: string, body: unknown) =>
   new Request("https://app.lyrashieldai.com/api/live-ai-safety", {
@@ -104,5 +106,48 @@ describe("live AI safety route", () => {
     expect(response.status).toBe(409)
     expect(response.headers.get("Cache-Control")).toBe("private, no-store")
     expect((await response.json()).error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+  })
+
+  it("denies safety-plan reads without agent:view", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await GET(
+      new Request("https://app.lyrashieldai.com/api/live-ai-safety?workspaceId=ws-1")
+    )
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/live-ai-safety",
+      "GET"
+    )
+    expect(vi.mocked(prisma.liveAiSafetyPlan.findMany)).not.toHaveBeenCalled()
+  })
+
+  it("denies safety settings writes without aiAssurance:manage", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await PUT(
+      jsonRequest("PUT", { workspaceId: "ws-1", incidentContact: "security@example.com" })
+    )
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/live-ai-safety",
+      "PUT"
+    )
+    expect(upsertLiveAiSafetySettings).not.toHaveBeenCalled()
+  })
+
+  it("denies safety-plan creation without agent:act", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await POST(jsonRequest("POST", plan))
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/live-ai-safety",
+      "POST"
+    )
+    expect(createLiveAiSafetyPlan).not.toHaveBeenCalled()
   })
 })

@@ -86,6 +86,10 @@ write_secret BETTER_AUTH_SECRET worker-better-auth-secret
 write_secret BETTER_AUTH_URL worker-better-auth-url
 write_secret NEXT_PUBLIC_APP_URL worker-next-public-app-url
 write_secret TRUSTED_PROXY_IP_HEADER worker-trusted-proxy-header
+write_secret POLAR_ENVIRONMENT worker-polar-environment
+write_secret POLAR_ACCESS_TOKEN worker-polar-access-token
+write_secret RAZORPAY_KEY_ID worker-razorpay-key-id
+write_secret RAZORPAY_KEY_SECRET worker-razorpay-key-secret
 read_secret ip-hash-salt
 if [ "${#secret_value}" -lt 32 ]; then
   echo "IP hash salt must contain at least 32 characters" >&2

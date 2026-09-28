@@ -6,6 +6,7 @@ const {
   isLaunchReportShareablePayload,
   generateReportHTML,
   gatherReportData,
+  isReportData,
   findFirst,
   update,
 } = vi.hoisted(() => ({
@@ -14,6 +15,7 @@ const {
   isLaunchReportShareablePayload: vi.fn((value: unknown) => value !== null && value !== undefined),
   generateReportHTML: vi.fn(() => "<html>standard</html>"),
   gatherReportData: vi.fn(),
+  isReportData: vi.fn((value: unknown) => value !== null && value !== undefined),
   findFirst: vi.fn(),
   update: vi.fn(),
 }))
@@ -24,6 +26,7 @@ vi.mock("@lyrashield/db", () => ({
   isLaunchReportShareablePayload,
   generateReportHTML,
   gatherReportData,
+  isReportData,
   prisma: { report: { findFirst, update } },
 }))
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission: vi.fn().mockResolvedValue({}) }))
@@ -33,6 +36,8 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import { GET } from "./route"
+import { requirePermission } from "@lyrashield/auth/server"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 describe("GET /api/reports/[id]/download", () => {
   beforeEach(() => {
@@ -59,14 +64,33 @@ describe("GET /api/reports/[id]/download", () => {
     expect(await response.text()).toBe("<html>launch</html>")
     expect(generateLaunchReportHTML).toHaveBeenCalledWith(payload)
     expect(generateReportHTML).not.toHaveBeenCalled()
+    expect(requirePermission).toHaveBeenCalledWith("ws-1", "report:download")
     expect(response.headers.get("Content-Disposition")).toBe(
       'inline; filename="Launch Readiness.html"'
     )
   })
 
+  it("denies report downloads when report:download is missing", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "report-1" }) }
+    )
+
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/reports/[id]/download",
+      "GET"
+    )
+    expect(findFirst).not.toHaveBeenCalled()
+  })
+
   it("returns an attachment with a server-sanitized title when requested", async () => {
     findFirst.mockResolvedValue({
-      contentJson: { findings: [] },
+      contentJson: { findings: [], scanInfo: { scanId: "scan-1" } },
       scanId: "scan-1",
       title: "Security / Review",
       type: "executive",
@@ -81,6 +105,105 @@ describe("GET /api/reports/[id]/download", () => {
     expect(response.headers.get("Content-Disposition")).toBe(
       'attachment; filename="Security  Review.html"'
     )
+  })
+
+  it("does not replace a present invalid snapshot with newly generated report data", async () => {
+    isReportData.mockReturnValueOnce(false)
+    findFirst.mockResolvedValue({
+      contentJson: { findings: "malformed" },
+      scanId: "scan-1",
+      title: "Legacy report",
+      type: "developer",
+    })
+    const response = await GET(
+      new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "report-1" }) }
+    )
+
+    expect(response.status).toBe(409)
+    expect(gatherReportData).not.toHaveBeenCalled()
+    expect(generateReportHTML).not.toHaveBeenCalled()
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it("rejects a valid snapshot bound to a different source scan", async () => {
+    const snapshot = { findings: [], scanInfo: { scanId: "scan-2" } }
+    findFirst.mockResolvedValue({
+      contentJson: snapshot,
+      scanId: "scan-1",
+      title: "Mismatched report",
+      type: "developer",
+    })
+
+    const response = await GET(
+      new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "report-1" }) }
+    )
+
+    expect(response.status).toBe(409)
+    expect(generateReportHTML).not.toHaveBeenCalled()
+    expect(gatherReportData).not.toHaveBeenCalled()
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it("regenerates a legacy report only when its snapshot is absent", async () => {
+    const regenerated = { findings: [], scanInfo: { scanId: "scan-1" }, title: "Legacy report" }
+    findFirst.mockResolvedValue({
+      contentJson: null,
+      scanId: "scan-1",
+      title: "Legacy report",
+      type: "developer",
+    })
+    gatherReportData.mockResolvedValueOnce(regenerated)
+
+    const response = await GET(
+      new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "report-1" }) }
+    )
+
+    expect(response.status).toBe(200)
+    expect(gatherReportData).toHaveBeenCalledWith("ws-1", "scan-1")
+    expect(generateReportHTML).toHaveBeenCalledWith(regenerated)
+  })
+
+  it("returns 409 when regenerated data does not match the report source scan", async () => {
+    isReportData.mockReturnValueOnce(false)
+    findFirst.mockResolvedValue({
+      contentJson: { findings: "malformed" },
+      scanId: "scan-1",
+      title: "Legacy report",
+      type: "developer",
+    })
+    gatherReportData.mockResolvedValueOnce({ scanInfo: { scanId: "scan-2" } })
+
+    const response = await GET(
+      new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "report-1" }) }
+    )
+
+    expect(response.status).toBe(409)
+    expect(generateReportHTML).not.toHaveBeenCalled()
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it("returns 409 for an invalid snapshot without a source scan", async () => {
+    isReportData.mockReturnValueOnce(false)
+    findFirst.mockResolvedValue({
+      contentJson: { findings: "malformed" },
+      scanId: null,
+      title: "Legacy report",
+      type: "developer",
+    })
+
+    const response = await GET(
+      new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "report-1" }) }
+    )
+
+    expect(response.status).toBe(409)
+    expect(generateReportHTML).not.toHaveBeenCalled()
+    expect(gatherReportData).not.toHaveBeenCalled()
+    expect(update).not.toHaveBeenCalled()
   })
 
   it("rejects a malformed launch snapshot before rendering", async () => {

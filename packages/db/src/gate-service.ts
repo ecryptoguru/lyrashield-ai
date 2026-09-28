@@ -11,7 +11,6 @@ import {
   computeGateVerdict,
   computeInputChecksum,
   computeVerdictChecksum,
-  GATE_ASSESSMENT_VERSION,
   evaluateGateApplicability,
   requiredScannersForTarget,
   isTargetTypeCovered,
@@ -20,7 +19,6 @@ import {
   type GateEvidenceInput,
   type GateVerdictResult,
 } from "@lyrashield/gate"
-import { createHash } from "node:crypto"
 import { logger } from "@lyrashield/logger"
 import {
   resolveRetestProfile,
@@ -29,107 +27,22 @@ import {
   type ScanMode,
 } from "@lyrashield/types"
 import type { FixPrMergeResult } from "./fix-proposal-service"
+import {
+  fingerprintPolicy,
+  isTrustedRetestReceipt,
+  parseAssessmentSnapshot,
+  snapshotFromManifest,
+  toEpochMs,
+} from "./gate-assessment"
 import { bindAccountRLSContext, withWorkspaceRLS, type ScopedTransaction } from "./rls"
+
+export { parseAssessmentSnapshot }
 
 export interface GateEvaluationResult {
   verdict: GateVerdictResult
   gateVerdictId: string
   /** Present when the gate could not evaluate at all (e.g. no completed scan). */
   note?: string
-}
-
-function toEpochMs(value: Date | null | undefined): number | null {
-  return value ? value.getTime() : null
-}
-
-const SUPPORTED_MANIFEST_VERSION = 7
-const COMMIT_PATTERN = /^[a-f0-9]{40}$/i
-const ARTIFACT_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/i
-
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize)
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, child]) => [key, canonicalize(child)])
-    )
-  }
-  return value
-}
-
-function fingerprintPolicy(policy: Record<string, unknown> | null): string | null {
-  if (!policy) return null
-  return createHash("sha256")
-    .update(JSON.stringify(canonicalize(policy)))
-    .digest("hex")
-}
-
-function snapshotFromManifest(input: {
-  scanId: string
-  endedAt: Date | null
-  policyId: string | null
-  policyFingerprint: string | null
-  manifest: { version: number; checksum: string; manifest: unknown } | null
-}): GateAssessmentSnapshot | null {
-  const manifest = input.manifest
-  if (
-    !manifest ||
-    manifest.version !== SUPPORTED_MANIFEST_VERSION ||
-    !input.endedAt ||
-    !input.policyId ||
-    !input.policyFingerprint
-  ) {
-    return null
-  }
-  const raw = manifest.manifest as {
-    engineExecution?: { sourceRevision?: unknown } | null
-    sourceExecution?: { sourceRevision?: unknown } | null
-    target?: { artifactDigest?: unknown } | null
-  }
-  const revision = raw.sourceExecution?.sourceRevision ?? raw.engineExecution?.sourceRevision
-  const artifactDigest = raw.target?.artifactDigest
-  const identity =
-    typeof revision === "string" && COMMIT_PATTERN.test(revision)
-      ? { kind: "COMMIT" as const, value: revision }
-      : typeof artifactDigest === "string" && ARTIFACT_DIGEST_PATTERN.test(artifactDigest)
-        ? { kind: "ARTIFACT_DIGEST" as const, value: artifactDigest }
-        : null
-  if (!identity) return null
-  return {
-    version: GATE_ASSESSMENT_VERSION,
-    scanId: input.scanId,
-    completedAtMs: input.endedAt.getTime(),
-    manifestChecksum: manifest.checksum,
-    manifestVersion: manifest.version,
-    policyId: input.policyId,
-    policyFingerprint: input.policyFingerprint,
-    identity,
-  }
-}
-
-function isTrustedRetestReceipt(
-  receipt: {
-    status: string
-    method: string
-    scanId: string
-    verifierVersion: string | null
-    evidence: unknown
-  },
-  sourceScanId: string
-): boolean {
-  if (
-    receipt.status !== "VALIDATED" ||
-    receipt.method !== "RETEST" ||
-    !receipt.verifierVersion?.startsWith("result-integrity-")
-  ) {
-    return false
-  }
-  const evidence = receipt.evidence as {
-    baseline?: { scanId?: unknown } | null
-    retest?: { scanId?: unknown } | null
-  } | null
-  return evidence?.baseline?.scanId === sourceScanId && evidence.retest?.scanId === receipt.scanId
 }
 
 /**
@@ -343,26 +256,6 @@ export async function getLatestGateVerdict(workspaceId: string, targetId: string
       orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
     })
   })
-}
-
-export function parseAssessmentSnapshot(value: unknown): GateAssessmentSnapshot | null {
-  if (!value || typeof value !== "object") return null
-  const snapshot = value as Partial<GateAssessmentSnapshot>
-  if (
-    snapshot.version !== GATE_ASSESSMENT_VERSION ||
-    typeof snapshot.scanId !== "string" ||
-    typeof snapshot.completedAtMs !== "number" ||
-    typeof snapshot.manifestChecksum !== "string" ||
-    snapshot.manifestVersion !== SUPPORTED_MANIFEST_VERSION ||
-    typeof snapshot.policyId !== "string" ||
-    typeof snapshot.policyFingerprint !== "string" ||
-    !snapshot.identity ||
-    (snapshot.identity.kind !== "COMMIT" && snapshot.identity.kind !== "ARTIFACT_DIGEST") ||
-    typeof snapshot.identity.value !== "string"
-  ) {
-    return null
-  }
-  return snapshot as GateAssessmentSnapshot
 }
 
 export interface GateApplicabilityOptions {
@@ -772,85 +665,72 @@ export async function handleFixPrMergedAndReevaluate(
   if (repoFullName && (!repoOwner || !repoName || extra.length > 0)) {
     throw new Error("Invalid GitHub repository identity")
   }
-  const outcome = await withWorkspaceRLS(
-    workspaceId,
-    async (lockTx) => {
-      // Serialize redeliveries through scan creation and durable retest association.
-      await lockTx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`fix-loop:${workspaceId}:${branchName}`}, 0))`
-      const { handleFixPrMerged } = await import("./fix-proposal-service")
-
-      // Resolve the finding's target and its latest COMPLETED scan (the retest
-      // template) — both under RLS.
-      const anchor = await withWorkspaceRLS(workspaceId, async (tx) => {
-        const pr = await tx.pullRequest.findFirst({
-          where: {
-            branchName,
-            ...(repoOwner && repoName ? { repoOwner, repoName } : {}),
-            ...(prNumber ? { OR: [{ prNumber }, { prNumber: null }] } : {}),
-            status: { in: ["open", "merged"] },
-            deletedAt: null,
-            fixProposal: { finding: { workspaceId, deletedAt: null } },
-          },
+  const advisoryKey = `fix-loop:${workspaceId}:${branchName}`
+  const findAnchor = async (tx: ScopedTransaction) => {
+    const pr = await tx.pullRequest.findFirst({
+      where: {
+        branchName,
+        ...(repoOwner && repoName ? { repoOwner, repoName } : {}),
+        ...(prNumber ? { OR: [{ prNumber }, { prNumber: null }] } : {}),
+        status: { in: ["open", "merged"] },
+        deletedAt: null,
+        fixProposal: { finding: { workspaceId, deletedAt: null } },
+      },
+      select: {
+        fixProposal: {
           select: {
-            fixProposal: {
+            finding: {
               select: {
-                finding: {
-                  select: {
-                    id: true,
-                    targetId: true,
-                    scan: {
-                      select: { id: true, goal: true, mode: true, policyId: true, targetId: true },
-                    },
-                  },
+                id: true,
+                targetId: true,
+                scan: {
+                  select: { id: true, goal: true, mode: true, policyId: true, targetId: true },
                 },
               },
             },
           },
-        })
-        const finding = pr?.fixProposal?.finding
-        if (!finding?.targetId || !finding.scan) return null
+        },
+      },
+    })
+    const finding = pr?.fixProposal?.finding
+    if (!finding?.targetId || !finding.scan) return null
 
-        // The latest COMPLETED scan for the target is the retest template — the
-        // source scan whose evidence the retest compares against. Fall back to the
-        // finding's own source scan when no completed scan exists.
-        const latestCompleted = await tx.scan.findFirst({
-          where: { workspaceId, targetId: finding.targetId, status: "COMPLETED", deletedAt: null },
-          orderBy: { createdAt: "desc" },
-          select: { id: true, goal: true, mode: true, policyId: true, targetId: true },
-        })
-        const template = latestCompleted ?? finding.scan
-        // Scan.targetId is nullable in the schema; a scan row without a target
-        // cannot anchor a retest. (Finding.targetId is already null-checked above.)
-        if (!template.targetId) return null
-        const retestTemplate: {
-          id: string
-          goal: ScanGoal
-          mode: ScanMode
-          policyId: string | null
-          targetId: string
-        } = {
-          ...template,
-          targetId: template.targetId,
-        }
-        return {
-          findingId: finding.id,
-          sourceScanId: finding.scan.id,
-          sourceMode: finding.scan.mode,
-          targetId: template.targetId,
-          template: retestTemplate,
-        }
-      })
+    const latestCompleted = await tx.scan.findFirst({
+      where: { workspaceId, targetId: finding.targetId, status: "COMPLETED", deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, goal: true, mode: true, policyId: true, targetId: true },
+    })
+    const template = latestCompleted ?? finding.scan
+    if (!template.targetId) return null
+    const retestTemplate: {
+      id: string
+      goal: ScanGoal
+      mode: ScanMode
+      policyId: string | null
+      targetId: string
+    } = { ...template, targetId: template.targetId }
+    return {
+      findingId: finding.id,
+      sourceScanId: finding.scan.id,
+      sourceMode: finding.scan.mode,
+      targetId: template.targetId,
+      template: retestTemplate,
+    }
+  }
+
+  const { handleFixPrMerged } = await import("./fix-proposal-service")
+  // This helper commits merge state separately so failed retest creation can
+  // resume on redelivery. It takes the same advisory lock in its transaction.
+  const result = await handleFixPrMerged({ workspaceId, branchName, prNumber, repoFullName })
+  if (!result) return null
+
+  const outcome = await withWorkspaceRLS(
+    workspaceId,
+    async (lockTx) => {
+      // Serialize redeliveries through scan creation and durable retest association.
+      await lockTx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${advisoryKey}, 0))`
+      const anchor = await findAnchor(lockTx)
       if (!anchor) return null
-
-      // Persist merge state first. The merge helper also resolves already-merged
-      // rows so a retry can resume the missing retest or queue delivery.
-      const result = await handleFixPrMerged({
-        workspaceId,
-        branchName,
-        prNumber,
-        repoFullName,
-      })
-      if (!result) return null
 
       // The retest's sponsoring account is the recorded actor — bind the
       // account RLS context inside this transaction so the entitlement check

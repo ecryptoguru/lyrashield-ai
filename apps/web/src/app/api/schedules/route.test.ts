@@ -46,6 +46,7 @@ vi.mock("@lyrashield/logger", () => ({
 import { GET, POST } from "./route"
 import { prisma, createSchedule, listSchedules } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost:3000/api/schedules", {
@@ -173,6 +174,30 @@ describe("POST /api/schedules", () => {
     expect(res.status).toBe(404)
   })
 
+  it("denies creation without schedule:create", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        cron: "0 0 * * 0",
+        goal: "TEST_APP",
+        mode: "STANDARD",
+      })
+    )
+
+    expectPermissionDenied(
+      res,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/schedules",
+      "POST"
+    )
+    expect(prisma.target.findFirst).not.toHaveBeenCalled()
+    expect(createSchedule).not.toHaveBeenCalled()
+  })
+
   it("maps legacy QUICK to SAFE for repository targets", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-3",
@@ -208,6 +233,21 @@ describe("GET /api/schedules", () => {
     const res = await GET(makeGetRequest({ workspaceId: "ws-1" }))
     expect(res.status).toBe(200)
     expect(listSchedules).toHaveBeenCalled()
+  })
+
+  it("denies listing without schedule:view", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+
+    const res = await GET(makeGetRequest({ workspaceId: "ws-1" }))
+
+    expectPermissionDenied(
+      res,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/schedules",
+      "GET"
+    )
+    expect(listSchedules).not.toHaveBeenCalled()
   })
 
   it("returns 400 when workspaceId is missing", async () => {

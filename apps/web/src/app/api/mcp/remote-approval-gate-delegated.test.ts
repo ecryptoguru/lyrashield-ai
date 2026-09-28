@@ -32,6 +32,7 @@ vi.mock("@lyrashield/db", () => ({
   claimOrGetAgentOperation: (...args: unknown[]) => claimOrGetAgentOperationMock(...args),
   completeAgentOperation: (...args: unknown[]) => completeAgentOperationMock(...args),
   failAgentOperation: (...args: unknown[]) => failAgentOperationMock(...args),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   hashOperationInput: vi.fn().mockReturnValue("op-hash"),
   checkDelegatedOperationAuthorization: vi
     .fn()
@@ -278,6 +279,36 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
       expect(result.result.content[0].text).toContain('"operationId": "op-123"')
     }
     // Tool was NOT re-executed
+    expect(callToolMock).not.toHaveBeenCalled()
+    expect(completeAgentOperationMock).not.toHaveBeenCalled()
+  })
+
+  it("denies a malformed stored result without re-executing the operation", async () => {
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      authorizationVersion: 1,
+      allowedOperations: ["scan.create"],
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["SAFE", "QUICK", "STANDARD"],
+      expiresAt: null,
+    }
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "REPLAY",
+      operation: { id: "op-corrupt", result: { foo: 1 } },
+    })
+
+    const result = await makeRemoteApprovalGate({ apiKeyInfo, connection, toolContext })(
+      "lyrashield_scan_target",
+      { targetId: "target-1", mode: "STANDARD", idempotencyKey: "idem-key-1" }
+    )
+
+    expect(result).toEqual({
+      approved: false,
+      reason: "The completed operation result is unavailable; the action will not be rerun.",
+    })
     expect(callToolMock).not.toHaveBeenCalled()
     expect(completeAgentOperationMock).not.toHaveBeenCalled()
   })

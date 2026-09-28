@@ -14,6 +14,7 @@ import {
   type ParsedRepo,
 } from "@lyrashield/sdk"
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js"
+import { z } from "zod"
 import {
   analyzeDiffAdvisory,
   DiffAdvisoryInputError,
@@ -23,11 +24,12 @@ import { MCP_RESULT_MAX_BYTES } from "./result-cap"
 
 const execFileAsync = promisify(execFile)
 
-export type McpToolResult = {
-  content: Array<{ type: "text"; text: string }>
-  isError?: boolean
-  structuredContent?: Record<string, unknown>
-}
+export const McpToolResultSchema = z.object({
+  content: z.array(z.object({ type: z.literal("text"), text: z.string() })),
+  isError: z.boolean().optional(),
+  structuredContent: z.record(z.string(), z.unknown()).optional(),
+})
+export type McpToolResult = z.infer<typeof McpToolResultSchema>
 
 export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   lyrashield_scan_target: {

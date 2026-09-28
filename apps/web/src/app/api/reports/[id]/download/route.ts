@@ -5,7 +5,7 @@ import {
   gatherReportData,
   isLaunchReportShareablePayload,
   prisma,
-  type ReportData,
+  isReportData,
 } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -42,18 +42,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
       }
       html = generateLaunchReportHTML(reportRecord.contentJson)
-    } else if (reportRecord?.contentJson) {
+    } else if (isReportData(reportRecord?.contentJson)) {
+      if (
+        !reportRecord.scanId ||
+        reportRecord.contentJson.scanInfo?.scanId !== reportRecord.scanId
+      ) {
+        return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
+      }
       // Preferred path: serve the immutable snapshot captured at report creation.
-      html = generateReportHTML(reportRecord.contentJson as unknown as ReportData)
-    } else if (reportRecord?.scanId) {
-      // Legacy fallback: reports created before the snapshot migration have no
-      // contentJson. Regenerate live from the source scan so old reports remain
-      // downloadable. These predate snapshotting, so exact-as-reviewed fidelity
-      // is not guaranteed — new reports always take the snapshot path above.
-      logger.warn("Report has no snapshot; regenerating from source scan (legacy report)", {
+      html = generateReportHTML(reportRecord.contentJson)
+    } else if (reportRecord?.contentJson === null && reportRecord.scanId) {
+      // Legacy reports without a stored snapshot can be regenerated from their source scan.
+      logger.warn("Report snapshot is unavailable; regenerating from source scan", {
         reportId: id,
       })
-      html = generateReportHTML(await gatherReportData(workspaceId, reportRecord.scanId))
+      const regenerated = await gatherReportData(workspaceId, reportRecord.scanId)
+      if (!isReportData(regenerated) || regenerated.scanInfo?.scanId !== reportRecord.scanId) {
+        return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
+      }
+      html = generateReportHTML(regenerated)
+    } else if (reportRecord?.scanId) {
+      return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
     } else {
       return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
     }

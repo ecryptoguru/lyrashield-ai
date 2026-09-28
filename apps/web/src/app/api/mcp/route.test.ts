@@ -19,7 +19,8 @@ vi.mock("@lyrashield/db", () => ({
   failApprovalExecution: vi.fn(),
   claimOrGetAgentOperation: (...a: unknown[]) => claimOrGetAgentOperationMock(...a),
   completeAgentOperation: (...a: unknown[]) => completeAgentOperationMock(...a),
-  failAgentOperation: vi.fn(),
+  failAgentOperation: vi.fn().mockResolvedValue({}),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   checkDelegatedOperationAuthorization: (...a: unknown[]) =>
     checkDelegatedOperationAuthorizationMock(...a),
   withWorkspaceRLS: vi.fn(),

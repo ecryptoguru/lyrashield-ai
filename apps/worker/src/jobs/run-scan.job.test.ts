@@ -73,6 +73,7 @@ vi.mock("@lyrashield/db", async () => {
     prisma: {
       auditLog: { create: vi.fn().mockResolvedValue({}) },
       workspaceMember: { findFirst: vi.fn().mockResolvedValue({ role: "OWNER" }) },
+      workspace: { findFirst: vi.fn().mockResolvedValue({ name: "Workspace One" }) },
       target: {
         findFirst: vi.fn(),
       },
@@ -297,7 +298,7 @@ import {
   assertEvidenceStorageConfigured,
   EvidenceStorageConfigurationError,
 } from "../engine/evidence-storage"
-import { notifyScanCompleted } from "../notifications"
+import { notifyCriticalFinding, notifyScanCompleted } from "../notifications"
 import {
   evaluateScanEntitlement,
   debitOverage,
@@ -2065,6 +2066,46 @@ describe("processScanJob", () => {
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
+  it("delivers every critical completion notification with one workspace read and bounded concurrency", async () => {
+    vi.mocked(persistFindings).mockResolvedValue(
+      Array.from({ length: 30 }, (_, index) => ({
+        id: `finding-${index}`,
+        title: `Critical ${index}`,
+        severity: "CRITICAL",
+        dedupeKey: `dedupe-${index}`,
+        isNew: true,
+      })) as never
+    )
+    let active = 0
+    let peakActive = 0
+    vi.mocked(notifyCriticalFinding).mockImplementation(async () => {
+      active++
+      peakActive = Math.max(peakActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 1))
+      active--
+    })
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+
+    expect(prisma.workspace.findFirst).toHaveBeenCalledTimes(1)
+    expect(notifyScanCompleted).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      expect.any(String),
+      30,
+      "Workspace One"
+    )
+    expect(notifyCriticalFinding).toHaveBeenCalledTimes(30)
+    expect(notifyCriticalFinding).toHaveBeenLastCalledWith(
+      "ws-1",
+      "finding-29",
+      "Critical 29",
+      "Test Target",
+      "Workspace One"
+    )
+    expect(peakActive).toBeLessThanOrEqual(2)
+  })
+
   it("keeps a completed scan completed when referral accounting fails", async () => {
     vi.mocked(qualifyReferralForWorkspace).mockRejectedValueOnce(
       new Error("referral database unavailable")
@@ -2846,7 +2887,13 @@ describe("processScanJob", () => {
       data: { summary: expectedSummary },
     })
     expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", expectedSummary)
-    expect(notifyScanCompleted).toHaveBeenCalledWith("ws-1", "scan-1", expectedSummary, 3)
+    expect(notifyScanCompleted).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      expectedSummary,
+      3,
+      "Workspace One"
+    )
   })
 
   it("leaves the engine's summary untouched when the persisted count already matches", async () => {

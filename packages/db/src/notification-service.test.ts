@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const rlsMock = vi.hoisted(() => ({ withWorkspaceRLS: vi.fn() }))
+
 vi.mock("./client", () => ({
   prisma: {
     $executeRaw: vi.fn(),
@@ -16,7 +18,10 @@ vi.mock("./client", () => ({
   },
 }))
 
+vi.mock("./rls", () => rlsMock)
+
 import { prisma } from "./client"
+import { withWorkspaceRLS } from "./rls"
 import {
   createNotification,
   getNotification,
@@ -63,6 +68,9 @@ describe("notification-service", () => {
     mockPrisma.$executeRaw.mockResolvedValue(1)
     mockPrisma.$transaction.mockImplementation(
       async (callback: (tx: typeof mockPrisma) => unknown) => callback(mockPrisma)
+    )
+    vi.mocked(withWorkspaceRLS).mockImplementation(
+      async (_workspaceId, callback) => callback(mockPrisma as never) as never
     )
     mockPrisma.notification.createMany.mockResolvedValue({ count: 1 })
     mockPrisma.notification.findUnique.mockResolvedValue(baseNotification)
@@ -430,26 +438,48 @@ describe("notification-service", () => {
       expect(sendFn).toHaveBeenCalledWith("in_app", expect.objectContaining({ body: accumulated }))
     })
 
+    it("uses one workspace-bound transaction for grouped digest appends", async () => {
+      mockPrisma.notification.createMany.mockResolvedValue({ count: 0 })
+      mockPrisma.notification.update.mockResolvedValue(baseNotification)
+
+      await createAndSendNotification({
+        workspaceId: "ws-1",
+        type: "scan.completed",
+        title: "Latest",
+        body: "Latest",
+        channels: ["in_app"],
+        routineGroup: {
+          groupType: "scan",
+          windowKey: "2026-09-21",
+          windowLabel: "Today",
+          detail: "retained",
+        },
+        sendFn: vi.fn().mockResolvedValue(true),
+      })
+
+      expect(withWorkspaceRLS).toHaveBeenCalledWith("ws-1", expect.any(Function))
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+      expect(mockPrisma.$executeRaw).toHaveBeenCalledTimes(1)
+    })
+
     it("serializes concurrent grouped digest appends", async () => {
       mockPrisma.notification.createMany.mockResolvedValue({ count: 0 })
       mockPrisma.notification.updateMany.mockResolvedValue({ count: 0 })
       let stored = { ...baseNotification, body: "Routine activity for Today:" }
       let lock = Promise.resolve()
-      mockPrisma.$transaction.mockImplementation(
-        async (callback: (tx: typeof mockPrisma) => unknown) => {
-          const previous = lock
-          let release = () => {}
-          lock = new Promise<void>((resolve) => {
-            release = resolve
-          })
-          await previous
-          try {
-            return await callback(mockPrisma)
-          } finally {
-            release()
-          }
+      vi.mocked(withWorkspaceRLS).mockImplementation(async (_workspaceId, callback) => {
+        const previous = lock
+        let release = () => {}
+        lock = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        await previous
+        try {
+          return (await callback(mockPrisma as never)) as never
+        } finally {
+          release()
         }
-      )
+      })
       mockPrisma.notification.findUnique.mockImplementation(async () => stored)
       mockPrisma.notification.update.mockImplementation(async ({ data }) => {
         stored = { ...stored, body: data.body }

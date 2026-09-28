@@ -5,7 +5,7 @@ vi.mock("@lyrashield/db", () => {
   const mockPrisma = {
     $transaction: vi.fn(),
     $executeRaw: vi.fn(),
-    scanResultManifest: { findUnique: vi.fn(), create: vi.fn() },
+    scanResultManifest: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
     scanCoverageReceipt: { createMany: vi.fn(), findMany: vi.fn() },
     findingCandidate: { upsert: vi.fn(), findMany: vi.fn() },
     findingVerification: { upsert: vi.fn() },
@@ -118,10 +118,29 @@ function mockRepoRetestState(
     if (scanId === "scan-2") return retestManifest
     return null
   }) as never)
+  vi.mocked(prisma.scanResultManifest.findMany).mockImplementation((async (args: unknown) => {
+    const scanIds =
+      (args as { where?: { scanId?: { in?: string[] } } } | undefined)?.where?.scanId?.in ?? []
+    return scanIds.flatMap((scanId) => {
+      const manifest =
+        scanId === "scan-1" ? baselineManifest : scanId === "scan-2" ? retestManifest : null
+      return manifest ? [manifest] : []
+    })
+  }) as never)
   vi.mocked(prisma.scanCoverageReceipt.findMany).mockImplementation((async (args: unknown) => {
-    const scanId = (args as { where?: { scanId?: unknown } } | undefined)?.where?.scanId
-    if (scanId === "scan-1") return baselineReceipts
-    if (scanId === "scan-2") return retestReceipts
+    const scanIds = (args as { where?: { scanId?: unknown } } | undefined)?.where?.scanId
+    if (Array.isArray(scanIds)) return []
+    if (scanIds && typeof scanIds === "object" && "in" in scanIds) {
+      return (scanIds.in as string[]).flatMap((scanId) =>
+        scanId === "scan-1"
+          ? baselineReceipts.map((receipt) => ({ ...receipt, scanId }))
+          : scanId === "scan-2"
+            ? retestReceipts.map((receipt) => ({ ...receipt, scanId }))
+            : []
+      )
+    }
+    if (scanIds === "scan-1") return baselineReceipts
+    if (scanIds === "scan-2") return retestReceipts
     return []
   }) as never)
 }
@@ -723,6 +742,23 @@ describe("result integrity", () => {
       expect(prisma.retest.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ status: "passed" }) })
       )
+    })
+
+    it("loads manifests and coverage for all scans with one query per table", async () => {
+      mockRepoRetestState()
+
+      await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+
+      expect(prisma.scanResultManifest.findMany).toHaveBeenCalledOnce()
+      expect(prisma.scanResultManifest.findMany).toHaveBeenCalledWith({
+        where: { scanId: { in: ["scan-2", "scan-1"] } },
+      })
+      expect(prisma.scanCoverageReceipt.findMany).toHaveBeenCalledOnce()
+      expect(prisma.scanCoverageReceipt.findMany).toHaveBeenCalledWith({
+        where: { scanId: { in: ["scan-2", "scan-1"] } },
+        select: { id: true, scanId: true, controlId: true, status: true },
+      })
+      expect(prisma.scanResultManifest.findUnique).not.toHaveBeenCalled()
     })
 
     it.each(["COMPLETED", "PARTIAL"])(

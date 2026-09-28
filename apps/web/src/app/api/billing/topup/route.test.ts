@@ -39,6 +39,8 @@ vi.mock("@lyrashield/billing", () => ({
 }))
 
 import { POST } from "./route"
+import { requirePermission } from "@lyrashield/auth/server"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 describe("POST /api/billing/topup Razorpay quote", () => {
   beforeEach(() => {
@@ -79,6 +81,24 @@ describe("POST /api/billing/topup Razorpay quote", () => {
     )
 
     expect(response.status).toBe(409)
+    expect(mocks.createRazorpay).not.toHaveBeenCalled()
+  })
+
+  it("denies top-up creation without billing:manage", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await POST(
+      new Request("https://app.lyrashieldai.com/api/billing/topup", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: "workspace-1", pack: "pack_100" }),
+      })
+    )
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "workspace-1",
+      "/api/billing/topup",
+      "POST"
+    )
     expect(mocks.createRazorpay).not.toHaveBeenCalled()
   })
 })

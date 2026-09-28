@@ -25,6 +25,7 @@ vi.mock("@lyrashield/db", () => ({
   retryScanCancellation: (...a: unknown[]) => retryScanCancellationMock(...a),
   completeAgentOperation: (...a: unknown[]) => completeAgentOperationMock(...a),
   failAgentOperation: (...a: unknown[]) => failAgentOperationMock(...a),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   getAgentOperation: (...a: unknown[]) => getAgentOperationMock(...a),
   listAgentOperationsForTasks: (...a: unknown[]) => listAgentOperationsForTasksMock(...a),
   checkDelegatedOperationAuthorization: (...a: unknown[]) =>
@@ -184,6 +185,7 @@ beforeEach(() => {
   retryScanCancellationMock.mockReset()
   completeAgentOperationMock.mockReset()
   failAgentOperationMock.mockReset()
+  failAgentOperationMock.mockResolvedValue({})
   getAgentOperationMock.mockReset()
   listAgentOperationsForTasksMock.mockReset()
   cancelScanMock.mockReset()

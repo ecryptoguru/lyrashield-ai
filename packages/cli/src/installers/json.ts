@@ -1,6 +1,7 @@
 import { readFile, access } from "node:fs/promises"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
+import { isJsonObject } from "@lyrashield/types"
 import { backupFile } from "./backup.js"
 import { atomicWrite } from "./atomic-write.js"
 
@@ -28,6 +29,19 @@ function setIn(
   const last = path[path.length - 1]!
   current[last] = value
   return obj
+}
+
+function parseJsonObject(original: string, filePath: string): Record<string, unknown> {
+  const invalidJsonObject = () =>
+    new Error(`${filePath} is not a JSON object. Fix or remove the file, then re-run the install.`)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(original)
+  } catch {
+    throw invalidJsonObject()
+  }
+  if (!isJsonObject(parsed)) throw invalidJsonObject()
+  return parsed
 }
 
 function equals(a: unknown, b: unknown): boolean {
@@ -61,18 +75,7 @@ export async function mergeJson(opts: JsonMergeOptions): Promise<JsonMergeResult
     // file does not exist
   }
 
-  let parsed: Record<string, unknown>
-  if (exists) {
-    try {
-      parsed = JSON.parse(original) as Record<string, unknown>
-    } catch {
-      throw new Error(
-        `${filePath} is not valid JSON. Fix or remove the file, then re-run the install.`
-      )
-    }
-  } else {
-    parsed = {}
-  }
+  const parsed = exists ? parseJsonObject(original, filePath) : {}
 
   const before = JSON.stringify(parsed)
   setIn(parsed, [rootKey, serverName], value)
@@ -98,8 +101,9 @@ export async function mergeJson(opts: JsonMergeOptions): Promise<JsonMergeResult
   // re-read and verify
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const reread = JSON.parse(await readFile(filePath, "utf-8")) as Record<string, unknown>
-  const inserted = (reread[rootKey] as Record<string, unknown> | undefined)?.[serverName]
+  const reread = parseJsonObject(await readFile(filePath, "utf-8"), filePath)
+  const root = isJsonObject(reread[rootKey]) ? reread[rootKey] : undefined
+  const inserted = root?.[serverName]
   if (!equals(inserted, value)) {
     throw new Error(`Verification failed: entry not found at ${rootKey}.${serverName} after write`)
   }
@@ -123,8 +127,8 @@ export async function removeJson(opts: JsonRemoveOptions): Promise<boolean> {
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const original = await readFile(filePath, "utf-8")
-  const parsed = JSON.parse(original) as Record<string, unknown>
-  const root = parsed[rootKey] as Record<string, unknown> | undefined
+  const parsed = parseJsonObject(original, filePath)
+  const root = isJsonObject(parsed[rootKey]) ? parsed[rootKey] : undefined
   if (!root || !(serverName in root)) return false
   delete root[serverName]
   if (Object.keys(root).length === 0) delete parsed[rootKey]

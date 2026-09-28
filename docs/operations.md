@@ -23,6 +23,25 @@ Founder- and operator-run procedures consolidated from standalone runbooks. Each
   Razorpay hosted-checkout methods above INR 15,000, Polar settlement
   readiness. Staging proof does not transfer to live rails.
 
+### Report-only billing reconciliation
+
+The worker checks paid Polar orders, captured Razorpay payments and
+unprocessed webhook events at startup and every 24 hours. Provider order/payment
+status can change after creation, so each run rescans a 24-day window. This
+covers Polar's documented 21-day subscription retry schedule and Razorpay's
+late-authorization capture window with a small scheduler-delay margin. The
+first attempt sets a durable coverage baseline 24 days before that attempt;
+each successful run advances a system-owned checkpoint, and later runs include
+the same 24-day overlap. Provider or database failures leave the checkpoint
+unchanged, so a later run catches up across outages. A cross-worker lease
+prevents overlapping sweeps. This job only reports and alerts: it does not
+replay webhook tracks or change billing, entitlements or money. The credential
+scopes and production provider pins still need separate verification before
+this code is considered operational. The first-attempt baseline is the
+forward-monitoring start: the job does not backfill provider payments older
+than that point. Complete any separate historical payment review before
+enabling production credentials.
+
 ### Step 0 — preflight (safe, read-only)
 
 ```bash
@@ -114,9 +133,12 @@ Set the affected `*_BILLING_ADMISSION` back to `off` and redeploy. Existing
 subscriptions are unaffected — admission gates _new_ purchases only. Failed
 tracks below the retry cap can reconcile; `dead_letter` tracks are terminal and
 are **not** automatically re-enqueued. Check `admin → Billing`, retain event
-and track IDs, diagnose provider delivery and processing without exposing raw
-payloads and use a separately authorized bounded recovery operation. Do not
-mark a rail ready with unresolved dead letters.
+and track IDs and diagnose provider delivery and processing without exposing
+raw payloads. There is currently no supported operator retry/reset operation
+for dead-letter tracks. Do not edit database state or enqueue a track directly.
+Provider redelivery may retry eligible nonterminal tracks but can expire or be
+rejected as stale. Keep the affected rail unready until an authorized recovery
+operation is implemented and its idempotency and audit behavior are verified.
 
 ### What this runbook does not cover
 
