@@ -4,12 +4,9 @@ import { OPTIONS, POST } from "./route"
 const MARKETING_ORIGIN = "https://lyrashieldai.com"
 const OPTIONAL_COOKIE_NAMES = ["lyrashield-acq", "ls_ref", "ls_ref_source", "ls_scorecard_visitor"]
 
-function request(
-  origin: string | undefined = MARKETING_ORIGIN,
-  method: "OPTIONS" | "POST" = "POST"
-) {
+function request(origin: string | null = MARKETING_ORIGIN, method: "OPTIONS" | "POST" = "POST") {
   const headers = new Headers()
-  if (origin !== undefined) headers.set("origin", origin)
+  if (origin !== null) headers.set("origin", origin)
   return new Request("https://app.lyrashieldai.com/api/privacy/analytics-opt-out", {
     method,
     headers,
@@ -50,7 +47,7 @@ describe("/api/privacy/analytics-opt-out", () => {
 
   it.each([
     ["attacker", "https://attacker.example"],
-    ["missing", undefined],
+    ["missing", null],
     ["null", "null"],
   ] as const)("rejects POST with a %s origin", async (_kind, origin) => {
     const response = await POST(request(origin))
@@ -69,7 +66,7 @@ describe("/api/privacy/analytics-opt-out", () => {
 
   it.each([
     ["attacker", "https://attacker.example"],
-    ["missing", undefined],
+    ["missing", null],
     ["null", "null"],
   ] as const)("rejects preflight with a %s origin", async (_kind, origin) => {
     const response = await OPTIONS(request(origin, "OPTIONS"))
