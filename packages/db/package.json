@@ -15,8 +15,8 @@
     "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
-    "@prisma/client": "7.9.1",
-    "@prisma/adapter-pg": "7.9.1",
+    "@prisma/client": "7.10.0",
+    "@prisma/adapter-pg": "7.10.0",
     "@prisma/client-runtime-utils": "7.9.1",
     "pg": "^8.23.0",
     "@lyrashield/logger": "workspace:*",
@@ -28,7 +28,7 @@
     "@paralleldrive/cuid2": "^3.3.0"
   },
   "devDependencies": {
-    "prisma": "7.9.1",
+    "prisma": "7.10.0",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "@types/node": "catalog:",
