@@ -1,6 +1,25 @@
 import { logger } from "@lyrashield/logger"
-import { EgressProxyError, type SafeFetchOutcome } from "./safe-fetch"
+import { z } from "zod"
+import { EgressProxyError, SAFE_FETCH_REASON_TEXT, type SafeFetchFailureReason } from "./safe-fetch"
 import { redactUrlForLogs } from "./ssrf"
+
+const ProxyOutcomeSchema = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    result: z.object({
+      html: z.string(),
+      status: z.number().int().min(200).max(599),
+      headers: z.record(z.string(), z.string()),
+    }),
+  }),
+  z.object({
+    ok: z.literal(false),
+    reason: z.custom<SafeFetchFailureReason>(
+      (value) => typeof value === "string" && Object.hasOwn(SAFE_FETCH_REASON_TEXT, value)
+    ),
+    detail: z.string().optional(),
+  }),
+])
 
 interface ProxyFetchInit extends RequestInit {
   timeoutMs?: number
@@ -108,9 +127,9 @@ export function createEgressProxyFetchFn(
       throw new EgressProxyError("request_failed", detail)
     }
 
-    let outcome: SafeFetchOutcome
+    let outcome: z.infer<typeof ProxyOutcomeSchema>
     try {
-      outcome = (await response.json()) as SafeFetchOutcome
+      outcome = ProxyOutcomeSchema.parse(await response.json())
     } catch (err) {
       clearTimeout(timer)
       callerSignal?.removeEventListener("abort", onCallerAbort)

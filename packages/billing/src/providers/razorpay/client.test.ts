@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   cancelPaymentLink: vi.fn(),
+  createPaymentLink: vi.fn(),
   createSubscription: vi.fn(),
   loggerError: vi.fn(),
 }))
 
 vi.mock("razorpay", () => ({
   default: class Razorpay {
-    paymentLink = { cancel: mocks.cancelPaymentLink }
+    paymentLink = { cancel: mocks.cancelPaymentLink, create: mocks.createPaymentLink }
     subscriptions = { create: mocks.createSubscription }
   },
 }))
@@ -21,6 +22,7 @@ vi.mock("@lyrashield/logger", () => ({
 
 import {
   cancelRazorpayPaymentLink,
+  createRazorpayPaymentLink,
   createRazorpaySubscription,
   getRazorpaySubscriptionCycleCount,
 } from "./client"
@@ -29,6 +31,40 @@ describe("getRazorpaySubscriptionCycleCount", () => {
   it("keeps monthly and annual subscriptions renewable until cancellation", () => {
     expect(getRazorpaySubscriptionCycleCount("monthly")).toBe(1200)
     expect(getRazorpaySubscriptionCycleCount("annual")).toBe(100)
+  })
+})
+
+describe("createRazorpayPaymentLink", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const request = {
+    amount: 10000,
+    description: "Minute pack",
+    callbackUrl: "https://app.lyrashieldai.com/billing/return",
+  }
+
+  it("returns a valid HTTPS provider link", async () => {
+    mocks.createPaymentLink.mockResolvedValueOnce({
+      id: "plink_123",
+      short_url: "https://rzp.io/i/example",
+    })
+
+    await expect(createRazorpayPaymentLink(request)).resolves.toEqual({
+      id: "plink_123",
+      url: "https://rzp.io/i/example",
+    })
+  })
+
+  it.each([
+    { id: "plink_123", short_url: undefined },
+    { id: "plink_123", short_url: "http://rzp.io/i/example" },
+    { id: "plink_123", short_url: "https://user:pass@rzp.io/i/example" },
+    { id: "wrong_123", short_url: "https://rzp.io/i/example" },
+  ])("fails closed on malformed provider response %#", async (response) => {
+    mocks.createPaymentLink.mockResolvedValueOnce(response)
+
+    await expect(createRazorpayPaymentLink(request)).resolves.toBeNull()
+    expect(mocks.loggerError).toHaveBeenCalledWith("Invalid Razorpay payment link response")
   })
 })
 

@@ -32,6 +32,14 @@ export type SubscriptionStatus =
   "active" | "canceled" | "past_due" | "trialing" | "paused" | "incomplete"
 export type BillingInterval = "monthly" | "annual"
 
+// Trials are account-owned FREE rows in trial.ts, not provider subscriptions.
+const WORKSPACE_PLAN_BY_CLOUD_PLAN = {
+  STARTER: "STARTER",
+  PRO: "PRO",
+  LAUNCH_ASSURANCE: "LAUNCH_ASSURANCE",
+  ENTERPRISE: "ENTERPRISE",
+} satisfies Record<Exclude<CloudPlanId, "TRIAL">, WorkspacePlan>
+
 export interface SyncSubscriptionParams {
   /**
    * Purchase-attribution workspace (provider metadata). Optional after
@@ -84,6 +92,8 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
     eventOccurredAt,
   } = params
 
+  if (plan === "TRIAL") throw new Error("trial_plan_not_provider_subscription")
+
   const cloudPlan = CLOUD_PLAN_MAP[plan]
   if (!cloudPlan) {
     logger.warn("Unknown plan in syncSubscription", { plan })
@@ -94,7 +104,7 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
     throw new Error("active_subscription_missing_period_start")
   }
 
-  const workspacePlan = plan as unknown as WorkspacePlan
+  const workspacePlan = WORKSPACE_PLAN_BY_CLOUD_PLAN[plan]
 
   // Determine the effective billing status
   let billingStatus: string

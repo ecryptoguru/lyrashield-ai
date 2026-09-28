@@ -10,6 +10,7 @@ vi.mock("@lyrashield/db", () => {
   return {
     prisma: mockPrisma,
     assertEvidenceEncrypted: vi.fn(),
+    resolveDbPoolMax: vi.fn().mockReturnValue(4),
     getWorkspaceContext: vi.fn().mockReturnValue("ws-1"),
     withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
       fn(mockPrisma)
@@ -25,14 +26,18 @@ vi.mock("./evidence-storage", () => ({
   EVIDENCE_KEY_REF: "vault://test",
 }))
 
-import { prisma } from "@lyrashield/db"
+import { prisma, resolveDbPoolMax } from "@lyrashield/db"
 import { persistFindings } from "./finding-persister"
 import type { NormalizedFinding } from "./normalizer"
 import { deleteEncryptedArtifact, uploadEvidence } from "./evidence-storage"
 import { generateDedupeKey } from "./output-parser"
 
 describe("persistFindings", () => {
-  it("stops new findings on grace exhaustion and waits for admitted writes", async () => {
+  it.each([
+    [4, 3],
+    [2, 1],
+  ])("stops new findings with DB pool %i after %i admitted writes", async (poolMax, admitted) => {
+    vi.mocked(resolveDbPoolMax).mockReturnValueOnce(poolMax)
     vi.mocked(prisma.finding.findMany).mockResolvedValue([])
     let expired = false
     let release!: () => void
@@ -63,14 +68,14 @@ describe("persistFindings", () => {
       settled = true
     })
     const assertion = expect(work).rejects.toThrow("grace exhausted")
-    await vi.waitFor(() => expect(prisma.finding.create).toHaveBeenCalledTimes(5))
+    await vi.waitFor(() => expect(prisma.finding.create).toHaveBeenCalledTimes(admitted))
     expired = true
     await Promise.resolve()
     expect(settled).toBe(false)
     release()
     await assertion
-    expect(prisma.finding.create).toHaveBeenCalledTimes(5)
-    expect(prisma.findingCandidate.upsert).toHaveBeenCalledTimes(5)
+    expect(prisma.finding.create).toHaveBeenCalledTimes(admitted)
+    expect(prisma.findingCandidate.upsert).toHaveBeenCalledTimes(admitted)
   })
   beforeEach(() => {
     vi.clearAllMocks()
