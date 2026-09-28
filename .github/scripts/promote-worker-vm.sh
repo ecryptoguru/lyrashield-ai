@@ -235,6 +235,7 @@ restore_host_assets() {
   install -m 0755 "$host_backup/refresh-secrets.sh" "$host_libexec_dir/lyrashield-refresh-secrets" || restore_failed=1
   install -m 0755 "$host_backup/refresh-egress.sh" "$host_libexec_dir/lyrashield-refresh-egress" || restore_failed=1
   install -m 0755 "$host_backup/capture-stop-provenance.sh" "$host_libexec_dir/lyrashield-capture-worker-stop-provenance" || restore_failed=1
+  # Older rollback images may still need these retired host assets.
   if [ -f "$host_backup/trial-claim-backfill.sh" ]; then
     install -m 0755 "$host_backup/trial-claim-backfill.sh" "$host_libexec_dir/lyrashield-trial-claim-backfill" || restore_failed=1
   else
@@ -418,8 +419,6 @@ for asset in \
   refresh-secrets.sh \
   refresh-egress.sh \
   capture-stop-provenance.sh \
-  trial-claim-backfill.sh \
-  backfill-clear-wrong-trial-claims.ts \
   lyrashield-worker.service \
   lyrashield-worker-secrets.service \
   lyrashield-worker-egress.service \
@@ -453,14 +452,13 @@ cp -p "$systemd_dir/lyrashield-worker-egress.service" "$host_backup/lyrashield-w
 cp -p "$systemd_dir/lyrashield-worker-egress-refresh.service" "$host_backup/lyrashield-worker-egress-refresh.service"
 cp -p "$systemd_dir/lyrashield-worker-egress-refresh.timer" "$host_backup/lyrashield-worker-egress-refresh.timer"
 host_assets_changed=1
+rm -f "$host_libexec_dir/lyrashield-trial-claim-backfill" "$host_assets_dir/backfill-clear-wrong-trial-claims.ts"
 install -m 0755 "$asset_stage/run-worker.sh" "$host_libexec_dir/lyrashield-run-worker"
 install -d -m 0755 "$host_assets_dir"
 install -m 0644 "$asset_stage/worker-env.sh" "$host_assets_dir/worker-env.sh"
 install -m 0755 "$asset_stage/refresh-secrets.sh" "$host_libexec_dir/lyrashield-refresh-secrets"
 install -m 0755 "$asset_stage/refresh-egress.sh" "$host_libexec_dir/lyrashield-refresh-egress"
 install -m 0755 "$asset_stage/capture-stop-provenance.sh" "$host_libexec_dir/lyrashield-capture-worker-stop-provenance"
-install -m 0755 "$asset_stage/trial-claim-backfill.sh" "$host_libexec_dir/lyrashield-trial-claim-backfill"
-install -m 0644 "$asset_stage/backfill-clear-wrong-trial-claims.ts" "$host_assets_dir/backfill-clear-wrong-trial-claims.ts"
 install -m 0644 "$asset_stage/lyrashield-worker.service" "$systemd_dir/lyrashield-worker.service"
 install -m 0644 "$asset_stage/lyrashield-worker-secrets.service" "$systemd_dir/lyrashield-worker-secrets.service"
 install -m 0644 "$asset_stage/lyrashield-worker-egress.service" "$systemd_dir/lyrashield-worker-egress.service"
