@@ -87,9 +87,13 @@ const html = renderDetail({ scan, findings: [finding] })
 
 describe("scan detail badge labels", () => {
   it("uses the same goal label as the scan list", () => {
-    const html = renderDetail({ scan: { ...scan, goal: "CHECK_PR" }, findings: [] })
-    expect(html).toContain("Check a PR")
-    expect(html).not.toContain("Check PR")
+    for (const [goal, label] of [
+      ["CHECK_PR", "Check a PR"],
+      ["SECURITY_REVIEW", "Security scan"],
+    ]) {
+      const html = renderDetail({ scan: { ...scan, goal }, findings: [] })
+      expect(html).toContain(label)
+    }
   })
 
   it("humanises the coverage receipt status and control outcome badges", () => {

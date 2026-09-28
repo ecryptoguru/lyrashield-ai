@@ -31,10 +31,15 @@ export const GOAL_OPTIONS = [
     label: "Compliance scan",
     description: "Map findings to compliance objectives.",
   },
+  {
+    value: "SECURITY_REVIEW",
+    label: "Security scan",
+    description: "Legacy scan goal retained for historical scans.",
+  },
 ] as const
 
 export function getGoalLabel(value: string): string {
-  return GOAL_OPTIONS.find((g) => g.value === value)?.label ?? humanizeToken(value)
+  return GOAL_OPTIONS.find((g) => g.value === value)?.label ?? value
 }
 
 /**

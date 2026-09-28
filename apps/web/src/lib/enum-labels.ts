@@ -1,11 +1,7 @@
 import { getGoalLabel, GOAL_OPTIONS, MODE_LABELS, SEVERITY_LABELS } from "./labels"
 
-const LEGACY_SCAN_GOAL_LABELS: Record<string, string> = {
-  SECURITY_REVIEW: "Security scan",
-}
 const SCAN_GOAL_LABELS: Record<string, string> = {
   ...Object.fromEntries(GOAL_OPTIONS.map(({ value, label }) => [value, label])),
-  ...LEGACY_SCAN_GOAL_LABELS,
 }
 
 const SCAN_MODE_LABELS: Readonly<Record<string, string>> = MODE_LABELS
@@ -85,8 +81,7 @@ const WORKSPACE_PLAN_LABELS: Record<string, string> = {
 }
 
 export function getScanGoalLabel(value: string): string {
-  return LEGACY_SCAN_GOAL_LABELS[value] ??
-    (GOAL_OPTIONS.some((goal) => goal.value === value) ? getGoalLabel(value) : value)
+  return SCAN_GOAL_LABELS[value] ?? getGoalLabel(value)
 }
 
 export function getScanModeLabel(value: string): string {
