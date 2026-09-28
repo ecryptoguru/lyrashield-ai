@@ -326,11 +326,23 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     expect(recordDeferredLoopClosure).not.toHaveBeenCalled()
   })
 
-  it("never merges: the route contains no merge call", async () => {
-    const { readFileSync } = await import("node:fs")
-    const { join } = await import("node:path")
-    const source = readFileSync(join(__dirname, "route.ts"), "utf8")
-    expect(source).not.toMatch(/mergePullRequest|octokit\.pulls\.merge|\.merge\(/)
+  it("handles supported webhook events without sending a GitHub write", async () => {
+    const outboundFetch = vi.fn()
+    vi.stubGlobal("fetch", outboundFetch)
+    systemPrisma.$transaction.mockImplementation(async (callback) => callback(tx))
+    try {
+      expect((await POST(installationDeletedRequest() as never)).status).toBe(200)
+      expect((await POST(pullRequestRequest({ merged: false }) as never)).status).toBe(200)
+      expect((await POST(pullRequestRequest() as never)).status).toBe(200)
+      expect((await POST(signedRequest("push", "{}", "push-1") as never)).status).toBe(200)
+
+      expect(tx.integration.update).toHaveBeenCalledOnce()
+      expect(handleMerged).toHaveBeenCalledOnce()
+      expect(enqueueScanJob).toHaveBeenCalledOnce()
+      expect(outboundFetch).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 
