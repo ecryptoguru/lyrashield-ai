@@ -1023,6 +1023,8 @@ describe("MCP tasks over the hosted endpoint", () => {
     await expect(
       backend.createTask({
         toolName: "lyrashield_scan_target",
+        args: {},
+        taskParams: {},
         toolResult: {
           content: [{ type: "text", text: '{"operationId":"private-operation-a"}' }],
           structuredContent: { operationId: "private-operation-a" },
