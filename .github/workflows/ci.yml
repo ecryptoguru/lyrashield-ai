@@ -499,18 +499,36 @@ jobs:
           fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
+      - name: Upload informational web coverage summary
+        if: always() && (needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true')
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: web-vitest-coverage-summary
+          path: coverage/coverage-summary.json
+          if-no-files-found: warn
+          retention-days: 14
+
       # The TRIAL_INTEGRATION_TEST suites assert their DATABASE_URL is a
       # localhost, non-superuser, NOBYPASSRLS role — the app_runtime_ci role
       # provisioned above is exactly that. They run in a dedicated invocation
       # because the suite-wide DATABASE_URL is the owner role.
       - name: Trial integration tests (restricted runtime role)
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
-        run: >
-          DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" TRIAL_INTEGRATION_TEST=1
-          pnpm exec vitest run
-          packages/billing/src/trial-integration.test.ts
-          apps/web/src/app/api/workspaces/route-integration.test.ts
-          packages/myra/src/server/operations.runtime.test.ts
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" TRIAL_INTEGRATION_TEST=1 \
+            pnpm exec vitest run \
+              packages/billing/src/trial-integration.test.ts \
+              apps/web/src/app/api/workspaces/route-integration.test.ts \
+              packages/myra/src/server/operations.runtime.test.ts \
+              --reporter=json --outputFile="$RUNNER_TEMP/trial-integration.json"
+          node .github/scripts/assert-named-vitest-tests.mjs \
+            "$RUNNER_TEMP/trial-integration.json" \
+            'serializes simultaneous claims for two workspaces and survives membership removal' \
+            'keeps trial writes inside the creator transaction after a module reload' \
+            'rejects a foreign owner before execution'
 
       # Keep the opt-in database suites live in required CI. Their own guards
       # still reject non-local databases; report checks make an accidental
@@ -527,20 +545,7 @@ jobs:
           assert_named_tests_passed() {
             local report_path="$1"
             shift
-            node --input-type=module - "$report_path" "$@" <<'NODE'
-          import { readFileSync } from "node:fs"
-
-          const [reportPath, ...expectedNames] = process.argv.slice(2)
-          const report = JSON.parse(readFileSync(reportPath, "utf8"))
-          const tests = (report.testResults ?? []).flatMap((file) => file.assertionResults ?? [])
-          for (const expectedName of expectedNames) {
-            const matches = tests.filter((test) => test.fullName.endsWith(expectedName))
-            if (matches.length !== 1 || matches[0].status !== "passed") {
-              throw new Error(`Expected exactly one passing test ending with ${JSON.stringify(expectedName)}; got ${JSON.stringify(matches)}`)
-            }
-            console.log(`verified: ${matches[0].fullName}`)
-          }
-          NODE
+            node .github/scripts/assert-named-vitest-tests.mjs "$report_path" "$@"
           }
 
           TEAM_MUTATION_DB_TEST=1 DATABASE_URL="$team_owner_database_url" DATABASE_SYSTEM_URL="$team_owner_database_url" \
