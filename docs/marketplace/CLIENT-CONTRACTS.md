@@ -52,7 +52,10 @@ Per package (dir `packages/<dir>` / name `<name>`: `agent-plugin`/`@lyrashield/a
    ```sh
    npm view <name> version          # shows the just-published version
    npm install <name>@latest        # in an empty scratch directory
-   node docs/marketplace/scripts/verify-published-mcp.mjs   # @lyrashield/mcp registry + stdio receipt
    ```
 
-   Then update the npm column above and re-export `docs/marketplace` so pinned versions match what users can install.
+   Update the npm column above and regenerate the marketplace export so client pins match the published versions. Separately, from the root of that clean generated export, run:
+
+   ```sh
+   node scripts/verify-published-mcp.mjs   # @lyrashield/mcp registry + stdio receipt
+   ```
