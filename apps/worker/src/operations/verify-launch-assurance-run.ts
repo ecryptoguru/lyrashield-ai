@@ -520,7 +520,9 @@ export async function verifyLaunchAssurance(
         return `terminal state ${state.status}; no post-cancellation engine starts`
       },
       deps,
-      stepTimeoutMs
+      // The settle loop has its own 120-second deadline. Leave the normal
+      // per-step allowance for its final state and engine-start readback.
+      SETTLE_TIMEOUT_MS + stepTimeoutMs
     )
     steps.push(settle)
     if (settle.status === "failed") {

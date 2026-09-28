@@ -832,6 +832,23 @@ describe("verifyLaunchAssurance", () => {
     expect(failing.steps.find((step) => step.name === "queue_recovery")?.status).toBe("skipped")
   })
 
+  it("lets the settle poll outlast the ordinary step timeout before recovering the queue", async () => {
+    let poll = 0
+    const deps = makeDeps({
+      getScanState: vi.fn(async () => ({
+        id: "cmt0q9a28000501jnmn1t453t",
+        workspaceId: "cmt7np5uv000002s6pnr7c376",
+        status: ++poll === 1 ? ("RUNNING" as ScanStatus) : ("CANCELLED" as ScanStatus),
+      })),
+    })
+
+    const receipt = await verifyLaunchAssurance({ ...baseOptions(), stepTimeoutMs: 500 }, deps)
+
+    expect(receipt.steps.find((step) => step.name === "settle_wait")?.status).toBe("passed")
+    expect(receipt.steps.find((step) => step.name === "queue_recovery")?.status).toBe("passed")
+    expect(deps.reconcile).toHaveBeenCalledOnce()
+  })
+
   it("does not settle or reconcile after authenticated cancellation fails", async () => {
     const baseline = makeDeps()
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
