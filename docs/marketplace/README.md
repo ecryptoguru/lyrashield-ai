@@ -1,7 +1,7 @@
 # LyraShield AI marketplace release source
 
-Prepared Agent Plugin version: `0.1.30` (unpublished release candidate). Channel-specific listing
-versions and review states below may lag this source candidate.
+Agent Plugin `0.1.30` is published on npm. This marketplace export awaits its matching
+release; channel-specific listing versions and review states may lag this source.
 
 ## Install from this repository
 

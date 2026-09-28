@@ -1,8 +1,9 @@
 # Changelog
 
-## 0.1.30 (release candidate)
+## 0.1.30
 
 - Pin the published MCP 0.2.11 tool catalog and align generated client manifests.
+- Pin published CLI 0.2.13 in client setup instructions.
 - Retain Codebuff's curated read-only tool list; new tools require separate client validation.
 
 ## 0.1.29
