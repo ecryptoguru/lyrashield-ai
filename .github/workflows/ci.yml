@@ -318,10 +318,13 @@ jobs:
           set -euo pipefail
           docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
             -c 'CREATE DATABASE v15_product' \
-            -c 'CREATE DATABASE lyra_v18_ci'
+            -c 'CREATE DATABASE lyra_v18_ci' \
+            -c 'CREATE DATABASE v22_agent_fk_ci'
           DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/v15_product?schema=public" \
             pnpm --filter @lyrashield/db migrate:deploy
           DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyra_v18_ci?schema=public" \
+            pnpm --filter @lyrashield/db migrate:deploy
+          DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/v22_agent_fk_ci?schema=public" \
             pnpm --filter @lyrashield/db migrate:deploy
 
       # Real-Postgres invariant proof, not an application-level mock: a
@@ -359,7 +362,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for database in v15_product lyra_v18_ci; do
+          for database in v15_product lyra_v18_ci v22_agent_fk_ci; do
             docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
               -c "GRANT CONNECT ON DATABASE ${database} TO app_runtime_ci"
             docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d "$database" -v ON_ERROR_STOP=1 \
@@ -502,6 +505,22 @@ jobs:
             'serializes simultaneous claims for two workspaces and survives membership removal' \
             'keeps trial writes inside the creator transaction after a module reload' \
             'rejects a foreign owner before execution'
+
+      - name: Agent operation workspace foreign key test
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          agent_fk_owner_database_url='postgresql://lyrashield:lyrashield@127.0.0.1:5432/v22_agent_fk_ci?schema=public'
+          agent_fk_runtime_database_url='postgresql://app_runtime_ci:runtime-ci-only@127.0.0.1:5432/v22_agent_fk_ci?schema=public'
+          AGENT_OPERATION_WORKSPACE_DB_TEST=1 \
+            DATABASE_URL="$agent_fk_owner_database_url" \
+            RLS_RUNTIME_DATABASE_URL="$agent_fk_runtime_database_url" \
+            pnpm exec vitest run packages/db/src/agent-operation-workspace.runtime.test.ts \
+              --reporter=json --outputFile="$RUNNER_TEMP/agent-operation-workspace.json"
+          node .github/scripts/assert-named-vitest-tests.mjs \
+            "$RUNNER_TEMP/agent-operation-workspace.json" \
+            'rejects cross-workspace connections under runtime RLS and preserves valid cascade behavior'
 
       # Keep the opt-in database suites live in required CI. Their own guards
       # still reject non-local databases; report checks make an accidental

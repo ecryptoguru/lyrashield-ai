@@ -40,3 +40,28 @@ process.exit(1)
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test("CI suites that omit core do not try to read its report", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lyrashield-test-no-core-"))
+  try {
+    const pnpm = join(dir, "pnpm")
+    writeFileSync(pnpm, `#!${process.execPath}\nprocess.exit(0)\n`)
+    chmodSync(pnpm, 0o755)
+    const runner = fileURLToPath(new URL("../../../run-all-tests.mjs", import.meta.url))
+    const result = spawnSync(process.execPath, [runner], {
+      cwd: fileURLToPath(new URL("../../../", import.meta.url)),
+      env: {
+        ...process.env,
+        CI: "true",
+        RUNNER_TEMP: dir,
+        LYRASHIELD_TEST_SUITES: "marketing",
+        PATH: `${dir}:${process.env.PATH}`,
+      },
+      encoding: "utf8",
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.doesNotMatch(result.stderr, /Could not read core Vitest report/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

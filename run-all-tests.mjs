@@ -61,8 +61,9 @@ function run(name, command) {
 }
 
 const results = await Promise.all(suites.map((suite) => run(suite.name, suite.command)))
+const coreResult = results.find((r) => r.name === "core")
 
-if (coreReportPath && results.find((r) => r.name === "core")?.code !== 0) {
+if (coreReportPath && coreResult && coreResult.code !== 0) {
   try {
     const report = JSON.parse(readFileSync(coreReportPath, "utf8"))
     for (const file of report.testResults ?? []) {
@@ -79,7 +80,7 @@ if (coreReportPath && results.find((r) => r.name === "core")?.code !== 0) {
   }
 }
 
-if (coreReportPath && results.find((r) => r.name === "core")?.code === 0) {
+if (coreReportPath && coreResult?.code === 0) {
   try {
     const report = JSON.parse(readFileSync(coreReportPath, "utf8"))
     assertNamedTestsPassed(report, [
