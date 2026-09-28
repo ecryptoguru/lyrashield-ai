@@ -24,6 +24,7 @@ describe("Vibe Security 50 coverage contract", () => {
     }
     expect(instruction).toContain(VIBE_SECURITY_COVERAGE_VERSION)
     expect(instruction).toContain("Report only evidence-backed findings")
+    expect(instruction).toContain("Record unassessed or interrupted controls as incomplete")
     expect(instruction).toContain("Every reported finding must include")
   })
 

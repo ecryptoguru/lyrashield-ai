@@ -348,7 +348,7 @@ export function buildVibeSecurityInstruction(goal: string, mode?: string): strin
   return [
     `Goal: ${goal}`,
     `LyraShield control version: ${VIBE_SECURITY_COVERAGE_VERSION}`,
-    "Assess each applicable control below. Report only evidence-backed findings; absence of evidence is not a vulnerability.",
+    "Use the applicable controls below to guide a time-bounded review. Prioritize the highest-risk trust boundaries, file supported findings as they are established, and finish before the runtime deadline. Record unassessed or interrupted controls as incomplete, never as clean. Report only evidence-backed findings; absence of evidence is not a vulnerability.",
     ...(mode?.toUpperCase() === "QUICK" || mode?.toUpperCase() === "SAFE"
       ? [
           "Quick runtime: prioritize the highest-risk trust boundaries, file supported findings as soon as they are established, then finish before the deadline. Record unassessed controls as incomplete; do not spend the full run trying to prove an absence of findings.",

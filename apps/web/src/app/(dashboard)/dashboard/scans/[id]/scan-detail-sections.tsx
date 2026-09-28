@@ -163,9 +163,9 @@ export function ScanCoverageDetail({
                 issue. It is not an independent verification or a security guarantee.
               </p>
               <p className="text-muted-foreground mt-2 text-xs">
-                “Inconclusive” is expected for many engine-led controls where the scan completed but
-                no explicit control mapping was returned. It indicates a coverage gap by design, not
-                a failed scan.
+                “Inconclusive” means the available evidence cannot establish a control outcome. It
+                can follow an unfinished scan, an unassessed check, or a missing engine control
+                mapping; it must not be read as a clean result.
               </p>
               <details className="mt-4 rounded-md border">
                 <summary className="hover:bg-muted/50 flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
