@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".next",
+    ".turbo",
+    "../../packages/**/*.test.ts",
+    "../../packages/**/*.test.tsx",
+    "vitest.config.ts"
+  ]
+}

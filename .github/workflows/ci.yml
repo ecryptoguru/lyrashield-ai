@@ -398,6 +398,10 @@ jobs:
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm typecheck
 
+      - name: Typecheck web tests
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        run: pnpm typecheck:web-tests
+
       - name: Typecheck browser fixtures
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm typecheck:e2e

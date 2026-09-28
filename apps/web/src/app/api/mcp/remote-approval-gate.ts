@@ -218,7 +218,9 @@ interface RemoteApprovalGateOptions {
   toolContext: { apiBaseUrl: string; apiKey: string; fetchFn?: typeof fetch }
 }
 
-export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): RemoteApprovalGate {
+export function makeRemoteApprovalGate(
+  options: RemoteApprovalGateOptions
+): (toolName: string, args: Record<string, unknown>) => ReturnType<RemoteApprovalGate> {
   const { apiKeyInfo, toolContext } = options
   const { workspaceId, scopes } = apiKeyInfo
 

@@ -64,7 +64,9 @@ import type { TrackRunSummary } from "@lyrashield/billing"
 import { WebhookAuthError, WebhookPayloadError } from "@lyrashield/billing"
 import { POST } from "./route"
 
-const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
+const mockPrisma = prisma as unknown as {
+  webhookEvent: Record<"create" | "findUnique" | "updateMany", ReturnType<typeof vi.fn>>
+}
 
 /** All applicable tracks succeeded. */
 function okSummary(): TrackRunSummary {
@@ -72,7 +74,10 @@ function okSummary(): TrackRunSummary {
 }
 
 /** One required track failed (or dead-lettered). */
-function failedSummary(track: string, opts: { deadLetter?: boolean } = {}): TrackRunSummary {
+function failedSummary(
+  track: TrackRunSummary["failures"][number]["track"],
+  opts: { deadLetter?: boolean } = {}
+): TrackRunSummary {
   const failure = { track, error: `${track}_handler_failed` }
   return {
     allSucceeded: false,
@@ -179,13 +184,13 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     }
     expect(mockPrisma.webhookEvent.create).toHaveBeenCalledTimes(3)
     const ids = mockPrisma.webhookEvent.create.mock.calls.map(
-      (c: [{ data: { externalId: string; identitySource: string } }]) => c[0].data.externalId
+      (c) => (c[0] as { data: { externalId: string } }).data.externalId
     )
     expect(new Set(ids).size).toBe(3)
     for (const id of ids) expect(id).toMatch(/^[0-9a-f]{64}$/)
     expect(
       mockPrisma.webhookEvent.create.mock.calls.every(
-        (c: [{ data: { identitySource: string } }]) => c[0].data.identitySource === "derived"
+        (c) => (c[0] as { data: { identitySource: string } }).data.identitySource === "derived"
       )
     ).toBe(true)
     expect(runTracksMock).toHaveBeenCalledTimes(3)
@@ -245,7 +250,7 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
   it("repairs the workspace binding before reprocessing a stranded row", async () => {
     const ev = rzEvent("subscription.charged", "sub_STALE", 1_755_000_000)
     const workspaceId = "workspace_stranded_receipt"
-    ev.payload.subscription.entity.notes = { workspaceId }
+    Object.assign(ev.payload.subscription.entity, { notes: { workspaceId } })
     validateRazorpayMock.mockReturnValue(ev)
     mockPrisma.webhookEvent.create.mockRejectedValue(
       Object.assign(new Error("unique"), { code: "P2002" })
@@ -604,7 +609,7 @@ describe("POST /billing/webhook — required-track durability (findings 12/18A)"
     const res = await POST(razorpayRequest(ev))
 
     expect(res.status).toBe(200)
-    const call = runTracksMock.mock.calls[0][0] as {
+    const call = runTracksMock.mock.calls[0]![0] as {
       webhookEventId: string
       event: { kind: string; productKind: string; orderId: string | null }
       rawPayload: unknown

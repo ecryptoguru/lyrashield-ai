@@ -65,6 +65,7 @@ describe("WebMCP output budgets", () => {
     const str = "x".repeat(WEBMCP_BUDGETS.output + 100)
     const result = boundOutputValue(str)
     expect(typeof result).toBe("string")
+    if (typeof result !== "string") throw new Error("Expected bounded string")
     expect(result.length).toBeLessThanOrEqual(WEBMCP_BUDGETS.output)
   })
 
@@ -108,7 +109,7 @@ describe("WebMCP output budgets", () => {
     })
     expect(schema.type).toBe("object")
     expect(schema.additionalProperties).toBe(false)
-    expect(schema.properties.query.description?.length).toBeLessThanOrEqual(
+    expect(schema.properties.query?.description?.length).toBeLessThanOrEqual(
       WEBMCP_BUDGETS.paramDescription
     )
   })

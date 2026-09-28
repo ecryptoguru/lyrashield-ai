@@ -157,7 +157,7 @@ describe("sanitizeReceiptReferences", () => {
 
   it("truncates oversized values", () => {
     const refs = sanitizeReceiptReferences({ scanId: "s".repeat(500) })
-    expect(refs?.scanId.length).toBeLessThanOrEqual(201)
+    expect(refs?.scanId?.length).toBeLessThanOrEqual(201)
   })
 })
 

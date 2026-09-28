@@ -95,7 +95,7 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
         authorizationVersion: 4,
         input: originalInput,
       })
-      expect(claim.status).toBe("NEW")
+      if (claim.status !== "NEW") throw new Error(`Unexpected claim status: ${claim.status}`)
       operationId = claim.operation.id
       expect(claim.operation.inputHash).toBe(
         hashOperationInput(CANONICAL_OPERATIONS.SCAN_CREATE, originalInput)
@@ -130,7 +130,7 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
           createdById: userId,
           keyId: `key-${suffix}`,
         },
-        connection,
+        connection: { ...connection, status: "ACTIVE" },
         toolContext: { apiBaseUrl: "http://localhost:3001", apiKey: "runtime-test" },
       })
 

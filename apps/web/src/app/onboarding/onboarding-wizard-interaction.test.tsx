@@ -55,6 +55,7 @@ import {
 type Element = ReactElement<{
   children?: ReactNode
   id?: string
+  href?: string
   value?: string
   onChange?: (event: { target: { value?: string; checked?: boolean } }) => void
   onSubmit?: (event: { preventDefault: () => void }) => void
@@ -315,7 +316,7 @@ it("keeps an accepted scan and retries only the onboarding save after its PATCH 
     expect.objectContaining({ headers: { "Idempotency-Key": expect.any(String) } })
   )
   expect(apiPatch).toHaveBeenCalledTimes(2)
-  expect(apiPatch.mock.calls[1]?.[1]).toMatchObject({ completed: true, currentStep: 4 })
+  expect(vi.mocked(apiPatch).mock.calls[1]?.[1]).toMatchObject({ completed: true, currentStep: 4 })
 })
 
 it("retries an uncertain scan start with the same idempotency key", async () => {
@@ -365,12 +366,10 @@ it("retries an uncertain scan start with the same idempotency key", async () => 
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
   expect(apiPost).toHaveBeenCalledTimes(2)
-  const firstKey = (apiPost.mock.calls[0]?.[2] as { headers?: Record<string, string> }).headers?.[
-    "Idempotency-Key"
-  ]
-  const retryKey = (apiPost.mock.calls[1]?.[2] as { headers?: Record<string, string> }).headers?.[
-    "Idempotency-Key"
-  ]
+  const firstKey = (vi.mocked(apiPost).mock.calls[0]?.[2] as { headers?: Record<string, string> })
+    .headers?.["Idempotency-Key"]
+  const retryKey = (vi.mocked(apiPost).mock.calls[1]?.[2] as { headers?: Record<string, string> })
+    .headers?.["Idempotency-Key"]
   expect(firstKey).toMatch(/^[0-9a-f-]{36}$/i)
   expect(retryKey).toBe(firstKey)
 })

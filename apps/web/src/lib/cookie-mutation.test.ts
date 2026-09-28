@@ -244,15 +244,15 @@ describe("cookie mutation route boundary", () => {
     }
   )
 
-  it.each([{ origin: "https://app.lyrashieldai.com" }, { "sec-fetch-site": "same-origin" }])(
-    "accepts same-origin browser metadata %j",
-    async (headers) => {
-      expect((await POST(request(headers))).status).toBe(200)
-      expect(mocks.updateSession).toHaveBeenCalledOnce()
-    }
-  )
+  it.each<Record<string, string>>([
+    { origin: "https://app.lyrashieldai.com" },
+    { "sec-fetch-site": "same-origin" },
+  ])("accepts same-origin browser metadata %j", async (headers) => {
+    expect((await POST(request(headers))).status).toBe(200)
+    expect(mocks.updateSession).toHaveBeenCalledOnce()
+  })
 
-  it.each([
+  it.each<Record<string, string>>([
     {},
     { origin: "null" },
     { origin: "https://evil.example", "sec-fetch-site": "same-origin" },

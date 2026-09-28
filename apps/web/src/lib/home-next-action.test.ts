@@ -15,7 +15,7 @@ const base = {
 }
 
 function gate(state: "READY" | "NOT_READY" | "INSUFFICIENT_EVIDENCE", applicable = true) {
-  return { state, applicable, reasons: [] }
+  return gateFor(state, state, applicable)
 }
 
 function gateFor(
@@ -130,7 +130,7 @@ describe("deriveHomeDecision — one canonical action", () => {
       reportCount: 0,
     })
     expect(decision.action?.cta).toBe("Review blockers")
-    expect(decision.primaryAction.href).toBe("/dashboard/findings")
+    expect(decision.primaryAction.href).toBe("/dashboard/findings?target=NOT_READY")
   })
 
   it("treats an expired assessment as insufficient for a ready-oriented action", () => {

@@ -825,7 +825,7 @@ describe("MCP tasks over the hosted endpoint", () => {
     const body = await readJson(res)
     const tasks = (body.result as { tasks: Array<{ taskId: string }> }).tasks
     expect(tasks).toHaveLength(1)
-    expect(tasks[0].taskId).toBe("lst_op-1")
+    expect(tasks[0]?.taskId).toBe("lst_op-1")
     expect(listAgentOperationsForTasksMock).toHaveBeenCalledWith(
       expect.objectContaining({ principalId: "conn-1", principalType: "OAUTH_CONNECTION" })
     )

@@ -211,16 +211,14 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
       idempotencyKey: "op-123",
     })
 
-    expect(result.approved).toBe(true)
-    if (result.approved) {
-      // The approved result carries the durable operation id stamp so the
-      // MCP task layer can bind a task id to this exact ledger row.
-      expect(result.result.structuredContent).toEqual({
-        scanId: "scan-999",
-        operationId: "op-123",
-      })
-      expect(result.result.content[0].text).toContain('"operationId": "op-123"')
-    }
+    if (!result.approved || !result.result) throw new Error("Expected approved tool result")
+    // The approved result carries the durable operation id stamp so the
+    // MCP task layer can bind a task id to this exact ledger row.
+    expect(result.result.structuredContent).toEqual({
+      scanId: "scan-999",
+      operationId: "op-123",
+    })
+    expect(result.result.content[0]?.text).toContain('"operationId": "op-123"')
     // Verifies no approval was created in Review Queue
     expect(createApprovalMock).not.toHaveBeenCalled()
     // Verifies operation was completed with the stamped result retained
@@ -268,16 +266,14 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
       idempotencyKey: "idem-key-1",
     })
 
-    expect(result.approved).toBe(true)
-    if (result.approved) {
-      // The replay is the recorded result stamped with the durable operation
-      // id — the id the MCP task layer binds `lst_<id>` to.
-      expect(result.result.structuredContent).toEqual({
-        scanId: "scan-999",
-        operationId: "op-123",
-      })
-      expect(result.result.content[0].text).toContain('"operationId": "op-123"')
-    }
+    if (!result.approved || !result.result) throw new Error("Expected approved replay result")
+    // The replay is the recorded result stamped with the durable operation
+    // id — the id the MCP task layer binds `lst_<id>` to.
+    expect(result.result.structuredContent).toEqual({
+      scanId: "scan-999",
+      operationId: "op-123",
+    })
+    expect(result.result.content[0]?.text).toContain('"operationId": "op-123"')
     // Tool was NOT re-executed
     expect(callToolMock).not.toHaveBeenCalled()
     expect(completeAgentOperationMock).not.toHaveBeenCalled()

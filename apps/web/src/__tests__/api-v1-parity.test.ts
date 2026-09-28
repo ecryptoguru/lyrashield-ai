@@ -46,7 +46,7 @@ describe("/api/v1 parity", () => {
           ),
         ].map((match) => match[1])
       )
-      expect(reexport[1].split(", ").sort(), path).toEqual(
+      expect(reexport[1]!.split(", ").sort(), path).toEqual(
         methods.filter((method) => exportedMethods.has(method) && !omitted.includes(method)).sort()
       )
     }

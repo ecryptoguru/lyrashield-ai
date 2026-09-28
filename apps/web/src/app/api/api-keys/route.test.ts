@@ -119,7 +119,7 @@ describe("POST /api/api-keys", () => {
 
   it.each([["lyrashield.read"], ["lyrashield.read", "lyrashield.write"]])(
     "rejects OAuth callers with scopes %j — no durable key is minted",
-    async (scopes) => {
+    async (...scopes) => {
       requireWorkspaceAccess.mockResolvedValue(
         sessionResult({ oauth: { userId: "user-1", workspaceId: "ws-1", scopes } })
       )

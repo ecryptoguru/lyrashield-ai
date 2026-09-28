@@ -44,7 +44,7 @@ describe("POST /api/admin/affiliates/action", () => {
     for (const headers of [
       { origin: "https://evil.example", "sec-fetch-site": "cross-site" },
       { "x-lyrashield-admin-elevation": "" },
-    ]) {
+    ] as Record<string, string>[]) {
       const response = await POST(request(headers))
       expect(response.status).toBe(403)
     }

@@ -179,7 +179,7 @@ export class LyraShieldClient {
         const res = await this.fetchFn(url, {
           method,
           headers,
-          body,
+          body: body as RequestInit["body"],
           signal,
         })
         lastStatus = res.status

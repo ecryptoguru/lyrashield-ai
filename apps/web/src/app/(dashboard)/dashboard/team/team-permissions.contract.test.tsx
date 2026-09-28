@@ -111,6 +111,8 @@ describe("team permission projection (W1-08)", () => {
               id: "inv-1",
               email: "inv@example.com",
               role: "BILLING_ADMIN",
+              status: "pending",
+              createdAt: "2026-01-01T00:00:00.000Z",
               expiresAt: "2026-02-01T00:00:00.000Z",
             },
           ],
