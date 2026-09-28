@@ -115,10 +115,13 @@ for invalid in --apply --unknown --apply=wrong; do
 done
 
 set +e
-script_output=$(run_script --unknown --unknown 2>&1)
+script_output=$(run_script \
+  --apply=backfill-clear-wrong-trial-claims \
+  --apply=backfill-clear-wrong-trial-claims 2>&1)
 script_status=$?
 set -e
 [ "$script_status" -ne 0 ]
 grep -Fq 'Usage: backfill-clear-wrong-trial-claims' <<< "$script_output"
+! grep -Fq 'DATABASE_SYSTEM_URL is required' <<< "$script_output"
 
 echo "Trial-claim VM backfill runner proof passed."
