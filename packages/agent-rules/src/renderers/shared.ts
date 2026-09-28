@@ -3,6 +3,7 @@ import type { Policy, RuleFormat } from "../types.js"
 export function renderMarkdownBody(policy: Policy, headingLevel = 2): string {
   const lines: string[] = []
   for (const section of policy.sections) {
+    if (lines.length > 0) lines.push("")
     const prefix = "#".repeat(headingLevel)
     lines.push(`${prefix} ${section.title}`, "")
     if (section.id === "honesty") {
