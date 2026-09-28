@@ -16,7 +16,11 @@ vi.mock("@lyrashield/config", async (original) => {
 import { createReport } from "./report-service"
 import * as reportGenerator from "./report-generator"
 import { createApproval, claimApprovalExecution } from "./agent-approval-service"
-import { handleFixPrMergedAndReevaluate, getCurrentGateVerdicts } from "./gate-service"
+import {
+  handleFixPrMergedAndReevaluate,
+  getCurrentGateVerdict,
+  getCurrentGateVerdicts,
+} from "./gate-service"
 import { prisma as runtime } from "./client"
 import {
   recordAgentMinutes,
@@ -760,5 +764,20 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
     expect(
       strict.get(cleanTarget.id)?.applicability.reasons.map((reason) => reason.code)
     ).toContain("IDENTITY_MISMATCH")
+
+    const targetIds = [cleanTarget.id, driftedTarget.id, verdictlessTarget.id]
+    for (const options of [
+      { now: new Date(now) },
+      { expectedCommit: commit, now: new Date(now) },
+      { expectedCommit: "d".repeat(40), now: new Date(now) },
+      { expectedCommit: commit, now: new Date(now + 48 * 60 * 60 * 1000) },
+    ]) {
+      const current = await getCurrentGateVerdicts(id, targetIds, options)
+      for (const currentTargetId of targetIds) {
+        expect(current.get(currentTargetId) ?? null).toEqual(
+          await getCurrentGateVerdict(id, currentTargetId, options)
+        )
+      }
+    }
   })
 })
