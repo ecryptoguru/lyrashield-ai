@@ -59,6 +59,8 @@ describe("createRazorpayPaymentLink", () => {
     { id: "plink_123", short_url: undefined },
     { id: "plink_123", short_url: "http://rzp.io/i/example" },
     { id: "plink_123", short_url: "https://user:pass@rzp.io/i/example" },
+    { id: "plink_123", short_url: "https://payments.example.com/i/example" },
+    { id: "plink_123", short_url: "https://rzp.io:444/i/example" },
     { id: "wrong_123", short_url: "https://rzp.io/i/example" },
   ])("fails closed on malformed provider response %#", async (response) => {
     mocks.createPaymentLink.mockResolvedValueOnce(response)

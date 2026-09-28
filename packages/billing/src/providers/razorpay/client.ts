@@ -50,7 +50,7 @@ function validPaymentLinkResponse(value: unknown): value is { id: string; short_
   if (typeof link.short_url !== "string") return false
   try {
     const url = new URL(link.short_url)
-    return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password
+    return url.origin === "https://rzp.io" && !url.username && !url.password
   } catch {
     return false
   }
