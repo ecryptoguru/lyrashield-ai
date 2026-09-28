@@ -19,9 +19,13 @@ const TEST_BASE_URL = "https://app.lyrashieldai.com"
 const TEST_MCP_URL = "https://app.lyrashieldai.com/api/mcp"
 const TEST_API_KEY = "lsk_test_lyrashield_api_key"
 
-it("keeps the registry MCP pin at the current MCP package version", () => {
-  expect(MCP_PACKAGE_VERSION).toBe(mcpManifest.version)
-  expect(MCP_PACKAGE_SPEC).toBe(`@lyrashield/mcp@${mcpManifest.version}`)
+it("keeps the published MCP pin on the candidate's compatible patch line", () => {
+  const [sourceMajor, sourceMinor, sourcePatch] = mcpManifest.version.split(".").map(Number)
+  const [publishedMajor, publishedMinor, publishedPatch] =
+    MCP_PACKAGE_VERSION.split(".").map(Number)
+  expect([sourceMajor, sourceMinor]).toEqual([publishedMajor, publishedMinor])
+  expect(sourcePatch).toBeGreaterThanOrEqual(publishedPatch)
+  expect(MCP_PACKAGE_SPEC).toBe(`@lyrashield/mcp@${MCP_PACKAGE_VERSION}`)
 })
 
 it("keeps OAuth config free of credential provenance overrides", () => {

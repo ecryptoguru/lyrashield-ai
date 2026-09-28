@@ -1,6 +1,6 @@
 # MCP protocol conformance
 
-Baseline: `@modelcontextprotocol/sdk` **1.30.1** and `@lyrashield/mcp` 0.2.10. The SDK
+Baseline: `@modelcontextprotocol/sdk` **1.30.1** and `@lyrashield/mcp` 0.2.11. The SDK
 floor is `^1.30.1` in `packages/mcp` and `packages/cli` (the CLI uses the SDK as an MCP
 client); `pnpm-lock.yaml` resolves `1.30.1` with integrity
 `sha512-H2HxLvC3HDNybePJaLdSrU1hhUK5iQw+WvV1b01myFyI7sdVGe1u/IPTE5D9fGCiJDVtgMV/lmFkQXLmQyIFYA==`.
