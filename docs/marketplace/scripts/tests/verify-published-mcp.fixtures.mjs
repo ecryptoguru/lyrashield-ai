@@ -113,10 +113,7 @@ test("isolated environment excludes inherited credentials and runtime injection"
 test("healthy initialization accepts required subset and additional legitimate tools", async () => {
   await probe(
     fixture({
-      catalog: [
-        ...tools(),
-        { name: "future_tool", inputSchema: { type: "object", properties: {} } },
-      ],
+      catalog: [...tools(), { name: "future_tool", inputSchema: { type: "object" } }],
     })
   )
 })
@@ -233,6 +230,57 @@ test("missing tool, duplicate names, added required input and incompatible schem
   required[1].inputSchema.required = [...required[1].inputSchema.required, "newInput"]
   assert.throws(() => validateCatalog(required), /schema is incompatible/)
   assert.throws(() => validateCatalog([...tools(), tools()[0]]), /duplicate/)
+})
+
+test("required schema assertions cannot narrow supported inputs", () => {
+  for (const [name, property, narrowing] of [
+    ["lyrashield_scan_target", "auto", { const: false }],
+    ["lyrashield_scan_target", "auto", { enum: [false] }],
+    ["lyrashield_scan_target", "workspaceId", { minLength: 100 }],
+    ["lyrashield_scan_target", "workspaceId", { maxLength: 1 }],
+    ["lyrashield_scan_target", "workspaceId", { pattern: "^forbidden$" }],
+    ["lyrashield_scan_target", "idempotencyKey", { maxLength: 1 }],
+    ["lyrashield_scan_target", "idempotencyKey", { minLength: 2 }],
+    ["lyrashield_list_targets", "limit", { minimum: 2 }],
+    ["lyrashield_list_targets", "limit", { maximum: 99 }],
+  ]) {
+    const catalog = tools()
+    Object.assign(
+      catalog.find((tool) => tool.name === name).inputSchema.properties[property],
+      narrowing
+    )
+    assert.throws(
+      () => validateCatalog(catalog),
+      /schema is incompatible/,
+      `${name}.${property} ${JSON.stringify(narrowing)}`
+    )
+  }
+  for (const narrowing of [
+    { allOf: [{ properties: { auto: { const: false } } }] },
+    { not: { properties: { auto: { const: true } } } },
+    { minProperties: 20 },
+    { dependentRequired: { auto: ["targetId"] } },
+  ]) {
+    const catalog = tools()
+    Object.assign(
+      catalog.find((tool) => tool.name === "lyrashield_scan_target").inputSchema,
+      narrowing
+    )
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+  }
+})
+
+test("modeled property bounds and broader compatible schemas pass", () => {
+  const catalog = tools()
+  const scan = catalog.find((tool) => tool.name === "lyrashield_scan_target").inputSchema
+  scan.properties.auto.enum = [true, false]
+  Object.assign(scan.properties.idempotencyKey, { minLength: 1, maxLength: 128 })
+  const targets = catalog.find((tool) => tool.name === "lyrashield_list_targets").inputSchema
+  Object.assign(targets.properties.limit, { minimum: 1, maximum: 100 })
+  validateCatalog(catalog)
+  Object.assign(scan.properties.idempotencyKey, { minLength: 0, maxLength: 256 })
+  Object.assign(targets.properties.limit, { minimum: 0, maximum: 200 })
+  validateCatalog(catalog)
 })
 
 test("stdio output limits and early stdin closure fail without hanging", async () => {

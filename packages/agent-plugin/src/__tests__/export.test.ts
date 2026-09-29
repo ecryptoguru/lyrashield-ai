@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { afterEach, describe, expect, it } from "vitest"
-import { createAllTools } from "@lyrashield/mcp"
+import { createAllTools, McpServer } from "@lyrashield/mcp"
 import { exportMarketplace } from "../export.js"
 
 const execFileAsync = promisify(execFile)
@@ -382,15 +382,7 @@ describe("exported validator", () => {
         timeout: 45000,
       }
     )
-    const catalog = createAllTools({ apiBaseUrl: "", apiKey: "" }).map((tool) => ({
-      name: tool.name,
-      inputSchema: tool.mutating
-        ? {
-            ...tool.inputSchema,
-            properties: { ...tool.inputSchema.properties, idempotencyKey: { type: "string" } },
-          }
-        : tool.inputSchema,
-    }))
+    const catalog = new McpServer({ toolContext: { apiBaseUrl: "", apiKey: "" } }).listTools()
     await execFileAsync(
       process.execPath,
       [
