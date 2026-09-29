@@ -178,7 +178,9 @@ export function ScanStatusNotices({
                   {pendingScanSubmission.operationId && (
                     <Button
                       type="button"
-                      variant="outline"
+                      variant={
+                        scanOperationStatus?.recovery === "retry_new_key" ? "outline" : "default"
+                      }
                       disabled={checkingScanOperation}
                       onClick={() => void checkPendingScanOperation(pendingScanSubmission)}
                     >
@@ -188,7 +190,7 @@ export function ScanStatusNotices({
                   {scanOperationStatus?.recovery !== "retry_new_key" && (
                     <Button
                       type="button"
-                      variant="outline"
+                      variant={pendingScanSubmission.operationId ? "outline" : "default"}
                       onClick={() => {
                         setForceNewAfterRecovery(false)
                         setShowCreate(true)
@@ -201,7 +203,9 @@ export function ScanStatusNotices({
                     scanOperationStatus?.recovery === "retry_new_key") && (
                     <Button
                       type="button"
-                      variant="outline"
+                      variant={
+                        scanOperationStatus?.recovery === "retry_new_key" ? "default" : "outline"
+                      }
                       onClick={() => {
                         setForceNewAfterRecovery(true)
                         setShowCreate(true)
