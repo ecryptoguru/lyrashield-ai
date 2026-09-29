@@ -421,7 +421,7 @@ async function main(): Promise<void> {
         webhookEventId: job.data.webhookEventId,
         track: job.data.track,
         outcome: result.outcome,
-        reEnqueued: result.reEnqueued,
+        retryRepresented: result.retryRepresented,
       })
     },
     {

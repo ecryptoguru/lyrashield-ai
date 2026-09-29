@@ -48,6 +48,9 @@ const validateRazorpayMock = vi.fn()
 const validatePolarMock = vi.fn()
 const assertCatalogMock = vi.fn()
 const runTracksMock = vi.fn()
+const getRetryScheduleMock = vi
+  .fn()
+  .mockImplementation(async () => ({ generation: 1, nextAttemptAt: new Date(Date.now() + 60_000) }))
 vi.mock("@lyrashield/billing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/billing")>()
   return {
@@ -55,6 +58,7 @@ vi.mock("@lyrashield/billing", async (importOriginal) => {
     validatePolarWebhook: (...args: unknown[]) => validatePolarMock(...args),
     validateRazorpayWebhook: (...args: unknown[]) => validateRazorpayMock(...args),
     assertProviderCatalogEvent: (...args: unknown[]) => assertCatalogMock(...args),
+    getWebhookTrackRetrySchedule: (...args: unknown[]) => getRetryScheduleMock(...args),
     runApplicableTracks: (...args: unknown[]) => runTracksMock(...args),
   }
 })
@@ -217,7 +221,7 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     expect(enqueueRetryMock).not.toHaveBeenCalled()
   })
 
-  it("concurrent duplicate delivery processes exactly once, both answered 200", async () => {
+  it("concurrent duplicate delivery processes exactly once, pending duplicate answers 503", async () => {
     const ev = rzEvent("subscription.activated", "sub_RACE", 1_755_000_000)
     validateRazorpayMock.mockReturnValue(ev)
 
@@ -243,7 +247,7 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     const [resA, resB] = await Promise.all([POST(razorpayRequest(ev)), POST(razorpayRequest(ev))])
 
     expect(resA.status).toBe(200)
-    expect(resB.status).toBe(200)
+    expect(resB.status).toBe(503)
     expect(runTracksMock).toHaveBeenCalledTimes(1)
   })
 
@@ -497,10 +501,14 @@ describe("POST /billing/webhook — required-track durability (findings 12/18A)"
     )
     // Exactly one bounded retry enqueued for the failed track.
     expect(enqueueRetryMock).toHaveBeenCalledTimes(1)
-    expect(enqueueRetryMock).toHaveBeenCalledWith({
-      webhookEventId: "evt_row_1",
-      track: "license",
-    })
+    expect(enqueueRetryMock).toHaveBeenCalledWith(
+      {
+        webhookEventId: "evt_row_1",
+        track: "license",
+        generation: 1,
+      },
+      { delayMs: expect.any(Number) }
+    )
   })
 
   it("a-post) redelivery after the retry job completed the track → 200 replay, zero side effects", async () => {
@@ -538,10 +546,14 @@ describe("POST /billing/webhook — required-track durability (findings 12/18A)"
 
     expect(res.status).toBe(500)
     expect(enqueueRetryMock).toHaveBeenCalledTimes(1)
-    expect(enqueueRetryMock).toHaveBeenCalledWith({
-      webhookEventId: "evt_row_1",
-      track: "affiliate",
-    })
+    expect(enqueueRetryMock).toHaveBeenCalledWith(
+      {
+        webhookEventId: "evt_row_1",
+        track: "affiliate",
+        generation: 1,
+      },
+      { delayMs: expect.any(Number) }
+    )
   })
 
   it("dead-lettered tracks are NOT re-enqueued at ingress", async () => {
