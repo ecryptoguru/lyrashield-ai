@@ -71,7 +71,7 @@ const REPO_APPLICABLE_CHECKS = [
 ] as const
 
 const REPO_LIMITS: Record<string, string> = {
-  QUICK: "Up to 16 minutes of engine time",
+  QUICK: "Up to 20 minutes of engine time",
   STANDARD: "Up to 20 minutes of engine time",
   DEEP: "Up to 40 minutes of engine time",
 }

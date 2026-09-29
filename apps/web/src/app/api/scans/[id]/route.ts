@@ -12,12 +12,13 @@ import { z } from "zod"
 import { ScanIdSchema } from "@lyrashield/types"
 import { revalidateDashboardAggregates } from "../../../../lib/cache"
 import { recordedOperation } from "../../../../lib/recorded-operation"
+import { filterDashboardScanEvents } from "@/lib/scan-event-visibility"
 
 function scanEtag(
   scan: NonNullable<Awaited<ReturnType<typeof getScanWithEvents>>>,
-  queuePosition: Awaited<ReturnType<typeof getScanQueuePosition>> | null
+  queuePosition: Awaited<ReturnType<typeof getScanQueuePosition>> | null,
+  events = scan.events ?? []
 ): string {
-  const events = scan.events ?? []
   const lastEvent = events[events.length - 1]
   const payload = JSON.stringify({
     id: scan.id,
@@ -64,14 +65,45 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     // Queue position can change without a scan row or event update.
     const queuePosition = scan.status === "QUEUED" ? await getScanQueuePosition(id) : null
-    const etag = scanEtag(scan, queuePosition)
+    const events = filterDashboardScanEvents(scan.events ?? [])
+    const etag = scanEtag(scan, queuePosition, events)
     const ifNoneMatch = request.headers.get("if-none-match")
     if (ifNoneMatch && ifNoneMatch === etag) {
       return new Response(null, { status: 304, headers: { ETag: etag } })
     }
 
     return NextResponse.json(
-      { success: true, data: { ...scan, queuePosition } },
+      {
+        success: true,
+        data: {
+          id: scan.id,
+          workspaceId: scan.workspaceId,
+          status: scan.status,
+          goal: scan.goal,
+          mode: scan.mode,
+          triggerType: scan.triggerType,
+          startedAt: scan.startedAt,
+          endedAt: scan.endedAt,
+          summary: scan.summary,
+          errorCategory: scan.errorCategory,
+          errorMessage: scan.errorMessage,
+          createdAt: scan.createdAt,
+          events,
+          eventsCursorApplied: scan.eventsCursorApplied ?? null,
+          resultManifest: scan.resultManifest
+            ? { checksum: scan.resultManifest.checksum ?? null }
+            : null,
+          coverageReceipts: (scan.coverageReceipts ?? []).map((receipt) => ({
+            scanner: receipt.scanner,
+            controlId: receipt.controlId,
+            status: receipt.status,
+            reason: receipt.reason,
+            subject: receipt.subject,
+            metadata: receipt.metadata,
+          })),
+          queuePosition,
+        },
+      },
       { status: 200, headers: { ETag: etag } }
     )
   } catch (error) {

@@ -60,7 +60,7 @@ export const IGNORED_DIRECTORIES = new Set([
 ])
 
 const MAX_FILES_BY_MODE = {
-  QUICK: 200,
+  QUICK: 256,
   STANDARD: 500,
   DEEP: 1_000,
 } as const
