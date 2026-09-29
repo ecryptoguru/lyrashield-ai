@@ -71,15 +71,15 @@ const REPO_APPLICABLE_CHECKS = [
 ] as const
 
 const REPO_LIMITS: Record<string, string> = {
-  QUICK: "Up to 15 minutes of engine time",
+  QUICK: "Up to 16 minutes of engine time",
   STANDARD: "Up to 20 minutes of engine time",
-  DEEP: "Up to 45 minutes of engine time",
+  DEEP: "Up to 40 minutes of engine time",
 }
 
 const URL_LIMITS: Record<string, string> = {
   SAFE: "Bounded deterministic checks only",
   STANDARD: "Up to 20 minutes of engine time",
-  DEEP: "Up to 45 minutes of engine time",
+  DEEP: "Up to 40 minutes of engine time",
 }
 
 export type ScanWorkflowId = "REVIEW_TARGET" | "REVIEW_CHANGES" | "AUTHENTICATED_ASSESSMENT"

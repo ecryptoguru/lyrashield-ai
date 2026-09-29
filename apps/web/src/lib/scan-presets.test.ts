@@ -27,10 +27,30 @@ describe("scan presets", () => {
   })
 
   it("maps each review type to its user-facing duration range", () => {
-    expect(getScanPresetEstimate("RELEASE_CHECK")).toEqual({ low: 5, high: 15 })
+    expect(getScanPresetEstimate("RELEASE_CHECK")).toEqual({ low: 5, high: 22 })
     expect(getScanPresetEstimate("CODE_REVIEW")).toEqual({ low: 12, high: 23 })
-    expect(getScanPresetEstimate("DEEP_REVIEW")).toEqual({ low: 25, high: 40 })
-    expect(getScanPresetEstimate("WEEKLY_MONITOR")).toEqual({ low: 5, high: 15 })
+    expect(getScanPresetEstimate("DEEP_REVIEW")).toEqual({ low: 25, high: 45 })
+    expect(getScanPresetEstimate("WEEKLY_MONITOR")).toEqual({ low: 5, high: 22 })
+  })
+
+  it("describes engine ceilings without counting scanner reserve as engine time", () => {
+    const repoOptions = getManualScanOptions({ type: "REPO" })
+    expect(repoOptions.find((option) => option.id === "RELEASE_CHECK")?.limitsSummary).toBe(
+      "Up to 16 minutes of engine time"
+    )
+    expect(repoOptions.find((option) => option.id === "CODE_REVIEW")?.limitsSummary).toBe(
+      "Up to 20 minutes of engine time"
+    )
+    expect(repoOptions.find((option) => option.id === "REVIEW_CHANGES")?.limitsSummary).toBe(
+      "Up to 16 minutes of engine time"
+    )
+    expect(repoOptions.find((option) => option.id === "DEEP_REVIEW")?.limitsSummary).toBe(
+      "Up to 40 minutes of engine time"
+    )
+    const deepUrl = getManualScanOptions({ type: "WEB_APP" }).find(
+      (option) => option.id === "WEB_APP_DEEP"
+    )
+    expect(deepUrl?.limitsSummary).toBe("Up to 40 minutes of engine time")
   })
 
   it("falls back to the release check for unknown client values", () => {
