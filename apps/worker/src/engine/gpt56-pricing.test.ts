@@ -147,6 +147,7 @@ describe("GPT-6 published pricing", () => {
     const currentRate = calculateGpt56CostUsd("azure_ai/gpt-6-luna", usage)
 
     expect(previousRate).not.toBeNull()
+    expect(currentRate).not.toBeNull()
     expect(currentRate!).toBeLessThan(previousRate! / 2)
   })
 
