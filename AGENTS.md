@@ -23,7 +23,7 @@ Repository ownership:
 
 Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not rename `@lyrashield/*` or `LYRASHIELD_*` without founder approval.
 
-## Release contract — 2026-09-28
+## Release contract — 2026-09-29
 
 - Cloud and Desktop release workflows pin engine `c2fb19595bdefa0eda52d09ccd2aaeabcca575ae`, which includes the GPT-6-only model boundary, Local scan integrity/viewer fixes, a request-bounded model-stream idle guard, and four-agent concurrency for Quick scans. A source pin does not establish a completed deployment or signed Desktop release; verify the exact release run separately. Desktop launch work remains deferred.
 - Product `main` requires `SCA & Secret Scan`, `Lint, Typecheck, Test & Build` and `Pinned Engine / Worker Contract`, with strict up-to-date branch checks. Update the engine's reverse `.lyrashield-worker-pin` only to an exact merged product commit after compatibility verification.
