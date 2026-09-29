@@ -73,6 +73,54 @@ export const REQUIRED_TOOLS = Object.freeze({
 
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value)
 
+const SCHEMA_ANNOTATIONS = new Set([
+  "title",
+  "description",
+  "default",
+  "examples",
+  "deprecated",
+  "readOnly",
+  "writeOnly",
+  "$comment",
+  "$schema",
+  "$id",
+])
+
+// Compatibility is deliberately bounded to marketplace-stdio/1 inputs, not
+// general JSON Schema equivalence. Unmodeled assertions fail closed.
+function compatibleProperty(schema, type, key) {
+  if (!object(schema) || schema.type !== type) return false
+  return Object.entries(schema).every(([facet, value]) => {
+    if (facet === "type" || SCHEMA_ANNOTATIONS.has(facet)) return true
+    if (facet === "enum") {
+      return (
+        type === "boolean" &&
+        Array.isArray(value) &&
+        value.length === 2 &&
+        value.includes(true) &&
+        value.includes(false)
+      )
+    }
+    if (facet === "minLength" || facet === "maxLength") {
+      if (type !== "string" || !Number.isInteger(value) || value < 0) return false
+      const minimum = key === "idempotencyKey" ? 1 : 0
+      const maximum = key === "idempotencyKey" ? 128 : Infinity
+      return facet === "minLength" ? value <= minimum : value >= maximum
+    }
+    if (facet === "minimum" || facet === "maximum") {
+      if (
+        type !== "integer" ||
+        key !== "limit" ||
+        typeof value !== "number" ||
+        !Number.isFinite(value)
+      )
+        return false
+      return facet === "minimum" ? value <= 1 : value >= 100
+    }
+    return false
+  })
+}
+
 export function validateCatalog(tools) {
   if (!Array.isArray(tools)) throw new Error("published MCP tool catalog is incomplete")
   const catalog = new Map()
@@ -89,11 +137,11 @@ export function validateCatalog(tools) {
     if (
       !object(schema) ||
       schema.type !== "object" ||
-      !object(schema.properties) ||
+      (schema.properties !== undefined && !object(schema.properties)) ||
       (schema.required !== undefined &&
         (!Array.isArray(schema.required) ||
           schema.required.some(
-            (key) => typeof key !== "string" || !Object.hasOwn(schema.properties, key)
+            (key) => typeof key !== "string" || !Object.hasOwn(schema.properties ?? {}, key)
           )))
     ) {
       throw new Error(`published MCP tool schema is invalid: ${tool.name}`)
@@ -105,10 +153,17 @@ export function validateCatalog(tools) {
     if (!schema) throw new Error(`published MCP tool catalog is missing ${name}`)
     const required = schema.required ?? []
     if (
+      Object.keys(schema).some(
+        (facet) =>
+          !SCHEMA_ANNOTATIONS.has(facet) &&
+          !["type", "properties", "required", "additionalProperties"].includes(facet)
+      ) ||
+      (schema.additionalProperties !== undefined &&
+        typeof schema.additionalProperties !== "boolean") ||
       contract.required.some((key) => !required.includes(key)) ||
       required.some((key) => !contract.required.includes(key)) ||
       Object.entries(contract.properties).some(
-        ([key, type]) => schema.properties[key]?.type !== type
+        ([key, type]) => !compatibleProperty(schema.properties?.[key], type, key)
       )
     ) {
       throw new Error(`published MCP tool schema is incompatible: ${name}`)
