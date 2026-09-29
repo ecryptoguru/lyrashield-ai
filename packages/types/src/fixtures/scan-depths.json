@@ -1,5 +1,5 @@
 {
-  "version": "scan-depths/1.0.0",
+  "version": "scan-depths/1.1.0",
   "publicDepths": ["QUICK", "STANDARD", "DEEP"],
   "storedModeEngineArgs": {
     "safe": "quick",
@@ -16,8 +16,8 @@
       "label": "Release Check",
       "description": "Fast, bounded repository review before you ship.",
       "executionLimits": {
-        "maxDurationMinutes": 15,
-        "maxEngineMinutes": 12
+        "maxDurationMinutes": 22,
+        "maxEngineMinutes": 16
       },
       "queueReserve": {
         "scannerReserveMinutes": 3

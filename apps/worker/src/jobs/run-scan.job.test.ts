@@ -532,9 +532,9 @@ describe("shouldRecordAgentMinutes", () => {
 
 describe("resolveScanRuntimeBudgetMs", () => {
   it.each(["SAFE", "QUICK"] as const)(
-    "caps %s scans at fifteen minutes even when the default policy is longer",
+    "caps %s scans at twenty-two minutes even when the default policy is longer",
     (mode) => {
-      expect(resolveScanRuntimeBudgetMs(mode, 60)).toBe(15 * 60 * 1000)
+      expect(resolveScanRuntimeBudgetMs(mode, 60)).toBe(22 * 60 * 1000)
     }
   )
 
@@ -560,7 +560,14 @@ describe("resolveScanRuntimeBudgetMs", () => {
 })
 
 describe("resolveEngineRuntimeBudgetMs", () => {
-  it("preserves the repository scanner reserve inside the total deadline", () => {
+  it("keeps at least fifteen minutes of Quick engine time within the total deadline", () => {
+    expect(resolveEngineRuntimeBudgetMs("QUICK", "REPO", 22 * 60 * 1000, 0)).toBe(16 * 60 * 1000)
+    // Legacy SAFE and CUSTOM stored values resolve to Quick and Deep profiles.
+    expect(resolveEngineRuntimeBudgetMs("SAFE", "REPO", 22 * 60 * 1000, 0)).toBe(16 * 60 * 1000)
+    expect(resolveEngineRuntimeBudgetMs("CUSTOM", "REPO", 45 * 60 * 1000, 0)).toBe(40 * 60 * 1000)
+  })
+
+  it("preserves Standard and Deep scanner reserves inside their total deadlines", () => {
     expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 23 * 60 * 1000, 0)).toBe(20 * 60 * 1000)
     expect(resolveEngineRuntimeBudgetMs("DEEP", "REPO", 45 * 60 * 1000, 0)).toBe(40 * 60 * 1000)
   })
@@ -3175,11 +3182,11 @@ describe("REPO scan wall-clock budget enforcement", () => {
     await processScanJob(policyJob)
 
     const timeoutMs = vi.mocked(runEngine).mock.calls[0]?.[2]
-    // SAFE keeps its three-minute deterministic scanner reserve inside the
-    // fifteen-minute total budget.
+    // SAFE/Quick keeps its three-minute scanner reserve inside the
+    // twenty-minute policy cap while allowing the sixteen-minute engine cap.
     expect(typeof timeoutMs).toBe("number")
     expect(timeoutMs).toBeGreaterThan(0)
-    expect(timeoutMs).toBeLessThanOrEqual(12 * 60 * 1000)
-    expect(timeoutMs).toBeGreaterThanOrEqual(12 * 60 * 1000 - 60_000)
+    expect(timeoutMs).toBeLessThanOrEqual(16 * 60 * 1000)
+    expect(timeoutMs).toBeGreaterThanOrEqual(15.5 * 60 * 1000)
   })
 })

@@ -9,8 +9,9 @@ describe("resolveScanProfile", () => {
       canonicalMode: "QUICK",
       engineMode: "quick",
       maxBudgetUsd: 1.2,
-      maxDurationMinutes: 15,
+      maxDurationMinutes: 22,
       scannerReserveMinutes: 3,
+      maxEngineMinutes: 16,
       usesAi: true,
       modelClass: "LUNA",
     })
@@ -73,6 +74,8 @@ describe("resolveScanProfile", () => {
       id: "API_DEEP",
       canonicalMode: "DEEP",
       engineMode: "deep",
+      maxDurationMinutes: 45,
+      maxEngineMinutes: 40,
       usesAi: true,
     })
   })

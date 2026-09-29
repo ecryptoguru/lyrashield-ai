@@ -2,11 +2,11 @@
 // These are conservative UX estimates, not runtime guarantees.
 
 const MINUTES_BY_MODE: Record<string, { low: number; high: number }> = {
-  SAFE: { low: 5, high: 15 },
-  QUICK: { low: 5, high: 15 },
+  SAFE: { low: 5, high: 22 },
+  QUICK: { low: 5, high: 22 },
   STANDARD: { low: 12, high: 23 },
-  DEEP: { low: 25, high: 40 },
-  CUSTOM: { low: 20, high: 60 },
+  DEEP: { low: 25, high: 45 },
+  CUSTOM: { low: 20, high: 45 },
 }
 
 export function estimateRunMinutes(mode: string, assetCount = 1): { low: number; high: number } {
