@@ -245,6 +245,30 @@ describe("scan detail guided states", () => {
   })
 })
 
+describe("scan detail accounting events", () => {
+  it("keeps billing settlement internals out of the user timeline", () => {
+    const html = renderDetail({
+      scan: {
+        ...scan,
+        events: [
+          {
+            id: "settlement-intent-1",
+            stage: "billing_settlement_intent",
+            level: "info",
+            message: "Settlement intent; missing usage receipt requires terminal accounting review",
+            metadata: null,
+            createdAt: "2026-01-01T00:05:00.000Z",
+          },
+        ],
+      },
+      findings: [],
+    })
+
+    expect(html).not.toContain("billing_settlement_intent")
+    expect(html).not.toContain("terminal accounting review")
+  })
+})
+
 describe("scan detail — truthful scope and declared coverage", () => {
   const plannedScan: ScanData = {
     ...scan,

@@ -4,6 +4,7 @@ export const INTERNAL_ACCOUNTING_EVENT_STAGES = new Set([
   "budget_cap",
   "llm_usage",
   "budget_exceeded",
+  "billing_settlement_intent",
 ])
 
 export const EVENT_LEVEL_COLOR: Record<string, string> = {
