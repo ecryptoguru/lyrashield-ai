@@ -369,6 +369,39 @@ describe("exportMarketplace", () => {
 })
 
 describe("exported validator", () => {
+  it("exports runnable verifier fixtures and the required client schema contract", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+    await expect(runValidator(output)).resolves.toContain("Marketplace validation passed")
+    await execFileAsync(
+      process.execPath,
+      ["--test", "scripts/tests/verify-published-mcp.fixtures.mjs"],
+      {
+        cwd: output,
+        timeout: 45000,
+      }
+    )
+    const catalog = createAllTools({ apiBaseUrl: "", apiKey: "" }).map((tool) => ({
+      name: tool.name,
+      inputSchema: tool.mutating
+        ? {
+            ...tool.inputSchema,
+            properties: { ...tool.inputSchema.properties, idempotencyKey: { type: "string" } },
+          }
+        : tool.inputSchema,
+    }))
+    await execFileAsync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { validateCatalog } from './scripts/verify-published-mcp.mjs'; validateCatalog(${JSON.stringify(catalog)})`,
+      ],
+      { cwd: output }
+    )
+  }, 60000)
+
   it("rejects published MCP verification with npm lifecycle scripts enabled", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
@@ -377,7 +410,7 @@ describe("exported validator", () => {
     const verifierFile = "scripts/verify-published-mcp.mjs"
     const verifierPath = path.join(output, verifierFile)
     const verifier = await readFile(verifierPath, "utf8")
-    const lifecycleGuard = '        npm_config_ignore_scripts: "true",\n'
+    const lifecycleGuard = 'npm_config_ignore_scripts: "true"'
     expect(verifier).toContain(lifecycleGuard)
     await writeFile(verifierPath, verifier.replace(lifecycleGuard, ""))
     await updateManifestHash(output, verifierFile)
