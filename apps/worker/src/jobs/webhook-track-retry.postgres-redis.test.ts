@@ -34,18 +34,25 @@ let billing: typeof import("@lyrashield/billing")
 let integrations: typeof import("@lyrashield/integrations")
 let workerModule: typeof import("./webhook-track-retry.job")
 const eventIds: string[] = []
+const workspaceIds: string[] = []
 const jobs = new Set<string>()
 const workers: Worker[] = []
 
-async function fixture() {
+async function fixture(workspaceId?: string) {
   const id = `webhook-fixture-${randomUUID()}`
   const payload = {
     type: "order.paid",
-    data: { id, subscription_id: "sub_fixture", amount: 4900, currency: "USD" },
+    data: {
+      id,
+      subscription_id: "sub_fixture",
+      amount: 4900,
+      currency: "USD",
+      ...(workspaceId ? { metadata: { workspaceId } } : {}),
+    },
   }
   eventIds.push(id)
   await owner.webhookEvent.create({
-    data: { id, provider: "polar", eventType: "order.paid", externalId: id, payload },
+    data: { id, provider: "polar", eventType: "order.paid", externalId: id, payload, workspaceId },
   })
   await billing.ensureWebhookTrackRows(id, ["affiliate"])
   return {
@@ -162,6 +169,7 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
     }
     if (owner) {
       await owner.webhookEvent.deleteMany({ where: { id: { in: eventIds } } })
+      await owner.workspace.deleteMany({ where: { id: { in: workspaceIds } } })
       await owner.$disconnect()
     }
     await db?.prisma.$disconnect()
@@ -454,21 +462,133 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
     expect(handler).toHaveBeenCalledTimes(1)
   })
 
-  it("legacy never-attempted jobs work while attempted unscheduled rows stay report-only", async () => {
+  it("automatically renews the lease while the real handler remains slow", async () => {
     const f = await fixture()
+    let release!: () => void
+    let started!: () => void
+    const start = new Promise<void>((resolve) => {
+      started = resolve
+    })
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const handler = vi.fn(async () => {
+      started()
+      await blocked
+    })
+    const running = billing.retryWebhookTrack({
+      webhookEventId: f.id,
+      track: "affiliate",
+      generation: 0,
+      handlers: { dispatchAffiliate: handler },
+    })
+    await start
+    const before = new Date(Date.now() + 45_000)
+    await owner.webhookEventTrack.updateMany({
+      where: { webhookEventId: f.id },
+      data: { leaseExpiresAt: before },
+    })
+    try {
+      // This waits for runClaimedTrack's actual thirty-second renewal timer;
+      // no direct renewal call or mocked timer participates.
+      await new Promise<void>((resolve) => setTimeout(resolve, 31_000))
+      await vi.waitFor(
+        async () => {
+          expect((await row(f.id)).leaseExpiresAt!.getTime()).toBeGreaterThan(
+            before.getTime() + 60_000
+          )
+        },
+        { timeout: 5_000, interval: 250 }
+      )
+      expect(await billing.claimWebhookTrack(f.id, "affiliate", 0)).toEqual({ outcome: "busy" })
+    } finally {
+      release()
+    }
+    expect(await running).toBe("succeeded")
+    expect(await row(f.id)).toMatchObject({ status: "succeeded", attempts: 1 })
+    expect(handler).toHaveBeenCalledTimes(1)
+  }, 45_000)
+
+  it("binds a non-null stored workspace and denies foreign or unbound runtime reads", async () => {
+    const own = `webhook-workspace-${randomUUID()}`
+    const foreign = `webhook-workspace-${randomUUID()}`
+    for (const id of [own, foreign]) {
+      workspaceIds.push(id)
+      await owner.workspace.create({ data: { id, slug: id, name: id } })
+    }
+    const f = await fixture(own)
+    expect(await db.prisma.webhookEvent.findUnique({ where: { id: f.id } })).toBeNull()
+    expect(
+      await db.runWithWorkspaceContext(foreign, () =>
+        db.prisma.webhookEvent.findUnique({ where: { id: f.id } })
+      )
+    ).toBeNull()
+    const handler = vi.fn().mockResolvedValue(undefined)
+    expect(
+      await db.runWithWorkspaceContext(foreign, () =>
+        billing.retryWebhookTrack({
+          webhookEventId: f.id,
+          track: "affiliate",
+          generation: 0,
+          handlers: { dispatchAffiliate: handler },
+        })
+      )
+    ).toBe("succeeded")
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: own }))
+    const receipt = await db.runWithWorkspaceContext(own, () =>
+      db.prisma.webhookEvent.findUniqueOrThrow({ where: { id: f.id } })
+    )
+    expect(receipt.processed).toBe(true)
+    expect(receipt.workspaceId).toBe(own)
+    expect(await row(f.id)).toMatchObject({ status: "succeeded", attempts: 1 })
+  })
+
+  it("historical null-due tracks require receipt review even with zero recorded attempts", async () => {
+    const f = await fixture()
+    // Old executors saved attempts only after failure. An external effect can
+    // therefore exist while the historical track still says pending/attempts=0.
+    let effects = 0
+    const handler = vi.fn(async () => {
+      effects++
+    })
+    await handler()
+    handler.mockClear()
     await owner.webhookEventTrack.updateMany({
       where: { webhookEventId: f.id },
       data: { nextAttemptAt: null },
     })
     expect((await workerModule.recoverDueWebhookTrackRetries()).examined).toBe(0)
-    const handler = vi.fn().mockResolvedValue(undefined)
     expect(
       await billing.retryWebhookTrack({
         webhookEventId: f.id,
         track: "affiliate",
         handlers: { dispatchAffiliate: handler },
       })
-    ).toBe("succeeded")
+    ).toBe("busy")
+    expect(
+      (
+        await billing.runApplicableTracks({
+          webhookEventId: f.id,
+          event: f.event,
+          rawPayload: f.payload,
+          handlers: { dispatchAffiliate: handler },
+        })
+      ).allSucceeded
+    ).toBe(false)
+    const legacyFixture = {
+      id: `${f.id}:affiliate`,
+      data: { webhookEventId: f.id, track: "affiliate" },
+    }
+    const legacyJob = legacyFixture as Parameters<typeof workerModule.processWebhookTrackRetry>[0]
+    expect(
+      await workerModule.processWebhookTrackRetry(legacyJob, { dispatchAffiliate: handler })
+    ).toEqual({ outcome: "busy", retryRepresented: false })
+    expect(await row(f.id)).toMatchObject({
+      status: "pending",
+      attempts: 0,
+      nextAttemptAt: null,
+      claimToken: null,
+    })
     const old = await fixture()
     await owner.webhookEventTrack.updateMany({
       where: { webhookEventId: old.id },
@@ -482,6 +602,7 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
       })
     ).toBe("busy")
     expect((await workerModule.recoverDueWebhookTrackRetries()).examined).toBe(0)
-    expect(handler).toHaveBeenCalledTimes(1)
+    expect(handler).not.toHaveBeenCalled()
+    expect(effects).toBe(1)
   })
 })

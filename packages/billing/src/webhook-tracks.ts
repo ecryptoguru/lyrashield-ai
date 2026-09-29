@@ -93,14 +93,8 @@ export async function claimWebhookTrack(
   track: WebhookTrackId,
   generation?: number
 ): Promise<WebhookTrackClaimResult> {
-  // A legacy never-attempted row is safe on an explicit delivery/job. Historical
-  // attempted rows remain unscheduled until their domain receipts are reviewed.
-  await prisma.$executeRaw`
-    UPDATE "WebhookEventTrack" SET "nextAttemptAt" = now(), "updatedAt" = now()
-    WHERE "webhookEventId" = ${webhookEventId} AND track = ${track}
-      AND status = 'pending' AND attempts = 0 AND generation = 0
-      AND "nextAttemptAt" IS NULL AND "claimToken" IS NULL
-  `
+  // Historical NULL due dates carry no proof of whether an old handler ran.
+  // Only newly materialized rows or receipt-reviewed recovery supply due state.
   // Never reclaim an expired handler: its external effect may have completed.
   await prisma.$executeRaw`
     UPDATE "WebhookEventTrack"

@@ -333,6 +333,21 @@ describe("durable webhook claims", () => {
     })
   })
 
+  it("historical null-due rows never gain implicit replay permission", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([])
+    mockPrisma.webhookEventTrack.findUnique.mockResolvedValue({
+      status: "pending",
+      attempts: 0,
+      nextAttemptAt: null,
+    })
+    expect(await claimWebhookTrack("legacy", "affiliate")).toEqual({ outcome: "busy" })
+    for (const call of vi.mocked(prisma.$executeRaw).mock.calls) {
+      const sql = (call[0] as unknown as string[]).join(" ")
+      expect(sql).not.toContain('SET "nextAttemptAt" = now()')
+    }
+    expect(handlers.dispatchAffiliate).not.toHaveBeenCalled()
+  })
+
   it("fifth reservation dead-letters without extending the total budget", async () => {
     vi.mocked(prisma.$queryRaw).mockResolvedValue([
       { generation: 4, attempts: WEBHOOK_TRACK_MAX_ATTEMPTS },
