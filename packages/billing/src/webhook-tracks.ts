@@ -14,7 +14,8 @@
  *              the historical dispatch triggers, minus minute packs (C2).
  */
 
-import { prisma } from "@lyrashield/db"
+import { randomUUID } from "node:crypto"
+import { prisma, getSystemPrisma, runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { extractProductId } from "@lyrashield/pricing"
 import { isHandledPolarEvent } from "./providers/polar/webhooks"
@@ -33,6 +34,8 @@ export const WEBHOOK_TRACK_MAX_ATTEMPTS = 5
 
 /** lastError is a bounded reason string — never payload or customer data. */
 const LAST_ERROR_MAX_CHARS = 500
+export const WEBHOOK_TRACK_RETRY_DELAY_MS = 60_000
+const CLAIM_LEASE_MS = 120_000
 
 /** Handlers injected so this module stays decoupled from package boundaries. */
 export interface WebhookTrackHandlers {
@@ -66,36 +69,164 @@ export async function ensureWebhookTrackRows(
   tracks: WebhookTrackId[]
 ): Promise<void> {
   await prisma.webhookEventTrack.createMany({
-    data: tracks.map((track) => ({ webhookEventId, track })),
+    data: tracks.map((track) => ({ webhookEventId, track, nextAttemptAt: new Date() })),
     skipDuplicates: true,
   })
 }
 
-export async function markTrackSucceeded(
-  webhookEventId: string,
+export interface WebhookTrackClaim {
+  webhookEventId: string
   track: WebhookTrackId
-): Promise<void> {
-  await prisma.webhookEventTrack.updateMany({
-    where: { webhookEventId, track },
-    data: { status: "succeeded", completedAt: new Date(), lastError: null },
+  generation: number
+  attempts: number
+  token: string
+}
+
+export type WebhookTrackClaimResult =
+  | { outcome: "claimed"; claim: WebhookTrackClaim }
+  | { outcome: "busy" | "missing" }
+  | { outcome: "terminal"; status: "succeeded" | "dead_letter" }
+
+/** One atomic reservation shared by ingress and retry consumers. */
+export async function claimWebhookTrack(
+  webhookEventId: string,
+  track: WebhookTrackId,
+  generation?: number
+): Promise<WebhookTrackClaimResult> {
+  // A legacy never-attempted row is safe on an explicit delivery/job. Historical
+  // attempted rows remain unscheduled until their domain receipts are reviewed.
+  await prisma.$executeRaw`
+    UPDATE "WebhookEventTrack" SET "nextAttemptAt" = now(), "updatedAt" = now()
+    WHERE "webhookEventId" = ${webhookEventId} AND track = ${track}
+      AND status = 'pending' AND attempts = 0 AND generation = 0
+      AND "nextAttemptAt" IS NULL AND "claimToken" IS NULL
+  `
+  // Never reclaim an expired handler: its external effect may have completed.
+  await prisma.$executeRaw`
+    UPDATE "WebhookEventTrack"
+    SET status = 'dead_letter', "lastError" = 'claim_expired_requires_receipt_review',
+        "claimToken" = NULL, "leaseExpiresAt" = NULL, "nextAttemptAt" = NULL, "updatedAt" = now()
+    WHERE "webhookEventId" = ${webhookEventId} AND track = ${track}
+      AND status = 'processing' AND "leaseExpiresAt" <= now()
+  `
+  const token = randomUUID()
+  const rows = await prisma.$queryRaw<Array<{ generation: number; attempts: number }>>`
+    UPDATE "WebhookEventTrack"
+    SET status = 'processing', attempts = attempts + 1, "claimToken" = ${token},
+        "leaseExpiresAt" = now() + ${CLAIM_LEASE_MS} * INTERVAL '1 millisecond',
+        "nextAttemptAt" = NULL, "updatedAt" = now()
+    WHERE "webhookEventId" = ${webhookEventId} AND track = ${track}
+      AND status IN ('pending', 'failed') AND "claimToken" IS NULL
+      AND attempts < ${WEBHOOK_TRACK_MAX_ATTEMPTS} AND "nextAttemptAt" <= now()
+      AND (${generation ?? null}::integer IS NULL OR generation = ${generation ?? null}::integer)
+    RETURNING generation, attempts
+  `
+  if (rows[0]) return { outcome: "claimed", claim: { webhookEventId, track, token, ...rows[0] } }
+  const row = await prisma.webhookEventTrack.findUnique({
+    where: { webhookEventId_track: { webhookEventId, track } },
+  })
+  if (!row) return { outcome: "missing" }
+  if (row.status === "succeeded" || row.status === "dead_letter") {
+    return { outcome: "terminal", status: row.status }
+  }
+  return { outcome: "busy" }
+}
+
+export async function renewWebhookTrackClaim(claim: WebhookTrackClaim): Promise<boolean> {
+  const count = await prisma.$executeRaw`
+    UPDATE "WebhookEventTrack"
+    SET "leaseExpiresAt" = now() + ${CLAIM_LEASE_MS} * INTERVAL '1 millisecond', "updatedAt" = now()
+    WHERE "webhookEventId" = ${claim.webhookEventId} AND track = ${claim.track}
+      AND status = 'processing' AND generation = ${claim.generation}
+      AND "claimToken" = ${claim.token} AND "leaseExpiresAt" > now()
+  `
+  return count === 1
+}
+
+export async function markTrackSucceeded(claim: WebhookTrackClaim): Promise<boolean> {
+  const count = await prisma.$executeRaw`
+    UPDATE "WebhookEventTrack"
+    SET status = 'succeeded', "completedAt" = now(), "lastError" = NULL,
+        "claimToken" = NULL, "leaseExpiresAt" = NULL, "nextAttemptAt" = NULL, "updatedAt" = now()
+    WHERE "webhookEventId" = ${claim.webhookEventId} AND track = ${claim.track}
+      AND status = 'processing' AND generation = ${claim.generation}
+      AND "claimToken" = ${claim.token} AND "leaseExpiresAt" > now()
+  `
+  return count === 1
+}
+
+/** Persist the next generation BEFORE attempting any Redis handoff. */
+export async function markTrackFailed(claim: WebhookTrackClaim, error: unknown): Promise<boolean> {
+  const dead = claim.attempts >= WEBHOOK_TRACK_MAX_ATTEMPTS
+  const count = await prisma.$executeRaw`
+    UPDATE "WebhookEventTrack"
+    SET status = ${dead ? "dead_letter" : "failed"}, "lastError" = ${boundTrackError(error)},
+        generation = generation + ${dead ? 0 : 1},
+        "nextAttemptAt" = CASE WHEN ${dead} THEN NULL ELSE now() + ${WEBHOOK_TRACK_RETRY_DELAY_MS} * INTERVAL '1 millisecond' END,
+        "claimToken" = NULL, "leaseExpiresAt" = NULL, "updatedAt" = now()
+    WHERE "webhookEventId" = ${claim.webhookEventId} AND track = ${claim.track}
+      AND status = 'processing' AND generation = ${claim.generation}
+      AND "claimToken" = ${claim.token} AND "leaseExpiresAt" > now()
+  `
+  return count === 1
+}
+
+export async function getWebhookTrackRetrySchedule(webhookEventId: string, track: WebhookTrackId) {
+  return prisma.webhookEventTrack.findFirst({
+    where: {
+      webhookEventId,
+      track,
+      status: { in: ["pending", "failed"] },
+      nextAttemptAt: { not: null },
+      claimToken: null,
+      attempts: { lt: WEBHOOK_TRACK_MAX_ATTEMPTS },
+    },
+    select: { generation: true, nextAttemptAt: true },
   })
 }
 
-export async function markTrackFailed(
-  webhookEventId: string,
-  track: WebhookTrackId,
-  error: unknown,
-  opts: { deadLetter?: boolean; attempts?: number } = {}
-): Promise<void> {
-  const message = boundTrackError(error)
-  await prisma.webhookEventTrack.updateMany({
-    where: { webhookEventId, track },
-    data: {
-      status: opts.deadLetter ? "dead_letter" : "failed",
-      ...(opts.attempts !== undefined ? { attempts: opts.attempts } : {}),
-      lastError: message,
-    },
-  })
+async function runClaimedTrack(
+  claim: WebhookTrackClaim,
+  execute: () => Promise<void>
+): Promise<WebhookTrackRetryOutcome> {
+  let leaseLost = false
+  let renewal: Promise<void> = Promise.resolve()
+  const timer = setInterval(() => {
+    renewal = renewal
+      .then(async () => {
+        if (!leaseLost) leaseLost = !(await renewWebhookTrackClaim(claim))
+      })
+      .catch(() => {
+        leaseLost = true
+      })
+  }, CLAIM_LEASE_MS / 4)
+  timer.unref()
+  try {
+    let executionError: unknown
+    let failed = false
+    try {
+      await execute()
+    } catch (error) {
+      executionError = error
+      failed = true
+    }
+    await renewal
+    if (leaseLost) return "busy"
+    // Receipt persistence errors must leave processing ownership intact. The
+    // handler may have completed an external effect; never turn a failed
+    // receipt write into permission to replay that handler automatically.
+    if (!failed) return (await markTrackSucceeded(claim)) ? "succeeded" : "busy"
+    if (!(await markTrackFailed(claim, executionError))) return "busy"
+    logger.error("Webhook track failed", {
+      webhookEventId: claim.webhookEventId,
+      track: claim.track,
+      attempts: claim.attempts,
+      reason: boundTrackError(executionError),
+    })
+    return claim.attempts >= WEBHOOK_TRACK_MAX_ATTEMPTS ? "dead_letter" : "failed"
+  } finally {
+    clearInterval(timer)
+  }
 }
 
 /** Truncate an error message into a bounded, log-safe reason string. */
@@ -260,38 +391,24 @@ export async function runApplicableTracks(params: {
   const applicable = computeApplicableTracks(event)
   await ensureWebhookTrackRows(webhookEventId, applicable)
 
-  const rows = await prisma.webhookEventTrack.findMany({ where: { webhookEventId } })
   const summary: TrackRunSummary = {
-    allSucceeded: true,
+    allSucceeded: false,
     attempted: 0,
     succeeded: 0,
     failures: [],
     deadLettered: [],
   }
-
   for (const track of applicable) {
-    const row = rows.find((r) => r.track === track)
-    if (row?.status === "succeeded" || row?.status === "dead_letter") continue
-
-    const attempts = (row?.attempts ?? 0) + 1
+    const result = await claimWebhookTrack(webhookEventId, track)
+    if (result.outcome !== "claimed") continue
     summary.attempted++
-    try {
-      await executeWebhookTrack(track, event, rawPayload, handlers)
-      await markTrackSucceeded(webhookEventId, track)
-      summary.succeeded++
-    } catch (error) {
-      const bounded = boundTrackError(error)
-      const dead = attempts >= WEBHOOK_TRACK_MAX_ATTEMPTS
-      await markTrackFailed(webhookEventId, track, error, { deadLetter: dead, attempts })
-      logger.error("Webhook track failed", {
-        webhookEventId,
-        track,
-        attempts,
-        deadLetter: dead,
-        reason: bounded,
-      })
-      const failure: TrackFailure = { track, error: bounded }
-      if (dead) summary.deadLettered.push(failure)
+    const outcome = await runClaimedTrack(result.claim, () =>
+      executeWebhookTrack(track, event, rawPayload, handlers)
+    )
+    if (outcome === "succeeded") summary.succeeded++
+    if (outcome === "failed" || outcome === "dead_letter") {
+      const failure = { track, error: outcome }
+      if (outcome === "dead_letter") summary.deadLettered.push(failure)
       else summary.failures.push(failure)
     }
   }
@@ -301,7 +418,7 @@ export async function runApplicableTracks(params: {
     summary.deadLettered.length === 0 &&
     // Nothing left non-succeeded among applicable tracks.
     !(await hasUnsatisfiedTrack(webhookEventId))
-  if (summary.allSucceeded && summary.attempted > 0) {
+  if (summary.allSucceeded) {
     await syncDerivedProcessedState(webhookEventId)
   }
   return summary
@@ -324,6 +441,7 @@ export type WebhookTrackRetryOutcome =
   | "skipped_dead_letter"
   | "not_applicable"
   | "missing"
+  | "busy"
 
 /**
  * Re-execute exactly ONE track for a stored webhook event (worker retry job).
@@ -336,57 +454,37 @@ export type WebhookTrackRetryOutcome =
 export async function retryWebhookTrack(params: {
   webhookEventId: string
   track: WebhookTrackId
+  generation?: number
   handlers: WebhookTrackHandlers
 }): Promise<WebhookTrackRetryOutcome> {
-  const { webhookEventId, track, handlers } = params
-
-  const event = await prisma.webhookEvent.findUnique({
+  const { webhookEventId, track, generation, handlers } = params
+  if (!WEBHOOK_TRACK_IDS.includes(track)) return "missing"
+  // Trusted worker lookup, then bind the stored event workspace for domain writes.
+  const event = await getSystemPrisma().webhookEvent.findUnique({
     where: { id: webhookEventId },
-    select: { provider: true, externalId: true, eventType: true, payload: true },
+    select: { provider: true, externalId: true, eventType: true, payload: true, workspaceId: true },
   })
-  if (!event || !WEBHOOK_TRACK_IDS.includes(track as WebhookTrackId)) return "missing"
-
-  const row = await prisma.webhookEventTrack.findUnique({
-    where: { webhookEventId_track: { webhookEventId, track } },
-  })
-  if (!row) return "missing"
-  if (row.status === "succeeded") return "skipped_succeeded"
-  if (row.status === "dead_letter") return "skipped_dead_letter"
-
-  const normalized = normalizeProviderEvent({
-    provider: event.provider === "razorpay" ? "razorpay" : "polar",
-    eventType: event.eventType,
-    payload: event.payload,
-    deliveryId: event.externalId,
-  })
-
-  // Track no longer applies (applicability rules changed since ingestion):
-  // remove the stale row so it cannot block the derived processed flag.
-  if (!computeApplicableTracks(normalized).includes(track)) {
-    await prisma.webhookEventTrack.delete({
-      where: { webhookEventId_track: { webhookEventId, track } },
+  if (!event) return "missing"
+  return runWithWorkspaceContext(event.workspaceId, async () => {
+    const result = await claimWebhookTrack(webhookEventId, track, generation)
+    if (result.outcome === "terminal") {
+      if (result.status === "succeeded") await syncDerivedProcessedState(webhookEventId)
+      return result.status === "succeeded" ? "skipped_succeeded" : "skipped_dead_letter"
+    }
+    if (result.outcome !== "claimed") return result.outcome
+    const outcome = await runClaimedTrack(result.claim, async () => {
+      const normalized = normalizeProviderEvent({
+        provider: event.provider === "razorpay" ? "razorpay" : "polar",
+        eventType: event.eventType,
+        payload: event.payload,
+        deliveryId: event.externalId,
+      })
+      // Preserve the receipt rather than deleting historical track state.
+      if (computeApplicableTracks(normalized).includes(track)) {
+        await executeWebhookTrack(track, normalized, event.payload, handlers)
+      }
     })
-    await syncDerivedProcessedState(webhookEventId)
-    return "not_applicable"
-  }
-
-  const attempts = row.attempts + 1
-  try {
-    await executeWebhookTrack(track, normalized, event.payload, handlers)
-    await markTrackSucceeded(webhookEventId, track)
-    await syncDerivedProcessedState(webhookEventId)
-    logger.info("Webhook track retry succeeded", { webhookEventId, track, attempts })
-    return "succeeded"
-  } catch (error) {
-    const dead = attempts >= WEBHOOK_TRACK_MAX_ATTEMPTS
-    await markTrackFailed(webhookEventId, track, error, { deadLetter: dead, attempts })
-    logger.error("Webhook track retry failed", {
-      webhookEventId,
-      track,
-      attempts,
-      deadLetter: dead,
-      reason: boundTrackError(error),
-    })
-    return dead ? "dead_letter" : "failed"
-  }
+    if (outcome === "succeeded") await syncDerivedProcessedState(webhookEventId)
+    return outcome
+  })
 }

@@ -1,110 +1,95 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-
-const retryWebhookTrackMock = vi.fn()
+const retry = vi.hoisted(() => vi.fn())
+const schedule = vi.hoisted(() => vi.fn())
+const enqueue = vi.hoisted(() => vi.fn())
+const findMany = vi.hoisted(() => vi.fn())
+const updateMany = vi.hoisted(() => vi.fn())
+const getJob = vi.hoisted(() => vi.fn())
+vi.mock("@lyrashield/db", () => ({ prisma: { webhookEventTrack: { findMany, updateMany } } }))
 vi.mock("@lyrashield/billing", () => ({
   WEBHOOK_TRACK_IDS: ["billing", "license", "affiliate"],
   WEBHOOK_TRACK_MAX_ATTEMPTS: 5,
-  retryWebhookTrack: (...args: unknown[]) => retryWebhookTrackMock(...args),
+  retryWebhookTrack: retry,
+  getWebhookTrackRetrySchedule: schedule,
 }))
-const enqueueRetryMock = vi.fn().mockResolvedValue("job_1")
 vi.mock("@lyrashield/integrations", () => ({
-  enqueueWebhookTrackRetry: (...args: unknown[]) => enqueueRetryMock(...args),
-  WEBHOOK_TRACK_RETRY_QUEUE_NAME: "webhook-track-retry",
+  enqueueWebhookTrackRetry: enqueue,
+  getWebhookTrackRetryQueue: () => ({ getJob }),
+  webhookTrackRetryJobId: (data: { generation: number }) => `retry-g${data.generation}`,
 }))
-vi.mock("@lyrashield/logger", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}))
-
-import { WEBHOOK_TRACK_MAX_ATTEMPTS } from "@lyrashield/billing"
-import { processWebhookTrackRetry } from "./webhook-track-retry.job"
-
-function job(data: Record<string, string>) {
-  const fixture = { data }
+vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn() } }))
+import { processWebhookTrackRetry, recoverDueWebhookTrackRetries } from "./webhook-track-retry.job"
+const handlers = { dispatchAffiliate: vi.fn() }
+function job(generation = 1, id = `retry-g${generation}`) {
+  const fixture = { id, data: { webhookEventId: "evt", track: "license", generation } }
   return fixture as Parameters<typeof processWebhookTrackRetry>[0]
 }
-
-const handlers = { dispatchAffiliate: vi.fn() }
-
 beforeEach(() => {
-  retryWebhookTrackMock.mockReset()
-  enqueueRetryMock.mockClear().mockResolvedValue("job_1")
+  vi.clearAllMocks()
+  retry.mockResolvedValue("failed")
+  schedule.mockResolvedValue({ generation: 2, nextAttemptAt: new Date(Date.now() + 60_000) })
+  enqueue.mockResolvedValue("retry-g2")
+  getJob.mockResolvedValue(undefined)
+  updateMany.mockResolvedValue({ count: 1 })
 })
-
-describe("processWebhookTrackRetry — bounded attempt budget", () => {
-  it("h) failed under cap re-enqueues exactly one delayed next attempt", async () => {
-    retryWebhookTrackMock.mockResolvedValue("failed")
-
-    const result = await processWebhookTrackRetry(
-      job({ webhookEventId: "evt_1", track: "license" }),
-      handlers
-    )
-
-    expect(result.outcome).toBe("failed")
-    expect(result.reEnqueued).toBe(true)
-    expect(enqueueRetryMock).toHaveBeenCalledTimes(1)
-    expect(enqueueRetryMock).toHaveBeenCalledWith(
-      { webhookEventId: "evt_1", track: "license" },
+describe("generation-bound retry", () => {
+  it("represents the persisted next generation after failure", async () => {
+    expect(await processWebhookTrackRetry(job(), handlers)).toEqual({
+      outcome: "failed",
+      retryRepresented: true,
+    })
+    expect(enqueue).toHaveBeenCalledWith(
+      { webhookEventId: "evt", track: "license", generation: 2 },
       { delayMs: expect.any(Number) }
     )
+    expect(retry).toHaveBeenCalledWith({
+      webhookEventId: "evt",
+      track: "license",
+      generation: 1,
+      handlers,
+    })
   })
-
-  it("h) dead_letter outcome is terminal — never re-enqueued", async () => {
-    retryWebhookTrackMock.mockResolvedValue("dead_letter")
-
-    const result = await processWebhookTrackRetry(
-      job({ webhookEventId: "evt_dl", track: "affiliate" }),
-      handlers
-    )
-
-    expect(result.outcome).toBe("dead_letter")
-    expect(result.reEnqueued).toBe(false)
-    expect(enqueueRetryMock).not.toHaveBeenCalled()
+  it("drops mismatched identities before domain execution", async () => {
+    expect((await processWebhookTrackRetry(job(1, "wrong"), handlers)).outcome).toBe("missing")
+    expect(retry).not.toHaveBeenCalled()
   })
-
-  it("terminal/terminal-adjacent outcomes never re-enqueue", async () => {
+  it("terminal or busy outcomes never enqueue", async () => {
     for (const outcome of [
       "succeeded",
+      "dead_letter",
+      "busy",
       "skipped_succeeded",
       "skipped_dead_letter",
-      "not_applicable",
       "missing",
     ]) {
-      retryWebhookTrackMock.mockResolvedValueOnce(outcome)
-      const result = await processWebhookTrackRetry(
-        job({ webhookEventId: `evt_${outcome}`, track: "billing" }),
-        handlers
-      )
-      expect(result.outcome).toBe(outcome)
-      expect(result.reEnqueued).toBe(false)
+      retry.mockResolvedValue(outcome)
+      expect((await processWebhookTrackRetry(job(), handlers)).retryRepresented).toBe(false)
     }
-    expect(enqueueRetryMock).not.toHaveBeenCalled()
+    expect(enqueue).not.toHaveBeenCalled()
   })
-
-  it("unknown track in job data → dropped without execution", async () => {
-    const result = await processWebhookTrackRetry(
-      job({ webhookEventId: "evt_bad", track: "nope" }),
-      handlers
+  it("handoff failure leaves recovery to durable due state", async () => {
+    enqueue.mockRejectedValueOnce(new Error("redis down"))
+    expect((await processWebhookTrackRetry(job(), handlers)).retryRepresented).toBe(false)
+  })
+  it("bounded maintenance advances retained terminal generations without changing attempts", async () => {
+    findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { webhookEventId: "evt", track: "license", generation: 2, nextAttemptAt: new Date(0) },
+      ])
+    getJob.mockResolvedValue({ getState: async () => "completed" })
+    expect(await recoverDueWebhookTrackRetries(10)).toEqual({
+      examined: 1,
+      represented: 1,
+      ambiguous: 0,
+    })
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { generation: { increment: 1 } } })
     )
-    expect(result.outcome).toBe("missing")
-    expect(retryWebhookTrackMock).not.toHaveBeenCalled()
-  })
-
-  it("enqueue failure does not crash the job (reconciliation sweeps later)", async () => {
-    retryWebhookTrackMock.mockResolvedValue("failed")
-    enqueueRetryMock.mockRejectedValue(new Error("redis down"))
-
-    const result = await processWebhookTrackRetry(
-      job({ webhookEventId: "evt_eq", track: "billing" }),
-      handlers
-    )
-
-    expect(result.outcome).toBe("failed")
-    expect(result.reEnqueued).toBe(false)
-  })
-})
-
-describe("attempt budget contract", () => {
-  it("dead-letter cap is 5", () => {
-    expect(WEBHOOK_TRACK_MAX_ATTEMPTS).toBe(5)
+    expect(enqueue).toHaveBeenCalledWith({ webhookEventId: "evt", track: "license", generation: 3 })
+    expect(findMany.mock.calls[1]![0]).toMatchObject({
+      take: 10,
+      where: { nextAttemptAt: { lte: expect.any(Date) }, attempts: { lt: 5 } },
+    })
   })
 })

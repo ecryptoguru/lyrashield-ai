@@ -192,6 +192,11 @@ export {
 export {
   WEBHOOK_TRACK_IDS,
   WEBHOOK_TRACK_MAX_ATTEMPTS,
+  WEBHOOK_TRACK_RETRY_DELAY_MS,
+  claimWebhookTrack,
+  renewWebhookTrackClaim,
+  getWebhookTrackRetrySchedule,
+  type WebhookTrackClaim,
   computeApplicableTracks,
   ensureWebhookTrackRows,
   markTrackSucceeded,
