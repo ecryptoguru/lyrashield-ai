@@ -47,8 +47,8 @@ overrides:
   "minimatch@>=10 <10.2.3": "^10.2.3"
   # GHSA-ggr8-5vv4-36mx: @prisma/config pins an affected pre-8 release.
   "deepmerge-ts@<8.0.0": "^8.0.0"
-  # GHSA-p293-qw3h-jr36: fix Next 16 below the patched 16.3.3 release.
-  "next@<16.3.3": "^16.3.3"
+  # GHSA-vcvr-r3jv-pc5j (next/og RCE), plus GHSA-p293-qw3h-jr36.
+  "next@>=16 <16.3.6": "16.3.6"
   # GHSA-fxqj-rqcc-2cmp: patched PostCSS starts at 8.5.23.
   "postcss@<8.5.23": "^8.5.26"
   # GHSA-rgj7-g3m4-5g8c: keep Sharp on its patched 0.35.x line.
