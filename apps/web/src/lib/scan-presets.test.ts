@@ -36,13 +36,13 @@ describe("scan presets", () => {
   it("describes engine ceilings without counting scanner reserve as engine time", () => {
     const repoOptions = getManualScanOptions({ type: "REPO" })
     expect(repoOptions.find((option) => option.id === "RELEASE_CHECK")?.limitsSummary).toBe(
-      "Up to 16 minutes of engine time"
+      "Up to 17 minutes of engine time"
     )
     expect(repoOptions.find((option) => option.id === "CODE_REVIEW")?.limitsSummary).toBe(
       "Up to 20 minutes of engine time"
     )
     expect(repoOptions.find((option) => option.id === "REVIEW_CHANGES")?.limitsSummary).toBe(
-      "Up to 16 minutes of engine time"
+      "Up to 17 minutes of engine time"
     )
     expect(repoOptions.find((option) => option.id === "DEEP_REVIEW")?.limitsSummary).toBe(
       "Up to 40 minutes of engine time"

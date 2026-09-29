@@ -35,7 +35,7 @@ const REPOSITORY_PROFILES: Record<RepositoryScanMode, ScanProfile> = {
     maxBudgetUsd: 1.2,
     maxDurationMinutes: 22,
     scannerReserveMinutes: 3,
-    maxEngineMinutes: 16,
+    maxEngineMinutes: 17,
     usesAi: true,
     modelClass: "LUNA",
     label: "Release Check",
@@ -90,7 +90,7 @@ function normalizedMode(mode: string): string {
  * minutes cover deterministic scanner/queue time and are NOT an engine
  * execution ceiling.
  */
-export const SCAN_DEPTH_CONTRACT_VERSION = "scan-depths/1.1.0" as const
+export const SCAN_DEPTH_CONTRACT_VERSION = "scan-depths/1.2.0" as const
 
 export type ScanDepthContract = {
   version: typeof SCAN_DEPTH_CONTRACT_VERSION

@@ -66,7 +66,7 @@ const MAX_FINDINGS_PER_FILE = 100
 const MAX_TOTAL_FINDINGS = 5_000
 // Matches ai-app-security's per-mode file budgets so mode breadth is honest
 // across deterministic source families.
-const MAX_FILES_BY_MODE = { QUICK: 200, STANDARD: 500, DEEP: 1_000 } as const
+const MAX_FILES_BY_MODE = { QUICK: 256, STANDARD: 500, DEEP: 1_000 } as const
 const MAX_REPRESENTATIVE_SKIPPED_PATHS = 20
 
 function sastFileBudget(mode: string | undefined): number {

@@ -560,10 +560,10 @@ describe("resolveScanRuntimeBudgetMs", () => {
 })
 
 describe("resolveEngineRuntimeBudgetMs", () => {
-  it("keeps at least fifteen minutes of Quick engine time within the total deadline", () => {
-    expect(resolveEngineRuntimeBudgetMs("QUICK", "REPO", 22 * 60 * 1000, 0)).toBe(16 * 60 * 1000)
+  it("keeps seventeen minutes of Quick engine time within the total deadline", () => {
+    expect(resolveEngineRuntimeBudgetMs("QUICK", "REPO", 22 * 60 * 1000, 0)).toBe(17 * 60 * 1000)
     // Legacy SAFE and CUSTOM stored values resolve to Quick and Deep profiles.
-    expect(resolveEngineRuntimeBudgetMs("SAFE", "REPO", 22 * 60 * 1000, 0)).toBe(16 * 60 * 1000)
+    expect(resolveEngineRuntimeBudgetMs("SAFE", "REPO", 22 * 60 * 1000, 0)).toBe(17 * 60 * 1000)
     expect(resolveEngineRuntimeBudgetMs("CUSTOM", "REPO", 45 * 60 * 1000, 0)).toBe(40 * 60 * 1000)
   })
 
@@ -3183,10 +3183,10 @@ describe("REPO scan wall-clock budget enforcement", () => {
 
     const timeoutMs = vi.mocked(runEngine).mock.calls[0]?.[2]
     // SAFE/Quick keeps its three-minute scanner reserve inside the
-    // twenty-minute policy cap while allowing the sixteen-minute engine cap.
+    // twenty-minute policy cap while allowing the seventeen-minute engine cap.
     expect(typeof timeoutMs).toBe("number")
     expect(timeoutMs).toBeGreaterThan(0)
-    expect(timeoutMs).toBeLessThanOrEqual(16 * 60 * 1000)
+    expect(timeoutMs).toBeLessThanOrEqual(17 * 60 * 1000)
     expect(timeoutMs).toBeGreaterThanOrEqual(15.5 * 60 * 1000)
   })
 })

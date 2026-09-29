@@ -11,7 +11,7 @@ describe("resolveScanProfile", () => {
       maxBudgetUsd: 1.2,
       maxDurationMinutes: 22,
       scannerReserveMinutes: 3,
-      maxEngineMinutes: 16,
+      maxEngineMinutes: 17,
       usesAi: true,
       modelClass: "LUNA",
     })
