@@ -67,6 +67,7 @@ export function useScanListState({
     firstPagePendingRef.current = null
     pollEtagRef.current = undefined
     setLoadingMore(false)
+    setRefreshing(false)
   }, [])
 
   // Locally accepted creation/cancellation/removal must also supersede older reads.
