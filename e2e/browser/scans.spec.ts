@@ -249,3 +249,101 @@ test("unresolved operation recovery checks the existing scan without resubmittin
     )
   ).toBe("operation-1")
 })
+
+for (const [action, read] of [
+  ["cancellation", "manual refresh"],
+  ["removal", "manual refresh"],
+  ["creation", "manual refresh"],
+  ["creation", "target filter"],
+] as const) {
+  test(`accepted ${action} releases a superseded ${read}`, async ({ page }) => {
+    let release!: () => void
+    let finish!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    let refreshStarted = false
+    const scan = {
+      id: "created-scan",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      triggerType: "MANUAL",
+      startedAt: null,
+      endedAt: null,
+      summary: null,
+      errorCategory: null,
+      errorMessage: null,
+      target: {
+        id: "target-a",
+        name: "Example repository",
+        type: "REPO",
+        url: null,
+        apiSpecUrl: null,
+        repoFullName: "example/repository",
+      },
+      createdAt: "2026-09-19T10:00:00.000Z",
+    }
+    await composerRoutes(page)
+    await page.route("**/api/scans?**", async (route) => {
+      refreshStarted = true
+      await held
+      await route.fulfill({
+        json: {
+          success: true,
+          data: { items: [{ ...scan, id: "stale-read" }], nextCursor: "stale-cursor" },
+        },
+      })
+      finish()
+    })
+    await page.route("**/api/scans/scan-a**", async (route) => {
+      await route.fulfill({
+        json: {
+          success: true,
+          data:
+            action === "cancellation"
+              ? { id: "scan-a", status: "CANCELLED", endedAt: scan.createdAt }
+              : { id: "scan-a" },
+        },
+      })
+    })
+    await page.route("**/api/scans", async (route) =>
+      route.fulfill({ json: { success: true, data: scan } })
+    )
+    await page.goto(`polling.html?polling=${action === "cancellation" ? "client-list" : "create"}`)
+    const refresh = page.getByRole("button", { name: "Refresh", exact: true })
+    if (read === "target filter") await page.getByLabel("Filter by target").selectOption("target-a")
+    else await refresh.click()
+    await expect.poll(() => refreshStarted).toBe(true)
+    await expect(refresh).toBeDisabled()
+
+    if (action === "cancellation") {
+      await page.getByRole("button", { name: "Cancel this scan", exact: true }).click()
+      await page.getByRole("button", { name: "Stop scan", exact: true }).click()
+      await expect(page.getByRole("link", { name: "Workspace scan", exact: true })).toHaveCount(0)
+    } else if (action === "removal") {
+      await page.getByRole("button", { name: "Remove scan", exact: true }).click()
+      await page.getByRole("button", { name: "Remove", exact: true }).click()
+      await expect(page.getByRole("link", { name: "Workspace scan", exact: true })).toHaveCount(0)
+    } else {
+      await page.getByRole("button", { name: /^New scan$/i }).click()
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: /^Start scan$/i })
+        .click()
+      await expect(page.getByRole("dialog")).toHaveCount(0)
+      await expect(page.locator('a[href="/dashboard/scans/created-scan"]').first()).toBeVisible()
+    }
+
+    await expect(refresh).toBeEnabled()
+    await expect(page.getByLabel("Loading scans")).toHaveCount(0)
+    release()
+    await finished
+    await expect(refresh).toBeEnabled()
+    await expect(page.getByLabel("Loading scans")).toHaveCount(0)
+    await expect(page.locator('a[href="/dashboard/scans/stale-read"]')).toHaveCount(0)
+  })
+}
