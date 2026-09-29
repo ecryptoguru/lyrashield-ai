@@ -2,12 +2,7 @@ import { useEffect, type Dispatch, type SetStateAction } from "react"
 import { apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
 import { scansPaginatedSchema } from "@/lib/api-schemas"
 import type { ScanStateFilter } from "@/lib/scan-presentation"
-import {
-  mergePolledScans,
-  mergeResolvedOffPageScans,
-  missingActiveScanIds,
-  nextActiveScanPollInterval,
-} from "./scans-client.utils"
+import { missingActiveScanIds, nextActiveScanPollInterval } from "./scans-client.utils"
 import type { ScanItem } from "./scan-types"
 
 export function useActiveScansPolling({
@@ -19,7 +14,10 @@ export function useActiveScansPolling({
   scansRef,
   firstPageIdsRef,
   firstPageHasMoreRef,
-  setScans,
+  beginPoll,
+  isCurrentRequest,
+  acceptPoll,
+  pollEtagRef,
   setPollStale,
 }: {
   hasActiveScans: boolean
@@ -30,7 +28,15 @@ export function useActiveScansPolling({
   scansRef: { current: ScanItem[] }
   firstPageIdsRef: { current: Set<string> }
   firstPageHasMoreRef: { current: boolean }
-  setScans: Dispatch<SetStateAction<ScanItem[]>>
+  beginPoll: () => number | null
+  isCurrentRequest: (requestId: number) => boolean
+  acceptPoll: (
+    requestId: number,
+    data: { items: ScanItem[]; nextCursor: string | null } | null,
+    resolved: ScanItem[] | null,
+    missingIds: string[]
+  ) => boolean
+  pollEtagRef: { current: string | undefined }
   setPollStale: Dispatch<SetStateAction<boolean>>
 }) {
   useEffect(() => {
@@ -42,7 +48,6 @@ export function useActiveScansPolling({
     let isAborted = false
     let inFlight = false
     let refreshOnVisible = false
-    let pollEtag: string | undefined
     const pollStartedAt = Date.now()
 
     const INITIAL_POLL_DELAY_MS = 10_000
@@ -61,6 +66,11 @@ export function useActiveScansPolling({
     const poll = async () => {
       timeoutId = undefined
       if (isAborted || document.hidden || inFlight) return
+      const requestId = beginPoll()
+      if (requestId === null) {
+        schedule(nextActiveScanPollInterval(Date.now() - pollStartedAt))
+        return
+      }
       inFlight = true
       try {
         // Poll the bounded first page so a scan's terminal state replaces its
@@ -69,21 +79,15 @@ export function useActiveScansPolling({
         const { data, etag } = await apiGetPaginatedConditional("/api/scans", listParams(), {
           signal: controller.signal,
           schema: scansPaginatedSchema,
-          ...(pollEtag ? { etag: pollEtag } : {}),
+          ...(pollEtagRef.current ? { etag: pollEtagRef.current } : {}),
         })
-        if (controller.signal.aborted) return
-        if (etag) pollEtag = etag
-        if (data) {
-          firstPageIdsRef.current = new Set(data.items.map((scan) => scan.id))
-          firstPageHasMoreRef.current = data.nextCursor !== null
-        }
-
+        if (controller.signal.aborted || !isCurrentRequest(requestId)) return
         const unfiltered = stateFilter === "ALL" && !targetFilter
         const missingIds = unfiltered
           ? missingActiveScanIds(
               scansRef.current,
-              firstPageIdsRef.current,
-              firstPageHasMoreRef.current
+              data ? new Set(data.items.map((scan) => scan.id)) : firstPageIdsRef.current,
+              data ? data.nextCursor !== null : firstPageHasMoreRef.current
             )
           : []
         const resolvedMissing = missingIds.length
@@ -95,24 +99,11 @@ export function useActiveScansPolling({
           : null
 
         if (controller.signal.aborted) return
-        setPollStale(false)
-        if (data || resolvedMissing) {
-          setScans((current) => {
-            if (controller.signal.aborted) return current
-            if (!unfiltered) {
-              // A filtered view replaces its page wholesale: rows that no
-              // longer match the filter must not linger from a previous page.
-              return data ? data.items : current
-            }
-            let merged = data
-              ? mergePolledScans(current, data.items, { hasMore: data.nextCursor !== null })
-              : current
-            if (!resolvedMissing) return merged
-            return mergeResolvedOffPageScans(merged, resolvedMissing.items, missingIds)
-          })
+        if (acceptPoll(requestId, data, resolvedMissing?.items ?? null, missingIds)) {
+          pollEtagRef.current = data ? etag : (etag ?? pollEtagRef.current)
         }
       } catch {
-        if (!controller.signal.aborted) setPollStale(true)
+        if (!controller.signal.aborted && isCurrentRequest(requestId)) setPollStale(true)
       } finally {
         inFlight = false
         if (!isAborted && !document.hidden) {
@@ -154,7 +145,10 @@ export function useActiveScansPolling({
     scansRef,
     firstPageIdsRef,
     firstPageHasMoreRef,
-    setScans,
+    beginPoll,
+    isCurrentRequest,
+    acceptPoll,
+    pollEtagRef,
     setPollStale,
   ])
 }

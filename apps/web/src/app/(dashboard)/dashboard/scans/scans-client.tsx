@@ -75,6 +75,7 @@ interface ScansClientProps {
   /** Server-parsed URL filter state — never re-read from window here. */
   initialStateFilter?: ScanStateFilter
   initialTargetFilter?: string
+  initialFilterUnavailable?: boolean
   /** Whether the active role may manage billing (drives recovery copy). */
   canManageBilling?: boolean
 }
@@ -92,6 +93,7 @@ export function ScansClient({
   initialMode,
   initialStateFilter = "ALL",
   initialTargetFilter = "",
+  initialFilterUnavailable = false,
   canManageBilling = false,
 }: ScansClientProps) {
   const [showCreate, setShowCreate] = useState(initialShowCreate)
@@ -132,6 +134,7 @@ export function ScansClient({
     loadingMore,
     refreshing,
     pollStale,
+    pagesReset,
     targetFilter,
     stateFilter,
     cancelling,
@@ -696,6 +699,16 @@ export function ScansClient({
         </div>
       </div>
 
+      {initialFilterUnavailable && !targetFilter && (
+        <p role="status" className="text-muted-foreground mb-4 text-sm">
+          This target filter is no longer available. Showing all targets with your selected state.
+        </p>
+      )}
+      {pagesReset && (
+        <p role="status" aria-live="polite" className="text-muted-foreground mb-4 text-sm">
+          Scan updates refreshed the first page. Load more to see older scans.
+        </p>
+      )}
       <ScanStatusNotices
         showCreate={showCreate}
         error={error}

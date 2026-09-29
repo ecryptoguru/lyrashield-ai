@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import type { Dispatch, SetStateAction } from "react"
+import { useRef, type Dispatch, type SetStateAction } from "react"
 import { AlertCircle, Check, ChevronDown, ChevronRight, Clock, Play } from "lucide-react"
 import { Badge, Button, cn, FormField, Input, Select, Spinner } from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -104,9 +104,20 @@ export function CreateScanSheet({
   selectedAttachments: string[]
   toggleAttachment: (id: string) => void
 }) {
+  const returnFocusRef = useRef<HTMLElement | null>(null)
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
+        onOpenAutoFocus={() => {
+          returnFocusRef.current =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null
+        }}
+        onCloseAutoFocus={(event) => {
+          if (returnFocusRef.current?.isConnected) {
+            event.preventDefault()
+            returnFocusRef.current.focus()
+          }
+        }}
         side={isDesktop ? "right" : "bottom"}
         className={cn(
           "flex flex-col gap-0 p-0",
@@ -129,7 +140,9 @@ export function CreateScanSheet({
             {(errorMessage || scanRecoveryError) && (
               <div role="alert" className="border-destructive/40 rounded-lg border p-3 text-sm">
                 {errorMessage && <p>{errorMessage}</p>}
-                {scanRecoveryError && <p>{scanRecoveryError}</p>}
+                {scanRecoveryError && scanRecoveryError !== errorMessage && (
+                  <p>{scanRecoveryError}</p>
+                )}
               </div>
             )}
             {errorCode === "DOMAIN_VERIFICATION_REQUIRED" && selectedTarget && (
