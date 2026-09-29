@@ -5,6 +5,8 @@ import {
   calculateGpt56CostUsdFromModelBuckets,
   GPT_6_PRICING_USD_PER_MILLION,
   GPT_56_PRICING_USD_PER_MILLION,
+  sumUsdCosts,
+  usdCostsMatch,
 } from "./gpt56-pricing"
 
 describe("GPT-5.6 official pricing", () => {
@@ -164,5 +166,37 @@ describe("GPT-6 published pricing", () => {
         longOutputTokens: 2_000,
       })
     ).toBe(0.97)
+  })
+
+  it("retains sub-micro costs across model buckets and ancillary charges", () => {
+    const tinyModelTotal = calculateGpt56CostUsdFromModelBuckets([
+      {
+        model: "azure_ai/gpt-6-luna",
+        standardInputTokens: 1,
+        standardCachedInputTokens: 1,
+        standardCacheWriteInputTokens: 0,
+        standardOutputTokens: 0,
+        longInputTokens: 0,
+        longCachedInputTokens: 0,
+        longCacheWriteInputTokens: 0,
+        longOutputTokens: 0,
+      },
+      {
+        model: "azure_ai/gpt-6-sol",
+        standardInputTokens: 1,
+        standardCachedInputTokens: 1,
+        standardCacheWriteInputTokens: 0,
+        standardOutputTokens: 0,
+        longInputTokens: 0,
+        longCachedInputTokens: 0,
+        longCacheWriteInputTokens: 0,
+        longOutputTokens: 0,
+      },
+    ])
+
+    expect(tinyModelTotal).toBe(0.00000021)
+    expect(sumUsdCosts(0.00015, 0.01)).toBe(0.01015)
+    expect(usdCostsMatch(0.010150000000000001, 0.01015)).toBe(true)
+    expect(usdCostsMatch(0.0101500001, 0.01015)).toBe(false)
   })
 })

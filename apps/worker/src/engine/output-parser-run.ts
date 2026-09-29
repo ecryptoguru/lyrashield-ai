@@ -6,6 +6,7 @@ import {
 } from "./engine-output-schema"
 import { boundedString, HTTP_EXCHANGE_ID_PATTERN, MAX_DB_INTEGER } from "./output-parser-common"
 import type { EngineRunRecord } from "./output-parser-types"
+import { sumUsdCosts } from "./gpt56-pricing"
 
 const MAX_RUN_TARGETS = 100
 const MAX_LLM_USAGE_NODES = 500
@@ -32,14 +33,14 @@ function usageCost(value: unknown): number | undefined {
 
 function webSearchCostUsd(value: unknown): number | undefined {
   if (!Array.isArray(value) || value.length > 50) return undefined
-  let total = 0
+  const costs: number[] = []
   for (const entry of value) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return undefined
     const cost = usageCost((entry as Record<string, unknown>).cost)
     if (cost === undefined) return undefined
-    total += cost
+    costs.push(cost)
   }
-  return value.length > 0 ? Math.round(total * 1_000_000) / 1_000_000 : undefined
+  return value.length > 0 ? (sumUsdCosts(...costs) ?? undefined) : undefined
 }
 
 function findUsageMetric(

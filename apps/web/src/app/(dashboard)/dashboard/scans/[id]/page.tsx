@@ -12,6 +12,7 @@ import { defaultStandards, renderStandards } from "@lyrashield/security"
 import { notFound, redirect } from "next/navigation"
 import { Radar } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { filterDashboardScanEvents } from "@/lib/scan-event-visibility"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { SCAN_SINGULAR } from "@/lib/terminology"
@@ -187,7 +188,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
           repoFullName: target.repoFullName,
         }
       : null,
-    events: scan.events.map((e) => ({
+    events: filterDashboardScanEvents(scan.events).map((e) => ({
       id: e.id,
       stage: e.stage,
       level: e.level,

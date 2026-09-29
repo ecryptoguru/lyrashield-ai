@@ -78,6 +78,133 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1", { eventsAfter: undefined })
   })
 
+  it("omits cost fields and internal accounting events from the dashboard response", async () => {
+    const createdAt = new Date("2026-09-29T12:00:00.000Z")
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      status: "COMPLETED",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      triggerType: "manual",
+      startedAt: createdAt,
+      endedAt: createdAt,
+      summary: null,
+      errorCategory: null,
+      errorMessage: null,
+      createdAt,
+      updatedAt: createdAt,
+      providerCostUsd: "0.435436",
+      billedCostUsd: "0.435436",
+      actualCostCents: 44,
+      llmRequestCount: 381,
+      llmInputTokens: 16_786_451,
+      llmCachedInputTokens: 14_406_097,
+      llmOutputTokens: 79_523,
+      events: [
+        {
+          id: "usage-event",
+          stage: "llm_usage",
+          level: "info",
+          message: "AI usage counters recorded",
+          metadata: { calculatedCostUsd: 0.435436, engineReportedCostUsd: 0.435435945 },
+          createdAt,
+        },
+        {
+          id: "settlement-event",
+          stage: "billing_settlement_intent",
+          level: "info",
+          message: "Settlement recorded",
+          metadata: { quantity: 16 },
+          createdAt,
+        },
+        {
+          id: "budget-cap-event",
+          stage: "budget_cap",
+          level: "warning",
+          message: "Protected budget cap checked",
+          metadata: { providerCostUsd: 0.435436 },
+          createdAt,
+        },
+        {
+          id: "budget-exceeded-event",
+          stage: "budget_exceeded",
+          level: "error",
+          message: "Protected run limit reached",
+          metadata: { billedCostUsd: 0.435436 },
+          createdAt,
+        },
+        {
+          id: "visible-event",
+          stage: "engine_progress",
+          level: "info",
+          message: "Engine review completed",
+          metadata: { completed: true },
+          createdAt,
+        },
+      ],
+      coverageReceipts: [],
+      resultManifest: { checksum: "manifest-checksum" },
+    } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.data).not.toHaveProperty("providerCostUsd")
+    expect(payload.data).not.toHaveProperty("billedCostUsd")
+    expect(payload.data).not.toHaveProperty("actualCostCents")
+    expect(payload.data).not.toHaveProperty("llmRequestCount")
+    expect(payload.data).not.toHaveProperty("llmInputTokens")
+    expect(payload.data).not.toHaveProperty("llmCachedInputTokens")
+    expect(payload.data).not.toHaveProperty("llmOutputTokens")
+    expect(payload.data.events.map((event: { id: string }) => event.id)).toEqual(["visible-event"])
+    expect(JSON.stringify(payload)).not.toContain("0.435")
+  })
+
+  it("does not change the response ETag for accounting-only event changes", async () => {
+    const createdAt = new Date("2026-09-29T12:00:00.000Z")
+    const scan = {
+      id: "scan-1",
+      workspaceId: "ws-1",
+      status: "COMPLETED",
+      updatedAt: createdAt,
+      events: [
+        {
+          id: "usage-event",
+          stage: "llm_usage",
+          level: "info",
+          message: "AI usage counters recorded",
+          metadata: { calculatedCostUsd: 0.25 },
+          createdAt,
+        },
+      ],
+    }
+    vi.mocked(getScanWithEvents)
+      .mockResolvedValueOnce(scan as never)
+      .mockResolvedValueOnce({
+        ...scan,
+        events: [
+          {
+            ...scan.events[0],
+            metadata: { calculatedCostUsd: 0.5 },
+          },
+        ],
+      } as never)
+    const url = "http://localhost/api/scans/scan-1?workspaceId=ws-1"
+    const first = await GET(new Request(url), routeParams)
+    const second = await GET(
+      new Request(url, { headers: { "if-none-match": first.headers.get("ETag")! } }),
+      routeParams
+    )
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(304)
+  })
+
   it("returns an updated queued position when the scan row and events are unchanged", async () => {
     vi.mocked(getScanWithEvents).mockResolvedValue({
       id: "scan-1",
