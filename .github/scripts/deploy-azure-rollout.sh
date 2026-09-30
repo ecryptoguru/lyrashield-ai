@@ -344,7 +344,7 @@ step_verify-worker-queues-are-empty-before-traffic-promotion() {
   result=$(azure_vm_run_command_with_retry \
     --name "$WORKER_VM_NAME" --resource-group "$RG" \
     --command-id RunShellScript \
-    --scripts "printf '%s' '$worker_env_payload' | base64 -d > /tmp/lyrashield-worker-env.sh && printf '%s' '$payload' | base64 -d | LYRASHIELD_WORKER_ENV_LIB=/tmp/lyrashield-worker-env.sh sh -s -- --preflight" \
+    --scripts "printf '%s' '$worker_env_payload' | base64 -d > /tmp/lyrashield-worker-env.sh && printf '%s' '$payload' | base64 -d | LYRASHIELD_WORKER_ENV_LIB=/tmp/lyrashield-worker-env.sh timeout --kill-after=10s 150s sh -s -- --preflight" \
     --query 'value[0].message' --output tsv)
   printf '%s\n' "$result"
   grep -q "Worker empty-queue preflight passed" <<< "$result"
