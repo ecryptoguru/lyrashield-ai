@@ -257,7 +257,7 @@ test("launch checks refreshed secrets before any worker queue consumer starts", 
   assert.notEqual(run({ REDIS_URL: "rotated-endpoint" }).status, 0)
 })
 
-test("retained compatible candidate uses the image engine label during recovery", (t) => {
+test("retained compatible candidate uses the image engine label during claim recovery", (t) => {
   const f = setup(t)
   assert.equal(f.vm("claim").status, 0)
   assert.equal(f.local("quiesce").status, 0)
@@ -274,7 +274,7 @@ test("retained compatible candidate uses the image engine label during recovery"
     f.env.LYRASHIELD_WORKER_RUNTIME_CONFIG,
     readFileSync(f.env.LYRASHIELD_WORKER_RUNTIME_CONFIG, "utf8").replace(image, candidate)
   )
-  const result = f.vm("recovery")
+  const result = f.vm("claim", { TEST_OWNER: "123:2" })
   assert.equal(result.status, 0, result.stderr)
 })
 
