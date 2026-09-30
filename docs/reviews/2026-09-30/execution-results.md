@@ -71,3 +71,5 @@ Fresh required audits found vulnerable Undici and PyJWT leaves. Undici was patch
 - Keep optional optimization deferred when the measurement does not justify it. A later representative measurement may support a focused change.
 
 The advisory Markdown check passed for the three owned review documents using `--no-globs`; generated private browser failure traces are outside that scoped documentation gate.
+
+Docker fixture and validation delivery: [draft PR #875](https://github.com/ecryptoguru/lyrashield-ai/pull/875). Fixture credential corrections leave the tested application and engine identities unchanged; repeated scan admission now correctly exercises the free-network rate limit.

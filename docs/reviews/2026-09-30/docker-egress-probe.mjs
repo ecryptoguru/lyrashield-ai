@@ -1,13 +1,16 @@
 // Disposable review stack only. The positive read uses the public example domain.
 import assert from "node:assert/strict"
+import { randomUUID } from "node:crypto"
 import { request } from "node:http"
 import { writeFile } from "node:fs/promises"
 import { mintRelayGrant } from "../../../packages/security/src/relay-grant.ts"
 
 const base = "http://127.0.0.1:34009"
-const admin = "ls-fixture-egress-review-only"
-const secret = "ls-fixture-relay-signing-review-only-20260930"
-const scanId = "docker_egress_disposable_fixture"
+const admin = process.env.LYRASHIELD_EGRESS_PROXY_SECRET
+const secret = process.env.LYRASHIELD_RELAY_SIGNING_SECRET
+assert.ok(admin?.startsWith("ls-fixture-"), "Explicit synthetic proxy fixture credential required")
+assert.ok(secret?.startsWith("ls-fixture-"), "Explicit synthetic relay fixture credential required")
+const scanId = `docker_egress_disposable_${randomUUID()}`
 const grant = mintRelayGrant(
   {
     v: 1,

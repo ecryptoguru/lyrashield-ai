@@ -1,15 +1,20 @@
 // Disposable review stack only. Never point this fixture at a shared service.
 import assert from "node:assert/strict"
+import { randomBytes } from "node:crypto"
 import { mkdir, writeFile } from "node:fs/promises"
-import { resolve } from "node:path"
+import { resolve, sep } from "node:path"
 
 const base = process.env.DOCKER_HTTP_ORIGIN ?? "http://localhost:33009"
 assert.ok(
   ["http://localhost:33009", "http://localhost:33012"].includes(base),
   "Disposable origins only"
 )
-const output = process.env.DOCKER_HTTP_OUTPUT ?? "/tmp/ls-hardening-20260930/evidence"
-assert.ok(output.startsWith("/tmp/ls-hardening-20260930/evidence"), "Disposable artifact path only")
+const evidenceRoot = resolve("/tmp/ls-hardening-20260930/evidence")
+const output = resolve(process.env.DOCKER_HTTP_OUTPUT ?? evidenceRoot)
+assert.ok(
+  output === evidenceRoot || output.startsWith(evidenceRoot + sep),
+  "Disposable artifact path only"
+)
 const expectedTerminal = process.env.DOCKER_HTTP_EXPECT_TERMINAL ?? "COMPLETED"
 assert.ok(["COMPLETED", "FAILED"].includes(expectedTerminal))
 const cookieJar = new Map()
@@ -46,7 +51,7 @@ assert.match(unauthenticated.headers.get("location") ?? "", /sign-in/)
 
 const account = {
   email: `docker-http-${Date.now()}@example.invalid`,
-  password: "ls-fixture-password-review-only-20260930!",
+  password: randomBytes(24).toString("base64url") + "Aa9!",
   name: "Disposable Docker HTTP Fixture",
 }
 const signup = await request("/api/auth/sign-up/email", {
@@ -76,6 +81,8 @@ const signin = await request("/api/auth/sign-in/email", {
 })
 assert.equal(signin.status, 200, await signin.clone().text())
 assert.equal((await (await request("/api/auth/get-session")).json()).user.id, signupBody.user.id)
+
+console.log(JSON.stringify({ credentialChecksPassed: true, steps }))
 
 const workspaceResponse = await request("/api/workspaces", {
   method: "POST",

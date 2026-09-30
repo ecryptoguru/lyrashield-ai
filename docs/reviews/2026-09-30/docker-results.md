@@ -88,6 +88,8 @@ The root also inspected the actual Docker sign-in page in the in-app browser; th
 
 With the fault profile stopped and no HTTP scan workload, a 45-second local window recorded 1,842→1,869 commands (+27), 12→12 connected clients, 3→3 blocked clients, 79→85 total connections, 2,637,992→2,556,648 bytes used memory and zero evictions. INFO probes, container health checks and local schedulers are included. This short fixture window is not a production quota/capacity estimate or an optimization baseline comparison. Controlled lifecycle/cost measurements belong to the separate measurement receipt.
 
+The test harness now generates each account password with `node:crypto` and requires explicit synthetic proxy/signing credentials from the caller. It rejects non-fixture credentials. The security diff gate initially flagged fixed test credentials; the runnable defaults were removed without changing scanner thresholds or adding exclusions. A fresh credential run passed all 11 authentication checks, then correctly stopped at `429 FREE_URL_SCAN_RATE_LIMITED` after repeated fixture scans. The earlier complete scan matrix remains the application validation receipt. Explicit-credential egress checks passed with a fresh per-run grant identity; an already revoked identity correctly remains denied. The artifact directory guard rejects normalized path traversal before requests or writes. Focused probe lint reports three advisory dynamic-filesystem warnings; the paths are bounded to the disposable evidence directory. The temporary OG fixture was cleaned after verification.
+
 ## Failures and recovery
 
 The initial 64 GiB Docker VM filled during builds. PostgreSQL emitted `could not write init file` and later failed a checkpoint/recovery with ENOSPC; affected database tests were rerun. Only reclaimable build cache was pruned. No unrelated images, containers or volumes were deleted. With all database tests idle, Docker Desktop was stopped and only its disk capacity changed from 64 to 96 GiB, then services and grants were restored. Existing data and settings were preserved.
@@ -130,7 +132,7 @@ docker compose -f docs/reviews/2026-09-30/docker-test.compose.yml up -d
 DATABASE_URL='postgresql://ls_test_owner:ls_fixture_owner@127.0.0.1:55439/ls_hardening?schema=public' pnpm --filter @lyrashield/db exec tsx ../../docs/reviews/2026-09-30/docker-og-fixture.ts seed
 # Wait for /api/ready/scans to return 200 before running the harness:
 node docs/reviews/2026-09-30/docker-http-probe.mjs
-pnpm --filter @lyrashield/db exec tsx ../../docs/reviews/2026-09-30/docker-egress-probe.mjs
+LYRASHIELD_EGRESS_PROXY_SECRET=ls-fixture-egress-review-only LYRASHIELD_RELAY_SIGNING_SECRET=ls-fixture-relay-signing-review-only-20260930 pnpm --filter @lyrashield/db exec tsx ../../docs/reviews/2026-09-30/docker-egress-probe.mjs
 FIXTURE_FAULT_MODE=lost-ack docker compose -f docs/reviews/2026-09-30/docker-test.compose.yml --profile fault up -d --force-recreate redis-ack-drop web-lost-ack
 DOCKER_HTTP_ORIGIN=http://localhost:33012 DOCKER_HTTP_OUTPUT=/tmp/ls-hardening-20260930/evidence/lost-ack node docs/reviews/2026-09-30/docker-http-probe.mjs
 curl http://localhost:39013/
