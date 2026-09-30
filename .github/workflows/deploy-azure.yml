@@ -36,7 +36,7 @@ env:
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
   EGRESS_PROXY_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-egress-proxy
-  ENGINE_REVISION: c2fb19595bdefa0eda52d09ccd2aaeabcca575ae
+  ENGINE_REVISION: 12daa1d4c2b012826c4df576a66b3d7bf99057c3
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
@@ -352,6 +352,7 @@ jobs:
       (vars.AZURE_RESOURCE_GROUP != '') &&
       ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
     permissions:
+      actions: read
       contents: read
       id-token: write
     uses: ./.github/workflows/deploy-azure-runtime.yml

@@ -75,6 +75,7 @@ jobs:
       source_sha: ${{ github.event.workflow_run.head_sha }}
     secrets: inherit
     permissions:
+      actions: read
       contents: read
       id-token: write
       packages: write

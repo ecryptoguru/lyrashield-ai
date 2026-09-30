@@ -358,6 +358,8 @@ Detailed file and package mapping: [codebase.md](./codebase.md).
 
 ## 8. Current production evidence
 
+2026-09-30 cross-repository hardening is merged, but the production transition remains pending. See [the refreshed readiness record](docs/reviews/2026-09-30/production-readiness.md) for merged revisions, the release startup correction, current live baseline and the protected webhook-claims cutover gates.
+
 ### Standard/Luna acceptance — 2026-08-26
 
 - Scan ID: `cmt9el7p7000001hdjnjo90wk`

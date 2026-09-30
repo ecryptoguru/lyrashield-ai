@@ -307,3 +307,20 @@ test("scanner update never binds GitHub App credentials", () => {
   assert.doesNotMatch(update, /GITHUB_APP_ID|GITHUB_APP_SLUG|GITHUB_APP_PRIVATE_KEY|GITHUB_WEBHOOK_SECRET|GITHUB_APP_CLIENT_ID|GITHUB_APP_CLIENT_SECRET/)
   assert.match(scanner, /--remove-env-vars[\s\S]*GITHUB_APP_PRIVATE_KEY/)
 })
+
+// Reusable workflows cannot regain permissions removed by a caller job.
+// A missing actions grant stops the entire release before any job starts.
+test("release callers preserve read access through the nested maintenance workflow", () => {
+  const release = readFileSync(".github/workflows/release-production.yml", "utf8")
+  for (const [workflow, job] of [
+    [release, "deploy-azure"],
+    [caller, "deploy"],
+    [runtime, "deploy"],
+  ]) {
+    const section = workflow.split(`\n  ${job}:\n`)[1]?.split(/\n  [\w-]+:/)[0]
+    assert.ok(section, `expected ${job} job`)
+    const permissions = section.match(/^    permissions:\n((?:      .*\n)+)/m)?.[1]
+    assert.match(permissions || "", /^      actions: read$/m, `${job} must preserve actions read`)
+    assert.doesNotMatch(permissions, /^      actions: write$/m)
+  }
+})

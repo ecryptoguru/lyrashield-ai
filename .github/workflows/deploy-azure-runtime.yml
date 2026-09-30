@@ -37,6 +37,7 @@ on:
         type: string
 
 permissions:
+  actions: read
   contents: read
   id-token: write
 
@@ -88,6 +89,7 @@ jobs:
     # control-plane calls still have their own tighter limits below.
     timeout-minutes: 90
     permissions:
+      actions: read
       contents: read
       # v16 4.3: production Azure login moved from the long-lived
       # AZURE_CREDENTIALS service-principal secret to federated OIDC, the
