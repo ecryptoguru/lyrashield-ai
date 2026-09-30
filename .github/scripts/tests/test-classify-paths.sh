@@ -204,6 +204,19 @@ assert_eq "browser harness: app" "false" "$(get_field "$out" "app")"
 assert_eq "browser harness: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 assert_eq "browser harness: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
+# Tooling-only keeps legacy shared/release routing, but narrows validation.
+for path in .github/scripts/promote-worker-vm.sh .github/workflows/ci.yml ops/deployment/azure-vm-run-command.sh run-all-tests.mjs; do
+  out=$(run_classify "$path")
+  assert_eq "$path: tooling-only" "true" "$(get_field "$out" "tooling-only")"
+  assert_eq "$path: shared retained" "true" "$(get_field "$out" "shared")"
+done
+for paths in $'run-all-tests.mjs\napps/web/src/app/page.tsx' $'.github/workflows/ci.yml\ninfra/new.txt' $'.github/workflows/ci.yml\npnpm-lock.yaml' $'.github/workflows/ci.yml\nvitest.config.ts' $'.github/workflows/ci.yml\nops/worker/run-worker.sh' README.md; do
+  out=$(run_classify "$paths")
+  assert_eq "$paths: broad validation retained" "false" "$(get_field "$out" "tooling-only")"
+done
+out=$(run_classify $'.github/scripts/promote-worker-vm.sh\nREADME.md')
+assert_eq "tooling plus root docs" "true" "$(get_field "$out" "tooling-only")"
+
 echo "Results: $pass passed, $fail failed"
 if [[ "$fail" -gt 0 ]]; then
   exit 1
