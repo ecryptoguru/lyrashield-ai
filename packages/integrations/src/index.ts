@@ -80,6 +80,8 @@ export {
   isScanWorkerAvailable,
   assertScanWorkerAvailable,
   ScanWorkerUnavailableError,
+  QueueEnqueueUncertainError,
+  QUEUE_PRODUCER_TIMEOUT_MS,
   SCAN_ADMISSION_STOP_KEY,
   SCAN_WORKER_HEARTBEAT_MS,
   SCAN_WORKER_TTL_MS,
@@ -89,6 +91,7 @@ export {
   WEBHOOK_TRACK_RETRY_QUEUE_NAME,
   getWebhookTrackRetryQueue,
   enqueueWebhookTrackRetry,
+  webhookTrackRetryJobId,
   type WebhookTrackRetryJobData,
 } from "./queue"
 export { FIX_GENERATE_QUEUE_NAME, enqueueFixGenerate, type FixGenerateJobData } from "./queue"

@@ -8,6 +8,7 @@ import {
   normalizeProviderEvent,
   assertProviderCatalogEvent,
   runApplicableTracks,
+  getWebhookTrackRetrySchedule,
   WebhookAuthError,
   WebhookPayloadError,
 } from "@lyrashield/billing"
@@ -288,7 +289,10 @@ export async function POST(request: Request) {
           return NextResponse.json({ success: true }, { status: 200 })
         } else if (Date.now() - existingEvent.createdAt.getTime() < REPROCESS_MIN_AGE_MS) {
           logger.info("Concurrent duplicate delivery skipped", { provider, eventType, externalId })
-          return NextResponse.json({ success: true }, { status: 200 })
+          return NextResponse.json(
+            { success: false, error: { code: "WEBHOOK_PROCESSING_PENDING" } },
+            { status: 503 }
+          )
         } else {
           logger.info("Reprocessing stranded webhook event", { provider, eventType, externalId })
           claimedEventId = existingEvent.id
@@ -338,10 +342,17 @@ export async function POST(request: Request) {
       // redelivery remains the additional recovery path.
       for (const failure of summary.failures) {
         try {
-          await enqueueWebhookTrackRetry({
-            webhookEventId,
-            track: failure.track,
-          })
+          const schedule = await getWebhookTrackRetrySchedule(webhookEventId, failure.track)
+          if (schedule?.nextAttemptAt) {
+            await enqueueWebhookTrackRetry(
+              {
+                webhookEventId,
+                track: failure.track,
+                generation: schedule.generation,
+              },
+              { delayMs: Math.max(0, schedule.nextAttemptAt.getTime() - Date.now()) }
+            )
+          }
         } catch (enqueueError) {
           logger.error("Webhook track retry enqueue failed", {
             webhookEventId: claimedEventId,

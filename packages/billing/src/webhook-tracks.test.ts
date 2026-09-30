@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => ({
+  getSystemPrisma: () => prisma,
+  runWithWorkspaceContext: (_workspace: unknown, fn: () => unknown) => fn(),
   prisma: {
+    $queryRaw: vi.fn().mockResolvedValue([{ generation: 0, attempts: 1 }]),
+    $executeRaw: vi.fn().mockResolvedValue(1),
     webhookEvent: {
       findUnique: vi.fn(),
       updateMany: vi.fn(),
@@ -45,6 +49,9 @@ import {
   runApplicableTracks,
   retryWebhookTrack,
   WEBHOOK_TRACK_MAX_ATTEMPTS,
+  claimWebhookTrack,
+  markTrackFailed,
+  markTrackSucceeded,
   type WebhookTrackHandlers,
 } from "./webhook-tracks"
 import { normalizeProviderEvent } from "./domain-events"
@@ -55,6 +62,8 @@ const handlers: WebhookTrackHandlers = { dispatchAffiliate: vi.fn().mockResolved
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([{ generation: 0, attempts: 1 }])
+  vi.mocked(prisma.$executeRaw).mockResolvedValue(1)
   mockPrisma.webhookEventTrack.createMany.mockResolvedValue({ count: 0 })
   mockPrisma.webhookEventTrack.findMany.mockResolvedValue([])
   mockPrisma.webhookEventTrack.findUnique.mockResolvedValue(null)
@@ -292,154 +301,89 @@ describe("c) Razorpay Track B — first + recurring payments each mint a license
   })
 })
 
-describe("runApplicableTracks / retryWebhookTrack — durable state machine", () => {
-  it("a) billing ok + license handler fails → failed track recorded, not all-succeeded", async () => {
-    issueLicenseMock.mockRejectedValue(new Error("signing key unavailable"))
-    mockPrisma.webhookEventTrack.count.mockResolvedValue(1) // unsatisfied track remains
-
-    const { event, payload } = polarLocalOrder("ord_FAIL")
+describe("durable webhook claims", () => {
+  it("reserves attempts before handler execution and fences a successful receipt", async () => {
+    const { event, payload } = polarLocalOrder("ord_success")
     const summary = await runApplicableTracks({
-      webhookEventId: "evt_fail",
+      webhookEventId: "evt",
       event,
       rawPayload: payload,
       handlers,
     })
-
-    expect(summary.allSucceeded).toBe(false)
-    expect(summary.failures.map((f) => f.track)).toContain("license")
-    expect(summary.succeeded).toBe(2) // billing + affiliate
-    expect(mockPrisma.webhookEvent.updateMany).not.toHaveBeenCalled()
-    // attempts incremented to 1, status failed, bounded error stored.
-    const failCall = mockPrisma.webhookEventTrack.updateMany.mock.calls.find(
-      (c: [{ data: { status?: string } }]) => c[0].data.status === "failed"
-    )
-    expect(failCall[0].data.attempts).toBe(1)
-    expect(failCall[0].data.lastError).toBe("signing key unavailable")
+    expect(summary.succeeded).toBe(3)
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(3)
+    expect(prisma.$executeRaw).toHaveBeenCalled()
+    const claimSql = vi.mocked(prisma.$queryRaw).mock.calls[0]![0] as unknown as string[]
+    expect(claimSql.join(" ")).toContain("attempts = attempts + 1")
   })
 
-  it("already-succeeded tracks are skipped on reprocess", async () => {
-    mockPrisma.webhookEventTrack.findMany.mockResolvedValue([
-      { track: "billing", status: "succeeded", attempts: 1 },
-      { track: "license", status: "succeeded", attempts: 1 },
-      { track: "affiliate", status: "succeeded", attempts: 1 },
-    ])
-    mockPrisma.webhookEventTrack.count.mockResolvedValue(0)
-
-    const { event, payload } = polarLocalOrder("ord_DONE")
-    const summary = await runApplicableTracks({
-      webhookEventId: "evt_done",
-      event,
-      rawPayload: payload,
-      handlers,
-    })
-
-    expect(summary.attempted).toBe(0)
-    expect(summary.allSucceeded).toBe(true)
-    expect(processPolarEventMock).not.toHaveBeenCalled()
+  it("busy and terminal claims never execute a handler", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([])
+    mockPrisma.webhookEventTrack.findUnique.mockResolvedValue({ status: "processing" })
+    const { event, payload } = polarLocalOrder("ord_busy")
+    expect(
+      (await runApplicableTracks({ webhookEventId: "evt", event, rawPayload: payload, handlers }))
+        .attempted
+    ).toBe(0)
     expect(issueLicenseMock).not.toHaveBeenCalled()
+    mockPrisma.webhookEventTrack.findUnique.mockResolvedValue({ status: "succeeded" })
+    expect(await claimWebhookTrack("evt", "billing")).toEqual({
+      outcome: "terminal",
+      status: "succeeded",
+    })
   })
 
-  it("h) retryWebhookTrack dead-letters at the attempt cap", async () => {
-    mockPrisma.webhookEvent.findUnique.mockResolvedValue({
-      provider: "polar",
-      externalId: "ord_DL",
-      eventType: "order.paid",
-      payload: polarLocalOrder("ord_DL").payload,
-    })
-    issueLicenseMock.mockRejectedValue(new Error("still failing"))
-
-    // Row sits at attempts = MAX-1 with status failed.
+  it("historical null-due rows never gain implicit replay permission", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([])
     mockPrisma.webhookEventTrack.findUnique.mockResolvedValue({
-      track: "license",
-      status: "failed",
-      attempts: WEBHOOK_TRACK_MAX_ATTEMPTS - 1,
-    })
-
-    const outcome = await retryWebhookTrack({
-      webhookEventId: "evt_dl",
-      track: "license",
-      handlers,
-    })
-
-    expect(outcome).toBe("dead_letter")
-    const dlCall = mockPrisma.webhookEventTrack.updateMany.mock.calls.find(
-      (c: [{ data: { status?: string } }]) => c[0].data.status === "dead_letter"
-    )
-    expect(dlCall).toBeTruthy()
-    expect(dlCall[0].data.attempts).toBe(WEBHOOK_TRACK_MAX_ATTEMPTS)
-    expect(dlCall[0].data.lastError).toBe("still failing")
-  })
-
-  it("retry job skips terminal states without executing handlers", async () => {
-    for (const [status, expected] of [
-      ["succeeded", "skipped_succeeded"],
-      ["dead_letter", "skipped_dead_letter"],
-    ] as const) {
-      vi.clearAllMocks()
-      mockPrisma.webhookEvent.findUnique.mockResolvedValue({
-        provider: "polar",
-        externalId: "x",
-        eventType: "order.paid",
-        payload: {},
-      })
-      mockPrisma.webhookEventTrack.findUnique.mockResolvedValue({
-        track: "license",
-        status,
-        attempts: 5,
-      })
-
-      const outcome = await retryWebhookTrack({
-        webhookEventId: "evt_term",
-        track: "license",
-        handlers,
-      })
-      expect(outcome).toBe(expected)
-      expect(issueLicenseMock).not.toHaveBeenCalled()
-    }
-  })
-
-  it("retry job removes stale rows whose track no longer applies", async () => {
-    mockPrisma.webhookEvent.findUnique.mockResolvedValue({
-      provider: "razorpay",
-      externalId: "evt_na",
-      eventType: "subscription.activated",
-      payload: {
-        event: "subscription.activated",
-        created_at: 1,
-        payload: { subscription: { entity: { id: "sub_NA" } } },
-      },
-    })
-    mockPrisma.webhookEventTrack.findUnique.mockResolvedValue({
-      track: "license",
       status: "pending",
       attempts: 0,
+      nextAttemptAt: null,
     })
-
-    const outcome = await retryWebhookTrack({
-      webhookEventId: "evt_na",
-      track: "license",
-      handlers,
-    })
-
-    expect(outcome).toBe("not_applicable")
-    expect(mockPrisma.webhookEventTrack.delete).toHaveBeenCalled()
+    expect(await claimWebhookTrack("legacy", "affiliate")).toEqual({ outcome: "busy" })
+    for (const call of vi.mocked(prisma.$executeRaw).mock.calls) {
+      const sql = (call[0] as unknown as string[]).join(" ")
+      expect(sql).not.toContain('SET "nextAttemptAt" = now()')
+    }
+    expect(handlers.dispatchAffiliate).not.toHaveBeenCalled()
   })
 
-  it("missing event or row → 'missing' outcome, no execution", async () => {
-    mockPrisma.webhookEvent.findUnique.mockResolvedValue(null)
-    expect(await retryWebhookTrack({ webhookEventId: "gone", track: "billing", handlers })).toBe(
-      "missing"
-    )
-
+  it("fifth reservation dead-letters without extending the total budget", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      { generation: 4, attempts: WEBHOOK_TRACK_MAX_ATTEMPTS },
+    ])
     mockPrisma.webhookEvent.findUnique.mockResolvedValue({
       provider: "polar",
-      externalId: "x",
+      externalId: "ord",
       eventType: "order.paid",
-      payload: {},
+      payload: polarLocalOrder("ord").payload,
+      workspaceId: null,
     })
-    mockPrisma.webhookEventTrack.findUnique.mockResolvedValue(null)
+    issueLicenseMock.mockRejectedValue(new Error("still failing"))
     expect(
-      await retryWebhookTrack({ webhookEventId: "evt_norow", track: "license", handlers })
-    ).toBe("missing")
+      await retryWebhookTrack({ webhookEventId: "evt", track: "license", generation: 4, handlers })
+    ).toBe("dead_letter")
+    const fail = vi.mocked(prisma.$executeRaw).mock.calls.at(-1)!
+    expect(fail).toContain("dead_letter")
+    expect(fail).toContain(true)
+  })
+
+  it("stale ownership cannot complete or downgrade a terminal receipt", async () => {
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(0)
+    const claim = {
+      webhookEventId: "evt",
+      track: "billing" as const,
+      generation: 1,
+      attempts: 2,
+      token: "stale",
+    }
+    expect(await markTrackSucceeded(claim)).toBe(false)
+    expect(await markTrackFailed(claim, new Error("late"))).toBe(false)
+    for (const call of vi.mocked(prisma.$executeRaw).mock.calls) {
+      const sql = (call[0] as unknown as string[]).join(" ")
+      expect(sql).toContain("status = 'processing'")
+      expect(sql).toContain('"leaseExpiresAt" > now()')
+      expect(call).toContain("stale")
+    }
   })
 })
