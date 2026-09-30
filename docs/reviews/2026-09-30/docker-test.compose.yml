@@ -15,7 +15,49 @@ x-runtime: &runtime
   POLAR_LOCAL_BILLING_ADMISSION: "off"
   RAZORPAY_LOCAL_BILLING_ADMISSION: "off"
   TRUSTED_PROXY_IP_HEADER: x-forwarded-for
+  IP_HASH_SALT: ls-fixture-ip-hash-salt-review-only-20260930
 services:
+  marketing:
+    image: ls-hardening-20260930:marketing
+    ports: ["127.0.0.1:33010:8787"]
+    volumes: ["marketing_state:/state"]
+    networks: [review]
+  redis-ack-drop:
+    image: node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
+    command: ["node", "/fixture/docker-redis-ack-drop.mjs"]
+    profiles: ["fault"]
+    environment:
+      FIXTURE_FAULT_MODE: ${FIXTURE_FAULT_MODE:-lost-ack}
+    volumes:
+      - ./docker-redis-ack-drop.mjs:/fixture/docker-redis-ack-drop.mjs:ro
+    ports: ["127.0.0.1:39013:8080"]
+    networks: [review]
+  web-lost-ack:
+    image: ls-hardening-20260930:web
+    environment:
+      <<: *runtime
+      REDIS_URL: redis://:ls_fixture_redis@redis-ack-drop:6379
+      BETTER_AUTH_URL: http://localhost:33012
+      NEXT_PUBLIC_APP_URL: http://localhost:33012
+      ADDITIONAL_TRUSTED_ORIGINS: http://localhost:33009,http://localhost:33012
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    ports: ["127.0.0.1:33012:3000"]
+    networks: [review]
+    profiles: ["fault"]
+  scanner:
+    image: ls-hardening-20260930:web
+    environment:
+      <<: *runtime
+      NEXT_PUBLIC_APP_URL: http://localhost:33011
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      # Official public test key, never a production Turnstile secret.
+      TURNSTILE_SECRET_KEY: 1x0000000000000000000000000000000AA
+    ports: ["127.0.0.1:33011:3000"]
+    networks: [review]
   web:
     image: ls-hardening-20260930:web
     environment:
@@ -85,3 +127,4 @@ networks:
 volumes:
   worker_runs:
   worker_evidence:
+  marketing_state:
