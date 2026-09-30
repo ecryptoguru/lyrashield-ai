@@ -475,6 +475,15 @@ jobs:
           fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
+      - name: Prove metering and queue invariants with disposable services
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BILLING_METER_POSTGRES_TEST=1 pnpm exec vitest run packages/billing/src/usage/meter.postgres.test.ts
+          WEBHOOK_TRACK_POSTGRES_REDIS_TEST=1 pnpm exec vitest run apps/worker/src/jobs/webhook-track-retry.postgres-redis.test.ts
+          BULLMQ_PRODUCER_REDIS_TEST=1 BULLMQ_TEST_REDIS_URL="$REDIS_URL" pnpm exec vitest run packages/integrations/src/queue.producer.redis.test.ts
+
       - name: Upload informational web coverage summary
         if: always() && (needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true')
         continue-on-error: true
