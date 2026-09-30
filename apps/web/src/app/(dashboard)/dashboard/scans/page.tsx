@@ -86,6 +86,13 @@ export default async function ScansPage({
   // first client render matches the server-rendered HTML (hydration parity).
   const stateFilter = parseScanStateFilter(params.state)
   const limit = 25
+  const listQuery = {
+    workspaceId,
+    limit,
+    ...(scanStateStatuses(stateFilter)
+      ? { statuses: scanStateStatuses(stateFilter) as never as ScanStatus[] }
+      : {}),
+  }
   // Scan rows come from listScans so the SSR page and the /api/scans poll share
   // one query shape and one projection — they previously drifted apart.
   const [listedTargets, { items, nextCursor }] = await Promise.all([
@@ -96,12 +103,8 @@ export default async function ScansPage({
       take: 200,
     }),
     listScans({
-      workspaceId,
+      ...listQuery,
       ...(params.target ? { targetId: params.target } : {}),
-      ...(scanStateStatuses(stateFilter)
-        ? { statuses: scanStateStatuses(stateFilter) as never as ScanStatus[] }
-        : {}),
-      limit,
     }),
   ])
   // A recent scan can reference a target beyond the first 200 picker entries.
@@ -136,7 +139,7 @@ export default async function ScansPage({
   let effectiveItems = items
   let effectiveNextCursor = nextCursor
   if (params.target && !targetFilterValid) {
-    const unscoped = await listScans({ workspaceId, limit })
+    const unscoped = await listScans(listQuery)
     effectiveItems = unscoped.items
     effectiveNextCursor = unscoped.nextCursor
   }
@@ -192,6 +195,7 @@ export default async function ScansPage({
         initialMode={params.mode}
         initialStateFilter={stateFilter}
         initialTargetFilter={targetFilterValid ? (params.target ?? "") : ""}
+        initialFilterUnavailable={Boolean(params.target) && !targetFilterValid}
         canManageBilling={canManageBilling}
       />
     </div>
