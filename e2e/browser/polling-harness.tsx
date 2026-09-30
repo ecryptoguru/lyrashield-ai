@@ -108,6 +108,10 @@ function ScopedClientHarness() {
           ]}
           initialData={[{ ...item, id: `scope-row-${workspaceId}`, status: "COMPLETED" }]}
           initialNextCursor={null}
+          initialShowCreate={new URLSearchParams(location.search).has("unavailable")}
+          initialRecoveryUnavailable={new URLSearchParams(location.search).has(
+            workspaceId === "ws-a" ? "unavailable" : "incoming-unavailable"
+          )}
         />
       </WebMcpReceiptProvider>
     </>
