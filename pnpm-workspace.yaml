@@ -39,9 +39,10 @@ overrides:
   "hono@<4.13.5": "^4.13.5"
   # Kept pending auth-owner confirmation; 0.28.17 is the known fixed line.
   kysely: "0.28.17"
-  # GHSA-rgw5-rvv9-x895: patch brace-expansion 1.x and 5.x without changing majors.
+  # GHSA-rgw5-rvv9-x895, GHSA-qhr7-859c-m2p7 and GHSA-6j4f-fj2g-mc7p:
+  # patch brace-expansion 1.x and 5.x without changing majors.
   "brace-expansion@<1.1.18": "^1.1.21"
-  "brace-expansion@>=5 <5.0.9": "^5.0.9"
+  "brace-expansion@>=5 <5.0.11": "^5.0.11"
   # GHSA-7r86-cg39-jmmj and GHSA-23c5-xmqv-rm74: keep affected minimatch lines patched.
   "minimatch@<3.1.4": "^3.1.5"
   "minimatch@>=10 <10.2.3": "^10.2.3"
