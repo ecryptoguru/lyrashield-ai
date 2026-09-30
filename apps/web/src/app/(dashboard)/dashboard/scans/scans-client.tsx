@@ -158,7 +158,9 @@ export function ScansClient({
   const [eligibility, setEligibility] = useState<ScanEligibilityState>({ status: "idle" })
   const [eligibilityAttempt, setEligibilityAttempt] = useState(0)
   const [startingTrial, setStartingTrial] = useState(false)
-  const scanSubmissionLock = useRef(false)
+  const scanSubmissionLock = useRef({ current: false })
+  const scopeGenerationRef = useRef(0)
+  const operationRequestRef = useRef(0)
   const [pendingScanSubmission, setPendingScanSubmission] = useState<PendingScanSubmission | null>(
     null
   )
@@ -180,6 +182,8 @@ export function ScansClient({
     setModeResetNotice,
   })
   async function handleCreateScan(startNewScan = false) {
+    const scopeGeneration = scopeGenerationRef.current
+    const isCurrentScope = () => scopeGeneration === scopeGenerationRef.current
     setErrorCode(null)
     if (!selectedTarget) {
       setError("Select a target to scan")
@@ -198,7 +202,7 @@ export function ScansClient({
       return
     }
 
-    await runScanSubmission(scanSubmissionLock, async () => {
+    await runScanSubmission(scanSubmissionLock.current, async () => {
       setCreating(true)
       if (startNewScan) setForceNewAfterRecovery(false)
       setError(null)
@@ -255,8 +259,9 @@ export function ScansClient({
               operationId
             )
             submission = updated ?? { ...submission, operationId }
-            setPendingScanSubmission(submission)
           }
+          if (!isCurrentScope()) return
+          setPendingScanSubmission(submission)
           setError(err instanceof Error ? err.message : "Failed to create scan")
           setErrorCode(err instanceof ApiError ? err.code : null)
           setScanRecoveryError(
@@ -274,10 +279,10 @@ export function ScansClient({
           scanId: result.id,
           ...(operationId ? { operationId } : {}),
         }
-        setPendingScanSubmission(accepted)
         try {
           recordAcceptedScan(scanSubmissionScope, submission.idempotencyKey, result.id, operationId)
         } catch (cause) {
+          if (!isCurrentScope()) return
           setScanRecoveryUnavailable(true)
           setScanRecoveryError(
             cause instanceof Error
@@ -285,11 +290,15 @@ export function ScansClient({
               : "Scan accepted; recovery details could not be saved."
           )
         }
+        // A late acceptance remains saved under its original scope for recovery.
+        if (!isCurrentScope()) return
+        setPendingScanSubmission(accepted)
         setScans((prev) => (prev.some((scan) => scan.id === result.id) ? prev : [result, ...prev]))
         try {
           clearPendingScanSubmission(scanSubmissionScope, submission.idempotencyKey)
           setPendingScanSubmission(null)
         } catch (cause) {
+          if (!isCurrentScope()) return
           setScanRecoveryUnavailable(true)
           setScanRecoveryError(
             cause instanceof Error
@@ -314,12 +323,13 @@ export function ScansClient({
         })
         setForceNewAfterRecovery(false)
       } catch (err) {
+        if (!isCurrentScope()) return
         setScanRecoveryUnavailable(true)
         setScanRecoveryError(
           err instanceof Error ? err.message : "Could not save scan recovery information."
         )
       } finally {
-        setCreating(false)
+        if (isCurrentScope()) setCreating(false)
       }
     })
   }
@@ -389,8 +399,16 @@ export function ScansClient({
   )
 
   useEffect(() => {
+    const scopeGeneration = scopeGenerationRef
+    ++scopeGeneration.current
+    // An older request's finally must not unlock a newer scope's submission.
+    scanSubmissionLock.current = { current: false }
     // Browser session storage is external state and is only available after hydration.
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCreating(false)
+    setCheckingScanOperation(false)
+    setError(null)
+    setErrorCode(null)
     setScanOperationStatus(null)
     setScanRecoveryError(null)
     setScanRecoveryUnavailable(false)
@@ -404,18 +422,29 @@ export function ScansClient({
         cause instanceof Error ? cause.message : "Saved scan recovery data could not be read."
       )
     }
+    return () => {
+      ++scopeGeneration.current
+    }
   }, [principalId, workspaceId])
 
   async function checkPendingScanOperation(submission: PendingScanSubmission) {
     if (!submission.operationId) return
+    const scopeGeneration = scopeGenerationRef.current
+    const requestId = ++operationRequestRef.current
+    const isCurrentOperation = () =>
+      scopeGeneration === scopeGenerationRef.current && requestId === operationRequestRef.current
+    const operationScope: ScanSubmissionScope = {
+      principalId: submission.principalId,
+      workspaceId: submission.workspaceId,
+      surface: submission.surface,
+    }
     setCheckingScanOperation(true)
     setScanRecoveryError(null)
     try {
       const status = await apiGet(
-        `/api/agent-operations/${encodeURIComponent(submission.operationId)}?workspaceId=${encodeURIComponent(workspaceId)}`,
+        `/api/agent-operations/${encodeURIComponent(submission.operationId)}?workspaceId=${encodeURIComponent(submission.workspaceId)}`,
         { schema: scanOperationStatusSchema }
       )
-      setScanOperationStatus(status)
       if (status.status === "COMPLETED" && status.resultLocation) {
         const accepted = {
           ...submission,
@@ -423,15 +452,15 @@ export function ScansClient({
           scanId: status.resultLocation,
           operationId: status.operationId,
         }
-        setPendingScanSubmission(accepted)
         try {
           recordAcceptedScan(
-            scanSubmissionScope,
+            operationScope,
             submission.idempotencyKey,
             status.resultLocation,
             status.operationId
           )
         } catch (cause) {
+          if (!isCurrentOperation()) return
           setScanRecoveryUnavailable(true)
           setScanRecoveryError(
             cause instanceof Error
@@ -439,19 +468,25 @@ export function ScansClient({
               : "Scan accepted; recovery details could not be saved."
           )
         }
+        if (!isCurrentOperation()) return
+        setScanOperationStatus(status)
+        setPendingScanSubmission(accepted)
         return
       }
+      if (!isCurrentOperation()) return
+      setScanOperationStatus(status)
       setScanRecoveryError(
         status.recovery === "retry_new_key"
           ? "The previous attempt was not submitted. Review the request before starting a new attempt."
           : "The previous scan start is still unresolved. Check its status again."
       )
     } catch (cause) {
+      if (!isCurrentOperation()) return
       setScanRecoveryError(
         cause instanceof Error ? cause.message : "Could not check the scan status."
       )
     } finally {
-      setCheckingScanOperation(false)
+      if (isCurrentOperation()) setCheckingScanOperation(false)
     }
   }
 

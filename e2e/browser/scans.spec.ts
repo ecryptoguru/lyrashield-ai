@@ -347,3 +347,325 @@ for (const [action, read] of [
     await expect(page.locator('a[href="/dashboard/scans/stale-read"]')).toHaveCount(0)
   })
 }
+
+function responseGate() {
+  let release!: () => void
+  const promise = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  return { promise, release }
+}
+const lateAcceptedScan = {
+  id: "accepted-in-old-scope",
+  status: "QUEUED",
+  goal: "TEST_APP",
+  mode: "STANDARD",
+  triggerType: "MANUAL",
+  startedAt: null,
+  endedAt: null,
+  summary: null,
+  errorCategory: null,
+  errorMessage: null,
+  target: {
+    id: "target-a",
+    name: "Example repository",
+    type: "REPO",
+    url: null,
+    apiSpecUrl: null,
+    repoFullName: "example/repository",
+  },
+  createdAt: "2026-09-19T10:00:00.000Z",
+}
+
+for (const change of ["workspace", "principal"] as const) {
+  test(`late accepted creation stays recoverable in its original scope after a ${change} change`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await composerRoutes(page)
+    await page.route("**/api/scans?**", (route) =>
+      route.fulfill({ json: { success: true, data: { items: [], nextCursor: null } } })
+    )
+    const held = responseGate()
+    const finished = responseGate()
+    let started = false
+    await page.route("**/api/scans", async (route) => {
+      started = true
+      await held.promise
+      await route.fulfill({ json: { success: true, data: lateAcceptedScan } })
+      finished.release()
+    })
+    await page.goto("polling.html?polling=scope")
+    await page.getByRole("button", { name: /^New scan$/i }).click()
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^Start scan$/i })
+      .click()
+    await expect.poll(() => started).toBe(true)
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await page.getByRole("button", { name: `Switch ${change}`, exact: true }).click()
+    await expect(page.getByLabel("Current scope")).toHaveText(
+      change === "workspace" ? "user-a:ws-b" : "user-b:ws-a"
+    )
+    await page.getByRole("button", { name: /^New scan$/i }).click()
+    const dialog = page.getByRole("dialog")
+    await dialog
+      .getByLabel("Target", { exact: true })
+      .selectOption(change === "workspace" ? "target-b" : "target-a")
+    await dialog.getByRole("radio", { name: /^Scan changes:/ }).click()
+    await dialog.getByLabel(/^Base revision/).fill("new-scope-base")
+    await dialog.getByLabel(/^Head revision/).fill("new-scope-head")
+    held.release()
+    await finished.promise
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const stored = sessionStorage.getItem(
+            "lyrashield:scan-submission:v1:user-a:ws-a:dashboard"
+          )
+          return stored ? JSON.parse(stored).state : null
+        })
+      )
+      .toBe("accepted")
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByLabel(/^Base revision/)).toHaveValue("new-scope-base")
+    await expect(dialog.getByLabel(/^Head revision/)).toHaveValue("new-scope-head")
+    await expect(page.locator('a[href="/dashboard/scans/accepted-in-old-scope"]')).toHaveCount(0)
+    if (change === "workspace") {
+      await page.screenshot({ path: "test-results/scan-late-workspace-acceptance.png" })
+    }
+    expect(
+      await page.evaluate(
+        () =>
+          JSON.parse(sessionStorage.getItem("lyrashield:scan-submission:v1:user-a:ws-a:dashboard")!)
+            .scanId
+      )
+    ).toBe("accepted-in-old-scope")
+    await page.keyboard.press("Escape")
+    await page.getByRole("button", { name: `Switch ${change}`, exact: true }).click()
+    await expect(page.getByLabel("Current scope")).toHaveText("user-a:ws-a")
+    await expect(page.getByRole("link", { name: "View scan", exact: true })).toHaveAttribute(
+      "href",
+      "/dashboard/scans/accepted-in-old-scope"
+    )
+  })
+
+  test(`late operation completion preserves original recovery without replacing the ${change} scope check`, async ({
+    page,
+  }) => {
+    await page.addInitScript((change) => {
+      const original = {
+        version: 1,
+        principalId: "user-a",
+        workspaceId: "ws-a",
+        surface: "dashboard",
+        requestIdentity: "{}",
+        idempotencyKey: "12345678-1234-4234-9234-123456789abc",
+        state: "pending",
+        operationId: "operation-a",
+      }
+      sessionStorage.setItem(
+        "lyrashield:scan-submission:v1:user-a:ws-a:dashboard",
+        JSON.stringify(original)
+      )
+      const principalId = change === "principal" ? "user-b" : "user-a"
+      const workspaceId = change === "workspace" ? "ws-b" : "ws-a"
+      sessionStorage.setItem(
+        `lyrashield:scan-submission:v1:${principalId}:${workspaceId}:dashboard`,
+        JSON.stringify({ ...original, principalId, workspaceId, operationId: "operation-b" })
+      )
+    }, change)
+    const oldHeld = responseGate()
+    const newHeld = responseGate()
+    const oldFinished = responseGate()
+    const started: string[] = []
+    await page.route("**/api/agent-operations/**", async (route) => {
+      const old = new URL(route.request().url()).pathname.endsWith("operation-a")
+      started.push(old ? "old" : "new")
+      await (old ? oldHeld.promise : newHeld.promise)
+      await route.fulfill({
+        json: {
+          success: true,
+          data: {
+            operationId: old ? "operation-a" : "operation-b",
+            status: old ? "COMPLETED" : "EXECUTING",
+            reasonCode: null,
+            resultLocation: old ? "accepted-in-old-scope" : null,
+            recovery: old ? "none" : "poll",
+            createdAt: lateAcceptedScan.createdAt,
+            updatedAt: lateAcceptedScan.createdAt,
+          },
+        },
+      })
+      if (old) oldFinished.release()
+    })
+    await page.goto("polling.html?polling=scope")
+    await page.getByRole("button", { name: "Check previous scan", exact: true }).click()
+    await expect.poll(() => started).toEqual(["old"])
+    await page.getByRole("button", { name: `Switch ${change}`, exact: true }).click()
+    await page.getByRole("button", { name: "Check previous scan", exact: true }).click()
+    await expect.poll(() => started).toEqual(["old", "new"])
+    oldHeld.release()
+    await oldFinished.promise
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(
+              sessionStorage.getItem("lyrashield:scan-submission:v1:user-a:ws-a:dashboard")!
+            ).state
+        )
+      )
+      .toBe("accepted")
+    await expect(page.getByRole("button", { name: "Checking status…", exact: true })).toBeDisabled()
+    await expect(page.getByRole("link", { name: "View scan", exact: true })).toHaveCount(0)
+    newHeld.release()
+    await expect(page.getByRole("alert")).toContainText("The scan operation is still processing.")
+  })
+}
+
+test("late acceptance cannot unlock or reset a new workspace submission", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await composerRoutes(page)
+  await page.route("**/api/scans?**", (route) =>
+    route.fulfill({ json: { success: true, data: { items: [], nextCursor: null } } })
+  )
+  const oldHeld = responseGate()
+  const newHeld = responseGate()
+  const requests: string[] = []
+  await page.route("**/api/scans", async (route) => {
+    const workspace = route.request().postDataJSON().workspaceId as string
+    requests.push(workspace)
+    await (workspace === "ws-a" ? oldHeld.promise : newHeld.promise)
+    await route.fulfill({
+      json: {
+        success: true,
+        data: {
+          ...lateAcceptedScan,
+          id: workspace === "ws-a" ? "accepted-in-old-scope" : "accepted-in-new-scope",
+          target: {
+            ...lateAcceptedScan.target,
+            id: workspace === "ws-a" ? "target-a" : "target-b",
+          },
+        },
+      },
+    })
+  })
+  await page.goto("polling.html?polling=scope")
+  await page.getByRole("button", { name: /^New scan$/i }).click()
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^Start scan$/i })
+    .click()
+  await expect.poll(() => requests).toEqual(["ws-a"])
+  await page.keyboard.press("Escape")
+  await page.getByRole("button", { name: "Switch workspace", exact: true }).click()
+  await page.getByRole("button", { name: /^New scan$/i }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.getByLabel("Target", { exact: true }).selectOption("target-b")
+  await dialog.getByRole("button", { name: /^Start scan$/i }).click()
+  await expect.poll(() => requests).toEqual(["ws-a", "ws-b"])
+  oldHeld.release()
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const stored = sessionStorage.getItem("lyrashield:scan-submission:v1:user-a:ws-a:dashboard")
+        return stored ? JSON.parse(stored).state : null
+      })
+    )
+    .toBe("accepted")
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole("button", { name: "Starting…", exact: true })).toBeDisabled()
+  await expect(page.locator('a[href="/dashboard/scans/accepted-in-old-scope"]')).toHaveCount(0)
+  newHeld.release()
+  await expect(dialog).toHaveCount(0)
+  await expect(
+    page.locator('a[href="/dashboard/scans/accepted-in-new-scope"]').first()
+  ).toBeVisible()
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("lyrashield:scan-submission:v1:user-a:ws-b:dashboard")
+    )
+  ).toBeNull()
+})
+
+test("accepted creation after unmount remains saved for original scope recovery", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await composerRoutes(page)
+  const held = responseGate()
+  let started = false
+  await page.route("**/api/scans", async (route) => {
+    started = true
+    await held.promise
+    await route.fulfill({ json: { success: true, data: lateAcceptedScan } })
+  })
+  await page.goto("polling.html?polling=scope")
+  await page.getByRole("button", { name: /^New scan$/i }).click()
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^Start scan$/i })
+    .click()
+  await expect.poll(() => started).toBe(true)
+  await page.evaluate(() => window.dispatchEvent(new Event("test:unmount")))
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  held.release()
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const stored = sessionStorage.getItem("lyrashield:scan-submission:v1:user-a:ws-a:dashboard")
+        return stored ? JSON.parse(stored).scanId : null
+      })
+    )
+    .toBe("accepted-in-old-scope")
+})
+
+test("late ambiguous creation saves its original operation without showing a new scope error", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await composerRoutes(page)
+  const held = responseGate()
+  let started = false
+  await page.route("**/api/scans", async (route) => {
+    started = true
+    await held.promise
+    await route.fulfill({
+      status: 503,
+      json: {
+        success: false,
+        error: {
+          code: "WORKER_UNAVAILABLE",
+          message: "Check the original operation before retrying.",
+          details: { operationId: "original-operation" },
+        },
+      },
+    })
+  })
+  await page.goto("polling.html?polling=scope")
+  await page.getByRole("button", { name: /^New scan$/i }).click()
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^Start scan$/i })
+    .click()
+  await expect.poll(() => started).toBe(true)
+  await page.keyboard.press("Escape")
+  await page.getByRole("button", { name: "Switch workspace", exact: true }).click()
+  held.release()
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const stored = sessionStorage.getItem("lyrashield:scan-submission:v1:user-a:ws-a:dashboard")
+        return stored ? JSON.parse(stored).operationId : null
+      })
+    )
+    .toBe("original-operation")
+  await expect(page.getByRole("alert")).toHaveCount(0)
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("lyrashield:scan-submission:v1:user-a:ws-b:dashboard")
+    )
+  ).toBeNull()
+})
