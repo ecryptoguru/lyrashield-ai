@@ -475,6 +475,13 @@ jobs:
           fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
+      - name: Prove durable metering receipts with disposable PostgreSQL
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BILLING_METER_POSTGRES_TEST=1 pnpm exec vitest run packages/billing/src/usage/meter.postgres.test.ts
+
       - name: Upload informational web coverage summary
         if: always() && (needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true')
         continue-on-error: true

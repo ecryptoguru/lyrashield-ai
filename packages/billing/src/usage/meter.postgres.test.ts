@@ -199,6 +199,7 @@ describe.skipIf(!enabled)("agent-minute metering against disposable PostgreSQL",
     const runtimeDatabase = new URL(runtimeUrl)
     const localHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "postgres"])
     const disposableDatabases = new Set(["lyrashield_test", "ls_hardening"])
+    if (process.env.CI === "true") disposableDatabases.add("lyrashield")
     if (
       !localHosts.has(ownerDatabase.hostname) ||
       !localHosts.has(runtimeDatabase.hostname) ||
