@@ -61,20 +61,33 @@ set -eu
 printf '%s\n' "$*" >> "$MOCK_SYSTEMCTL_LOG"
 printf 'systemctl %s\n' "$*" >> "$MOCK_ORDER_LOG"
 command=$1
+quiet=0
+case "$*" in *--quiet*) quiet=1 ;; esac
 shift
 [ "${1:-}" != "--quiet" ] || shift
 unit=${1:-}
 case "$command:$unit" in
   is-active:lyrashield-worker-egress-refresh.timer)
-    [ "$(cat "$MOCK_TIMER_ACTIVE")" = 1 ] ;;
+    if [ "$(cat "$MOCK_TIMER_ACTIVE")" = 1 ]; then
+      [ "$quiet" = 1 ] || printf 'active\n'; exit 0
+    fi
+    [ "$quiet" = 1 ] || printf 'inactive\n'; exit 3 ;;
   is-active:lyrashield-worker-egress-refresh.service)
     exit 1 ;;
   is-active:lyrashield-worker.service)
-    [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ] ;;
+    if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then
+      [ "$quiet" = 1 ] || printf 'active\n'
+      exit 0
+    fi
+    [ "$quiet" = 1 ] || printf 'inactive\n'
+    exit 3 ;;
   is-enabled:lyrashield-worker.service)
     [ "$(cat "$MOCK_SERVICE_ENABLED")" = 1 ] ;;
   is-enabled:lyrashield-worker-egress-refresh.timer)
-    [ "$(cat "$MOCK_TIMER_ENABLED")" = 1 ] ;;
+    if [ "$(cat "$MOCK_TIMER_ENABLED")" = 1 ]; then
+      [ "$quiet" = 1 ] || printf 'enabled\n'; exit 0
+    fi
+    [ "$quiet" = 1 ] || printf 'disabled\n'; exit 1 ;;
   enable:*)
     for unit in "$@"; do
       case "$unit" in
@@ -83,6 +96,20 @@ case "$command:$unit" in
         *) echo "unexpected enabled unit: $unit" >&2; exit 1 ;;
       esac
     done ;;
+  disable:--now)
+    case "${2:-}" in
+      lyrashield-worker-egress-refresh.timer)
+        printf 0 > "$MOCK_TIMER_ACTIVE"
+        printf 0 > "$MOCK_TIMER_ENABLED" ;;
+      lyrashield-worker.service)
+        printf 0 > "$MOCK_SERVICE_ACTIVE"
+        printf 0 > "$MOCK_SERVICE_ENABLED"
+        printf 0 > "$MOCK_CONTAINER_PRESENT" ;;
+      *) exit 1 ;;
+    esac ;;
+  stop:lyrashield-worker.service)
+    printf 0 > "$MOCK_SERVICE_ACTIVE"
+    printf 0 > "$MOCK_CONTAINER_PRESENT" ;;
   stop:lyrashield-worker-egress-refresh.timer)
     printf 0 > "$MOCK_TIMER_ACTIVE" ;;
   start:lyrashield-worker-egress-refresh.timer)
@@ -125,6 +152,7 @@ case "$1:$2" in
     [ "$(cat "$MOCK_CONTAINER_PRESENT")" = 1 ] || exit 1
     case "$*" in
       *State.Health*)
+        if [ "${MOCK_UNHEALTHY:-0}" = 1 ]; then printf 'unhealthy\n'; exit 0; fi
         if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf 'healthy\n'; else printf 'starting\n'; fi ;;
       *'{{.Image}}'*) printf '%s\n' 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' ;;
       *Config.Image*)
@@ -133,10 +161,27 @@ case "$1:$2" in
         else
           printf '%s\n' "$MOCK_TARGET"
         fi ;;
+      inspect\ lyrashield-worker) : ;;
       *) exit 1 ;;
     esac ;;
   run:*)
     case "$*" in
+      *'const [raw,owner,product,oldImage,durable,runId]'*)
+        while [ "$1" != -e ]; do shift; done
+        shift
+        code=$1
+        shift
+        node --input-type=module - "$code" "$@" <<'NODE'
+import fs from "node:fs";
+const code = process.argv[2];
+const args = process.argv.slice(3);
+process.argv = ["node", ...args];
+const replacement = 'Promise.resolve({default: class Redis { async get() { return globalThis.readAdmission(); } async quit() {} }})';
+globalThis.readAdmission = () => fs.readFileSync(process.env.MOCK_ADMISSION_STOP, "utf8");
+await eval(`(async () => { ${code.replace('import("ioredis")', replacement)} })()`);
+NODE
+        ;;
+      *WEBHOOK_TRACK_CLAIM_PROTOCOL*) printf '%s\n' "${MOCK_CLAIM_PROTOCOL:-durable-claims/1}" ;;
       *'cjson.decode'*)
         promotion_stop='{"operator":"github-actions","reason":"worker-promotion"}'
         if [ ! -s "$MOCK_ADMISSION_STOP" ]; then
@@ -165,7 +210,12 @@ case "$1:$2" in
           printf '%s' "$promotion_stop" > "$MOCK_ADMISSION_STOP"
           printf '1\n%s\n' "$promotion_stop"
         fi ;;
-      *getSystemPrisma*) printf '%s\n' '{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}' ;;
+      *getSystemPrisma*)
+        if [ -n "${MOCK_QUEUE_COUNTS:-}" ]; then
+          printf '%s\n' "$MOCK_QUEUE_COUNTS"
+        else
+          printf '%s\n' '{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
+        fi ;;
       *) : ;;
     esac ;;
   exec:-w)
@@ -212,6 +262,18 @@ cat > "$case_dir/bin/df" <<'MOCK'
 printf '%s\n' 'Filesystem 1-blocks Used Available Capacity Mounted on'
 printf '/dev/mock 10000000000 1000 %s 1%% /\n' "$MOCK_FREE_BYTES"
 MOCK
+  cat > "$case_dir/bin/seq" <<'MOCK'
+#!/bin/sh
+if [ "${MOCK_UNHEALTHY:-0}" = 1 ] && [ "$*" = '1 600' ]; then printf '1\n'; else /usr/bin/seq "$@"; fi
+MOCK
+  cat > "$case_dir/bin/sleep" <<'MOCK'
+#!/bin/sh
+exit 0
+MOCK
+  cat > "$case_dir/bin/stat" <<'MOCK'
+#!/bin/sh
+printf '%s\n' "${MOCK_RECEIPT_STAT:-0:600}"
+MOCK
   cat > "$case_dir/bin/chown" <<'MOCK'
 #!/bin/sh
 exit 0
@@ -229,6 +291,13 @@ run_case() {
   local floor_bytes=${13:-}
   local floor_via=${14:-env}
   local restart_fails=${15:-0}
+  local cutover=${16:-0}
+  local receipt_mode=${17:-owned}
+  local protocol=${18:-durable-claims/1}
+  local queue_counts=${19:-}
+  local unhealthy=0 receipt_stat=0:600
+  [ "$name" != cutover-health-failure ] || unhealthy=1
+  [ "$name" != cutover-insecure-receipt ] || receipt_stat=0:644
   local floor_env=""
   if [ "$floor_via" = env ]; then
     floor_env=$floor_bytes
@@ -256,10 +325,34 @@ run_case() {
     printf 'legacy maintenance source\n' > "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts"
   fi
 
+  local mode_arg=""
+  local owned_stop=''
+  local durable=''
+  if [ "$cutover" = 1 ]; then
+    mode_arg=--webhook-claims-cutover
+    owned_stop="{\"operator\":\"github-actions\",\"reason\":\"webhook-claims-cutover\",\"owner\":\"123:1\",\"runId\":\"123\",\"productRevision\":\"$app_revision\"}"
+    durable=$(node -e 'console.log(JSON.stringify({owner:"123:1",runId:"123",productRevision:process.argv[1],admissionStopValue:process.argv[2],previousWorkerImage:process.argv[3]}))' "$app_revision" "$owned_stop" "$old_image")
+    printf '%s' "$durable" > "$case_dir/cutover.json"
+    chmod 0600 "$case_dir/cutover.json"
+    printf '%s' "$owned_stop" > "$case_dir/admission-stop"
+    case "$receipt_mode" in
+      missing) rm "$case_dir/cutover.json" ;;
+      foreign) printf '{"operator":"on-call"}' > "$case_dir/admission-stop" ;;
+      stale-run) durable=${durable//123/999}; printf '%s' "$durable" > "$case_dir/cutover.json" ;;
+    esac
+  fi
   set +e
   output=$(
     PATH="$case_dir/bin:$PATH" \
       MOCK_TARGET="$target" \
+      MOCK_CLAIM_PROTOCOL="$protocol" \
+      MOCK_UNHEALTHY="$unhealthy" \
+      MOCK_RECEIPT_STAT="$receipt_stat" \
+      MOCK_QUEUE_COUNTS="$queue_counts" \
+      LYRASHIELD_ADMISSION_STOP_RECEIPT="$owned_stop" \
+      LYRASHIELD_ADMISSION_STOP_OWNER="123:1" \
+      LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID=123 \
+      LYRASHIELD_WEBHOOK_CUTOVER_RECEIPT_FILE="$case_dir/cutover.json" \
       MOCK_APP_REVISION="$app_revision" \
       MOCK_ENGINE_REVISION="$engine_revision" \
       MOCK_SERVICE_ACTIVE="$case_dir/service-active" \
@@ -287,11 +380,53 @@ run_case() {
       LYRASHIELD_WORKER_HOST_ASSETS_DIR="$case_dir/host/assets" \
       LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
       LYRASHIELD_WORKER_SYSTEMD_DIR="$case_dir/host/systemd" \
-      sh "$script" "$target" "$app_revision" "$engine_revision" 2>&1
+      sh "$script" ${mode_arg:+"$mode_arg"} "$target" "$app_revision" "$engine_revision" 2>&1
   )
   status=$?
   set -e
 
+  if [ "$cutover" = 1 ]; then
+    if [ "$expected" = success ]; then
+      [ "$status" -eq 0 ] || { printf '%s\n' "$output"; exit 1; }
+      grep -Fq 'scan admission held' <<< "$output"
+      [ "$(cat "$case_dir/service-active")" = 1 ]
+      grep -Fq "LYRASHIELD_WORKER_IMAGE=$target" "$case_dir/runtime.conf"
+    else
+      [ "$status" -ne 0 ] || { printf '%s\n' "$output"; exit 1; }
+      grep -Fq 'webhook maintenance held, no legacy rollback' <<< "$output"
+      [ "$(cat "$case_dir/service-active")" = 0 ]
+      [ "$(cat "$case_dir/service-enabled")" = 0 ]
+      if [ "$fail_image_check" = 1 ] || [ "$restart_fails" = 1 ] || [ "$unhealthy" = 1 ]; then
+        grep -Fq "LYRASHIELD_WORKER_IMAGE=$target" "$case_dir/runtime.conf"
+        grep -Fq "LYRASHIELD_WORKER_IMAGE=$old_image" "$case_dir/runtime.conf.rollback-$app_revision"
+        grep -Fq 'image asset: run-worker.sh' "$case_dir/host/libexec/lyrashield-run-worker"
+      fi
+    fi
+    [ "$(cat "$case_dir/timer-active")" = 0 ]
+    [ "$(cat "$case_dir/timer-enabled")" = 0 ]
+    [ -s "$case_dir/admission-stop" ]
+    if [ -n "$replacement_stop" ]; then
+      [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
+    elif [ "$receipt_mode" = foreign ]; then
+      [ "$(cat "$case_dir/admission-stop")" = '{"operator":"on-call"}' ]
+    else
+      [ "$(cat "$case_dir/admission-stop")" = "$owned_stop" ]
+    fi
+    if grep -Fq 'cjson.decode' "$case_dir/docker.log" ||
+      grep -Fq 'redis.call("DEL"' "$case_dir/docker.log" ||
+      grep -Fq 'systemctl start lyrashield-worker-egress-refresh.timer' "$case_dir/order.log"; then
+      echo "Maintenance promotion must never claim/resume admission or restart its timer" >&2
+      exit 1
+    fi
+    restarts=$(grep -Fc 'restart lyrashield-worker.service' "$case_dir/systemctl.log" || true)
+    [ "$restarts" -le 1 ]
+    if [ "$expected" = success ]; then
+      [ "$restarts" = 1 ]
+      grep -Fq "$old_image node --import tsx --input-type=module -e const {getSystemPrisma}" "$case_dir/docker.log"
+      grep -Fq "$target node --import tsx --input-type=module -e const billing=" "$case_dir/docker.log"
+    fi
+    return
+  fi
   if [ "$expected" = success ]; then
     [ "$status" -eq 0 ]
     grep -Fq 'Worker service state: active enabled' <<< "$output"
@@ -394,6 +529,19 @@ run_case() {
   fi
 }
 
+run_case cutover-stopped-bootstrap 0 1 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1
+run_case cutover-newer-stop 0 1 0 failure 0 '' 0 '{"operator":"on-call","reason":"incident"}' 9999999000 0 1 '' env 0 1
+run_case cutover-health-failure 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1
+run_case cutover-insecure-receipt 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1
+run_case cutover-missing-receipt 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 missing
+run_case cutover-foreign-receipt 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 foreign
+run_case cutover-stale-run 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 stale-run
+run_case cutover-live-worker 0 1 0 failure 1 '' 0 '' 9999999000 1 1 '' env 0 1
+run_case cutover-old-container 0 1 0 failure 0 '' 0 '' 9999999000 1 1 '' env 0 1
+run_case cutover-missing-capability 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 owned legacy
+run_case cutover-nonempty-queue 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 owned durable-claims/1 '{"nonterminal":1}'
+run_case cutover-identity-failure 0 1 0 failure 0 '' 1 '' 9999999000 0 1 '' env 0 1
+run_case cutover-restart-failure 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 1 1
 run_case healthy 1 1 1 success
 run_case removes-legacy-maintenance-assets 1 1 1 success
 run_case repairs-inactive-timer 0 1 1 success
