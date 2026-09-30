@@ -381,6 +381,18 @@ assert(
   publishedMcpVerifier.includes('npm_config_ignore_scripts: "true"'),
   "published MCP runtime verification must disable npm lifecycle scripts"
 )
+assert(
+  !publishedMcpVerifier.includes("...process.env") &&
+    !/spawn\(\s*["']npx["']/.test(publishedMcpVerifier) &&
+    publishedMcpVerifier.includes("await verifyStdio(process.execPath") &&
+    publishedMcpVerifier.includes("verifyIntegrity(archive, metadata.dist?.integrity)") &&
+    publishedMcpVerifier.includes("marketplace-stdio/1"),
+  "published MCP verification must execute the verified local artifact with an isolated environment and required tool schemas"
+)
+assert(
+  await exists("scripts/tests/verify-published-mcp.fixtures.mjs"),
+  "published MCP verifier fixtures must be included in the export"
+)
 const kiro = (await readJson(".mcp.kiro.json")).mcpServers?.lyrashield
 assert(
   kiro?.command === "npx" && JSON.stringify(kiro.args) === JSON.stringify(["-y", expectedPackage]),

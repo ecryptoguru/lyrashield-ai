@@ -354,6 +354,10 @@ step_verify-worker-queues-are-empty-before-traffic-promotion() {
 step_promote-healthy-candidate-revisions() {
   source ops/deployment/containerapp.sh
   restore_previous() {
+    if [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
+      echo "::error::Maintenance cutover keeps incompatible previous writers disabled."
+      return 0
+    fi
     ca_set_traffic "$APP_NAME" "$APP_PREVIOUS" "$RG" || true
     ca_set_traffic "$SCANNER_NAME" "$SCANNER_PREVIOUS" "$RG" || true
     ca_set_traffic "$EGRESS_NAME" "$EGRESS_PREVIOUS" "$RG" || true
@@ -465,16 +469,29 @@ step_promote-verified-worker-digest-on-vm() {
   # script sources the copy embedded in this payload.
   worker_env_payload=$(base64 --wrap=0 ops/worker/worker-env.sh)
   worker_ref="${WORKER_IMAGE%@*}@${WORKER_DIGEST}"
+  promotion_prefix=""
+  promotion_flag=""
+  if [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
+    : "${LYRASHIELD_ADMISSION_STOP_RECEIPT:?}" "${LYRASHIELD_ADMISSION_STOP_OWNER:?}" "${LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID:?}"
+    [[ "$LYRASHIELD_ADMISSION_STOP_OWNER" =~ ^[0-9]+:[0-9]+$ && "$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID" =~ ^[0-9]+$ ]] || exit 1
+    receipt_payload=$(printf '%s' "$LYRASHIELD_ADMISSION_STOP_RECEIPT" | base64 --wrap=0)
+    promotion_prefix="LYRASHIELD_ADMISSION_STOP_RECEIPT=\$(printf '%s' '$receipt_payload' | base64 -d) LYRASHIELD_ADMISSION_STOP_OWNER='$LYRASHIELD_ADMISSION_STOP_OWNER' LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID='$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID' "
+    promotion_flag="--webhook-claims-cutover "
+  fi
   export AZURE_VM_RUN_COMMAND_TIMEOUT_SECONDS=1800
   result=$(azure_vm_run_command_with_retry \
     --name "$WORKER_VM_NAME" \
     --resource-group "$RG" \
     --command-id RunShellScript \
-    --scripts "printf '%s' '$worker_env_payload' | base64 -d > /tmp/lyrashield-worker-env.sh && printf '%s' '$payload' | base64 -d | LYRASHIELD_WORKER_ENV_LIB=/tmp/lyrashield-worker-env.sh sh -s -- '$worker_ref' '$DEPLOY_SHA' '$ENGINE_REVISION'" \
+    --scripts "printf '%s' '$worker_env_payload' | base64 -d > /tmp/lyrashield-worker-env.sh && printf '%s' '$payload' | base64 -d | LYRASHIELD_WORKER_ENV_LIB=/tmp/lyrashield-worker-env.sh ${promotion_prefix}sh -s -- ${promotion_flag}'$worker_ref' '$DEPLOY_SHA' '$ENGINE_REVISION'" \
     --query 'value[0].message' \
     --output tsv)
   printf '%s\n' "$result"
-  grep -q "Worker promotion passed for ${WORKER_DIGEST}" <<< "$result"
+  if [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
+    grep -q "Worker webhook cutover passed for ${WORKER_DIGEST}; scan admission held" <<< "$result"
+  else
+    grep -q "Worker promotion passed for ${WORKER_DIGEST}" <<< "$result"
+  fi
 }
 
 # Workflow step: Roll back production traffic on health failure

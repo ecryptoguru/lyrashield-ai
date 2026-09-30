@@ -104,3 +104,12 @@ test("guard precedes configuration and migration mutations in protected producti
   }
   assert.doesNotMatch(readFileSync(script, "utf8"), /BYPASS|ALLOW_UNSAFE|CONFIRMATION/)
 })
+
+test("web images bind the exact source revision into OCI provenance", () => {
+  const workflow = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
+  const web = workflow.slice(
+    workflow.indexOf("- name: Build and push web image"),
+    workflow.indexOf("- name: Build and push worker image")
+  )
+  assert.match(web, /org\.opencontainers\.image\.revision=\$\{\{ env\.DEPLOY_SHA \}\}/)
+})
