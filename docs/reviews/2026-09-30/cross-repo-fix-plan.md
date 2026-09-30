@@ -1,6 +1,6 @@
 # LyraShield Cross-Repository Review and Hardening Implementation Plan
 
-> **Execution status:** The founder authorized implementation and local Docker testing on 30 September. Source corrections and local verification are in progress on isolated branches. Merge, production release, signed Desktop release, package publication, and paid provider acceptance remain separate gates. Checkboxes retain the original acceptance criteria; see the execution ledger for evidence and unresolved items.
+> **Execution status:** The founder authorized implementation and local Docker testing on 30 September. Source corrections and local verification are in progress on isolated branches. Merge, production release, signed Desktop release, package publication, and paid provider acceptance remain separate gates. Checked criteria have current evidence; unchecked baseline, operational and release criteria remain explicitly unresolved. See the execution ledger for evidence and limits.
 
 **Date:** 30 September 2026
 
@@ -182,13 +182,13 @@ Each task follows: characterization test fails for the intended reason → minim
 
 ### Task A — Capture an executable baseline and protect current fixes
 
-**Files:** Existing repository test harnesses; new review evidence under `docs/reviews/2026-09-30/` in the implementation branch. New files named in this plan are proposals, not files created by this review.
+**Files:** Existing repository test harnesses; new review evidence under `docs/reviews/2026-09-30/` in the implementation branch. File lists originated as proposals; the execution ledger records the resulting changes and verification.
 
-- [ ] Record exact main/head SHAs, engine pin/reverse pin, dirty-tree status, image digest, lockfile hashes, and active queue payload versions. Preserve the recovery worktree and user-owned files; use fetched main for implementation unless a specific recovered change is intentionally ported.
+- [x] Record exact main/head SHAs, engine pin/reverse pin, dirty-tree status, image digest, lockfile hashes, and active queue payload versions. Preserve the recovery worktree and user-owned files; use fetched main for implementation unless a specific recovered change is intentionally ported.
 - [ ] Run the existing product, engine, and marketplace checks at the starting revisions. Separate pre-existing failures from changes introduced by this work.
-- [ ] Reuse existing scan-profile/fixture tests for Quick/Standard 20/23/3 limits and add only missing assertions for finalization headroom, customer-minute policy, cost privacy, and evidence-state semantics. Do not restore recovered 17/20/3 Quick values or older engine pins accidentally.
+- [x] Reuse existing scan-profile/fixture tests for Quick/Standard 20/23/3 limits and add only missing assertions for finalization headroom, customer-minute policy, cost privacy, and evidence-state semantics. Do not restore recovered 17/20/3 Quick values or older engine pins accidentally.
 - [ ] Snapshot public scan DTO and MCP schemas. Include old valid payloads so contract-preserving changes are tested rather than assumed.
-- [ ] Produce a gate ledger with `pass`, `fail`, `not-run`, and `blocked`; attach command output and revision to each entry.
+- [x] Produce a gate ledger with `pass`, `fail`, `not-run`, and `blocked`; attach command output and revision to each entry.
 
 ### Task B — Patch the Next.js runtime floor independently
 
@@ -196,11 +196,12 @@ Each task follows: characterization test fails for the intended reason → minim
 
 **Exercise:** Both OG route files and normal auth/dashboard routing.
 
-- [ ] Add a dependency-resolution assertion that rejects a runtime version below the advisory's patched floor.
-- [ ] Record failing baseline evidence without attempting a production exploit.
-- [ ] Update the runtime dependency and compatible tooling/overrides together, within the current major.
-- [ ] Verify real OG rendering and malicious-looking strings; preserve shape, dimensions, headers, 404 behavior, and revocation behavior.
-- [ ] Build and inspect the exact image/package resolution. Merge this independently of broad dependency maintenance.
+- [x] Add a dependency-resolution assertion that rejects a runtime version below the advisory's patched floor.
+- [x] Record failing baseline evidence without attempting a production exploit.
+- [x] Update the runtime dependency and compatible tooling/overrides together, within the current major.
+- [x] Verify real OG rendering and malicious-looking strings; preserve shape, dimensions, headers, 404 behavior, and revocation behavior.
+- [x] Build and inspect the exact image/package resolution.
+- [ ] Merge this independently of broad dependency maintenance.
 
 ### Task C — Repair webhook retries and shared execution ownership
 
@@ -208,12 +209,12 @@ Each task follows: characterization test fails for the intended reason → minim
 
 **Proposed interface responsibility:** A shared billing-domain claim operation returns `claimed`, `busy`, `terminal`, or `missing`, with the durable generation and ownership token for a claimed attempt. Both inline ingress and worker retries must use it. Queue submission accepts the generation and reports whether it is represented in the queue. Claim that it was newly enqueued only if the pinned BullMQ API supplies authoritative evidence; a returned job ID or check-then-add sequence does not prove that. Reconciliation counters must follow the same semantics.
 
-- [ ] Reproduce the current same-ID scheduling failure using the pinned real queue library.
-- [ ] Test a second execution path arriving while the first owns the claim. Assert no duplicate handler execution and no terminal-state downgrade.
-- [ ] Test atomic attempt reservation across ingress and workers, lease expiry during slow handlers, stale-owner completion, and crash after an external effect but before the track receipt. Preserve handler idempotency; unresolved external effects require receipt-aware recovery.
-- [ ] Introduce colon-free IDs derived from event, track, and durable generation; preserve stable deduplication within a generation.
-- [ ] Persist next-due retry state before queue handoff; add bounded, due-only database recovery through existing worker maintenance, respecting generation, ownership, and terminal states. No new idle BullMQ consumer is needed. Do not extend the five-attempt budget or convert provider reconciliation into an automatic billing replay.
-- [ ] Verify healthy success, repeated failures/dead-letter, restarts, duplicate deliveries, and queue retention semantics with PostgreSQL/Redis.
+- [x] Reproduce the current same-ID scheduling failure using the pinned real queue library.
+- [x] Test a second execution path arriving while the first owns the claim. Assert no duplicate handler execution and no terminal-state downgrade.
+- [x] Test atomic attempt reservation across ingress and workers, lease expiry during slow handlers, stale-owner completion, and crash after an external effect but before the track receipt. Preserve handler idempotency; unresolved external effects require receipt-aware recovery.
+- [x] Introduce colon-free IDs derived from event, track, and durable generation; preserve stable deduplication within a generation.
+- [x] Persist next-due retry state before queue handoff; add bounded, due-only database recovery through existing worker maintenance, respecting generation, ownership, and terminal states. No new idle BullMQ consumer is needed. Do not extend the five-attempt budget or convert provider reconciliation into an automatic billing replay.
+- [x] Verify healthy success, repeated failures/dead-letter, restarts, duplicate deliveries, and queue retention semantics with PostgreSQL/Redis.
 - [ ] Inventory existing unsatisfied tracks and prepare a receipt-aware recovery report. Recovery execution is a separate controlled action, not a blanket replay.
 - [ ] For rollout, pause/drain the affected retry consumer and coordinate with ingress compatibility so old writers cannot bypass new claim ownership. Do not drain or restart unrelated paid scans unnecessarily.
 
@@ -223,24 +224,24 @@ Each task follows: characterization test fails for the intended reason → minim
 
 **Proposed interface responsibility:** Receipt verification takes the expected account/workspace/scan/phase/idempotency identity and returns a validated persisted receipt or an explicit absence/mismatch. It must not run scan work or mutate provider-side state.
 
-- [ ] Inject P2002 from the expected unique key, an unrelated key, and the finalization callback.
-- [ ] Require an authoritative fresh receipt read after a rolled-back transaction before returning replay success; validate the normal existing-receipt branch too, including `kind`, `deletedAt`, ownership, metadata scan ID, and phase-bound key.
-- [ ] Keep a matching usage receipt from hiding finalizer-originated P2002 or another finalization failure. Do not re-invoke the callback or provider work as receipt recovery.
-- [ ] Preserve stored overage/account metadata; refuse mismatched ownership.
-- [ ] Verify partial evidence success plus failed monetary commit does not cause double execution or automatic retrospective charging.
-- [ ] Exercise real transaction rollback, serialization contention, and concurrent settlements for one account across workspaces.
-- [ ] Compare ledger totals, pack balances, and terminal evidence before/after on fixture accounts.
+- [x] Inject P2002 from the expected unique key, an unrelated key, and the finalization callback.
+- [x] Require an authoritative fresh receipt read after a rolled-back transaction before returning replay success; validate the normal existing-receipt branch too, including `kind`, `deletedAt`, ownership, metadata scan ID, and phase-bound key.
+- [x] Keep a matching usage receipt from hiding finalizer-originated P2002 or another finalization failure. Do not re-invoke the callback or provider work as receipt recovery.
+- [x] Preserve stored overage/account metadata; refuse mismatched ownership.
+- [x] Verify partial evidence success plus failed monetary commit does not cause double execution or automatic retrospective charging.
+- [x] Exercise real transaction rollback, serialization contention, and concurrent settlements for one account across workspaces.
+- [x] Compare ledger totals, pack balances, and terminal evidence before/after on fixture accounts.
 
 ### Task E — Bound producer failure without introducing late duplicate scans
 
 **Modify:** Producer connection factory and existing admission error/recovery path; add real Redis failure-injection tests.
 
-- [ ] Reproduce disconnection after worker readiness but before/during enqueue.
-- [ ] Separate producer and worker connection policies across scan, fix-generation, and webhook queues. Keep worker persistent reconnect unchanged; cover HTTP and worker-hosted producers.
-- [ ] Establish a proposed **5-second queue-I/O response budget**, subject to the measured admission baseline. Enforce it with bounded underlying operations, not just a detached timeout wrapper.
-- [ ] Distinguish definitive rejection from uncertain admission. Preserve the original operation ID and same-key recovery.
-- [ ] Characterize each admission caller's current enqueue-error transition and worker terminal-job guard before altering recovery. Retain fail-closed behavior and never automatically revive ambiguous paid scans.
-- [ ] Test recovered Redis and late acknowledgments produce one scan, one terminal settlement, and understandable client recovery.
+- [x] Reproduce disconnection after worker readiness but before/during enqueue.
+- [x] Separate producer and worker connection policies across scan, fix-generation, and webhook queues. Keep worker persistent reconnect unchanged; cover HTTP and worker-hosted producers.
+- [x] Establish a proposed **5-second queue-I/O response budget**, subject to the measured admission baseline. Enforce it with bounded underlying operations, not just a detached timeout wrapper.
+- [x] Distinguish definitive rejection from uncertain admission. Preserve the original operation ID and same-key recovery.
+- [x] Characterize each admission caller's current enqueue-error transition and worker terminal-job guard before altering recovery. Retain fail-closed behavior and never automatically revive ambiguous paid scans.
+- [x] Test recovered Redis and late acknowledgments produce one scan, one terminal settlement, and understandable client recovery.
 
 ### Task F — Repair scan list state and simplify recovery UX
 
@@ -248,23 +249,23 @@ Each task follows: characterization test fails for the intended reason → minim
 
 **Required ownership:** Cursor and rows change in the same accepted transition. A response must match its query/request generation; both polling and manual requests participate. Reuse `listRequestRef`, `firstPagePendingRef`, `loadMoreRequestRef`, and first-page metadata ownership where practical. Reset the polling ETag when a replacement/query invalidates its baseline; a subsequent 304 must not retain stale rows or cursor.
 
-- [ ] Add a failing two-page → filtered poll → load-more test that demonstrates skipped rows.
-- [ ] Apply atomic first-page replacement including its cursor, invalidate outstanding page requests, and deduplicate accepted rows.
-- [ ] Add a failing SSR fallback test for invalid target plus valid status filter; preserve that status constraint.
-- [ ] Exercise old responses after filter/workspace changes, hidden-tab resume, 304, cancellation, removal, and manual refresh.
-- [ ] Preserve form values after recoverable errors and surface a single primary recovery action. Do not discard accepted-submission recovery state.
-- [ ] Verify keyboard navigation, focus return from the create sheet, announced error/status messages, mobile widths, and reduced motion in the real browser.
+- [x] Add a failing two-page → filtered poll → load-more test that demonstrates skipped rows.
+- [x] Apply atomic first-page replacement including its cursor, invalidate outstanding page requests, and deduplicate accepted rows.
+- [x] Add a failing SSR fallback test for invalid target plus valid status filter; preserve that status constraint.
+- [x] Exercise old responses after filter/workspace changes, hidden-tab resume, 304, cancellation, removal, and manual refresh.
+- [x] Preserve form values after recoverable errors and surface a single primary recovery action. Do not discard accepted-submission recovery state.
+- [x] Verify keyboard navigation, focus return from the create sheet, announced error/status messages, mobile widths, and reduced motion in the real browser.
 
 ### Task G — Correct relay framing, then update the product consumer pin
 
 **Modify:** `lyrashield-engine/lyrashield/runtime/target_relay_proxy.py`; extend `tests/test_target_relay_proxy.py` using a local fixture origin. Start from engine main, and compare compatibility against product main's pinned `c2fb19595bdefa0eda52d09ccd2aaeabcca575ae`. Update product engine pin only after engine verification.
 
-- [ ] Write red tests for HEAD length, 204 framing, 304 length semantics, and response connection-nominated headers.
-- [ ] Introduce the smallest method/status-aware header assembly change. Preserve fixed relay destination and scope enforcement.
-- [ ] Run GET/body-limit/transport/TLS regression tests and the full existing engine contract suite. Follow `scripts/verify-controlled-derivative.sh`, including its frozen dependency installation with `--extra viewer`; do not omit the optional viewer needed by the complete suite.
-- [ ] Run product parser/worker compatibility against the exact candidate engine revision, including old durable output fixtures.
+- [x] Write red tests for HEAD length, 204 framing, 304 length semantics, and response connection-nominated headers.
+- [x] Introduce the smallest method/status-aware header assembly change. Preserve fixed relay destination and scope enforcement.
+- [x] Run GET/body-limit/transport/TLS regression tests and the full existing engine contract suite. Follow `scripts/verify-controlled-derivative.sh`, including its frozen dependency installation with `--extra viewer`; do not omit the optional viewer needed by the complete suite.
+- [x] Run product parser/worker compatibility against the exact candidate engine revision, including old durable output fixtures.
 - [ ] Merge engine change, update both Cloud and Desktop product pins in a reviewed PR, then update engine's reverse consumer pin to the exact merged product revision after compatibility proof. Build/promote the Cloud worker only through founder-dispatched release; signed Desktop release and installed-client acceptance remain separate gates.
-- [ ] Treat a pin-only reverse update as provenance alignment, not a reason for an endless runtime pin-bump cycle.
+- [x] Treat a pin-only reverse update as provenance alignment, not a reason for an endless runtime pin-bump cycle.
 
 ### Task H — Harden marketplace verification at the source and regenerate
 
@@ -272,16 +273,17 @@ Each task follows: characterization test fails for the intended reason → minim
 
 **Regenerate:** Public marketplace artifact tree and manifest via `packages/agent-plugin/src/export.ts`.
 
-- [ ] Add fixture subprocesses for hangs, stderr floods, malformed frames, ignored termination, and open descendant pipes. Fixtures must not access production credentials or networks.
-- [ ] Bound registry acquisition, pack/install, and handshake separately. Proposed process limits: pack/install 60 seconds; handshake 30 seconds; terminate owned process tree after a 2-second graceful window. These are implementation acceptance targets, not measurements of current runtime.
-- [ ] Drain/redact stderr and limit retained diagnostics; cap an incomplete JSON-RPC frame at 1 MiB. Settle the orchestration promise exactly once on success/error/timeout.
-- [ ] Execute the verified artifact under a controlled registry/environment; keep lifecycle-script suppression and integrity identity checks.
-- [ ] Do not spread `process.env` into package subprocesses. Allow only needed platform variables and synthetic test credentials; isolate npm home/config/cache and prove secrets are absent. Cap registry metadata and archive acquisition as well as child output; reject archive paths outside the owned staging directory.
-- [ ] Validate a versioned required subset of tool names and compatible schemas. Additional legitimate tools must not fail compatibility solely because their count changed.
-- [ ] Export from a clean product checkout into a new empty staging directory; run `node scripts/validate.mjs` there before building derived artifacts.
-- [ ] After the Zed build, run `node scripts/validate.mjs --release` to validate release assets. Confirm manifest hashes, source commit, clean-source state, and immutable publication status; never promote the recovered `sourceCommit: null` / unpublished export directly.
+- [x] Add fixture subprocesses for hangs, stderr floods, malformed frames, ignored termination, and open descendant pipes. Fixtures must not access production credentials or networks.
+- [x] Bound registry acquisition, pack/install, and handshake separately. Proposed process limits: pack/install 60 seconds; handshake 30 seconds; terminate owned process tree after a 2-second graceful window. These are implementation acceptance targets, not measurements of current runtime.
+- [x] Drain/redact stderr and limit retained diagnostics; cap an incomplete JSON-RPC frame at 1 MiB. Settle the orchestration promise exactly once on success/error/timeout.
+- [x] Execute the verified artifact under a controlled registry/environment; keep lifecycle-script suppression and integrity identity checks.
+- [x] Do not spread `process.env` into package subprocesses. Allow only needed platform variables and synthetic test credentials; isolate npm home/config/cache and prove secrets are absent. Cap registry metadata and archive acquisition as well as child output; reject archive paths outside the owned staging directory.
+- [x] Validate a versioned required subset of tool names and compatible schemas. Additional legitimate tools must not fail compatibility solely because their count changed.
+- [x] Export from a clean product checkout into a new empty staging directory; run `node scripts/validate.mjs` there before building derived artifacts.
+- [x] After the Zed build, run `node scripts/validate.mjs --release` to validate release assets. Confirm manifest hashes, source commit, clean-source state, and immutable publication status; never promote the recovered `sourceCommit: null` / unpublished export directly.
 - [ ] Prove hosted OAuth and local stdio separately: valid login/credential, expiration, revocation, insufficient scope, workspace boundary, and forbidden mutation. Package initialization alone is not authenticated-client acceptance.
-- [ ] Update client pins only after the exact package version is published and verified. Publish/tag only through the existing authorized immutable-release workflow.
+- [x] Update client pins only after the exact package version is published and verified.
+- [ ] Publish/tag only through the existing authorized immutable-release workflow.
 
 ### Task I — Optimize only the measured hot paths
 
