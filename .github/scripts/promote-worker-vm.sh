@@ -56,7 +56,7 @@ worker_oneshot() (
           if [ "${#probe_id}" -eq 64 ]; then
             # Docker's cidfile binds cleanup to this invocation, never a live
             # worker or a concurrent maintenance container.
-            docker rm -f "$probe_id" >/dev/null 2>&1 || status=1
+            timeout --kill-after=5s 10s docker rm -f "$probe_id" >/dev/null 2>&1 || status=1
           else
             status=1
           fi ;;

@@ -168,7 +168,7 @@ const preflightEnvFile = [
 const installPreflightSecretRefresher = (directory) => {
   writeFileSync(
     path.join(directory, "timeout"),
-    '#!/bin/sh\nset -eu\n[ "$1" = "--kill-after=10s" ]\n[ "$2" = "120s" ]\nshift 2\nexec "$@"\n',
+    '#!/bin/sh\nset -eu\ncase "$1 $2" in\n  "--kill-after=10s 120s"|"--kill-after=5s 10s") ;;\n  *) exit 1 ;;\nesac\nshift 2\nexec "$@"\n',
     { mode: 0o700 }
   )
   const refreshLog = path.join(directory, "secret-refresh.log")

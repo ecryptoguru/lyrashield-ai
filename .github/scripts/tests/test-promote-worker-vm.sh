@@ -58,8 +58,10 @@ MOCK
   cat > "$case_dir/bin/timeout" <<'MOCK'
 #!/bin/sh
 set -eu
-[ "$1" = "--kill-after=10s" ]
-[ "$2" = "120s" ]
+case "$1 $2" in
+  "--kill-after=10s 120s"|"--kill-after=5s 10s") ;;
+  *) exit 1 ;;
+esac
 shift 2
 exec "$@"
 MOCK
