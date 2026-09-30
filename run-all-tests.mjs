@@ -15,7 +15,10 @@ const coreReportPath = isCi
   : null
 const coreCommand = ["vitest", "run", "--exclude", "**/dist/**"]
 if (coreReportPath) {
-  coreCommand.push("--reporter=json", `--outputFile=${coreReportPath}`, "--coverage")
+  coreCommand.push("--reporter=json", `--outputFile=${coreReportPath}`)
+}
+if (process.env.LYRASHIELD_TEST_COVERAGE === "1") {
+  coreCommand.push("--coverage")
 }
 
 const allSuites = [
@@ -29,10 +32,14 @@ const allSuites = [
   { name: "ops", command: ["node", "--test", ".github/scripts/tests/*.test.mjs"] },
 ]
 
-const requestedSuites = (process.env.LYRASHIELD_TEST_SUITES ?? "core,marketing,motion,ops")
-  .split(",")
-  .map((name) => name.trim())
-  .filter(Boolean)
+const requestedSuites = [
+  ...new Set(
+    (process.env.LYRASHIELD_TEST_SUITES ?? "core,marketing,motion,ops")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean)
+  ),
+]
 const suitesByName = new Map(allSuites.map((suite) => [suite.name, suite]))
 const suites = requestedSuites.map((name) => {
   const suite = suitesByName.get(name)

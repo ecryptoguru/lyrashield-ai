@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Path classifier for CI change detection.
 #
-# Reads file paths from stdin (one per line) and outputs seven boolean outputs
+# Reads file paths from stdin (one per line) and outputs eight boolean outputs
 # to GITHUB_OUTPUT (or stdout when run outside a workflow):
+#   tooling-only — only known CI/deployment tooling and optional docs changed
 #   docs-only  — every changed file is a docs/config/agent-rules file
 #   marketing  — at least one file is under apps/marketing or apps/marketing-motion
 #   app        — at least one file is under apps/web or apps/worker
@@ -32,6 +33,12 @@ shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|t
 marketing_deploy_pattern='^(apps/(marketing|marketing-motion)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo)'
 azure_deploy_pattern='^(apps/(web|worker)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|Dockerfile|docker-compose\.yml|ops/(deployment|worker)/|\.github/scripts/(promote-worker-vm|verify-engine-revision|verify-engine-worker-contract)\.sh|\.github/workflows/(deploy-azure|release-production)\.yml)'
 
+# Only explicitly covered tooling can skip runtime suites. Unknown and mixed
+# changes keep the existing broad classification and deployment decision.
+tooling_pattern='^(\.github/workflows/(ci|deploy-azure|deploy-azure-runtime|release-production)\.yml|\.github/scripts/(classify-paths\.sh|assert-named-vitest-tests\.mjs|deploy-azure-(preflight|rollout)\.sh|promote-worker-vm\.sh|verify-webhook-cutover\.mjs)|\.github/scripts/tests/.*|ops/deployment/.*|ops/monitoring/.*|run-all-tests\.mjs)$'
+tooling_only=true
+tooling_seen=false
+
 docs_only=true
 marketing=false
 app=false
@@ -43,6 +50,11 @@ azure_deploy=false
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue
+  if echo "$f" | grep -qE "$tooling_pattern"; then
+    tooling_seen=true
+  elif ! echo "$f" | grep -qE "$docs_pattern"; then
+    tooling_only=false
+  fi
   path_classified=false
   if echo "$f" | grep -qE "$docs_pattern"; then
     path_classified=true
@@ -78,6 +90,7 @@ while IFS= read -r f; do
 done
 
 if $marketing || $app || $desktop || $shared; then docs_only=false; fi
+if ! $tooling_seen || $marketing || $app || $desktop || $unknown; then tooling_only=false; fi
 
 # Fail closed per path: an uncovered file mixed with recognized files must not
 # inherit their narrower deployment routing. Treat it as shared and deploy both
@@ -94,6 +107,7 @@ fi
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   {
     echo "docs-only=$docs_only"
+    echo "tooling-only=$tooling_only"
     echo "marketing=$marketing"
     echo "app=$app"
     echo "desktop=$desktop"
@@ -103,6 +117,7 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   } >> "$GITHUB_OUTPUT"
 else
   echo "docs-only=$docs_only"
+  echo "tooling-only=$tooling_only"
   echo "marketing=$marketing"
   echo "app=$app"
   echo "desktop=$desktop"

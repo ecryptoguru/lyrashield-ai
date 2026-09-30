@@ -64,6 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       docs-only: ${{ steps.classify.outputs.docs-only }}
+      tooling-only: ${{ steps.classify.outputs.tooling-only }}
       marketing: ${{ steps.classify.outputs.marketing }}
       app: ${{ steps.classify.outputs.app }}
       desktop: ${{ steps.classify.outputs.desktop }}
@@ -78,6 +79,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+
+      - name: Validate workflow syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl --fail --silent --show-error --location --max-time 60 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$archive"
+          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' "$archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck='' .github/workflows/*.yml
 
       - name: Test path classifier
         shell: bash
@@ -287,17 +300,17 @@ jobs:
         run: pnpm db:generate
 
       - name: Informational dead-code inventory
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.docs-only != 'true' && needs.changes.outputs.tooling-only != 'true'
         # Findings are candidate evidence until the 4a baseline is cleared.
         # Knip still exits nonzero for invalid configuration or execution errors.
         run: pnpm exec knip --no-exit-code
 
       - name: Create shadow database
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -c 'CREATE DATABASE lyrashield_shadow;'
 
       - name: Migration drift check
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: |
           pnpm --filter @lyrashield/db exec prisma migrate diff \
             --from-migrations ./prisma/migrations \
@@ -305,14 +318,14 @@ jobs:
             --exit-code
 
       - name: Run database migrations
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm --filter @lyrashield/db migrate:deploy
 
       # These tests intentionally reject arbitrary DBs and use fixed local
       # database names as a destructive-action guard. Keep each fixture DB
       # disposable and migrate it from the checked-out schema.
       - name: Create isolated product regression databases
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -332,7 +345,7 @@ jobs:
       # named constraint, while NULL, zero, and a positive decimal remain valid.
       # All rows are created inside one transaction and rolled back.
       - name: Assert policy budgets are nonnegative
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         shell: bash
         run: |
           docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
@@ -345,7 +358,7 @@ jobs:
             -c "ROLLBACK"
 
       - name: Use a restricted RLS runtime role
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         shell: bash
         run: |
           docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
@@ -358,7 +371,7 @@ jobs:
           echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
 
       - name: Grant restricted runtime access to regression databases
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -373,12 +386,12 @@ jobs:
           done
 
       - name: Size lint (advisory)
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.marketing == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true') || needs.changes.outputs.marketing == 'true'
         continue-on-error: true
         run: pnpm lint:size
 
       - name: Smoke-test production-equivalent account and workspace grants
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -389,8 +402,12 @@ jobs:
             psql -h 127.0.0.1 -U app_runtime_ci -d lyrashield -v ON_ERROR_STOP=1 \
             -c "DO \$\$ BEGIN IF has_table_privilege(current_user, 'public.billing_reconciliation_state', 'SELECT') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'INSERT') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'UPDATE') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'DELETE') THEN RAISE EXCEPTION 'app_runtime_ci must not access billing_reconciliation_state'; END IF; END \$\$;"
 
+      - name: Lint CI tooling
+        if: needs.changes.outputs.tooling-only == 'true'
+        run: pnpm exec eslint run-all-tests.mjs .github/scripts/*.mjs .github/scripts/tests/*.mjs
+
       - name: Lint
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm lint
 
       - name: Lint marketing
@@ -398,23 +415,23 @@ jobs:
         run: pnpm --filter @lyrashield/marketing lint
 
       - name: Typecheck
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm typecheck
 
       - name: Typecheck web tests
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm typecheck:web-tests
 
       - name: Typecheck browser fixtures
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm typecheck:e2e
 
       - name: Typecheck portable browser harness
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm typecheck:browser-harness
 
       - name: Lint portable browser harness
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm lint:browser-harness
 
       - name: Typecheck marketing
@@ -427,23 +444,23 @@ jobs:
       # name in the error. blog:check-links is deliberately NOT gated here — it
       # calls ~50 third-party URLs and would make merges depend on their uptime.
       - name: Validate blog content
-        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm --filter @lyrashield/marketing blog:validate
 
       - name: Validate blog images
-        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm --filter @lyrashield/marketing blog:validate:images
 
       - name: Validate blog MDX
-        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm --filter @lyrashield/marketing blog:validate:mdx
 
       - name: Validate blog offline gates
-        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm --filter @lyrashield/marketing blog:validate:offline
 
       - name: Validate compare content
-        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm --filter @lyrashield/marketing compare:validate
 
       - name: Validate redirects coverage
@@ -451,7 +468,7 @@ jobs:
         # architecture): every prerendered route must carry an explicit
         # _redirects rule or its slash variant silently falls back to the
         # platform 307. Runs the same enumeration the e2e suite asserts.
-        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm --filter @lyrashield/marketing validate-redirects
 
       - name: Test affected suites
@@ -463,20 +480,26 @@ jobs:
           APP_CHANGED: ${{ needs.changes.outputs.app }}
           MARKETING_CHANGED: ${{ needs.changes.outputs.marketing }}
           SHARED_CHANGED: ${{ needs.changes.outputs.shared }}
+          TOOLING_ONLY: ${{ needs.changes.outputs.tooling-only }}
+          LYRASHIELD_TEST_COVERAGE: ${{ github.event_name == 'push' && '1' || '0' }}
         shell: bash
         run: |
           set -euo pipefail
           suites=()
-          if [ "$APP_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
-            suites+=(core ops)
-          fi
-          if [ "$MARKETING_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
-            suites+=(marketing motion)
+          if [ "$TOOLING_ONLY" = true ]; then
+            suites+=(ops)
+          else
+            if [ "$APP_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
+              suites+=(core ops)
+            fi
+            if [ "$MARKETING_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
+              suites+=(marketing motion)
+            fi
           fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
       - name: Prove metering and queue invariants with disposable services
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -485,13 +508,13 @@ jobs:
           BULLMQ_PRODUCER_REDIS_TEST=1 BULLMQ_TEST_REDIS_URL="$REDIS_URL" pnpm exec vitest run packages/integrations/src/queue.producer.redis.test.ts
 
       - name: Upload informational web coverage summary
-        if: always() && (needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true')
+        if: always() && github.event_name == 'push' && (needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true'))
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: web-vitest-coverage-summary
           path: coverage/coverage-summary.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
       # The TRIAL_INTEGRATION_TEST suites assert their DATABASE_URL is a
@@ -499,7 +522,7 @@ jobs:
       # provisioned above is exactly that. They run in a dedicated invocation
       # because the suite-wide DATABASE_URL is the owner role.
       - name: Trial integration tests (restricted runtime role)
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -516,7 +539,7 @@ jobs:
             'rejects a foreign owner before execution'
 
       - name: Agent operation workspace foreign key test
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -535,7 +558,7 @@ jobs:
       # still reject non-local databases; report checks make an accidental
       # Vitest skip fail the job instead of looking green.
       - name: Run required PostgreSQL regression tests
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -604,7 +627,6 @@ jobs:
           bash .github/scripts/tests/test-azure-secret-set.sh
           bash .github/scripts/tests/test-validate-worker-provenance.sh
           sh ops/monitoring/scan-admission.test.sh
-          node --test .github/scripts/tests/worker-preflight.test.mjs .github/scripts/tests/worker-contract-worktree.test.mjs
           sh ops/deployment/azure-vm-run-command.test.sh
           sh ops/monitoring/provision-alerts.test.sh
           sh ops/worker/refresh-secrets.test.sh
@@ -614,7 +636,7 @@ jobs:
         run: sh ops/worker/capture-stop-provenance.test.sh
 
       - name: Build app and shared packages
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm build
 
       - name: Build marketing
@@ -637,7 +659,7 @@ jobs:
       # what makes the install step reliably fit its timeout. Added after the
       # step timed out at 8 minutes three runs in a row (2026-08-19/20).
       - name: Cache Playwright browser
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
@@ -648,7 +670,7 @@ jobs:
             playwright-${{ runner.os }}-
 
       - name: Install Playwright browser
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         timeout-minutes: 15
         run: |
           # Playwright needs Ubuntu packages, not GitHub's preconfigured Google
@@ -662,12 +684,12 @@ jobs:
           pnpm exec playwright install --with-deps chromium
 
       - name: Marketing browser E2E
-        if: needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         timeout-minutes: 10
         run: pnpm --filter @lyrashield/marketing test:browser
 
       - name: Browser E2E (includes functional mobile shell at 390px)
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         timeout-minutes: 15
         # DATABASE_URL: the NOBYPASSRLS runtime role — the app under test runs
         # with RLS enforced, so e2e exercises the real RLS posture.
@@ -685,7 +707,7 @@ jobs:
             pnpm exec playwright test
 
       - name: Portable browser harness
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         timeout-minutes: 10
         run: pnpm test:browser-harness
 
@@ -1083,6 +1105,10 @@ jobs:
 
       - name: Typecheck
         run: pnpm --filter @lyrashield/desktop-frontend typecheck
+
+      - name: Lint CI tooling
+        if: needs.changes.outputs.tooling-only == 'true'
+        run: pnpm exec eslint run-all-tests.mjs .github/scripts/*.mjs .github/scripts/tests/*.mjs
 
       - name: Lint
         run: pnpm --filter @lyrashield/desktop-frontend lint
