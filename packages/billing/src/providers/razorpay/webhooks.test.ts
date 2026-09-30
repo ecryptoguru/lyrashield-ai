@@ -45,6 +45,82 @@ describe("validateRazorpayWebhook", () => {
     expect(validateRazorpayWebhook(payload, signature)).toMatchObject({ event: "payment.captured" })
   })
 
+  it("accepts provider snapshots with nullable payment and subscription fields", () => {
+    const createdAt = Math.floor(Date.now() / 1000)
+    const events = [
+      {
+        event: "payment.captured",
+        payload: {
+          payment: {
+            entity: {
+              id: "pay_nullable",
+              amount: 100,
+              currency: "INR",
+              order_id: null,
+              refund_status: null,
+              notes: [],
+            },
+          },
+        },
+      },
+      {
+        event: "subscription.authenticated",
+        payload: {
+          subscription: {
+            entity: {
+              id: "sub_cancelled",
+              status: "authenticated",
+              plan_id: "plan_test",
+              current_start: null,
+              current_end: null,
+              ended_at: null,
+              notes: [],
+            },
+          },
+        },
+      },
+      {
+        event: "subscription.activated",
+        payload: {
+          subscription: {
+            entity: {
+              id: "sub_active",
+              status: "active",
+              plan_id: "plan_test",
+              notes: { notes_key_1: "Tea, Earl Grey, Hot" },
+            },
+          },
+        },
+      },
+      {
+        event: "payment_link.cancelled",
+        payload: {
+          payment_link: {
+            entity: {
+              id: "plink_cancelled",
+              reference_id: null,
+              notes: null,
+            },
+          },
+        },
+      },
+    ]
+
+    const parsedEvents = events.map((event) => {
+      const payload = JSON.stringify({ ...event, created_at: createdAt })
+      const signature = createHmac("sha256", secrets.current).update(payload).digest("hex")
+
+      return validateRazorpayWebhook(payload, signature)
+    })
+
+    expect(parsedEvents[0]?.payload.payment?.entity.notes).toEqual({})
+    expect(parsedEvents[1]?.payload.subscription?.entity.notes).toEqual({})
+    expect(parsedEvents[2]?.payload.subscription?.entity.notes).toEqual({
+      notes_key_1: "Tea, Earl Grey, Hot",
+    })
+    expect(parsedEvents[3]?.payload.payment_link?.entity.notes).toBeNull()
+  })
+
   it("rejects malformed nested payment entities before adapter use", () => {
     const payload = JSON.stringify({
       event: "payment.captured",

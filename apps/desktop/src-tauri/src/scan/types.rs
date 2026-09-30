@@ -257,8 +257,9 @@ pub struct ScanSummary {
     pub finding_count: usize,
 }
 
-/// Stable keyset cursor for scan history. Both fields are required so scans
-/// sharing a timestamp cannot be skipped or returned twice between pages.
+/// Stable keyset cursor for scan history. `started_at` is the fixed-width UTC
+/// sort key, so equivalent RFC3339 offsets and fractional precision compare
+/// consistently; `scan_id` breaks ties.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanHistoryCursor {

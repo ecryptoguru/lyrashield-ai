@@ -7,6 +7,7 @@ const REQUIRED_CASES: [string, RegExp][] = [
   ["STOPPED_BUDGET", /protected per-scan budget/i],
   ["TIMED_OUT", /timed out/i],
   ["TARGET_LIMIT_REACHED", /target limit/i],
+  ["TARGET_EXISTS", /already exists/i],
   ["DEEP_NOT_ALLOWED", /deep/i],
   ["WORKSPACE_NOT_FOUND", /no longer available/i],
   ["SSRF_BLOCKED", /internal, private/i],
@@ -37,6 +38,13 @@ describe("operation failure presentation (W1-07)", () => {
     })
     expect(presentation.cause).toContain("checkout-service")
     expect(presentation.recovery).toMatch(/authorization prompt/i)
+  })
+
+  it("routes target conflicts to the workspace target list", () => {
+    const presentation = presentOperationFailure("TARGET_EXISTS")
+
+    expect(presentation.effect).toMatch(/no duplicate target was created/i)
+    expect(presentation.recoveryHref).toBe("/dashboard/targets")
   })
 
   it("never echoes unknown error text into the presentation", () => {

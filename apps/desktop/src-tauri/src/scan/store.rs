@@ -24,7 +24,13 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "contextual finding evidence and threat model state",
         include_str!("../sql/003_evidence_context.sql"),
     ),
+    (
+        4,
+        "canonical scan history ordering",
+        include_str!("../sql/004_scan_history_order.sql"),
+    ),
 ];
+const SCAN_HISTORY_ORDER_BACKFILL_BATCH_SIZE: i64 = 500;
 const MIGRATION_TABLE: &str = "CREATE TABLE IF NOT EXISTS _sqlx_migrations (
     version BIGINT PRIMARY KEY,
     description TEXT NOT NULL,
@@ -52,7 +58,63 @@ fn open_database(path: &std::path::Path) -> Result<rusqlite::Connection, String>
     conn.pragma_update(None, "journal_mode", "WAL")
         .map_err(|e| format!("database journal mode: {}", e))?;
     migrate_database(&mut conn, MIGRATIONS)?;
+    backfill_scan_started_at_sort(&mut conn)?;
     Ok(conn)
+}
+
+fn canonical_scan_timestamp(timestamp: chrono::DateTime<chrono::Utc>) -> String {
+    timestamp.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)
+}
+
+fn scan_started_at_sort_key(started_at: &str) -> String {
+    chrono::DateTime::parse_from_rfc3339(started_at)
+        .map(|timestamp| canonical_scan_timestamp(timestamp.with_timezone(&chrono::Utc)))
+        .unwrap_or_else(|_| started_at.to_owned())
+}
+
+fn backfill_scan_started_at_sort(conn: &mut rusqlite::Connection) -> Result<(), String> {
+    let has_missing: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM scans WHERE started_at_sort IS NULL)",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("check scan history ordering backfill: {}", e))?;
+    if !has_missing {
+        return Ok(());
+    }
+
+    let tx = conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(|e| format!("scan history ordering transaction: {}", e))?;
+    loop {
+        let missing = {
+            let mut stmt = tx
+                .prepare(
+                    "SELECT scan_id, started_at FROM scans WHERE started_at_sort IS NULL LIMIT ?",
+                )
+                .map_err(|e| format!("prepare scan history ordering backfill: {}", e))?;
+            let rows = stmt
+                .query_map([SCAN_HISTORY_ORDER_BACKFILL_BATCH_SIZE], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })
+                .map_err(|e| format!("read scan history ordering backfill: {}", e))?;
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read scan history ordering backfill: {}", e))?
+        };
+        if missing.is_empty() {
+            break;
+        }
+        for (scan_id, started_at) in missing {
+            tx.execute(
+                "UPDATE scans SET started_at_sort = ? WHERE scan_id = ? AND started_at_sort IS NULL",
+                rusqlite::params![scan_started_at_sort_key(&started_at), scan_id],
+            )
+            .map_err(|e| format!("backfill scan history ordering: {}", e))?;
+        }
+    }
+    tx.commit()
+        .map_err(|e| format!("commit scan history ordering: {}", e))
 }
 
 // Startup owns schema validation. Normal operations must not acquire migration
@@ -258,6 +320,7 @@ impl TestStorage {
     pub fn new_in_memory() -> Self {
         let mut conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
         migrate_database(&mut conn, MIGRATIONS).expect("migrate test db");
+        backfill_scan_started_at_sort(&mut conn).expect("backfill test db");
         Self {
             conn: Mutex::new(conn),
         }
@@ -321,17 +384,20 @@ pub async fn create_scan(
     diff_head: Option<&str>,
 ) -> Result<(), String> {
     let store = storage_for(app);
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now();
+    let started_at = now.to_rfc3339();
+    let started_at_sort = canonical_scan_timestamp(now);
     let mode_str = serde_json::to_string(mode).map_err(|e| e.to_string())?;
     store
         .execute(
-            "INSERT INTO scans (scan_id, target, mode, status, started_at, finding_count, workflow, backend, diff_base, diff_head) VALUES (?, ?, ?, ?, ?, ?, ?, 'local', ?, ?)",
+            "INSERT INTO scans (scan_id, target, mode, status, started_at, started_at_sort, finding_count, workflow, backend, diff_base, diff_head) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'local', ?, ?)",
             vec![
                 scan_id.into(),
                 target.into(),
                 mode_str.into(),
                 serde_json::Value::String("pending".into()),
-                now.into(),
+                started_at.into(),
+                started_at_sort.into(),
                 0.into(),
                 workflow.as_str().into(),
                 diff_base.map(|s| JsonValue::String(s.to_string())).unwrap_or(JsonValue::Null),
@@ -354,16 +420,19 @@ pub async fn create_submitted_scan(
     diff_head: Option<&str>,
 ) -> Result<(), String> {
     let store = storage_for(app);
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now();
+    let started_at = now.to_rfc3339();
+    let started_at_sort = canonical_scan_timestamp(now);
     let mode_str = serde_json::to_string(mode).map_err(|e| e.to_string())?;
     store
         .execute(
-            "INSERT INTO scans (scan_id, target, mode, status, started_at, finding_count, workflow, backend, diff_base, diff_head) VALUES (?, ?, ?, 'submitted', ?, 0, ?, 'cloud', ?, ?)",
+            "INSERT INTO scans (scan_id, target, mode, status, started_at, started_at_sort, finding_count, workflow, backend, diff_base, diff_head) VALUES (?, ?, ?, 'submitted', ?, ?, 0, ?, 'cloud', ?, ?)",
             vec![
                 scan_id.into(),
                 target.into(),
                 mode_str.into(),
-                now.into(),
+                started_at.into(),
+                started_at_sort.into(),
                 workflow.as_str().into(),
                 diff_base.map(|s| JsonValue::String(s.to_string())).unwrap_or(JsonValue::Null),
                 diff_head.map(|s| JsonValue::String(s.to_string())).unwrap_or(JsonValue::Null),
@@ -631,7 +700,8 @@ fn persist_terminal_in(
 }
 
 pub async fn list_scans(app: &AppHandle) -> Result<Vec<ScanSummary>, String> {
-    Ok(list_scan_page(app, None, None).await?.scans)
+    let store = storage_for(app);
+    list_all_scans_from_storage(store.as_ref()).await
 }
 
 pub async fn list_scan_page(
@@ -648,6 +718,19 @@ fn bounded_scan_page_size(limit: Option<usize>) -> usize {
     limit.unwrap_or(50).clamp(1, 100)
 }
 
+async fn list_all_scans_from_storage(store: &dyn ScanStorage) -> Result<Vec<ScanSummary>, String> {
+    let mut cursor = None;
+    let mut scans = Vec::new();
+    loop {
+        let page = list_scan_page_from_storage(store, cursor, 100).await?;
+        scans.extend(page.scans);
+        let Some(next_cursor) = page.next_cursor else {
+            return Ok(scans);
+        };
+        cursor = Some(next_cursor);
+    }
+}
+
 async fn list_scan_page_from_storage(
     store: &dyn ScanStorage,
     cursor: Option<ScanHistoryCursor>,
@@ -655,7 +738,7 @@ async fn list_scan_page_from_storage(
 ) -> Result<ScanHistoryPage, String> {
     let (query, params) = match cursor {
         Some(cursor) => (
-            "SELECT scan_id, target, mode, workflow, backend, contract_version, diff_base, diff_head, status, started_at, completed_at, finding_count FROM scans WHERE started_at < ? OR (started_at = ? AND scan_id < ?) ORDER BY started_at DESC, scan_id DESC LIMIT ?",
+            "SELECT scan_id, target, mode, workflow, backend, contract_version, diff_base, diff_head, status, started_at, started_at_sort, completed_at, finding_count FROM scans WHERE started_at_sort < ? OR (started_at_sort = ? AND scan_id < ?) ORDER BY started_at_sort DESC, scan_id DESC LIMIT ?",
             vec![
                 cursor.started_at.clone().into(),
                 cursor.started_at.into(),
@@ -664,25 +747,26 @@ async fn list_scan_page_from_storage(
             ],
         ),
         None => (
-            "SELECT scan_id, target, mode, workflow, backend, contract_version, diff_base, diff_head, status, started_at, completed_at, finding_count FROM scans ORDER BY started_at DESC, scan_id DESC LIMIT ?",
+            "SELECT scan_id, target, mode, workflow, backend, contract_version, diff_base, diff_head, status, started_at, started_at_sort, completed_at, finding_count FROM scans ORDER BY started_at_sort DESC, scan_id DESC LIMIT ?",
             vec![((page_size + 1) as i64).into()],
         ),
     };
     let rows = store.select(query, params).await?;
     let has_more = rows.len() > page_size;
+    let next_cursor = if has_more {
+        let last = &rows[page_size - 1];
+        Some(ScanHistoryCursor {
+            started_at: get_string(last, "started_at_sort")?,
+            scan_id: get_string(last, "scan_id")?,
+        })
+    } else {
+        None
+    };
     let scans = rows
         .iter()
         .take(page_size)
         .map(row_to_summary)
         .collect::<Result<Vec<_>, _>>()?;
-    let next_cursor = has_more
-        .then(|| {
-            scans.last().map(|scan| ScanHistoryCursor {
-                started_at: scan.started_at.clone(),
-                scan_id: scan.scan_id.clone(),
-            })
-        })
-        .flatten();
     Ok(ScanHistoryPage { scans, next_cursor })
 }
 

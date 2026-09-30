@@ -15,6 +15,10 @@ import { getTargetDomainStatuses } from "@/lib/target-domain-status"
 type TargetInput =
   ReturnType<typeof CreateRepoTargetSchema.parse> | ReturnType<typeof CreateUrlTargetSchema.parse>
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 const conflictTargetSelect = {
   id: true,
   type: true,
@@ -77,9 +81,10 @@ function targetExistsResponse(
       error: {
         code: "TARGET_EXISTS",
         message:
-          "A target for this source already exists in the workspace. Continue with the existing target.",
-        ...(compatible && existing ? { details: { existingTargetId: existing.id } } : {}),
-        existingTargetId: existing?.id ?? null,
+          "A target for this source already exists in the workspace. Open Targets to review it before continuing.",
+        ...(compatible && existing
+          ? { details: { existingTargetId: existing.id }, existingTargetId: existing.id }
+          : { existingTargetId: null }),
       },
     },
     { status: 409 }
@@ -100,8 +105,7 @@ async function post(request: Request) {
     )
   }
 
-  const isRepo =
-    typeof body === "object" && body !== null && (body as Record<string, unknown>).type === "REPO"
+  const isRepo = isRecord(body) && body.type === "REPO"
   const parsed = isRepo
     ? CreateRepoTargetSchema.safeParse(body)
     : CreateUrlTargetSchema.safeParse(body)
@@ -253,7 +257,7 @@ async function post(request: Request) {
         : {
             workspaceId,
             projectId: data.projectId ?? null,
-            type: data.type as "WEB_APP" | "API",
+            type: data.type,
             name: data.name,
             url: data.url,
             apiSpecUrl: data.apiSpecUrl ?? null,
@@ -271,7 +275,7 @@ async function post(request: Request) {
         typeof error === "object" &&
         error !== null &&
         "code" in error &&
-        (error as { code: unknown }).code === "P2002"
+        error.code === "P2002"
       ) {
         const existing = await findExistingTarget(data)
         return targetExistsResponse(

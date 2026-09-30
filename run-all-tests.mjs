@@ -15,7 +15,9 @@ const coreReportPath = isCi
   : null
 const coreCommand = ["vitest", "run", "--exclude", "**/dist/**"]
 if (coreReportPath) {
-  coreCommand.push("--reporter=json", `--outputFile=${coreReportPath}`)
+  // Keep Vitest's native diagnostics: JSON can replace timeout details with
+  // STACK_TRACE_ERROR. The JSON report still powers the named-test guard.
+  coreCommand.push("--reporter=default", "--reporter=json", `--outputFile=${coreReportPath}`)
 }
 if (process.env.LYRASHIELD_TEST_COVERAGE === "1") {
   coreCommand.push("--coverage")

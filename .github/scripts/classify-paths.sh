@@ -16,6 +16,14 @@
 # classifier logic is testable independently of the workflow runtime.
 set -euo pipefail
 
+force_all=false
+if [[ "${1:-}" == "--force-all" ]]; then
+  force_all=true
+elif [[ "$#" -ne 0 ]]; then
+  echo "Usage: classify-paths.sh [--force-all]" >&2
+  exit 2
+fi
+
 # Path classification patterns.
 # docs_pattern: files that never affect build, lint, typecheck, or tests.
 #   NOTE: .devin/, .claude/, .codeium/, .cursor/, .agents/, .windsurf/ are
@@ -35,7 +43,7 @@ azure_deploy_pattern='^(apps/(web|worker)/|packages/|package\.json|pnpm-lock\.ya
 
 # Only explicitly covered tooling can skip runtime suites. Unknown and mixed
 # changes keep the existing broad classification and deployment decision.
-tooling_pattern='^(\.github/workflows/(ci|deploy-azure|deploy-azure-runtime|release-production)\.yml|\.github/scripts/(classify-paths\.sh|assert-named-vitest-tests\.mjs|deploy-azure-(preflight|rollout)\.sh|promote-worker-vm\.sh|verify-webhook-cutover\.mjs)|\.github/scripts/tests/.*|ops/deployment/.*|ops/monitoring/.*|run-all-tests\.mjs)$'
+tooling_pattern='^(\.github/workflows/(ci|deploy-azure|deploy-azure-runtime|release-production)\.yml|\.github/scripts/(classify-paths|classify-main-change-gap)\.sh|\.github/scripts/(assert-named-vitest-tests\.mjs|deploy-azure-(preflight|rollout)\.sh|promote-worker-vm\.sh|verify-webhook-cutover\.mjs)|\.github/scripts/tests/.*|ops/deployment/.*|ops/monitoring/.*|run-all-tests\.mjs)$'
 tooling_only=true
 tooling_seen=false
 
@@ -100,6 +108,20 @@ if ! $tooling_seen || $marketing || $app || $desktop || $unknown; then tooling_o
 # desktop have their own delivery paths; docs-only changes need no deployment.
 # An unknown path is fail-closed because its build impact is not yet classified.
 if [[ "$unknown" == "true" ]]; then
+  marketing_deploy=true
+  azure_deploy=true
+fi
+
+# A missing or untrusted production baseline must run every path-selected gate
+# and route both artifacts. Callers use this mode when they cannot prove what
+# is currently deployed; it is intentionally broader than an unknown path.
+if $force_all; then
+  docs_only=false
+  tooling_only=false
+  marketing=true
+  app=true
+  desktop=true
+  shared=true
   marketing_deploy=true
   azure_deploy=true
 fi

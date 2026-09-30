@@ -181,6 +181,7 @@ async function prepareUrlEngineRelay(params: {
     executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
   )
 
+  let relayRegistrationAttempted = false
   try {
     const specServerHosts =
       target.type === "API" && target.apiSpecUrl
@@ -248,6 +249,9 @@ async function prepareUrlEngineRelay(params: {
       }
     }
 
+    // Registration may succeed remotely even if its response is lost. From
+    // this point, every setup failure must attempt revocation before failing.
+    relayRegistrationAttempted = true
     await registerRelayGrant(scanId, minted.grant, relayConfig, sessionBinding)
     await addScanEvent(scanId, "relay_scope", "info", "Relay scope granted", {
       hosts: minted.scope.hosts,
@@ -282,6 +286,22 @@ async function prepareUrlEngineRelay(params: {
       relay: { context: { url: relayConfig.url, grant: minted.grant }, config: relayConfig },
     }
   } catch (grantError) {
+    if (relayRegistrationAttempted) {
+      try {
+        await revokeRelayGrant(scanId, relayConfig)
+      } catch (cleanupError) {
+        // Cleanup must not replace the original registration/audit failure.
+        try {
+          logger.error("Failed to revoke relay grant after setup failure", {
+            scanId,
+            setupErrorType: grantError instanceof Error ? grantError.name : "UNKNOWN",
+            cleanupErrorType: cleanupError instanceof Error ? cleanupError.name : "UNKNOWN",
+          })
+        } catch {
+          // Logging must not replace the original registration/audit failure either.
+        }
+      }
+    }
     await addScanEvent(scanId, "engine_skipped", "error", "Relay grant could not be minted", {
       targetType: target.type,
       error: grantError instanceof Error ? grantError.message : String(grantError),

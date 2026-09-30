@@ -26,7 +26,11 @@ export class ProviderCatalogConfigError extends Error {
 }
 
 function record(value: unknown): UnknownRecord {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as UnknownRecord) : {}
+  return isRecord(value) ? value : {}
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function text(value: unknown): string | null {
@@ -93,7 +97,15 @@ function configuredProviderKey(
 function parsePlanKey(key: string): { plan: CloudPlanId; interval: BillingInterval } | null {
   const match = /^(starter|pro|launch_assurance)_(monthly|annual)$/.exec(key)
   if (!match) return null
-  return { plan: match[1]!.toUpperCase() as CloudPlanId, interval: match[2] as BillingInterval }
+  const plans: Record<string, CloudPlanId> = {
+    starter: "STARTER",
+    pro: "PRO",
+    launch_assurance: "LAUNCH_ASSURANCE",
+  }
+  const plan = plans[match[1]!]
+  const interval = match[2]
+  if (!plan || (interval !== "monthly" && interval !== "annual")) return null
+  return { plan, interval }
 }
 
 function requireMetadataAgreement(

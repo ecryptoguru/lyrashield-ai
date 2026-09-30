@@ -17,6 +17,8 @@ for (const coverage of ["0", "1"]) {
 const { writeFileSync } = require("node:fs")
 const reportPath = process.argv.find((arg) => arg.startsWith("--outputFile="))?.slice(13)
 if (!reportPath || process.argv.includes("--coverage") !== (process.env.LYRASHIELD_TEST_COVERAGE === "1")) process.exit(2)
+if (!process.argv.includes("--reporter=default") || !process.argv.includes("--reporter=json")) process.exit(2)
+console.error("Native Vitest diagnostic: Test timed out in 5000ms.")
 writeFileSync(reportPath, JSON.stringify({ testResults: [{ name: "sample.test.ts", assertionResults: [{ fullName: "sample suite reports the failing case", status: "failed", failureMessages: ["Error: expected true\\n    at sample.test.ts:4:3"] }] }] }))
 process.exit(1)
 `
@@ -38,6 +40,7 @@ process.exit(1)
       assert.equal(result.status, 1, result.stderr)
       assert.match(result.stderr, /sample suite reports the failing case/)
       assert.match(result.stderr, /at sample\.test\.ts:4:3/)
+      assert.match(result.stderr, /Native Vitest diagnostic: Test timed out in 5000ms/)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { ApiResponse, PaginatedResponse } from "@lyrashield/types"
+import type { PaginatedResponse } from "@lyrashield/types"
 import { safeApiErrorMessage } from "./safe-api-error-message"
 
 export class ApiError extends Error {
@@ -41,11 +41,13 @@ const apiResponseSchema = z
   })
   .passthrough()
 
+type ApiEnvelope = z.infer<typeof apiResponseSchema>
+
 function httpError(status: number): ApiError {
   return new ApiError("HTTP_ERROR", `Request failed with status ${status}`, status)
 }
 
-function responseError(json: ApiResponse<unknown>, status: number): ApiError {
+function responseError(json: ApiEnvelope, status: number): ApiError {
   const error = new ApiError(
     json.error?.code ?? "UNKNOWN_ERROR",
     json.error?.message ?? "An unknown error occurred",
@@ -55,7 +57,7 @@ function responseError(json: ApiResponse<unknown>, status: number): ApiError {
   return error
 }
 
-async function readApiResponse(response: Response): Promise<ApiResponse<unknown>> {
+async function readApiResponse(response: Response): Promise<ApiEnvelope> {
   let body: unknown
   try {
     body = await response.json()
@@ -78,7 +80,7 @@ async function readApiResponse(response: Response): Promise<ApiResponse<unknown>
       response.status
     )
   }
-  return parsed.data as ApiResponse<unknown>
+  return parsed.data
 }
 
 function appendQueryParams(url: string, params?: Record<string, string | undefined>): string {

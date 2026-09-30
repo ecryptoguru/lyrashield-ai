@@ -82,7 +82,7 @@ export function ScanHistory({ onOpen }: { onOpen: (scanId: string) => void }) {
           </button>
         </div>
       ) : scans.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No local scans yet.</p>
+        <p className="text-sm text-muted-foreground">No scans yet.</p>
       ) : (
         scans.map((scan) => (
           <button

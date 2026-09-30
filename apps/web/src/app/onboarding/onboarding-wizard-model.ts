@@ -105,10 +105,10 @@ export function friendlyTargetError(cause: unknown): string {
     if (cause.code === "VALIDATION_ERROR") {
       return "We couldn't save your target. Please check the name and URL and try again."
     }
-    // W2-02: a same-source retry continues with the target that already
-    // exists instead of creating a second one.
+    // A same-source conflict can differ in target settings, so direct users
+    // to review the existing target instead of suggesting automatic reuse.
     if (cause.code === "TARGET_EXISTS") {
-      return "A target for this source already exists in your workspace. Open Targets to continue with it — no duplicate was created."
+      return "A target for this source already exists in your workspace. Open Targets to review it before continuing — no duplicate was created."
     }
   }
   return cause instanceof Error ? cause.message : "Could not start the review."

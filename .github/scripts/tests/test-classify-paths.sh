@@ -205,7 +205,7 @@ assert_eq "browser harness: marketing deploy" "false" "$(get_field "$out" "marke
 assert_eq "browser harness: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 # Tooling-only keeps legacy shared/release routing, but narrows validation.
-for path in .github/scripts/promote-worker-vm.sh .github/workflows/ci.yml ops/deployment/azure-vm-run-command.sh run-all-tests.mjs; do
+for path in .github/scripts/promote-worker-vm.sh .github/scripts/classify-main-change-gap.sh .github/workflows/ci.yml ops/deployment/azure-vm-run-command.sh run-all-tests.mjs; do
   out=$(run_classify "$path")
   assert_eq "$path: tooling-only" "true" "$(get_field "$out" "tooling-only")"
   assert_eq "$path: shared retained" "true" "$(get_field "$out" "shared")"
@@ -216,6 +216,14 @@ for paths in $'run-all-tests.mjs\napps/web/src/app/page.tsx' $'.github/workflows
 done
 out=$(run_classify $'.github/scripts/promote-worker-vm.sh\nREADME.md')
 assert_eq "tooling plus root docs" "true" "$(get_field "$out" "tooling-only")"
+
+# Missing production provenance forces every path-selected validation and route.
+out=$(printf '' | bash "$CLASSIFY" --force-all)
+for field in app marketing desktop shared marketing-deploy azure-deploy; do
+  assert_eq "force-all: $field" "true" "$(get_field "$out" "$field")"
+done
+assert_eq "force-all: docs-only" "false" "$(get_field "$out" "docs-only")"
+assert_eq "force-all: tooling-only" "false" "$(get_field "$out" "tooling-only")"
 
 echo "Results: $pass passed, $fail failed"
 if [[ "$fail" -gt 0 ]]; then

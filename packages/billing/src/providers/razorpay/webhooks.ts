@@ -26,18 +26,23 @@ import { env } from "@lyrashield/config"
 import { z } from "zod"
 import { WebhookAuthError, WebhookPayloadError } from "../../webhook-errors"
 
+const notesSchema = z.preprocess(
+  (value) => (Array.isArray(value) && value.length === 0 ? {} : value),
+  z.record(z.string(), z.string()).nullish()
+)
+
 const paymentEntitySchema = z
   .object({
     id: z.string(),
     amount: z.number(),
     currency: z.string(),
-    notes: z.record(z.string(), z.string()).optional(),
+    notes: notesSchema,
     email: z.string().optional(),
-    order_id: z.string().optional(),
+    order_id: z.string().nullish(),
     amount_refunded: z.number().optional(),
     amountRefunded: z.number().optional(),
-    refund_status: z.string().optional(),
-    refundStatus: z.string().optional(),
+    refund_status: z.string().nullish(),
+    refundStatus: z.string().nullish(),
     status: z.string().optional(),
   })
   .passthrough()
@@ -75,10 +80,10 @@ const razorpayWebhookEventSchema = z
                 id: z.string(),
                 status: z.string(),
                 plan_id: z.string(),
-                current_start: z.number().optional(),
-                current_end: z.number().optional(),
-                ended_at: z.number().optional(),
-                notes: z.record(z.string(), z.string()).optional(),
+                current_start: z.number().nullish(),
+                current_end: z.number().nullish(),
+                ended_at: z.number().nullish(),
+                notes: notesSchema,
               })
               .passthrough(),
           })
@@ -89,8 +94,8 @@ const razorpayWebhookEventSchema = z
             entity: z
               .object({
                 id: z.string(),
-                reference_id: z.string().optional(),
-                notes: z.record(z.string(), z.string()).optional(),
+                reference_id: z.string().nullish(),
+                notes: notesSchema,
               })
               .passthrough(),
           })
@@ -112,7 +117,8 @@ const MAX_PROVIDER_CLOCK_SKEW_MS = 5 * 60 * 1000
  * Security:
  * - Uses RAZORPAY_WEBHOOK_SECRET exclusively (never falls back to the API key
  *   secret, which has a different purpose and would weaken webhook validation).
- * - Rejects events older than 5 minutes to prevent replay attacks.
+ * - Rejects events older than the 15-day provider replay window or too far in
+ *   the future to prevent replay attacks.
  *
  * @param body - Raw request body string
  * @param signature - Value of X-Razorpay-Signature header

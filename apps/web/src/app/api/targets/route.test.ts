@@ -154,6 +154,97 @@ describe("POST /api/targets", () => {
     expect(prisma.target.create).not.toHaveBeenCalled()
   })
 
+  it("does not return an existing target ID when its settings are incompatible", async () => {
+    vi.mocked(assertTargetAllowed).mockResolvedValue({
+      allowed: false,
+      code: "TARGET_LIMIT_REACHED",
+      message: "Upgrade to create another target.",
+      targetsUsed: 3,
+      targetCap: 3,
+    })
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-existing",
+      type: "REPO",
+      name: "Existing target",
+      projectId: null,
+      environment: "STAGING",
+      repoFullName: "ecryptoguru/existing-target",
+      repoProvider: "github",
+      branch: "main",
+      installationId: null,
+      url: null,
+      apiSpecUrl: null,
+    } as never)
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/targets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          type: "REPO",
+          name: "Existing target",
+          repoOwner: "ecryptoguru",
+          repoName: "existing-target",
+          branch: "release",
+          environment: "STAGING",
+        }),
+      })
+    )
+
+    expect(response.status).toBe(409)
+    const result = await response.json()
+    expect(result.error).toMatchObject({ code: "TARGET_EXISTS", existingTargetId: null })
+    expect(result.error.details).toBeUndefined()
+    expect(prisma.target.create).not.toHaveBeenCalled()
+  })
+
+  it("returns the matching target after a concurrent create wins the unique constraint", async () => {
+    vi.mocked(assertTargetAllowed).mockResolvedValue({ allowed: true } as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-existing",
+      type: "REPO",
+      name: "Existing target",
+      projectId: null,
+      environment: "STAGING",
+      repoFullName: "ecryptoguru/existing-target",
+      repoProvider: "github",
+      branch: "main",
+      installationId: null,
+      url: null,
+      apiSpecUrl: null,
+    } as never)
+    vi.mocked(prisma.target.create).mockRejectedValue(
+      Object.assign(new Error("unique constraint"), { code: "P2002" }) as never
+    )
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/targets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          type: "REPO",
+          name: "Existing target",
+          repoOwner: "ecryptoguru",
+          repoName: "existing-target",
+          branch: "main",
+          environment: "STAGING",
+        }),
+      })
+    )
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({
+      success: false,
+      error: {
+        code: "TARGET_EXISTS",
+        details: { existingTargetId: "target-existing" },
+      },
+    })
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
+  })
+
   it("rejects a new target when the trial target cap is reached", async () => {
     vi.mocked(assertTargetAllowed).mockResolvedValue({
       allowed: false,
