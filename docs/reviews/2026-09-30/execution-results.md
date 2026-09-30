@@ -1,0 +1,75 @@
+# Cross-repository implementation and Docker test results
+
+Implementation uses isolated branches based on the fetched main revisions in the plan. User-owned recovery changes remain preserved. This document records local evidence; it does not declare production release readiness.
+
+| Task | Source and local evidence                                                                                                                                                                                                                                                                                            | Remaining gate                                                                                                                                                                                                                                                         |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A    | Main revisions and recovery divergence captured; existing runtime invariants retained. Disposable PostgreSQL uses a restricted runtime role and all 110 migrations.                                                                                                                                                  | Complete starting-revision full suites were not run; initial source snapshots and focused regressions establish the baseline.                                                                                                                                          |
+| B    | Next 16.3.6 and Undici 8.10.2 floors, immutable lock resolution, real OG image tests and Docker rendering. Draft PR #870 has fresh required CI green.                                                                                                                                                                | Merge and exact production image release.                                                                                                                                                                                                                              |
+| C    | Shared durable webhook claims, atomic attempts, lease renewal, colon-free generation IDs and bounded maintenance recovery. Legacy or ambiguous effects remain quarantined for receipt review. Real PostgreSQL/Redis regressions cover ownership and retry lifecycle.                                                 | Before rollout, drain old ingress/retry writers. Roll back only to a compatible patched writer; additive schema remains.                                                                                                                                               |
+| D    | Fresh account/workspace-bound usage receipt recovery; unrelated unique and finalization errors propagate. 53 unit and 14 real PostgreSQL cases passed.                                                                                                                                                               | Fresh component PR CI and release.                                                                                                                                                                                                                                     |
+| E    | Owned bounded producer connections, readiness bounds and preserved identities after uncertain acknowledgements. Docker lost-ACK and absent-job admissions replay the same scan ID, with no duplicate scan or agent-minute charge. Missing jobs fail through normal orphan reconciliation.                            | Twenty-one focused unit/real Redis cases passed, including read-only recovery after an ended connection. Final clean-archive image sealing and HTTP fault/recovery smokes passed. See the Docker receipt for exact identities.                                         |
+| F    | Atomic scan-list cursor/status state, SSR initial rows, refresh reset and original-scope late-response fencing. Actual Chromium desktop/mobile recovery and scope races passed.                                                                                                                                      | Independent scope and hydration review passed. Deployed browser acceptance remains separate.                                                                                                                                                                           |
+| G    | Engine method/status-aware relay framing and connection-nominated header removal. Final engine c0cf936b4c3ee6f8f331681802645cc044d60911 passed 2,703 tests with four expected skips, lint, mypy and security checks.                                                                                                 | Exact product consumer contract passed: nine files, 411 tests against product 58cc2e46 and engine c0cf936b. Engine merge, reviewed Cloud/Desktop pin updates, reverse pin to exact merged product and founder-dispatched releases remain separate.                     |
+| H    | Bounded package acquisition and subprocess lifetime, verified tarball integrity, isolated environment, frame/output caps and compatible required MCP schema checks. Unit adversarial fixtures and existing authorization regressions passed. Docker packed CLI and MCP initialize/list-tools passed without network. | Clean export, 31-artifact release validation, locked Zed WASM build and the hardened published MCP 0.2.11 verifier passed. Marketplace draft PR #38 binds source 58cc2e46 with sourceClean true. Real authenticated client acceptance and publication remain separate. |
+| I    | Controlled billing and queue measurements plus 294 runtime invariant tests. Tail latency was inconsistent and production cardinality unavailable; no speculative optimization landed.                                                                                                                                | Production Redis capacity window and representative end-to-end measurements before any optional performance change.                                                                                                                                                    |
+
+## Final source and local gates
+
+Product code revision: `58cc2e46ec6c60f46f2d7ed9a8059205394aae88`. Engine revision: `c0cf936b4c3ee6f8f331681802645cc044d60911`. Both source trees were clean when archived/exported. Later receipt and test-fixture commits do not change application or engine code identities.
+
+| Gate                             | Result                                                                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Product core, final source       | 627 files passed; 6,038 tests passed, 54 explicitly skipped.                                                                                     |
+| Marketing / motion / operations  | 302 / 18 / 44 tests passed through the raw test runner.                                                                                          |
+| Real metering / webhook services | 14 PostgreSQL metering plus 10 PostgreSQL/Redis webhook cases passed. Docker worker was stopped for exclusive queue ownership during this suite. |
+| Producer boundary suite          | 16 unit plus five real namespaced Redis cases passed.                                                                                            |
+| Engine full controlled gate      | 2,703 passed, four expected skips; three dependency audits clean.                                                                                |
+| Exact engine/product consumer    | Nine files, 411 tests passed.                                                                                                                    |
+| Static and schema                | 37 lint tasks and 37 typecheck tasks passed; web-test and browser-fixture typechecks, formatting, migration/schema drift and diff checks passed. |
+| Deployment-script fixtures       | 44 Node cases plus all shell suites passed; mocked commands never touch a live VM.                                                               |
+| Worker image contract            | Non-root user, 89 Python distributions and image policy passed.                                                                                  |
+| Independent final review         | Source approved after hydration and ended-queue recovery corrections.                                                                            |
+
+The first aggregate run under concurrent image/test builds exceeded an existing five-second module-import timeout in the scan API parity case. The isolated 27-case parity suite passed, then the complete final suite passed under the unchanged timeout with contention removed. An earlier shared-queue integration run lost two fixture jobs to the simultaneously running Docker retry consumer; the exclusive rerun passed all 24 cases. Neither failure was erased or represented as green.
+
+Lockfile SHA-256: product `4a28f12352aa9bb7354650d79d081fa95918c8f05b4cc5fe167b46e117285e10`; engine `54bf79e34591243413dfe88afd9a5575f8e20b7d242c516aff91d7fabcce06cd`.
+
+## Draft delivery
+
+- [#870 Next/Undici security](https://github.com/ecryptoguru/lyrashield-ai/pull/870): required main-target CI and security diff gate passed.
+- [#871 durable metering](https://github.com/ecryptoguru/lyrashield-ai/pull/871), [#872 MCP verifier](https://github.com/ecryptoguru/lyrashield-ai/pull/872), [#873 scan-list recovery](https://github.com/ecryptoguru/lyrashield-ai/pull/873): focused drafts over #870.
+- [#874 webhook/queue reliability](https://github.com/ecryptoguru/lyrashield-ai/pull/874): focused draft over #871.
+- [Engine #192](https://github.com/ecryptoguru/lyrashield-engine/pull/192): fresh verify, audit and sandbox build CI passed on the exact engine revision.
+- [Marketplace #38](https://github.com/ecryptoguru/lyrashield-marketplace/pull/38): clean generated candidate with fresh exact-head CI passed; publication remains gated.
+
+Stacked product drafts have passing security diff gates. Their required main CI is **not-run** because the existing workflow accepts PRs targeting main only; run it after the bases land and drafts are retargeted. No CI filter was broadened and no required check was bypassed. Worktrees remain available for review.
+
+## Docker scope
+
+The final [Docker receipt](./docker-results.md) records exact images, local endpoints, runtime checks, failure recovery and reproduction commands.
+
+The [compose fixture](./docker-test.compose.yml) exercises web, scanner, three worker consumers, PostgreSQL, Redis, authenticated egress, the engine sandbox, generated marketing worker with local D1, and packed CLI/MCP clients. Fixture ports bind localhost. Credentials and data are synthetic; provider/model credentials are absent.
+
+Authenticated app tests cover sign-up, sign-in/session, workspace creation, private-target denial, a deterministic SAFE scan and operation-key replay. The scan completed with one scan/operation, zero agent-minute usage and no provider requests. Incomplete scanner coverage remains incomplete; completion is not a security assurance claim. Marketing waitlist validation and replay use local D1 only. OG routes produce correct PNG dimensions and missing-card behavior.
+
+Fault injection uses a local Redis proxy. One scenario drops a successful add reply; another prevents the add from reaching Redis. Neither creates a second scan. Worker restart uses normal reconciliation, without deleting queue keys or automatically replaying paid work.
+
+Native Desktop signing/installation, hosted OAuth client activation, live payment/refund proof, Azure/Cloudflare production release and sustained production Redis metrics are not Docker gates and have not been performed.
+
+## Security dependency compatibility exception
+
+Fresh required audits found vulnerable Undici and PyJWT leaves. Undici was patched within its existing major. The engine locks PyJWT 2.14.0. Official Semgrep 1.178.0 still declares a vulnerable PyJWT range; no compatible official release was available during verification. A reviewed deterministic metadata exception changes only that exact PyJWT requirement and its RECORD hash, preserving original artifact identity and all other dependencies. Installation remains hash-locked with mandatory pip checks and three clean dependency audits. Real Semgrep JWT/JWKS and CLI fixtures passed. Remove the exception when an official compatible release is available; production release still requires review of this maintained exception.
+
+## Review rulings and costs
+
+- Preserve recovered user work and implement from current main. A recovered feature needs an intentional later port.
+- Coordinate webhook and queue edits because they share queue authority. Their combined real-service tests are required.
+- Return a persisted scan identity after ambiguous queue acknowledgement. Admission status may resolve asynchronously through normal reconciliation; no duplicate paid request is created.
+- Keep source corrections separate from merges, publication, production dispatch and paid transactions. Local green evidence does not authorize those gates.
+- Expand Docker Desktop storage from 64 to 96 GiB to complete image builds, preserving existing images, containers and volumes. The VM has a larger storage ceiling.
+- Keep optional optimization deferred when the measurement does not justify it. A later representative measurement may support a focused change.
+
+The advisory Markdown check passed for the three owned review documents using `--no-globs`; generated private browser failure traces are outside that scoped documentation gate.
+
+Docker fixture and validation delivery: [draft PR #875](https://github.com/ecryptoguru/lyrashield-ai/pull/875). Fixture credential corrections leave the tested application and engine identities unchanged; repeated scan admission now correctly exercises the free-network rate limit.
