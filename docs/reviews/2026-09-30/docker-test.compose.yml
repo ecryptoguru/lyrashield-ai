@@ -85,7 +85,7 @@ services:
       # Satisfies startup configuration without granting any provider access.
       LLM_API_KEY: ls-fixture-invalid-no-provider-access
       LLM_API_BASE: http://127.0.0.1:9
-      LYRASHIELD_IMAGE: lyrashield-sandbox:cross-repo-ls06-20260930
+      LYRASHIELD_IMAGE: lyrashield-sandbox:cross-repo-ls06-pyjwt-20260930
       LYRASHIELD_ENGINE_SANDBOX_NETWORK: ls-hardening-20260930-sandbox
       LYRASHIELD_TELEMETRY: "0"
       LYRASHIELD_WEB_SEARCH_ENABLED: "0"
