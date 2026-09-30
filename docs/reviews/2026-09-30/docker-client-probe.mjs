@@ -1,12 +1,11 @@
 // Operates only on packed local client artifacts inside an ephemeral container.
 import assert from "node:assert/strict"
-import { spawn, execFileSync } from "node:child_process"
+import { spawn, execFileSync, spawnSync } from "node:child_process"
 
 console.log(execFileSync("/app/node_modules/.bin/lyrashield", ["--version"], { encoding: "utf8" }))
-assert.match(
-  execFileSync("/app/node_modules/.bin/lyrashield", ["--help"], { encoding: "utf8" }),
-  /scan|login/
-)
+const help = spawnSync("/app/node_modules/.bin/lyrashield", ["--help"], { encoding: "utf8" })
+assert.equal(help.status, 0)
+assert.match(help.stdout + help.stderr, /scan|login/)
 const child = spawn("node", ["/app/node_modules/@lyrashield/mcp/bin/lyrashield-mcp.mjs"], {
   env: {
     PATH: process.env.PATH,
