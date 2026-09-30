@@ -45,6 +45,19 @@ describe("validateRazorpayWebhook", () => {
     expect(validateRazorpayWebhook(payload, signature)).toMatchObject({ event: "payment.captured" })
   })
 
+  it("rejects malformed nested payment entities before adapter use", () => {
+    const payload = JSON.stringify({
+      event: "payment.captured",
+      created_at: Math.floor(Date.now() / 1000),
+      payload: { payment: { entity: { id: 7, amount: "100", currency: 42 } } },
+    })
+    const signature = createHmac("sha256", secrets.current).update(payload).digest("hex")
+
+    expect(() => validateRazorpayWebhook(payload, signature)).toThrow(
+      "Razorpay webhook has invalid event shape"
+    )
+  })
+
   it("accepts a delayed provider retry with the original event timestamp", () => {
     const payload = JSON.stringify({
       event: "payment.captured",

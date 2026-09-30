@@ -165,7 +165,7 @@ export const ACCOUNT_OWNED_MODELS = new Set<string>([
   "MyraAuditEvent",
 ])
 
-export const READ_OPS = new Set<string>([
+const READ_OPS = new Set<string>([
   "findMany",
   "findUnique",
   "findFirst",
@@ -182,7 +182,7 @@ export const READ_OPS = new Set<string>([
 // they target one row by unique id and routes already scope them via a prior
 // workspace-scoped read; leaving them out avoids surprising unique-where edge
 // cases. (S7)
-export const WRITE_SCOPE_OPS = new Set<string>(["updateMany", "deleteMany"])
+const WRITE_SCOPE_OPS = new Set<string>(["updateMany", "deleteMany"])
 
 type WorkspaceContext = {
   workspaceId: string | null
@@ -195,7 +195,7 @@ type WorkspaceContext = {
 // its extension reading an old store while reloaded transaction helpers bind a
 // new one, causing a protected write to escape its caller's transaction.
 // Only the storage instance is shared; request values remain async-local.
-const globalForWorkspace = globalThis as unknown as {
+const globalForWorkspace = globalThis as typeof globalThis & {
   lyrashieldWorkspaceStore?: AsyncLocalStorage<WorkspaceContext>
 }
 const workspaceStore =

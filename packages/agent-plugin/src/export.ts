@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { MUTATING_TOOL_NAMES } from "@lyrashield/mcp/tool-policy"
 import { buildPlugin } from "./build.js"
-import { getPluginDir } from "./index.js"
+import { getPluginDir } from "./plugin-dir.js"
 
 const PUBLIC_FILES = [
   "README.md",

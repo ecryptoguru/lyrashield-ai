@@ -1,6 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreExportsUsedInFile": false,
   "rules": {
     "duplicates": "off"
   },
@@ -21,11 +20,15 @@
         "scripts/generate-og-cards.mjs",
         "src/**/*.test.{ts,tsx}"
       ],
-      "project": ["src/**/*.{ts,tsx,astro}", "tests-browser/**/*.ts", "scripts/**/*.{mjs,ts}"]
+      "project": [
+        "src/**/*.{ts,tsx,astro,mdx,css}",
+        "tests-browser/**/*.ts",
+        "scripts/**/*.{mjs,ts}"
+      ]
     },
     "apps/marketing-motion": {
       "entry": ["tests/**/*.test.mjs"],
-      "project": ["scripts/**/*.mjs", "tests/**/*.mjs"]
+      "project": ["scripts/**/*.mjs", "src/**/*.css", "tests/**/*.mjs"]
     },
     "apps/web": {
       "entry": [
@@ -33,7 +36,7 @@
         "src/instrumentation*.ts",
         "src/**/*.test.{ts,tsx}"
       ],
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx,css}"]
     },
     "apps/worker": {
       "entry": [
@@ -41,7 +44,7 @@
         "src/operations/verify-evidence-storage-fail-closed.ts",
         "src/**/*.test.{ts,tsx}"
       ],
-      "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,ts}"]
+      "project": ["src/**/*.{ts,tsx}"]
     },
     "packages/affiliate": {
       "entry": ["src/**/*.test.ts"],
@@ -120,7 +123,7 @@
       "project": ["src/**/*.ts"]
     },
     "packages/myra": {
-      "entry": ["src/**/*.test.ts", "scripts/import-knowledge.ts"],
+      "entry": ["src/**/*.test.ts"],
       "project": ["src/**/*.ts", "scripts/**/*.ts"]
     },
     "packages/pricing": {

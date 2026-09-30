@@ -224,8 +224,8 @@ export async function generateLaunchReport(
         status: "generated",
         format: "html",
         createdById,
-        contentJson: payload as unknown as Record<string, unknown>,
-        provenanceJson: provenance as unknown as Record<string, unknown>,
+        contentJson: { ...payload },
+        provenanceJson: { ...provenance },
       },
       select: { id: true },
     })

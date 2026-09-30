@@ -37,7 +37,7 @@ function request() {
   form.set("audienceSize", "1k-10k")
   form.set("audienceType", "developers")
   form.set("promotionMethods", "Newsletter and conference talks about developer security.")
-  form.set("payoutMethod", "payoneer")
+  form.set("payoutMethod", "")
   form.set("acceptTerms", "true")
   form.set("taxFormStatus", "will_complete")
   return new Request("http://localhost/affiliates/api/apply", { method: "POST", body: form })
@@ -74,6 +74,30 @@ describe("affiliate apply", () => {
     const response = await POST(request())
 
     expect(response.status).toBe(201)
-    expect(affiliate.create).toHaveBeenCalled()
+    expect(affiliate.create).toHaveBeenCalledWith({
+      data: expect.not.objectContaining({ payoutMethod: expect.anything() }),
+    })
   })
+
+  it.each(["briskpe", "payoneer"])(
+    "rejects applications for unavailable provider %s",
+    async (provider) => {
+      const form = new FormData()
+      form.set("name", "Partner One")
+      form.set("website", "https://partner.example.com")
+      form.set("audienceSize", "1k-10k")
+      form.set("audienceType", "developers")
+      form.set("promotionMethods", "Newsletter and conference talks about developer security.")
+      form.set("payoutMethod", provider)
+      form.set("acceptTerms", "true")
+      form.set("taxFormStatus", "will_complete")
+
+      const response = await POST(
+        new Request("http://localhost/affiliates/api/apply", { method: "POST", body: form })
+      )
+
+      expect(response.status).toBe(400)
+      expect(affiliate.create).not.toHaveBeenCalled()
+    }
+  )
 })

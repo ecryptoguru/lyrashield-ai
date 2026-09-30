@@ -179,7 +179,7 @@ describe("action.yml risky-pattern drift guard (source of truth: src/diff-core.t
     for (const check of checks) {
       const tsPattern = RISKY_PATTERNS.find((p) => p.ruleId === check.ruleId)
       expect(check.severity, `severity drift for rule "${check.ruleId}"`).toBe(tsPattern?.severity)
-      // Mirrors the level derivation in runRiskyPatternChecks().
+      // The CLI maps HIGH/CRITICAL patterns to SARIF errors.
       const expectedLevel =
         tsPattern?.severity === "HIGH" || tsPattern?.severity === "CRITICAL" ? "error" : "warning"
       expect(check.level, `SARIF level drift for rule "${check.ruleId}"`).toBe(expectedLevel)

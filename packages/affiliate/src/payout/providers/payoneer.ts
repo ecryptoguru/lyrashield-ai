@@ -5,7 +5,7 @@
  * Docs: https://developer.payoneer.com/
  */
 
-export interface PayoneerProvider {
+interface PayoneerProvider {
   send(
     payoutId: string,
     amount: string,

@@ -210,7 +210,7 @@ This section retains the approved payout operating model and the unresolved prov
 
 - The paying entity is the Indian company. Polar collects payments only and does not pay affiliates.
 - India affiliate payouts use RazorpayX in INR.
-- Non-India affiliate payouts use Payoneer Enterprise Mass Payouts, subject to partnership and API approval. BriskPe or Cashfree is the fallback if the primary rail is unavailable or unsuitable.
+- The planned non-India rail is Payoneer Enterprise Mass Payouts, subject to partnership and API approval. No non-India payout provider is currently approved.
 - Payout eligibility remains a $100 minimum, monthly net-30 payment on the 15th, a 30-day hold, completed tax-form gate, a 25% reserve for a new affiliate's first 90 days and automatic clawback for provider-confirmed refunds or chargebacks.
 - Payouts remain disabled until provider credentials, recipient validation, delivery webhooks, idempotency, rejection handling, reconciliation, tax-form handling and operator procedures pass production-scoped verification.
 

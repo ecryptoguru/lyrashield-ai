@@ -1,9 +1,9 @@
 import { expect } from "vitest"
 import type { Permission } from "@lyrashield/auth"
 
-export type PermissionedMethod = "DELETE" | "GET" | "PATCH" | "POST" | "PUT"
+type PermissionedMethod = "DELETE" | "GET" | "PATCH" | "POST" | "PUT"
 
-export const ROUTE_PERMISSION_MANIFEST = [
+const ROUTE_PERMISSION_MANIFEST = [
   { route: "/api/ai-assurance/evidence", method: "GET", permission: "aiAssurance:view" },
   { route: "/api/ai-assurance/evidence", method: "POST", permission: "aiAssurance:manage" },
   {
@@ -56,7 +56,7 @@ export const ROUTE_PERMISSION_MANIFEST = [
   permission: Permission
 }[]
 
-export function routePermission(route: string, method: PermissionedMethod): Permission {
+function routePermission(route: string, method: PermissionedMethod): Permission {
   const match = ROUTE_PERMISSION_MANIFEST.find(
     (entry) => entry.route === route && entry.method === method
   )
@@ -64,7 +64,7 @@ export function routePermission(route: string, method: PermissionedMethod): Perm
   return match.permission
 }
 
-export function expectRoutePermissionCall(
+function expectRoutePermissionCall(
   calls: readonly unknown[][],
   workspaceId: string,
   route: string,

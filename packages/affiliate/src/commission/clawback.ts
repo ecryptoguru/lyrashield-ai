@@ -17,7 +17,7 @@
 import { Prisma } from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD } from "../index"
+import { CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD } from "../constants"
 
 export type ClawbackReason = "REFUND" | "CHARGEBACK" | "SELF_REFERRAL" | "FRAUD"
 

@@ -15,16 +15,18 @@ const systemRole = `app_system_test_${roleSuffix}`
 const systemPassword = `artifact-${roleSuffix}`
 let restrictedSystem: PrismaClient | undefined
 let schemaAvailable = false
+let systemRoleCreated = false
 
 beforeAll(async () => {
   const databaseUrl = process.env.DATABASE_URL
-  if (!databaseUrl) return
+  if (!databaseUrl) throw new Error("Disposable artifact-deletion tests require DATABASE_URL")
   const functions = await prisma.$queryRaw<Array<{ available: boolean }>>`
     SELECT to_regprocedure(
       'app.claim_artifact_deletion_task(text[],timestamp,text,timestamp)'
     ) IS NOT NULL AS available`
-  if (functions[0]?.available !== true) return
-  schemaAvailable = true
+  if (functions[0]?.available !== true) {
+    throw new Error("Artifact deletion worker functions are missing; apply migrations before tests")
+  }
   const parsedDatabaseUrl = new URL(databaseUrl)
   const databaseName = decodeURIComponent(parsedDatabaseUrl.pathname.slice(1))
   if (!/^[A-Za-z0-9_]+$/.test(databaseName)) {
@@ -34,6 +36,7 @@ beforeAll(async () => {
   await prisma.$executeRawUnsafe(
     `CREATE ROLE ${systemRole} LOGIN PASSWORD '${systemPassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`
   )
+  systemRoleCreated = true
   await prisma.$executeRawUnsafe(`GRANT CONNECT ON DATABASE ${databaseName} TO ${systemRole}`)
   await prisma.$executeRawUnsafe(`GRANT USAGE ON SCHEMA app TO ${systemRole}`)
   await prisma.$executeRawUnsafe(
@@ -46,11 +49,12 @@ beforeAll(async () => {
   restrictedSystem = new PrismaClient({
     adapter: new PrismaPg({ connectionString: restrictedUrl.toString() }),
   })
+  schemaAvailable = true
 })
 
 afterAll(async () => {
   await restrictedSystem?.$disconnect()
-  if (schemaAvailable) {
+  if (systemRoleCreated) {
     await prisma.$executeRawUnsafe(`DROP OWNED BY ${systemRole}`)
     await prisma.$executeRawUnsafe(`DROP ROLE IF EXISTS ${systemRole}`)
   }

@@ -35,7 +35,7 @@ export class ScanAttachmentStagingError extends Error {
   }
 }
 
-export interface StagedAttachmentEntry {
+interface StagedAttachmentEntry {
   /** ScanAttachment row id — the artifact identity the plan recorded. */
   id: string
   /** Original uploader filename (validated at upload; not used as a path). */

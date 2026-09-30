@@ -20,7 +20,7 @@ export interface ScanItem {
   createdAt: string
 }
 
-export type ScanEligibility = {
+type ScanEligibility = {
   allowed: boolean
   code: string | null
   message: string | null

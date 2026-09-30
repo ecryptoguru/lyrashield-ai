@@ -2405,9 +2405,8 @@ model Commission {
 
   conversion  Conversion   @relation(fields: [conversionId], references: [id], onDelete: Cascade)
   affiliate   Affiliate    @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
-  // A commission can have up to two payout items: the main payout, and a
-  // later reserve-release payout for the reserved portion held back during
-  // the new-affiliate reserve period.
+  // A commission has one ordinary payout item and may have multiple historical
+  // reserve-release attempts after confirmed provider rejections.
   payoutItems PayoutItem[]
 
   @@unique([conversionId, affiliateId])
@@ -2438,10 +2437,9 @@ model Payout {
 model PayoutItem {
   id               String  @id @default(cuid())
   payoutId         String
-  // A commission can have up to two payout items: the main payout, and a
-  // later reserve-release payout for the reserved portion that was held back
-  // during the new-affiliate reserve period. The ordinary (non-reserve) payout
-  // item is unique per commission via a partial unique index:
+  // A commission has one ordinary payout item and may have multiple reserve-
+  // release attempt items. The ordinary payout item is unique per commission
+  // via a partial unique index:
   //   CREATE UNIQUE INDEX ... ON "PayoutItem"("commissionId") WHERE "isReserveRelease"=false
   // Prisma cannot express partial indexes, so the index is created in raw SQL
   // migration 20260822200000_payout_item_ordinary_unique.

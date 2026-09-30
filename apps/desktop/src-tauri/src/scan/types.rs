@@ -257,6 +257,22 @@ pub struct ScanSummary {
     pub finding_count: usize,
 }
 
+/// Stable keyset cursor for scan history. Both fields are required so scans
+/// sharing a timestamp cannot be skipped or returned twice between pages.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanHistoryCursor {
+    pub started_at: String,
+    pub scan_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanHistoryPage {
+    pub scans: Vec<ScanSummary>,
+    pub next_cursor: Option<ScanHistoryCursor>,
+}
+
 fn local_backend() -> String {
     "local".to_string()
 }

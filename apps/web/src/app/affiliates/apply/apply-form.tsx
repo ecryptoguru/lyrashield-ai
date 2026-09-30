@@ -187,18 +187,19 @@ export function AffiliateApplyForm({ userId }: ApplyFormProps) {
         <label htmlFor="payoutMethod" className="block text-sm font-medium">
           Preferred Payout Method
         </label>
+        <p className="text-xs text-muted-foreground">
+          Only RazorpayX payouts in India are currently supported. You can apply without selecting a
+          method if that does not apply to you.
+        </p>
         <select
           id="payoutMethod"
           name="payoutMethod"
-          required
           value={values.payoutMethod}
           onChange={(e) => set("payoutMethod", e.target.value)}
           className={FIELD}
         >
-          <option value="">Select...</option>
+          <option value="">Not available for my location</option>
           <option value="razorpayx">RazorpayX (India — INR)</option>
-          <option value="payoneer">Payoneer (Global)</option>
-          <option value="briskpe">BriskPe (RBI-native fallback)</option>
         </select>
       </div>
 

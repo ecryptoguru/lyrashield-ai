@@ -189,6 +189,9 @@ jobs:
           --health-retries 5
 
     env:
+      # Vitest validates every database/Redis URL against the local disposable
+      # service before loading integration suites. Developer unit runs omit this.
+      LYRASHIELD_TEST_DB_DISPOSABLE: "1"
       DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
       SHADOW_DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public"
       # v16 2.2: getSystemPrisma() no longer silently falls back to the RLS

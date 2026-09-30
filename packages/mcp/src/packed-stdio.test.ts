@@ -1,5 +1,4 @@
 import { execFile, execFileSync, spawn } from "node:child_process"
-import { existsSync } from "node:fs"
 import { mkdtemp, readdir, rm } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -29,9 +28,7 @@ let extractDir: string
 let pkgDir: string
 
 beforeAll(async () => {
-  if (!existsSync(path.join(PACKAGE_ROOT, "dist", "stdio-transport.js"))) {
-    execFileSync("pnpm", ["exec", "tsup"], { cwd: PACKAGE_ROOT, stdio: "inherit" })
-  }
+  execFileSync("pnpm", ["exec", "tsup"], { cwd: PACKAGE_ROOT, stdio: "inherit" })
   // Sweep leftovers from killed runs so they can never be packed or committed.
   for (const entry of await readdir(PACKAGE_ROOT)) {
     if (entry.startsWith(".packed-stdio-")) {

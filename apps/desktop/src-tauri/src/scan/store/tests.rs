@@ -27,6 +27,49 @@ fn browser_fixtures_match_real_native_wire_and_export_inputs() {
     );
 }
 
+#[tokio::test]
+async fn scan_history_uses_bounded_stable_pages_with_duplicate_timestamps() {
+    let store = super::TestStorage::new_in_memory();
+    let timestamp = serde_json::Value::String("2026-09-30T12:00:00Z".into());
+    for index in 0..1_001 {
+        store
+            .execute(
+                "INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES (?, 'local', 'standard', 'completed', ?)",
+                vec![format!("scan-{index:04}" ).into(), timestamp.clone()],
+            )
+            .await
+            .unwrap();
+    }
+
+    assert_eq!(super::bounded_scan_page_size(None), 50);
+    assert_eq!(super::bounded_scan_page_size(Some(0)), 1);
+    assert_eq!(super::bounded_scan_page_size(Some(1_000)), 100);
+
+    let mut cursor = None;
+    let mut ids = Vec::new();
+    loop {
+        let page = super::list_scan_page_from_storage(
+            &store,
+            cursor,
+            super::bounded_scan_page_size(Some(500)),
+        )
+        .await
+        .unwrap();
+        assert!(page.scans.len() <= 100);
+        ids.extend(page.scans.into_iter().map(|scan| scan.scan_id));
+        match page.next_cursor {
+            Some(next) => cursor = Some(next),
+            None => break,
+        }
+    }
+
+    let expected = (0..1_001)
+        .rev()
+        .map(|index| format!("scan-{index:04}"))
+        .collect::<Vec<_>>();
+    assert_eq!(ids, expected);
+}
+
 #[test]
 fn completed_scan_rejects_late_cancel_and_failure_preserves_exit_code() {
     let dir = tempfile::tempdir().unwrap();
@@ -34,6 +77,11 @@ fn completed_scan_rejects_late_cancel_and_failure_preserves_exit_code() {
     for id in ["done", "failed"] {
         conn.execute("INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES (?1,'local','standard','running','now')", [id]).unwrap();
     }
+    conn.execute(
+        "INSERT INTO findings (id,scan_id,severity,title,detected_at) VALUES ('finding-1','done','HIGH','Persisted finding','now')",
+        [],
+    )
+    .unwrap();
     super::persist_terminal_in(
         &mut conn,
         "done",
@@ -60,6 +108,15 @@ fn completed_scan_rejects_late_cancel_and_failure_preserves_exit_code() {
         })
         .unwrap(),
         "completed"
+    );
+    assert_eq!(
+        conn.query_row(
+            "SELECT finding_count FROM scans WHERE scan_id='done'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1
     );
     assert_eq!(
         conn.query_row(

@@ -25,12 +25,8 @@ import { SecretClient } from "@azure/keyvault-secrets"
 import { env } from "@lyrashield/config"
 import { getSystemPrisma } from "@lyrashield/db"
 import { getLocalSku, LOCAL_SKU_MAP, type LocalSkuId } from "@lyrashield/pricing"
-import {
-  signLicense,
-  encodeLicenseBlob,
-  type LicenseFile,
-  type LicenseSku,
-} from "@lyrashield/licenses"
+import { z } from "zod"
+import { signLicense, encodeLicenseBlob, type LicenseFile } from "@lyrashield/licenses"
 import { logger } from "@lyrashield/logger"
 
 /** Individual licenses allow up to 3 machines. Team licenses allow 1 machine per seat. */
@@ -243,7 +239,10 @@ export function parseLocalProductIds(): Record<string, string> {
   const raw = env.POLAR_LOCAL_PRODUCT_IDS
   if (!raw) return {}
   try {
-    return JSON.parse(raw) as Record<string, string>
+    const parsed = z.record(z.string(), z.string()).safeParse(JSON.parse(raw))
+    if (parsed.success) return parsed.data
+    logger.warn("POLAR_LOCAL_PRODUCT_IDS must be a string-to-string JSON object — ignoring")
+    return {}
   } catch {
     logger.warn("POLAR_LOCAL_PRODUCT_IDS is not valid JSON — ignoring")
     return {}
@@ -266,7 +265,7 @@ export async function issueSignedLicense(
 
   const licenseFile = signLicense(
     {
-      sku: license.sku as LicenseSku,
+      sku: requireLocalSkuId(license.sku),
       seatCount: license.seatCount,
       machineIds: license.machineIds,
       updateEligibleUntil: license.updateEligibleUntil.toISOString(),
@@ -291,10 +290,21 @@ export async function issueSignedLicense(
 }
 
 function resolveLocalSkuFromProductId(productId: string): LocalSkuId | null {
-  if (productId in LOCAL_SKU_MAP) return productId as LocalSkuId
+  if (isLocalSkuId(productId)) return productId
   const productMap = parseLocalProductIds()
-  const entry = Object.entries(productMap).find(([, pid]) => pid === productId)
-  return entry ? (entry[0] as LocalSkuId) : null
+  for (const [sku, pid] of Object.entries(productMap)) {
+    if (isLocalSkuId(sku) && pid === productId) return sku
+  }
+  return null
+}
+
+function isLocalSkuId(value: string): value is LocalSkuId {
+  return Object.hasOwn(LOCAL_SKU_MAP, value)
+}
+
+function requireLocalSkuId(value: string): LocalSkuId {
+  if (!isLocalSkuId(value)) throw new Error("license_invalid_sku")
+  return value
 }
 
 /**
@@ -651,7 +661,7 @@ export async function retrieveLicenseByToken(
   } else {
     // Rebuild file without re-signing, using stored signature
     licenseFile = {
-      sku: license.sku as LicenseSku,
+      sku: requireLocalSkuId(license.sku),
       seatCount: license.seatCount,
       machineIds: license.machineIds,
       updateEligibleUntil: license.updateEligibleUntil.toISOString(),
@@ -659,7 +669,7 @@ export async function retrieveLicenseByToken(
       signature: license.signature,
       signingKeyId: license.signingKeyId,
       issuedAt: license.issuedAt.toISOString(),
-    } as unknown as LicenseFile
+    }
   }
 
   const blob = encodeLicenseBlob(licenseFile)

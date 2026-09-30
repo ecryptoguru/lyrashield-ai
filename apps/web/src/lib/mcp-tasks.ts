@@ -62,7 +62,7 @@ const MCP_TASK_CANCEL_RETRY_AFTER_MS = 2 * 60 * 1000
  * scan.cancel path. Recovery calls can never duplicate a paid scan.
  */
 
-export interface HostedTaskConnection {
+interface HostedTaskConnection {
   id: string
   workspaceId: string
   status: "ACTIVE"

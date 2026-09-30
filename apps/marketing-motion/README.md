@@ -6,6 +6,8 @@ This private workspace produces the deterministic Three.js evidence world. It is
 
 From the repository root:
 
+The `derive`, `verify`, and `verify:determinism` commands require `ffmpeg` and `ffprobe` on `PATH`. They are system tools and are not installed by pnpm.
+
 ```bash
 # Bundle both compositions
 pnpm --filter @lyrashield/marketing-motion build

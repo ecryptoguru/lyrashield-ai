@@ -6,7 +6,7 @@ import type {
   WebMcpCoverageReceipt,
 } from "../scanners/ai-app-security"
 
-export type ResultTarget = {
+type ResultTarget = {
   id: string
   type: string
   repoFullName?: string | null
@@ -109,7 +109,7 @@ export type ResultManifestInput = {
 export const MANIFEST_VERSION = 7
 export const SCANNER_CONTRACT_VERSION = "2026-09-13a"
 
-export type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED" | "PARTIAL"
+type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED" | "PARTIAL"
 
 export type FamilyReceipt = {
   scanner: string

@@ -11,11 +11,11 @@ import { describeCliFailure } from "./failure.js"
 import type { Output } from "./output.js"
 
 /** Watched work ended without success — scan terminal ≠ COMPLETED, or an operation FAILED/CONFLICT. */
-export const EXIT_TERMINAL_UNSUCCESSFUL = 7
+const EXIT_TERMINAL_UNSUCCESSFUL = 7
 /** The wait deadline elapsed before a terminal state. */
-export const EXIT_WAIT_TIMEOUT = 8
+const EXIT_WAIT_TIMEOUT = 8
 /** SIGINT while waiting — the server-side work keeps running. */
-export const EXIT_SIGINT = 130
+const EXIT_SIGINT = 130
 
 const DEFAULT_WAIT_TIMEOUT_MS = 30 * 60 * 1000
 const DEFAULT_POLL_INTERVAL_MS = 5000
@@ -65,7 +65,7 @@ export function parseWaitFlags(parsed: Record<string, unknown>, output: Output):
   return { wait, timeoutMs, pollIntervalMs }
 }
 
-export interface WaitControl {
+interface WaitControl {
   signal: AbortSignal
   interrupted: () => boolean
   dispose: () => void
@@ -313,5 +313,3 @@ export async function runOperationWait(
     control.dispose()
   }
 }
-
-export type { ScanSnapshot }

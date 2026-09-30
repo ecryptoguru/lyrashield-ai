@@ -2,7 +2,9 @@ import {
   addScanEvent,
   assertEvidenceEncrypted,
   completeScanWithScore,
+  createAiSecurityScoreSnapshot,
   prisma,
+  qualifyReferralForWorkspace,
   updateScanStatus,
   withScanFinalizationClaim,
   type ScanStatus,
@@ -20,9 +22,11 @@ import { completeRetestsForScan, persistResultManifest } from "../../engine/resu
 import type { ScanJobResult } from "../../types"
 import type { ScanExecutionTarget } from "./preparation"
 import type { ScanTerminalError } from "./settlement"
+import type { EngineTriageSnapshot } from "./triage"
 import { refreshGateVerdictAfterTerminalScan } from "./lifecycle-utils"
+import { notifyCriticalFinding, notifyScanCompleted, notifyScanFailed } from "../../notifications"
 
-export type ScanFinalizationTerminalResult = {
+type ScanFinalizationTerminalResult = {
   status: "failed"
   errorCategory: string
   errorMessage: string
@@ -33,6 +37,370 @@ export type ScanFinalizationValue = {
   newFindings: number
   scanSummary: string
   terminalResult: ScanFinalizationTerminalResult | null
+}
+
+type PersistedScanEvidence = {
+  persistedFindings: Awaited<ReturnType<typeof persistFindings>>
+  newFindings: number
+  scanSummary: string
+  ingestionWarnings: string[]
+  threatModelRef: Parameters<typeof persistResultManifest>[0]["threatModel"]
+  httpExchangeRef: Parameters<typeof persistResultManifest>[0]["httpExchangeEvidence"]
+}
+
+async function persistScanEvidence(params: {
+  scanId: string
+  workspaceId: string
+  targetId: string
+  engineResult: EngineRunResult
+  orchestratorResult: Awaited<ReturnType<typeof runScannerOrchestrator>>
+  assertCanStart: () => void
+}): Promise<PersistedScanEvidence> {
+  const { scanId, workspaceId, targetId, engineResult, orchestratorResult, assertCanStart } = params
+  // Upload evidence before findings so each claim can bind the exact exchange
+  // export it was validated against. Failed uploads remain explicit warnings.
+  const ingestionWarnings = [...engineResult.output.ingestionIssues]
+  const recordIngestionWarning = (message: string) => {
+    if (ingestionWarnings.length < 100) ingestionWarnings.push(message.slice(0, 500))
+  }
+  let threatModelRef: PersistedScanEvidence["threatModelRef"] = null
+  if (engineResult.output.threatModels) {
+    try {
+      assertCanStart()
+      const uploaded = await uploadScanArtifact({
+        workspaceId,
+        scanId,
+        type: "threat_model",
+        artifactId: "threat-models",
+        content: engineResult.output.threatModels.document,
+        contentType: "application/json; charset=utf-8",
+      })
+      assertEvidenceEncrypted(uploaded.encryptionKeyRef)
+      threatModelRef = {
+        checksum: uploaded.checksum,
+        byteLength: uploaded.byteLength,
+        modelCount: engineResult.output.threatModels.models.length,
+        ...(engineResult.output.threatModels.schemaVersion
+          ? { schemaVersion: engineResult.output.threatModels.schemaVersion }
+          : {}),
+        // The encrypted artifact stays authoritative; keep the manifest preview small.
+        entries: engineResult.output.threatModels.models.slice(0, 10).map((model) => ({
+          target: model.target.slice(0, 120),
+          preview: model.content.slice(0, 300),
+        })),
+      }
+    } catch (error) {
+      recordIngestionWarning(
+        `threat model artifact could not be stored: ${error instanceof Error ? error.message : String(error)}`
+      )
+      logger.error("Failed to store threat-model evidence artifact", {
+        scanId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  let httpExchangeRef: PersistedScanEvidence["httpExchangeRef"] = null
+  if (engineResult.output.httpExchangeExport) {
+    try {
+      assertCanStart()
+      const uploaded = await uploadScanArtifact({
+        workspaceId,
+        scanId,
+        type: "http_exchanges",
+        artifactId: "http-exchanges",
+        content: engineResult.output.httpExchangeExport.document,
+        contentType: "application/json; charset=utf-8",
+      })
+      assertEvidenceEncrypted(uploaded.encryptionKeyRef)
+      httpExchangeRef = {
+        checksum: uploaded.checksum,
+        byteLength: uploaded.byteLength,
+        exchangeCount: engineResult.output.httpExchangeExport.exchangeCount,
+        ...(engineResult.output.httpExchangeExport.schemaVersion
+          ? { schemaVersion: engineResult.output.httpExchangeExport.schemaVersion }
+          : {}),
+      }
+    } catch (error) {
+      // Validated exchange IDs without the stored export are warnings, not a durable receipt.
+      recordIngestionWarning(
+        `http exchange export artifact could not be stored: ${error instanceof Error ? error.message : String(error)}`
+      )
+      logger.error("Failed to store http-exchange evidence artifact", {
+        scanId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  const persistedFindings = await persistFindings({
+    scanId,
+    workspaceId,
+    targetId,
+    vulnerabilities: orchestratorResult.allFindings,
+    assertCanStart,
+    ...(engineResult.sourceRevision ? { sourceRevision: engineResult.sourceRevision } : {}),
+    ...(httpExchangeRef?.checksum
+      ? { httpExchangeArtifactChecksum: httpExchangeRef.checksum }
+      : {}),
+  })
+  const newFindings = persistedFindings.filter((finding) => finding.isNew).length
+  assertCanStart()
+  const duplicateFindings = persistedFindings.length - newFindings
+  const scanSummary =
+    persistedFindings.length !== engineResult.output.findingCount
+      ? `${engineResult.output.summary} ${persistedFindings.length} finding(s) retained after all scanner layers and deduplication.`
+      : engineResult.output.summary
+
+  await addScanEvent(
+    scanId,
+    "findings_persisted",
+    "info",
+    `Persisted ${persistedFindings.length} finding(s): ${newFindings} new, ${duplicateFindings} duplicate`,
+    {
+      total: persistedFindings.length,
+      new: newFindings,
+      duplicate: duplicateFindings,
+    }
+  ).catch((eventError) =>
+    logger.warn("Failed to persist findings_persisted event", {
+      scanId,
+      error: eventError instanceof Error ? eventError.message : String(eventError),
+    })
+  )
+
+  if (ingestionWarnings.length > 0) {
+    await addScanEvent(
+      scanId,
+      "engine_evidence",
+      "warning",
+      `Engine evidence ingestion recorded ${ingestionWarnings.length} issue(s)`,
+      { issues: ingestionWarnings.slice(0, 50) }
+    ).catch((eventError) =>
+      logger.warn("Failed to persist engine_evidence warning event", {
+        scanId,
+        error: eventError instanceof Error ? eventError.message : String(eventError),
+      })
+    )
+  }
+
+  await prisma.scan.update({ where: { id: scanId }, data: { summary: scanSummary } })
+  return {
+    persistedFindings,
+    newFindings,
+    scanSummary,
+    ingestionWarnings,
+    threatModelRef,
+    httpExchangeRef,
+  }
+}
+
+export async function finalizeEarlyEngineTerminal(params: {
+  scanId: string
+  workspaceId: string
+  target: ScanExecutionTarget
+  engineBacked: boolean
+  engineResult: EngineRunResult
+  workerExecution: ReturnType<typeof resolveWorkerExecutionProvenance>
+  engineExecution?: Parameters<typeof persistResultManifest>[0]["engineExecution"]
+  stagedAttachments?: Parameters<typeof persistResultManifest>[0]["attachments"]
+  maxBudgetUsd: number
+  billedCostUsd: number | null
+  costReconciled: boolean
+  reconciliationReason?: string
+  terminalOutcome: {
+    status: "FAILED" | "STOPPED_BUDGET"
+    errorCategory: string
+    errorMessage: string
+  }
+  actualCostCents?: number
+  notificationDescription: "budget-stop" | "scan timeout"
+}): Promise<ScanJobResult> {
+  const {
+    scanId,
+    workspaceId,
+    target,
+    engineBacked,
+    engineResult,
+    workerExecution,
+    engineExecution,
+    stagedAttachments,
+    maxBudgetUsd,
+    billedCostUsd,
+    costReconciled,
+    reconciliationReason,
+    terminalOutcome,
+    actualCostCents,
+    notificationDescription,
+  } = params
+  await persistResultManifest({
+    scanId,
+    target: {
+      id: target.id,
+      type: target.type,
+      repoFullName: target.repoFullName,
+      branch: target.branch,
+      url: target.url,
+    },
+    engineBacked,
+    sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
+    engineFindingCount: 0,
+    coverageIssues: [
+      { scanner: "engine", status: "bounded", reason: terminalOutcome.errorMessage },
+    ],
+    engineExecution,
+    accounting: {
+      maxBudgetUsd,
+      billedCostUsd,
+      reconciled: costReconciled,
+      ...(reconciliationReason ? { reconciliationReason } : {}),
+    },
+    workerExecution,
+    ...(stagedAttachments ? { attachments: stagedAttachments } : {}),
+    terminalOutcome,
+  })
+  await completeRetestsForScan({ scanId, workspaceId })
+  await updateScanStatus(scanId, terminalOutcome.status as ScanStatus, {
+    errorCategory: terminalOutcome.errorCategory,
+    errorMessage: terminalOutcome.errorMessage,
+    ...(actualCostCents !== undefined ? { actualCostCents } : {}),
+  })
+  try {
+    await notifyScanFailed(workspaceId, scanId, terminalOutcome.errorMessage)
+  } catch (notificationError) {
+    logger.warn(`Failed to send ${notificationDescription} notification`, {
+      scanId,
+      error:
+        notificationError instanceof Error ? notificationError.message : String(notificationError),
+    })
+  }
+  return {
+    status: "failed",
+    errorCategory: terminalOutcome.errorCategory,
+    errorMessage: terminalOutcome.errorMessage,
+  }
+}
+
+export async function runScanCompletionFollowups(params: {
+  scanId: string
+  workspaceId: string
+  targetId: string
+  targetName: string
+  exitCode: number
+  scanSummary: string
+  newFindings: number
+  persistedFindings: ScanFinalizationValue["persistedFindings"]
+  orchestratorResult: Awaited<ReturnType<typeof runScannerOrchestrator>>
+  aiSecuritySignals: Parameters<typeof createAiSecurityScoreSnapshot>[2]["signals"]
+  triageSnapshot?: EngineTriageSnapshot
+}): Promise<void> {
+  const {
+    scanId,
+    workspaceId,
+    targetId,
+    targetName,
+    exitCode,
+    scanSummary,
+    newFindings,
+    persistedFindings,
+    orchestratorResult,
+    aiSecuritySignals,
+    triageSnapshot,
+  } = params
+  // These actions follow durable completion. Their failures must not replay or reverse the scan.
+  if (orchestratorResult.aiAppSecurityCoverage) {
+    try {
+      await createAiSecurityScoreSnapshot(scanId, workspaceId, {
+        signals: aiSecuritySignals,
+        coverage: orchestratorResult.aiAppSecurityCoverage,
+        ai03: orchestratorResult.ai03Coverage ?? {
+          resolutionStatus: "UNSUPPORTED",
+          advisoryStatus: "UNAVAILABLE",
+          fresh: false,
+        },
+        ...(triageSnapshot ? { triage: triageSnapshot } : {}),
+      })
+    } catch (aiScoreError) {
+      logger.warn("Failed to create AI security score snapshot", {
+        scanId,
+        error: aiScoreError instanceof Error ? aiScoreError.message : String(aiScoreError),
+      })
+    }
+  }
+  try {
+    await qualifyReferralForWorkspace(workspaceId)
+  } catch (referralError) {
+    logger.warn("Failed to qualify referral after scan completion", {
+      scanId,
+      error: referralError instanceof Error ? referralError.message : String(referralError),
+    })
+  }
+
+  logger.info("Scan job completed", {
+    scanId,
+    targetId,
+    exitCode,
+    findings: persistedFindings.length,
+    newFindings,
+  })
+
+  try {
+    const criticalFindings = persistedFindings.filter((finding) => finding.severity === "CRITICAL")
+    let workspaceName: string | undefined
+    try {
+      workspaceName = (
+        await prisma.workspace.findFirst({
+          where: { id: workspaceId },
+          select: { name: true },
+        })
+      )?.name
+    } catch (workspaceError) {
+      logger.warn("Failed to resolve workspace name for scan completion notifications", {
+        scanId,
+        error: workspaceError instanceof Error ? workspaceError.message : String(workspaceError),
+      })
+    }
+
+    const tasks = [
+      () =>
+        notifyScanCompleted(
+          workspaceId,
+          scanId,
+          scanSummary,
+          persistedFindings.length,
+          workspaceName
+        ),
+      ...criticalFindings.map(
+        (finding) => () =>
+          notifyCriticalFinding(workspaceId, finding.id, finding.title, targetName, workspaceName)
+      ),
+    ]
+    const notifications: PromiseSettledResult<void>[] = []
+    for (let start = 0; start < tasks.length; start += 2) {
+      notifications.push(
+        ...(await Promise.allSettled(tasks.slice(start, start + 2).map((notify) => notify())))
+      )
+    }
+    const failedNotifications = notifications.filter(
+      (notification): notification is PromiseRejectedResult => notification.status === "rejected"
+    )
+    if (failedNotifications.length > 0) {
+      logger.warn("Some scan completion notifications failed", {
+        scanId,
+        failures: failedNotifications.map((notification) =>
+          notification.reason instanceof Error
+            ? notification.reason.message
+            : String(notification.reason)
+        ),
+      })
+    }
+  } catch (notificationError) {
+    logger.warn("Failed to send scan completion notification", {
+      scanId,
+      error:
+        notificationError instanceof Error ? notificationError.message : String(notificationError),
+    })
+  }
 }
 
 export async function finalizeScanLifecycle(params: {
@@ -90,178 +458,31 @@ export async function finalizeScanLifecycle(params: {
   } = params
 
   return withScanFinalizationClaim(scanId, workspaceId, async () => {
-    // run.json 1.1 evidence artifacts. Both uploads run BEFORE findings
-    // persist so a finding's claim context can checksum-bind the exact
-    // exchange export its http_exchange_ids validated against. An upload
-    // failure leaves explicit incomplete evidence (a recorded warning),
-    // never a fabricated successful binding.
-    const ingestionWarnings = [...engineResult.output.ingestionIssues]
-    const recordIngestionWarning = (message: string) => {
-      if (ingestionWarnings.length < 100) ingestionWarnings.push(message.slice(0, 500))
-    }
-    let threatModelRef: Parameters<typeof persistResultManifest>[0]["threatModel"] = null
-    if (engineResult.output.threatModels) {
-      try {
-        grace.assertRemaining()
-        const uploaded = await uploadScanArtifact({
-          workspaceId,
-          scanId,
-          type: "threat_model",
-          artifactId: "threat-models",
-          content: engineResult.output.threatModels.document,
-          contentType: "application/json; charset=utf-8",
-        })
-        assertEvidenceEncrypted(uploaded.encryptionKeyRef)
-        threatModelRef = {
-          checksum: uploaded.checksum,
-          byteLength: uploaded.byteLength,
-          modelCount: engineResult.output.threatModels.models.length,
-          ...(engineResult.output.threatModels.schemaVersion
-            ? { schemaVersion: engineResult.output.threatModels.schemaVersion }
-            : {}),
-          // Bounded engine-declared preview for truthful rendering. The
-          // sealed artifact remains authoritative; previews are capped so the
-          // manifest stays small.
-          entries: engineResult.output.threatModels.models.slice(0, 10).map((model) => ({
-            target: model.target.slice(0, 120),
-            preview: model.content.slice(0, 300),
-          })),
-        }
-      } catch (error) {
-        recordIngestionWarning(
-          `threat model artifact could not be stored: ${error instanceof Error ? error.message : String(error)}`
-        )
-        logger.error("Failed to store threat-model evidence artifact", {
-          scanId,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }
-    let httpExchangeRef: Parameters<typeof persistResultManifest>[0]["httpExchangeEvidence"] = null
-    if (engineResult.output.httpExchangeExport) {
-      try {
-        grace.assertRemaining()
-        const uploaded = await uploadScanArtifact({
-          workspaceId,
-          scanId,
-          type: "http_exchanges",
-          artifactId: "http-exchanges",
-          content: engineResult.output.httpExchangeExport.document,
-          contentType: "application/json; charset=utf-8",
-        })
-        assertEvidenceEncrypted(uploaded.encryptionKeyRef)
-        httpExchangeRef = {
-          checksum: uploaded.checksum,
-          byteLength: uploaded.byteLength,
-          exchangeCount: engineResult.output.httpExchangeExport.exchangeCount,
-          ...(engineResult.output.httpExchangeExport.schemaVersion
-            ? { schemaVersion: engineResult.output.httpExchangeExport.schemaVersion }
-            : {}),
-        }
-      } catch (error) {
-        // The exchange ids were still validated against the parsed export;
-        // without the stored artifact they remain honest claims but carry no
-        // durable binding — recorded as a warning, never a receipt.
-        recordIngestionWarning(
-          `http exchange export artifact could not be stored: ${error instanceof Error ? error.message : String(error)}`
-        )
-        logger.error("Failed to store http-exchange evidence artifact", {
-          scanId,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }
-
-    const persistedFindings = await persistFindings({
+    const evidence = await persistScanEvidence({
       scanId,
       workspaceId,
       targetId,
-      vulnerabilities: orchestratorResult.allFindings,
+      engineResult,
+      orchestratorResult,
       assertCanStart: grace.assertRemaining,
-      // Stamp the scanned revision on every finding so fix patches apply
-      // against exactly the commit that was analyzed.
-      ...(engineResult.sourceRevision ? { sourceRevision: engineResult.sourceRevision } : {}),
-      ...(httpExchangeRef?.checksum
-        ? { httpExchangeArtifactChecksum: httpExchangeRef.checksum }
-        : {}),
     })
+    const {
+      persistedFindings,
+      newFindings,
+      scanSummary,
+      ingestionWarnings,
+      threatModelRef,
+      httpExchangeRef,
+    } = evidence
 
-    const newFindings = persistedFindings.filter((f) => f.isNew).length
-    grace.assertRemaining()
-    const dupFindings = persistedFindings.length - newFindings
-
-    // engineResult.output.summary describes only the agentic engine's own
-    // vulnerabilities.json artifact (see parseEngineOutput). It never sees the
-    // SCA, secrets, agent-config, or URL scanner findings that the
-    // orchestrator merges in, nor the false-positive filtering and dedup that
-    // happen afterward — so on a run where the engine layer alone found
-    // nothing, it reads "0 finding(s) reported" next to a persisted finding
-    // count that can be dozens. That text becomes scan.summary, which the
-    // dashboard, the private assurance report, and completion notifications
-    // all display verbatim, so the mismatch is user-facing, not just internal.
-    // Leave the engine's own text untouched when it already matches what was
-    // persisted; only correct it when the two disagree, so this stays a
-    // targeted fix rather than a rewrite of copy that was already accurate.
-    const scanSummary =
-      persistedFindings.length !== engineResult.output.findingCount
-        ? `${engineResult.output.summary} ${persistedFindings.length} finding(s) retained after all scanner layers and deduplication.`
-        : engineResult.output.summary
-
-    try {
-      await addScanEvent(
-        scanId,
-        "findings_persisted",
-        "info",
-        `Persisted ${persistedFindings.length} finding(s): ${newFindings} new, ${dupFindings} duplicate`,
-        {
-          total: persistedFindings.length,
-          new: newFindings,
-          duplicate: dupFindings,
-        }
-      )
-    } catch (eventErr) {
-      logger.warn("Failed to persist findings_persisted event", {
-        scanId,
-        error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-      })
-    }
-
-    // Evidence that was dropped or could not be verified is part of the
-    // honest result record — persist it as a bounded warning event and into
-    // the immutable manifest rather than losing it in logs.
-    if (ingestionWarnings.length > 0) {
-      try {
-        await addScanEvent(
-          scanId,
-          "engine_evidence",
-          "warning",
-          `Engine evidence ingestion recorded ${ingestionWarnings.length} issue(s)`,
-          { issues: ingestionWarnings.slice(0, 50) }
-        )
-      } catch (eventErr) {
-        logger.warn("Failed to persist engine_evidence warning event", {
-          scanId,
-          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-        })
-      }
-    }
-
-    // Persist the result manifest for every outcome, including a failed or
-    // incomplete engine, so coverage receipts are always available. The
-    // manifest must exist BEFORE retest finalization: completeRetestsForScan
-    // binds its verdict to the stored baseline/retest checksums, so a crash
-    // between manifest and retests resumes finalization from the receipt
-    // evidence instead of skipping it.
-    await prisma.scan.update({
-      where: { id: scanId },
-      data: { summary: scanSummary },
-    })
     const finishEvidence = async () => {
       const terminalError = params.terminalErrorAfterMeter()
       // Once sealing starts, await the whole evidence/retest/settlement
       // sequence. Interrupting between its writes could promote an
       // incomplete retest or abandon an unsettled billing transaction.
       grace.assertRemaining()
+      // Persist the manifest before retest completion so crash recovery binds
+      // every verdict to stored baseline and retest receipts.
       await persistResultManifest({
         scanId,
         target: {

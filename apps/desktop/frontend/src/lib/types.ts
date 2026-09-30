@@ -1,4 +1,4 @@
-export type LicenseSku =
+type LicenseSku =
   | "individual_launch"
   | "individual_regular"
   | "team_perpetual"
@@ -141,6 +141,16 @@ export interface ScanSummary {
   startedAt: string
   completedAt: string | null
   findingCount: number
+}
+
+export interface ScanHistoryCursor {
+  startedAt: string
+  scanId: string
+}
+
+export interface ScanHistoryPage {
+  scans: ScanSummary[]
+  nextCursor: ScanHistoryCursor | null
 }
 
 export interface ScanDetail {

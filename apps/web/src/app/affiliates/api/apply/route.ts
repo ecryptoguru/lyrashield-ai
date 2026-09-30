@@ -22,7 +22,10 @@ const ApplySchema = z.object({
   audienceSize: z.enum(["<1k", "1k-10k", "10k-50k", "50k-100k", "100k+"]),
   audienceType: z.enum(["developers", "security", "devops", "founders", "mixed"]),
   promotionMethods: z.string().min(10).max(2000),
-  payoutMethod: z.enum(["razorpayx", "payoneer", "briskpe"]),
+  payoutMethod: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(["razorpayx"]).optional()
+  ),
   // C-L10: Binding terms acceptance — the affiliate must affirmatively accept
   // the program terms (FTC/ASA disclosure, no-FUD, no "only-we"/benchmark
   // claims, no brand bidding). Approval is gated on this being true. A truthy
@@ -124,17 +127,21 @@ async function post(request: Request) {
       // C-L10: Record binding terms acceptance (versioned) at application time.
       acceptedTermsAt: new Date(),
       termsVersion: AFFILIATE_TERMS_VERSION,
-      payoutMethod: {
-        type: parsed.data.payoutMethod,
-        valid: false,
-        application: {
-          name: parsed.data.name,
-          website: parsed.data.website,
-          audienceSize: parsed.data.audienceSize,
-          audienceType: parsed.data.audienceType,
-          promotionMethods: parsed.data.promotionMethods,
-        },
-      },
+      ...(parsed.data.payoutMethod
+        ? {
+            payoutMethod: {
+              type: parsed.data.payoutMethod,
+              valid: false,
+              application: {
+                name: parsed.data.name,
+                website: parsed.data.website,
+                audienceSize: parsed.data.audienceSize,
+                audienceType: parsed.data.audienceType,
+                promotionMethods: parsed.data.promotionMethods,
+              },
+            },
+          }
+        : {}),
       taxFormType,
       taxFormStatus: submittedTaxForm ? "PENDING_REVIEW" : "NOT_SUBMITTED",
     },

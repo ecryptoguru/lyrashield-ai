@@ -8,19 +8,12 @@ import { parseRunJson } from "./output-parser-run"
 import type { EngineArtifactInput, ParsedScanOutput } from "./output-parser-types"
 
 export type {
-  AdvisoryCvss,
   EngineArtifactInput,
   EngineCoverageGap,
-  EngineMetadataValue,
   EngineRunRecord,
   EngineVulnerability,
-  FindingRevision,
-  FixVerificationAttestation,
   ParsedEngineCoverage,
-  ParsedHttpExchangeExport,
   ParsedScanOutput,
-  ParsedThreatModelEntry,
-  ParsedThreatModels,
   ScopedCoverageEntry,
   ScopedCoverageOutcome,
 } from "./output-parser-types"

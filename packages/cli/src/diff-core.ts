@@ -115,7 +115,7 @@ export async function resolveDiffRange(
   return { base: resolvedBase, head: resolvedHead }
 }
 
-export async function getChangedFiles(base: string, head: string): Promise<string[]> {
+async function getChangedFiles(base: string, head: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
     execFile("git", ["diff", "--name-only", base, head], { cwd: process.cwd() }, (err, stdout) => {
       if (err) return reject(err)
@@ -143,59 +143,7 @@ async function getFileDiff(base: string, head: string, file: string): Promise<st
   })
 }
 
-export async function getAddedLinesForFile(
-  base: string,
-  head: string,
-  file: string
-): Promise<string[]> {
-  const stdout = await getFileDiff(base, head, file)
-  return stdout
-    .split("\n")
-    .filter((l) => l.startsWith("+") && !l.startsWith("+++") && !l.startsWith("+//"))
-    .map((l) => l.slice(1))
-}
-
-function parseHunkHeader(line: string): { newStart: number; newCount: number } | null {
-  // Git emits one short hunk-header line here; input is not arbitrary file content.
-  // eslint-disable-next-line security/detect-unsafe-regex
-  const match = line.match(/^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,(\d+))?\s+@@/)
-  if (!match) return null
-  const newStart = Number.parseInt(match[1]!, 10)
-  const newCount = match[2] ? Number.parseInt(match[2], 10) : 1
-  return { newStart, newCount }
-}
-
-export async function getAddedLineNumbers(
-  base: string,
-  head: string,
-  file: string
-): Promise<Set<number>> {
-  const stdout = await getFileDiff(base, head, file)
-  const added = new Set<number>()
-  let currentLine: number | null = null
-  for (const line of stdout.split("\n")) {
-    const header = parseHunkHeader(line)
-    if (header) {
-      currentLine = header.newStart
-      continue
-    }
-    if (currentLine == null) continue
-    if (line.startsWith("+") && !line.startsWith("+++") && !line.startsWith("+//")) {
-      added.add(currentLine)
-      currentLine++
-    } else if (line.startsWith(" ")) {
-      currentLine++
-    } else if (line.startsWith("-")) {
-      // Removed lines do not advance the new-file line counter.
-    }
-  }
-  return added
-}
-
-export async function getChangedFileContent(
-  head: string,
-  file: string
-): Promise<string | undefined> {
+async function getChangedFileContent(head: string, file: string): Promise<string | undefined> {
   const staged = head === "--cached"
   const ref = staged ? "" : head
   const object = staged ? `:${file}` : `${ref}:${file}`
@@ -237,7 +185,7 @@ function synthesizedDiffHeader(file: string): string {
  * the analyzer reports them as `file_content_not_supplied` (the former
  * `unreadable_file` gap) and coverage stays INCOMPLETE — fail closed.
  */
-export async function collectDiffAdvisoryInput(
+async function collectDiffAdvisoryInput(
   base: string,
   head: string
 ): Promise<{ diff: string; files: { path: string; content: string }[] }> {
@@ -344,17 +292,6 @@ export async function runAdvisoryChecks(input: DiffAdvisoryInput): Promise<DiffF
 
 export async function runDiffChecks(base: string, head: string): Promise<DiffFinding[]> {
   return runAdvisoryChecks(await collectDiffAdvisoryInput(base, head))
-}
-
-export async function runRiskyPatternChecks(base: string, head: string): Promise<DiffFinding[]> {
-  const changedFiles = await getChangedFiles(base, head)
-  const parts: string[] = []
-  for (const file of changedFiles) {
-    const body = await getFileDiff(base, head, file)
-    parts.push(body.startsWith("diff --git") ? body : synthesizedDiffHeader(file) + body)
-  }
-  const result = await analyzeDiffAdvisory({ diff: parts.join("") })
-  return mapPatternFindings(result.findings.filter((f) => f.source === "pattern"))
 }
 
 export async function runWebMcpDiffChecks(base: string, head: string): Promise<DiffFinding[]> {

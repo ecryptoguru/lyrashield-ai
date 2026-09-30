@@ -24,7 +24,7 @@ import {
 import { ENGINE_LLM_STALL_MS, runEngineProcess } from "./runner-process"
 import { ENGINE_WORK_ROOT } from "./workspace-path"
 
-export type { EngineProfile, ReasoningEffort } from "./runner-config"
+export type { EngineProfile } from "./runner-config"
 export {
   assertRepositoryScanRuntimeConfigured,
   buildEngineEnv,

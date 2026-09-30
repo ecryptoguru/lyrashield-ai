@@ -24,7 +24,7 @@ import {
 import { isPublicOriginAllowed, publicCorsHeaders } from "@/lib/public-cors"
 
 /** Header carrying the anonymous public-session bearer token. */
-export const MYRA_SESSION_HEADER = "x-myra-session"
+const MYRA_SESSION_HEADER = "x-myra-session"
 
 // ─── Feature gates (default off; a disabled surface fails closed to 404) ─────
 
@@ -32,7 +32,7 @@ export function myraPublicEnabled(): boolean {
   return env.MYRA_PUBLIC_ENABLED === "1"
 }
 
-export function myraDashboardEnabled(): boolean {
+function myraDashboardEnabled(): boolean {
   return env.MYRA_DASHBOARD_ENABLED === "1"
 }
 
@@ -100,7 +100,7 @@ export function myraPreflight(request: Request): Response {
 
 // ─── Responses ──────────────────────────────────────────────────────────────
 
-export function myraJson(
+function myraJson(
   request: Request,
   body: unknown,
   status: number,
@@ -217,7 +217,7 @@ function isMyraErrorCode(value: unknown): value is MyraErrorCode {
  * api-auth convention) and objects carrying a `code` field. Returns null for
  * unrecognized errors so callers can fall through to a generic 500.
  */
-export function myraErrorFromUnknown(error: unknown): MyraError | null {
+function myraErrorFromUnknown(error: unknown): MyraError | null {
   if (!error || typeof error !== "object") return null
   const code = (error as { code?: unknown }).code
   if (isMyraErrorCode(code)) {

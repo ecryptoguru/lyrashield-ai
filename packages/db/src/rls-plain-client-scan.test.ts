@@ -230,7 +230,8 @@ const ALLOWLIST: Record<string, string> = {
     "project/integration/target reads under requireWorkspaceAccess/requirePermission-bound context (extension-wrapped)",
 }
 
-const READ_OPS = ["findMany", "findFirst", "findUnique", "count", "aggregate", "groupBy"]
+const PLAIN_READ_PATTERN =
+  /\bprisma\.([A-Za-z_$][\w$]*)\.(findMany|findFirst|findUnique|count|aggregate|groupBy)\s*\(/g
 
 // __dirname-relative (the terminology test precedent): the scan must not
 // depend on the runner's working directory. From packages/db/src: two levels
@@ -254,11 +255,12 @@ function scanSource(source: string): string[] {
   const offenders: string[] = []
   const lines = source.split("\n")
   for (const [index, line] of lines.entries()) {
-    for (const accessor of FORCE_RLS_ACCESSORS) {
-      for (const op of READ_OPS) {
-        if (line.includes(`prisma.${accessor}.${op}(`)) {
-          offenders.push(`line ${index + 1} prisma.${accessor}.${op}`)
-        }
+    PLAIN_READ_PATTERN.lastIndex = 0
+    for (const match of line.matchAll(PLAIN_READ_PATTERN)) {
+      const accessor = match[1]
+      const operation = match[2]
+      if (accessor && operation && FORCE_RLS_ACCESSORS.has(accessor)) {
+        offenders.push(`line ${index + 1} prisma.${accessor}.${operation}`)
       }
     }
   }

@@ -20,7 +20,7 @@ import { withAccountRLS, withWorkspaceRLS, type ScopedTransaction } from "@lyras
 import { CLOUD_PLAN_MAP, type CloudPlanId } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
 
-export type GrantSource = "subscription" | "annual_monthly" | "trial" | "manual" | "replenishment"
+type GrantSource = "subscription" | "annual_monthly" | "trial" | "manual" | "replenishment"
 
 /**
  * Sources that represent THE subscription's cycle pool. A mid-cycle plan

@@ -15,7 +15,7 @@ const SCORE_GRADES = new Set<ScoreGrade>(["A_PLUS", "A", "B", "C", "D", "F"])
 const MAX_PUBLIC_VERSION_LENGTH = 128
 const MAX_PUBLIC_RESOLVED_FINDINGS = 1_000_000
 
-export type ReleaseVerdict = "GO" | "GO_WITH_CONDITIONS" | "NO_GO" | "NOT_EVALUATED"
+type ReleaseVerdict = "GO" | "GO_WITH_CONDITIONS" | "NO_GO" | "NOT_EVALUATED"
 
 const RELEASE_VERDICTS: readonly string[] = ["GO", "GO_WITH_CONDITIONS", "NO_GO", "NOT_EVALUATED"]
 

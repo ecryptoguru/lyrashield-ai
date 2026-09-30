@@ -4,23 +4,15 @@ import { z } from "zod"
 import { prisma } from "@lyrashield/db"
 import { getCachedSession } from "@/lib/cache"
 
-// S12: Discriminated union for payout method — prevents arbitrary JSON injection
-const PayoutMethodSchema = z.discriminatedUnion("type", [
-  z
-    .object({
-      type: z.literal("razorpayx"),
-      fundAccountId: z.string().regex(/^fa_[A-Za-z0-9]+$/),
-      maskedDisplay: z.string().min(3).max(64),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("payoneer"),
-      payeeId: z.string().min(3).max(128),
-      maskedDisplay: z.string().min(3).max(64),
-    })
-    .strict(),
-])
+// S12: Accept only the currently supported rail; reject unavailable providers
+// even when a caller bypasses the browser form.
+const PayoutMethodSchema = z
+  .object({
+    type: z.literal("razorpayx"),
+    fundAccountId: z.string().regex(/^fa_[A-Za-z0-9]+$/),
+    maskedDisplay: z.string().min(3).max(64),
+  })
+  .strict()
 
 const MethodSchema = z
   .object({

@@ -26,6 +26,87 @@ interface FetchOptions<T = unknown> extends RequestInit {
 
 const DEFAULT_TIMEOUT_MS = 30_000
 
+const apiResponseSchema = z
+  .object({
+    success: z.boolean(),
+    data: z.unknown().optional(),
+    error: z
+      .object({
+        code: z.string(),
+        message: z.string(),
+        details: z.unknown().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough()
+
+function httpError(status: number): ApiError {
+  return new ApiError("HTTP_ERROR", `Request failed with status ${status}`, status)
+}
+
+function responseError(json: ApiResponse<unknown>, status: number): ApiError {
+  const error = new ApiError(
+    json.error?.code ?? "UNKNOWN_ERROR",
+    json.error?.message ?? "An unknown error occurred",
+    status
+  )
+  error.details = json.error?.details
+  return error
+}
+
+async function readApiResponse(response: Response): Promise<ApiResponse<unknown>> {
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error
+    if (!response.ok) throw httpError(response.status)
+    throw new ApiError(
+      "PARSE_ERROR",
+      `Failed to parse response (status ${response.status})`,
+      response.status
+    )
+  }
+
+  const parsed = apiResponseSchema.safeParse(body)
+  if (!parsed.success) {
+    if (!response.ok) throw httpError(response.status)
+    throw new ApiError(
+      "PARSE_ERROR",
+      `Invalid response envelope (status ${response.status})`,
+      response.status
+    )
+  }
+  return parsed.data as ApiResponse<unknown>
+}
+
+function appendQueryParams(url: string, params?: Record<string, string | undefined>): string {
+  if (!params) return url
+
+  const hashIndex = url.indexOf("#")
+  const urlWithoutHash = hashIndex === -1 ? url : url.slice(0, hashIndex)
+  const hash = hashIndex === -1 ? "" : url.slice(hashIndex)
+  const queryIndex = urlWithoutHash.indexOf("?")
+  const path = queryIndex === -1 ? urlWithoutHash : urlWithoutHash.slice(0, queryIndex)
+  const searchParams = new URLSearchParams(
+    queryIndex === -1 ? "" : urlWithoutHash.slice(queryIndex + 1)
+  )
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) searchParams.set(key, value)
+  }
+
+  const query = searchParams.toString()
+  return `${path}${query ? `?${query}` : ""}${hash}`
+}
+
+function jsonHeaders(headers?: HeadersInit): Headers {
+  const result = new Headers(headers)
+  if (!result.has("Content-Type")) result.set("Content-Type", "application/json")
+  return result
+}
+
 function parseWithSchema<T>(data: unknown, schema: z.ZodType<T>, status: number): T {
   try {
     return schema.parse(data)
@@ -68,24 +149,15 @@ async function request<T>(url: string, options: FetchOptions<T> = {}): Promise<T
       return undefined as T
     }
 
-    let json: ApiResponse<T>
-    try {
-      json = await res.json()
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") throw err
-      throw new ApiError(
-        "PARSE_ERROR",
-        `Failed to parse response (status ${res.status})`,
-        res.status
-      )
+    const json = await readApiResponse(res)
+
+    if (!res.ok) {
+      if (!json.success) throw responseError(json, res.status)
+      throw httpError(res.status)
     }
 
     if (!json.success) {
-      const code = json.error?.code ?? "UNKNOWN_ERROR"
-      const message = json.error?.message ?? "An unknown error occurred"
-      const err = new ApiError(code, message, res.status)
-      err.details = json.error?.details
-      throw err
+      throw responseError(json, res.status)
     }
 
     if (schema) {
@@ -158,29 +230,13 @@ export async function apiGetConditional<T>(
       return { data: null, etag, status: 304 }
     }
 
+    const json = await readApiResponse(res)
     if (!res.ok) {
-      throw new ApiError("HTTP_ERROR", `Request failed with status ${res.status}`, res.status)
-    }
-
-    let json: ApiResponse<T>
-    try {
-      json = (await res.json()) as ApiResponse<T>
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") throw err
-      throw new ApiError(
-        "PARSE_ERROR",
-        `Failed to parse response (status ${res.status})`,
-        res.status
-      )
+      if (!json.success) throw responseError(json, res.status)
+      throw httpError(res.status)
     }
     if (!json.success) {
-      const err = new ApiError(
-        json.error?.code ?? "UNKNOWN_ERROR",
-        json.error?.message ?? "An unknown error occurred",
-        res.status
-      )
-      err.details = json.error?.details
-      throw err
+      throw responseError(json, res.status)
     }
 
     return {
@@ -209,7 +265,7 @@ export async function apiPost<T>(
   return request<T>(url, {
     ...options,
     method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: jsonHeaders(options?.headers),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
 }
@@ -222,7 +278,7 @@ export async function apiPatch<T>(
   return request<T>(url, {
     ...options,
     method: "PATCH",
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: jsonHeaders(options?.headers),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
 }
@@ -235,7 +291,7 @@ export async function apiPut<T>(
   return request<T>(url, {
     ...options,
     method: "PUT",
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: jsonHeaders(options?.headers),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
 }
@@ -253,16 +309,7 @@ export async function apiGetPaginated<T>(
   params?: Record<string, string | undefined>,
   options?: FetchOptions<PaginatedResponse<T>>
 ): Promise<PaginatedResponse<T>> {
-  const searchParams = new URLSearchParams()
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null) {
-        searchParams.set(key, value)
-      }
-    }
-  }
-  const fullUrl = searchParams.toString() ? `${url}?${searchParams}` : url
-
+  const fullUrl = appendQueryParams(url, params)
   return request<PaginatedResponse<T>>(fullUrl, { ...options, method: "GET" })
 }
 
@@ -276,15 +323,6 @@ export async function apiGetPaginatedConditional<T>(
   params?: Record<string, string | undefined>,
   options: FetchOptions<PaginatedResponse<T>> & { etag?: string } = {}
 ): Promise<ConditionalResponse<PaginatedResponse<T>>> {
-  const searchParams = new URLSearchParams()
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null) {
-        searchParams.set(key, value)
-      }
-    }
-  }
-  const fullUrl = searchParams.toString() ? `${url}?${searchParams}` : url
-
+  const fullUrl = appendQueryParams(url, params)
   return apiGetConditional<PaginatedResponse<T>>(fullUrl, options)
 }
