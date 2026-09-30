@@ -176,6 +176,11 @@ fi
 old_image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$config")
 [ -n "$old_image" ]
 backup="${config}.rollback-${expected_app}"
+if [ "$webhook_cutover" -eq 1 ]; then
+  # Each stopped image keeps its own forensic config; a rerun must not replace
+  # the original legacy snapshot with a compatible candidate's configuration.
+  backup="${config}.cutover-prior-${expected_app}-${old_image##*@sha256:}"
+fi
 timer_was_active=0
 systemctl is-active --quiet "$timer" && timer_was_active=1
 admission_stop_owned=0
@@ -206,9 +211,10 @@ assert_cutover_receipt() {
     [ "$(stat -c '%u:%a' "$receipt_file")" = '0:600' ] || {
     echo "Webhook cutover requires a root-owned 0600 durable receipt" >&2; return 1;
   }
-  # JavaScript template literals must reach the container without shell expansion.
+  # Hash the full selected connection values before touching Redis. A password
+  # rotation also requires a new controlled maintenance proof.
   # shellcheck disable=SC2016
-  receipt_verified=$(redis_eval 'const {default:Redis}=await import("ioredis"); const [raw,owner,product,oldImage,durable,runId]=process.argv.slice(1); const receipt=JSON.parse(raw); const saved=JSON.parse(durable); if (!/^[0-9]+$/.test(runId)||!owner.startsWith(`${runId}:`)||!/^[0-9]+:[0-9]+$/.test(owner)||String(receipt.runId)!==runId||String(saved.runId)!==runId||receipt.operator!=="github-actions"||receipt.reason!=="webhook-claims-cutover"||receipt.owner!==owner||receipt.productRevision!==product||saved.owner!==owner||saved.productRevision!==product||saved.admissionStopValue!==raw||saved.previousWorkerImage!==oldImage) throw new Error("Webhook cutover receipt identity mismatch"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { if (await redis.get("lyrashield:scan-admission:stopped")!==raw) throw new Error("Webhook cutover admission receipt mismatch"); console.log("MATCH"); } finally { await redis.quit(); }' "$LYRASHIELD_ADMISSION_STOP_RECEIPT" "$LYRASHIELD_ADMISSION_STOP_OWNER" "$expected_app" "$old_image" "$(cat "$receipt_file")" "$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID")
+  receipt_verified=$(redis_eval 'const {default:Redis}=await import("ioredis"); const {createHash}=await import("node:crypto"); const [raw,owner,product,currentImage,durable,runId,engine,live]=process.argv.slice(1); const receipt=JSON.parse(raw); const saved=JSON.parse(durable); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); const hashes={databaseUrlSha256:hash(process.env.DATABASE_URL),databaseSystemUrlSha256:hash(process.env.DATABASE_SYSTEM_URL),redisUrlSha256:hash(process.env.REDIS_URL)}; if(Object.entries(hashes).some(([key,value])=>saved[key]!==value) || (live && Object.entries(hashes).some(([key,value])=>JSON.parse(live)[key]!==value))) throw new Error("Webhook cutover connection identity changed"); if (!/^[0-9]+$/.test(runId)||!owner.startsWith(`${runId}:`)||!/^[0-9]+:[0-9]+$/.test(owner)||String(receipt.runId)!==runId||String(saved.runId)!==runId||receipt.operator!=="github-actions"||receipt.reason!=="webhook-claims-cutover"||receipt.owner!==owner||receipt.productRevision!==product||saved.owner!==owner||saved.productRevision!==product||saved.admissionStopValue!==raw||![saved.previousWorkerImage,saved.candidateWorkerImage,saved.previousCandidateWorkerImage].filter(Boolean).includes(currentImage)) throw new Error("Webhook cutover receipt identity mismatch"); if(currentImage!==saved.previousWorkerImage) { const billing=await import("@lyrashield/billing"); if(billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/1" || saved.candidateProductRevision!==product || saved.candidateEngineRevision!==engine || saved.candidateWebhookTrackClaimProtocol!=="durable-claims/1" || process.env.LYRASHIELD_PRODUCT_REVISION!==product || process.env.LYRASHIELD_ENGINE_REVISION!==engine) throw new Error("Recorded cutover candidate identity mismatch"); } const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { if (await redis.get("lyrashield:scan-admission:stopped")!==raw) throw new Error("Webhook cutover admission receipt mismatch"); console.log("MATCH"); } finally { await redis.quit(); }' "$LYRASHIELD_ADMISSION_STOP_RECEIPT" "$LYRASHIELD_ADMISSION_STOP_OWNER" "$expected_app" "$old_image" "$(cat "$receipt_file")" "$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID" "$expected_engine" "${1:-}")
   [ "$receipt_verified" = MATCH ]
 }
 
@@ -221,12 +227,13 @@ assert_cutover_timer_stopped() {
 
 assert_legacy_worker_stopped() {
   state=$(systemctl is-active "$service" 2>/dev/null || true)
-  case "$state" in inactive|failed) ;; *) echo "Webhook cutover requires a stopped old worker service" >&2; return 1 ;; esac
-  # Docker daemon failure is not evidence that the old container is absent.
-  docker info --format '{{.DockerRootDir}}' >/dev/null
-  if docker inspect "$container" >/dev/null 2>&1; then
-    echo "Webhook cutover requires the old worker container to be absent" >&2; return 1
-  fi
+  case "$state" in inactive) ;; *) echo "Webhook cutover requires a stopped old worker service" >&2; return 1 ;; esac
+  remaining=$(docker ps -a --filter 'name=^/lyrashield-worker$' --format '{{.Names}}') || {
+    echo "Webhook cutover could not inspect old worker container state" >&2; return 1;
+  }
+  [ -z "$remaining" ] || {
+    echo "Webhook cutover requires the old worker container to be absent" >&2; return 1;
+  }
 }
 
 resume_admission() {
@@ -472,6 +479,8 @@ if [ "$webhook_cutover" -eq 1 ]; then
   cp -p "$config" "$capability_config"
   sed "s|^LYRASHIELD_WORKER_IMAGE=.*|LYRASHIELD_WORKER_IMAGE=$target|" "$config" > "$capability_config"
   config=$capability_config
+  # The same receipt check runs in the candidate image/environment before boot.
+  assert_cutover_receipt
   capability=$(worker_oneshot 'const billing=await import("@lyrashield/billing"); console.log(billing.WEBHOOK_TRACK_CLAIM_PROTOCOL);')
   config=$old_config
   rm -f "$capability_config"
@@ -543,7 +552,26 @@ install -m 0644 "$asset_stage/lyrashield-worker-egress-refresh.service" "$system
 install -m 0644 "$asset_stage/lyrashield-worker-egress-refresh.timer" "$systemd_dir/lyrashield-worker-egress-refresh.timer"
 systemctl daemon-reload
 
-cp -p "$config" "$backup"
+if [ "$webhook_cutover" -eq 1 ]; then
+  promotion_step=recording-webhook-candidate
+  assert_cutover_receipt
+  assert_empty_queues
+  assert_legacy_worker_stopped
+  # Keep the previously configured compatible candidate through the atomic
+  # config swap. A same-source rebuild can have a different immutable digest.
+  updated_receipt=$(worker_oneshot 'const [raw,current,target,product,engine]=process.argv.slice(1); const saved=JSON.parse(raw); const previousCandidateWorkerImage=current!==saved.previousWorkerImage?current:undefined; console.log(JSON.stringify({...saved,candidateWorkerImage:target,candidateProductRevision:product,candidateEngineRevision:engine,candidateWebhookTrackClaimProtocol:"durable-claims/1",previousCandidateWorkerImage}));' "$(cat "$receipt_file")" "$old_image" "$target" "$expected_app" "$expected_engine")
+  receipt_temporary=$(mktemp "${receipt_file}.XXXXXX")
+  printf '%s\n' "$updated_receipt" > "$receipt_temporary"
+  chmod 0600 "$receipt_temporary"
+  chown root:root "$receipt_temporary"
+  sync -f "$receipt_temporary"
+  mv "$receipt_temporary" "$receipt_file"
+  sync -f "$(dirname "$receipt_file")"
+fi
+
+if [ "$webhook_cutover" -eq 0 ] || [ ! -e "$backup" ]; then
+  cp -p "$config" "$backup"
+fi
 temporary=$(mktemp "${config}.XXXXXX")
 awk -v image="$target" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } { print } END { if (!found) exit 1 }' "$config" > "$temporary"
 chmod 0600 "$temporary"
@@ -573,10 +601,11 @@ wait_healthy
 if [ "$webhook_cutover" -eq 1 ]; then
   promotion_step=checking-held-cutover
   # The pipeline alone releases this receipt after compatible app/scanner health.
-  # Readback still uses the old image named in the durable maintenance receipt.
+  # Readback uses the pre-promotion image retained by the maintenance receipt.
   candidate_config=$config
+  live_hashes=$(docker exec "$container" node --input-type=module -e 'const {createHash}=await import("node:crypto"); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); console.log(JSON.stringify({databaseUrlSha256:hash(process.env.DATABASE_URL),databaseSystemUrlSha256:hash(process.env.DATABASE_SYSTEM_URL),redisUrlSha256:hash(process.env.REDIS_URL)}));')
   config=$backup
-  assert_cutover_receipt
+  assert_cutover_receipt "$live_hashes"
   config=$candidate_config
   systemctl enable "$service"
   systemctl is-active --quiet "$service"

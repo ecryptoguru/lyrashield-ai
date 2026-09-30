@@ -205,15 +205,15 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   assert.equal(normalizedIf("Deactivate superseded Container App revisions"), "steps.smoke-public.outcome == 'success'")
   assert.equal(
     normalizedIf("Roll back production traffic on health failure"),
-    "failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
   assert.equal(
     normalizedIf("Restore prior ingress mode after failed rollout"),
-    "failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
   assert.equal(
     normalizedIf("Deactivate zero-traffic candidates after failed rollout"),
-    "failure() && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.webhook_claims_cutover != true && failure() && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
 
   const app = functionBody(rollout, "deploy-app-container-app")

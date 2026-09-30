@@ -164,9 +164,17 @@ case "$1:$2" in
       inspect\ lyrashield-worker) : ;;
       *) exit 1 ;;
     esac ;;
+  ps:-a)
+    [ "${MOCK_DOCKER_PS_FAIL:-0}" != 1 ] || exit 1
+    [ "$(cat "$MOCK_CONTAINER_PRESENT")" != 1 ] || printf 'lyrashield-worker\n' ;;
   run:*)
+    export DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' "$MOCK_WORKER_ENV_FILE" | head -n 1)"
+    export DATABASE_SYSTEM_URL="$(sed -n 's/^DATABASE_SYSTEM_URL=//p' "$MOCK_WORKER_ENV_FILE" | head -n 1)"
+    export REDIS_URL="$(sed -n 's/^REDIS_URL=//p' "$MOCK_WORKER_ENV_FILE" | head -n 1)"
+    export LYRASHIELD_PRODUCT_REVISION="$MOCK_APP_REVISION"
+    export LYRASHIELD_ENGINE_REVISION="$MOCK_ENGINE_REVISION"
     case "$*" in
-      *'const [raw,owner,product,oldImage,durable,runId]'*)
+      *'const [raw,owner,product,currentImage,durable,runId,engine,live]'*|*'candidateWorkerImage:target'*)
         while [ "$1" != -e ]; do shift; done
         shift
         code=$1
@@ -177,8 +185,12 @@ const code = process.argv[2];
 const args = process.argv.slice(3);
 process.argv = ["node", ...args];
 const replacement = 'Promise.resolve({default: class Redis { async get() { return globalThis.readAdmission(); } async quit() {} }})';
-globalThis.readAdmission = () => fs.readFileSync(process.env.MOCK_ADMISSION_STOP, "utf8");
-await eval(`(async () => { ${code.replace('import("ioredis")', replacement)} })()`);
+globalThis.readAdmission = () => {
+  fs.appendFileSync(process.env.MOCK_ORDER_LOG, "redis-read\n");
+  return fs.readFileSync(process.env.MOCK_ADMISSION_STOP, "utf8");
+};
+const billing = `Promise.resolve({WEBHOOK_TRACK_CLAIM_PROTOCOL:${JSON.stringify(process.env.MOCK_CLAIM_PROTOCOL || "durable-claims/1")}})`;
+await eval(`(async () => { ${code.replace('import("ioredis")', replacement).replace('import("@lyrashield/billing")', billing)} })()`);
 NODE
         ;;
       *WEBHOOK_TRACK_CLAIM_PROTOCOL*) printf '%s\n' "${MOCK_CLAIM_PROTOCOL:-durable-claims/1}" ;;
@@ -223,6 +235,15 @@ NODE
     exit 1 ;;
   exec:lyrashield-worker)
     case "$*" in
+      *databaseUrlSha256*)
+        node - "$MOCK_WORKER_ENV_FILE" <<'NODE'
+const fs = require("node:fs"), crypto = require("node:crypto");
+const env = Object.fromEntries(fs.readFileSync(process.argv[2], "utf8").trim().split("\n").map(line => {const i=line.indexOf("="); return [line.slice(0,i),line.slice(i+1)];}));
+if (process.env.MOCK_LIVE_STALE === "1") env.REDIS_URL = "rediss://rotated@redis.test:6379";
+const hash = value => crypto.createHash("sha256").update(value || "").digest("hex");
+console.log(JSON.stringify({databaseUrlSha256:hash(env.DATABASE_URL),databaseSystemUrlSha256:hash(env.DATABASE_SYSTEM_URL),redisUrlSha256:hash(env.REDIS_URL)}));
+NODE
+        ;;
       *printenv\ REDIS_URL*)
         if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf '%s\n' 'rediss://current@redis.test:6379'; else printf '%s\n' 'rediss://retired@retired-redis.test:6379'; fi ;;
       *printenv\ DATABASE_URL*)
@@ -262,6 +283,10 @@ cat > "$case_dir/bin/df" <<'MOCK'
 printf '%s\n' 'Filesystem 1-blocks Used Available Capacity Mounted on'
 printf '/dev/mock 10000000000 1000 %s 1%% /\n' "$MOCK_FREE_BYTES"
 MOCK
+  cat > "$case_dir/bin/sync" <<'MOCK'
+#!/bin/sh
+printf 'sync %s\n' "$*" >> "$MOCK_ORDER_LOG"
+MOCK
   cat > "$case_dir/bin/seq" <<'MOCK'
 #!/bin/sh
 if [ "${MOCK_UNHEALTHY:-0}" = 1 ] && [ "$*" = '1 600' ]; then printf '1\n'; else /usr/bin/seq "$@"; fi
@@ -282,6 +307,7 @@ MOCK
 }
 
 run_case() {
+  local target=$target
   local name=$1 timer_active=$2 service_enabled=$3 timer_enabled=$4 expected=$5
   local service_active=${6:-1} existing_stop=${7:-} fail_image_check=${8:-0}
   local replacement_stop=${9:-}
@@ -295,7 +321,9 @@ run_case() {
   local receipt_mode=${17:-owned}
   local protocol=${18:-durable-claims/1}
   local queue_counts=${19:-}
-  local unhealthy=0 receipt_stat=0:600
+  local unhealthy=0 receipt_stat=0:600 docker_ps_fail=0 live_stale=0
+  [ "$name" != cutover-docker-uncertain ] || docker_ps_fail=1
+  [ "$name" != cutover-live-environment-rotated ] || live_stale=1
   [ "$name" != cutover-health-failure ] || unhealthy=1
   [ "$name" != cutover-insecure-receipt ] || receipt_stat=0:644
   local floor_env=""
@@ -331,7 +359,7 @@ run_case() {
   if [ "$cutover" = 1 ]; then
     mode_arg=--webhook-claims-cutover
     owned_stop="{\"operator\":\"github-actions\",\"reason\":\"webhook-claims-cutover\",\"owner\":\"123:1\",\"runId\":\"123\",\"productRevision\":\"$app_revision\"}"
-    durable=$(node -e 'console.log(JSON.stringify({owner:"123:1",runId:"123",productRevision:process.argv[1],admissionStopValue:process.argv[2],previousWorkerImage:process.argv[3]}))' "$app_revision" "$owned_stop" "$old_image")
+    durable=$(node -e 'const hash=value=>require("node:crypto").createHash("sha256").update(value).digest("hex"); console.log(JSON.stringify({owner:"123:1",runId:"123",productRevision:process.argv[1],admissionStopValue:process.argv[2],previousWorkerImage:process.argv[3],databaseUrlSha256:hash("postgresql://current@database.test:5432/lyrashield"),databaseSystemUrlSha256:hash(""),redisUrlSha256:hash("rediss://current@redis.test:6379")}))' "$app_revision" "$owned_stop" "$old_image")
     printf '%s' "$durable" > "$case_dir/cutover.json"
     chmod 0600 "$case_dir/cutover.json"
     printf '%s' "$owned_stop" > "$case_dir/admission-stop"
@@ -339,14 +367,36 @@ run_case() {
       missing) rm "$case_dir/cutover.json" ;;
       foreign) printf '{"operator":"on-call"}' > "$case_dir/admission-stop" ;;
       stale-run) durable=${durable//123/999}; printf '%s' "$durable" > "$case_dir/cutover.json" ;;
+      stale-env) printf 'REDIS_URL=rediss://rotated@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\nGHCR_TOKEN=test-token\n' > "$case_dir/worker.env" ;;
+      retry|wrong-candidate|rebuilt-retry|previous-candidate)
+        cp "$case_dir/runtime.conf" "$case_dir/runtime.conf.cutover-prior-$app_revision-${old_image##*@sha256:}"
+        recorded=$target
+        [ "$receipt_mode" != wrong-candidate ] || recorded="ghcr.io/example/worker@sha256:$(printf 'f%.0s' {1..64})"
+        durable=$(node -e 'const saved=JSON.parse(process.argv[1]); console.log(JSON.stringify({...saved,candidateWorkerImage:process.argv[2],candidateProductRevision:process.argv[3],candidateEngineRevision:process.argv[4],candidateWebhookTrackClaimProtocol:"durable-claims/1"}))' "$durable" "$recorded" "$app_revision" "$engine_revision")
+        printf '%s' "$durable" > "$case_dir/cutover.json"
+        printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$target" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
+        if [ "$receipt_mode" = rebuilt-retry ] || [ "$receipt_mode" = previous-candidate ]; then
+          configured_candidate=$target
+          target="ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:$(printf 'f%.0s' {1..64})"
+          if [ "$receipt_mode" = previous-candidate ]; then
+            durable=$(node -e 'const saved=JSON.parse(process.argv[1]); console.log(JSON.stringify({...saved,candidateWorkerImage:process.argv[2],previousCandidateWorkerImage:process.argv[3]}))' "$durable" "$target" "$configured_candidate")
+            printf '%s' "$durable" > "$case_dir/cutover.json"
+          fi
+        fi
+        ;;
     esac
   fi
+  local configured_image
+  configured_image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$case_dir/runtime.conf")
   set +e
   output=$(
     PATH="$case_dir/bin:$PATH" \
       MOCK_TARGET="$target" \
       MOCK_CLAIM_PROTOCOL="$protocol" \
       MOCK_UNHEALTHY="$unhealthy" \
+      MOCK_DOCKER_PS_FAIL="$docker_ps_fail" \
+      MOCK_LIVE_STALE="$live_stale" \
+      MOCK_WORKER_ENV_FILE="$case_dir/worker.env" \
       MOCK_RECEIPT_STAT="$receipt_stat" \
       MOCK_QUEUE_COUNTS="$queue_counts" \
       LYRASHIELD_ADMISSION_STOP_RECEIPT="$owned_stop" \
@@ -396,9 +446,9 @@ run_case() {
       grep -Fq 'webhook maintenance held, no legacy rollback' <<< "$output"
       [ "$(cat "$case_dir/service-active")" = 0 ]
       [ "$(cat "$case_dir/service-enabled")" = 0 ]
-      if [ "$fail_image_check" = 1 ] || [ "$restart_fails" = 1 ] || [ "$unhealthy" = 1 ]; then
+      if [ "$fail_image_check" = 1 ] || [ "$restart_fails" = 1 ] || [ "$unhealthy" = 1 ] || [ "$live_stale" = 1 ]; then
         grep -Fq "LYRASHIELD_WORKER_IMAGE=$target" "$case_dir/runtime.conf"
-        grep -Fq "LYRASHIELD_WORKER_IMAGE=$old_image" "$case_dir/runtime.conf.rollback-$app_revision"
+        grep -Fq "LYRASHIELD_WORKER_IMAGE=$configured_image" "$case_dir/runtime.conf.cutover-prior-$app_revision-${configured_image##*@sha256:}"
         grep -Fq 'image asset: run-worker.sh' "$case_dir/host/libexec/lyrashield-run-worker"
       fi
     fi
@@ -422,8 +472,23 @@ run_case() {
     [ "$restarts" -le 1 ]
     if [ "$expected" = success ]; then
       [ "$restarts" = 1 ]
-      grep -Fq "$old_image node --import tsx --input-type=module -e const {getSystemPrisma}" "$case_dir/docker.log"
+      if [ "$receipt_mode" = owned ]; then grep -Fq "$old_image node --import tsx --input-type=module -e const {getSystemPrisma}" "$case_dir/docker.log"; fi
       grep -Fq "$target node --import tsx --input-type=module -e const billing=" "$case_dir/docker.log"
+    fi
+    if [ "$receipt_mode" = retry ] || [ "$receipt_mode" = rebuilt-retry ] || [ "$receipt_mode" = previous-candidate ]; then
+      grep -Fq "LYRASHIELD_WORKER_IMAGE=$old_image" "$case_dir/runtime.conf.cutover-prior-$app_revision-${old_image##*@sha256:}"
+    fi
+    if [ "$receipt_mode" = stale-env ]; then
+      if grep -Fxq redis-read "$case_dir/order.log"; then echo 'Stale connections reached Redis' >&2; exit 1; fi
+    fi
+    if [ "$expected" = success ] || [ "$fail_image_check" = 1 ] || [ "$restart_fails" = 1 ] || [ "$unhealthy" = 1 ] || [ "$live_stale" = 1 ]; then
+      node -e 'const saved=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); if(saved.candidateWorkerImage!==process.argv[2] || saved.candidateProductRevision!==process.argv[3] || saved.candidateEngineRevision!==process.argv[4] || saved.candidateWebhookTrackClaimProtocol!=="durable-claims/1") process.exit(1);' "$case_dir/cutover.json" "$target" "$app_revision" "$engine_revision"
+      if [ "$receipt_mode" = rebuilt-retry ] || [ "$receipt_mode" = previous-candidate ]; then
+        node -e 'const saved=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); if(saved.previousCandidateWorkerImage!==process.argv[2]) process.exit(1);' "$case_dir/cutover.json" "$configured_image"
+      fi
+      sync_line=$(grep -n '^sync -f .*cutover.json.' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
+      restart_line=$(grep -n 'systemctl restart lyrashield-worker.service' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
+      [ -n "$sync_line" ] && [ "$sync_line" -lt "$restart_line" ]
     fi
     return
   fi
@@ -529,6 +594,15 @@ run_case() {
   fi
 }
 
+run_case cutover-rebuilt-candidate 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1 rebuilt-retry
+run_case cutover-before-config-crash-retry 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1 previous-candidate
+run_case cutover-rebuilt-candidate-health-failure 0 0 0 failure 0 '' 1 '' 9999999000 0 1 '' env 0 1 rebuilt-retry
+run_case cutover-compatible-retry 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1 retry
+run_case cutover-retry-missing-capability 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 retry legacy
+run_case cutover-wrong-recorded-candidate 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 wrong-candidate
+run_case cutover-stale-environment 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 stale-env
+run_case cutover-docker-uncertain 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1
+run_case cutover-live-environment-rotated 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1
 run_case cutover-stopped-bootstrap 0 1 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1
 run_case cutover-newer-stop 0 1 0 failure 0 '' 0 '{"operator":"on-call","reason":"incident"}' 9999999000 0 1 '' env 0 1
 run_case cutover-health-failure 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1
@@ -587,6 +661,7 @@ printf 'REDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://cu
 preflight_output=$(
   PATH="$preflight_dir/bin:$PATH" \
     MOCK_TARGET="$target" \
+    MOCK_WORKER_ENV_FILE="$preflight_dir/worker.env" \
     MOCK_APP_REVISION="$app_revision" \
     MOCK_ENGINE_REVISION="$engine_revision" \
     MOCK_SERVICE_ACTIVE="$preflight_dir/service-active" \
