@@ -290,7 +290,7 @@ jobs:
             echo "clean: no raw serial-comma candidates"
             exit 0
           fi
-          printf '%s\n' "$hits" | head -20
+          printf '%s\n' "$hits" | sed -n '1,20p'
           total=$(printf '%s\n' "$hits" | wc -l)
           echo "::notice::$total raw serial-comma candidate(s) — inspect the step summary (advisory)"
           exit 1

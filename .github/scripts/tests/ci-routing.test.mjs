@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
-import { execFileSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { execFileSync, spawnSync } from "node:child_process"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import test from "node:test"
 import { runInNewContext } from "node:vm"
 
@@ -60,5 +60,32 @@ test("runtime, mixed, dependency and unknown paths retain production regression 
     ["new-runtime-entrypoint.js"],
   ]) {
     for (const name of runtimeSteps) assert.equal(runs(name, paths), true, `${paths}: ${name}`)
+  }
+})
+
+test("large advisory copy output reaches its notice without a broken pipe", () => {
+  const body = workflow.match(
+    /- name: Serial-comma copy scan \(advisory\)[\s\S]*?        run: \|\n([\s\S]*?)(?=\n      - name:)/
+  )?.[1]
+  assert.ok(body, "Missing advisory copy scan")
+  const directory = mkdtempSync("/tmp/lyrashield-copy-scan-")
+  try {
+    const script = body
+      .replace(/^          /gm, "")
+      .replace(
+        /hits=\$\(grep[\s\S]*?\|\| true\)/,
+        'hits=$(for ((i=0; i<10000; i++)); do printf "fixture:%s: comment, and text\\n" "$i"; done)'
+      )
+    const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", script], {
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_STEP_SUMMARY: `${directory}/summary` },
+    })
+    assert.equal(result.status, 1, "Candidates retain the advisory status")
+    assert.match(result.stdout, /::notice::\s*10000 raw serial-comma candidate/)
+    assert.equal(result.stdout.split("fixture:").length - 1, 20)
+    assert.equal(result.stderr, "")
+    assert.equal(readFileSync(`${directory}/summary`, "utf8").split("fixture:").length - 1, 10000)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
   }
 })
