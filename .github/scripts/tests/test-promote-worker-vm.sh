@@ -55,6 +55,16 @@ MOCK
     printf 'installed unit: %s\n' "$unit" > "$case_dir/host/systemd/$unit"
   done
 
+  cat > "$case_dir/bin/timeout" <<'MOCK'
+#!/bin/sh
+set -eu
+[ "$1" = "--kill-after=10s" ]
+[ "$2" = "120s" ]
+shift 2
+exec "$@"
+MOCK
+  chmod +x "$case_dir/bin/timeout"
+
   cat > "$case_dir/bin/systemctl" <<'MOCK'
 #!/bin/sh
 set -eu

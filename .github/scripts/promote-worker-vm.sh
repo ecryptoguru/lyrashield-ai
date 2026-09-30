@@ -38,24 +38,50 @@ worker_image_from_config() {
 # environment file plus the same --env set the live worker gets. The docker
 # socket and the shared root stay unmounted; the container only reaches
 # Postgres and Redis.
-worker_oneshot() {
+worker_oneshot() (
   code=$1
   shift
   image=$(worker_image_from_config)
   env_args=$(lyrashield_worker_env_args "$config" "$environment_file")
+  probe_dir=$(mktemp -d)
+  probe_name="lyrashield-maintenance-$(basename "$probe_dir")"
+  cleanup_probe() {
+    status=$?
+    trap - EXIT HUP INT TERM
+    if [ -s "$probe_dir/container.id" ]; then
+      probe_id=$(cat "$probe_dir/container.id")
+      case "$probe_id" in
+        *[!0-9a-f]*|'') status=1 ;;
+        *)
+          if [ "${#probe_id}" -eq 64 ]; then
+            # Docker's cidfile binds cleanup to this invocation, never a live
+            # worker or a concurrent maintenance container.
+            docker rm -f "$probe_id" >/dev/null 2>&1 || status=1
+          else
+            status=1
+          fi ;;
+      esac
+    fi
+    rm -f "$probe_dir/container.id"
+    rmdir "$probe_dir" || status=1
+    exit "$status"
+  }
+  trap cleanup_probe EXIT
+  trap 'exit 1' HUP INT TERM
   # Intentional word splitting: worker-env.sh emits one `--env` argument pair
   # per line and every emitted value is whitespace-free.
   # shellcheck disable=SC2086
-  docker run --rm --network bridge \
+  timeout --kill-after=10s 120s docker run --name "$probe_name" \
+    --cidfile "$probe_dir/container.id" --network bridge --no-healthcheck \
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --env-file "$environment_file" \
     $env_args \
     --env TMPDIR=/tmp \
     -w /app/apps/worker "$image" \
     node --import tsx --input-type=module -e "$code" "$@"
-}
+)
 
-queue_count='const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scanQueue.getJobCounts("wait","active","delayed","prioritized"),webhookQueue.getJobCounts("wait","active","delayed","prioritized")]); console.log(JSON.stringify({nonterminal,scan,webhook})); } finally { await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); }'
+queue_count='const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scanQueue.getJobCounts("wait","active","delayed","prioritized"),webhookQueue.getJobCounts("wait","active","delayed","prioritized")]); console.log(JSON.stringify({nonterminal,scan,webhook})); } finally { const closed=await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); for (const queue of [scanQueue,webhookQueue]) { const connection=queue.opts?.connection; if (typeof connection?.disconnect === "function") connection.disconnect(false); } const failed=closed.find(result=>result.status==="rejected"); if (failed) throw failed.reason; }'
 queue_expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
 
 assert_empty_queues() {
