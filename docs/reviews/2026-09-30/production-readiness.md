@@ -18,7 +18,7 @@ The release at merged product `c948aa1b` failed at startup in [run 36698540141](
 
 Cloud and Desktop source pins advance together to the exact merged engine `12daa1d4`. The temporary unmerged-candidate CI job is removed; the required pinned engine/worker contract remains authoritative. Desktop publication remains deferred.
 
-Local release validation: 82 Node deployment tests passed with zero skips; the nested permission regression passed; workflow actionlint, pin parity, engine merge/provenance checks, formatting and diff checks passed. Final branch CI and the pinned consumer contract must pass before merge.
+Local release validation: all 411 pinned worker/engine contract tests passed across nine files; 82 Node deployment tests passed with zero skips; all shell deployment suites passed, including 83 Azure admission cases; the nested permission regression passed; workflow actionlint, pin parity, engine merge/provenance checks, formatting and diff checks passed. Fresh required final-branch CI must pass before merge.
 
 ## Live runtime readback
 
