@@ -4,6 +4,10 @@ const processBillingDowngradeJobMock = vi.hoisted(() => vi.fn().mockResolvedValu
 const processBillingExpirePacksJobMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const replenishAllowanceCyclesMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const runBillingReconciliationMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const recoveryMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ examined: 0, represented: 0, ambiguous: 0 })
+)
+vi.mock("./jobs/webhook-track-retry.job", () => ({ recoverDueWebhookTrackRetries: recoveryMock }))
 const loggerMock = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }))
 
 vi.mock("./jobs/billing-downgrade.job", () => ({
@@ -39,6 +43,7 @@ describe("billing jobs scheduler", () => {
     const timers = startBillingJobsScheduler(60 * 60 * 1000)
 
     expect(timers).toHaveLength(4)
+    expect(recoveryMock).toHaveBeenCalledTimes(1)
     expect(runBillingReconciliationMock).toHaveBeenCalledTimes(1)
 
     await vi.advanceTimersByTimeAsync(23 * 60 * 60 * 1000)
@@ -46,6 +51,7 @@ describe("billing jobs scheduler", () => {
 
     await vi.advanceTimersByTimeAsync(60 * 60 * 1000)
     expect(runBillingReconciliationMock).toHaveBeenCalledTimes(2)
+    expect(recoveryMock).toHaveBeenCalledTimes(25)
 
     timers.forEach(clearInterval)
   })

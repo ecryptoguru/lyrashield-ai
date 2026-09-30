@@ -1744,9 +1744,14 @@ model WebhookEventTrack {
   workspaceId    String?
   // "billing" | "license" | "affiliate"
   track          String
-  // "pending" | "succeeded" | "failed" | "dead_letter"
+  // "pending" | "processing" | "succeeded" | "failed" | "dead_letter"
   status         String    @default("pending")
   attempts       Int       @default(0)
+  generation     Int       @default(0)
+  // Null on historical rows: do not automatically replay unknown effects.
+  nextAttemptAt  DateTime?
+  claimToken     String?
+  leaseExpiresAt DateTime?
   // Bounded reason string (truncated, identifiers/reason codes only).
   lastError      String?
   completedAt    DateTime?
@@ -1758,6 +1763,7 @@ model WebhookEventTrack {
   @@unique([webhookEventId, track])
   @@index([status])
   @@index([track, status])
+  @@index([status, nextAttemptAt])
 }
 
 /// Global checkpoint and lease for the report-only provider reconciliation job.

@@ -6,6 +6,14 @@ on:
       source_sha:
         required: true
         type: string
+      webhook_recovery_requires_receipt:
+        required: false
+        default: false
+        type: boolean
+      webhook_claims_cutover:
+        required: false
+        default: false
+        type: boolean
       engine_revision:
         required: true
         type: string
@@ -34,6 +42,9 @@ permissions:
 
 env:
   DEPLOY_SHA: ${{ inputs.source_sha }}
+  WEBHOOK_CLAIMS_CUTOVER: ${{ inputs.webhook_claims_cutover && 'true' || 'false' }}
+  LYRASHIELD_ADMISSION_STOP_OWNER: ${{ github.run_id }}:${{ github.run_attempt }}
+  LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID: ${{ github.run_id }}
   ENGINE_REVISION: ${{ inputs.engine_revision }}
   REGISTRY: ghcr.io
   WEB_IMAGE: ${{ inputs.web_image }}
@@ -135,6 +146,33 @@ jobs:
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
 
+      - name: Verify existing owned receipt before original-source recovery
+        if: inputs.webhook_claims_cutover == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          latest_main=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)
+          if [ "$DEPLOY_SHA" != "$latest_main" ]; then
+            [ "${GITHUB_RUN_ATTEMPT:-1}" -gt 1 ] || exit 1
+            bash .github/scripts/webhook-claims-maintenance.sh recovery
+          fi
+
+      # Read-only guard runs before production configuration or migration mutations.
+      # First claims cutover is a separately approved maintenance operation.
+      - name: Verify compatible webhook cutover baseline
+        if: inputs.webhook_claims_cutover != true
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          GHCR_USERNAME: ${{ github.repository_owner }}
+        run: node .github/scripts/verify-webhook-cutover.mjs
+
       - name: Preserve live Cloud billing admission
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
@@ -210,7 +248,43 @@ jobs:
         # malicious allowlisted build script could read the production DB URL.
         run: pnpm install --frozen-lockfile
 
+      - name: Verify migration database continuity before maintenance
+        if: inputs.webhook_claims_cutover == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          MIGRATION_DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh database
+
+      - name: Claim webhook maintenance admission stop
+        if: inputs.webhook_claims_cutover == true
+        id: webhook-stop
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh claim
+      - name: Quiesce every old webhook writer
+        if: inputs.webhook_claims_cutover == true
+        id: webhook-quiesce
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh quiesce
+      - name: Read back excluded writers immediately before migration
+        if: inputs.webhook_claims_cutover == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          MIGRATION_DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+        run: |
+          bash .github/scripts/webhook-claims-maintenance.sh verify
+          bash .github/scripts/webhook-claims-maintenance.sh database
       - name: Run database migrations
+        id: database-migration
         env:
           DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
         run: bash .github/scripts/deploy-azure-preflight.sh run-database-migrations
@@ -409,11 +483,21 @@ jobs:
           CLOUDFLARE_ORIGIN_MTLS: ${{ env.CLOUDFLARE_ORIGIN_MTLS }}
         run: bash .github/scripts/deploy-azure-rollout.sh smoke-candidate-revisions
       - name: Verify worker queues are empty before traffic promotion
+        if: inputs.webhook_claims_cutover != true
         id: worker-preflight
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
         run: bash .github/scripts/deploy-azure-rollout.sh verify-worker-queues-are-empty-before-traffic-promotion
+      - name: Boot compatible worker before opening webhook ingress
+        if: inputs.webhook_claims_cutover == true
+        id: webhook-worker
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          WORKER_IMAGE: ${{ inputs.worker_image }}
+          WORKER_DIGEST: ${{ inputs.worker_digest }}
+        run: bash .github/scripts/deploy-azure-rollout.sh promote-verified-worker-digest-on-vm
       - name: Promote healthy candidate revisions
         id: promote
         env:
@@ -461,8 +545,10 @@ jobs:
       # 1. The empty-queue preflight above already verified the worker queues
       #    are drained BEFORE traffic was promoted, so the gap window carries
       #    only jobs created by the NEW app after cutover.
-      # 2. Those jobs are consumed by the OLD worker, which is safe because
-      #    the app↔worker contract is pinned and CI-enforced in both
+      # 2. The early cutover guard independently proves all current billing
+      #    writers and rollback images support durable claims. Engine pins alone
+      #    do not prove billing compatibility. Engine job/result compatibility
+      #    remains pinned and CI-enforced in both
       #    directions: the app's ENGINE_REVISION pin (verified by
       #    verify-engine-revision.sh with green engine checks at that exact
       #    SHA) and the engine's .lyrashield-worker-pin contract tests. A
@@ -475,6 +561,7 @@ jobs:
       #    this step's outcome) while the old worker keeps serving until a
       #    retry succeeds.
       - name: Promote verified worker digest on VM
+        if: inputs.webhook_claims_cutover != true
         id: worker-vm
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -485,7 +572,7 @@ jobs:
       # Migrations and app-scope configuration remain forward-only. This rollback
       # changes traffic only, after every candidate had already passed readiness.
       - name: Roll back production traffic on health failure
-        if: failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+        if: inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
@@ -500,7 +587,7 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh roll-back-production-traffic-on-health-failure
       - name: Restore prior ingress mode after failed rollout
         if: >
-          failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
+          inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
@@ -512,7 +599,7 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh restore-prior-ingress-mode-after-failed-rollout
       - name: Deactivate zero-traffic candidates after failed rollout
         if: >
-          failure() &&
+          inputs.webhook_claims_cutover != true && failure() &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
@@ -529,3 +616,28 @@ jobs:
           EGRESS_CANDIDATE: ${{ steps.deploy-egress-proxy.outputs.revision }}
           EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
         run: bash .github/scripts/deploy-azure-rollout.sh deactivate-zero-traffic-candidates-after-failed-rollout
+
+      - name: Verify installed compatible webhook writer baseline
+        if: inputs.webhook_claims_cutover == true
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          GHCR_USERNAME: ${{ github.repository_owner }}
+        run: node .github/scripts/verify-webhook-cutover.mjs
+      - name: Resume only owned admission after compatible cutover
+        if: inputs.webhook_claims_cutover == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh resume
+      - name: Hold webhook ingress closed after failed maintenance
+        if: failure() && inputs.webhook_claims_cutover == true && steps.webhook-stop.outcome == 'success'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh hold

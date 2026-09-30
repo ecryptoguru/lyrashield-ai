@@ -43,6 +43,8 @@ const cycleStart = new Date("2026-08-01T00:00:00.000Z")
 let usageRecords: UsageRecordState[]
 let packs: PackState[]
 let updateManyMock: ReturnType<typeof vi.fn>
+let usageCreateMock: ReturnType<typeof vi.fn>
+let receiptReadMock: ReturnType<typeof vi.fn>
 
 function configureDatabase(
   poolMinutes: number,
@@ -85,6 +87,14 @@ function configureDatabase(
     pack.remainingMinutes -= data.remainingMinutes.decrement
     return { count: 1 }
   })
+
+  usageCreateMock = vi.fn(async ({ data }) => {
+    usageRecords.push({ id: `usage_${usageRecords.length + 1}`, deletedAt: null, ...data })
+    return {}
+  })
+  receiptReadMock = vi.fn(async ({ where }) =>
+    usageRecords.find((record) => record.idempotencyKey === where.idempotencyKey)
+  )
 
   const tx = {
     scan: {
@@ -155,9 +165,7 @@ function configureDatabase(
       ),
     },
     usageRecord: {
-      findUnique: vi.fn(async ({ where }) =>
-        usageRecords.find((record) => record.idempotencyKey === where.idempotencyKey)
-      ),
+      findUnique: receiptReadMock,
       findMany: vi.fn(async ({ where }) => {
         const kinds = Array.isArray(where.kind?.in) ? where.kind.in : [where.kind]
         return usageRecords
@@ -171,20 +179,7 @@ function configureDatabase(
           )
           .map(({ quantity }) => ({ quantity }))
       }),
-      create: vi.fn(async ({ data }) => {
-        usageRecords.push({
-          id: `usage_${usageRecords.length + 1}`,
-          workspaceId: data.workspaceId,
-          accountId: data.accountId ?? null,
-          kind: data.kind,
-          quantity: data.quantity,
-          idempotencyKey: data.idempotencyKey,
-          cycleStart: data.cycleStart,
-          deletedAt: null,
-          metadata: data.metadata,
-        })
-        return {}
-      }),
+      create: usageCreateMock,
     },
     minutePack: {
       findMany: vi.fn(async ({ where }: { where: { accountId?: string | null } }) =>
@@ -209,7 +204,7 @@ function configureDatabase(
       () => undefined,
       () => undefined
     )
-    if (options)
+    if (options?.isolationLevel)
       expect(options).toEqual(expect.objectContaining({ isolationLevel: "Serializable" }))
     return result
   })
@@ -451,5 +446,257 @@ describe("recordAgentMinutes billing-outcome rules (founder-confirmed 2026-08-29
     expect(settleOverage).not.toHaveBeenCalled()
     const record = usageRecords.find((r) => r.kind === "agent_minutes")
     expect(record?.cycleStart?.getTime()).toBe(trialStart.getTime())
+  })
+})
+
+describe("recordAgentMinutes authoritative replay receipts", () => {
+  const conflict = (target: string[] = ["idempotencyKey"]) =>
+    Object.assign(new Error("unique conflict"), { code: "P2002", meta: { target } })
+  const receipt = (overrides: Partial<UsageRecordState> = {}): UsageRecordState => ({
+    id: "receipt",
+    workspaceId: "ws_1",
+    accountId: SPONSOR,
+    kind: "agent_minutes",
+    quantity: 3,
+    idempotencyKey: "ws_1:scan_1:engine_run",
+    cycleStart,
+    deletedAt: null,
+    metadata: { scanId: "scan_1", accountId: SPONSOR, overageMinutes: 2 },
+    ...overrides,
+  })
+
+  it("reads a fresh account-bound durable receipt after a usage key conflict", async () => {
+    configureDatabase(0)
+    const error = conflict()
+    usageCreateMock.mockImplementationOnce(async () => {
+      // A legacy writer commits independently while this insertion loses.
+      usageRecords.push(receipt())
+      throw error
+    })
+    const finalize = vi.fn()
+    const result = await recordAgentMinutes("ws_1", "scan_1", 180_000, {
+      phase: "engine_run",
+      beforeCommit: finalize,
+    })
+    expect(result).toMatchObject({ created: false, overageMinutes: 2, accountId: SPONSOR })
+    expect(finalize).not.toHaveBeenCalled()
+    expect(receiptReadMock).toHaveBeenCalledTimes(2)
+    expect(receiptReadMock.mock.calls[1]?.[0].where).toEqual({
+      idempotencyKey: "ws_1:scan_1:engine_run",
+      accountId: SPONSOR,
+    })
+    expect(transactionMock.mock.calls.at(-1)?.[1]).toMatchObject({ accountId: SPONSOR })
+  })
+
+  it("recovers the exact Prisma PostgreSQL adapter constraint shape", async () => {
+    configureDatabase(100)
+    usageCreateMock.mockImplementationOnce(async () => {
+      usageRecords.push(receipt())
+      throw {
+        code: "P2002",
+        meta: {
+          modelName: "UsageRecord",
+          driverAdapterError: {
+            cause: {
+              kind: "UniqueConstraintViolation",
+              originalCode: "23505",
+              constraint: { fields: ['"idempotencyKey"'] },
+            },
+          },
+        },
+      }
+    })
+    expect(
+      await recordAgentMinutes("ws_1", "scan_1", 180_000, { phase: "engine_run" })
+    ).toMatchObject({ created: false, overageMinutes: 2, accountId: SPONSOR })
+  })
+
+  it("recovers the exact PostgreSQL constraint message when RLS suppresses field detail", async () => {
+    configureDatabase(100)
+    usageCreateMock.mockImplementationOnce(async () => {
+      usageRecords.push(receipt())
+      throw {
+        code: "P2002",
+        meta: {
+          modelName: "UsageRecord",
+          driverAdapterError: {
+            cause: {
+              kind: "UniqueConstraintViolation",
+              originalCode: "23505",
+              originalMessage:
+                'duplicate key value violates unique constraint "UsageRecord_idempotencyKey_key"',
+            },
+          },
+        },
+      }
+    })
+    expect(
+      await recordAgentMinutes("ws_1", "scan_1", 180_000, { phase: "engine_run" })
+    ).toMatchObject({ created: false, overageMinutes: 2, accountId: SPONSOR })
+  })
+
+  it("refuses a merely similar PostgreSQL constraint message", async () => {
+    configureDatabase(100)
+    const error = {
+      code: "P2002",
+      meta: {
+        modelName: "UsageRecord",
+        driverAdapterError: {
+          cause: {
+            kind: "UniqueConstraintViolation",
+            originalCode: "23505",
+            originalMessage:
+              'duplicate key value violates unique constraint "UsageRecord_idempotencyKey_key_other"',
+          },
+        },
+      },
+    }
+    usageCreateMock.mockRejectedValueOnce(error)
+    await expect(
+      recordAgentMinutes("ws_1", "scan_1", 180_000, { phase: "engine_run" })
+    ).rejects.toBe(error)
+    expect(receiptReadMock).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    { modelName: "OtherModel", fields: ['"idempotencyKey"'] },
+    { modelName: "UsageRecord", fields: ["id"] },
+    { modelName: "UsageRecord", fields: undefined },
+    { modelName: "UsageRecord", fields: ['"idempotencyKey"', "id"] },
+  ])("refuses ambiguous PostgreSQL adapter constraints %j", async ({ modelName, fields }) => {
+    configureDatabase(100)
+    const error = {
+      code: "P2002",
+      meta: {
+        modelName,
+        driverAdapterError: {
+          cause: {
+            kind: "UniqueConstraintViolation",
+            originalCode: "23505",
+            constraint: { fields },
+          },
+        },
+      },
+    }
+    usageCreateMock.mockRejectedValueOnce(error)
+    await expect(
+      recordAgentMinutes("ws_1", "scan_1", 180_000, { phase: "engine_run" })
+    ).rejects.toBe(error)
+    expect(receiptReadMock).toHaveBeenCalledOnce()
+  })
+
+  it.each([["idempotencyKey"], ["id"], ["otherUnique"], []])(
+    "does not turn a %j conflict without a durable receipt into success",
+    async (...target) => {
+      configureDatabase(100)
+      const error = conflict(target as string[])
+      usageCreateMock.mockRejectedValueOnce(error)
+      await expect(
+        recordAgentMinutes("ws_1", "scan_1", 180_000, { phase: "engine_run" })
+      ).rejects.toBe(error)
+    }
+  )
+
+  const invalidReceipts: Partial<UsageRecordState>[] = [
+    { accountId: "other_account" },
+    { workspaceId: "other_workspace" },
+    { kind: "pool_grant" },
+    { deletedAt: new Date() },
+    { idempotencyKey: "ws_1:scan_1:other_phase" },
+    { metadata: { scanId: "other_scan", accountId: SPONSOR } },
+    { metadata: { scanId: "scan_1", accountId: "other_account" } },
+    { metadata: undefined },
+  ]
+  it.each(invalidReceipts)(
+    "rejects an existing mismatched receipt %j before finalization",
+    async (bad) => {
+      configureDatabase(100)
+      receiptReadMock.mockResolvedValueOnce(receipt(bad))
+      const finalize = vi.fn()
+      await expect(
+        recordAgentMinutes("ws_1", "scan_1", 180_000, {
+          phase: "engine_run",
+          beforeCommit: finalize,
+        })
+      ).rejects.toThrow("agent_minute_receipt_mismatch")
+      expect(finalize).not.toHaveBeenCalled()
+      expect(usageCreateMock).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(invalidReceipts)(
+    "rejects a fresh mismatched receipt %j after insertion conflict",
+    async (bad) => {
+      configureDatabase(100)
+      receiptReadMock.mockResolvedValueOnce(null).mockResolvedValueOnce(receipt(bad))
+      usageCreateMock.mockRejectedValueOnce(conflict())
+      await expect(
+        recordAgentMinutes("ws_1", "scan_1", 180_000, { phase: "engine_run" })
+      ).rejects.toThrow("agent_minute_receipt_mismatch")
+    }
+  )
+
+  it("propagates unrelated usage-insertion conflicts even when a matching receipt appears", async () => {
+    configureDatabase(100)
+    const error = conflict(["id"])
+    receiptReadMock.mockResolvedValueOnce(null).mockResolvedValueOnce(receipt())
+    usageCreateMock.mockRejectedValueOnce(error)
+    await expect(
+      recordAgentMinutes("ws_1", "scan_1", 180_000, { phase: "engine_run" })
+    ).rejects.toBe(error)
+    expect(receiptReadMock).toHaveBeenCalledOnce()
+  })
+
+  it("propagates overage unique conflicts without receipt recovery or finalization", async () => {
+    configureDatabase(0)
+    const error = conflict()
+    const finalize = vi.fn()
+    await expect(
+      recordAgentMinutes("ws_1", "scan_1", 180_000, {
+        phase: "engine_run",
+        settleOverage: vi.fn().mockRejectedValue(error),
+        beforeCommit: finalize,
+      })
+    ).rejects.toBe(error)
+    expect(receiptReadMock).toHaveBeenCalledOnce()
+    expect(finalize).not.toHaveBeenCalled()
+  })
+
+  it.each([false, true])(
+    "never hides a finalizer P2002 when existing receipt is %s",
+    async (existing) => {
+      configureDatabase(100)
+      if (existing) usageRecords.push(receipt())
+      const error = conflict()
+      const finalize = vi.fn().mockRejectedValue(error)
+      await expect(
+        recordAgentMinutes("ws_1", "scan_1", 180_000, {
+          phase: "engine_run",
+          beforeCommit: finalize,
+        })
+      ).rejects.toBe(error)
+      expect(finalize).toHaveBeenCalledOnce()
+      expect(receiptReadMock).toHaveBeenCalledOnce()
+    }
+  )
+
+  it("does not recover a post-finalization P2002 from a matching receipt", async () => {
+    configureDatabase(100)
+    const transaction = transactionMock.getMockImplementation()!
+    const error = conflict()
+    transactionMock.mockImplementation(async (callback, options) => {
+      const result = await transaction(callback, options)
+      if (options?.isolationLevel) throw error
+      return result
+    })
+    const finalize = vi.fn()
+    await expect(
+      recordAgentMinutes("ws_1", "scan_1", 180_000, {
+        phase: "engine_run",
+        beforeCommit: finalize,
+      })
+    ).rejects.toBe(error)
+    expect(finalize).toHaveBeenCalledOnce()
+    expect(receiptReadMock).toHaveBeenCalledOnce()
   })
 })
