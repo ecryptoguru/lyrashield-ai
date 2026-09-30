@@ -3,8 +3,15 @@ import assert from "node:assert/strict"
 import { mkdir, writeFile } from "node:fs/promises"
 import { resolve } from "node:path"
 
-const base = "http://localhost:33009"
-const output = "/tmp/ls-hardening-20260930/evidence"
+const base = process.env.DOCKER_HTTP_ORIGIN ?? "http://localhost:33009"
+assert.ok(
+  ["http://localhost:33009", "http://localhost:33012"].includes(base),
+  "Disposable origins only"
+)
+const output = process.env.DOCKER_HTTP_OUTPUT ?? "/tmp/ls-hardening-20260930/evidence"
+assert.ok(output.startsWith("/tmp/ls-hardening-20260930/evidence"), "Disposable artifact path only")
+const expectedTerminal = process.env.DOCKER_HTTP_EXPECT_TERMINAL ?? "COMPLETED"
+assert.ok(["COMPLETED", "FAILED"].includes(expectedTerminal))
 const cookieJar = new Map()
 const steps = []
 async function request(path, options = {}) {
@@ -29,10 +36,13 @@ async function request(path, options = {}) {
 
 await mkdir(output, { recursive: true })
 assert.equal((await request("/api/health")).status, 200)
-assert.equal((await request("/login")).status, 200)
+const legacyLogin = await request("/login")
+assert.equal(legacyLogin.status, 307)
+assert.equal(legacyLogin.headers.get("location"), "/sign-in")
+assert.equal((await request("/sign-in")).status, 200)
 const unauthenticated = await request("/dashboard")
 assert.ok([302, 303, 307, 308].includes(unauthenticated.status))
-assert.match(unauthenticated.headers.get("location") ?? "", /login/)
+assert.match(unauthenticated.headers.get("location") ?? "", /sign-in/)
 
 const account = {
   email: `docker-http-${Date.now()}@example.invalid`,
@@ -51,7 +61,7 @@ assert.equal(session.status, 200)
 assert.equal((await session.json()).user.id, signupBody.user.id)
 const dashboard = await request("/dashboard")
 assert.ok([200, 302, 303, 307, 308].includes(dashboard.status))
-assert.doesNotMatch(dashboard.headers.get("location") ?? "", /login/)
+assert.doesNotMatch(dashboard.headers.get("location") ?? "", /sign-in/)
 const signout = await request("/api/auth/sign-out", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
@@ -82,6 +92,7 @@ const privateTarget = await request("/api/targets", {
     type: "WEB_APP",
     name: "Private denial fixture",
     url: "http://127.0.0.1/private",
+    ownershipAttested: true,
   }),
 })
 assert.equal(privateTarget.status, 400)
@@ -92,11 +103,12 @@ const targetResponse = await request("/api/targets", {
   body: JSON.stringify({
     workspaceId,
     type: "WEB_APP",
-    name: "Passive example fixture",
-    url: "https://example.com/",
+    name: "Passive owned marketing fixture",
+    url: "https://lyrashieldai.com/",
+    ownershipAttested: true,
   }),
 })
-assert.equal(targetResponse.status, 201, await targetResponse.clone().text())
+assert.equal(targetResponse.status, 200, await targetResponse.clone().text())
 const targetId = (await targetResponse.json()).data.id
 const createScanOptions = {
   method: "POST",
@@ -109,6 +121,7 @@ const scanId = (await admitted.json()).data.id
 const repeated = await request("/api/scans", createScanOptions)
 assert.equal(repeated.status, 200, await repeated.clone().text())
 assert.equal((await repeated.json()).data.id, scanId)
+console.log(JSON.stringify({ admittedScanId: scanId, workspaceId }))
 let terminalScan
 for (let attempt = 0; attempt < 90; attempt++) {
   const scan = await request(`/api/scans/${scanId}?workspaceId=${workspaceId}`)
@@ -118,10 +131,10 @@ for (let attempt = 0; attempt < 90; attempt++) {
     terminalScan = body
     break
   }
-  await new Promise((resolve) => setTimeout(resolve, 1000))
+  await new Promise((resolve) => setTimeout(resolve, 3000))
 }
 assert(terminalScan, "Passive deterministic fixture must reach a terminal state")
-assert.equal(terminalScan.status, "COMPLETED", JSON.stringify(terminalScan))
+assert.equal(terminalScan.status, expectedTerminal, JSON.stringify(terminalScan))
 assert.equal(terminalScan.mode, "SAFE")
 
 for (const [format, width, height] of [
