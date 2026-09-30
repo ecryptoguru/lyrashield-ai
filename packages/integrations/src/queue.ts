@@ -152,6 +152,14 @@ function createProducerQueue<Data, Result>(
     logger.warn("Queue producer error", { queue: name, error: error.message })
   )
   producerConnections.set(queue, connection)
+  const close = queue.close
+  queue.close = async () => {
+    try {
+      await close.call(queue)
+    } finally {
+      connection.disconnect(false)
+    }
+  }
   return queue
 }
 
