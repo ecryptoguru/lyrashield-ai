@@ -210,7 +210,7 @@ const defaultJobOptions = {
 let scanQueue: Queue<ScanJobData, ScanJobResult> | null = null
 
 export function getScanQueue(): Queue<ScanJobData, ScanJobResult> {
-  if (!scanQueue) {
+  if (!scanQueue || producerConnections.get(scanQueue)?.status === "end") {
     scanQueue = createProducerQueue<ScanJobData, ScanJobResult>(SCAN_QUEUE_NAME, defaultJobOptions)
   }
   return scanQueue
@@ -276,7 +276,10 @@ export function webhookTrackRetryJobId(data: WebhookTrackRetryJobData): string {
 let webhookTrackRetryQueue: Queue<WebhookTrackRetryJobData, void> | null = null
 
 export function getWebhookTrackRetryQueue(): Queue<WebhookTrackRetryJobData, void> {
-  if (!webhookTrackRetryQueue) {
+  if (
+    !webhookTrackRetryQueue ||
+    producerConnections.get(webhookTrackRetryQueue)?.status === "end"
+  ) {
     webhookTrackRetryQueue = createProducerQueue<WebhookTrackRetryJobData, void>(
       WEBHOOK_TRACK_RETRY_QUEUE_NAME,
       defaultJobOptions
@@ -366,7 +369,7 @@ export interface FixGenerateJobData {
 let fixGenerateQueue: Queue<FixGenerateJobData, unknown> | null = null
 
 function getFixGenerateQueue(): Queue<FixGenerateJobData, unknown> {
-  if (!fixGenerateQueue) {
+  if (!fixGenerateQueue || producerConnections.get(fixGenerateQueue)?.status === "end") {
     fixGenerateQueue = createProducerQueue<FixGenerateJobData, unknown>(FIX_GENERATE_QUEUE_NAME, {
       // The consumer is deterministic from stored evidence (no model call),
       // so retrying a transient failure is safe. attempts stay small so a
