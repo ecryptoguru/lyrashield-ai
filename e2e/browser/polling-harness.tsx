@@ -75,10 +75,51 @@ const scan: ScanData = {
   aiSecurity: null,
 }
 
+function ScopedClientHarness() {
+  const [workspaceId, setWorkspaceId] = useState("ws-a")
+  const [principalId, setPrincipalId] = useState("user-a")
+  const targetId = workspaceId === "ws-a" ? "target-a" : "target-b"
+  return (
+    <>
+      <button onClick={() => setWorkspaceId((current) => (current === "ws-a" ? "ws-b" : "ws-a"))}>
+        Switch workspace
+      </button>
+      <button
+        onClick={() => setPrincipalId((current) => (current === "user-a" ? "user-b" : "user-a"))}
+      >
+        Switch principal
+      </button>
+      <output aria-label="Current scope">
+        {principalId}:{workspaceId}
+      </output>
+      <WebMcpReceiptProvider>
+        <ScansClient
+          principalId={principalId}
+          workspaceId={workspaceId}
+          targets={[
+            {
+              id: targetId,
+              name: "Example repository",
+              type: "REPO",
+              repoFullName: "example/repository",
+              url: null,
+              apiSpecUrl: null,
+            },
+          ]}
+          initialData={[{ ...item, id: `scope-row-${workspaceId}`, status: "COMPLETED" }]}
+          initialNextCursor={null}
+        />
+      </WebMcpReceiptProvider>
+    </>
+  )
+}
+
 export default function PollingHarness() {
   const [detailId, setDetailId] = useState("scan-a")
   const mode = new URLSearchParams(location.search).get("polling")
-  return mode === "create" || mode === "client-list" ? (
+  return mode === "scope" ? (
+    <ScopedClientHarness />
+  ) : mode === "create" || mode === "client-list" ? (
     <WebMcpReceiptProvider>
       <ScansClient
         principalId="user-a"
