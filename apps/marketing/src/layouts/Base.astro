@@ -155,47 +155,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
     <meta name="theme-color" content="#f5f9fc" data-theme-color />
     {noReferrer && <meta name="referrer" content="no-referrer" />}
     <link rel="preload" as="font" type="font/woff2" href={bricolageWoff2} crossorigin="anonymous" />
-    <script is:inline>
-      (() => {
-        try {
-          const cookiePreference = document.cookie.match(
-            /(?:^|; )lyrashield-theme=(system|light|dark)(?:;|$)/
-          )?.[1]
-          const storedPreference = localStorage.getItem("lyrashield-theme")
-          const preference = cookiePreference || storedPreference || "system"
-          if (!cookiePreference && (storedPreference === "system" || storedPreference === "light" || storedPreference === "dark")) {
-            const domain = location.hostname === "lyrashieldai.com" || location.hostname.endsWith(".lyrashieldai.com")
-              ? "; Domain=.lyrashieldai.com"
-              : ""
-            document.cookie = `lyrashield-theme=${storedPreference}; Max-Age=31536000; Path=/${domain}; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`
-          }
-          const dark =
-            preference === "dark" ||
-            (preference === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
-          document.documentElement.dataset.theme = dark ? "dark" : "light"
-          document.documentElement.dataset.themePreference = preference
-          document.querySelector('meta[data-theme-color]')?.setAttribute("content", dark ? "#08111c" : "#f5f9fc")
-        } catch {}
-      })()
-    </script>
-    <script is:inline>
-      /* Opt into the scroll-reveal pre-state before first paint to avoid a
-         flash-of-visible-then-hidden. Gated on motion + data preferences and
-         IntersectionObserver support, so no-JS / reduced-motion / data-saver
-         users always render fully visible. Observation wiring loads after. */
-      ;(() => {
-        try {
-          const connection = navigator.connection
-          if (
-            "IntersectionObserver" in window &&
-            !matchMedia("(prefers-reduced-motion: reduce)").matches &&
-            !(connection && connection.saveData === true)
-          ) {
-            document.documentElement.classList.add("reveal-ready")
-          }
-        } catch {}
-      })()
-    </script>
+    <script src="/scripts/head-bootstrap.js" is:inline></script>
   </head>
   <body class="bg-bg text-text font-ui antialiased">
     <a
@@ -449,31 +409,6 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
         else void initializeAnalytics()
       })
     </script>
-    <script is:inline>
-      /* First-touch acquisition handoff: append the current page's utm_* and a
-         bounded route-name token to app sign-up links. Runs regardless of
-         analytics consent — it only rewrites hrefs, never sends data. The app
-         revalidates every value against an allowlist. */
-      ;(() => {
-        try {
-          const params = new URLSearchParams(location.search)
-          const route =
-            location.pathname === "/" ? "home" : location.pathname.split("/")[1] || "home"
-          document
-            .querySelectorAll('a[href^="https://app.lyrashieldai.com/sign-up"]')
-            .forEach((a) => {
-              try {
-                const href = new URL(a.getAttribute("href"))
-                for (const key of ["utm_source", "utm_medium", "utm_campaign", "utm_content"]) {
-                  const value = params.get(key)
-                  if (value && !href.searchParams.get(key)) href.searchParams.set(key, value)
-                }
-                if (!href.searchParams.get("from")) href.searchParams.set("from", route)
-                a.setAttribute("href", href.toString())
-              } catch {}
-            })
-        } catch {}
-      })()
-    </script>
+    <script src="/scripts/signup-attribution.js" is:inline></script>
   </body>
 </html>

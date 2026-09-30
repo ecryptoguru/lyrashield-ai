@@ -14,6 +14,7 @@ vi.mock("@lyrashield/db", () => ({
   claimOrGetAgentOperation: vi.fn(),
   completeAgentOperation: vi.fn(),
   failAgentOperation: vi.fn(),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
 }))
 
 vi.mock("@lyrashield/evidence-storage", () => ({

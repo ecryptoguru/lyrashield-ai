@@ -1,4 +1,4 @@
-import { forwardRef } from "react"
+import { Children, cloneElement, forwardRef, isValidElement } from "react"
 import { cn } from "./utils"
 
 export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
@@ -49,15 +49,59 @@ interface FormFieldProps {
   htmlFor: string
   children: React.ReactNode
   className?: string
+  hint?: string
+  error?: string
 }
 
-export function FormField({ label, htmlFor, children, className }: FormFieldProps) {
+export function FormField({ label, htmlFor, children, className, hint, error }: FormFieldProps) {
+  const hintId = `${htmlFor}-hint`
+  const errorId = `${htmlFor}-error`
+  const control =
+    hint || error
+      ? Children.map(children, (child) => {
+          if (
+            !isValidElement<{ id?: string; "aria-describedby"?: string }>(child) ||
+            child.props.id !== htmlFor
+          ) {
+            return child
+          }
+
+          const descriptions = [
+            ...new Set(
+              [
+                child.props["aria-describedby"],
+                hint ? hintId : undefined,
+                error ? errorId : undefined,
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .split(/\s+/)
+            ),
+          ].join(" ")
+
+          return cloneElement(child, {
+            "aria-describedby": descriptions,
+            ...(error ? { "aria-invalid": true } : {}),
+          })
+        })
+      : children
+
   return (
     <div className={className}>
       <label htmlFor={htmlFor} className="mb-1 block text-sm font-medium">
         {label}
       </label>
-      {children}
+      {control}
+      {hint ? (
+        <p id={hintId} className="mt-1 text-sm text-muted-foreground">
+          {hint}
+        </p>
+      ) : null}
+      {error ? (
+        <p id={errorId} className="mt-1 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
     </div>
   )
 }

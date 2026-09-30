@@ -118,6 +118,83 @@ function recordedOverageMinutes(metadata: unknown): number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0
 }
 
+function isUsageReceiptUniqueConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const details = error as {
+    code?: unknown
+    meta?: {
+      modelName?: unknown
+      target?: unknown
+      driverAdapterError?: {
+        cause?: {
+          kind?: unknown
+          originalCode?: unknown
+          originalMessage?: unknown
+          constraint?: { fields?: unknown }
+        }
+      }
+    }
+  }
+  if (details.code !== "P2002") return false
+  const target = details.meta?.target
+  if (Array.isArray(target) && target.length === 1 && target[0] === "idempotencyKey") return true
+  // Prisma's pg adapter uses constraint DETAIL for fields; PostgreSQL omits
+  // DETAIL under RLS. In that case require the exact database constraint
+  // message, never a substring or an arbitrary application error message.
+  const cause = details.meta?.driverAdapterError?.cause
+  const fields = cause?.constraint?.fields
+  return (
+    details.meta?.modelName === "UsageRecord" &&
+    cause?.kind === "UniqueConstraintViolation" &&
+    cause.originalCode === "23505" &&
+    ((Array.isArray(fields) && fields.length === 1 && fields[0] === '"idempotencyKey"') ||
+      (fields === undefined &&
+        cause.originalMessage ===
+          'duplicate key value violates unique constraint "UsageRecord_idempotencyKey_key"'))
+  )
+}
+
+/** Only the usage insertion's exact idempotency constraint can authorize recovery. */
+class UsageReceiptConflict extends Error {
+  constructor(readonly originalError: unknown) {
+    super("agent_minute_usage_receipt_conflict")
+  }
+}
+
+async function readAgentMinuteReceipt(
+  tx: MeterTransaction,
+  expected: { accountId: string; workspaceId: string; scanId: string; idempotencyKey: string }
+) {
+  const receipt = await tx.usageRecord.findUnique({
+    where: { idempotencyKey: expected.idempotencyKey, accountId: expected.accountId },
+    select: {
+      accountId: true,
+      workspaceId: true,
+      idempotencyKey: true,
+      kind: true,
+      deletedAt: true,
+      metadata: true,
+    },
+  })
+  if (!receipt) return null
+  const metadata = receipt.metadata
+  if (
+    receipt.accountId !== expected.accountId ||
+    receipt.workspaceId !== expected.workspaceId ||
+    receipt.idempotencyKey !== expected.idempotencyKey ||
+    receipt.kind !== "agent_minutes" ||
+    receipt.deletedAt !== null ||
+    !metadata ||
+    typeof metadata !== "object" ||
+    Array.isArray(metadata) ||
+    metadata.scanId !== expected.scanId ||
+    metadata.accountId !== expected.accountId
+  ) {
+    throw new Error("agent_minute_receipt_mismatch")
+  }
+  return receipt
+}
+
 /**
  * Resolve the sponsoring account for a scan. The persisted createdById is the
  * trusted identity bound at admission — job payloads are untrusted.
@@ -227,9 +304,11 @@ export async function recordAgentMinutes(
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`account:${sponsorAccountId}`}, 0))`
 
-          const existing = await tx.usageRecord.findUnique({
-            where: { idempotencyKey },
-            select: { id: true, metadata: true },
+          const existing = await readAgentMinuteReceipt(tx, {
+            accountId: sponsorAccountId,
+            workspaceId,
+            scanId,
+            idempotencyKey,
           })
           if (existing) {
             finalizationStarted = Boolean(opts.beforeCommit)
@@ -290,21 +369,29 @@ export async function recordAgentMinutes(
         continue
       }
 
-      // P2002 remains a safe replay fallback if legacy writers do not take the
-      // workspace advisory lock.
-      if (
-        error !== null &&
-        typeof error === "object" &&
-        "code" in error &&
-        (error as { code: string }).code === "P2002"
-      ) {
+      // The failed transaction has rolled back. Legacy writers may omit our
+      // locks; only a fresh account-bound receipt proves their settlement.
+      // Recovery is read-only and never invokes finalization or provider work.
+      if (error instanceof UsageReceiptConflict && !finalizationStarted) {
+        const receipt = await withWorkspaceRLS(
+          workspaceId,
+          (tx) =>
+            readAgentMinuteReceipt(tx, {
+              accountId: sponsorAccountId,
+              workspaceId,
+              scanId,
+              idempotencyKey,
+            }),
+          { accountId: sponsorAccountId }
+        )
+        if (!receipt) throw error.originalError
         logger.debug("Idempotent replay of recordAgentMinutes", { idempotencyKey })
         return {
           created: false,
           minutes: 0,
           idempotencyKey,
-          overageMinutes: 0,
-          accountId: sponsorAccountId,
+          overageMinutes: recordedOverageMinutes(receipt.metadata),
+          accountId: receipt.accountId!,
         }
       }
       throw error
@@ -414,24 +501,29 @@ async function recordMinutesAndDebitIncrementalSpillover(
     }
   }
 
-  await tx.usageRecord.create({
-    data: {
-      workspaceId: input.workspaceId,
-      accountId: input.accountId,
-      kind: "agent_minutes",
-      quantity: input.minutes,
-      idempotencyKey: input.idempotencyKey,
-      cycleStart: cycleStart ?? null,
-      metadata: {
-        scanId: input.scanId,
+  try {
+    await tx.usageRecord.create({
+      data: {
+        workspaceId: input.workspaceId,
         accountId: input.accountId,
-        mode: input.mode ?? null,
-        wallClockMs: input.wallClockMs,
-        rawMinutes: input.rawMinutes,
-        multiplier: input.multiplier,
-        overageMinutes: toDecrement,
+        kind: "agent_minutes",
+        quantity: input.minutes,
+        idempotencyKey: input.idempotencyKey,
+        cycleStart: cycleStart ?? null,
+        metadata: {
+          scanId: input.scanId,
+          accountId: input.accountId,
+          mode: input.mode ?? null,
+          wallClockMs: input.wallClockMs,
+          rawMinutes: input.rawMinutes,
+          multiplier: input.multiplier,
+          overageMinutes: toDecrement,
+        },
       },
-    },
-  })
+    })
+  } catch (error) {
+    if (isUsageReceiptUniqueConflict(error)) throw new UsageReceiptConflict(error)
+    throw error
+  }
   return toDecrement
 }

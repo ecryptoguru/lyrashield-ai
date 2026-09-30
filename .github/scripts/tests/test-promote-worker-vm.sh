@@ -22,8 +22,6 @@ write_mocks() {
     refresh-secrets.sh \
     refresh-egress.sh \
     capture-stop-provenance.sh \
-    trial-claim-backfill.sh \
-    backfill-clear-wrong-trial-claims.ts \
     lyrashield-worker.service \
     lyrashield-worker-secrets.service \
     lyrashield-worker-egress.service \
@@ -57,26 +55,51 @@ MOCK
     printf 'installed unit: %s\n' "$unit" > "$case_dir/host/systemd/$unit"
   done
 
+  cat > "$case_dir/bin/timeout" <<'MOCK'
+#!/bin/sh
+set -eu
+case "$1 $2" in
+  "--kill-after=10s 120s"|"--kill-after=5s 10s") ;;
+  *) exit 1 ;;
+esac
+shift 2
+exec "$@"
+MOCK
+  chmod +x "$case_dir/bin/timeout"
+
   cat > "$case_dir/bin/systemctl" <<'MOCK'
 #!/bin/sh
 set -eu
 printf '%s\n' "$*" >> "$MOCK_SYSTEMCTL_LOG"
 printf 'systemctl %s\n' "$*" >> "$MOCK_ORDER_LOG"
 command=$1
+quiet=0
+case "$*" in *--quiet*) quiet=1 ;; esac
 shift
 [ "${1:-}" != "--quiet" ] || shift
 unit=${1:-}
 case "$command:$unit" in
   is-active:lyrashield-worker-egress-refresh.timer)
-    [ "$(cat "$MOCK_TIMER_ACTIVE")" = 1 ] ;;
+    if [ "$(cat "$MOCK_TIMER_ACTIVE")" = 1 ]; then
+      [ "$quiet" = 1 ] || printf 'active\n'; exit 0
+    fi
+    [ "$quiet" = 1 ] || printf 'inactive\n'; exit 3 ;;
   is-active:lyrashield-worker-egress-refresh.service)
     exit 1 ;;
   is-active:lyrashield-worker.service)
-    [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ] ;;
+    if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then
+      [ "$quiet" = 1 ] || printf 'active\n'
+      exit 0
+    fi
+    [ "$quiet" = 1 ] || printf 'inactive\n'
+    exit 3 ;;
   is-enabled:lyrashield-worker.service)
     [ "$(cat "$MOCK_SERVICE_ENABLED")" = 1 ] ;;
   is-enabled:lyrashield-worker-egress-refresh.timer)
-    [ "$(cat "$MOCK_TIMER_ENABLED")" = 1 ] ;;
+    if [ "$(cat "$MOCK_TIMER_ENABLED")" = 1 ]; then
+      [ "$quiet" = 1 ] || printf 'enabled\n'; exit 0
+    fi
+    [ "$quiet" = 1 ] || printf 'disabled\n'; exit 1 ;;
   enable:*)
     for unit in "$@"; do
       case "$unit" in
@@ -85,6 +108,20 @@ case "$command:$unit" in
         *) echo "unexpected enabled unit: $unit" >&2; exit 1 ;;
       esac
     done ;;
+  disable:--now)
+    case "${2:-}" in
+      lyrashield-worker-egress-refresh.timer)
+        printf 0 > "$MOCK_TIMER_ACTIVE"
+        printf 0 > "$MOCK_TIMER_ENABLED" ;;
+      lyrashield-worker.service)
+        printf 0 > "$MOCK_SERVICE_ACTIVE"
+        printf 0 > "$MOCK_SERVICE_ENABLED"
+        printf 0 > "$MOCK_CONTAINER_PRESENT" ;;
+      *) exit 1 ;;
+    esac ;;
+  stop:lyrashield-worker.service)
+    printf 0 > "$MOCK_SERVICE_ACTIVE"
+    printf 0 > "$MOCK_CONTAINER_PRESENT" ;;
   stop:lyrashield-worker-egress-refresh.timer)
     printf 0 > "$MOCK_TIMER_ACTIVE" ;;
   start:lyrashield-worker-egress-refresh.timer)
@@ -127,6 +164,7 @@ case "$1:$2" in
     [ "$(cat "$MOCK_CONTAINER_PRESENT")" = 1 ] || exit 1
     case "$*" in
       *State.Health*)
+        if [ "${MOCK_UNHEALTHY:-0}" = 1 ]; then printf 'unhealthy\n'; exit 0; fi
         if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf 'healthy\n'; else printf 'starting\n'; fi ;;
       *'{{.Image}}'*) printf '%s\n' 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' ;;
       *Config.Image*)
@@ -135,10 +173,40 @@ case "$1:$2" in
         else
           printf '%s\n' "$MOCK_TARGET"
         fi ;;
+      inspect\ lyrashield-worker) : ;;
       *) exit 1 ;;
     esac ;;
+  ps:-a)
+    [ "${MOCK_DOCKER_PS_FAIL:-0}" != 1 ] || exit 1
+    [ "$(cat "$MOCK_CONTAINER_PRESENT")" != 1 ] || printf 'lyrashield-worker\n' ;;
   run:*)
+    export DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' "$MOCK_WORKER_ENV_FILE" | head -n 1)"
+    export DATABASE_SYSTEM_URL="$(sed -n 's/^DATABASE_SYSTEM_URL=//p' "$MOCK_WORKER_ENV_FILE" | head -n 1)"
+    export REDIS_URL="$(sed -n 's/^REDIS_URL=//p' "$MOCK_WORKER_ENV_FILE" | head -n 1)"
+    export LYRASHIELD_PRODUCT_REVISION="$MOCK_APP_REVISION"
+    export LYRASHIELD_ENGINE_REVISION="$MOCK_ENGINE_REVISION"
     case "$*" in
+      *'const [raw,owner,product,currentImage,durable,runId,engine,live]'*|*'candidateWorkerImage:target'*)
+        while [ "$1" != -e ]; do shift; done
+        shift
+        code=$1
+        shift
+        node --input-type=module - "$code" "$@" <<'NODE'
+import fs from "node:fs";
+const code = process.argv[2];
+const args = process.argv.slice(3);
+process.argv = ["node", ...args];
+const replacement = 'Promise.resolve({default: class Redis { async get() { return globalThis.readAdmission(); } async quit() {} }})';
+globalThis.readAdmission = () => {
+  fs.appendFileSync(process.env.MOCK_ORDER_LOG, "redis-read\n");
+  return fs.readFileSync(process.env.MOCK_ADMISSION_STOP, "utf8");
+};
+const billing = `Promise.resolve({WEBHOOK_TRACK_CLAIM_PROTOCOL:${JSON.stringify(process.env.MOCK_CLAIM_PROTOCOL || "durable-claims/1")}})`;
+const source = code.replace('import("ioredis")', replacement).replace('import("@lyrashield/billing")', billing);
+await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
+NODE
+        ;;
+      *WEBHOOK_TRACK_CLAIM_PROTOCOL*) printf '%s\n' "${MOCK_CLAIM_PROTOCOL:-durable-claims/1}" ;;
       *'cjson.decode'*)
         promotion_stop='{"operator":"github-actions","reason":"worker-promotion"}'
         if [ ! -s "$MOCK_ADMISSION_STOP" ]; then
@@ -167,7 +235,12 @@ case "$1:$2" in
           printf '%s' "$promotion_stop" > "$MOCK_ADMISSION_STOP"
           printf '1\n%s\n' "$promotion_stop"
         fi ;;
-      *getSystemPrisma*) printf '%s\n' '{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}' ;;
+      *getSystemPrisma*)
+        if [ -n "${MOCK_QUEUE_COUNTS:-}" ]; then
+          printf '%s\n' "$MOCK_QUEUE_COUNTS"
+        else
+          printf '%s\n' '{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
+        fi ;;
       *) : ;;
     esac ;;
   exec:-w)
@@ -175,6 +248,15 @@ case "$1:$2" in
     exit 1 ;;
   exec:lyrashield-worker)
     case "$*" in
+      *databaseUrlSha256*)
+        node - "$MOCK_WORKER_ENV_FILE" <<'NODE'
+const fs = require("node:fs"), crypto = require("node:crypto");
+const env = Object.fromEntries(fs.readFileSync(process.argv[2], "utf8").trim().split("\n").map(line => {const i=line.indexOf("="); return [line.slice(0,i),line.slice(i+1)];}));
+if (process.env.MOCK_LIVE_STALE === "1") env.REDIS_URL = "rediss://rotated@redis.test:6379";
+const hash = value => crypto.createHash("sha256").update(value || "").digest("hex");
+console.log(JSON.stringify({databaseUrlSha256:hash(env.DATABASE_URL),databaseSystemUrlSha256:hash(env.DATABASE_SYSTEM_URL),redisUrlSha256:hash(env.REDIS_URL)}));
+NODE
+        ;;
       *printenv\ REDIS_URL*)
         if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf '%s\n' 'rediss://current@redis.test:6379'; else printf '%s\n' 'rediss://retired@retired-redis.test:6379'; fi ;;
       *printenv\ DATABASE_URL*)
@@ -214,6 +296,22 @@ cat > "$case_dir/bin/df" <<'MOCK'
 printf '%s\n' 'Filesystem 1-blocks Used Available Capacity Mounted on'
 printf '/dev/mock 10000000000 1000 %s 1%% /\n' "$MOCK_FREE_BYTES"
 MOCK
+  cat > "$case_dir/bin/sync" <<'MOCK'
+#!/bin/sh
+printf 'sync %s\n' "$*" >> "$MOCK_ORDER_LOG"
+MOCK
+  cat > "$case_dir/bin/seq" <<'MOCK'
+#!/bin/sh
+if [ "${MOCK_UNHEALTHY:-0}" = 1 ] && [ "$*" = '1 600' ]; then printf '1\n'; else /usr/bin/seq "$@"; fi
+MOCK
+  cat > "$case_dir/bin/sleep" <<'MOCK'
+#!/bin/sh
+exit 0
+MOCK
+  cat > "$case_dir/bin/stat" <<'MOCK'
+#!/bin/sh
+printf '%s\n' "${MOCK_RECEIPT_STAT:-0:600}"
+MOCK
   cat > "$case_dir/bin/chown" <<'MOCK'
 #!/bin/sh
 exit 0
@@ -222,6 +320,7 @@ MOCK
 }
 
 run_case() {
+  local target=$target
   local name=$1 timer_active=$2 service_enabled=$3 timer_enabled=$4 expected=$5
   local service_active=${6:-1} existing_stop=${7:-} fail_image_check=${8:-0}
   local replacement_stop=${9:-}
@@ -231,6 +330,15 @@ run_case() {
   local floor_bytes=${13:-}
   local floor_via=${14:-env}
   local restart_fails=${15:-0}
+  local cutover=${16:-0}
+  local receipt_mode=${17:-owned}
+  local protocol=${18:-durable-claims/1}
+  local queue_counts=${19:-}
+  local unhealthy=0 receipt_stat=0:600 docker_ps_fail=0 live_stale=0
+  [ "$name" != cutover-docker-uncertain ] || docker_ps_fail=1
+  [ "$name" != cutover-live-environment-rotated ] || live_stale=1
+  [ "$name" != cutover-health-failure ] || unhealthy=1
+  [ "$name" != cutover-insecure-receipt ] || receipt_stat=0:644
   local floor_env=""
   if [ "$floor_via" = env ]; then
     floor_env=$floor_bytes
@@ -253,11 +361,61 @@ run_case() {
     printf 'LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES=%s\n' "$floor_bytes" >> "$case_dir/runtime.conf"
   fi
   printf 'GHCR_TOKEN=test-token\nREDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\n' > "$case_dir/worker.env"
+  if [ "$name" = rolls-back-maintenance-assets ] || [ "$name" = removes-legacy-maintenance-assets ]; then
+    printf 'legacy maintenance runner\n' > "$case_dir/host/libexec/lyrashield-trial-claim-backfill"
+    printf 'legacy maintenance source\n' > "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts"
+  fi
 
+  local mode_arg=""
+  local owned_stop=''
+  local durable=''
+  if [ "$cutover" = 1 ]; then
+    mode_arg=--webhook-claims-cutover
+    owned_stop="{\"operator\":\"github-actions\",\"reason\":\"webhook-claims-cutover\",\"owner\":\"123:1\",\"runId\":\"123\",\"productRevision\":\"$app_revision\"}"
+    durable=$(node -e 'const hash=value=>require("node:crypto").createHash("sha256").update(value).digest("hex"); console.log(JSON.stringify({owner:"123:1",runId:"123",productRevision:process.argv[1],admissionStopValue:process.argv[2],previousWorkerImage:process.argv[3],databaseUrlSha256:hash("postgresql://current@database.test:5432/lyrashield"),databaseSystemUrlSha256:hash(""),redisUrlSha256:hash("rediss://current@redis.test:6379")}))' "$app_revision" "$owned_stop" "$old_image")
+    printf '%s' "$durable" > "$case_dir/cutover.json"
+    chmod 0600 "$case_dir/cutover.json"
+    printf '%s' "$owned_stop" > "$case_dir/admission-stop"
+    case "$receipt_mode" in
+      missing) rm "$case_dir/cutover.json" ;;
+      foreign) printf '{"operator":"on-call"}' > "$case_dir/admission-stop" ;;
+      stale-run) durable=${durable//123/999}; printf '%s' "$durable" > "$case_dir/cutover.json" ;;
+      stale-env) printf 'REDIS_URL=rediss://rotated@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\nGHCR_TOKEN=test-token\n' > "$case_dir/worker.env" ;;
+      retry|wrong-candidate|rebuilt-retry|previous-candidate)
+        cp "$case_dir/runtime.conf" "$case_dir/runtime.conf.cutover-prior-$app_revision-${old_image##*@sha256:}"
+        recorded=$target
+        [ "$receipt_mode" != wrong-candidate ] || recorded="ghcr.io/example/worker@sha256:$(printf 'f%.0s' {1..64})"
+        durable=$(node -e 'const saved=JSON.parse(process.argv[1]); console.log(JSON.stringify({...saved,candidateWorkerImage:process.argv[2],candidateProductRevision:process.argv[3],candidateEngineRevision:process.argv[4],candidateWebhookTrackClaimProtocol:"durable-claims/1"}))' "$durable" "$recorded" "$app_revision" "$engine_revision")
+        printf '%s' "$durable" > "$case_dir/cutover.json"
+        printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$target" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
+        if [ "$receipt_mode" = rebuilt-retry ] || [ "$receipt_mode" = previous-candidate ]; then
+          configured_candidate=$target
+          target="ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:$(printf 'f%.0s' {1..64})"
+          if [ "$receipt_mode" = previous-candidate ]; then
+            durable=$(node -e 'const saved=JSON.parse(process.argv[1]); console.log(JSON.stringify({...saved,candidateWorkerImage:process.argv[2],previousCandidateWorkerImage:process.argv[3]}))' "$durable" "$target" "$configured_candidate")
+            printf '%s' "$durable" > "$case_dir/cutover.json"
+          fi
+        fi
+        ;;
+    esac
+  fi
+  local configured_image
+  configured_image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$case_dir/runtime.conf")
   set +e
   output=$(
     PATH="$case_dir/bin:$PATH" \
       MOCK_TARGET="$target" \
+      MOCK_CLAIM_PROTOCOL="$protocol" \
+      MOCK_UNHEALTHY="$unhealthy" \
+      MOCK_DOCKER_PS_FAIL="$docker_ps_fail" \
+      MOCK_LIVE_STALE="$live_stale" \
+      MOCK_WORKER_ENV_FILE="$case_dir/worker.env" \
+      MOCK_RECEIPT_STAT="$receipt_stat" \
+      MOCK_QUEUE_COUNTS="$queue_counts" \
+      LYRASHIELD_ADMISSION_STOP_RECEIPT="$owned_stop" \
+      LYRASHIELD_ADMISSION_STOP_OWNER="123:1" \
+      LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID=123 \
+      LYRASHIELD_WEBHOOK_CUTOVER_RECEIPT_FILE="$case_dir/cutover.json" \
       MOCK_APP_REVISION="$app_revision" \
       MOCK_ENGINE_REVISION="$engine_revision" \
       MOCK_SERVICE_ACTIVE="$case_dir/service-active" \
@@ -285,11 +443,68 @@ run_case() {
       LYRASHIELD_WORKER_HOST_ASSETS_DIR="$case_dir/host/assets" \
       LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
       LYRASHIELD_WORKER_SYSTEMD_DIR="$case_dir/host/systemd" \
-      sh "$script" "$target" "$app_revision" "$engine_revision" 2>&1
+      sh "$script" ${mode_arg:+"$mode_arg"} "$target" "$app_revision" "$engine_revision" 2>&1
   )
   status=$?
   set -e
 
+  if [ "$cutover" = 1 ]; then
+    if [ "$expected" = success ]; then
+      [ "$status" -eq 0 ] || { printf '%s\n' "$output"; exit 1; }
+      grep -Fq 'scan admission held' <<< "$output"
+      [ "$(cat "$case_dir/service-active")" = 1 ]
+      grep -Fq "LYRASHIELD_WORKER_IMAGE=$target" "$case_dir/runtime.conf"
+    else
+      [ "$status" -ne 0 ] || { printf '%s\n' "$output"; exit 1; }
+      grep -Fq 'webhook maintenance held, no legacy rollback' <<< "$output"
+      [ "$(cat "$case_dir/service-active")" = 0 ]
+      [ "$(cat "$case_dir/service-enabled")" = 0 ]
+      if [ "$fail_image_check" = 1 ] || [ "$restart_fails" = 1 ] || [ "$unhealthy" = 1 ] || [ "$live_stale" = 1 ]; then
+        grep -Fq "LYRASHIELD_WORKER_IMAGE=$target" "$case_dir/runtime.conf"
+        grep -Fq "LYRASHIELD_WORKER_IMAGE=$configured_image" "$case_dir/runtime.conf.cutover-prior-$app_revision-${configured_image##*@sha256:}"
+        grep -Fq 'image asset: run-worker.sh' "$case_dir/host/libexec/lyrashield-run-worker"
+      fi
+    fi
+    [ "$(cat "$case_dir/timer-active")" = 0 ]
+    [ "$(cat "$case_dir/timer-enabled")" = 0 ]
+    [ -s "$case_dir/admission-stop" ]
+    if [ -n "$replacement_stop" ]; then
+      [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
+    elif [ "$receipt_mode" = foreign ]; then
+      [ "$(cat "$case_dir/admission-stop")" = '{"operator":"on-call"}' ]
+    else
+      [ "$(cat "$case_dir/admission-stop")" = "$owned_stop" ]
+    fi
+    if grep -Fq 'cjson.decode' "$case_dir/docker.log" ||
+      grep -Fq 'redis.call("DEL"' "$case_dir/docker.log" ||
+      grep -Fq 'systemctl start lyrashield-worker-egress-refresh.timer' "$case_dir/order.log"; then
+      echo "Maintenance promotion must never claim/resume admission or restart its timer" >&2
+      exit 1
+    fi
+    restarts=$(grep -Fc 'restart lyrashield-worker.service' "$case_dir/systemctl.log" || true)
+    [ "$restarts" -le 1 ]
+    if [ "$expected" = success ]; then
+      [ "$restarts" = 1 ]
+      if [ "$receipt_mode" = owned ]; then grep -Fq "$old_image node --import tsx --input-type=module -e const {getSystemPrisma}" "$case_dir/docker.log"; fi
+      grep -Fq "$target node --import tsx --input-type=module -e const billing=" "$case_dir/docker.log"
+    fi
+    if [ "$receipt_mode" = retry ] || [ "$receipt_mode" = rebuilt-retry ] || [ "$receipt_mode" = previous-candidate ]; then
+      grep -Fq "LYRASHIELD_WORKER_IMAGE=$old_image" "$case_dir/runtime.conf.cutover-prior-$app_revision-${old_image##*@sha256:}"
+    fi
+    if [ "$receipt_mode" = stale-env ]; then
+      if grep -Fxq redis-read "$case_dir/order.log"; then echo 'Stale connections reached Redis' >&2; exit 1; fi
+    fi
+    if [ "$expected" = success ] || [ "$fail_image_check" = 1 ] || [ "$restart_fails" = 1 ] || [ "$unhealthy" = 1 ] || [ "$live_stale" = 1 ]; then
+      node -e 'const saved=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); if(saved.candidateWorkerImage!==process.argv[2] || saved.candidateProductRevision!==process.argv[3] || saved.candidateEngineRevision!==process.argv[4] || saved.candidateWebhookTrackClaimProtocol!=="durable-claims/1") process.exit(1);' "$case_dir/cutover.json" "$target" "$app_revision" "$engine_revision"
+      if [ "$receipt_mode" = rebuilt-retry ] || [ "$receipt_mode" = previous-candidate ]; then
+        node -e 'const saved=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); if(saved.previousCandidateWorkerImage!==process.argv[2]) process.exit(1);' "$case_dir/cutover.json" "$configured_image"
+      fi
+      sync_line=$(grep -n '^sync -f .*cutover.json.' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
+      restart_line=$(grep -n 'systemctl restart lyrashield-worker.service' "$case_dir/order.log" | head -n 1 | cut -d: -f1)
+      [ -n "$sync_line" ] && [ "$sync_line" -lt "$restart_line" ]
+    fi
+    return
+  fi
   if [ "$expected" = success ]; then
     [ "$status" -eq 0 ]
     grep -Fq 'Worker service state: active enabled' <<< "$output"
@@ -342,8 +557,8 @@ run_case() {
     [ -n "$restart_line" ] && [ -n "$claim_line" ] && [ -n "$queue_line" ]
     [ "$restart_line" -gt "$claim_line" ] && [ "$restart_line" -gt "$queue_line" ]
     [ -f "$case_dir/host/assets/worker-env.sh" ]
-    [ -x "$case_dir/host/libexec/lyrashield-trial-claim-backfill" ]
-    [ -f "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts" ]
+    [ ! -e "$case_dir/host/libexec/lyrashield-trial-claim-backfill" ]
+    [ ! -e "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts" ]
     if [ "$name" = missing-rollback-image ]; then
       grep -Fq 'No local rollback image' <<< "$output"
     fi
@@ -352,10 +567,14 @@ run_case() {
       grep -Fq '2147483648-byte floor' <<< "$output"
     fi
   else
-    # A failed first deployment must not strand a privileged maintenance
-    # runner or its source on the VM after host-asset rollback.
-    [ ! -e "$case_dir/host/libexec/lyrashield-trial-claim-backfill" ]
-    [ ! -e "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts" ]
+    # A rollback must restore legacy assets if the previous image needs them.
+    if [ "$name" = rolls-back-maintenance-assets ]; then
+      grep -Fxq 'legacy maintenance runner' "$case_dir/host/libexec/lyrashield-trial-claim-backfill"
+      grep -Fxq 'legacy maintenance source' "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts"
+    else
+      [ ! -e "$case_dir/host/libexec/lyrashield-trial-claim-backfill" ]
+      [ ! -e "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts" ]
+    fi
   fi
   if [ -n "$replacement_stop" ]; then
     [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
@@ -388,7 +607,30 @@ run_case() {
   fi
 }
 
+run_case cutover-rebuilt-candidate 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1 rebuilt-retry
+run_case cutover-before-config-crash-retry 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1 previous-candidate
+run_case cutover-rebuilt-candidate-health-failure 0 0 0 failure 0 '' 1 '' 9999999000 0 1 '' env 0 1 rebuilt-retry
+run_case cutover-compatible-retry 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1 retry
+run_case cutover-retry-missing-capability 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 retry legacy
+run_case cutover-wrong-recorded-candidate 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 wrong-candidate
+run_case cutover-stale-environment 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 stale-env
+run_case cutover-docker-uncertain 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1
+run_case cutover-live-environment-rotated 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1
+run_case cutover-stopped-bootstrap 0 1 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1
+run_case cutover-newer-stop 0 1 0 failure 0 '' 0 '{"operator":"on-call","reason":"incident"}' 9999999000 0 1 '' env 0 1
+run_case cutover-health-failure 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1
+run_case cutover-insecure-receipt 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1
+run_case cutover-missing-receipt 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 missing
+run_case cutover-foreign-receipt 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 foreign
+run_case cutover-stale-run 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 stale-run
+run_case cutover-live-worker 0 1 0 failure 1 '' 0 '' 9999999000 1 1 '' env 0 1
+run_case cutover-old-container 0 1 0 failure 0 '' 0 '' 9999999000 1 1 '' env 0 1
+run_case cutover-missing-capability 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 owned legacy
+run_case cutover-nonempty-queue 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 owned durable-claims/1 '{"nonterminal":1}'
+run_case cutover-identity-failure 0 1 0 failure 0 '' 1 '' 9999999000 0 1 '' env 0 1
+run_case cutover-restart-failure 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 1 1
 run_case healthy 1 1 1 success
+run_case removes-legacy-maintenance-assets 1 1 1 success
 run_case repairs-inactive-timer 0 1 1 success
 run_case repairs-disabled-units 1 0 0 success
 run_case repairs-inactive-service 1 1 1 success 0
@@ -432,6 +674,7 @@ printf 'REDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://cu
 preflight_output=$(
   PATH="$preflight_dir/bin:$PATH" \
     MOCK_TARGET="$target" \
+    MOCK_WORKER_ENV_FILE="$preflight_dir/worker.env" \
     MOCK_APP_REVISION="$app_revision" \
     MOCK_ENGINE_REVISION="$engine_revision" \
     MOCK_SERVICE_ACTIVE="$preflight_dir/service-active" \

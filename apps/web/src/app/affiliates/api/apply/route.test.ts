@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => ({
   prisma: {
@@ -46,11 +46,16 @@ function request() {
 describe("affiliate apply", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubEnv("IP_HASH_SALT", "test-only-ip-hash-salt-is-long-enough-for-tests")
     getCachedSessionMock.mockResolvedValue({ userId: "user-1" })
     affiliate.findUnique.mockResolvedValue(null)
     user.findUnique.mockResolvedValue({ email: "user@example.com" })
     click.count.mockResolvedValue(0)
     affiliate.create.mockResolvedValue({ id: "aff-1" })
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it.each([

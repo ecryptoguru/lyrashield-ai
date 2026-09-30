@@ -25,5 +25,9 @@ export default defineConfig({
       // These use node:test and run in the ops suite, not Vitest.
       ".github/scripts/tests/**",
     ],
+    coverage: {
+      provider: "v8",
+      reporter: ["text-summary", "json-summary"],
+    },
   },
 })

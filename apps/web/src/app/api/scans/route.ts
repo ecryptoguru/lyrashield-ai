@@ -7,6 +7,7 @@ import {
   updateScanStatus,
   claimOrGetAgentOperation,
   completeAgentOperation,
+  toJsonObject,
   failAgentOperation,
   resolveScanAttachments,
   resolveAuthenticatedAssessmentAuthorization,
@@ -50,8 +51,6 @@ import {
   checkScanCreateRateLimit,
   clientIpFromRequest,
 } from "../../../lib/rate-limit"
-
-const ACTIVE_SCAN_STATUSES = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"] as const
 
 /** Full lowercase git object IDs (SHA-1 = 40, SHA-256 = 64) pass through as
  * immutable revisions; anything else resolves through the installation. */
@@ -329,33 +328,6 @@ async function post(request: Request) {
       )
     }
 
-    const [activeScans, activeWorkspaceScans] = await Promise.all([
-      prisma.scan.count({
-        where: {
-          workspaceId,
-          targetId: data.targetId,
-          status: { in: [...ACTIVE_SCAN_STATUSES] },
-        },
-      }),
-      prisma.scan.count({
-        where: { workspaceId, status: { in: [...ACTIVE_SCAN_STATUSES] } },
-      }),
-    ])
-    if (activeScans > 0) {
-      return apiError(
-        "SCAN_IN_PROGRESS",
-        "Target already has an active scan. Cancel it or wait for completion.",
-        409
-      )
-    }
-    if (activeWorkspaceScans >= MAX_CONCURRENT_WORKSPACE_SCANS) {
-      return apiError(
-        "SCAN_CONCURRENCY_LIMIT",
-        `This workspace already has ${activeWorkspaceScans} reviews running. Wait for one to finish before starting another.`,
-        409
-      )
-    }
-
     try {
       await assertScanWorkerAvailable()
     } catch (error) {
@@ -615,7 +587,7 @@ async function post(request: Request) {
     if (operationClaim?.status === "NEW") {
       await completeAgentOperation(operationClaim.operation.id, workspaceId, {
         resultReference: scan.id,
-        result: result as unknown as Record<string, unknown>,
+        result: toJsonObject(result),
       })
       operationCompleted = true
     }

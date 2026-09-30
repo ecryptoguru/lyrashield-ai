@@ -1,15 +1,7 @@
-import { MODE_LABELS, SEVERITY_LABELS } from "./labels"
+import { getGoalLabel, GOAL_OPTIONS, MODE_LABELS, SEVERITY_LABELS } from "./labels"
 
 const SCAN_GOAL_LABELS: Record<string, string> = {
-  CHECK_PR: "Check PR",
-  TEST_APP: "Code scan",
-  LAUNCH_REVIEW: "Release check",
-  WEEKLY_MONITOR: "Weekly monitor",
-  FULL_PENTEST: "Deep security scan",
-  COMPLIANCE_REVIEW: "Compliance scan",
-  // Legacy identifier from the pre-V2 goal enum; kept so historical rows and
-  // old clients still render a human label instead of the raw token.
-  SECURITY_REVIEW: "Security scan",
+  ...Object.fromEntries(GOAL_OPTIONS.map(({ value, label }) => [value, label])),
 }
 
 const SCAN_MODE_LABELS: Readonly<Record<string, string>> = MODE_LABELS
@@ -89,7 +81,7 @@ const WORKSPACE_PLAN_LABELS: Record<string, string> = {
 }
 
 export function getScanGoalLabel(value: string): string {
-  return SCAN_GOAL_LABELS[value] ?? value
+  return getGoalLabel(value)
 }
 
 export function getScanModeLabel(value: string): string {

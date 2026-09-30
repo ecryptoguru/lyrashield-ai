@@ -355,7 +355,9 @@ describe("GET /api/team/invitations/accept", () => {
     const parsed = jsonResponse(await response.json(), response.status)
 
     expect(parsed.status).toBe(200)
-    expect(parsed.body.data.workspaceName).toBe("Acme Workspace")
+    expect((parsed.body as { data: { workspaceName: string } }).data.workspaceName).toBe(
+      "Acme Workspace"
+    )
   })
 
   it("404s for an unknown token without leaking existence details", async () => {

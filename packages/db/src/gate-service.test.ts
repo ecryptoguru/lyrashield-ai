@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const rlsTransactionNestingGuard = vi.hoisted(() => ({ enabled: false, depth: 0 }))
+
 vi.mock("./client", () => ({
   prisma: {
     $executeRaw: vi.fn(),
@@ -18,9 +20,17 @@ vi.mock("./client", () => ({
 }))
 
 vi.mock("./rls", () => ({
-  withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
-    fn(prisma)
-  ),
+  withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) => {
+    if (rlsTransactionNestingGuard.enabled && rlsTransactionNestingGuard.depth > 0) {
+      throw new Error("nested withWorkspaceRLS transaction")
+    }
+    rlsTransactionNestingGuard.depth++
+    try {
+      return await fn(prisma)
+    } finally {
+      rlsTransactionNestingGuard.depth--
+    }
+  }),
   bindAccountRLSContext: vi.fn(async () => {}),
 }))
 
@@ -58,13 +68,18 @@ vi.mock("./scan-service", () => ({
 }))
 
 import { prisma } from "./client"
+import { computeGateVerdict } from "@lyrashield/gate"
 import { createScan, WorkspaceScanConcurrencyLimitError } from "./scan-service"
-import { handleFixPrMergedAndReevaluate as handleMerge } from "./gate-service"
+import {
+  evaluateGateForTarget,
+  handleFixPrMergedAndReevaluate as handleMerge,
+} from "./gate-service"
 const admission = vi.fn(async () => {})
 const handleFixPrMergedAndReevaluate = (workspaceId: string, branch: string, prNumber?: number) =>
   handleMerge(workspaceId, branch, prNumber, admission)
 
 const mockPrisma = prisma as unknown as {
+  $executeRaw: ReturnType<typeof vi.fn>
   pullRequest: { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
   scan: { findFirst: ReturnType<typeof vi.fn> }
   workspaceMember: { findFirst: ReturnType<typeof vi.fn> }
@@ -79,6 +94,8 @@ const mockPrisma = prisma as unknown as {
 describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    rlsTransactionNestingGuard.enabled = false
+    rlsTransactionNestingGuard.depth = 0
     admission.mockResolvedValue(undefined)
     vi.mocked(prisma.retest.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.findingCandidate.findMany).mockResolvedValue([])
@@ -120,6 +137,81 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
     mockPrisma.target.findFirst.mockResolvedValue({ id: "target-1", type: "REPO" })
     mockPrisma.finding.findMany.mockResolvedValue([])
     mockPrisma.scanCoverageReceipt.findMany.mockResolvedValue([])
+  })
+
+  it("does not open nested workspace transactions while handling a merge", async () => {
+    rlsTransactionNestingGuard.enabled = true
+    try {
+      await expect(
+        handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+      ).resolves.not.toBeNull()
+      const advisoryKeys = mockPrisma.$executeRaw.mock.calls.map((call) => call[1])
+      expect(advisoryKeys).toEqual([
+        "fix-loop:workspace-1:lyrashield/fix-abc123",
+        "fix-loop:workspace-1:lyrashield/fix-abc123",
+      ])
+    } finally {
+      rlsTransactionNestingGuard.enabled = false
+      rlsTransactionNestingGuard.depth = 0
+    }
+  })
+
+  it("loads only verdict-relevant verification receipts", async () => {
+    mockPrisma.scan.findFirst.mockReset().mockResolvedValue(null)
+    const receipts = [
+      { status: "DETECTED", method: "RETEST", scanId: "retest-scan" },
+      { status: "INCONCLUSIVE", method: "RETEST", scanId: "retest-scan" },
+      {
+        status: "VALIDATED",
+        method: "RETEST",
+        scanId: "retest-scan",
+        verifierVersion: "result-integrity-1",
+        evidence: { baseline: { scanId: "source-scan" }, retest: { scanId: "retest-scan" } },
+      },
+    ]
+    mockPrisma.finding.findMany.mockImplementation(async ({ select }) => [
+      {
+        id: "finding-1",
+        severity: "HIGH",
+        status: "FIXED",
+        verificationStatus: "VALIDATED",
+        lastSeenAt: new Date(),
+        scanId: "source-scan",
+        disposition: null,
+        dispositionActorUserId: null,
+        dispositionReason: null,
+        dispositionAssessmentId: null,
+        dispositionAt: null,
+        canonicalFindingId: null,
+        verificationReceipts: receipts.filter((receipt) =>
+          select.verificationReceipts.where.status.in.includes(receipt.status)
+        ),
+      },
+    ])
+
+    await evaluateGateForTarget("workspace-1", "target-1")
+
+    expect(mockPrisma.finding.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { workspaceId: "workspace-1", targetId: "target-1", deletedAt: null },
+        select: expect.objectContaining({
+          verificationReceipts: expect.objectContaining({
+            where: { status: { in: ["VALIDATED", "VERIFIED"] } },
+          }),
+        }),
+      })
+    )
+    expect(vi.mocked(computeGateVerdict).mock.lastCall?.[0].findings[0]).toMatchObject({
+      hasPositiveEvidence: true,
+      retestConfirmedResolved: true,
+    })
+
+    receipts.pop()
+    await evaluateGateForTarget("workspace-1", "target-1")
+    expect(vi.mocked(computeGateVerdict).mock.lastCall?.[0].findings[0]).toMatchObject({
+      hasPositiveEvidence: false,
+      retestConfirmedResolved: false,
+    })
   })
 
   it("binds the Retest to a NEW retest scan, never the finding's original terminal scan", async () => {

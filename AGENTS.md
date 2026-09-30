@@ -23,9 +23,9 @@ Repository ownership:
 
 Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not rename `@lyrashield/*` or `LYRASHIELD_*` without founder approval.
 
-## Release contract — 2026-09-25
+## Release contract — 2026-09-30
 
-- Cloud and Desktop release workflows pin engine `21ce6688b8bc39c88822a0e1792b9be08dca8a07`, which includes the GPT-6-only model boundary and Local scan integrity/viewer fixes. A source pin does not establish a completed deployment or signed Desktop release; verify the exact release run separately.
+- Cloud and Desktop release workflows pin engine `12daa1d4c2b012826c4df576a66b3d7bf99057c3`, which includes the GPT-6-only model boundary, Local scan integrity/viewer fixes, a request-bounded model-stream idle guard, four-agent concurrency for Quick scans, and method/status-aware relay framing with audited dependency compatibility. A source pin does not establish a completed deployment or signed Desktop release; verify the exact release run separately. Desktop launch work remains deferred.
 - Product `main` requires `SCA & Secret Scan`, `Lint, Typecheck, Test & Build` and `Pinned Engine / Worker Contract`, with strict up-to-date branch checks. Update the engine's reverse `.lyrashield-worker-pin` only to an exact merged product commit after compatibility verification.
 
 Current release and runtime evidence lives in [PRD §8](./PRD.md#8-current-production-evidence) and [codebase §11](./codebase.md#11-production-topology-and-accepted-evidence). Refresh deployed state before operational action.
@@ -139,10 +139,10 @@ Local gates — run the ones a change touches before opening a PR:
 - `pnpm verify:worker-image` — worker image contract on the checked-out Dockerfile and host assets.
 - Deploy-script suites: `node --test .github/scripts/tests/*.test.mjs` and `for t in .github/scripts/tests/*.sh; do bash "$t" || exit 1; done`. These mock `docker`/`systemctl`/`curl` and never touch a real VM.
 
-Release pipeline — GitHub Actions only; production steps are founder-dispatched:
+Release pipeline — GitHub Actions only; qualifying main merges can trigger production automatically:
 
-- `ci.yml` gates every PR: SCA/secret scan, path classification, lint/typecheck/test/build, pinned engine-worker contract, desktop jobs, marketing deploy on main push.
-- `release-production.yml` dispatches `deploy-azure.yml`: builds the digest-pinned worker image, promotes `lyrashield-worker.service` through `.github/scripts/promote-worker-vm.sh` (admission stop → secrets refresh → empty-queue preflight → restart → readiness), then rolls app/scanner and the Cloudflare marketing worker.
+- `ci.yml` gates PRs targeting main: SCA/secret scan, path classification, lint/typecheck/test/build, pinned engine-worker contract and desktop jobs. Qualifying main pushes automatically deploy marketing after successful required CI jobs.
+- `release-production.yml` runs after successful main CI and automatically calls `deploy-azure.yml` when the routing receipt requires Azure deployment and the tested SHA is still current main. The runtime workflow deploys and promotes app, scanner and egress-proxy revisions before promoting the digest-pinned worker through `.github/scripts/promote-worker-vm.sh` (admission stop → secrets refresh → empty-queue preflight → restart → readiness). Manual emergency dispatch separately requires the current main SHA and exact confirmation; a merge must be authorized with its automatic deployment effects in mind.
 - `promote-worker-vm.sh --preflight` runs only the queue check against the refreshed environment file; it never restarts the live worker.
 - `production-scan-readiness.yml` probes `https://app.lyrashieldai.com/api/ready/scans` and writes the probe status/body to the step summary on failure.
 - Local `.env` values are developer-specific (Myra flags, provider credentials); a red `env-runtime` test or web build caused by them is environmental, not a regression — compare against a clean checkout before claiming breakage.

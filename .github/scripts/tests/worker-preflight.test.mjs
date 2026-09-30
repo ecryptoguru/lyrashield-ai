@@ -1,16 +1,26 @@
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
+const runtimeWorkflow = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
+const callerWorkflow = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
+const preflightScript = readFileSync(".github/scripts/deploy-azure-preflight.sh", "utf8")
+const rolloutScript = readFileSync(".github/scripts/deploy-azure-rollout.sh", "utf8")
+
+const workflowStepBody = (script, slug) => {
+  const marker = `step_${slug}() {\n`
+  const start = script.indexOf(marker)
+  assert.notEqual(start, -1, `script function for ${slug} exists`)
+  const end = script.indexOf("\n}\n", start + marker.length)
+  assert.notEqual(end, -1, `script function for ${slug} closes`)
+  return script.slice(start + marker.length, end)
+}
+
 test("public scanner revision and secret store exclude GitHub App credentials", () => {
-  const workflow = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
-  const scannerDeploy = workflow
-    .split("      - name: Deploy scanner Container App\n")[1]
-    ?.split("\n      - name:")[0]
-  assert.ok(scannerDeploy)
+  const scannerDeploy = workflowStepBody(rolloutScript, "deploy-scanner-container-app")
   for (const credential of [
     "GITHUB_APP_ID",
     "GITHUB_APP_SLUG",
@@ -27,23 +37,84 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
   assert.match(scannerDeploy, /REDIS_URL=secretref:bullmq-redis-url/)
   assert.match(scannerDeploy, /UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token/)
 
-  const workerRedisSync = workflow
-    .split("      - name: Sync BullMQ Redis secret to worker Key Vault\n")[1]
-    ?.split("\n      - name:")[0]
-  assert.ok(workerRedisSync)
-  assert.match(workerRedisSync, /--name worker-redis-url/)
-  assert.match(workerRedisSync, /BULLMQ_REDIS_URL/)
+  const workerRedisSync = workflowStepBody(
+    preflightScript,
+    "sync-bullmq-redis-secret-to-worker-key-vault"
+  )
+  assert.match(
+    workerRedisSync,
+    /azure_keyvault_sync_env_group "\$AZURE_KEY_VAULT_NAME" worker-redis-url:BULLMQ_REDIS_URL/
+  )
+  assert.doesNotMatch(workerRedisSync, /--value\s+"\$BULLMQ_REDIS_URL"/)
+  assert.match(workerRedisSync, /AZURE_KEY_VAULT_NAME" != "lyrashieldprodsecrets"/)
 
-  const githubSync = workflow
-    .split("      - name: Sync GitHub App secrets to app Container App\n")[1]
+  const billingSecretSync = workflowStepBody(
+    preflightScript,
+    "sync-billing-reconciliation-credentials-to-worker-key-vault"
+  )
+  assert.match(billingSecretSync, /azure_keyvault_sync_env_group "\$AZURE_KEY_VAULT_NAME"/)
+  assert.match(billingSecretSync, /worker-polar-access-token:POLAR_ACCESS_TOKEN/)
+  assert.match(billingSecretSync, /worker-razorpay-key-secret:RAZORPAY_KEY_SECRET/)
+  assert.doesNotMatch(billingSecretSync, /--value\s+"\$secret_value"/)
+  assert.match(billingSecretSync, /AZURE_KEY_VAULT_NAME" != "lyrashieldprodsecrets"/)
+
+  const billingAppSync = workflowStepBody(
+    preflightScript,
+    "sync-billing-provider-secrets-to-app-container-app"
+  )
+  const billingAppStep = runtimeWorkflow
+    .split("      - name: Sync billing provider secrets to app Container App\n")[1]
     ?.split("\n      - name:")[0]
-  assert.ok(githubSync)
+  assert.ok(billingAppStep)
+  assert.match(billingAppSync, /worker-polar-access-token,identityref:system/)
+  assert.match(billingAppSync, /worker-razorpay-key-secret,identityref:system/)
+  assert.match(
+    billingAppStep,
+    /AZURE_APP_SECRET_KEY_VAULT_NAME: \$\{\{ vars\.AZURE_APP_SECRET_KEY_VAULT_NAME \}\}/
+  )
+  assert.match(billingAppSync, /AZURE_APP_SECRET_KEY_VAULT_NAME,,.*AZURE_KEY_VAULT_NAME,,/)
+  assert.match(billingAppSync, /azure_keyvault_sync_env_group "\$AZURE_APP_SECRET_KEY_VAULT_NAME"/)
+  assert.match(billingAppSync, /polar-webhook-secret:POLAR_WEBHOOK_SECRET/)
+  assert.match(
+    billingAppSync,
+    /app_vault_base="https:\/\/\$\{AZURE_APP_SECRET_KEY_VAULT_NAME\}\.vault\.azure\.net\/secrets"/
+  )
+  assert.match(
+    billingAppSync,
+    /polar-webhook-secret=keyvaultref:\$\{app_vault_base\}\/polar-webhook-secret,identityref:system/
+  )
+  assert.match(
+    billingAppSync,
+    /razorpay-webhook-secret=keyvaultref:\$\{app_vault_base\}\/razorpay-webhook-secret,identityref:system/
+  )
+  assert.ok(
+    billingAppSync.indexOf("azure_keyvault_sync_env_group") <
+      billingAppSync.indexOf("sync_secret_group")
+  )
+  const referenceSync = billingAppSync.slice(billingAppSync.indexOf("sync_secret_group"))
+  assert.doesNotMatch(referenceSync, /POLAR_WEBHOOK_SECRET|RAZORPAY_WEBHOOK_SECRET/)
+  assert.doesNotMatch(billingAppSync, /POLAR_ACCESS_TOKEN|RAZORPAY_KEY_SECRET/)
+
+  const ipHashSaltSync = workflowStepBody(preflightScript, "sync-ip-hash-salt-key-vault-reference")
+  assert.match(
+    ipHashSaltSync,
+    /for secret_name in worker-polar-access-token worker-razorpay-key-id worker-razorpay-key-secret/
+  )
+  assert.match(ipHashSaltSync, /redis_scope="\$\{vault_id\}\/secrets\/worker-redis-url"/)
+  assert.match(ipHashSaltSync, /provider_secret_scope="\$\{vault_id\}\/secrets\/\$\{secret_name\}"/)
+
+  const githubSync = workflowStepBody(
+    preflightScript,
+    "sync-github-app-secrets-to-app-container-app"
+  )
   assert.doesNotMatch(githubSync, /AZURE_SCANNER_CONTAINER_APP_NAME/)
+  assert.match(githubSync, /azure_keyvault_sync_env_group "\$AZURE_APP_SECRET_KEY_VAULT_NAME"/)
+  assert.doesNotMatch(
+    githubSync,
+    /--secrets[^\n]*GITHUB_APP_(?:ID|SLUG|PRIVATE_KEY|CLIENT_ID|CLIENT_SECRET)/
+  )
 
-  const cleanup = workflow
-    .split("      - name: Remove excess scanner secrets\n")[1]
-    ?.split("\n      - name:")[0]
-  assert.ok(cleanup)
+  const cleanup = workflowStepBody(rolloutScript, "remove-excess-scanner-secrets")
   for (const secret of [
     "github-app-id",
     "github-app-slug",
@@ -67,7 +138,9 @@ const preflightDockerStub = [
   "      *) exit 1 ;;",
   "    esac ;;",
   "  run:*)",
+  '    previous=""; for argument in "$@"; do if [ "$previous" = --cidfile ]; then printf "%064d" 1 > "$argument"; fi; previous="$argument"; done',
   "    printf '%s\\n' \"$QUEUE_STATE\" ;;",
+  "  rm:-f) exit 0 ;;",
   "  exec:lyrashield-worker)",
   '    case "$*" in',
   "      *printenv\\ REDIS_URL*) printf '%s\\n' \"$MOCK_LIVE_REDIS_URL\" ;;",
@@ -85,6 +158,7 @@ const preflightEnvFile = [
   `BETTER_AUTH_SECRET=${"a".repeat(32)}`,
   "BETTER_AUTH_URL=https://app.lyrashieldai.com",
   "NEXT_PUBLIC_APP_URL=https://app.lyrashieldai.com",
+  `IP_HASH_SALT=${"t".repeat(40)}`,
   "TRUSTED_PROXY_IP_HEADER=cf-connecting-ip",
   "LYRASHIELD_WEB_SEARCH_API_KEY=test-search-key",
   "GHCR_TOKEN=test-token",
@@ -92,6 +166,11 @@ const preflightEnvFile = [
 ].join("\n")
 
 const installPreflightSecretRefresher = (directory) => {
+  writeFileSync(
+    path.join(directory, "timeout"),
+    '#!/bin/sh\nset -eu\ncase "$1 $2" in\n  "--kill-after=10s 120s"|"--kill-after=5s 10s") ;;\n  *) exit 1 ;;\nesac\nshift 2\nexec "$@"\n',
+    { mode: 0o700 }
+  )
   const refreshLog = path.join(directory, "secret-refresh.log")
   writeFileSync(
     path.join(directory, "lyrashield-refresh-secrets"),
@@ -382,17 +461,15 @@ test("preflight environment loads @lyrashield/config in production and matches t
 
 for (const failure of ["busy-queue", "vm-error"]) {
   test(`workflow recovers ingress and candidates after ${failure}`, () => {
-    const workflow = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
-    const preflight = workflow
+    const preflight = runtimeWorkflow
       .split("      - name: Verify worker queues are empty before traffic promotion\n")[1]
       ?.split("\n      - name:")[0]
     assert.ok(preflight)
     assert.match(preflight, /id: worker-preflight/)
-    const command = preflight
-      .split("        run: |\n")[1]
-      .split("\n")
-      .map((line) => line.replace(/^          /, ""))
-      .join("\n")
+    const command = workflowStepBody(
+      rolloutScript,
+      "verify-worker-queues-are-empty-before-traffic-promotion"
+    )
     const directory = mkdtempSync(path.join(tmpdir(), "worker-workflow-"))
     try {
       mkdirSync(path.join(directory, "ops/deployment"), { recursive: true })
@@ -423,14 +500,14 @@ for (const failure of ["busy-queue", "vm-error"]) {
         "Restore prior ingress mode after failed rollout",
         "Deactivate zero-traffic candidates after failed rollout",
       ]) {
-        const condition = workflow
+        const condition = runtimeWorkflow
           .split("      - name: " + name + "\n")[1]
           ?.split("        env:")[0]
         assert.ok(condition)
         assert.match(condition, /failure\(\)/)
         assert.match(condition, /steps\.worker-preflight\.outcome == 'failure'/)
       }
-      const trafficRollback = workflow
+      const trafficRollback = runtimeWorkflow
         .split("      - name: Roll back production traffic on health failure\n")[1]
         ?.split("        env:")[0]
       assert.ok(trafficRollback)
@@ -440,3 +517,38 @@ for (const failure of ["busy-queue", "vm-error"]) {
     }
   })
 }
+
+// Execute the probe's JavaScript against a legacy queue whose close() does not
+// disconnect its caller-owned socket. A syntax/text check cannot catch this.
+test("empty-queue probe exits after closing legacy caller-owned sockets", () => {
+  const source = readFileSync(".github/scripts/promote-worker-vm.sh", "utf8")
+  const code = source.match(/^queue_count='(.+)'$/m)?.[1]
+  assert.ok(code)
+  const socket = `({disconnect(){clearInterval(this.keepalive)},keepalive:setInterval(()=>{},1000)})`
+  const legacyQueue = `({opts:{connection:${socket}},async getJobCounts(){return {wait:0,active:0,delayed:0,prioritized:0}},async close(){}})`
+  const executable = code
+    .replace(
+      'await import("@lyrashield/db")',
+      "({getSystemPrisma:()=>({scan:{async count(){return 0}},async $disconnect(){}})})"
+    )
+    .replace(
+      'await import("@lyrashield/integrations")',
+      `({getScanQueue:()=>${legacyQueue},getWebhookTrackRetryQueue:()=>${legacyQueue},async closeRedis(){}})`
+    )
+  const result = spawnSync(process.execPath, ["--input-type=module", "-e", executable], {
+    encoding: "utf8",
+    timeout: 1500,
+  })
+  assert.equal(result.status, 0, result.error?.message || result.stderr)
+  assert.equal(JSON.parse(result.stdout).nonterminal, 0)
+  const failedCleanup = executable.replace(
+    "async close(){}",
+    'async close(){throw new Error("cleanup failed")}'
+  )
+  const failure = spawnSync(process.execPath, ["--input-type=module", "-e", failedCleanup], {
+    encoding: "utf8",
+    timeout: 1500,
+  })
+  assert.equal(failure.status, 1, failure.error?.message || failure.stderr)
+  assert.match(failure.stderr, /cleanup failed/)
+})

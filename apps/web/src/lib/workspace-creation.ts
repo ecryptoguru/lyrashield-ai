@@ -69,7 +69,18 @@ export async function createWorkspaceWithTrial(input: {
         },
       })
 
-      const trial = await startTrial(workspace.id, input.userId, tx)
+      let trial: Awaited<ReturnType<typeof startTrial>>
+      try {
+        trial = await startTrial(workspace.id, input.userId, tx)
+      } catch (error) {
+        // A paid account may still create workspaces; it simply cannot claim a trial.
+        if (!(error instanceof Error) || error.message !== "TRIAL_PAID_PLAN") throw error
+        const owner = await tx.user.findUnique({
+          where: { id: input.userId },
+          select: { trialStartedAt: true },
+        })
+        trial = { started: false, alreadyUsed: Boolean(owner?.trialStartedAt), trialEndsAt: null }
+      }
       return { result: workspace, trial }
     },
     { accountId: input.userId }

@@ -28,6 +28,8 @@ vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: v
 
 import { prisma } from "@lyrashield/db"
 import { POST } from "./route"
+import { requirePermission } from "@lyrashield/auth/server"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const { addControlEvidenceArtifacts, uploadEncryptedArtifact, deleteEncryptedArtifact } = mocks
 
@@ -121,6 +123,21 @@ describe("evidence artifact upload", () => {
     })
 
     expect(response.status).toBe(400)
+    expect(uploadEncryptedArtifact).not.toHaveBeenCalled()
+  })
+
+  it("denies artifact uploads without aiAssurance:manage", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await POST(uploadRequest("evidence"), {
+      params: Promise.resolve({ id: "evidence-1" }),
+    })
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/ai-assurance/evidence/[id]/artifacts",
+      "POST"
+    )
     expect(uploadEncryptedArtifact).not.toHaveBeenCalled()
   })
 

@@ -171,7 +171,7 @@ describe("scanSast", () => {
 
   it("bounds files by the mode's budget and reports the overflow", async () => {
     const files: Record<string, string> = {}
-    for (let i = 0; i < 210; i++)
+    for (let i = 0; i < 270; i++)
       files[`f${String(i).padStart(4, "0")}.ts`] = `export const v${i} = ${i}`
     const dir = await setupRepo(files)
 
@@ -184,15 +184,15 @@ describe("scanSast", () => {
       skippedByReason: Record<string, number>
       representativeSkippedPaths?: string[]
     }
-    expect(receipt.filesScanned).toBe(200)
-    expect(receipt.skippedByReason.fileLimit).toBe(10)
-    expect(receipt.representativeSkippedPaths).toContain("f0200.ts")
-    expect(coverageIssues.some((issue) => issue.reason.includes("200 of 210"))).toBe(true)
+    expect(receipt.filesScanned).toBe(256)
+    expect(receipt.skippedByReason.fileLimit).toBe(14)
+    expect(receipt.representativeSkippedPaths).toContain("f0256.ts")
+    expect(coverageIssues.some((issue) => issue.reason.includes("256 of 270"))).toBe(true)
 
-    // STANDARD covers all 210 — the mode budget visibly widens coverage.
+    // STANDARD covers all 270 — the mode budget visibly widens coverage.
     const wide: Record<string, unknown> = {}
     await scanSast({ repoPath: dir, workspaceDir: dir, mode: "STANDARD", discovery: wide })
-    expect((wide.sast as { filesScanned: number }).filesScanned).toBe(210)
+    expect((wide.sast as { filesScanned: number }).filesScanned).toBe(270)
   })
 
   it("records incomplete coverage when repository discovery fails", async () => {

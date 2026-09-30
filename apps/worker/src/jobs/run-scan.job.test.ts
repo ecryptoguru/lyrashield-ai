@@ -73,6 +73,7 @@ vi.mock("@lyrashield/db", async () => {
     prisma: {
       auditLog: { create: vi.fn().mockResolvedValue({}) },
       workspaceMember: { findFirst: vi.fn().mockResolvedValue({ role: "OWNER" }) },
+      workspace: { findFirst: vi.fn().mockResolvedValue({ name: "Workspace One" }) },
       target: {
         findFirst: vi.fn(),
       },
@@ -258,7 +259,11 @@ vi.mock("../engine/scanner-orchestrator", () => ({
     secretsFindings: [],
     urlFindings: [],
     agentConfigFindings: [],
+    mlSupplyChainFindings: [],
+    sastFindings: [],
+    iacFindings: [],
     aiAppSecurityFindings: [],
+    webMcpFindings: [],
     coverageIssues: [],
     stats: {
       total: 0,
@@ -297,7 +302,7 @@ import {
   assertEvidenceStorageConfigured,
   EvidenceStorageConfigurationError,
 } from "../engine/evidence-storage"
-import { notifyScanCompleted } from "../notifications"
+import { notifyCriticalFinding, notifyScanCompleted } from "../notifications"
 import {
   evaluateScanEntitlement,
   debitOverage,
@@ -428,6 +433,44 @@ describe("shouldRecordAgentMinutes", () => {
     expect(result).toMatchObject({ billedCostUsd: 0.00015, costReconciled: true })
   })
 
+  it("records model-token and web-search costs separately in the private usage receipt", async () => {
+    const result = await persistEngineUsageCheckpoint({
+      scanId: "gpt6-search-pricing",
+      maxBudgetUsd: 1.2,
+      usageExpected: true,
+      webSearchCostUsd: 0.0100000123,
+      llmUsage: {
+        ...completeUsage,
+        model: "azure_ai/gpt-6-luna",
+        total_cost_usd: 0.0101500123,
+        accountingComplete: true,
+        model_usage_buckets: [{ ...completeUsage, model: "azure_ai/gpt-6-luna" }],
+      },
+    })
+
+    expect(result).toMatchObject({ billedCostUsd: 0.0101500123, costReconciled: true })
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "gpt6-search-pricing",
+      "llm_usage",
+      "info",
+      expect.any(String),
+      expect.objectContaining({
+        modelTokenCostUsd: 0.00015,
+        webSearchCostUsd: 0.0100000123,
+        calculatedCostUsd: 0.0101500123,
+        engineReportedCostUsd: 0.0101500123,
+        reconciliationStatus: "matched",
+      })
+    )
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "gpt6-search-pricing" },
+      data: expect.objectContaining({
+        providerCostUsd: "0.0101500123",
+        billedCostUsd: "0.0101500123",
+      }),
+    })
+  })
+
   it("retains known counters without reconciling an incomplete provider checkpoint", async () => {
     const result = await persistEngineUsageCheckpoint({
       scanId: "partial-triage",
@@ -527,9 +570,9 @@ describe("shouldRecordAgentMinutes", () => {
 
 describe("resolveScanRuntimeBudgetMs", () => {
   it.each(["SAFE", "QUICK"] as const)(
-    "caps %s scans at fifteen minutes even when the default policy is longer",
+    "caps %s repository scans at twenty-three minutes even when the default policy is longer",
     (mode) => {
-      expect(resolveScanRuntimeBudgetMs(mode, 60)).toBe(15 * 60 * 1000)
+      expect(resolveScanRuntimeBudgetMs(mode, 60)).toBe(23 * 60 * 1000)
     }
   )
 
@@ -555,7 +598,16 @@ describe("resolveScanRuntimeBudgetMs", () => {
 })
 
 describe("resolveEngineRuntimeBudgetMs", () => {
-  it("preserves the repository scanner reserve inside the total deadline", () => {
+  it("gives Quick and Standard the same twenty-minute engine ceiling", () => {
+    expect(resolveEngineRuntimeBudgetMs("QUICK", "REPO", 23 * 60 * 1000, 0)).toBe(20 * 60 * 1000)
+    // Legacy SAFE and CUSTOM stored values resolve to Quick and Deep profiles.
+    expect(resolveEngineRuntimeBudgetMs("SAFE", "REPO", 23 * 60 * 1000, 0)).toBe(20 * 60 * 1000)
+    // An explicitly lower policy still reduces the engine time after reserve.
+    expect(resolveEngineRuntimeBudgetMs("QUICK", "REPO", 20 * 60 * 1000, 0)).toBe(17 * 60 * 1000)
+    expect(resolveEngineRuntimeBudgetMs("CUSTOM", "REPO", 45 * 60 * 1000, 0)).toBe(40 * 60 * 1000)
+  })
+
+  it("preserves Standard and Deep scanner reserves inside their total deadlines", () => {
     expect(resolveEngineRuntimeBudgetMs("STANDARD", "REPO", 23 * 60 * 1000, 0)).toBe(20 * 60 * 1000)
     expect(resolveEngineRuntimeBudgetMs("DEEP", "REPO", 45 * 60 * 1000, 0)).toBe(40 * 60 * 1000)
   })
@@ -1131,6 +1183,11 @@ describe("processScanJob", () => {
       secretsFindings: [],
       urlFindings: [],
       agentConfigFindings: [],
+      mlSupplyChainFindings: [],
+      sastFindings: [],
+      iacFindings: [],
+      aiAppSecurityFindings: [],
+      webMcpFindings: [],
       coverageIssues: [],
       stats: {
         total: 0,
@@ -1261,6 +1318,13 @@ describe("processScanJob", () => {
       "info",
       expect.stringContaining("43 code/URL review controls"),
       expect.objectContaining({ totalControls: 50, evidenceControlsRequired: 7 })
+    )
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "scanners_complete",
+      "info",
+      expect.stringContaining("ai_app_security=0"),
+      expect.objectContaining({ aiAppSecurity: 0 })
     )
   })
 
@@ -1826,8 +1890,8 @@ describe("processScanJob", () => {
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: {
-        providerCostUsd: "3.500000",
-        billedCostUsd: "1.200000",
+        providerCostUsd: "3.5000000000",
+        billedCostUsd: "1.2000000000",
         actualCostCents: 120,
         llmRequestCount: 1,
         llmInputTokens: 17_500_000,
@@ -1892,7 +1956,7 @@ describe("processScanJob", () => {
       where: { id: "scan-1" },
       data: {
         providerCostUsd: null,
-        billedCostUsd: "0.005358",
+        billedCostUsd: "0.0053580000",
         actualCostCents: 1,
         llmRequestCount: 7,
         llmInputTokens: 18_420,
@@ -1953,7 +2017,7 @@ describe("processScanJob", () => {
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: expect.objectContaining({
-        providerCostUsd: "0.020000",
+        providerCostUsd: "0.0200000000",
         billedCostUsd: null,
         actualCostCents: null,
       }),
@@ -2042,8 +2106,8 @@ describe("processScanJob", () => {
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: expect.objectContaining({
-        providerCostUsd: "0.000320",
-        billedCostUsd: "0.000320",
+        providerCostUsd: "0.0003200000",
+        billedCostUsd: "0.0003200000",
         llmRequestCount: 1,
       }),
     })
@@ -2063,6 +2127,50 @@ describe("processScanJob", () => {
       "Scan completed with 0 findings"
     )
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+    expect(logger.warn).toHaveBeenCalledWith("Some scan completion notifications failed", {
+      scanId: "scan-1",
+      failures: ["notification provider unavailable"],
+    })
+  })
+
+  it("delivers every critical completion notification with one workspace read and bounded concurrency", async () => {
+    vi.mocked(persistFindings).mockResolvedValue(
+      Array.from({ length: 30 }, (_, index) => ({
+        id: `finding-${index}`,
+        title: `Critical ${index}`,
+        severity: "CRITICAL",
+        dedupeKey: `dedupe-${index}`,
+        isNew: true,
+      })) as never
+    )
+    let active = 0
+    let peakActive = 0
+    vi.mocked(notifyCriticalFinding).mockImplementation(async () => {
+      active++
+      peakActive = Math.max(peakActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 1))
+      active--
+    })
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+
+    expect(prisma.workspace.findFirst).toHaveBeenCalledTimes(1)
+    expect(notifyScanCompleted).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      expect.any(String),
+      30,
+      "Workspace One"
+    )
+    expect(notifyCriticalFinding).toHaveBeenCalledTimes(30)
+    expect(notifyCriticalFinding).toHaveBeenLastCalledWith(
+      "ws-1",
+      "finding-29",
+      "Critical 29",
+      "Test Target",
+      "Workspace One"
+    )
+    expect(peakActive).toBeLessThanOrEqual(2)
   })
 
   it("keeps a completed scan completed when referral accounting fails", async () => {
@@ -2846,7 +2954,13 @@ describe("processScanJob", () => {
       data: { summary: expectedSummary },
     })
     expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", expectedSummary)
-    expect(notifyScanCompleted).toHaveBeenCalledWith("ws-1", "scan-1", expectedSummary, 3)
+    expect(notifyScanCompleted).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      expectedSummary,
+      3,
+      "Workspace One"
+    )
   })
 
   it("leaves the engine's summary untouched when the persisted count already matches", async () => {
@@ -3089,7 +3203,7 @@ describe("REPO scan wall-clock budget enforcement", () => {
     mockStoredScanAuthority({ policyId: "policy-duration-1" })
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       maxBudgetUsd: { toNumber: () => 3.2 },
-      maxDurationMinutes: 20,
+      maxDurationMinutes: 23,
     } as never)
     const policyJobFixture = {
       id: "scan-1",
@@ -3108,11 +3222,10 @@ describe("REPO scan wall-clock budget enforcement", () => {
     await processScanJob(policyJob)
 
     const timeoutMs = vi.mocked(runEngine).mock.calls[0]?.[2]
-    // SAFE keeps its three-minute deterministic scanner reserve inside the
-    // fifteen-minute total budget.
+    // SAFE/Quick keeps its three-minute scanner reserve within the profile cap.
     expect(typeof timeoutMs).toBe("number")
     expect(timeoutMs).toBeGreaterThan(0)
-    expect(timeoutMs).toBeLessThanOrEqual(12 * 60 * 1000)
-    expect(timeoutMs).toBeGreaterThanOrEqual(12 * 60 * 1000 - 60_000)
+    expect(timeoutMs).toBeLessThanOrEqual(20 * 60 * 1000)
+    expect(timeoutMs).toBeGreaterThanOrEqual(18.5 * 60 * 1000)
   })
 })

@@ -35,7 +35,9 @@ type MonitorProps = { optionalCollectionEnabled: boolean | null }
 const listeners = new Map<string, (event: Event) => void>()
 
 function dispatchPreference(value: unknown) {
-  listeners.get("lyrashield:analytics-preference")?.({ detail: value } as Event)
+  listeners.get("lyrashield:analytics-preference")?.(
+    Object.assign(new Event("lyrashield:analytics-preference"), { detail: value })
+  )
 }
 
 function renderGate() {

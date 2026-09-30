@@ -2,33 +2,25 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useScansWebMcp } from "./scans-webmcp"
-import { useActiveScansPolling } from "./use-active-scans-polling"
+import { useScanListState } from "./use-scan-list-state"
 import { CreateScanSheet } from "./create-scan-sheet"
 import { ScanList } from "./scan-list"
-import Link from "next/link"
+import { ScanStatusNotices } from "./scan-status-notices"
 import { Play, RefreshCw } from "lucide-react"
 import { z } from "zod"
 import { Button, Select } from "@lyrashield/ui"
 import {
   scanAttachmentListSchema,
-  scanCancelSchema,
   scanEligibilitySchema,
   scanItemSchema,
   scansPaginatedSchema,
   type ScanAttachmentItem,
 } from "@/lib/api-schemas"
-import { ApiError, apiDelete, apiPost, apiGet, apiGetPaginated } from "@/lib/api-client"
+import { ApiError, apiPost, apiGet } from "@/lib/api-client"
 import { SCAN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
+import { findRecoveryPreset, getReviewSetupGuidance, scanRecoveryHref } from "./scans-client.utils"
 import {
-  findRecoveryPreset,
-  getReviewSetupGuidance,
-  isBillingRecoveryCode,
-  scanRecoveryHref,
-} from "./scans-client.utils"
-import {
-  isActiveScan,
   SCAN_STATE_FILTERS,
-  parseScanStateFilter,
   scanStateStatusLabel,
   type ScanStateFilter,
 } from "@/lib/scan-presentation"
@@ -83,6 +75,7 @@ interface ScansClientProps {
   /** Server-parsed URL filter state — never re-read from window here. */
   initialStateFilter?: ScanStateFilter
   initialTargetFilter?: string
+  initialFilterUnavailable?: boolean
   /** Whether the active role may manage billing (drives recovery copy). */
   canManageBilling?: boolean
 }
@@ -100,12 +93,9 @@ export function ScansClient({
   initialMode,
   initialStateFilter = "ALL",
   initialTargetFilter = "",
+  initialFilterUnavailable = false,
   canManageBilling = false,
 }: ScansClientProps) {
-  const [scans, setScans] = useState<ScanItem[]>(initialData)
-  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
   const [showCreate, setShowCreate] = useState(initialShowCreate)
   const reviewChoiceVersion = useRef(0)
   // One active target and no explicit selection: preselect it. Choosing among
@@ -137,16 +127,41 @@ export function ScansClient({
     initialRecoveryUnavailable ? "This target is no longer available. Choose another target." : null
   )
   const [errorCode, setErrorCode] = useState<string | null>(null)
-  const [cancelling, setCancelling] = useState<string | null>(null)
-  const [removing, setRemoving] = useState<string | null>(null)
-  const [pollStale, setPollStale] = useState(false)
-  // Server-parsed URL filters; updated via replaceState and refetch.
-  const [targetFilter, setTargetFilter] = useState(initialTargetFilter)
-  const [stateFilter, setStateFilter] = useState<ScanStateFilter>(initialStateFilter)
+  const {
+    scans,
+    setScans,
+    nextCursor,
+    loadingMore,
+    refreshing,
+    pollStale,
+    pagesReset,
+    targetFilter,
+    stateFilter,
+    cancelling,
+    removing,
+    handleTargetFilterChange,
+    handleStateFilterChange,
+    handleClearFilters,
+    handleCancelScan,
+    handleRemoveScan,
+    handleLoadMore,
+    handleRefresh,
+  } = useScanListState({
+    workspaceId,
+    initialData,
+    initialNextCursor,
+    initialTargetFilter,
+    initialStateFilter,
+    setError,
+    setErrorCode,
+  })
   const [eligibility, setEligibility] = useState<ScanEligibilityState>({ status: "idle" })
   const [eligibilityAttempt, setEligibilityAttempt] = useState(0)
   const [startingTrial, setStartingTrial] = useState(false)
-  const scanSubmissionLock = useRef(false)
+  const scanSubmissionLock = useRef({ current: false })
+  const scopeGenerationRef = useRef(0)
+  const operationRequestRef = useRef(0)
+  const errorScopeRef = useRef({ principalId, workspaceId })
   const [pendingScanSubmission, setPendingScanSubmission] = useState<PendingScanSubmission | null>(
     null
   )
@@ -167,89 +182,9 @@ export function ScansClient({
     setShowCreate,
     setModeResetNotice,
   })
-  const scansRef = useRef(scans)
-  const firstPageIdsRef = useRef(new Set(initialData.map((scan) => scan.id)))
-  const firstPageHasMoreRef = useRef(initialNextCursor !== null)
-
-  useEffect(() => {
-    scansRef.current = scans
-  }, [scans])
-
-  const listParams = useCallback(
-    (extra: Record<string, string> = {}) => ({
-      workspaceId,
-      ...(targetFilter ? { targetId: targetFilter } : {}),
-      ...(stateFilter !== "ALL" ? { state: stateFilter } : {}),
-      ...extra,
-    }),
-    [workspaceId, targetFilter, stateFilter]
-  )
-
-  function updateFilterUrl(next: { target?: string; state?: ScanStateFilter }) {
-    if (typeof window === "undefined") return
-    const params = new URLSearchParams(window.location.search)
-    const nextTarget = next.target ?? targetFilter
-    const nextState = next.state ?? stateFilter
-    if (nextTarget) params.set("target", nextTarget)
-    else params.delete("target")
-    if (nextState !== "ALL") params.set("state", nextState)
-    else params.delete("state")
-    const search = params.toString()
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${search ? `?${search}` : ""}`
-    )
-  }
-
-  async function refetchFirstPage(
-    nextTarget = targetFilter,
-    nextState: ScanStateFilter = stateFilter
-  ) {
-    const result = await apiGetPaginated<ScanItem>(
-      "/api/scans",
-      {
-        workspaceId,
-        ...(nextTarget ? { targetId: nextTarget } : {}),
-        ...(nextState !== "ALL" ? { state: nextState } : {}),
-      },
-      {
-        schema: scansPaginatedSchema,
-      }
-    )
-    setScans(result.items)
-    setNextCursor(result.nextCursor)
-    firstPageIdsRef.current = new Set(result.items.map((scan) => scan.id))
-    firstPageHasMoreRef.current = result.nextCursor !== null
-  }
-
-  function handleTargetFilterChange(value: string) {
-    setTargetFilter(value)
-    updateFilterUrl({ target: value })
-    setError(null)
-    setErrorCode(null)
-    refetchFirstPage(value, stateFilter).catch(() => setPollStale(true))
-  }
-
-  function handleStateFilterChange(value: string) {
-    const next = parseScanStateFilter(value)
-    setStateFilter(next)
-    updateFilterUrl({ state: next })
-    setError(null)
-    setErrorCode(null)
-    refetchFirstPage(targetFilter, next).catch(() => setPollStale(true))
-  }
-
-  function handleClearFilters() {
-    setTargetFilter("")
-    setStateFilter("ALL")
-    updateFilterUrl({ target: "", state: "ALL" })
-    setError(null)
-    setErrorCode(null)
-    refetchFirstPage("", "ALL").catch(() => setPollStale(true))
-  }
-
   async function handleCreateScan(startNewScan = false) {
+    const scopeGeneration = scopeGenerationRef.current
+    const isCurrentScope = () => scopeGeneration === scopeGenerationRef.current
     setErrorCode(null)
     if (!selectedTarget) {
       setError("Select a target to scan")
@@ -268,7 +203,7 @@ export function ScansClient({
       return
     }
 
-    await runScanSubmission(scanSubmissionLock, async () => {
+    await runScanSubmission(scanSubmissionLock.current, async () => {
       setCreating(true)
       if (startNewScan) setForceNewAfterRecovery(false)
       setError(null)
@@ -325,8 +260,9 @@ export function ScansClient({
               operationId
             )
             submission = updated ?? { ...submission, operationId }
-            setPendingScanSubmission(submission)
           }
+          if (!isCurrentScope()) return
+          setPendingScanSubmission(submission)
           setError(err instanceof Error ? err.message : "Failed to create scan")
           setErrorCode(err instanceof ApiError ? err.code : null)
           setScanRecoveryError(
@@ -344,10 +280,10 @@ export function ScansClient({
           scanId: result.id,
           ...(operationId ? { operationId } : {}),
         }
-        setPendingScanSubmission(accepted)
         try {
           recordAcceptedScan(scanSubmissionScope, submission.idempotencyKey, result.id, operationId)
         } catch (cause) {
+          if (!isCurrentScope()) return
           setScanRecoveryUnavailable(true)
           setScanRecoveryError(
             cause instanceof Error
@@ -355,11 +291,15 @@ export function ScansClient({
               : "Scan accepted; recovery details could not be saved."
           )
         }
+        // A late acceptance remains saved under its original scope for recovery.
+        if (!isCurrentScope()) return
+        setPendingScanSubmission(accepted)
         setScans((prev) => (prev.some((scan) => scan.id === result.id) ? prev : [result, ...prev]))
         try {
           clearPendingScanSubmission(scanSubmissionScope, submission.idempotencyKey)
           setPendingScanSubmission(null)
         } catch (cause) {
+          if (!isCurrentScope()) return
           setScanRecoveryUnavailable(true)
           setScanRecoveryError(
             cause instanceof Error
@@ -384,12 +324,13 @@ export function ScansClient({
         })
         setForceNewAfterRecovery(false)
       } catch (err) {
+        if (!isCurrentScope()) return
         setScanRecoveryUnavailable(true)
         setScanRecoveryError(
           err instanceof Error ? err.message : "Could not save scan recovery information."
         )
       } finally {
-        setCreating(false)
+        if (isCurrentScope()) setCreating(false)
       }
     })
   }
@@ -407,76 +348,6 @@ export function ScansClient({
     }
   }
 
-  async function handleCancelScan(scanId: string) {
-    setCancelling(scanId)
-    setError(null)
-    setErrorCode(null)
-    try {
-      const result = await apiPost(
-        `/api/scans/${scanId}`,
-        { workspaceId },
-        { schema: scanCancelSchema }
-      )
-      setScans((prev) =>
-        prev.map((s) =>
-          s.id === scanId ? { ...s, status: result.status, endedAt: result.endedAt } : s
-        )
-      )
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to cancel scan")
-    } finally {
-      setCancelling(null)
-    }
-  }
-
-  async function handleRemoveScan(scanId: string) {
-    setRemoving(scanId)
-    setError(null)
-    setErrorCode(null)
-    try {
-      await apiDelete(`/api/scans/${scanId}?workspaceId=${encodeURIComponent(workspaceId)}`)
-      setScans((prev) => prev.filter((scan) => scan.id !== scanId))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to remove scan")
-    } finally {
-      setRemoving(null)
-    }
-  }
-
-  async function handleLoadMore() {
-    if (!nextCursor) return
-    setLoadingMore(true)
-    setErrorCode(null)
-    try {
-      const result = await apiGetPaginated<ScanItem>(
-        "/api/scans",
-        listParams({ cursor: nextCursor }),
-        { schema: scansPaginatedSchema }
-      )
-      setScans((prev) => [...prev, ...result.items])
-      setNextCursor(result.nextCursor)
-    } catch {
-      setError("Failed to load more scans")
-    } finally {
-      setLoadingMore(false)
-    }
-  }
-
-  async function handleRefresh() {
-    setRefreshing(true)
-    setError(null)
-    setErrorCode(null)
-    try {
-      await refetchFirstPage()
-      setPollStale(false)
-    } catch {
-      setPollStale(true)
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
-  const hasActiveScans = scans.some((scan) => isActiveScan(scan.status))
   const selectedTargetDetails = targets.find((target) => target.id === selectedTarget)
   const selectedTargetType = selectedTargetDetails?.type ?? ""
   const availableOptions = getManualScanOptions({
@@ -529,8 +400,14 @@ export function ScansClient({
   )
 
   useEffect(() => {
+    const scopeGeneration = scopeGenerationRef
+    ++scopeGeneration.current
+    // An older request's finally must not unlock a newer scope's submission.
+    scanSubmissionLock.current = { current: false }
     // Browser session storage is external state and is only available after hydration.
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCreating(false)
+    setCheckingScanOperation(false)
     setScanOperationStatus(null)
     setScanRecoveryError(null)
     setScanRecoveryUnavailable(false)
@@ -544,18 +421,42 @@ export function ScansClient({
         cause instanceof Error ? cause.message : "Saved scan recovery data could not be read."
       )
     }
+    return () => {
+      ++scopeGeneration.current
+    }
   }, [principalId, workspaceId])
+
+  useEffect(() => {
+    const previous = errorScopeRef.current
+    if (previous.principalId === principalId && previous.workspaceId === workspaceId) return
+    errorScopeRef.current = { principalId, workspaceId }
+    // Keep the server's recovery message on hydration and use the incoming scope's snapshot.
+    setError(
+      initialRecoveryUnavailable
+        ? "This target is no longer available. Choose another target."
+        : null
+    )
+    setErrorCode(null)
+  }, [initialRecoveryUnavailable, principalId, workspaceId])
 
   async function checkPendingScanOperation(submission: PendingScanSubmission) {
     if (!submission.operationId) return
+    const scopeGeneration = scopeGenerationRef.current
+    const requestId = ++operationRequestRef.current
+    const isCurrentOperation = () =>
+      scopeGeneration === scopeGenerationRef.current && requestId === operationRequestRef.current
+    const operationScope: ScanSubmissionScope = {
+      principalId: submission.principalId,
+      workspaceId: submission.workspaceId,
+      surface: submission.surface,
+    }
     setCheckingScanOperation(true)
     setScanRecoveryError(null)
     try {
       const status = await apiGet(
-        `/api/agent-operations/${encodeURIComponent(submission.operationId)}?workspaceId=${encodeURIComponent(workspaceId)}`,
+        `/api/agent-operations/${encodeURIComponent(submission.operationId)}?workspaceId=${encodeURIComponent(submission.workspaceId)}`,
         { schema: scanOperationStatusSchema }
       )
-      setScanOperationStatus(status)
       if (status.status === "COMPLETED" && status.resultLocation) {
         const accepted = {
           ...submission,
@@ -563,15 +464,15 @@ export function ScansClient({
           scanId: status.resultLocation,
           operationId: status.operationId,
         }
-        setPendingScanSubmission(accepted)
         try {
           recordAcceptedScan(
-            scanSubmissionScope,
+            operationScope,
             submission.idempotencyKey,
             status.resultLocation,
             status.operationId
           )
         } catch (cause) {
+          if (!isCurrentOperation()) return
           setScanRecoveryUnavailable(true)
           setScanRecoveryError(
             cause instanceof Error
@@ -579,19 +480,25 @@ export function ScansClient({
               : "Scan accepted; recovery details could not be saved."
           )
         }
+        if (!isCurrentOperation()) return
+        setScanOperationStatus(status)
+        setPendingScanSubmission(accepted)
         return
       }
+      if (!isCurrentOperation()) return
+      setScanOperationStatus(status)
       setScanRecoveryError(
         status.recovery === "retry_new_key"
           ? "The previous attempt was not submitted. Review the request before starting a new attempt."
           : "The previous scan start is still unresolved. Check its status again."
       )
     } catch (cause) {
+      if (!isCurrentOperation()) return
       setScanRecoveryError(
         cause instanceof Error ? cause.message : "Could not check the scan status."
       )
     } finally {
-      setCheckingScanOperation(false)
+      if (isCurrentOperation()) setCheckingScanOperation(false)
     }
   }
 
@@ -792,19 +699,6 @@ export function ScansClient({
     setShowCreate(true)
   }
 
-  useActiveScansPolling({
-    hasActiveScans,
-    workspaceId,
-    listParams,
-    stateFilter,
-    targetFilter,
-    scansRef,
-    firstPageIdsRef,
-    firstPageHasMoreRef,
-    setScans,
-    setPollStale,
-  })
-
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -852,171 +746,43 @@ export function ScansClient({
         </div>
       </div>
 
-      {error && !showCreate && (
-        <div
-          role="alert"
-          className="border-destructive/50 bg-destructive/10 text-destructive mb-4 rounded-lg border p-3 text-sm"
-        >
-          <span>{safeApiErrorMessage(error)}</span>
-          {(isBillingRecoveryCode(errorCode) ||
-            (eligibilityBlocked &&
-              isBillingRecoveryCode(
-                eligibility.status === "ready" ? eligibility.eligibility.code : null
-              ))) && <BillingRecoveryLink canManageBilling={canManageBilling} />}
-        </div>
+      {initialFilterUnavailable && !targetFilter && (
+        <p role="status" className="text-muted-foreground mb-4 text-sm">
+          This target filter is no longer available. Showing all targets with your selected state.
+        </p>
       )}
-
-      {scanRecoveryUnavailable && !showCreate && (
-        <div
-          role="alert"
-          className="border-amber-500/50 bg-amber-500/10 mb-4 rounded-lg border p-3 text-sm"
-        >
-          <p>
-            {scanRecoveryError ??
-              "Saved scan recovery data could not be read. Starting again may create a second scan."}
-          </p>
-          <Button
-            className="mt-2"
-            type="button"
-            variant="outline"
-            onClick={() => {
-              try {
-                clearPendingScanSubmission(scanSubmissionScope)
-                setScanRecoveryUnavailable(false)
-                setScanRecoveryError(null)
-                setForceNewAfterRecovery(true)
-                setShowCreate(true)
-              } catch (cause) {
-                setScanRecoveryError(
-                  cause instanceof Error ? cause.message : "Could not clear scan recovery data."
-                )
-              }
-            }}
-          >
-            Discard recovery data and continue
-          </Button>
-        </div>
+      {pagesReset && (
+        <p role="status" aria-live="polite" className="text-muted-foreground mb-4 text-sm">
+          Scan updates refreshed the first page. Load more to see older scans.
+        </p>
       )}
-
-      {!showCreate &&
-        pendingScanSubmission &&
-        pendingScanSubmission.principalId === principalId &&
-        pendingScanSubmission.workspaceId === workspaceId && (
-          <div
-            className="border-amber-500/50 bg-amber-500/10 mb-4 flex flex-col gap-3 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-            role={pendingScanSubmission.state === "accepted" ? "status" : "alert"}
-            aria-live="polite"
-          >
-            <div className="space-y-1">
-              {pendingScanSubmission.state === "accepted" && pendingScanSubmission.scanId ? (
-                <p>
-                  Scan accepted.{" "}
-                  <Link
-                    className="text-primary underline underline-offset-4"
-                    href={`/dashboard/scans/${encodeURIComponent(pendingScanSubmission.scanId)}`}
-                  >
-                    View scan
-                  </Link>
-                </p>
-              ) : (
-                <p>
-                  {pendingScanMatchesCurrent
-                    ? "A previous scan start is unresolved. Retrying the same details reuses its key."
-                    : "A previous scan start is unresolved, and the current details differ. Restore the same request or explicitly start a new scan."}
-                </p>
-              )}
-              {scanRecoveryError && <p>{scanRecoveryError}</p>}
-              {scanOperationStatus?.recovery === "poll" && (
-                <p>The scan operation is still processing.</p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {pendingScanSubmission.state === "accepted" && pendingScanSubmission.scanId ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    try {
-                      clearPendingScanSubmission(
-                        scanSubmissionScope,
-                        pendingScanSubmission.idempotencyKey
-                      )
-                      setPendingScanSubmission(null)
-                      setScanOperationStatus(null)
-                      setForceNewAfterRecovery(false)
-                      setShowCreate(true)
-                    } catch (cause) {
-                      setScanRecoveryUnavailable(true)
-                      setScanRecoveryError(
-                        cause instanceof Error
-                          ? cause.message
-                          : "Could not clear scan recovery data."
-                      )
-                    }
-                  }}
-                >
-                  Start another scan
-                </Button>
-              ) : (
-                <>
-                  {pendingScanSubmission.operationId && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={checkingScanOperation}
-                      onClick={() => void checkPendingScanOperation(pendingScanSubmission)}
-                    >
-                      {checkingScanOperation ? "Checking status…" : "Check previous scan"}
-                    </Button>
-                  )}
-                  {scanOperationStatus?.recovery !== "retry_new_key" && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setForceNewAfterRecovery(false)
-                        setShowCreate(true)
-                      }}
-                    >
-                      {pendingScanMatchesCurrent ? "Review same request" : "Review current request"}
-                    </Button>
-                  )}
-                  {(!pendingScanMatchesCurrent ||
-                    scanOperationStatus?.recovery === "retry_new_key") && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setForceNewAfterRecovery(true)
-                        setShowCreate(true)
-                      }}
-                    >
-                      Review details for a new scan
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-      {pollStale && (
-        <div
-          role="status"
-          className="border-amber-500/50 bg-amber-500/10 mb-4 flex flex-col gap-3 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-        >
-          <span>Updates are paused. The displayed scan status may be stale.</span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => void handleRefresh()}
-            disabled={refreshing}
-          >
-            {refreshing ? "Refreshing" : "Try again"}
-          </Button>
-        </div>
-      )}
+      <ScanStatusNotices
+        showCreate={showCreate}
+        error={error}
+        errorCode={errorCode}
+        eligibilityBlocked={eligibilityBlocked}
+        eligibilityCode={eligibility.status === "ready" ? eligibility.eligibility.code : null}
+        canManageBilling={canManageBilling}
+        scanRecoveryUnavailable={scanRecoveryUnavailable}
+        scanRecoveryError={scanRecoveryError}
+        scanSubmissionScope={scanSubmissionScope}
+        setScanRecoveryUnavailable={setScanRecoveryUnavailable}
+        setScanRecoveryError={setScanRecoveryError}
+        setForceNewAfterRecovery={setForceNewAfterRecovery}
+        setShowCreate={setShowCreate}
+        pendingScanSubmission={pendingScanSubmission}
+        principalId={principalId}
+        workspaceId={workspaceId}
+        pendingScanMatchesCurrent={pendingScanMatchesCurrent}
+        scanOperationStatus={scanOperationStatus}
+        checkingScanOperation={checkingScanOperation}
+        checkPendingScanOperation={checkPendingScanOperation}
+        setPendingScanSubmission={setPendingScanSubmission}
+        setScanOperationStatus={setScanOperationStatus}
+        pollStale={pollStale}
+        handleRefresh={handleRefresh}
+        refreshing={refreshing}
+      />
 
       {/* Composer sheet: right-side on desktop, full-height bottom sheet on mobile. */}
       <CreateScanSheet
@@ -1079,20 +845,5 @@ export function ScansClient({
         onLoadMore={handleLoadMore}
       />
     </div>
-  )
-}
-
-function BillingRecoveryLink({ canManageBilling }: { canManageBilling: boolean }) {
-  if (canManageBilling) {
-    return (
-      <Link href="/dashboard/billing" className="ml-2 underline underline-offset-4">
-        Review billing options
-      </Link>
-    )
-  }
-  return (
-    <span className="text-muted-foreground ml-2">
-      Ask a workspace owner to review billing options.
-    </span>
   )
 }

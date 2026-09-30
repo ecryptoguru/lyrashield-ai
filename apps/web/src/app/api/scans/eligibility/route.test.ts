@@ -127,6 +127,7 @@ import {
   peekFreeUrlScanRateLimit,
 } from "../../../../lib/rate-limit"
 import { GET } from "./route"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 function request(params: Record<string, string> | URLSearchParams) {
   const url = new URL("http://localhost/api/scans/eligibility")
@@ -207,6 +208,22 @@ describe("GET /api/scans/eligibility", () => {
     expect(prisma.target.findFirst).toHaveBeenCalledWith({
       where: { id: "target-1", workspaceId: "ws-1", deletedAt: null },
     })
+    expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+  })
+
+  it("denies eligibility reads without scan:create", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+
+    const response = await GET(request(validQuery))
+
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/scans/eligibility",
+      "GET"
+    )
+    expect(prisma.target.findFirst).not.toHaveBeenCalled()
     expect(evaluateScanEntitlement).not.toHaveBeenCalled()
   })
 

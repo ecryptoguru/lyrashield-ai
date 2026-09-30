@@ -4,7 +4,7 @@ const apiKey = process.env.LYRASHIELD_API_KEY?.trim()
 
 const definition: AgentDefinition = {
   id: "lyrashield-review",
-  version: "0.1.29",
+  version: "0.1.30",
   publisher: "lyrashield",
   displayName: "LyraShield Review",
   model: "anthropic/claude-sonnet-4.5",
@@ -13,7 +13,7 @@ const definition: AgentDefinition = {
   mcpServers: {
     lyrashield: {
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.10"],
+      args: ["-y", "@lyrashield/mcp@0.2.11"],
       env: apiKey ? { LYRASHIELD_API_KEY: apiKey } : {},
     },
   },
@@ -27,12 +27,10 @@ const definition: AgentDefinition = {
     "lyrashield/lyrashield_list_targets",
     "lyrashield/lyrashield_get_scan_status",
     "lyrashield/lyrashield_get_scan_quality",
-    "lyrashield/lyrashield_get_scan_eligibility",
     "lyrashield/lyrashield_check_diff",
     "lyrashield/lyrashield_explain_finding",
     "lyrashield/lyrashield_generate_fix_plan",
     "lyrashield/lyrashield_create_pr_security_recap",
-    "lyrashield/lyrashield_list_scan_attachments",
   ],
   spawnerPrompt: "Use for a read-only LyraShield release-assurance review of the current change.",
   systemPrompt: "You are LyraShield Review. Never apply changes or bypass approvals.",

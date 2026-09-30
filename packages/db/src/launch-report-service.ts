@@ -38,6 +38,7 @@ import {
   type LaunchReportProvenance,
 } from "./launch-report-provenance"
 import { signLaunchReportChecksum, LAUNCH_REPORT_SIGNING_KEY_ID } from "./launch-report-signing"
+import { isLaunchReportShareablePayload } from "./launch-report-html"
 import type { GateVerdict } from "./generated/prisma"
 
 export interface LaunchReportResult {
@@ -265,13 +266,14 @@ export async function getLaunchReportDetail(
       select: { type: true, contentJson: true, provenanceJson: true },
     })
     if (!report || report.type !== "launch_readiness") return null
-    const payload = report.contentJson as Partial<LaunchReportShareablePayload> | null
+    const content: unknown = report.contentJson
+    if (!isLaunchReportShareablePayload(content)) {
+      return { verdictLabel: null, stale: true, provenance: null }
+    }
+    const payload = content
     return {
-      verdictLabel:
-        payload && typeof payload.verdictLabel === "string"
-          ? (payload.verdictLabel as LaunchReportVerdictLabel)
-          : null,
-      stale: payload?.stale === true,
+      verdictLabel: payload.verdictLabel,
+      stale: payload.stale,
       provenance: parseLaunchReportProvenance(report.provenanceJson),
     }
   })
@@ -297,7 +299,9 @@ export async function getSharedLaunchReport(
       select: { contentJson: true, type: true },
     })
     if (!report || report.type !== "launch_readiness") return null
-    const payload = report.contentJson as unknown as LaunchReportShareablePayload
+    const content: unknown = report.contentJson
+    if (!isLaunchReportShareablePayload(content)) return null
+    const payload = content
     const expiresAtMs = payload.expiresAt ? new Date(payload.expiresAt).getTime() : Number.NaN
     // Stored bytes and their signature remain immutable. This is a read-time
     // presentation flag so legacy or expired reports never render as current.
@@ -338,10 +342,12 @@ export async function confirmSharedLaunchReportIdentity(input: {
     })
     if (!report) return "UNAVAILABLE"
 
-    const payload = report.contentJson as Partial<LaunchReportShareablePayload> | null
+    const content: unknown = report.contentJson
+    if (!isLaunchReportShareablePayload(content)) return "UNAVAILABLE"
+    const payload = content
     const provenance = parseLaunchReportProvenance(report.provenanceJson)
     if (
-      payload?.reportChecksum !== input.reportChecksum ||
+      payload.reportChecksum !== input.reportChecksum ||
       !provenance?.assessedIdentity ||
       provenance.assessedIdentity.kind !== input.identity.kind
     ) {

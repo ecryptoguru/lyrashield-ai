@@ -43,7 +43,16 @@ export function scanAiDataExposure(source: AiDataExposureSource): AiDataExposure
     const lineNumber = index + 1
     const isLogger =
       /\b(?:console\.(?:log|info|debug|warn)|logger\.(?:info|debug|warn|error))\s*\(/i.test(line)
-    if (isLogger && /\b(?:prompt|messages?|response|completion)\b/i.test(line)) {
+    // Match a logged value, not a word inside a diagnostic string such as
+    // console.log("Could not read response text").
+    const logArguments = isLogger ? line.slice(line.search(/\b(?:console|logger)\./i)) : ""
+    const withoutQuotedStrings = logArguments.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, "")
+    if (
+      isLogger &&
+      /\b(?:prompt|messages?|response|completion)\b(?=\s*[:+.)\],}]|\s*$)/i.test(
+        withoutQuotedStrings
+      )
+    ) {
       findings.push(
         finding(
           source.path,
@@ -75,10 +84,12 @@ export function scanAiDataExposure(source: AiDataExposureSource): AiDataExposure
         )
       )
     }
+    const toolDeclaration = /\btool\w*\s*=\s*\{([^}]*)\}/i.exec(line)?.[1]
     if (
-      /\b(?:exec|spawn|command|shell)\b/i.test(line) &&
-      /\b(?:tool|execute|command|shell)\b/i.test(line) &&
-      !/\b(?:require_?approval|approvalRequired)\s*[:=]\s*true\b/i.test(line)
+      toolDeclaration &&
+      /\b(?:command|exec|shell)\s*:/i.test(toolDeclaration) &&
+      /\b(?:execute|autoExecute|autoApprove)\s*:\s*true\b/i.test(toolDeclaration) &&
+      !/\b(?:require_?approval|approvalRequired)\s*[:=]\s*true\b/i.test(toolDeclaration)
     ) {
       findings.push(
         finding(

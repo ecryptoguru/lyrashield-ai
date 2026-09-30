@@ -1,15 +1,21 @@
-import { requirePermission } from "@lyrashield/auth/server"
+import {
+  requireOAuthPermission,
+  requirePermission,
+  type OAuthAuthContext,
+} from "@lyrashield/auth/server"
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
 import {
   claimOrGetAgentOperation,
   checkDelegatedOperationAuthorization,
   completeAgentOperation,
   failAgentOperation,
+  toJsonObject,
   withWorkspaceRLS,
   TOOL_OPERATION_MAP,
 } from "@lyrashield/db"
 import {
   McpServer,
+  McpToolResultSchema,
   extractScanIdFromToolResult,
   type McpToolResult,
   type RemoteApprovalGate,
@@ -213,10 +219,13 @@ interface RemoteApprovalGateOptions {
     allowedProfiles: string[]
     expiresAt: Date | null
   }
+  oauthContext?: OAuthAuthContext
   toolContext: { apiBaseUrl: string; apiKey: string; fetchFn?: typeof fetch }
 }
 
-export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): RemoteApprovalGate {
+export function makeRemoteApprovalGate(
+  options: RemoteApprovalGateOptions
+): (toolName: string, args: Record<string, unknown>) => ReturnType<RemoteApprovalGate> {
   const { apiKeyInfo, toolContext } = options
   const { workspaceId, scopes } = apiKeyInfo
 
@@ -230,7 +239,19 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
     const permission = operationPermissions[TOOL_OPERATION_MAP[toolName]?.canonicalOperation ?? ""]
     if (!permission) return denied("This operation has no supported permission binding.")
     try {
-      await requirePermission(workspaceId, permission)
+      if (options.oauthContext) {
+        if (
+          options.oauthContext.userId !== apiKeyInfo.createdById ||
+          options.oauthContext.workspaceId !== workspaceId ||
+          (options.connection && options.oauthContext.connectionId !== options.connection.id)
+        ) {
+          throw new Error("FORBIDDEN")
+        }
+        await requireOAuthPermission(options.oauthContext, permission)
+      } else {
+        if (options.connection) throw new Error("FORBIDDEN")
+        await requirePermission(workspaceId, permission)
+      }
     } catch {
       return denied("Current workspace access does not authorize this operation.")
     }
@@ -289,17 +310,15 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
         })
 
         if (claim.status === "REPLAY") {
-          if (!claim.operation.result) {
+          const storedResult = McpToolResultSchema.safeParse(claim.operation.result)
+          if (!storedResult.success) {
             return denied(
               "The completed operation result is unavailable; the action will not be rerun."
             )
           }
           return {
             approved: true,
-            result: withOperationId(
-              claim.operation.result as unknown as McpToolResult,
-              claim.operation.id
-            ),
+            result: withOperationId(storedResult.data, claim.operation.id),
           }
         }
 
@@ -355,11 +374,11 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
           // one — task recovery resolves the scan via this reference without
           // ever re-executing the tool.
           resultReference: extractScanIdFromToolResult(toolResult) ?? undefined,
-          result: {
+          result: toJsonObject({
             content: stampedResult.content,
             isError: stampedResult.isError,
             structuredContent: stampedResult.structuredContent,
-          },
+          }),
         })
 
         return { approved: true, result: stampedResult }

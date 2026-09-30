@@ -240,6 +240,9 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       PlatformAdminElevation: "Owner-only cross-workspace action elevation",
       PlatformAdminChallengeLimit: "Owner-only operator challenge rate limit",
     }
+    const forcedSystemOnlyTables = {
+      billing_reconciliation_state: "Singleton billing reconciliation checkpoint, system-owned",
+    }
     const accountTables = ["account_acquisitions", "account_preferences"]
     // Myra support-agent tables (20260915000000_myra_support_agent): dual-owner
     // (accountId/publicSessionId) tables plus child/append-only/system tables.
@@ -279,7 +282,15 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         .filter((row) => row.relrowsecurity)
         .map((row) => row.relname)
         .sort()
-    ).toEqual([...tenantTables, ...accountTables, ...myraTables, ...Object.keys(systemOnly)].sort())
+    ).toEqual(
+      [
+        ...tenantTables,
+        ...accountTables,
+        ...myraTables,
+        ...Object.keys(systemOnly),
+        ...Object.keys(forcedSystemOnlyTables),
+      ].sort()
+    )
     for (const table of tenantTables) {
       expect(
         rows.find((row) => row.relname === table),
@@ -291,6 +302,12 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         rows.find((row) => row.relname === table),
         table
       ).toMatchObject({ relrowsecurity: true, relforcerowsecurity: false })
+    }
+    for (const table of Object.keys(forcedSystemOnlyTables)) {
+      expect(
+        rows.find((row) => row.relname === table),
+        table
+      ).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true })
     }
     for (const table of accountTables) {
       expect(

@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const requirePermissionMock = vi.fn().mockResolvedValue({})
+const requireOAuthPermissionMock = vi.fn((...args: unknown[]) => {
+  const [oauth, permission] = args as [{ workspaceId: string }, string]
+  return requirePermissionMock(oauth.workspaceId, permission)
+})
 vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: (...args: unknown[]) => requirePermissionMock(...args),
+  requireOAuthPermission: (...args: unknown[]) => requireOAuthPermissionMock(...args),
 }))
 
 const createApprovalMock = vi.fn()
@@ -32,6 +37,7 @@ vi.mock("@lyrashield/db", () => ({
   claimOrGetAgentOperation: (...args: unknown[]) => claimOrGetAgentOperationMock(...args),
   completeAgentOperation: (...args: unknown[]) => completeAgentOperationMock(...args),
   failAgentOperation: (...args: unknown[]) => failAgentOperationMock(...args),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   hashOperationInput: vi.fn().mockReturnValue("op-hash"),
   checkDelegatedOperationAuthorization: vi
     .fn()
@@ -120,7 +126,27 @@ vi.mock("../../../lib/rate-limit", () => ({
   checkApprovalCreateRateLimit: vi.fn().mockResolvedValue({ limited: false, retryAfter: 0 }),
 }))
 
-import { makeRemoteApprovalGate } from "./remote-approval-gate"
+import { makeRemoteApprovalGate as createRemoteApprovalGate } from "./remote-approval-gate"
+
+function makeRemoteApprovalGate(options: Parameters<typeof createRemoteApprovalGate>[0]) {
+  if (options.oauthContext || !options.connection) return createRemoteApprovalGate(options)
+
+  return createRemoteApprovalGate({
+    ...options,
+    oauthContext: {
+      userId: options.apiKeyInfo.createdById,
+      workspaceId: options.apiKeyInfo.workspaceId,
+      scopes: options.apiKeyInfo.scopes,
+      connectionId: options.connection.id,
+      authorizationVersion: options.connection.authorizationVersion,
+      allowedOperations: options.connection.allowedOperations,
+      allowedTargetIds: options.connection.allowedTargetIds,
+      allTargets: options.connection.allTargets,
+      allowedProfiles: options.connection.allowedProfiles,
+      expiresAt: options.connection.expiresAt,
+    },
+  })
+}
 
 describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
   const apiKeyInfo = {
@@ -174,6 +200,63 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
     expect(callToolMock).not.toHaveBeenCalled()
   })
 
+  it("denies an idempotent replay for a removed bearer user despite an owner cookie session", async () => {
+    const oauthContext = {
+      userId: "bearer-user-a",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      connectionId: "conn-1",
+      authorizationVersion: 7,
+      allowedOperations: ["scan.create"],
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["STANDARD"],
+      expiresAt: null,
+    }
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      authorizationVersion: 7,
+      allowedOperations: ["scan.create"],
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["STANDARD"],
+      expiresAt: null,
+    }
+    const authInfo = { ...apiKeyInfo, createdById: oauthContext.userId }
+    requirePermissionMock.mockResolvedValueOnce({
+      session: { userId: "owner-cookie-user-b" },
+      workspace: { role: "OWNER" },
+    })
+    requireOAuthPermissionMock.mockRejectedValueOnce(new Error("FORBIDDEN"))
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "REPLAY",
+      operation: { id: "old-op", result: { private: "stored" } },
+    })
+
+    const gate = createRemoteApprovalGate({
+      apiKeyInfo: authInfo,
+      oauthContext,
+      connection,
+      toolContext,
+    })
+    const result = await gate("lyrashield_scan_target", {
+      targetId: "target-1",
+      mode: "STANDARD",
+      idempotencyKey: "old-operation-key",
+    })
+
+    expect(result).toEqual({
+      approved: false,
+      reason: "Current workspace access does not authorize this operation.",
+    })
+    expect(requireOAuthPermissionMock).toHaveBeenCalledWith(oauthContext, "scan:create")
+    expect(requirePermissionMock).not.toHaveBeenCalled()
+    expect(claimOrGetAgentOperationMock).not.toHaveBeenCalled()
+    expect(callToolMock).not.toHaveBeenCalled()
+  })
+
   it("executes seamlessly when delegated connection grant authorizes the tool", async () => {
     const connection = {
       id: "conn-1",
@@ -210,16 +293,14 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
       idempotencyKey: "op-123",
     })
 
-    expect(result.approved).toBe(true)
-    if (result.approved) {
-      // The approved result carries the durable operation id stamp so the
-      // MCP task layer can bind a task id to this exact ledger row.
-      expect(result.result.structuredContent).toEqual({
-        scanId: "scan-999",
-        operationId: "op-123",
-      })
-      expect(result.result.content[0].text).toContain('"operationId": "op-123"')
-    }
+    if (!result.approved || !result.result) throw new Error("Expected approved tool result")
+    // The approved result carries the durable operation id stamp so the
+    // MCP task layer can bind a task id to this exact ledger row.
+    expect(result.result.structuredContent).toEqual({
+      scanId: "scan-999",
+      operationId: "op-123",
+    })
+    expect(result.result.content[0]?.text).toContain('"operationId": "op-123"')
     // Verifies no approval was created in Review Queue
     expect(createApprovalMock).not.toHaveBeenCalled()
     // Verifies operation was completed with the stamped result retained
@@ -267,17 +348,45 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
       idempotencyKey: "idem-key-1",
     })
 
-    expect(result.approved).toBe(true)
-    if (result.approved) {
-      // The replay is the recorded result stamped with the durable operation
-      // id — the id the MCP task layer binds `lst_<id>` to.
-      expect(result.result.structuredContent).toEqual({
-        scanId: "scan-999",
-        operationId: "op-123",
-      })
-      expect(result.result.content[0].text).toContain('"operationId": "op-123"')
-    }
+    if (!result.approved || !result.result) throw new Error("Expected approved replay result")
+    // The replay is the recorded result stamped with the durable operation
+    // id — the id the MCP task layer binds `lst_<id>` to.
+    expect(result.result.structuredContent).toEqual({
+      scanId: "scan-999",
+      operationId: "op-123",
+    })
+    expect(result.result.content[0]?.text).toContain('"operationId": "op-123"')
     // Tool was NOT re-executed
+    expect(callToolMock).not.toHaveBeenCalled()
+    expect(completeAgentOperationMock).not.toHaveBeenCalled()
+  })
+
+  it("denies a malformed stored result without re-executing the operation", async () => {
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      authorizationVersion: 1,
+      allowedOperations: ["scan.create"],
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["SAFE", "QUICK", "STANDARD"],
+      expiresAt: null,
+    }
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "REPLAY",
+      operation: { id: "op-corrupt", result: { foo: 1 } },
+    })
+
+    const result = await makeRemoteApprovalGate({ apiKeyInfo, connection, toolContext })(
+      "lyrashield_scan_target",
+      { targetId: "target-1", mode: "STANDARD", idempotencyKey: "idem-key-1" }
+    )
+
+    expect(result).toEqual({
+      approved: false,
+      reason: "The completed operation result is unavailable; the action will not be rerun.",
+    })
     expect(callToolMock).not.toHaveBeenCalled()
     expect(completeAgentOperationMock).not.toHaveBeenCalled()
   })

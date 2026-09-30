@@ -11,7 +11,7 @@ azure_vm_run_command_with_retry() {
 
   while [ "$attempt" -le "$max_attempts" ]; do
     error_file=$(mktemp)
-    if result=$(timeout --foreground "${timeout_seconds}s" az vm run-command invoke "$@" 2>"$error_file"); then
+    if result=$(timeout --kill-after=10s "${timeout_seconds}s" az vm run-command invoke "$@" 2>"$error_file"); then
       status=0
     else
       status=$?
@@ -25,6 +25,14 @@ azure_vm_run_command_with_retry() {
       fi
       printf '%s\n' "$result"
       return 0
+    fi
+
+    # A timed-out client leaves remote execution uncertain. Never retry a
+    # mutation just because buffered output also contains a busy-command error.
+    if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+      printf '%s\n%s\n' "$result" "$error_output" >&2
+      echo "Azure VM Run Command timed out; inspect remote execution before retrying" >&2
+      return "$status"
     fi
 
     if printf '%s\n%s' "$result" "$error_output" | grep -q 'Run command extension execution is in progress' &&

@@ -20,6 +20,7 @@ export {
   createDeleteScanAttachmentTool,
   createRequestFixPrTool,
   createAllTools,
+  McpToolResultSchema,
   type McpTool,
   type McpToolResult,
   type ToolHandlerContext,

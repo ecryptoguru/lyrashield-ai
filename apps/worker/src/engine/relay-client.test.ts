@@ -13,7 +13,7 @@ const baseInput = {
   mode: "STANDARD" as const,
   verifiedDomain: "example.com",
   targetUrl: "https://app.example.com/login",
-  engineBudgetMs: 12 * 60 * 1000,
+  engineBudgetMs: 20 * 60 * 1000,
 }
 
 describe("resolveRelayRuntimeConfig", () => {
@@ -91,7 +91,7 @@ describe("mintScanRelayGrant", () => {
   it("bounds the grant by the engine budget plus grace", () => {
     const before = Date.now()
     const { scope } = mintScanRelayGrant(baseInput, CONFIG)
-    const expected = before + 12 * 60 * 1000 + 5 * 60 * 1000
+    const expected = before + 20 * 60 * 1000 + 5 * 60 * 1000
     expect(scope.exp).toBeGreaterThanOrEqual(expected)
     expect(scope.exp).toBeLessThan(expected + 5_000)
   })

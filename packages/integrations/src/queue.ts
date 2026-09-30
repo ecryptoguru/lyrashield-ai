@@ -1,4 +1,7 @@
 import { Queue } from "bullmq"
+import Redis from "ioredis"
+import { createHash } from "node:crypto"
+import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "@lyrashield/types"
 import { getRedis } from "./redis"
@@ -110,10 +113,95 @@ export async function assertScanWorkerAvailable(): Promise<void> {
   if (!(await isScanWorkerAvailable())) throw new ScanWorkerUnavailableError()
 }
 
+export const QUEUE_PRODUCER_TIMEOUT_MS = 5_000
+
+export class QueueEnqueueUncertainError extends Error {
+  readonly code = "QUEUE_ENQUEUE_UNCERTAIN"
+  constructor(
+    readonly jobId: string,
+    cause: unknown
+  ) {
+    super("Queue acknowledgement was unavailable; retain the existing job identity", { cause })
+    this.name = "QueueEnqueueUncertainError"
+  }
+}
+
 function getConnectionOpts() {
   return {
-    url: env.REDIS_URL || "redis://localhost:6379",
-    maxRetriesPerRequest: null as number | null,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+    autoResendUnfulfilledCommands: false,
+    connectTimeout: 1_000,
+    commandTimeout: 2_000,
+    retryStrategy: (times: number) => (times <= 2 ? 100 : null),
+  }
+}
+
+const producerConnections = new WeakMap<object, Redis>()
+
+function createProducerQueue<Data, Result>(
+  name: string,
+  jobOptions: typeof defaultJobOptions
+): Queue<Data, Result> {
+  const connection = new Redis(env.REDIS_URL || "redis://localhost:6379", getConnectionOpts())
+  connection.on("error", (error) =>
+    logger.warn("Queue producer Redis error", { error: error.message })
+  )
+  const queue = new Queue<Data, Result>(name, { connection, defaultJobOptions: jobOptions })
+  queue.on("error", (error) =>
+    logger.warn("Queue producer error", { queue: name, error: error.message })
+  )
+  producerConnections.set(queue, connection)
+  const close = queue.close
+  queue.close = async () => {
+    try {
+      await close.call(queue)
+    } finally {
+      connection.disconnect(false)
+    }
+  }
+  return queue
+}
+
+async function boundedQueueAdd<Data, Result>(
+  queue: Queue<Data, Result>,
+  jobId: string,
+  add: () => Promise<string>,
+  reset: () => void,
+  beforeAdd?: () => Promise<void>
+): Promise<string> {
+  let attempted = false
+  let abandoned = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const abandon = () => {
+    if (abandoned) return
+    abandoned = true
+    // Own the socket: never leave an offline command replaying after the caller settles.
+    producerConnections.get(queue)?.disconnect(false)
+    reset()
+  }
+  try {
+    return await Promise.race([
+      (async () => {
+        await beforeAdd?.()
+        await queue.waitUntilReady()
+        if (abandoned) throw new Error("Queue producer operation abandoned")
+        attempted = true
+        return add()
+      })(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          abandon()
+          reject(new Error("Queue producer deadline exceeded"))
+        }, QUEUE_PRODUCER_TIMEOUT_MS)
+      }),
+    ])
+  } catch (error) {
+    abandon()
+    if (attempted) throw new QueueEnqueueUncertainError(jobId, error)
+    throw error
+  } finally {
+    if (timer) clearTimeout(timer)
   }
 }
 
@@ -130,20 +218,37 @@ const defaultJobOptions = {
 let scanQueue: Queue<ScanJobData, ScanJobResult> | null = null
 
 export function getScanQueue(): Queue<ScanJobData, ScanJobResult> {
-  if (!scanQueue) {
-    scanQueue = new Queue<ScanJobData, ScanJobResult>(SCAN_QUEUE_NAME, {
-      connection: getConnectionOpts(),
-      defaultJobOptions,
-    })
+  if (!scanQueue || producerConnections.get(scanQueue)?.status === "end") {
+    scanQueue = createProducerQueue<ScanJobData, ScanJobResult>(SCAN_QUEUE_NAME, defaultJobOptions)
   }
   return scanQueue
 }
 
 export async function enqueueScan(data: ScanJobData): Promise<string> {
-  await assertScanWorkerAvailable()
   const queue = getScanQueue()
-  const job = await queue.add("scan", data, { jobId: data.scanId })
-  return job.id!
+  try {
+    return await boundedQueueAdd(
+      queue,
+      data.scanId,
+      async () => {
+        const job = await queue.add("scan", data, { jobId: data.scanId })
+        return job.id!
+      },
+      () => {
+        if (scanQueue === queue) scanQueue = null
+      },
+      assertScanWorkerAvailable
+    )
+  } catch (error) {
+    if (!(error instanceof QueueEnqueueUncertainError)) throw error
+    // Admission already persisted this exact scan. Keep it QUEUED and return
+    // its identity: failing it here could race a running job; retrying a new
+    // scan could duplicate paid work. Existing reconciliation resolves absence.
+    logger.warn("Scan queue acknowledgement uncertain; retained existing scan", {
+      scanId: data.scanId,
+    })
+    return data.scanId
+  }
 }
 
 /**
@@ -160,39 +265,62 @@ export interface WebhookTrackRetryJobData {
   webhookEventId: string
   /** "billing" | "license" | "affiliate" */
   track: string
+  generation: number
+}
+
+export function webhookTrackRetryJobId(data: WebhookTrackRetryJobData): string {
+  if (!Number.isSafeInteger(data.generation) || data.generation < 0) {
+    throw new Error("Invalid webhook retry generation")
+  }
+  if (!data.webhookEventId || !["billing", "license", "affiliate"].includes(data.track)) {
+    throw new Error("Invalid webhook retry identity")
+  }
+  const identity = createHash("sha256")
+    .update(JSON.stringify([data.webhookEventId, data.track]))
+    .digest("hex")
+  return `track-${identity}-g${data.generation}`
 }
 
 let webhookTrackRetryQueue: Queue<WebhookTrackRetryJobData, void> | null = null
 
 export function getWebhookTrackRetryQueue(): Queue<WebhookTrackRetryJobData, void> {
-  if (!webhookTrackRetryQueue) {
-    webhookTrackRetryQueue = new Queue<WebhookTrackRetryJobData, void>(
+  if (
+    !webhookTrackRetryQueue ||
+    producerConnections.get(webhookTrackRetryQueue)?.status === "end"
+  ) {
+    webhookTrackRetryQueue = createProducerQueue<WebhookTrackRetryJobData, void>(
       WEBHOOK_TRACK_RETRY_QUEUE_NAME,
-      {
-        connection: getConnectionOpts(),
-        defaultJobOptions,
-      }
+      defaultJobOptions
     )
   }
   return webhookTrackRetryQueue
 }
 
 /**
- * Enqueue a retry for one webhook track. jobId = `<eventId>:<track>` so
- * concurrent/repeated enqueues for the same event+track dedupe while one is
- * already waiting/delayed/active.
+ * Represent one durable retry generation. Retained older jobs cannot suppress
+ * the next generation; repeated handoffs for this generation deduplicate.
  */
 export async function enqueueWebhookTrackRetry(
   data: WebhookTrackRetryJobData,
   opts: { delayMs?: number } = {}
 ): Promise<string> {
   const queue = getWebhookTrackRetryQueue()
-  const job = await queue.add("webhook-track-retry", data, {
-    jobId: `${data.webhookEventId}:${data.track}`,
-    attempts: 1,
-    ...(opts.delayMs !== undefined ? { delay: opts.delayMs } : {}),
-  })
-  return job.id!
+  const jobId = webhookTrackRetryJobId(data)
+  return boundedQueueAdd(
+    queue,
+    jobId,
+    async () => {
+      const job = await queue.add("webhook-track-retry", data, {
+        jobId,
+        attempts: 1,
+        ...(opts.delayMs !== undefined ? { delay: opts.delayMs } : {}),
+      })
+      return job.id!
+    },
+    () => {
+      if (webhookTrackRetryQueue === queue) webhookTrackRetryQueue = null
+    }
+  )
 }
 
 /**
@@ -218,9 +346,13 @@ export async function getScanQueuePosition(scanId: string): Promise<ScanQueuePos
     const queue = getScanQueue()
     // v6 removed 'paused' from the JobType union; the scan queue is never
     // paused by the app, so only the active waiting states are queried.
-    const waiting = await queue.getJobs(["wait", "delayed", "prioritized"])
-    const index = waiting.findIndex((job) => job.id === scanId)
+    // The status poll needs only IDs. getJobs hydrates every waiting job,
+    // making each poll read every job hash as well as the queue ranges.
+    const waiting = await queue.getRanges(["wait", "delayed", "prioritized"], 0, -1)
+    const index = waiting.indexOf(scanId)
     if (index === -1) return null
+    // A stale queue entry must not present a removed job as waiting.
+    if (!(await queue.getJob(scanId))) return null
     return { position: index + 1, waiting: waiting.length }
   } catch {
     return null
@@ -245,18 +377,15 @@ export interface FixGenerateJobData {
 let fixGenerateQueue: Queue<FixGenerateJobData, unknown> | null = null
 
 function getFixGenerateQueue(): Queue<FixGenerateJobData, unknown> {
-  if (!fixGenerateQueue) {
-    fixGenerateQueue = new Queue<FixGenerateJobData, unknown>(FIX_GENERATE_QUEUE_NAME, {
-      connection: getConnectionOpts(),
-      defaultJobOptions: {
-        // The consumer is deterministic from stored evidence (no model call),
-        // so retrying a transient failure is safe. attempts stay small so a
-        // poisoned payload cannot hammer the worker.
-        attempts: 3,
-        backoff: { type: "exponential", delay: 5_000 },
-        removeOnComplete: { count: 100 },
-        removeOnFail: { count: 200 },
-      },
+  if (!fixGenerateQueue || producerConnections.get(fixGenerateQueue)?.status === "end") {
+    fixGenerateQueue = createProducerQueue<FixGenerateJobData, unknown>(FIX_GENERATE_QUEUE_NAME, {
+      // The consumer is deterministic from stored evidence (no model call),
+      // so retrying a transient failure is safe. attempts stay small so a
+      // poisoned payload cannot hammer the worker.
+      attempts: 3,
+      backoff: { type: "exponential", delay: 5_000 },
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 200 },
     })
   }
   return fixGenerateQueue
@@ -269,6 +398,15 @@ function getFixGenerateQueue(): Queue<FixGenerateJobData, unknown> {
  */
 export async function enqueueFixGenerate(data: FixGenerateJobData): Promise<string> {
   const queue = getFixGenerateQueue()
-  const job = await queue.add("fix-generate", data, { jobId: data.fixProposalId })
-  return job.id!
+  return boundedQueueAdd(
+    queue,
+    data.fixProposalId,
+    async () => {
+      const job = await queue.add("fix-generate", data, { jobId: data.fixProposalId })
+      return job.id!
+    },
+    () => {
+      if (fixGenerateQueue === queue) fixGenerateQueue = null
+    }
+  )
 }

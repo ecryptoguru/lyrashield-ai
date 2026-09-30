@@ -20,6 +20,7 @@ vi.mock("@lyrashield/billing", () => ({
 vi.mock("@lyrashield/logger", () => ({ logger: { error: mocks.loggerError } }))
 
 import { GET } from "./route"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const expiredTrial = {
   isActive: false,
@@ -127,5 +128,20 @@ describe("GET /api/billing/usage", () => {
 
     expect(body.data.trial.minutesLeft).toBe(0)
     expect(body.data.usage.totalRemaining).toBe(0)
+  })
+
+  it("denies account usage reads without billing:manage", async () => {
+    mocks.requirePermission.mockRejectedValueOnce(new Error("FORBIDDEN"))
+    const response = await GET(
+      new Request("https://app.lyrashieldai.com/api/billing/usage?workspaceId=ws-1")
+    )
+    expectPermissionDenied(
+      response,
+      mocks.requirePermission.mock.calls,
+      "ws-1",
+      "/api/billing/usage",
+      "GET"
+    )
+    expect(mocks.resolveAccountBilling).not.toHaveBeenCalled()
   })
 })

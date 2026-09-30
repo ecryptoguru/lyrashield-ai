@@ -1,0 +1,646 @@
+name: Deploy Azure runtime
+
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      webhook_recovery_requires_receipt:
+        required: false
+        default: false
+        type: boolean
+      webhook_claims_cutover:
+        required: false
+        default: false
+        type: boolean
+      engine_revision:
+        required: true
+        type: string
+      web_image:
+        required: true
+        type: string
+      web_digest:
+        required: true
+        type: string
+      worker_image:
+        required: true
+        type: string
+      worker_digest:
+        required: true
+        type: string
+      egress_proxy_image:
+        required: true
+        type: string
+      egress_proxy_digest:
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+env:
+  DEPLOY_SHA: ${{ inputs.source_sha }}
+  WEBHOOK_CLAIMS_CUTOVER: ${{ inputs.webhook_claims_cutover && 'true' || 'false' }}
+  LYRASHIELD_ADMISSION_STOP_OWNER: ${{ github.run_id }}:${{ github.run_attempt }}
+  LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID: ${{ github.run_id }}
+  ENGINE_REVISION: ${{ inputs.engine_revision }}
+  REGISTRY: ghcr.io
+  WEB_IMAGE: ${{ inputs.web_image }}
+  WORKER_IMAGE: ${{ inputs.worker_image }}
+  EGRESS_PROXY_IMAGE: ${{ inputs.egress_proxy_image }}
+  MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
+  APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
+  SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
+  REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '1' }}
+  PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
+  # Scanner-only deployments remain closed; app deployments replace these
+  # defaults with the validated 100%-traffic app revision before rollout.
+  POLAR_BILLING_ADMISSION: "off"
+  POLAR_LOCAL_BILLING_ADMISSION: "off"
+  RAZORPAY_BILLING_ADMISSION: "off"
+  RAZORPAY_LOCAL_BILLING_ADMISSION: "off"
+  BILLING_CANARY_WORKSPACE_IDS: ""
+  CLOUDFLARE_ORIGIN_MTLS: ${{ vars.CLOUDFLARE_ORIGIN_MTLS || 'off' }}
+  CLOUDFLARE_AOP_CERT_SHA256: ${{ vars.CLOUDFLARE_AOP_CERT_SHA256 || '' }}
+  MYRA_PUBLIC_ENABLED: ${{ vars.MYRA_PUBLIC_ENABLED || '0' }}
+  MYRA_DASHBOARD_ENABLED: ${{ vars.MYRA_DASHBOARD_ENABLED || '0' }}
+  MYRA_OPERATOR_ENABLED: ${{ vars.MYRA_OPERATOR_ENABLED || '0' }}
+  MYRA_WRITES_ENABLED: ${{ vars.MYRA_WRITES_ENABLED || '0' }}
+  MYRA_PUBLIC_BOOKING_ENABLED: ${{ vars.MYRA_PUBLIC_BOOKING_ENABLED || '0' }}
+  MYRA_GENERATION_ENABLED: ${{ vars.MYRA_GENERATION_ENABLED || '0' }}
+  MYRA_PROVIDER: ${{ vars.MYRA_PROVIDER || 'mock' }}
+  MYRA_CALENDAR_PROVIDER: ${{ vars.MYRA_CALENDAR_PROVIDER }}
+  MYRA_AZURE_OPENAI_ENDPOINT: ${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}
+  MYRA_MODEL: ${{ vars.MYRA_MODEL }}
+  MYRA_MONTHLY_BUDGET_USD: ${{ vars.MYRA_MONTHLY_BUDGET_USD }}
+  MYRA_GOOGLE_CLIENT_ID: ${{ vars.MYRA_GOOGLE_CLIENT_ID }}
+  MYRA_GOOGLE_CALENDAR_ID: ${{ vars.MYRA_GOOGLE_CALENDAR_ID }}
+  MYRA_SUPPORT_NOTIFY_EMAIL: ${{ vars.MYRA_SUPPORT_NOTIFY_EMAIL || 'support@lyrashieldai.com' }}
+
+jobs:
+  deploy:
+    name: Deploy Azure Container Apps
+    runs-on: ubuntu-24.04
+    # This budget covers migrations, parallel bounded candidate health checks,
+    # production smoke, and bounded traffic recovery. Individual Azure
+    # control-plane calls still have their own tighter limits below.
+    timeout-minutes: 90
+    permissions:
+      actions: read
+      contents: read
+      # v16 4.3: production Azure login moved from the long-lived
+      # AZURE_CREDENTIALS service-principal secret to federated OIDC, the
+      # same model the desktop release already uses. Requires the
+      # AZURE_DEPLOY_CLIENT_ID / AZURE_DEPLOY_TENANT_ID /
+      # AZURE_DEPLOY_SUBSCRIPTION_ID secrets (federated-credential setup is a
+      # one-time founder action; no client secret is stored).
+      id-token: write
+    environment:
+      name: azure-production
+      url: ${{ env.APP_URL }}
+    if: >
+      (vars.AZURE_RESOURCE_GROUP != '') &&
+      ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
+    steps:
+      # Deployment checks and the live admission reader use repository scripts.
+      - name: Checkout for deployment checks
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      # Myra fail-closed check (Deep Review v18): confirmed writes require the
+      # Google calendar provider and usable credentials; the mock adapter and
+      # its fault switches must never reach production.
+      - name: Verify Myra deployment configuration
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          MYRA_WRITES_ENABLED: ${{ vars.MYRA_WRITES_ENABLED || '0' }}
+          MYRA_PUBLIC_BOOKING_ENABLED: ${{ vars.MYRA_PUBLIC_BOOKING_ENABLED || '0' }}
+          MYRA_DASHBOARD_ENABLED: ${{ vars.MYRA_DASHBOARD_ENABLED || '0' }}
+          MYRA_GENERATION_ENABLED: ${{ vars.MYRA_GENERATION_ENABLED || '0' }}
+          MYRA_PROVIDER: ${{ vars.MYRA_PROVIDER || 'mock' }}
+          MYRA_MODEL: ${{ vars.MYRA_MODEL }}
+          MYRA_AZURE_OPENAI_ENDPOINT: ${{ vars.MYRA_AZURE_OPENAI_ENDPOINT }}
+          MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          MYRA_CALENDAR_PROVIDER: ${{ vars.MYRA_CALENDAR_PROVIDER }}
+          MYRA_GOOGLE_CLIENT_ID: ${{ vars.MYRA_GOOGLE_CLIENT_ID }}
+          MYRA_GOOGLE_CLIENT_SECRET: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET }}
+          MYRA_GOOGLE_REFRESH_TOKEN: ${{ secrets.MYRA_GOOGLE_REFRESH_TOKEN }}
+          MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT: ${{ vars.MYRA_MOCK_CALENDAR_TIMEOUT_ON_INSERT }}
+          MYRA_MOCK_CALENDAR_PENDING_CONFERENCE: ${{ vars.MYRA_MOCK_CALENDAR_PENDING_CONFERENCE }}
+          MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT: ${{ vars.MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT }}
+        run: node .github/scripts/verify-myra-deployment-config.mjs
+
+      - name: Log in to Azure
+        # v16 4.3: OIDC federated login — no stored client secret. The
+        # workload identity (client id) must carry the same role assignments
+        # the old service principal had.
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
+
+      - name: Ensure Container Apps extension
+        run: az extension add --name containerapp --yes --only-show-errors
+
+      - name: Verify existing owned receipt before original-source recovery
+        if: inputs.webhook_claims_cutover == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          latest_main=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)
+          if [ "$DEPLOY_SHA" != "$latest_main" ]; then
+            [ "${GITHUB_RUN_ATTEMPT:-1}" -gt 1 ] || exit 1
+            bash .github/scripts/webhook-claims-maintenance.sh recovery
+          fi
+
+      # Read-only guard runs before production configuration or migration mutations.
+      # First claims cutover is a separately approved maintenance operation.
+      - name: Verify compatible webhook cutover baseline
+        if: inputs.webhook_claims_cutover != true
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          GHCR_USERNAME: ${{ github.repository_owner }}
+        run: node .github/scripts/verify-webhook-cutover.mjs
+
+      - name: Preserve live Cloud billing admission
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/read-cloud-billing-admission.sh >> "$GITHUB_ENV"
+
+      - name: Verify billing provider deployment configuration
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
+          POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
+          POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
+          CLOUDFLARE_ORIGIN_MTLS: ${{ env.CLOUDFLARE_ORIGIN_MTLS }}
+          CLOUDFLARE_AOP_CERT_SHA256: ${{ env.CLOUDFLARE_AOP_CERT_SHA256 }}
+        run: node .github/scripts/verify-billing-deployment-config.mjs
+
+      - name: Ensure app and scanner system identities
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/deploy-azure-preflight.sh ensure-app-and-scanner-system-identities
+      - name: Prepare private registry and zero-downtime rollout
+        id: rollout
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_EGRESS_PROXY_CONTAINER_APP_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          GHCR_USERNAME: ${{ github.repository_owner }}
+          WEB_IMAGE: ${{ inputs.web_image }}
+          WEB_DIGEST: ${{ inputs.web_digest }}
+          EGRESS_PROXY_IMAGE: ${{ inputs.egress_proxy_image }}
+          EGRESS_PROXY_DIGEST: ${{ inputs.egress_proxy_digest }}
+        run: bash .github/scripts/deploy-azure-preflight.sh prepare-private-registry-and-zero-downtime-rollout
+      # Schema first, then code. Migrations previously ran only in CI against a throwaway
+      # database and never against production, so a release needing a schema change served
+      # 500s until someone remembered to run this by hand. Ordering matters: new code must
+      # never meet an old schema, which means migrations must be additive and
+      # backward-compatible with the currently running image.
+      - name: Configure git default branch
+        run: git config --global init.defaultBranch main
+
+      - name: Checkout for migrations
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Setup pnpm
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          # Every workflow runs pnpm install as an explicit step; the
+          # successor action's install default is true, so opt out.
+          install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies (no secrets)
+        # VULN-H-001: install-time build scripts inherit step env. Dependency
+        # installation must never share a step with a bound secret — a
+        # malicious allowlisted build script could read the production DB URL.
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify migration database continuity before maintenance
+        if: inputs.webhook_claims_cutover == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          MIGRATION_DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh database
+
+      - name: Claim webhook maintenance admission stop
+        if: inputs.webhook_claims_cutover == true
+        id: webhook-stop
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh claim
+      - name: Quiesce every old webhook writer
+        if: inputs.webhook_claims_cutover == true
+        id: webhook-quiesce
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh quiesce
+      - name: Read back excluded writers immediately before migration
+        if: inputs.webhook_claims_cutover == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          MIGRATION_DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+        run: |
+          bash .github/scripts/webhook-claims-maintenance.sh verify
+          bash .github/scripts/webhook-claims-maintenance.sh database
+      - name: Run database migrations
+        id: database-migration
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+        run: bash .github/scripts/deploy-azure-preflight.sh run-database-migrations
+      - name: Verify shared rate-limiting credentials
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        run: bash .github/scripts/deploy-azure-preflight.sh verify-shared-rate-limiting-credentials
+      - name: Verify BullMQ Redis credential
+        env:
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: bash .github/scripts/deploy-azure-preflight.sh verify-bullmq-redis-credential
+      # The Container Apps and worker VM consume the same BullMQ endpoint from
+      # different secret stores. Keep the VM's Key Vault copy in lockstep so a
+      # Redis rotation cannot leave the production worker on an exhausted plan.
+      - name: Sync BullMQ Redis secret to worker Key Vault
+        env:
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: bash .github/scripts/deploy-azure-preflight.sh sync-bullmq-redis-secret-to-worker-key-vault
+      - name: Sync billing reconciliation credentials to worker Key Vault
+        env:
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
+          POLAR_ACCESS_TOKEN: ${{ secrets.POLAR_ACCESS_TOKEN }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+        run: bash .github/scripts/deploy-azure-preflight.sh sync-billing-reconciliation-credentials-to-worker-key-vault
+      - name: Verify evidence envelope key
+        id: verify-evidence-kek
+        env:
+          LYRASHIELD_EVIDENCE_KEK: ${{ secrets.LYRASHIELD_EVIDENCE_KEK }}
+          LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: ${{ vars.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF }}
+          LYRASHIELD_EVIDENCE_KEK_KEYRING: ${{ secrets.LYRASHIELD_EVIDENCE_KEK_KEYRING }}
+        run: bash .github/scripts/deploy-azure-preflight.sh verify-evidence-envelope-key
+      - name: Sync evidence envelope key to app Container App
+        id: sync-evidence-kek
+        env:
+          LYRASHIELD_EVIDENCE_KEK: ${{ secrets.LYRASHIELD_EVIDENCE_KEK }}
+          LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: ${{ vars.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF }}
+          LYRASHIELD_EVIDENCE_KEK_KEYRING: ${{ secrets.LYRASHIELD_EVIDENCE_KEK_KEYRING }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
+          EVIDENCE_KEK_VERSION: ${{ steps.verify-evidence-kek.outputs.version }}
+        run: bash .github/scripts/deploy-azure-preflight.sh sync-evidence-envelope-key-to-app-container-app
+      - name: Sync evidence storage credentials to app Container App
+        env:
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/deploy-azure-preflight.sh sync-evidence-storage-credentials-to-app-container-app
+      - name: Sync IP hash salt Key Vault reference
+        env:
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/deploy-azure-preflight.sh sync-ip-hash-salt-key-vault-reference
+      # Myra support agent (docs/myra-spec.md). All MYRA_* flags default off;
+      # these secrets are synced only when the GitHub secret is configured, so
+      # enabling stays a vars/secrets change with no workflow edit.
+      # Secret names must stay <=20 chars (Container Apps limit).
+      - name: Sync Myra secrets to app Container App
+        env:
+          MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          MYRA_GOOGLE_CLIENT_SECRET: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET }}
+          MYRA_GOOGLE_REFRESH_TOKEN: ${{ secrets.MYRA_GOOGLE_REFRESH_TOKEN }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
+        run: bash .github/scripts/deploy-azure-preflight.sh sync-myra-secrets-to-app-container-app
+      - name: Sync Upstash secrets to Container Apps
+        id: sync-upstash
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
+          AZURE_CONTAINER_APPS_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_CONTAINER_APPS_SECRET_KEY_VAULT_NAME }}
+        run: bash .github/scripts/deploy-azure-preflight.sh sync-upstash-secrets-to-container-apps
+      - name: Sync BullMQ Redis secret to Container Apps
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+        run: bash .github/scripts/deploy-azure-preflight.sh sync-bullmq-redis-secret-to-container-apps
+      - name: Sync billing provider secrets to app Container App
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
+          POLAR_WEBHOOK_SECRET: ${{ secrets.POLAR_WEBHOOK_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/deploy-azure-preflight.sh sync-billing-provider-secrets-to-app-container-app
+      - name: Verify email verification credentials
+        env:
+          EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
+          POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/deploy-azure-preflight.sh verify-email-verification-credentials
+      # Garbage-collect GitHub App secrets so rotation deletes what is no longer needed.
+      # The former runbook (docs/deployment/PRODUCTION_DEPLOYMENT.md, removed 2026-09-09)
+      # laid out app creation, credential inventory, webhook wiring, and secret naming.
+      # Every deploy reconciles this list with Container App secrets:
+      # existing secrets keep their type (PEM private key survives intact), and a secret
+      # that vanishes from the set below is removed so stale material does not linger.
+      # This block is independent of whether the app still needs rotation.
+      - name: Verify GitHub App credentials
+        env:
+          GITHUB_APP_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_ID }}
+          GITHUB_APP_SLUG: ${{ secrets.LYRASHIELD_GITHUB_APP_SLUG }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.LYRASHIELD_GITHUB_APP_PRIVATE_KEY }}
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_WEBHOOK_SECRET }}
+          GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
+          GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
+        run: bash .github/scripts/deploy-azure-preflight.sh verify-github-app-credentials
+      - name: Sync GitHub App secrets to app Container App
+        id: sync-github-app
+        env:
+          GITHUB_APP_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_ID }}
+          GITHUB_APP_SLUG: ${{ secrets.LYRASHIELD_GITHUB_APP_SLUG }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.LYRASHIELD_GITHUB_APP_PRIVATE_KEY }}
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_WEBHOOK_SECRET }}
+          GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
+          GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
+        run: bash .github/scripts/deploy-azure-preflight.sh sync-github-app-secrets-to-app-container-app
+      - name: Deploy app Container App
+        id: deploy-app
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          IMAGE: ${{ inputs.web_image }}@${{ inputs.web_digest }}
+          LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: ${{ vars.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF }}
+          LYRASHIELD_EVIDENCE_KEK_SECRET: ${{ steps.sync-evidence-kek.outputs.active_name }}
+          LYRASHIELD_EVIDENCE_KEK_KEYRING_SECRET: ${{ steps.sync-evidence-kek.outputs.keyring_name }}
+          POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
+          GITHUB_APP_CLIENT_ID_CONFIGURED: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID != '' }}
+          GITHUB_APP_CLIENT_SECRET_CONFIGURED: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET != '' }}
+          EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
+          POLAR_PRODUCT_IDS: ${{ vars.POLAR_PRODUCT_IDS }}
+          POLAR_LOCAL_PRODUCT_IDS: ${{ vars.POLAR_LOCAL_PRODUCT_IDS }}
+          RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          MYRA_AZURE_OPENAI_API_KEY_CONFIGURED: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY != '' }}
+          TURNSTILE_SECRET_KEY_CONFIGURED: ${{ secrets.TURNSTILE_SECRET_KEY != '' }}
+          MYRA_GOOGLE_CLIENT_SECRET_CONFIGURED: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET != '' }}
+          MYRA_GOOGLE_REFRESH_TOKEN_CONFIGURED: ${{ secrets.MYRA_GOOGLE_REFRESH_TOKEN != '' }}
+        run: bash .github/scripts/deploy-azure-rollout.sh deploy-app-container-app
+      - name: Deploy scanner Container App
+        id: deploy-scanner
+        if: steps.sync-upstash.outcome == 'success' && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        env:
+          IMAGE: ${{ inputs.web_image }}@${{ inputs.web_digest }}
+          EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/deploy-azure-rollout.sh deploy-scanner-container-app
+      - name: Deploy egress-proxy Container App
+        id: deploy-egress-proxy
+        if: vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME != ''
+        env:
+          IMAGE: ${{ inputs.egress_proxy_image }}@${{ inputs.egress_proxy_digest }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_EGRESS_PROXY_CONTAINER_APP_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/deploy-azure-rollout.sh deploy-egress-proxy-container-app
+      - name: Smoke candidate revisions
+        id: smoke-candidates
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          APP_REVISION: ${{ steps.deploy-app.outputs.revision }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          SCANNER_REVISION: ${{ steps.deploy-scanner.outputs.revision }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          APP_FQDN: ${{ steps.deploy-app.outputs.fqdn }}
+          SCANNER_FQDN: ${{ steps.deploy-scanner.outputs.fqdn }}
+          EGRESS_FQDN: ${{ steps.deploy-egress-proxy.outputs.fqdn }}
+          EGRESS_REVISION: ${{ steps.deploy-egress-proxy.outputs.revision }}
+          CLOUDFLARE_ORIGIN_MTLS: ${{ env.CLOUDFLARE_ORIGIN_MTLS }}
+        run: bash .github/scripts/deploy-azure-rollout.sh smoke-candidate-revisions
+      - name: Verify worker queues are empty before traffic promotion
+        timeout-minutes: 5
+        if: inputs.webhook_claims_cutover != true
+        id: worker-preflight
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: bash .github/scripts/deploy-azure-rollout.sh verify-worker-queues-are-empty-before-traffic-promotion
+      - name: Boot compatible worker before opening webhook ingress
+        if: inputs.webhook_claims_cutover == true
+        id: webhook-worker
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          WORKER_IMAGE: ${{ inputs.worker_image }}
+          WORKER_DIGEST: ${{ inputs.worker_digest }}
+        run: bash .github/scripts/deploy-azure-rollout.sh promote-verified-worker-digest-on-vm
+      - name: Promote healthy candidate revisions
+        id: promote
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          APP_CANDIDATE: ${{ steps.deploy-app.outputs.revision }}
+          APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          SCANNER_CANDIDATE: ${{ steps.deploy-scanner.outputs.revision }}
+          SCANNER_PREVIOUS: ${{ steps.rollout.outputs.scanner_previous }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_CANDIDATE: ${{ steps.deploy-egress-proxy.outputs.revision }}
+          EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
+        run: bash .github/scripts/deploy-azure-rollout.sh promote-healthy-candidate-revisions
+      - name: Smoke production traffic
+        id: smoke-public
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: bash .github/scripts/deploy-azure-rollout.sh smoke-production-traffic
+      - name: Deactivate superseded Container App revisions
+        if: steps.smoke-public.outcome == 'success'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          APP_CURRENT: ${{ steps.deploy-app.outputs.revision }}
+          APP_ROLLBACK: ${{ steps.rollout.outputs.app_previous }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          SCANNER_CURRENT: ${{ steps.deploy-scanner.outputs.revision }}
+          SCANNER_ROLLBACK: ${{ steps.rollout.outputs.scanner_previous }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_CURRENT: ${{ steps.deploy-egress-proxy.outputs.revision }}
+          EGRESS_ROLLBACK: ${{ steps.rollout.outputs.egress_previous }}
+        run: bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions
+      - name: Remove excess scanner secrets
+        if: steps.smoke-public.outcome == 'success' && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/deploy-azure-rollout.sh remove-excess-scanner-secrets
+      # v16 4.3 — why worker-VM promotion may run AFTER the app traffic
+      # cutover (deliberate ordering, not an oversight):
+      #
+      # 1. The empty-queue preflight above already verified the worker queues
+      #    are drained BEFORE traffic was promoted, so the gap window carries
+      #    only jobs created by the NEW app after cutover.
+      # 2. The early cutover guard independently proves all current billing
+      #    writers and rollback images support durable claims. Engine pins alone
+      #    do not prove billing compatibility. Engine job/result compatibility
+      #    remains pinned and CI-enforced in both
+      #    directions: the app's ENGINE_REVISION pin (verified by
+      #    verify-engine-revision.sh with green engine checks at that exact
+      #    SHA) and the engine's .lyrashield-worker-pin contract tests. A
+      #    merge that changed the job/result contract incompatible with the
+      #    deployed worker cannot reach this step — the pinned-contract CI
+      #    jobs fail first.
+      # 3. The promotion is digest-exact and idempotent: promote-worker-vm.sh
+      #    verifies the digest, swaps the systemd unit and restarts. A
+      #    failure here rolls traffic back (the rollback step below keys on
+      #    this step's outcome) while the old worker keeps serving until a
+      #    retry succeeds.
+      - name: Promote verified worker digest on VM
+        if: inputs.webhook_claims_cutover != true
+        id: worker-vm
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          WORKER_IMAGE: ${{ inputs.worker_image }}
+          WORKER_DIGEST: ${{ inputs.worker_digest }}
+        run: bash .github/scripts/deploy-azure-rollout.sh promote-verified-worker-digest-on-vm
+      # Migrations and app-scope configuration remain forward-only. This rollback
+      # changes traffic only, after every candidate had already passed readiness.
+      - name: Roll back production traffic on health failure
+        if: inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+        env:
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          SCANNER_PREVIOUS: ${{ steps.rollout.outputs.scanner_previous }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_SMOKE_URL: ${{ env.APP_URL }}/api/ready
+          SCANNER_SMOKE_URL: ${{ env.SCANNER_URL }}/api/ready
+        run: bash .github/scripts/deploy-azure-rollout.sh roll-back-production-traffic-on-health-failure
+      - name: Restore prior ingress mode after failed rollout
+        if: >
+          inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
+          (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
+          steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
+          steps.worker-preflight.outcome == 'failure' ||
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          PREVIOUS_CLIENT_CERT_MODE: ${{ steps.deploy-app.outputs.previous_client_cert_mode }}
+        run: bash .github/scripts/deploy-azure-rollout.sh restore-prior-ingress-mode-after-failed-rollout
+      - name: Deactivate zero-traffic candidates after failed rollout
+        if: >
+          inputs.webhook_claims_cutover != true && failure() &&
+          (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
+          steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
+          steps.worker-preflight.outcome == 'failure' ||
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          APP_CANDIDATE: ${{ steps.deploy-app.outputs.revision }}
+          APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          SCANNER_CANDIDATE: ${{ steps.deploy-scanner.outputs.revision }}
+          SCANNER_PREVIOUS: ${{ steps.rollout.outputs.scanner_previous }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_CANDIDATE: ${{ steps.deploy-egress-proxy.outputs.revision }}
+          EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
+        run: bash .github/scripts/deploy-azure-rollout.sh deactivate-zero-traffic-candidates-after-failed-rollout
+
+      - name: Verify installed compatible webhook writer baseline
+        if: inputs.webhook_claims_cutover == true
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          GHCR_USERNAME: ${{ github.repository_owner }}
+        run: node .github/scripts/verify-webhook-cutover.mjs
+      - name: Resume only owned admission after compatible cutover
+        if: inputs.webhook_claims_cutover == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh resume
+      - name: Hold webhook ingress closed after failed maintenance
+        if: failure() && inputs.webhook_claims_cutover == true && steps.webhook-stop.outcome == 'success'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh hold

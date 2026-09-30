@@ -21,7 +21,8 @@ vi.mock("@lyrashield/db", () => ({
   },
   claimOrGetAgentOperation: vi.fn(),
   completeAgentOperation: vi.fn(),
-  failAgentOperation: vi.fn(),
+  failAgentOperation: vi.fn().mockResolvedValue({}),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   createScan: vi.fn(),
   listScans: vi.fn(),
   updateScanStatus: vi.fn(),
@@ -105,6 +106,7 @@ function defaultAuthMock() {
 describe("scan operation route regressions", () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    vi.mocked(failAgentOperation).mockResolvedValue({} as never)
     defaultAuthMock()
     vi.mocked(checkScanCreateRateLimit).mockResolvedValue({
       limited: false,
@@ -112,10 +114,12 @@ describe("scan operation route regressions", () => {
       retryAfter: 0,
     })
     vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1", type: "REPO" } as never)
-    vi.mocked(prisma.policy.findFirst).mockImplementation(async (args) => {
+    vi.mocked(prisma.policy.findFirst).mockImplementation((async (args: {
+      where?: { id?: string }
+    }) => {
       const policy = { id: args?.where?.id ?? "policy-a" }
       return policy as never
-    })
+    }) as never)
     vi.mocked(prisma.scan.count).mockResolvedValue(0)
     vi.mocked(assertScanAllowed).mockResolvedValue({ allowed: true } as never)
     vi.mocked(createScan).mockResolvedValue({ id: "new-scan", createdAt: new Date() } as never)

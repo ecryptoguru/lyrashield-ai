@@ -41,7 +41,7 @@ describe("AI-05 excessive agency", () => {
     }
   })
 
-  it("flags snake_case, camelCase and member-call destructive operations", () => {
+  it("flags destructive tool names and calls, not unrelated application mutations", () => {
     // `\b` cannot be used here: in `delete_file` the boundary after `delete` is
     // followed by `_`, itself a word character, so `delete\b` would not match
     // and this real case would be lost.
@@ -49,17 +49,18 @@ describe("AI-05 excessive agency", () => {
       '  name: "delete_file",',
       '  name: "remove_user",',
       '  name: "rm_rf",',
-      "await db.drop(table)",
       "tool.deleteFile(path)",
-      "db.dropTable(name)",
-      "users.removeRecord(id)",
-      "fs.rmSync(path)",
-      "collection.deleteMany({ active: false })",
       "tool.truncate()",
-      "overwrite(path)",
-      "destroy()",
     ]) {
       expect(state(line), `missed destructive call: ${line}`).toBe("DETECTED")
+    }
+    for (const line of [
+      "const removeLoading = (id) => setLoadingIds((prev) => prev.delete(id))",
+      "await db.drop(table)",
+      "collection.deleteMany({ active: false })",
+      "toolbar.deleteFile(path)",
+    ]) {
+      expect(state(line), `false agent permission finding on: ${line}`).toBe("NO_FINDING")
     }
   })
 

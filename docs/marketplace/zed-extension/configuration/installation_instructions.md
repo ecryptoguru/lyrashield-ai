@@ -7,7 +7,7 @@ Run bounded security scans, review findings with their evidence states and drive
 Run the following once in a terminal, select one workspace in the browser, then restart Zed:
 
 ```sh
-npx -y lyrashield@0.2.12 login --oauth
+npx -y lyrashield@0.2.13 login --oauth
 ```
 
 The extension starts `@lyrashield/mcp`, which reads the user-only credential from
@@ -43,13 +43,13 @@ Open your Zed settings and add:
 Stored OAuth preserves an explicit `LYRASHIELD_API_URL` override. Inherited credential overrides
 are removed before MCP starts. An explicit API key uses `https://app.lyrashieldai.com` only.
 
-MCP 0.2.10 refreshes expired stored OAuth credentials against the stored issuer before the
+MCP 0.2.11 refreshes expired stored OAuth credentials against the stored issuer before the
 stdio server starts. An explicit API URL override applies to subsequent LyraShield API calls.
 
 ## Requirements
 
 - **Node.js** v24 or newer (Zed provides its own Node binary; you do not need to install one manually).
-- The `@lyrashield/mcp` package is pinned to version 0.2.10; releases deliberately update this pin.
+- The `@lyrashield/mcp` package is pinned to version 0.2.11; releases deliberately update this pin.
 
 ## Available tools
 
@@ -61,7 +61,7 @@ See the full tool list and behavior in the [`@lyrashield/mcp` README](https://ww
 
 ## Troubleshooting
 
-**Authentication errors from the tools** — run `npx -y lyrashield@0.2.12 login --oauth` again, restart Zed and
+**Authentication errors from the tools** — run `npx -y lyrashield@0.2.13 login --oauth` again, restart Zed and
 confirm the selected workspace. If using the fallback, check that `api_key` has the required scope.
 
 **Server fails to start** — confirm Zed can reach `https://registry.npmjs.org` to download the package.

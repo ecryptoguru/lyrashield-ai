@@ -1,12 +1,28 @@
 import { spawn } from "node:child_process"
+import { readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { assertNamedTestsPassed } from "./.github/scripts/assert-named-vitest-tests.mjs"
 
 /**
  * Run all test suites independently and report every result.
  * This runner runs independent suites in parallel and exits non-zero if any fail.
  */
 
+const isCi = process.env.CI === "true"
+const coreReportPath = isCi
+  ? join(process.env.RUNNER_TEMP ?? tmpdir(), `lyrashield-core-vitest-${process.pid}.json`)
+  : null
+const coreCommand = ["vitest", "run", "--exclude", "**/dist/**"]
+if (coreReportPath) {
+  coreCommand.push("--reporter=json", `--outputFile=${coreReportPath}`)
+}
+if (process.env.LYRASHIELD_TEST_COVERAGE === "1") {
+  coreCommand.push("--coverage")
+}
+
 const allSuites = [
-  { name: "core", command: ["vitest", "run", "--exclude", "**/dist/**"] },
+  { name: "core", command: coreCommand },
   {
     name: "marketing",
     command: ["pnpm", "--filter", "@lyrashield/marketing", "exec", "vitest", "run"],
@@ -16,10 +32,14 @@ const allSuites = [
   { name: "ops", command: ["node", "--test", ".github/scripts/tests/*.test.mjs"] },
 ]
 
-const requestedSuites = (process.env.LYRASHIELD_TEST_SUITES ?? "core,marketing,motion,ops")
-  .split(",")
-  .map((name) => name.trim())
-  .filter(Boolean)
+const requestedSuites = [
+  ...new Set(
+    (process.env.LYRASHIELD_TEST_SUITES ?? "core,marketing,motion,ops")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean)
+  ),
+]
 const suitesByName = new Map(allSuites.map((suite) => [suite.name, suite]))
 const suites = requestedSuites.map((name) => {
   const suite = suitesByName.get(name)
@@ -48,6 +68,46 @@ function run(name, command) {
 }
 
 const results = await Promise.all(suites.map((suite) => run(suite.name, suite.command)))
+const coreResult = results.find((r) => r.name === "core")
+
+if (coreReportPath && coreResult && coreResult.code !== 0) {
+  try {
+    const report = JSON.parse(readFileSync(coreReportPath, "utf8"))
+    for (const file of report.testResults ?? []) {
+      for (const test of file.assertionResults ?? []) {
+        if (test.status === "failed") {
+          console.error(`\n==> ${test.fullName || test.title || file.name}`)
+          for (const message of test.failureMessages ?? []) console.error(message)
+        }
+      }
+      if (file.message) console.error(`\n==> ${file.name}\n${file.message}`)
+    }
+  } catch (error) {
+    console.error(`\n==> Could not read core Vitest report at ${coreReportPath}: ${error.message}`)
+  }
+}
+
+if (coreReportPath && coreResult?.code === 0) {
+  try {
+    const report = JSON.parse(readFileSync(coreReportPath, "utf8"))
+    assertNamedTestsPassed(report, [
+      "renews month two once, without a workspace, preserving month-one consumption",
+      "denies a coworker even when the workspace matches",
+      "binds a task to the recorded operation row — and resolves it fresh every time",
+      "reads every target's current verdict in one batched call under the restricted runtime role",
+      "accounts for every live public RLS table and verifies enforcement flags",
+      "sees the expired account and downgrades the workspace (getSystemPrisma sweep)",
+      "the guard count sees the running scan for the schedule's workspace+target",
+      "releases the reservation when the provider definitely fails",
+      "returns an entry whose only matching word is in the topic column",
+      "retrieves the expected public source in the top five for at least 90% of 60 questions",
+      "executes atomic cleanup, count, TTL, and one warmed EVALSHA per operation",
+    ])
+  } catch (error) {
+    console.error("\n==> core environment-gated test guard failed:", error)
+    results.push({ name: "core environment-gated test guard", code: 1 })
+  }
+}
 
 const failed = results.filter((r) => r.code !== 0)
 if (failed.length > 0) {

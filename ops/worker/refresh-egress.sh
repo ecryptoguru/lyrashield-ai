@@ -193,6 +193,8 @@ register_approved_endpoint "https://github.com" 443
 register_approved_endpoint "https://api.github.com" 443
 register_approved_endpoint "https://api.osv.dev" 443
 register_approved_endpoint "https://api.first.org" 443
+register_approved_endpoint "https://api.polar.sh" 443
+register_approved_endpoint "https://api.razorpay.com" 443
 register_approved_endpoint "$LYRASHIELD_EGRESS_PROXY_URL" 443
 register_approved_endpoint "https://api.parallel.ai" 443
 # Staged rollout only: an already-running pre-proxy worker may still depend on
@@ -217,6 +219,8 @@ append_endpoint_rules "https://github.com" 443
 append_endpoint_rules "https://api.github.com" 443
 append_endpoint_rules "https://api.osv.dev" 443
 append_endpoint_rules "https://api.first.org" 443
+append_endpoint_rules "https://api.polar.sh" 443
+append_endpoint_rules "https://api.razorpay.com" 443
 append_endpoint_rules "$LYRASHIELD_EGRESS_PROXY_URL" 443
 append_endpoint_rules "https://api.parallel.ai" 443
 

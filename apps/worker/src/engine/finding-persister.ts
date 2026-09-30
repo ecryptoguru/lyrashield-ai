@@ -1,4 +1,4 @@
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { prisma, resolveDbPoolMax, withWorkspaceRLS } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import {
   type EngineVulnerability,
@@ -216,12 +216,9 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
   })
   const existingMap = new Map(existingFindings.map((f) => [f.dedupeKey, f]))
 
-  // Persist each finding's create/update + evidence + detection receipt as an
-  // atomic per-finding sequence, but overlap findings with bounded concurrency
-  // so a scan with many findings doesn't serialize hundreds of R2 uploads and
-  // DB round-trips. Correctness is preserved: each finding is independent (keyed
-  // by its own dedupeKey), the reopen logic and verification receipts are
-  // unchanged, and results are collected in stable input order.
+  // Persist each finding's create/update, evidence, and detection receipt in
+  // order. These DB and R2 writes are not one atomic transaction; a failed
+  // step can leave earlier writes even when scan finalization fails.
   const persistOne = async (vuln: (typeof vulnerabilities)[number]): Promise<PersistedFinding> => {
     const isNormalized = "dedupeKey" in vuln && "normalizedSeverity" in vuln
     const dedupeKey = isNormalized
@@ -412,11 +409,11 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
     }
   }
 
-  // Bounded-concurrency map preserving input order. Concurrency of 5 overlaps
-  // the I/O-bound evidence uploads without overwhelming the DB pool or R2.
+  // Bounded-concurrency map preserving input order. Stay below the configured
+  // pool ceiling to leave headroom for the outer finalization transaction.
   // Each finding is wrapped in its own try/catch so a single failure does not
   // leave sibling workers dangling or emit undefined holes into the result.
-  const CONCURRENCY = 5
+  const CONCURRENCY = Math.max(1, Math.min(3, resolveDbPoolMax() - 1))
   const ordered: (PersistedFinding | undefined)[] = new Array(vulnerabilities.length)
   const errors: Error[] = []
   let cursor = 0

@@ -5,6 +5,7 @@ import { verifyWebhookSignature } from "@lyrashield/integrations"
 import { enqueueScanJob, assertScanWorkerAvailable } from "@/lib/queue"
 import { assertScanAllowed } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
+import { revalidateDashboardAggregates } from "@/lib/cache"
 
 const GitHubInstallationDeletedEventSchema = z.object({
   action: z.literal("deleted"),
@@ -156,6 +157,7 @@ async function handleInstallationDeleted(
   logger.info("GitHub installation deleted, targets disabled", {
     installationId: installation.id,
   })
+  revalidateDashboardAggregates(integration.workspaceId)
   return null
 }
 
@@ -280,6 +282,7 @@ async function handleMergedFixPullRequest(
       loopClosureDelivered = true
       const { completeLoopClosure } = await import("@lyrashield/db")
       await completeLoopClosure(workspaceId, repoFullName, pullRequest.number)
+      revalidateDashboardAggregates(workspaceId)
       logger.info("Fix PR merge closed the loop", {
         retestId: outcome.retestId,
         findingId: outcome.findingId,

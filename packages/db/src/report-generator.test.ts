@@ -43,6 +43,7 @@ import { prisma } from "./client"
 import {
   gatherReportData,
   generateReportHTML,
+  isReportData,
   parseWebMcpAssurance,
   type ReportWebMcpAssurance,
 } from "./report-generator"
@@ -115,6 +116,86 @@ const validWebMcpReceipt: ReportWebMcpAssurance = {
 }
 
 describe("report-generator", () => {
+  describe("isReportData", () => {
+    const snapshot = {
+      version: 3,
+      title: "Security Report",
+      type: "developer",
+      workspaceName: "Workspace",
+      scanInfo: null,
+      findings: [],
+      findingsBySeverity: {},
+      findingsByStatus: {},
+      findingsByCategory: {},
+      totalFindings: 0,
+      verifiedCount: 0,
+      fixedCount: 0,
+      retestSummary: { passed: 0, failed: 0, pending: 0 },
+      findingsTruncated: false,
+      generatedAt: "2026-09-28T00:00:00.000Z",
+    }
+
+    it("accepts current and legacy-version structurally valid report snapshots", () => {
+      expect(isReportData(snapshot)).toBe(true)
+      const legacySnapshot: Record<string, unknown> = { ...snapshot }
+      delete legacySnapshot.version
+      expect(isReportData(legacySnapshot)).toBe(true)
+    })
+
+    it("accepts historical v2 scan info without targetId, goal, or mode", () => {
+      const historicalV2 = {
+        ...snapshot,
+        version: 2,
+        scanInfo: {
+          scanId: "scan-v2",
+          status: "COMPLETED",
+          summary: null,
+          targetName: "Example",
+          targetType: "REPO",
+          targetUrl: null,
+          startedAt: null,
+          endedAt: null,
+          manifestChecksum: null,
+          coverage: { completed: 0, limited: 0, notApplicable: 0 },
+        },
+      }
+
+      expect(isReportData(historicalV2)).toBe(true)
+      expect(isReportData({ ...historicalV2, version: 3 })).toBe(false)
+    })
+
+    it.each([
+      ["missing findings", { ...snapshot, findings: undefined }],
+      ["invalid generated date", { ...snapshot, generatedAt: "not-a-date" }],
+      [
+        "unsafe finding severity",
+        {
+          ...snapshot,
+          findings: [
+            {
+              id: "f1",
+              title: "title",
+              severity: "HIGH;bad",
+              status: "OPEN",
+              verified: false,
+              confidence: "low",
+              cwe: null,
+              cvssScore: null,
+              category: null,
+              summary: "summary",
+              exploitability: null,
+              recommendedFix: null,
+              fixStatus: "none",
+              retestStatus: null,
+            },
+          ],
+        },
+      ],
+    ])("rejects %s", (_label, value) => {
+      expect(isReportData(value)).toBe(false)
+    })
+  })
+
   it("rejects malformed WebMCP manifest metadata", () => {
     expect(
       parseWebMcpAssurance({
@@ -310,12 +391,15 @@ describe("report-generator", () => {
       expect(data.findings).toHaveLength(0)
       expect(data.version).toBe(3)
       expect(data.assurance?.verdict).toBe("NOT_EVALUATED")
+      expect(isReportData(data)).toBe(true)
     })
 
     it("gathers report data with scanId", async () => {
       mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme Inc" })
       mockPrisma.scan.findFirst.mockResolvedValue({
         id: "scan-1",
+        goal: "TEST_APP",
+        mode: "STANDARD",
         status: "completed",
         summary: "Full scan",
         target: { name: "example.com", type: "url", url: "https://example.com" },
@@ -392,6 +476,7 @@ describe("report-generator", () => {
       expect(data.aiAssurance?.controls).toHaveLength(7)
       expect(data.aiAssurance?.controls.every((c) => c.state === "EVIDENCE_REQUIRED")).toBe(true)
       expect(data.webMcpAssurance).toBeUndefined()
+      expect(isReportData(data)).toBe(true)
     })
 
     it("freezes allowlisted WebMCP finding aggregates and bounded remediation", async () => {
@@ -849,6 +934,45 @@ describe("report-generator", () => {
       })
 
       expect(html).toContain("No findings")
+    })
+
+    it("escapes severity labels supplied directly to the HTML renderer", () => {
+      const html = generateReportHTML({
+        title: "Test",
+        type: "developer",
+        workspaceName: "Test",
+        scanInfo: null,
+        findings: [
+          {
+            id: "f-1",
+            title: "Test finding",
+            severity: '<img src=x onerror="alert(1)">',
+            status: '<svg onload="alert(2)">',
+            verified: false,
+            confidence: "low",
+            cwe: null,
+            cvssScore: null,
+            category: null,
+            summary: "Test summary",
+            exploitability: null,
+            recommendedFix: null,
+            fixStatus: "none",
+            retestStatus: null,
+          },
+        ],
+        findingsBySeverity: { '<img src=x onerror="alert(1)">': 1 },
+        totalFindings: 1,
+        verifiedCount: 0,
+        fixedCount: 0,
+        retestSummary: { passed: 0, failed: 0, pending: 0 },
+        findingsTruncated: false,
+        generatedAt: new Date("2026-07-06"),
+      })
+
+      expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;")
+      expect(html).not.toContain('<img src=x onerror="alert(1)">')
+      expect(html).toContain("&lt;svg onload=&quot;alert(2)&quot;&gt;")
+      expect(html).not.toContain('<svg onload="alert(2)">')
     })
 
     it("escapes HTML in user content", () => {

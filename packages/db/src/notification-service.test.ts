@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const rlsMock = vi.hoisted(() => ({ withWorkspaceRLS: vi.fn() }))
+
 vi.mock("./client", () => ({
   prisma: {
     $executeRaw: vi.fn(),
@@ -16,7 +18,10 @@ vi.mock("./client", () => ({
   },
 }))
 
+vi.mock("./rls", () => rlsMock)
+
 import { prisma } from "./client"
+import { withWorkspaceRLS } from "./rls"
 import {
   createNotification,
   getNotification,
@@ -63,6 +68,9 @@ describe("notification-service", () => {
     mockPrisma.$executeRaw.mockResolvedValue(1)
     mockPrisma.$transaction.mockImplementation(
       async (callback: (tx: typeof mockPrisma) => unknown) => callback(mockPrisma)
+    )
+    vi.mocked(withWorkspaceRLS).mockImplementation(
+      async (_workspaceId, callback) => callback(mockPrisma as never) as never
     )
     mockPrisma.notification.createMany.mockResolvedValue({ count: 1 })
     mockPrisma.notification.findUnique.mockResolvedValue(baseNotification)
@@ -337,25 +345,100 @@ describe("notification-service", () => {
       }
     })
 
-    it("marks notifications as failed when sendFn returns false", async () => {
+    it("persists failed delivery before surfacing sendFn false", async () => {
       mockPrisma.notification.update.mockResolvedValue({ status: "failed" })
 
       const sendFn = vi.fn().mockResolvedValue(false)
 
-      await createAndSendNotification({
-        workspaceId: "ws-1",
-        type: "scan.failed",
-        title: "Scan Failed",
-        body: "Bad",
-        sendFn,
-      })
+      await expect(
+        createAndSendNotification({
+          workspaceId: "ws-1",
+          type: "scan.failed",
+          title: "Scan Failed",
+          body: "Bad",
+          channels: ["slack"],
+          sendFn,
+        })
+      ).rejects.toThrow("Notification delivery failed for channel slack")
 
       const updateCalls = mockPrisma.notification.updateMany.mock.calls.filter(
         (call) => call[0].data.status === "failed"
       )
-      for (const call of updateCalls) {
-        expect(call[0].data.status).toBe("failed")
-      }
+      expect(updateCalls).toHaveLength(1)
+      expect(updateCalls[0]?.[0]).toEqual({
+        where: { id: "notif-1", status: "sending" },
+        data: { status: "failed", deliveryLeaseExpiresAt: null },
+      })
+    })
+
+    it("persists failed delivery before surfacing a sendFn rejection", async () => {
+      const providerFailure = new Error("Slack unavailable")
+      const sendFn = vi.fn().mockRejectedValue(providerFailure)
+
+      await expect(
+        createAndSendNotification({
+          workspaceId: "ws-1",
+          type: "scan.failed",
+          title: "Scan Failed",
+          body: "Bad",
+          channels: ["slack"],
+          sendFn,
+        })
+      ).rejects.toMatchObject({
+        message: "Notification delivery failed for channel slack",
+        cause: providerFailure,
+      })
+
+      expect(mockPrisma.notification.updateMany).toHaveBeenCalledWith({
+        where: { id: "notif-1", status: "sending" },
+        data: { status: "failed", deliveryLeaseExpiresAt: null },
+      })
+    })
+
+    it("continues delivery to later channels before surfacing an earlier failure", async () => {
+      const sendFn = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+
+      await expect(
+        createAndSendNotification({
+          workspaceId: "ws-1",
+          type: "scan.failed",
+          title: "Scan Failed",
+          body: "Bad",
+          channels: ["slack", "discord"],
+          sendFn,
+        })
+      ).rejects.toThrow("Notification delivery failed for channel slack")
+
+      expect(sendFn.mock.calls.map(([channel]) => channel)).toEqual(["slack", "discord"])
+      expect(
+        mockPrisma.notification.updateMany.mock.calls.map(([call]) => call.data.status)
+      ).toEqual(["sending", "failed", "sending", "sent"])
+    })
+
+    it("aggregates multiple delivery failures with their channel names", async () => {
+      const sendFn = vi.fn().mockResolvedValue(false)
+
+      const failure = await createAndSendNotification({
+        workspaceId: "ws-1",
+        type: "scan.failed",
+        title: "Scan Failed",
+        body: "Bad",
+        channels: ["slack", "discord"],
+        sendFn,
+      }).catch((error: unknown) => error)
+
+      expect(failure).toBeInstanceOf(AggregateError)
+      expect(failure.message).toBe("Notification delivery failed for channels: slack, discord")
+      expect(failure.errors).toEqual([
+        expect.objectContaining({ message: "Notification delivery failed for channel slack" }),
+        expect.objectContaining({ message: "Notification delivery failed for channel discord" }),
+      ])
+      expect(sendFn.mock.calls.map(([channel]) => channel)).toEqual(["slack", "discord"])
+      expect(
+        mockPrisma.notification.updateMany.mock.calls.filter(
+          ([call]) => call.data.status === "failed"
+        )
+      ).toHaveLength(2)
     })
 
     it("respects custom channels", async () => {
@@ -430,26 +513,48 @@ describe("notification-service", () => {
       expect(sendFn).toHaveBeenCalledWith("in_app", expect.objectContaining({ body: accumulated }))
     })
 
+    it("uses one workspace-bound transaction for grouped digest appends", async () => {
+      mockPrisma.notification.createMany.mockResolvedValue({ count: 0 })
+      mockPrisma.notification.update.mockResolvedValue(baseNotification)
+
+      await createAndSendNotification({
+        workspaceId: "ws-1",
+        type: "scan.completed",
+        title: "Latest",
+        body: "Latest",
+        channels: ["in_app"],
+        routineGroup: {
+          groupType: "scan",
+          windowKey: "2026-09-21",
+          windowLabel: "Today",
+          detail: "retained",
+        },
+        sendFn: vi.fn().mockResolvedValue(true),
+      })
+
+      expect(withWorkspaceRLS).toHaveBeenCalledWith("ws-1", expect.any(Function))
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+      expect(mockPrisma.$executeRaw).toHaveBeenCalledTimes(1)
+    })
+
     it("serializes concurrent grouped digest appends", async () => {
       mockPrisma.notification.createMany.mockResolvedValue({ count: 0 })
       mockPrisma.notification.updateMany.mockResolvedValue({ count: 0 })
       let stored = { ...baseNotification, body: "Routine activity for Today:" }
       let lock = Promise.resolve()
-      mockPrisma.$transaction.mockImplementation(
-        async (callback: (tx: typeof mockPrisma) => unknown) => {
-          const previous = lock
-          let release = () => {}
-          lock = new Promise<void>((resolve) => {
-            release = resolve
-          })
-          await previous
-          try {
-            return await callback(mockPrisma)
-          } finally {
-            release()
-          }
+      vi.mocked(withWorkspaceRLS).mockImplementation(async (_workspaceId, callback) => {
+        const previous = lock
+        let release = () => {}
+        lock = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        await previous
+        try {
+          return (await callback(mockPrisma as never)) as never
+        } finally {
+          release()
         }
-      )
+      })
       mockPrisma.notification.findUnique.mockImplementation(async () => stored)
       mockPrisma.notification.update.mockImplementation(async ({ data }) => {
         stored = { ...stored, body: data.body }

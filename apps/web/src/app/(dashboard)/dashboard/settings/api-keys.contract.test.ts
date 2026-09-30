@@ -10,8 +10,8 @@ import { readFileSync } from "node:fs"
  * access to a key the user believed was read-only. The reset must always
  * include the scope, and every path that closes the form must use it.
  *
- * (apps/web has no React component-test harness; this asserts the source
- * contract, matching the existing source-contract test precedent in the repo.)
+ * The actual create request body is covered in security-actions.runtime.test.tsx.
+ * These source checks retain the reset's call-site coverage.
  */
 describe("API keys create-form scope reset", () => {
   const source = readFileSync(new URL("./api-keys.tsx", import.meta.url), "utf8")
@@ -35,9 +35,5 @@ describe("API keys create-form scope reset", () => {
       directCloses.length,
       "setShowCreate(false) should only appear inside closeCreateForm()"
     ).toBe(1)
-  })
-
-  it("defaults the scope state to read", () => {
-    expect(source).toMatch(/useState<"read"\s*\|\s*"write">\("read"\)/)
   })
 })

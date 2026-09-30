@@ -826,8 +826,8 @@ model Scan {
   riskScoreAfter        Int?
   estimatedCostCents    Int?
   actualCostCents       Int?
-  providerCostUsd       Decimal?   @db.Decimal(12, 6)
-  billedCostUsd         Decimal?   @db.Decimal(12, 6)
+  providerCostUsd       Decimal?   @db.Decimal(19, 10)
+  billedCostUsd         Decimal?   @db.Decimal(19, 10)
   llmRequestCount       Int?
   llmInputTokens        Int?
   llmCachedInputTokens  Int?
@@ -1744,9 +1744,14 @@ model WebhookEventTrack {
   workspaceId    String?
   // "billing" | "license" | "affiliate"
   track          String
-  // "pending" | "succeeded" | "failed" | "dead_letter"
+  // "pending" | "processing" | "succeeded" | "failed" | "dead_letter"
   status         String    @default("pending")
   attempts       Int       @default(0)
+  generation     Int       @default(0)
+  // Null on historical rows: do not automatically replay unknown effects.
+  nextAttemptAt  DateTime?
+  claimToken     String?
+  leaseExpiresAt DateTime?
   // Bounded reason string (truncated, identifiers/reason codes only).
   lastError      String?
   completedAt    DateTime?
@@ -1758,6 +1763,20 @@ model WebhookEventTrack {
   @@unique([webhookEventId, track])
   @@index([status])
   @@index([track, status])
+  @@index([status, nextAttemptAt])
+}
+
+/// Global checkpoint and lease for the report-only provider reconciliation job.
+/// Access is restricted to the dedicated system database role by migration RLS.
+model BillingReconciliationState {
+  id              String    @id @default("singleton")
+  coverageFrom    DateTime  @map("coverage_from") @db.Timestamptz(3)
+  lastCompletedAt DateTime? @map("last_completed_at") @db.Timestamptz(3)
+  leaseToken      String?   @map("lease_token")
+  leaseExpiresAt  DateTime? @map("lease_expires_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("billing_reconciliation_state")
 }
 
 model Retest {
@@ -1849,6 +1868,7 @@ model AgentConnection {
   @@index([workspaceId])
   @@index([userId])
   @@index([status])
+  @@unique([id, workspaceId])
   @@map("agent_connections")
 }
 
@@ -1887,7 +1907,7 @@ model AgentOperation {
   updatedAt            DateTime             @updatedAt
 
   workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  connection AgentConnection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  connection AgentConnection? @relation(fields: [connectionId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
 
   @@unique([connectionId, operationName, idempotencyKey])
   @@unique([workspaceId, principalType, principalId, operationName, idempotencyKey])

@@ -304,7 +304,9 @@ describe("signup attribution", () => {
   it("expires every optional tracking cookie in the browser", () => {
     const written: string[] = []
     const documentStub = {
-      cookie: "",
+      get cookie() {
+        return ""
+      },
       set cookie(value: string) {
         written.push(value)
       },

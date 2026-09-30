@@ -1,10 +1,5 @@
 export { SEVERITY_ICON, SEVERITY_COLOR, SEVERITY_ORDER } from "@/lib/severity-presentation"
-
-export const INTERNAL_ACCOUNTING_EVENT_STAGES = new Set([
-  "budget_cap",
-  "llm_usage",
-  "budget_exceeded",
-])
+export { INTERNAL_ACCOUNTING_EVENT_STAGES } from "@/lib/scan-event-visibility"
 
 export const EVENT_LEVEL_COLOR: Record<string, string> = {
   info: "text-muted-foreground",

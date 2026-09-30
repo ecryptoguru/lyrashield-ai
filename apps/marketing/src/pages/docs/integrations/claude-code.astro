@@ -34,7 +34,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 2,
         name: "Add the mcpServers entry",
-        text: 'Add an mcpServers key with the lyrashield entry using command "npx" and args ["-y","@lyrashield/mcp@0.2.10"].',
+        text: 'Add an mcpServers key with the lyrashield entry using command "npx" and args ["-y","@lyrashield/mcp@0.2.11"].',
       },
       {
         "@type": "HowToStep",
@@ -101,7 +101,7 @@ const jsonLd: unknown[] = [
   </p>
 
   <pre><code>{`claude mcp add --scope project --transport stdio lyrashield \\
-  -- npx -y @lyrashield/mcp@0.2.10`}</code></pre>
+  -- npx -y @lyrashield/mcp@0.2.11`}</code></pre>
 
   <h2>Option C — Agent Plugin (recommended)</h2>
   <p>
@@ -141,6 +141,6 @@ claude plugin install lyrashield@lyrashield-ai</code></pre>
   <div class="callout callout--warn">
     <strong>Requirements:</strong> For local stdio, Node.js 24+ and a local OAuth login or workspace API key. Remote OAuth needs no local key. The{" "}
     <code>@lyrashield/mcp</code> package is published on npm, so{" "}
-    <code>npx -y @lyrashield/mcp@0.2.10</code> resolves directly.
+    <code>npx -y @lyrashield/mcp@0.2.11</code> resolves directly.
   </div>
 </DocsLayout>

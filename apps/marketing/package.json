@@ -6,9 +6,9 @@
   "scripts": {
     "predev": "wrangler types && pnpm exec tsx scripts/generate-openapi.ts",
     "dev": "astro dev",
-    "prebuild": "wrangler types && pnpm exec tsx scripts/generate-openapi.ts",
+    "prebuild": "wrangler types && pnpm exec tsx scripts/generate-openapi.ts && node scripts/generate-security-headers.mjs",
     "build": "astro build",
-    "postbuild": "node scripts/apply-worker-scheme-guard.mjs",
+    "postbuild": "node scripts/apply-worker-scheme-guard.mjs && node scripts/validate-csp.mjs",
     "prepreview": "wrangler types && pnpm exec tsx scripts/generate-openapi.ts",
     "preview": "pnpm preview:build && pnpm preview:serve",
     "preview:build": "node scripts/preview-build.mjs",

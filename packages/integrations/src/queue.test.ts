@@ -43,6 +43,11 @@ const mocks = vi.hoisted(() => {
     commandErrors,
     queueAdd: vi.fn(),
     queueWorkersCount: vi.fn(),
+    queueGetRanges: vi.fn(),
+    queueGetJob: vi.fn(),
+    queueOptions: [] as Array<Record<string, unknown>>,
+    queueReady: vi.fn(async () => {}),
+    disconnect: vi.fn(),
     setExistsError(error: Error | null) {
       existsError = error
     },
@@ -50,15 +55,38 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock("./redis", () => ({ getRedis: () => mocks.redis }))
+vi.mock("ioredis", () => ({
+  default: class {
+    constructor(
+      _url: string,
+      readonly options: Record<string, unknown>
+    ) {}
+    on() {
+      return this
+    }
+    disconnect = mocks.disconnect
+  },
+}))
 vi.mock("bullmq", () => ({
   Queue: class {
+    constructor(_name: string, options: Record<string, unknown>) {
+      mocks.queueOptions.push(options)
+    }
+    close = vi.fn(async () => {})
     add = mocks.queueAdd
+    on() {
+      return this
+    }
+    waitUntilReady = mocks.queueReady
     getWorkersCount = mocks.queueWorkersCount
+    getRanges = mocks.queueGetRanges
+    getJob = mocks.queueGetJob
   },
 }))
 
 import {
   enqueueScan,
+  getScanQueuePosition,
   isScanWorkerAvailable,
   registerScanWorker,
   SCAN_WORKER_HEARTBEAT_MS,
@@ -69,6 +97,19 @@ import {
 } from "./queue"
 
 describe("scan worker availability", () => {
+  it("bounds producer commands without offline replay", async () => {
+    const { getScanQueue } = await import("./queue")
+    getScanQueue()
+    expect(mocks.queueOptions[0]?.connection).toMatchObject({
+      options: {
+        maxRetriesPerRequest: 1,
+        enableOfflineQueue: false,
+        autoResendUnfulfilledCommands: false,
+        connectTimeout: 1_000,
+        commandTimeout: 2_000,
+      },
+    })
+  })
   beforeEach(() => {
     mocks.redis.members.clear()
     mocks.redis.values.clear()
@@ -77,6 +118,8 @@ describe("scan worker availability", () => {
     mocks.setExistsError(null)
     mocks.queueAdd.mockReset()
     mocks.queueWorkersCount.mockReset()
+    mocks.queueGetRanges.mockReset()
+    mocks.queueGetJob.mockReset()
     mocks.queueWorkersCount.mockResolvedValue(1)
   })
 
@@ -187,6 +230,36 @@ describe("scan worker availability", () => {
   })
 })
 
+describe("scan queue position", () => {
+  beforeEach(() => {
+    mocks.queueGetRanges.mockReset()
+    mocks.queueGetJob.mockReset()
+  })
+
+  it("reads queue IDs in the same state order without hydrating every job", async () => {
+    mocks.queueGetRanges.mockResolvedValue(["scan-1", "scan-2", "scan-3"])
+    mocks.queueGetJob.mockResolvedValue({ id: "scan-2" })
+
+    expect(await getScanQueuePosition("scan-2")).toEqual({ position: 2, waiting: 3 })
+    expect(mocks.queueGetRanges).toHaveBeenCalledWith(["wait", "delayed", "prioritized"], 0, -1)
+    expect(mocks.queueGetJob).toHaveBeenCalledExactlyOnceWith("scan-2")
+  })
+
+  it("returns no position for absent or removed jobs", async () => {
+    mocks.queueGetRanges.mockResolvedValue(["scan-1", "scan-2"])
+    expect(await getScanQueuePosition("scan-3")).toBeNull()
+    expect(mocks.queueGetJob).not.toHaveBeenCalled()
+
+    mocks.queueGetJob.mockResolvedValue(null)
+    expect(await getScanQueuePosition("scan-2")).toBeNull()
+  })
+
+  it("returns no position when the queue read fails", async () => {
+    mocks.queueGetRanges.mockRejectedValue(new Error("Redis unavailable"))
+    expect(await getScanQueuePosition("scan-1")).toBeNull()
+  })
+})
+
 describe("webhook track retry queue", () => {
   beforeEach(() => {
     mocks.queueAdd.mockReset().mockResolvedValue({ id: "job_9" })
@@ -200,13 +273,14 @@ describe("webhook track retry queue", () => {
     const id = await enqueueWebhookTrackRetry({
       webhookEventId: "evt_abc",
       track: "license",
+      generation: 1,
     })
 
     expect(id).toBe("job_9")
     expect(mocks.queueAdd).toHaveBeenCalledWith(
       "webhook-track-retry",
-      { webhookEventId: "evt_abc", track: "license" },
-      { jobId: "evt_abc:license", attempts: 1 }
+      { webhookEventId: "evt_abc", track: "license", generation: 1 },
+      { jobId: expect.stringMatching(/^track-[a-f0-9]{64}-g1$/), attempts: 1 }
     )
   })
 
@@ -214,14 +288,82 @@ describe("webhook track retry queue", () => {
     const { enqueueWebhookTrackRetry } = await import("./queue")
 
     await enqueueWebhookTrackRetry(
-      { webhookEventId: "evt_delay", track: "affiliate" },
+      { webhookEventId: "evt_delay", track: "affiliate", generation: 2 },
       { delayMs: 60_000 }
     )
 
     expect(mocks.queueAdd).toHaveBeenCalledWith(
       "webhook-track-retry",
-      { webhookEventId: "evt_delay", track: "affiliate" },
-      { jobId: "evt_delay:affiliate", attempts: 1, delay: 60_000 }
+      { webhookEventId: "evt_delay", track: "affiliate", generation: 2 },
+      { jobId: expect.stringMatching(/^track-[a-f0-9]{64}-g2$/), attempts: 1, delay: 60_000 }
     )
+  })
+})
+
+describe("producer deadline ownership", () => {
+  const data = {
+    scanId: "deadline-scan",
+    workspaceId: "ws",
+    targetId: "target",
+    goal: "review",
+    mode: "SAFE" as const,
+  }
+
+  beforeEach(async () => {
+    mocks.queueReady.mockReset().mockResolvedValue(undefined)
+    mocks.queueAdd.mockReset().mockResolvedValue({ id: data.scanId })
+    mocks.disconnect.mockClear()
+    mocks.redis.members.clear()
+    mocks.redis.values.clear()
+    mocks.commandErrors.clear()
+    await registerScanWorker("deadline-worker")
+  })
+
+  it("abandons a stalled ready wait and never adds when that wait resolves late", async () => {
+    vi.useFakeTimers()
+    let ready: (() => void) | undefined
+    mocks.queueReady.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          ready = resolve
+        })
+    )
+    const pending = enqueueScan(data)
+    const rejected = expect(pending).rejects.toThrow("deadline")
+    try {
+      await vi.advanceTimersByTimeAsync(5_000)
+      await rejected
+      ready?.()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mocks.queueAdd).not.toHaveBeenCalled()
+      expect(mocks.disconnect).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("keeps an accepted scan identity when an add acknowledgement is unavailable", async () => {
+    mocks.queueAdd.mockRejectedValueOnce(new Error("Command timed out"))
+    expect(await enqueueScan(data)).toBe(data.scanId)
+    expect(mocks.disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  it("an older concurrent timeout cannot evict the replacement producer", async () => {
+    vi.useFakeTimers()
+    const { getScanQueue } = await import("./queue")
+    mocks.queueAdd.mockImplementation(() => new Promise(() => {}))
+    try {
+      const first = enqueueScan({ ...data, scanId: "first" })
+      await vi.advanceTimersByTimeAsync(1_000)
+      const second = enqueueScan({ ...data, scanId: "second" })
+      await vi.advanceTimersByTimeAsync(4_000)
+      expect(await first).toBe("first")
+      const replacement = getScanQueue()
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(await second).toBe("second")
+      expect(getScanQueue()).toBe(replacement)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

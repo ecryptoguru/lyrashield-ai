@@ -16,6 +16,9 @@ export function getRedis(): Redis | null {
     maxRetriesPerRequest: 3,
     enableReadyCheck: false,
     lazyConnect: true,
+    connectTimeout: 1_000,
+    commandTimeout: 2_000,
+    autoResendUnfulfilledCommands: false,
   })
 
   redis.on("error", (err) => {

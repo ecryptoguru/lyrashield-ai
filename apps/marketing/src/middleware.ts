@@ -1,9 +1,11 @@
 import { defineMiddleware } from "astro:middleware"
+import marketingCsp from "./lib/marketing-csp.json"
+
+const CONTENT_SECURITY_POLICY = marketingCsp.directives.join("; ")
 
 const SECURITY_HEADERS = {
   "Origin-Agent-Cluster": "?1",
-  "Content-Security-Policy":
-    "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://us.i.posthog.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' blob: https://media.lyrashieldai.com; connect-src 'self' https: https://cloudflareinsights.com https://media.lyrashieldai.com; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests",
+  "Content-Security-Policy": CONTENT_SECURITY_POLICY,
   "Cross-Origin-Opener-Policy": "same-origin",
   "Permissions-Policy":
     "tools=(self), camera=(), microphone=(), geolocation=(), payment=(), usb=()",

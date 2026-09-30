@@ -19,7 +19,8 @@ vi.mock("@lyrashield/db", () => ({
   failApprovalExecution: vi.fn(),
   claimOrGetAgentOperation: (...a: unknown[]) => claimOrGetAgentOperationMock(...a),
   completeAgentOperation: (...a: unknown[]) => completeAgentOperationMock(...a),
-  failAgentOperation: vi.fn(),
+  failAgentOperation: vi.fn().mockResolvedValue({}),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   checkDelegatedOperationAuthorization: (...a: unknown[]) =>
     checkDelegatedOperationAuthorizationMock(...a),
   withWorkspaceRLS: vi.fn(),
@@ -41,9 +42,11 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 const verifyOAuthBearer = vi.fn()
 const requirePermissionMock = vi.fn().mockResolvedValue({})
+const requireOAuthPermissionMock = vi.fn().mockResolvedValue({})
 vi.mock("@lyrashield/auth/server", () => ({
   verifyOAuthBearer: (...args: unknown[]) => verifyOAuthBearer(...args),
   requirePermission: (...args: unknown[]) => requirePermissionMock(...args),
+  requireOAuthPermission: (...args: unknown[]) => requireOAuthPermissionMock(...args),
 }))
 
 import { POST } from "./route"
@@ -94,6 +97,7 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
     vi.clearAllMocks()
     handleRemoteMcpRequest.mockReset()
     requirePermissionMock.mockResolvedValue({})
+    requireOAuthPermissionMock.mockResolvedValue({})
   })
 
   it("401s with no Authorization header and never touches the engine", async () => {

@@ -1,0 +1,130 @@
+# Disposable review stack only. Credentials are public synthetic fixtures.
+# PostgreSQL/Redis are provisioned separately so integration tests share them.
+name: ls-hardening-20260930
+x-runtime: &runtime
+  DATABASE_URL: postgresql://ls_test_runtime:ls_fixture_runtime@postgres:5432/ls_hardening?schema=public
+  DATABASE_SYSTEM_URL: postgresql://ls_test_owner:ls_fixture_owner@postgres:5432/ls_hardening?schema=public
+  REDIS_URL: redis://:ls_fixture_redis@redis:6379
+  BETTER_AUTH_SECRET: ls-fixture-auth-secret-review-only-20260930
+  BETTER_AUTH_URL: http://localhost:33009
+  NEXT_PUBLIC_APP_URL: http://localhost:33009
+  NEXT_PUBLIC_MARKETING_URL: http://localhost:33010
+  PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
+  LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
+  POLAR_BILLING_ADMISSION: "off"
+  POLAR_LOCAL_BILLING_ADMISSION: "off"
+  RAZORPAY_LOCAL_BILLING_ADMISSION: "off"
+  TRUSTED_PROXY_IP_HEADER: x-forwarded-for
+  IP_HASH_SALT: ls-fixture-ip-hash-salt-review-only-20260930
+services:
+  marketing:
+    image: ls-hardening-20260930:marketing
+    ports: ["127.0.0.1:33010:8787"]
+    volumes: ["marketing_state:/state"]
+    networks: [review]
+  redis-ack-drop:
+    image: node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
+    command: ["node", "/fixture/docker-redis-ack-drop.mjs"]
+    profiles: ["fault"]
+    environment:
+      FIXTURE_FAULT_MODE: ${FIXTURE_FAULT_MODE:-lost-ack}
+    volumes:
+      - ./docker-redis-ack-drop.mjs:/fixture/docker-redis-ack-drop.mjs:ro
+    ports: ["127.0.0.1:39013:8080"]
+    networks: [review]
+  web-lost-ack:
+    image: ls-hardening-20260930:web
+    environment:
+      <<: *runtime
+      REDIS_URL: redis://:ls_fixture_redis@redis-ack-drop:6379
+      BETTER_AUTH_URL: http://localhost:33012
+      NEXT_PUBLIC_APP_URL: http://localhost:33012
+      ADDITIONAL_TRUSTED_ORIGINS: http://localhost:33009,http://localhost:33012
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    ports: ["127.0.0.1:33012:3000"]
+    networks: [review]
+    profiles: ["fault"]
+  scanner:
+    image: ls-hardening-20260930:web
+    environment:
+      <<: *runtime
+      NEXT_PUBLIC_APP_URL: http://localhost:33011
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      # Official public test key, never a production Turnstile secret.
+      TURNSTILE_SECRET_KEY: 1x0000000000000000000000000000000AA
+    ports: ["127.0.0.1:33011:3000"]
+    networks: [review]
+  web:
+    image: ls-hardening-20260930:web
+    environment:
+      <<: *runtime
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    ports: ["127.0.0.1:33009:3000"]
+    networks: [review]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  worker:
+    image: ls-hardening-20260930:worker
+    environment:
+      <<: *runtime
+      NODE_ENV: development
+      TMPDIR: /tmp/ls-hardening-20260930/worker-tmp
+      LYRASHIELD_LOCAL_EVIDENCE_STORAGE: "1"
+      LYRASHIELD_LOCAL_EVIDENCE_DIR: /app/.lyrashield/evidence
+      LYRASHIELD_LUNA_LLM: azure_ai/gpt-6-luna
+      LYRASHIELD_SOL_LLM: azure_ai/gpt-6-sol
+      # Satisfies startup configuration without granting any provider access.
+      LLM_API_KEY: ls-fixture-invalid-no-provider-access
+      LLM_API_BASE: http://127.0.0.1:9
+      LYRASHIELD_IMAGE: lyrashield-sandbox:cross-repo-ls06-pyjwt-20260930
+      LYRASHIELD_ENGINE_SANDBOX_NETWORK: ls-hardening-20260930-sandbox
+      LYRASHIELD_TELEMETRY: "0"
+      LYRASHIELD_WEB_SEARCH_ENABLED: "0"
+      LYRASHIELD_EGRESS_PROXY_URL: http://egress-proxy:4000
+      LYRASHIELD_EGRESS_PROXY_SECRET: ls-fixture-egress-review-only
+    group_add: ["0"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/ls-hardening-20260930/worker-tmp:/tmp/ls-hardening-20260930/worker-tmp
+      - worker_runs:/app/lyrashield_runs
+      - worker_evidence:/app/.lyrashield/evidence
+    networks: [review, sandbox]
+    pids_limit: 512
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('fs').stat('/tmp/lyrashield-worker-ready',(e,s)=>process.exit(e||Date.now()-s.mtimeMs>120000?1:0))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+  egress-proxy:
+    image: ls-hardening-20260930:egress-proxy
+    environment:
+      LYRASHIELD_EGRESS_PROXY_SECRET: ls-fixture-egress-review-only
+      LYRASHIELD_RELAY_SIGNING_SECRET: ls-fixture-relay-signing-review-only-20260930
+    ports: ["127.0.0.1:34009:4000"]
+    networks: [review, sandbox]
+networks:
+  review:
+    external: true
+    name: ls-hardening-20260930
+  sandbox:
+    external: true
+    name: ls-hardening-20260930-sandbox
+volumes:
+  worker_runs:
+  worker_evidence:
+  marketing_state:

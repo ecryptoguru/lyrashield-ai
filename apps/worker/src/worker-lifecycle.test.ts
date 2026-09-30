@@ -1,5 +1,17 @@
 import { describe, expect, it, vi } from "vitest"
-import { observeWorkerRun } from "./worker-lifecycle"
+import { assertWorkerDbPoolCapacity, observeWorkerRun } from "./worker-lifecycle"
+
+describe("assertWorkerDbPoolCapacity", () => {
+  it("allows scan concurrency below the database connection pool size", () => {
+    expect(() => assertWorkerDbPoolCapacity(3, 4)).not.toThrow()
+  })
+
+  it("rejects scan concurrency that can occupy every database connection", () => {
+    expect(() => assertWorkerDbPoolCapacity(4, 4)).toThrow(
+      "LYRASHIELD_WORKER_CONCURRENCY (4) must be lower than LYRASHIELD_DB_POOL_MAX (4)"
+    )
+  })
+})
 
 describe("observeWorkerRun", () => {
   it("stops the process when the BullMQ run loop returns", async () => {

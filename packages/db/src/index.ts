@@ -172,6 +172,7 @@ export {
   type ScanAttachment,
 } from "./scan-attachment-service"
 export {
+  ACTIVE_SCAN_STATUSES,
   createScan,
   updateScanStatus,
   addScanEvent,
@@ -321,7 +322,12 @@ export {
   LAUNCH_REPORT_PROVENANCE_VERSION,
   type LaunchReportProvenance,
 } from "./launch-report-provenance"
-export { gatherReportData, generateReportHTML, type ReportData } from "./report-generator"
+export {
+  gatherReportData,
+  generateReportHTML,
+  isReportData,
+  type ReportData,
+} from "./report-generator"
 export {
   createNotification,
   getNotification,
@@ -495,6 +501,7 @@ export {
   listRecentAgentOperations,
   listAgentOperationsForTasks,
   resolveOperationPrincipal,
+  toJsonObject,
   type AgentOperationListItem,
   type ClaimAgentOperationParams,
   type ClaimOperationResult,

@@ -3,6 +3,37 @@ import { logger } from "@lyrashield/logger"
 import { createHash } from "node:crypto"
 import { withWorkspaceRLS } from "./rls"
 
+function isPrismaInputJsonValue(value: unknown): value is Prisma.InputJsonValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true
+  if (typeof value === "number") return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every(isPrismaInputJsonValue)
+  if (typeof value === "object") return Object.values(value).every(isPrismaInputJsonValue)
+  return false
+}
+
+function isPrismaInputJsonObject(value: unknown): value is Prisma.InputJsonObject {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(isPrismaInputJsonValue)
+  )
+}
+
+/** Normalize supported runtime values (including Dates) before storing JSON. */
+export function toJsonObject(value: object): Prisma.InputJsonObject {
+  const serialized = JSON.stringify(value)
+  if (typeof serialized !== "string") {
+    throw new TypeError("Operation result must be JSON-serializable.")
+  }
+
+  const normalized: unknown = JSON.parse(serialized)
+  if (!isPrismaInputJsonObject(normalized)) {
+    throw new TypeError("Operation result must be a JSON object.")
+  }
+  return normalized
+}
+
 export interface ClaimAgentOperationParams {
   workspaceId: string
   operationName: string
@@ -205,7 +236,7 @@ export async function completeAgentOperation(
   workspaceId: string,
   params: {
     resultReference?: string
-    result?: Record<string, unknown>
+    result?: Prisma.InputJsonObject
   }
 ): Promise<AgentOperation> {
   return withWorkspaceRLS(workspaceId, (tx) =>
@@ -214,7 +245,7 @@ export async function completeAgentOperation(
       data: {
         status: "COMPLETED",
         resultReference: params.resultReference,
-        result: params.result as Prisma.InputJsonValue,
+        result: params.result,
       },
     })
   )

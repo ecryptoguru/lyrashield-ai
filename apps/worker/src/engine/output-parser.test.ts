@@ -306,6 +306,18 @@ describe("output-parser", () => {
       expect(result?.webSearchCostUsd).toBe(0.01)
     })
 
+    it("retains web-search charges below one micro-dollar", () => {
+      const result = parseRunJson(
+        JSON.stringify({
+          run_id: "run-search-cost-precision",
+          status: "completed",
+          web_search_usage: [{ cost: 0.00000012 }, { cost: 0.00000023 }],
+        })
+      )
+
+      expect(result?.webSearchCostUsd).toBe(0.00000035)
+    })
+
     it("parses valid run record", () => {
       const raw = JSON.stringify({
         run_id: "run-abc",

@@ -18,9 +18,10 @@ vi.mock("@lyrashield/auth", () => ({
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 vi.mock("../../../lib/cache", () => ({ revalidateDashboardAggregates: vi.fn() }))
 
-import { POST } from "./route"
-import { prisma, createReport } from "@lyrashield/db"
+import { GET, POST } from "./route"
+import { prisma, createReport, listReports } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 describe("POST /api/reports", () => {
   beforeEach(() => {
@@ -118,5 +119,37 @@ describe("POST /api/reports", () => {
         snapshotReused: true,
       },
     })
+  })
+
+  it("denies report listing without report:download", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await GET(new Request("http://localhost/api/reports?workspaceId=ws-1"))
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/reports",
+      "GET"
+    )
+    expect(listReports).not.toHaveBeenCalled()
+  })
+
+  it("denies report creation without report:create", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await POST(
+      new Request("http://localhost/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: "ws-1", title: "Report" }),
+      })
+    )
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/reports",
+      "POST"
+    )
+    expect(createReport).not.toHaveBeenCalled()
   })
 })

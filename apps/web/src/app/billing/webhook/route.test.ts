@@ -48,6 +48,9 @@ const validateRazorpayMock = vi.fn()
 const validatePolarMock = vi.fn()
 const assertCatalogMock = vi.fn()
 const runTracksMock = vi.fn()
+const getRetryScheduleMock = vi
+  .fn()
+  .mockImplementation(async () => ({ generation: 1, nextAttemptAt: new Date(Date.now() + 60_000) }))
 vi.mock("@lyrashield/billing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/billing")>()
   return {
@@ -55,6 +58,7 @@ vi.mock("@lyrashield/billing", async (importOriginal) => {
     validatePolarWebhook: (...args: unknown[]) => validatePolarMock(...args),
     validateRazorpayWebhook: (...args: unknown[]) => validateRazorpayMock(...args),
     assertProviderCatalogEvent: (...args: unknown[]) => assertCatalogMock(...args),
+    getWebhookTrackRetrySchedule: (...args: unknown[]) => getRetryScheduleMock(...args),
     runApplicableTracks: (...args: unknown[]) => runTracksMock(...args),
   }
 })
@@ -64,7 +68,9 @@ import type { TrackRunSummary } from "@lyrashield/billing"
 import { WebhookAuthError, WebhookPayloadError } from "@lyrashield/billing"
 import { POST } from "./route"
 
-const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
+const mockPrisma = prisma as unknown as {
+  webhookEvent: Record<"create" | "findUnique" | "updateMany", ReturnType<typeof vi.fn>>
+}
 
 /** All applicable tracks succeeded. */
 function okSummary(): TrackRunSummary {
@@ -72,7 +78,10 @@ function okSummary(): TrackRunSummary {
 }
 
 /** One required track failed (or dead-lettered). */
-function failedSummary(track: string, opts: { deadLetter?: boolean } = {}): TrackRunSummary {
+function failedSummary(
+  track: TrackRunSummary["failures"][number]["track"],
+  opts: { deadLetter?: boolean } = {}
+): TrackRunSummary {
   const failure = { track, error: `${track}_handler_failed` }
   return {
     allSucceeded: false,
@@ -179,13 +188,13 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     }
     expect(mockPrisma.webhookEvent.create).toHaveBeenCalledTimes(3)
     const ids = mockPrisma.webhookEvent.create.mock.calls.map(
-      (c: [{ data: { externalId: string; identitySource: string } }]) => c[0].data.externalId
+      (c) => (c[0] as { data: { externalId: string } }).data.externalId
     )
     expect(new Set(ids).size).toBe(3)
     for (const id of ids) expect(id).toMatch(/^[0-9a-f]{64}$/)
     expect(
       mockPrisma.webhookEvent.create.mock.calls.every(
-        (c: [{ data: { identitySource: string } }]) => c[0].data.identitySource === "derived"
+        (c) => (c[0] as { data: { identitySource: string } }).data.identitySource === "derived"
       )
     ).toBe(true)
     expect(runTracksMock).toHaveBeenCalledTimes(3)
@@ -212,7 +221,7 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     expect(enqueueRetryMock).not.toHaveBeenCalled()
   })
 
-  it("concurrent duplicate delivery processes exactly once, both answered 200", async () => {
+  it("concurrent duplicate delivery processes exactly once, pending duplicate answers 503", async () => {
     const ev = rzEvent("subscription.activated", "sub_RACE", 1_755_000_000)
     validateRazorpayMock.mockReturnValue(ev)
 
@@ -238,14 +247,14 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     const [resA, resB] = await Promise.all([POST(razorpayRequest(ev)), POST(razorpayRequest(ev))])
 
     expect(resA.status).toBe(200)
-    expect(resB.status).toBe(200)
+    expect(resB.status).toBe(503)
     expect(runTracksMock).toHaveBeenCalledTimes(1)
   })
 
   it("repairs the workspace binding before reprocessing a stranded row", async () => {
     const ev = rzEvent("subscription.charged", "sub_STALE", 1_755_000_000)
     const workspaceId = "workspace_stranded_receipt"
-    ev.payload.subscription.entity.notes = { workspaceId }
+    Object.assign(ev.payload.subscription.entity, { notes: { workspaceId } })
     validateRazorpayMock.mockReturnValue(ev)
     mockPrisma.webhookEvent.create.mockRejectedValue(
       Object.assign(new Error("unique"), { code: "P2002" })
@@ -492,10 +501,14 @@ describe("POST /billing/webhook — required-track durability (findings 12/18A)"
     )
     // Exactly one bounded retry enqueued for the failed track.
     expect(enqueueRetryMock).toHaveBeenCalledTimes(1)
-    expect(enqueueRetryMock).toHaveBeenCalledWith({
-      webhookEventId: "evt_row_1",
-      track: "license",
-    })
+    expect(enqueueRetryMock).toHaveBeenCalledWith(
+      {
+        webhookEventId: "evt_row_1",
+        track: "license",
+        generation: 1,
+      },
+      { delayMs: expect.any(Number) }
+    )
   })
 
   it("a-post) redelivery after the retry job completed the track → 200 replay, zero side effects", async () => {
@@ -533,10 +546,14 @@ describe("POST /billing/webhook — required-track durability (findings 12/18A)"
 
     expect(res.status).toBe(500)
     expect(enqueueRetryMock).toHaveBeenCalledTimes(1)
-    expect(enqueueRetryMock).toHaveBeenCalledWith({
-      webhookEventId: "evt_row_1",
-      track: "affiliate",
-    })
+    expect(enqueueRetryMock).toHaveBeenCalledWith(
+      {
+        webhookEventId: "evt_row_1",
+        track: "affiliate",
+        generation: 1,
+      },
+      { delayMs: expect.any(Number) }
+    )
   })
 
   it("dead-lettered tracks are NOT re-enqueued at ingress", async () => {
@@ -604,7 +621,7 @@ describe("POST /billing/webhook — required-track durability (findings 12/18A)"
     const res = await POST(razorpayRequest(ev))
 
     expect(res.status).toBe(200)
-    const call = runTracksMock.mock.calls[0][0] as {
+    const call = runTracksMock.mock.calls[0]![0] as {
       webhookEventId: string
       event: { kind: string; productKind: string; orderId: string | null }
       rawPayload: unknown

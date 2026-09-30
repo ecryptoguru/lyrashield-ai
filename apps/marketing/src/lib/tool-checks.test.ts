@@ -34,6 +34,7 @@ describe("browser-local security tool checks", () => {
       ['{"apiKey": "verysecretvalue123456"}', "verysecretvalue123456"],
       ["API_KEY                 = verysecretvalue123456", "verysecretvalue123456"],
       [`API_KEY${" ".repeat(40)}=verysecretvalue123456`, "verysecretvalue123456"],
+      ["secret: literal-secret-value-123456", "literal-secret-value-123456"],
     ]
 
     for (const [text, secret] of cases) {

@@ -86,6 +86,17 @@ function renderDetail(props: {
 const html = renderDetail({ scan, findings: [finding] })
 
 describe("scan detail badge labels", () => {
+  it("uses the same goal label as the scan list", () => {
+    for (const [goal, label] of [
+      ["CHECK_PR", "Check a PR"],
+      ["SECURITY_REVIEW", "Security scan"],
+      ["FUTURE_REVIEW", "Future review"],
+    ] as const) {
+      const html = renderDetail({ scan: { ...scan, goal }, findings: [] })
+      expect(html).toContain(label)
+    }
+  })
+
   it("humanises the coverage receipt status and control outcome badges", () => {
     expect(html).toContain(">Not applicable<")
     expect(html).toContain(">No finding<")
@@ -181,11 +192,27 @@ describe("scan detail guided states", () => {
         },
       },
       findings: [],
+      scorecard: { targetId: target.id, grade: "A", canPublish: true },
     })
 
     expect(html).toContain("Coverage: Complete")
     expect(html).toContain("Create an assurance report")
     expect(html).toContain("/dashboard/reports?scanId=scan-1&amp;targetId=target-1")
+    expect(html).toContain("Share this review")
+    expect(html).toContain("Create public scorecard")
+    expect(html).toContain("Absence of findings is not verification.")
+  })
+
+  it("withholds report and scorecard actions for a partial clean result", () => {
+    const html = renderDetail({
+      scan: { ...scan, status: "PARTIAL", target },
+      findings: [],
+      scorecard: { targetId: target.id, grade: "A", canPublish: true },
+    })
+
+    expect(html).not.toContain("Create an assurance report")
+    expect(html).not.toContain("Share this review")
+    expect(html).not.toContain("Create public scorecard")
   })
 
   it("uses a human target type label", () => {
@@ -215,6 +242,30 @@ describe("scan detail guided states", () => {
     expect(html).toContain("Review account usage")
     expect(html).toContain("/dashboard/billing")
     expect(html).not.toContain("Start a new scan")
+  })
+})
+
+describe("scan detail accounting events", () => {
+  it("keeps billing settlement internals out of the user timeline", () => {
+    const html = renderDetail({
+      scan: {
+        ...scan,
+        events: [
+          {
+            id: "settlement-intent-1",
+            stage: "billing_settlement_intent",
+            level: "info",
+            message: "Settlement intent; missing usage receipt requires terminal accounting review",
+            metadata: null,
+            createdAt: "2026-01-01T00:05:00.000Z",
+          },
+        ],
+      },
+      findings: [],
+    })
+
+    expect(html).not.toContain("billing_settlement_intent")
+    expect(html).not.toContain("terminal accounting review")
   })
 })
 

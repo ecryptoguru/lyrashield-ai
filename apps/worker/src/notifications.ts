@@ -6,14 +6,10 @@ export async function notifyScanCompleted(
   workspaceId: string,
   scanId: string,
   summary: string,
-  findingCount: number
+  findingCount: number,
+  workspaceName?: string
 ): Promise<void> {
   try {
-    const workspace = await prisma.workspace.findFirst({
-      where: { id: workspaceId },
-      select: { name: true },
-    })
-
     const title = `Scan Completed — ${findingCount} finding${findingCount !== 1 ? "s" : ""}`
     const body = `Scan ${scanId} completed successfully.\n\nSummary: ${summary}\nFindings: ${findingCount}`
 
@@ -27,7 +23,7 @@ export async function notifyScanCompleted(
       type: "scan.completed",
       title,
       body,
-      workspaceName: workspace?.name,
+      workspaceName,
       routineGroup: {
         groupType: "scan completions",
         windowKey,
@@ -38,6 +34,7 @@ export async function notifyScanCompleted(
     })
   } catch (error) {
     logger.error("Failed to send scan completed notification", { error: String(error), scanId })
+    throw error
   }
 }
 
@@ -65,6 +62,7 @@ export async function notifyScanFailed(
     })
   } catch (error) {
     logger.error("Failed to send scan failed notification", { error: String(error), scanId })
+    throw error
   }
 }
 
@@ -72,14 +70,10 @@ export async function notifyCriticalFinding(
   workspaceId: string,
   findingId: string,
   findingTitle: string,
-  targetName: string
+  targetName: string,
+  workspaceName?: string
 ): Promise<void> {
   try {
-    const workspace = await prisma.workspace.findFirst({
-      where: { id: workspaceId },
-      select: { name: true },
-    })
-
     const title = `Critical Finding — ${findingTitle}`
     const body = `A critical vulnerability was found on target: ${targetName}.\n\nFinding ID: ${findingId}`
 
@@ -88,7 +82,7 @@ export async function notifyCriticalFinding(
       type: "finding.critical",
       title,
       body,
-      workspaceName: workspace?.name,
+      workspaceName,
       sendFn: (channel, payload) => sendNotification(channel as NotificationChannel, payload),
     })
   } catch (error) {
@@ -96,5 +90,6 @@ export async function notifyCriticalFinding(
       error: String(error),
       findingId,
     })
+    throw error
   }
 }

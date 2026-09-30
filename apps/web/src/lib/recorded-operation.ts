@@ -2,8 +2,10 @@ import {
   claimOrGetAgentOperation,
   completeAgentOperation,
   failAgentOperation,
+  toJsonObject,
 } from "@lyrashield/db"
 import type { requirePermission } from "@lyrashield/auth/server"
+import { isJsonObject } from "@lyrashield/types"
 import { apiError, apiSuccess } from "./api-response"
 import { logger } from "@lyrashield/logger"
 
@@ -40,7 +42,15 @@ export async function recordedOperation(
   if (claim.status === "CONFLICT") return apiError("IDEMPOTENCY_CONFLICT", claim.message, 409)
   const operationId = claim.operation.id
   if (claim.status === "REPLAY" && claim.operation.result) {
-    return apiSuccess({ ...(claim.operation.result as Record<string, unknown>), operationId })
+    if (!isJsonObject(claim.operation.result))
+      return apiError(
+        "OPERATION_RESULT_UNAVAILABLE",
+        "The completed operation result is unavailable; the action will not be rerun.",
+        409,
+        undefined,
+        { operationId }
+      )
+    return apiSuccess({ ...claim.operation.result, operationId })
   }
   if (claim.status !== "NEW")
     return apiError(
@@ -61,16 +71,18 @@ export async function recordedOperation(
       }
       return response
     }
-    const envelope = (await response.clone().json()) as { data: Record<string, unknown> }
-    const resultReference = [envelope.data.id, envelope.data.approvalId, envelope.data.prUrl].find(
+    const envelope: unknown = await response.clone().json()
+    if (!isJsonObject(envelope) || !isJsonObject(envelope.data)) return response
+    const data = envelope.data
+    const resultReference = [data.id, data.approvalId, data.prUrl].find(
       (value): value is string => typeof value === "string" && value.length > 0
     )
     await completeAgentOperation(operationId, params.workspaceId, {
-      result: envelope.data,
+      result: toJsonObject(data),
       resultReference,
     })
     completed = true
-    return apiSuccess({ ...envelope.data, operationId }, response.status)
+    return apiSuccess({ ...data, operationId }, response.status)
   } finally {
     // A handler may already have persisted work before returning an error.
     // Only a callback that positively confirms no submission may permit a fresh key.

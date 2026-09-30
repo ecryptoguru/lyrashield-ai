@@ -145,7 +145,7 @@ describe("scanAiAppSecurity", () => {
     await mkdir(join(tempDir, "tests", "unit"), { recursive: true })
     await writeFile(join(tempDir, "src", "z-critical.ts"), VULNERABLE_TS)
     await Promise.all(
-      Array.from({ length: 216 }, (_, index) =>
+      Array.from({ length: 272 }, (_, index) =>
         writeFile(
           join(tempDir, "tests", "unit", `${String(index).padStart(3, "0")}.test.ts`),
           SAFE_TS
@@ -164,9 +164,9 @@ describe("scanAiAppSecurity", () => {
     expect(quick.findings).toContainEqual(expect.objectContaining({ id: "AI-01" }))
     expect(quick.discovery).toMatchObject({
       mode: "QUICK",
-      maxFiles: 200,
-      eligibleFiles: 217,
-      scannedFiles: 200,
+      maxFiles: 256,
+      eligibleFiles: 273,
+      scannedFiles: 256,
       skippedFiles: 17,
       skippedByReason: { fileLimit: 17 },
     })
@@ -179,13 +179,13 @@ describe("scanAiAppSecurity", () => {
     expect(quick.aiScanResult.coverage.limitsReached).toContain("max_files")
     expect(quick.webMcpCoverage).toMatchObject({
       coverageState: "INCONCLUSIVE",
-      eligibleFiles: 200,
+      eligibleFiles: 256,
       sourceSelection: {
-        eligibleFiles: 217,
-        selectedFiles: 200,
+        eligibleFiles: 273,
+        selectedFiles: 256,
         skippedFiles: 17,
         skippedByReason: { fileLimit: 17 },
-        limits: { maxFiles: 200 },
+        limits: { maxFiles: 256 },
         limitsReached: ["max_files"],
       },
     })
@@ -194,7 +194,7 @@ describe("scanAiAppSecurity", () => {
       expect.objectContaining({
         scanner: "ai_app_security",
         status: "bounded",
-        metadata: expect.objectContaining({ eligibleFiles: 217, scannedFiles: 200 }),
+        metadata: expect.objectContaining({ eligibleFiles: 273, scannedFiles: 256 }),
       })
     )
 
@@ -209,16 +209,16 @@ describe("scanAiAppSecurity", () => {
     expect(standard.discovery).toMatchObject({
       mode: "STANDARD",
       maxFiles: 500,
-      eligibleFiles: 217,
-      scannedFiles: 217,
+      eligibleFiles: 273,
+      scannedFiles: 273,
       skippedFiles: 0,
     })
     expect(standard.aiScanResult.coverage.limitsReached).not.toContain("max_files")
     expect(standard.webMcpCoverage).toMatchObject({
       coverageState: "COMPLETE",
       sourceSelection: {
-        eligibleFiles: 217,
-        selectedFiles: 217,
+        eligibleFiles: 273,
+        selectedFiles: 273,
         skippedFiles: 0,
         limitsReached: [],
       },

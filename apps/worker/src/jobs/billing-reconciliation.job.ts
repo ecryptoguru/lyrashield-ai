@@ -1,20 +1,19 @@
 /**
  * Billing reconciliation job.
  *
- * Daily BullMQ job that:
- * 1. Pulls recent Polar orders/subscriptions and Razorpay payments
- * 2. Compares against WebhookEvent rows in the database
- * 3. Re-enqueues locally persisted webhook tracks that are safe to retry
- * 4. Alerts on provider drift without synthesizing unverified webhook payloads
+ * Daily worker job that:
+ * 1. Pulls paid Polar orders and captured Razorpay payments since its durable checkpoint
+ * 2. Compares them against persisted WebhookEvent rows
+ * 3. Reports unprocessed events and provider/webhook drift to operators
  *
- * This is a safety net — webhooks should handle 99% of events, but this
- * job catches the ones that fall through the cracks.
+ * This is report-only. It never synthesizes webhook payloads, retries tracks,
+ * or changes billing or entitlements.
  */
 
-import { prisma, getSystemPrisma } from "@lyrashield/db"
+import { randomUUID } from "node:crypto"
+import { getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { getPolarClient, getRazorpayClient, WEBHOOK_TRACK_MAX_ATTEMPTS } from "@lyrashield/billing"
-import { enqueueWebhookTrackRetry } from "@lyrashield/integrations"
+import { getPolarClient, getRazorpayClient } from "@lyrashield/billing"
 
 export interface ReconciliationResult {
   /** Number of Polar events checked. */
@@ -25,126 +24,242 @@ export interface ReconciliationResult {
   replayed: number
   /** Number of drift alerts raised. */
   driftAlerts: number
-  /** Number of incomplete webhook tracks re-enqueued for retry. */
-  tracksReEnqueued: number
-  /** Number of dead-lettered tracks skipped (terminal — need manual triage). */
-  deadLetterSkipped: number
+  /** True only when every provider and database check completed and the cursor advanced. */
+  completed: boolean
+  /** True when another worker currently owns the reconciliation lease. */
+  skipped: boolean
   /** Details of drift alerts. */
   alerts: ReconciliationAlert[]
 }
 
 interface ReconciliationAlert {
   provider: string
-  externalId: string
+  externalId?: string
   type: string
   message: string
 }
 
-/** A pending track older than this is stranded (crashed before execution). */
-const STRANDED_PENDING_MIN_AGE_MS = 10 * 60_000
+interface ReconciliationLease {
+  token: string
+  runStartedAt: Date
+  coverageFrom: Date
+  lastCompletedAt: Date | null
+}
 
-/** Upper bound on retries enqueued per reconciliation run. */
-const TRACK_RETRY_BATCH_LIMIT = 50
+// Rescan orders/payments for status changes after creation. Polar retries
+// subscription charges for 21 days; Razorpay can capture late-authorized
+// payments for up to 5 days. Three extra days cover scheduler delay.
+const RECONCILIATION_OVERLAP_MS = 24 * 24 * 60 * 60 * 1000
+const RECONCILIATION_LEASE_ID = "singleton"
+
+class ReconciliationLeaseLostError extends Error {
+  constructor() {
+    super("Billing reconciliation lease was lost before completion")
+    this.name = "ReconciliationLeaseLostError"
+  }
+}
+
+async function hasProviderWebhookEvent(provider: "polar" | "razorpay", objectId: string) {
+  // Keep the cross-workspace check on the system client. These exact JSONB
+  // expressions are backed by the provider-specific partial indexes in
+  // 20260928140000_webhook_provider_object_lookup.
+  const rows =
+    provider === "polar"
+      ? await getSystemPrisma().$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM "WebhookEvent"
+          WHERE provider = 'polar' AND "eventType" = 'order.paid'
+            AND (payload #> '{data,id}') = to_jsonb(${objectId}::text)
+          LIMIT 1
+        `
+      : await getSystemPrisma().$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM "WebhookEvent"
+          WHERE provider = 'razorpay' AND "eventType" = 'payment.captured'
+            AND (payload #> '{payload,payment,entity,id}') = to_jsonb(${objectId}::text)
+          LIMIT 1
+        `
+
+  return rows.length > 0
+}
+
+async function acquireReconciliationLease(): Promise<ReconciliationLease | null> {
+  const token = randomUUID()
+  const rows = await getSystemPrisma().$queryRaw<
+    Array<{ checked_through: Date; coverage_from: Date; last_completed_at: Date | null }>
+  >`
+    INSERT INTO public."billing_reconciliation_state" (
+      "id", "coverage_from", "last_completed_at", "lease_token", "lease_expires_at", "updated_at"
+    ) VALUES (
+      ${RECONCILIATION_LEASE_ID}, now() - INTERVAL '24 days', NULL,
+      ${token}, now() + INTERVAL '30 minutes', now()
+    )
+    ON CONFLICT ("id") DO UPDATE SET
+      "lease_token" = EXCLUDED."lease_token",
+      "lease_expires_at" = EXCLUDED."lease_expires_at",
+      "updated_at" = now()
+    WHERE "billing_reconciliation_state"."lease_expires_at" IS NULL
+      OR "billing_reconciliation_state"."lease_expires_at" <= now()
+    RETURNING "coverage_from", "last_completed_at", now() AS checked_through
+  `
+  const state = rows[0]
+  return state
+    ? {
+        token,
+        runStartedAt: state.checked_through,
+        coverageFrom: state.coverage_from,
+        lastCompletedAt: state.last_completed_at,
+      }
+    : null
+}
+
+async function renewReconciliationLease(token: string): Promise<void> {
+  const updated = await getSystemPrisma().$executeRaw`
+    UPDATE public."billing_reconciliation_state"
+    SET "lease_expires_at" = now() + INTERVAL '30 minutes', "updated_at" = now()
+    WHERE "id" = ${RECONCILIATION_LEASE_ID}
+      AND "lease_token" = ${token}
+      AND "lease_expires_at" > now()
+  `
+  if (updated !== 1) throw new ReconciliationLeaseLostError()
+}
+
+async function completeReconciliationLease(token: string, completedAt: Date): Promise<boolean> {
+  const updated = await getSystemPrisma().$executeRaw`
+    UPDATE public."billing_reconciliation_state"
+    SET "last_completed_at" = ${completedAt},
+        "lease_token" = NULL,
+        "lease_expires_at" = NULL,
+        "updated_at" = now()
+    WHERE "id" = ${RECONCILIATION_LEASE_ID}
+      AND "lease_token" = ${token}
+      AND "lease_expires_at" > now()
+  `
+  return updated === 1
+}
+
+async function releaseReconciliationLease(token: string): Promise<void> {
+  await getSystemPrisma().$executeRaw`
+    UPDATE public."billing_reconciliation_state"
+    SET "lease_token" = NULL, "lease_expires_at" = NULL, "updated_at" = now()
+    WHERE "id" = ${RECONCILIATION_LEASE_ID} AND "lease_token" = ${token}
+  `
+}
+
+function recordProviderCheckFailure(
+  result: ReconciliationResult,
+  provider: "polar" | "razorpay"
+): void {
+  result.driftAlerts++
+  result.alerts.push({
+    provider,
+    type: "provider_check_failed",
+    message: `${provider} reconciliation failed; provider events were not checked`,
+  })
+}
 
 /**
  * Run the billing reconciliation job.
  *
- * This job is designed to be run as a daily BullMQ repeatable job.
- * It checks the last 24 hours of events.
+ * It checks from the last successful cursor with a 24-day overlap, plus every
+ * still-unprocessed webhook. A first run establishes a 24-day baseline.
  */
 export async function runBillingReconciliation(): Promise<ReconciliationResult> {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000) // last 24 hours
   const result: ReconciliationResult = {
     polarChecked: 0,
     razorpayChecked: 0,
     replayed: 0,
     driftAlerts: 0,
-    tracksReEnqueued: 0,
-    deadLetterSkipped: 0,
+    completed: false,
+    skipped: false,
     alerts: [],
   }
 
-  // Reconcile Polar events
-  await reconcilePolar(since, result)
+  const lease = await acquireReconciliationLease()
+  if (!lease) {
+    result.skipped = true
+    logger.info("Billing reconciliation skipped; another worker holds the lease")
+    return result
+  }
 
-  // Reconcile Razorpay events
-  await reconcileRazorpay(since, result)
+  const until = lease.runStartedAt
+  const since = lease.lastCompletedAt
+    ? new Date(lease.lastCompletedAt.getTime() - RECONCILIATION_OVERLAP_MS)
+    : lease.coverageFrom
 
-  // Check for unprocessed webhook events in the DB
-  await checkUnprocessedEvents(result)
+  try {
+    const polarComplete = await reconcilePolar(since, until, result, lease.token)
+    const razorpayComplete = await reconcileRazorpay(since, until, result, lease.token)
 
-  // Re-enqueue incomplete required-tracks (findings 12 / 18A)
-  await reEnqueueIncompleteTracks(result)
+    await renewReconciliationLease(lease.token)
+    await checkUnprocessedEvents(result)
+
+    if (polarComplete && razorpayComplete) {
+      await renewReconciliationLease(lease.token)
+      result.completed = await completeReconciliationLease(lease.token, until)
+      if (!result.completed) throw new ReconciliationLeaseLostError()
+    }
+  } finally {
+    try {
+      await releaseReconciliationLease(lease.token)
+    } catch (error) {
+      logger.error("Billing reconciliation lease release failed", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  if (result.driftAlerts > 0) {
+    const alertSamples = result.alerts.slice(0, 20)
+    logger.warn("operator_alert", {
+      code: "reconciliation_drift",
+      severity: "warning",
+      alertCount: result.driftAlerts,
+      alertSamples,
+      truncatedAlertCount: Math.max(0, result.driftAlerts - alertSamples.length),
+    })
+  }
 
   logger.info("Billing reconciliation complete", {
     polarChecked: result.polarChecked,
     razorpayChecked: result.razorpayChecked,
     replayed: result.replayed,
     driftAlerts: result.driftAlerts,
-    tracksReEnqueued: result.tracksReEnqueued,
-    deadLetterSkipped: result.deadLetterSkipped,
+    completed: result.completed,
+    initialBaseline: lease.lastCompletedAt === null,
+    coverageFrom: since.toISOString(),
+    checkedThrough: until.toISOString(),
   })
 
   return result
 }
 
 /**
- * Reconcile Polar orders and subscriptions against WebhookEvent rows.
+ * Reconcile paid Polar orders against WebhookEvent rows.
  */
-async function reconcilePolar(since: Date, result: ReconciliationResult): Promise<void> {
+async function reconcilePolar(
+  since: Date,
+  until: Date,
+  result: ReconciliationResult,
+  leaseToken: string
+): Promise<boolean> {
   const client = getPolarClient()
   if (!client) {
     logger.debug("Polar client not configured — skipping Polar reconciliation")
-    return
+    recordProviderCheckFailure(result, "polar")
+    return false
   }
 
   try {
-    // A-L07: Paginate through all orders in the 24h window, not just the first 50.
-    let page = 1
-    const pageSize = 50
-    let hasMore = true
-    while (hasMore) {
-      const ordersResponse = await (
-        client as unknown as {
-          orders: {
-            list: (params: {
-              limit: number
-              page?: number
-            }) => Promise<
-              | { result: { id: string }[] }
-              | { items: { id: string }[] }
-              | { data: { id: string }[] }
-              | { pagination: { hasMore: boolean } }
-            >
-          }
-        }
-      ).orders
-        .list({ limit: pageSize, page })
-        .catch(() => null)
+    // The API has no modified-at filter. Descending creation order lets this
+    // stop once orders are older than the transition lookback.
+    for await (const page of await client.orders.list({
+      limit: 100,
+      sorting: ["-created_at"],
+    })) {
+      await renewReconciliationLease(leaseToken)
+      for (const order of page.result.items) {
+        if (order.createdAt < since) break
+        if (order.createdAt > until || !order.paid) continue
 
-      if (!ordersResponse) {
-        logger.debug("Polar orders API not available — skipping")
-        return
-      }
-
-      const orders =
-        (
-          ordersResponse as {
-            result?: { id: string }[]
-            items?: { id: string }[]
-            data?: { id: string }[]
-          }
-        ).result ??
-        (ordersResponse as { items?: { id: string }[] }).items ??
-        (ordersResponse as { data?: { id: string }[] }).data ??
-        []
-
-      if (orders.length === 0) {
-        hasMore = false
-        break
-      }
-
-      for (const order of orders) {
         result.polarChecked++
 
         // Check if we have a WebhookEvent for this order. WebhookEvent is
@@ -153,14 +268,7 @@ async function reconcilePolar(since: Date, result: ReconciliationResult): Promis
         // GitHub webhook route) — the plain client returns empty rows under
         // the NOBYPASSRLS runtime role and every order false-flags as
         // "webhook may have been missed".
-        const existing = await getSystemPrisma().webhookEvent.findFirst({
-          where: {
-            provider: "polar",
-            eventType: "order.paid",
-            payload: { path: ["data", "id"], equals: order.id },
-          },
-          select: { id: true, processed: true, eventType: true, payload: true },
-        })
+        const existing = await hasProviderWebhookEvent("polar", order.id)
 
         if (!existing) {
           result.driftAlerts++
@@ -170,88 +278,73 @@ async function reconcilePolar(since: Date, result: ReconciliationResult): Promis
             type: "order.paid",
             message: "Polar order not found in WebhookEvent table — webhook may have been missed",
           })
-        } else if (!existing.processed) {
-          // A-M06: Unprocessed event — flag for reprocessing
-          result.driftAlerts++
-          result.alerts.push({
-            provider: "polar",
-            externalId: order.id,
-            type: "unprocessed",
-            message: "Polar webhook event exists but was not processed",
-          })
         }
       }
-
-      // Check if there are more pages
-      const pagination = (ordersResponse as { pagination?: { hasMore: boolean } }).pagination
-      hasMore = pagination?.hasMore ?? orders.length === pageSize
-      page++
+      if (page.result.items.some((order) => order.createdAt < since)) break
     }
+    return true
   } catch (error) {
+    if (error instanceof ReconciliationLeaseLostError) throw error
     logger.error("Polar reconciliation failed", {
       error: error instanceof Error ? error.message : String(error),
     })
+    recordProviderCheckFailure(result, "polar")
+    return false
   }
 }
 
 /**
  * Reconcile Razorpay payments against WebhookEvent rows.
  */
-async function reconcileRazorpay(_since: Date, result: ReconciliationResult): Promise<void> {
+async function reconcileRazorpay(
+  since: Date,
+  until: Date,
+  result: ReconciliationResult,
+  leaseToken: string
+): Promise<boolean> {
   const client = getRazorpayClient()
   if (!client) {
     logger.debug("Razorpay client not configured — skipping Razorpay reconciliation")
-    return
+    recordProviderCheckFailure(result, "razorpay")
+    return false
   }
 
   try {
-    // A-L07: Paginate through all payments in the 24h window
+    const from = Math.floor(since.getTime() / 1000)
+    const to = Math.floor(until.getTime() / 1000)
     let razorpayPage = 1
     const razorpayPageSize = 50
     let razorpayHasMore = true
     while (razorpayHasMore) {
-      const payments = await (
-        client as unknown as {
-          payments: {
-            all: (params: {
-              count: number
-              skip?: number
-            }) => Promise<{ items: { id: string; status: string }[] }>
-          }
-        }
-      ).payments
-        .all({ count: razorpayPageSize, skip: (razorpayPage - 1) * razorpayPageSize })
-        .catch(() => null)
+      await renewReconciliationLease(leaseToken)
+      const payments = await client.payments.all({
+        count: razorpayPageSize,
+        skip: (razorpayPage - 1) * razorpayPageSize,
+        from,
+        to,
+      })
 
-      if (!payments) {
-        logger.debug("Razorpay payments API not available — skipping")
-        return
+      if (!payments || !Array.isArray(payments.items)) {
+        logger.debug("Razorpay payments API returned an invalid response — skipping")
+        recordProviderCheckFailure(result, "razorpay")
+        return false
       }
 
-      const paymentItems = payments.items ?? []
+      const paymentItems = payments.items
       if (paymentItems.length === 0) {
         razorpayHasMore = false
         break
       }
 
       for (const payment of paymentItems) {
+        if (payment.created_at < from || payment.created_at > to) continue
         result.razorpayChecked++
 
         if (payment.status !== "captured") continue
 
         // Cross-workspace provider reconciliation — system client (see the
         // Polar note above: WebhookEvent is FORCE RLS strict).
-        const existing = await getSystemPrisma().webhookEvent.findFirst({
-          where: {
-            provider: "razorpay",
-            eventType: "payment.captured",
-            payload: {
-              path: ["payload", "payment", "entity", "id"],
-              equals: payment.id,
-            },
-          },
-          select: { id: true, processed: true },
-        })
+        const existing = await hasProviderWebhookEvent("razorpay", payment.id)
 
         if (!existing) {
           result.driftAlerts++
@@ -262,24 +355,20 @@ async function reconcileRazorpay(_since: Date, result: ReconciliationResult): Pr
             message:
               "Razorpay payment not found in WebhookEvent table — webhook may have been missed",
           })
-        } else if (!existing.processed) {
-          result.driftAlerts++
-          result.alerts.push({
-            provider: "razorpay",
-            externalId: payment.id,
-            type: "unprocessed",
-            message: "Razorpay webhook event exists but was not processed",
-          })
         }
       }
 
       razorpayHasMore = paymentItems.length === razorpayPageSize
       razorpayPage++
     }
+    return true
   } catch (error) {
+    if (error instanceof ReconciliationLeaseLostError) throw error
     logger.error("Razorpay reconciliation failed", {
       error: error instanceof Error ? error.message : String(error),
     })
+    recordProviderCheckFailure(result, "razorpay")
+    return false
   }
 }
 
@@ -290,74 +379,26 @@ async function checkUnprocessedEvents(result: ReconciliationResult): Promise<voi
   // Cross-workspace sweep over every provider's events — system client
   // (WebhookEvent is FORCE RLS strict; the plain client sees nothing under
   // the runtime role).
-  const unprocessed = await getSystemPrisma().webhookEvent.findMany({
-    where: {
-      processed: false,
-      createdAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) }, // last 48 hours
-    },
-    select: { id: true, provider: true, externalId: true, eventType: true },
-    take: 100,
-  })
+  const webhookEvent = getSystemPrisma().webhookEvent
+  const where = { processed: false }
+  const [unprocessedCount, unprocessed] = await Promise.all([
+    webhookEvent.count({ where }),
+    webhookEvent.findMany({
+      where,
+      select: { id: true, provider: true, externalId: true, eventType: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 100,
+    }),
+  ])
+
+  result.driftAlerts += unprocessedCount
 
   for (const event of unprocessed) {
-    result.driftAlerts++
     result.alerts.push({
       provider: event.provider,
       externalId: event.externalId,
       type: event.eventType,
       message: `Unprocessed ${event.provider} webhook event: ${event.eventType}`,
-    })
-  }
-}
-
-/**
- * Re-enqueue incomplete required-tracks (findings 12 / 18A).
- *
- * Selects track rows that are pending-but-stranded (older than the stranded
- * window) or failed while under the bounded attempt cap, and enqueues one
- * bounded batch of retry jobs. Dead-lettered tracks are terminal — counted
- * and skipped so they surface for manual triage without infinite retries.
- */
-async function reEnqueueIncompleteTracks(result: ReconciliationResult): Promise<void> {
-  const strandedCutoff = new Date(Date.now() - STRANDED_PENDING_MIN_AGE_MS)
-
-  const incomplete = await prisma.webhookEventTrack.findMany({
-    where: {
-      OR: [
-        { status: "pending", createdAt: { lt: strandedCutoff } },
-        { status: "failed", attempts: { lt: WEBHOOK_TRACK_MAX_ATTEMPTS } },
-      ],
-    },
-    select: { id: true, webhookEventId: true, track: true },
-    orderBy: { updatedAt: "asc" },
-    take: TRACK_RETRY_BATCH_LIMIT + 25,
-  })
-
-  for (const row of incomplete) {
-    if (result.tracksReEnqueued >= TRACK_RETRY_BATCH_LIMIT) break
-    try {
-      await enqueueWebhookTrackRetry({ webhookEventId: row.webhookEventId, track: row.track })
-      result.tracksReEnqueued++
-    } catch (error) {
-      logger.warn("Reconciliation could not enqueue webhook track retry", {
-        webhookEventId: row.webhookEventId,
-        track: row.track,
-        reason: "retry_enqueue_failed",
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
-
-  // Dead letters: count only (bounded summary), never re-enqueue.
-  result.deadLetterSkipped = await prisma.webhookEventTrack.count({
-    where: { status: "dead_letter" },
-  })
-
-  if (result.tracksReEnqueued > 0 || result.deadLetterSkipped > 0) {
-    logger.info("Webhook track reconciliation sweep", {
-      reEnqueued: result.tracksReEnqueued,
-      deadLetterSkipped: result.deadLetterSkipped,
-      scanned: incomplete.length,
     })
   }
 }

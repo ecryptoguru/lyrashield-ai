@@ -2,79 +2,40 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useFindingsWebMcp } from "./findings-webmcp"
 import { FindingDetailDrawer } from "./finding-detail-drawer"
+import { FindingsControls, FindingsResults } from "./findings-client-view"
+import { useFindingDrawer } from "./use-finding-drawer"
 import {
   findingsContextKey,
   loadFindingsListContext,
   saveFindingsListContext,
   type FindingsListPage,
 } from "./findings-list-context"
-import Link from "next/link"
-import { Bug, Shield, ChevronRight, CheckCircle2, XCircle, Calendar, SortDesc } from "lucide-react"
-import {
-  Button,
-  Badge,
-  Card,
-  EmptyState,
-  Spinner,
-  LoadMore,
-  Select,
-  buttonVariants,
-  cn,
-} from "@lyrashield/ui"
+import { Button, Card, LoadMore } from "@lyrashield/ui"
 import { findingsPaginatedSchema } from "@/lib/api-schemas"
 import { apiGetPaginated } from "@/lib/api-client"
-import {
-  FINDING_PLURAL,
-  SCAN_PLURAL,
-  SCAN_SINGULAR,
-  TARGET_PLURAL,
-  TARGET_SINGULAR,
-} from "@/lib/terminology"
-import { SEVERITY_BADGE } from "@/lib/severity-badge"
+import { FINDING_PLURAL } from "@/lib/terminology"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { severityLabel, humanizeToken } from "@/lib/labels"
-import { calculateFindingPriority, type FindingPriorityResult } from "@/lib/finding-priority"
-import type { FindingStatus, TargetEnvironment } from "@lyrashield/types"
 import {
   findingFilterToApiQuery,
-  findingsHref,
   parseFindingListParams,
   type FindingFilter as FindingFilterValue,
 } from "@/lib/finding-list-params"
-import { SEVERITY_ICON, SEVERITY_COLOR, SEVERITY_ORDER } from "./finding-presentation"
+import {
+  sortFindings,
+  updateFindingStatus,
+  type FindingListItem,
+  type SortMode,
+} from "./findings-list-model"
+
+export type { FindingListItem, SortMode } from "./findings-list-model"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface FindingListItem {
-  id: string
-  title: string
-  summary: string
-  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO"
-  status: string
-  verified: boolean
-  verificationStatus: string
-  verificationMethod?: string | null
-  verificationReason?: string | null
-  confidence: string
-  cwe?: string | null
-  cvssScore?: number | null
-  businessImpact?: string | null
-  exploitability?: string | null
-  target?: { id: string; name: string; type: string; environment?: string | null } | null
-  _count?: { evidence: number; fixProposals: number }
-  firstSeenAt: string
-  lastSeenAt: string
-  priority?: FindingPriorityResult
-}
-
 // ---------------------------------------------------------------------------
 // FindingsClient
 // ---------------------------------------------------------------------------
-
-export type SortMode = "priority" | "severity" | "newest"
 
 export function FindingsClient({
   workspaceId,
@@ -145,18 +106,18 @@ export function FindingsClient({
   const [scanId, setScanId] = useState(initialScanId)
   const [targetFilter, setTargetFilter] = useState(initialTargetFilter)
   const [query, setQuery] = useState(initialQuery)
-  const [selectedFinding, setSelectedFinding] = useState<FindingListItem | null>(() =>
-    initialSelectedFindingId
-      ? (initialData.find((finding) => finding.id === initialSelectedFindingId) ?? null)
-      : null
-  )
+  const {
+    selectedFinding,
+    setSelectedFinding,
+    openerRef,
+    openFinding,
+    closeFinding,
+    clearFindingForScopeChange,
+  } = useFindingDrawer(findings, initialData, initialSelectedFindingId)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [restoreError, setRestoreError] = useState(false)
   const [restoreReady, setRestoreReady] = useState(false)
-  // The row that opened the drawer, for focus restoration on close.
-  const openerRef = useRef<HTMLElement | null>(null)
-  const pushedFindingUrlRef = useRef(false)
   const rowRefs = useRef(new Map<string, HTMLButtonElement | null>())
   const requestGenerationRef = useRef(0)
   const requestAbortRef = useRef<AbortController | null>(null)
@@ -179,64 +140,6 @@ export function FindingsClient({
   useEffect(() => {
     currentScopeRef.current = JSON.stringify({ filter, scanId, target: targetFilter, q: query })
   }, [filter, scanId, targetFilter, query])
-
-  /**
-   * Drawer URL state: opening writes `finding=` (pushState, so Back returns to
-   * the list), closing removes only `finding=` and restores focus to the row
-   * that opened the drawer. Filter/sort/search state is never touched.
-   */
-  const openFinding = useCallback((finding: FindingListItem) => {
-    setSelectedFinding(finding)
-    if (typeof window === "undefined") return
-    const url = new URL(window.location.href)
-    url.searchParams.set("finding", finding.id)
-    window.history.pushState(null, "", `${url.pathname}${url.search}`)
-    pushedFindingUrlRef.current = true
-  }, [])
-
-  const closeFinding = useCallback(() => {
-    const opener = openerRef.current
-    setSelectedFinding(null)
-    openerRef.current = null
-    if (typeof window === "undefined") return
-    if (pushedFindingUrlRef.current) {
-      pushedFindingUrlRef.current = false
-      // Back pops the pushed entry; the popstate listener keeps state in sync.
-      window.history.back()
-    } else {
-      const url = new URL(window.location.href)
-      url.searchParams.delete("finding")
-      window.history.replaceState(null, "", `${url.pathname}${url.search}`)
-    }
-    // Restore focus to the row that opened the drawer.
-    requestAnimationFrame(() => opener?.focus())
-  }, [])
-
-  const clearFindingForScopeChange = useCallback(() => {
-    setSelectedFinding(null)
-    openerRef.current = null
-    pushedFindingUrlRef.current = false
-    if (typeof window === "undefined") return
-    const url = new URL(window.location.href)
-    url.searchParams.delete("finding")
-    window.history.replaceState(null, "", `${url.pathname}${url.search}`)
-  }, [])
-
-  // Browser Back from a drawer deep link or an opened drawer returns to the
-  // list state without losing filter/sort/search.
-  useEffect(() => {
-    const onPopState = () => {
-      pushedFindingUrlRef.current = false
-      const findingId = new URL(window.location.href).searchParams.get("finding")
-      setSelectedFinding(
-        findingId ? (findings.find((finding) => finding.id === findingId) ?? null) : null
-      )
-    }
-    window.addEventListener("popstate", onPopState)
-    return () => window.removeEventListener("popstate", onPopState)
-  }, [findings])
-
-  // Keep the drawer deep link on refresh. closeFinding removes it explicitly.
 
   // Server props own page one. Saved pages only tell us how many additional
   // pages to re-fetch through fresh cursors before restoring scroll.
@@ -622,131 +525,23 @@ export function FindingsClient({
     clearFindingForScopeChange,
   ])
 
-  // Client-side sort — priority first (the API-ranked page default), then
-  // severity high-first, then newest. Each mode keeps its own tie-breakers so
-  // ordering stays deterministic across accumulated pages.
-  const sortedFindings = [...findings].sort((a, b) => {
-    if (sortMode === "priority") {
-      return (
-        (b.priority?.score ?? -1) - (a.priority?.score ?? -1) ||
-        (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99) ||
-        new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
-      )
-    }
-    if (sortMode === "severity") {
-      return (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99)
-    }
-    // newest = lastSeenAt desc
-    return new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
-  })
-
-  const filterChips = [
-    { label: "Open", value: "OPEN" },
-    { label: "All", value: "ALL" },
-    { label: "Critical", value: "CRITICAL" },
-    { label: "High", value: "HIGH" },
-    { label: "Medium", value: "MEDIUM" },
-    { label: "Fixed", value: "FIXED" },
-    { label: "Verified", value: "VERIFIED" },
-  ] as const
+  const sortedFindings = sortFindings(findings, sortMode)
 
   return (
     <div>
-      <div
-        aria-label="Findings scope"
-        className="mb-5 flex flex-col gap-2 rounded-lg border bg-card px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-      >
-        <p>
-          <span className="font-medium">Scope:</span>{" "}
-          {targetFilter
-            ? `Target: ${targets.find((target) => target.id === targetFilter)?.name ?? "Selected target"}`
-            : "All targets"}
-          {scanId ? ` · Scan: ${scanId}` : ""}
-          {!scanId && !targetFilter ? " · All workspace findings" : ""}
-        </p>
-        {(scanId || targetFilter) && (
-          <Link
-            href={findingsHref({ tab: "issues" })}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            All workspace findings
-          </Link>
-        )}
-      </div>
-      <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          {filterChips.map((chip) => (
-            <button
-              key={chip.value}
-              type="button"
-              aria-pressed={filter === chip.value}
-              onClick={() => void handleFilterChange(chip.value)}
-              className={cn(
-                "min-h-11 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                filter === chip.value
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-              )}
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {targets.length > 0 && (
-            <Select
-              aria-label={`Filter by ${TARGET_SINGULAR.toLowerCase()}`}
-              value={targetFilter}
-              onChange={(e) => void handleTargetFilterChange(e.target.value)}
-              disabled={Boolean(scanId)}
-              className="h-9 w-44"
-            >
-              <option value="">All {TARGET_PLURAL.toLowerCase()}</option>
-              {targets.map((target) => (
-                <option key={target.id} value={target.id}>
-                  {target.name}
-                </option>
-              ))}
-            </Select>
-          )}
-          <input
-            type="search"
-            value={query}
-            maxLength={120}
-            onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder={`Search ${FINDING_PLURAL.toLowerCase()}…`}
-            aria-label={`Search ${FINDING_PLURAL.toLowerCase()}`}
-            className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none lg:w-56"
-          />
-
-          {/* Sort control */}
-          <div className="flex w-full min-w-0 max-w-full items-center gap-1 rounded-full border px-3 py-1 sm:w-auto">
-            <span className="text-muted-foreground text-xs">Sort loaded results</span>
-            {sortMode === "severity" ? (
-              <SortDesc className="text-muted-foreground h-3 w-3" aria-hidden="true" />
-            ) : (
-              <Calendar className="text-muted-foreground h-3 w-3" aria-hidden="true" />
-            )}
-            <select
-              value={sortMode}
-              onChange={(e) => {
-                const next = e.target.value as SortMode
-                setSortMode(next)
-                updateQueryParams({ filter, sort: next })
-              }}
-              aria-label="Sort loaded results"
-              title="Sort loaded results"
-              className="text-muted-foreground focus-visible:ring-ring min-w-0 flex-1 cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none sm:flex-none"
-            >
-              <option value="priority">Priority (recommended)</option>
-              <option value="severity">Severity (high first)</option>
-              <option value="newest">Newest</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
+      <FindingsControls
+        filter={filter}
+        sortMode={sortMode}
+        scanId={scanId}
+        targetFilter={targetFilter}
+        query={query}
+        targets={targets}
+        handleFilterChange={handleFilterChange}
+        handleTargetFilterChange={handleTargetFilterChange}
+        handleQueryChange={handleQueryChange}
+        setSortMode={setSortMode}
+        updateQueryParams={updateQueryParams}
+      />
       {hasWebMcpUndo && (
         <Card className="mb-4 flex items-center gap-3 p-3" role="status">
           <span className="text-muted-foreground text-sm">
@@ -770,131 +565,54 @@ export function FindingsClient({
         </p>
       )}
 
-      {loading && findings.length === 0 ? (
-        <div
-          className="space-y-3"
-          aria-busy="true"
-          aria-label={`Loading ${FINDING_PLURAL.toLowerCase()}`}
-        >
-          {[0, 1, 2].map((item) => (
-            <Skeleton key={item} className="h-32 w-full" />
-          ))}
-        </div>
-      ) : findings.length === 0 ? (
-        <EmptyState
-          icon={Bug}
-          title={`No ${FINDING_PLURAL.toLowerCase()} yet`}
-          description={`Security ${FINDING_PLURAL.toLowerCase()} detected by ${SCAN_PLURAL.toLowerCase()} will appear here. Start a ${SCAN_SINGULAR.toLowerCase()} to get started.`}
-          action={
-            <Link href="/dashboard/scans" className={buttonVariants()}>
-              Start a {SCAN_SINGULAR.toLowerCase()}
-            </Link>
-          }
-        />
-      ) : (
-        <div className={`space-y-3 ${loading ? "pointer-events-none opacity-50" : ""}`}>
-          {loading && (
-            <div className="flex items-center justify-center py-4">
-              <Spinner />
-            </div>
-          )}
-          {sortedFindings.map((finding) => {
-            const SevIcon = SEVERITY_ICON[finding.severity] ?? Shield
-            const priorityReason = finding.priority?.reasons[0]
-            return (
-              <Card key={finding.id} className="p-0 transition-shadow hover:shadow-card-hover">
-                {/* One semantic control per row: the title button opens the
-                    drawer. No nested links, buttons, or disclosures inside it. */}
-                <button
-                  type="button"
-                  ref={(el) => {
-                    rowRefs.current.set(finding.id, el)
-                  }}
-                  onClick={(event) => {
-                    openerRef.current = event.currentTarget
-                    openFinding(finding)
-                  }}
-                  aria-haspopup="dialog"
-                  className="flex w-full items-start justify-between gap-4 rounded-xl p-4 text-left focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      {/* Severity with icon (WCAG 1.4.1) */}
-                      <Badge variant={SEVERITY_BADGE[finding.severity] ?? "muted"}>
-                        <SevIcon
-                          className={cn("mr-1 h-3 w-3", SEVERITY_COLOR[finding.severity])}
-                          aria-hidden="true"
-                        />
-                        {severityLabel(finding.severity)}
-                      </Badge>
-                      {finding.verified ? (
-                        <span className="flex items-center gap-1 text-xs text-emerald-500">
-                          <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Independently
-                          verified
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground flex items-center gap-1 text-xs">
-                          <XCircle className="h-3 w-3" aria-hidden="true" />{" "}
-                          {humanizeToken(finding.verificationStatus)}
-                        </span>
-                      )}
-                    </div>
-                    <span className="block truncate font-medium" title={finding.title}>
-                      {finding.title}
-                    </span>
-                    <span className="text-muted-foreground mt-0.5 block text-xs">
-                      {finding.target ? `${finding.target.name} · ` : ""}
-                      {priorityReason ?? humanizeToken(finding.status)}
-                    </span>
-                  </div>
-                  <ChevronRight
-                    className="text-muted-foreground mt-1 h-5 w-5 shrink-0"
-                    aria-hidden="true"
-                  />
-                </button>
-              </Card>
-            )
-          })}
-
-          {restoreReady && (
-            <LoadMore
-              key={JSON.stringify([workspaceId, scanId, filter, targetFilter, query])}
-              cursor={nextCursor}
-              onLoadMore={async (cursor) => {
-                const generation = requestGenerationRef.current
-                const abort = new AbortController()
-                loadMoreAbortRef.current = abort
-                const res = await apiGetPaginated<FindingListItem>(
-                  `/api/findings`,
-                  listQuery({ cursor }),
-                  { schema: findingsPaginatedSchema, signal: abort.signal }
-                )
-                acceptLoadMoreRef.current =
-                  generation === requestGenerationRef.current && !abort.signal.aborted
-                return { items: res.items, nextCursor: res.nextCursor }
-              }}
-              onItems={(items) => {
-                if (acceptLoadMoreRef.current) {
-                  pendingItemsRef.current = items
-                  setFindings((prev) => [...prev, ...items])
-                }
-              }}
-              onNextCursor={(cursor) => {
-                if (!acceptLoadMoreRef.current) return
-                if (pendingItemsRef.current) {
-                  pagesRef.current = [
-                    ...pagesRef.current,
-                    { items: pendingItemsRef.current, nextCursor: cursor },
-                  ]
-                  pendingItemsRef.current = null
-                }
-                setNextCursor(cursor)
-                acceptLoadMoreRef.current = false
-              }}
-            />
-          )}
-        </div>
-      )}
+      <FindingsResults
+        loading={loading}
+        findings={findings}
+        sortedFindings={sortedFindings}
+        rowRefs={rowRefs}
+        onOpenFinding={(finding, button) => {
+          openerRef.current = button
+          openFinding(finding)
+        }}
+      >
+        {restoreReady && (
+          <LoadMore
+            key={JSON.stringify([workspaceId, scanId, filter, targetFilter, query])}
+            cursor={nextCursor}
+            onLoadMore={async (cursor) => {
+              const generation = requestGenerationRef.current
+              const abort = new AbortController()
+              loadMoreAbortRef.current = abort
+              const res = await apiGetPaginated<FindingListItem>(
+                `/api/findings`,
+                listQuery({ cursor }),
+                { schema: findingsPaginatedSchema, signal: abort.signal }
+              )
+              acceptLoadMoreRef.current =
+                generation === requestGenerationRef.current && !abort.signal.aborted
+              return { items: res.items, nextCursor: res.nextCursor }
+            }}
+            onItems={(items) => {
+              if (acceptLoadMoreRef.current) {
+                pendingItemsRef.current = items
+                setFindings((prev) => [...prev, ...items])
+              }
+            }}
+            onNextCursor={(cursor) => {
+              if (!acceptLoadMoreRef.current) return
+              if (pendingItemsRef.current) {
+                pagesRef.current = [
+                  ...pagesRef.current,
+                  { items: pendingItemsRef.current, nextCursor: cursor },
+                ]
+                pendingItemsRef.current = null
+              }
+              setNextCursor(cursor)
+              acceptLoadMoreRef.current = false
+            }}
+          />
+        )}
+      </FindingsResults>
 
       {selectedFinding && (
         <FindingDetailDrawer
@@ -907,21 +625,7 @@ export function FindingsClient({
           onClose={closeFinding}
           onStatusChange={(id, status) => {
             const reprioritize = (f: FindingListItem): FindingListItem =>
-              f.id === id
-                ? {
-                    ...f,
-                    status,
-                    priority: calculateFindingPriority({
-                      severity: f.severity,
-                      status: status as FindingStatus,
-                      verified: f.verified,
-                      confidence: f.confidence,
-                      environment: (f.target?.environment ?? null) as TargetEnvironment | null,
-                      businessImpact: f.businessImpact,
-                      exploitability: f.exploitability,
-                    }),
-                  }
-                : f
+              updateFindingStatus(f, id, status)
             pagesRef.current = pagesRef.current.map((page) => ({
               ...page,
               items: page.items.map(reprioritize),

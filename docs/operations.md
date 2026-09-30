@@ -23,6 +23,25 @@ Founder- and operator-run procedures consolidated from standalone runbooks. Each
   Razorpay hosted-checkout methods above INR 15,000, Polar settlement
   readiness. Staging proof does not transfer to live rails.
 
+### Report-only billing reconciliation
+
+The worker checks paid Polar orders, captured Razorpay payments and
+unprocessed webhook events at startup and every 24 hours. Provider order/payment
+status can change after creation, so each run rescans a 24-day window. This
+covers Polar's documented 21-day subscription retry schedule and Razorpay's
+late-authorization capture window with a small scheduler-delay margin. The
+first attempt sets a durable coverage baseline 24 days before that attempt;
+each successful run advances a system-owned checkpoint, and later runs include
+the same 24-day overlap. Provider or database failures leave the checkpoint
+unchanged, so a later run catches up across outages. A cross-worker lease
+prevents overlapping sweeps. This job only reports and alerts: it does not
+replay webhook tracks or change billing, entitlements or money. The credential
+scopes and production provider pins still need separate verification before
+this code is considered operational. The first-attempt baseline is the
+forward-monitoring start: the job does not backfill provider payments older
+than that point. Complete any separate historical payment review before
+enabling production credentials.
+
 ### Step 0 — preflight (safe, read-only)
 
 ```bash
@@ -114,9 +133,12 @@ Set the affected `*_BILLING_ADMISSION` back to `off` and redeploy. Existing
 subscriptions are unaffected — admission gates _new_ purchases only. Failed
 tracks below the retry cap can reconcile; `dead_letter` tracks are terminal and
 are **not** automatically re-enqueued. Check `admin → Billing`, retain event
-and track IDs, diagnose provider delivery and processing without exposing raw
-payloads and use a separately authorized bounded recovery operation. Do not
-mark a rail ready with unresolved dead letters.
+and track IDs and diagnose provider delivery and processing without exposing
+raw payloads. There is currently no supported operator retry/reset operation
+for dead-letter tracks. Do not edit database state or enqueue a track directly.
+Provider redelivery may retry eligible nonterminal tracks but can expire or be
+rejected as stale. Keep the affected rail unready until an authorized recovery
+operation is implemented and its idempotency and audit behavior are verified.
 
 ### What this runbook does not cover
 
@@ -179,36 +201,6 @@ payments — separate founder workstreams with their own gates.
 Do not claim the key is rotated, licenses are revoked, or Desktop clients trust a
 replacement key until the coordinated implementation is merged, released and
 verified against the deployed app and a clean Desktop profile.
-
-## Trial claim backfill
-
-`packages/db/scripts/backfill-clear-wrong-trial-claims.ts` clears wrongly stamped `User.trialStartedAt` rows left by the retired fallback that stamped the column for invited members who never received a trial grant.
-
-A candidate is a user whose `trialStartedAt` is set while the account has neither trial marker row (`BillingAccount.provider = "trial"`, `accountId = user.id`) nor trial grant (`UsageRecord.kind = "trial_grant"`, `accountId = user.id`). A marker or grant of any age — even soft-deleted — means the claim was real and the user is skipped.
-
-### Steps
-
-1. Run a dry pass from the production worker VM and read the candidate list (ids and created dates only — never emails):
-
-   ```bash
-   sudo /usr/local/libexec/lyrashield-trial-claim-backfill
-   ```
-
-2. Review the `candidates` array. Apply with the explicit confirmation flag:
-
-   ```bash
-   sudo /usr/local/libexec/lyrashield-trial-claim-backfill --apply=backfill-clear-wrong-trial-claims
-   ```
-
-   The VM runner rejects a bare `--apply`; use the pinned confirmation spelling so the intent remains explicit in runbooks and shell history.
-
-3. The apply pass runs in one serializable transaction: each candidate's `trialStartedAt` is cleared and one chained `AuditLog` row (`trial.claim_cleared`, `resourceType: "user"`) is appended in the user's oldest owned workspace. A cleared user who owns no workspace is listed under `unaudited`.
-
-4. Re-run the dry pass — the candidate list should be empty. The script is idempotent.
-
-### Production execution
-
-Production execution is a founder action run from the worker VM — never from a laptop and never under the runtime role. The runner creates a one-shot container from the deployed digest, passes only the system database URL through a private temporary environment file, and copies the image-bound reviewed script into the deployed database package. It accepts only a dry run or the exact apply confirmation shown above. Retain the printed report as the receipt.
 
 ## Affiliate payout operations
 

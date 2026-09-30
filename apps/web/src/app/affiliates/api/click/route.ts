@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createHash } from "node:crypto"
 import { z } from "zod"
 import { detectAttribution } from "@lyrashield/affiliate"
 import { parseAffiliateCookie } from "@lyrashield/affiliate"
 import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
 import { clientIpFromRequest } from "@/lib/rate-limit"
+import { hashPrivacyValue } from "@/lib/privacy-hash"
 
 const ClickSchema = z.object({
   code: z.string().min(1).max(64),
@@ -78,13 +78,6 @@ function isBotUserAgent(ua: string | null): boolean {
   return BOT_USER_AGENT_PATTERNS.some((pattern) => pattern.test(ua))
 }
 
-function hashIp(ip: string): string {
-  const salt = process.env.IP_HASH_SALT ?? "lyrashield-ip-salt-v1"
-  return createHash("sha256")
-    .update(ip + salt)
-    .digest("hex")
-}
-
 function getClientIp(request: NextRequest): string | undefined {
   const ip = clientIpFromRequest(request)
   return ip === "unknown" ? undefined : ip
@@ -115,7 +108,7 @@ export async function POST(request: NextRequest) {
 
   // S6: Rate limiting
   const clientIp = getClientIp(request)
-  const ipKey = clientIp ? hashIp(clientIp) : "unknown"
+  const ipKey = clientIp ? await hashPrivacyValue(clientIp) : "unknown"
   const rateLimit = checkClickRateLimit(ipKey)
   if (rateLimit.limited) {
     return NextResponse.json(
@@ -142,16 +135,12 @@ export async function POST(request: NextRequest) {
   const consentGiven = consentCookie?.includes("__ls_consent=1") ?? false
 
   // S3: Hash the IP before passing to attribution
-  const ipHash = clientIp ? hashIp(clientIp) : undefined
+  const ipHash = clientIp ? await hashPrivacyValue(clientIp) : undefined
   // S4: Hash the user-agent before storing
   // C-L01: Use the same salted hashing as proxy.ts for consistency.
   // proxy.ts uses hashWithSalt (salted SHA-256 via Web Crypto), so we
   // replicate that here with the same salt to produce matching hashes.
-  const userAgentHash = rawUserAgent
-    ? createHash("sha256")
-        .update(rawUserAgent + (process.env.IP_HASH_SALT ?? "lyrashield-ip-salt-v1"))
-        .digest("hex")
-    : undefined
+  const userAgentHash = rawUserAgent ? await hashPrivacyValue(rawUserAgent) : undefined
 
   const result = await detectAttribution({
     pathname: "/",

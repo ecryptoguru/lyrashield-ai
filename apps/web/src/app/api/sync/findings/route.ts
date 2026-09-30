@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
+import { revalidateDashboardAggregates } from "../../../../lib/cache"
 import { hasSyncFindingWriteRole, hasSyncWriteAccess } from "../../../../lib/sync-auth"
 import { markLegacySyncResponse, resolveSyncCredential } from "../../../../lib/sync-license-auth"
 
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic"
 
 // Detection-state-only: only OPEN is accepted from desktop; FIXED is mapped to FIXED_PENDING_RETEST
 // Verified is always false (server-enforced). Reject forged terminal or verified=true.
-const ALLOWED_SYNC_STATUSES = new Set(["OPEN", "FIXED_PENDING_RETEST"])
+const ALLOWED_SYNC_STATUSES = ["OPEN", "FIXED_PENDING_RETEST"] as const
+const AllowedSyncStatusSchema = z.enum(ALLOWED_SYNC_STATUSES)
 const STATUS_FIX_MAPPING: Record<string, string> = {
   FIXED: "FIXED_PENDING_RETEST",
 }
@@ -114,7 +116,7 @@ async function post(request: Request) {
           400
         )
       }
-      if (!ALLOWED_SYNC_STATUSES.has(mapped)) {
+      if (!AllowedSyncStatusSchema.safeParse(mapped).success) {
         return apiError("INVALID_STATUS", `status '${f.status}' not allowed via sync`, 400)
       }
     }
@@ -275,7 +277,7 @@ async function post(request: Request) {
       for (const finding of findings) {
         const externalId = `local:${license.id}:${finding.id}`
         const mappedStatus = STATUS_FIX_MAPPING[finding.status] ?? finding.status
-        const finalStatus = ALLOWED_SYNC_STATUSES.has(mappedStatus) ? mappedStatus : "OPEN"
+        const finalStatus = AllowedSyncStatusSchema.parse(mappedStatus)
         const technicalDetail = [
           finding.filePath ? `File: ${finding.filePath}` : null,
           finding.lineNumber ? `Line: ${finding.lineNumber}` : null,
@@ -293,7 +295,7 @@ async function post(request: Request) {
             title: finding.title,
             summary: finding.description ?? finding.title,
             severity: finding.severity,
-            status: finalStatus as never,
+            status: finalStatus,
             verified: false,
             technicalDetail: technicalDetail || null,
             dedupeKey: finding.id,
@@ -304,7 +306,7 @@ async function post(request: Request) {
             title: finding.title,
             summary: finding.description ?? finding.title,
             severity: finding.severity,
-            status: finalStatus as never,
+            status: finalStatus,
             verified: false,
             technicalDetail: technicalDetail || null,
             lastSeenAt: new Date(),
@@ -375,6 +377,10 @@ async function post(request: Request) {
       reportsCount: result.reportsPersisted,
       seq: result.seq,
     })
+
+    if (result.persistedFindings > 0 || result.reportsPersisted > 0) {
+      revalidateDashboardAggregates(workspaceId)
+    }
 
     return markLegacySyncResponse(
       apiSuccess(

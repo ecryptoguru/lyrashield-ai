@@ -26,6 +26,7 @@ import {
   claimOrGetAgentOperation,
   completeAgentOperation,
   failAgentOperation,
+  toJsonObject,
 } from "./agent-operation-service"
 import { withWorkspaceRLS } from "./rls"
 
@@ -676,11 +677,11 @@ export async function invokeConnectorTool(
   }
 
   await completeAgentOperation(claim.operation.id, workspaceId, {
-    result: {
-      output: capped.output as Prisma.InputJsonValue,
+    result: toJsonObject({
+      output: capped.output,
       truncated: capped.truncated,
       bytes: capped.bytes,
-    },
+    }),
   })
   if (scanId) {
     await recordConnectorReceipt(scanId, workspaceId, {

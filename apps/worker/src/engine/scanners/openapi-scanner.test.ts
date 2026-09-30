@@ -157,6 +157,41 @@ describe("scanOpenApi", () => {
     vi.clearAllMocks()
   })
 
+  it("preserves empty execution receipts across rejected contracts", async () => {
+    const profile = getUrlScanProfile("API", "STANDARD")
+    const rejected = [
+      { body: "", code: "UNSUPPORTED_CONTENT" },
+      { body: "{broken", code: "UNSUPPORTED_CONTENT" },
+      { body: "[]", code: "UNSUPPORTED_CONTENT" },
+      { body: JSON.stringify({ openapi: "2.0", paths: {} }), code: "UNSUPPORTED_CONTENT" },
+      { body: JSON.stringify(specWithTooManyPaths), code: "UNSUPPORTED_CONTENT" },
+      {
+        body: JSON.stringify({
+          openapi: "3.0.0",
+          servers: [{ url: "https://outside.example" }],
+          paths: {},
+        }),
+        code: "OUT_OF_SCOPE",
+      },
+    ]
+
+    for (const { body, code } of rejected) {
+      const result = await scanOpenApi({
+        targetUrl: "https://api.example.com",
+        apiSpecUrl: "https://api.example.com/openapi.json",
+        profile,
+        fetchFn: defaultFetch({
+          "https://api.example.com/openapi.json": makeSpecResponse(body),
+        }),
+        resolver: PUBLIC_RESOLVER,
+      })
+      expect(result.findings).toEqual([])
+      expect(result.attemptedOperations).toEqual([])
+      expect(result.issues.map((issue) => issue.code)).toEqual([code])
+      expect(result.execution).toMatchObject({ operationCount: 0, issueCodes: [code] })
+    }
+  })
+
   it("fetches a JSON spec and emits GET + HEAD operation attempts for Standard", async () => {
     const apiSpecUrl = "https://api.example.com/openapi.json"
     const spec = standardSpec

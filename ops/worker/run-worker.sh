@@ -142,6 +142,21 @@ worker_shared_root=/var/lib/lyrashield/worker
 # ahead of the privileged shared-root chown below.
 env_args=$(lyrashield_worker_env_args "$runtime_config" "$environment_file" "$worker_shared_root")
 
+# ExecStartPre refreshes secrets. Validate the resulting environment before any
+# queue consumer starts, including after a host restart during maintenance.
+cutover_receipt=${LYRASHIELD_WEBHOOK_CUTOVER_RECEIPT_FILE:-/var/lib/lyrashield/webhook-claims-cutover.json}
+if [ -e "$cutover_receipt" ]; then
+  [ ! -L "$cutover_receipt" ] && [ "$(stat -c '%u:%a' "$cutover_receipt")" = 0:600 ] || exit 1
+  saved_cutover=$(cat "$cutover_receipt")
+  # Intentional splitting of the validated worker-env.sh argument list.
+  # shellcheck disable=SC2086,SC2016
+  # This probe mounts no host paths; keep its compiler cache in a bounded tmpfs.
+  docker run --rm --network none --env-file "$environment_file" $env_args \
+    --env TMPDIR=/tmp --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+    -w /app/apps/worker "$LYRASHIELD_WORKER_IMAGE" \
+    node --import tsx --input-type=module -e 'import {createHash} from "node:crypto"; const receipt=JSON.parse(process.argv[1]); const billing=await import("@lyrashield/billing"); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); if(process.env.LYRASHIELD_PRODUCT_REVISION!==receipt.productRevision || billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/1" || receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL) || receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL) || receipt.redisUrlSha256!==hash(process.env.REDIS_URL)) throw new Error("Cutover worker environment does not match owned receipt");' "$saved_cutover"
+fi
+
 socket_group=$(stat -c '%g' /var/run/docker.sock)
 pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"
 if [ ! -s "$pin_file" ]; then

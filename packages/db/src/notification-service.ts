@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import { prisma } from "./client"
+import { withWorkspaceRLS } from "./rls"
 import type { Notification } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import {
@@ -234,6 +235,7 @@ export async function createAndSendNotification(params: {
   ) => Promise<boolean>
 }): Promise<void> {
   const channels = params.channels ?? DEFAULT_CHANNELS
+  const deliveryFailures: Array<{ channel: string; failure: Error }> = []
 
   // W3-06: routine events in the same group window share one dedupe key, so
   // concurrent/retried completions reuse one row (the unique-constraint path
@@ -293,7 +295,7 @@ export async function createAndSendNotification(params: {
       // overwriting, so earlier events in the window are not erased. The
       // list stays bounded with an explicit overflow note.
       if (grouped) {
-        notification = await prisma.$transaction(async (tx) => {
+        notification = await withWorkspaceRLS(params.workspaceId, async (tx) => {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`notification:${channel}:${dedupeKey}`}, 0))`
           const current = await tx.notification.findUnique({
             where: { channel_dedupeKey: { channel, dedupeKey } },
@@ -344,6 +346,7 @@ export async function createAndSendNotification(params: {
     }
 
     let sent = false
+    let deliveryError: unknown
     try {
       sent = await params.sendFn(channel, {
         type: effectiveType,
@@ -352,6 +355,7 @@ export async function createAndSendNotification(params: {
         workspaceName: params.workspaceName,
       })
     } catch (error) {
+      deliveryError = error
       logger.error("Notification delivery threw", {
         workspaceId: params.workspaceId,
         notificationId: notification.id,
@@ -366,10 +370,28 @@ export async function createAndSendNotification(params: {
         data: { status: "sent", sentAt: new Date(), deliveryLeaseExpiresAt: null },
       })
     } else {
-      await prisma.notification.updateMany({
+      const failed = await prisma.notification.updateMany({
         where: { id: notification.id, status: "sending" },
         data: { status: "failed", deliveryLeaseExpiresAt: null },
       })
+      if (failed.count !== 1) {
+        throw new Error(`Failed notification status was not persisted for channel ${channel}`)
+      }
+      deliveryFailures.push({
+        channel,
+        failure: new Error(`Notification delivery failed for channel ${channel}`, {
+          cause: deliveryError,
+        }),
+      })
     }
+  }
+
+  if (deliveryFailures.length === 1) throw deliveryFailures[0]!.failure
+  if (deliveryFailures.length > 1) {
+    const failedChannels = deliveryFailures.map(({ channel }) => channel).join(", ")
+    throw new AggregateError(
+      deliveryFailures.map(({ failure }) => failure),
+      `Notification delivery failed for channels: ${failedChannels}`
+    )
   }
 }

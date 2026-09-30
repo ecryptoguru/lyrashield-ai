@@ -23,6 +23,8 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import { GET, POST } from "./route"
+import { requirePermission } from "@lyrashield/auth/server"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 function actionRequest(body: unknown) {
   return new Request("http://localhost/api/reports/report-1", {
@@ -86,6 +88,21 @@ describe("POST /api/reports/[id]", () => {
       })
     })
   })
+
+  it("denies sharing or revoking without report:create", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await POST(actionRequest({ workspaceId: "ws-1", action: "share" }), {
+      params: Promise.resolve({ id: "report-1" }),
+    })
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/reports/[id]",
+      "POST"
+    )
+    expect(getShareableReport).not.toHaveBeenCalled()
+  })
 })
 
 describe("GET /api/reports/[id] — authenticated private detail", () => {
@@ -139,5 +156,20 @@ describe("GET /api/reports/[id] — authenticated private detail", () => {
     const body = await response.json()
     expect(body.data.launchReport).toBeUndefined()
     expect(getLaunchReportDetail).not.toHaveBeenCalled()
+  })
+
+  it("denies private report reads without report:download", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "report-1" }) })
+
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/reports/[id]",
+      "GET"
+    )
+    expect(getShareableReport).not.toHaveBeenCalled()
   })
 })

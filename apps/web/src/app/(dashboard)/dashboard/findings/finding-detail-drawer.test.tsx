@@ -7,6 +7,8 @@ import { FindingStatusBadge } from "./finding-detail-drawer"
 // that SSR cannot reach; pin the label wiring at the source so the humanised
 // helpers cannot regress back to raw token replaces.
 const source = readFileSync(new URL("./finding-detail-drawer.tsx", import.meta.url), "utf8")
+const tabsSource = readFileSync(new URL("./finding-detail-tabs.tsx", import.meta.url), "utf8")
+const actionSource = readFileSync(new URL("./finding-action-tab.tsx", import.meta.url), "utf8")
 
 describe("FindingStatusBadge", () => {
   it("labels FIX_READY as a human phrase not a raw token", () => {
@@ -21,15 +23,19 @@ describe("finding detail drawer enum labels", () => {
   it("routes every status and method badge through the label helpers", () => {
     expect(source).not.toContain('replace(/_/g, " ")')
     expect(source).not.toContain('replaceAll("_", " ")')
-    expect(source).toContain("FINDING_STATUS_LABELS[finding.status]")
+    expect(tabsSource).not.toContain('replace(/_/g, " ")')
+    expect(tabsSource).not.toContain('replaceAll("_", " ")')
+    expect(actionSource).not.toContain('replace(/_/g, " ")')
+    expect(actionSource).not.toContain('replaceAll("_", " ")')
+    expect(actionSource).toContain("FINDING_STATUS_LABELS[finding.status]")
     expect(source).toContain("getVerificationStatusLabel(finding.verificationStatus)")
-    expect(source).toContain("getVerificationStatusLabel(receipt.status)")
-    expect(source).toContain("humanizeToken(receipt.method)")
+    expect(tabsSource).toContain("getVerificationStatusLabel(receipt.status)")
+    expect(tabsSource).toContain("humanizeToken(receipt.method)")
   })
 
   it("lets long checksums and receipt ids wrap instead of overflowing", () => {
-    expect((source.match(/className="break-all font-mono"/g) ?? []).length).toBe(7)
+    expect((tabsSource.match(/className="break-all font-mono"/g) ?? []).length).toBe(7)
     // Only the short scanner-source label keeps plain mono styling.
-    expect((source.match(/className="font-mono"/g) ?? []).length).toBe(1)
+    expect((tabsSource.match(/className="font-mono"/g) ?? []).length).toBe(1)
   })
 })

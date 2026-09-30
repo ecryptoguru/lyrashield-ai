@@ -10,6 +10,8 @@ import {
   GPT_6_PRICING_SOURCE,
   GPT_56_PRICING_EFFECTIVE_DATE,
   GPT_56_PRICING_SOURCE,
+  sumUsdCosts,
+  usdCostsMatch,
   type Gpt56ModelUsageBuckets,
 } from "../../engine/gpt56-pricing"
 import type { ScannerCoverageIssue } from "../../engine/scanner-coverage"
@@ -271,23 +273,27 @@ export async function persistEngineUsageCheckpoint(params: {
 
   let pricingMethod: string
   let modelMixUnpriceable = false
+  let modelTokenCostUsd: number | null = null
   let rateCardCostUsd: number | null = null
 
   if (usage.modelPricingBuckets) {
-    const tokenCostUsd = calculateGpt56CostUsdFromModelBuckets(usage.modelPricingBuckets)
-    rateCardCostUsd = tokenCostUsd === null ? null : tokenCostUsd + webSearchCostUsd
+    modelTokenCostUsd = calculateGpt56CostUsdFromModelBuckets(usage.modelPricingBuckets)
+    rateCardCostUsd =
+      modelTokenCostUsd === null ? null : sumUsdCosts(modelTokenCostUsd, webSearchCostUsd)
     pricingMethod = "per_request_model_buckets"
   } else if (usage.pricingBuckets) {
     if (usage.singleModel) {
-      const tokenCostUsd = calculateGpt56CostUsdFromBuckets(usage.singleModel, usage.pricingBuckets)
-      rateCardCostUsd = tokenCostUsd === null ? null : tokenCostUsd + webSearchCostUsd
+      modelTokenCostUsd = calculateGpt56CostUsdFromBuckets(usage.singleModel, usage.pricingBuckets)
+      rateCardCostUsd =
+        modelTokenCostUsd === null ? null : sumUsdCosts(modelTokenCostUsd, webSearchCostUsd)
       pricingMethod = "per_request_buckets"
     } else {
       modelMixUnpriceable = true
       pricingMethod = "model_mix_unpriceable"
     }
   } else if (aggregateCostUsd !== null) {
-    rateCardCostUsd = aggregateCostUsd + webSearchCostUsd
+    modelTokenCostUsd = aggregateCostUsd
+    rateCardCostUsd = sumUsdCosts(aggregateCostUsd, webSearchCostUsd)
     pricingMethod = "aggregate_tokens"
   } else {
     pricingMethod = "unavailable"
@@ -309,7 +315,9 @@ export async function persistEngineUsageCheckpoint(params: {
     accountingComplete &&
     rateCardCostUsd !== null &&
     (usage.engineReportedCostUsd === null ||
-      Math.abs(rateCardCostUsd - usage.engineReportedCostUsd) < 0.000001)
+      (isGpt6Usage
+        ? usdCostsMatch(rateCardCostUsd, usage.engineReportedCostUsd)
+        : Math.abs(rateCardCostUsd - usage.engineReportedCostUsd) < 0.000001))
   // Do not attach a money value to a scan unless the recorded provider total
   // agrees with the complete, per-request rate-card calculation. A completed
   // scan remains useful when accounting needs later operator reconciliation;
@@ -343,6 +351,8 @@ export async function persistEngineUsageCheckpoint(params: {
   try {
     await addScanEvent(scanId, "llm_usage", "info", "AI usage counters recorded", {
       ...usage,
+      modelTokenCostUsd,
+      webSearchCostUsd,
       calculatedCostUsd: rateCardCostUsd,
       pricingMethod,
       billedCostUsd,
@@ -370,8 +380,8 @@ export async function persistEngineUsageCheckpoint(params: {
     where: { id: scanId },
     data: {
       providerCostUsd:
-        usage.engineReportedCostUsd === null ? null : usage.engineReportedCostUsd.toFixed(6),
-      billedCostUsd: billedCostUsd === null ? null : billedCostUsd.toFixed(6),
+        usage.engineReportedCostUsd === null ? null : usage.engineReportedCostUsd.toFixed(10),
+      billedCostUsd: billedCostUsd === null ? null : billedCostUsd.toFixed(10),
       actualCostCents: billedCostUsd === null ? null : Math.round(billedCostUsd * 100),
       llmRequestCount: usage.requestCount,
       llmInputTokens: usage.inputTokens,

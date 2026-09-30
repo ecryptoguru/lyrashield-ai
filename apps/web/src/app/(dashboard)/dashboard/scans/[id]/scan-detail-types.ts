@@ -123,10 +123,6 @@ export interface ScanPollData {
   summary: string | null
   errorCategory: string | null
   errorMessage: string | null
-  llmRequestCount?: number | null
-  llmInputTokens?: number | null
-  llmCachedInputTokens?: number | null
-  llmOutputTokens?: number | null
   createdAt: string | Date
   events?: Array<
     Omit<ScanEvent, "metadata" | "createdAt"> & { metadata?: unknown; createdAt: string | Date }

@@ -55,7 +55,12 @@ import { lockWorkspaceMembership, prisma } from "@lyrashield/db"
 import { resolveAccountBilling } from "@lyrashield/billing"
 import { GET, POST } from "./route"
 
-const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>
+const mockPrisma = prisma as unknown as {
+  workspaceMember: Record<"count" | "findFirst" | "findMany", ReturnType<typeof vi.fn>>
+  invitation: Record<"count" | "create" | "findFirst" | "findMany", ReturnType<typeof vi.fn>>
+  workspace: { findUnique: ReturnType<typeof vi.fn> }
+  user: { findMany: ReturnType<typeof vi.fn> }
+}
 
 function inviteRequest(role = "MEMBER") {
   return new Request("http://localhost/api/team", {

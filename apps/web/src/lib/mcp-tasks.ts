@@ -32,7 +32,7 @@ import {
   withWorkspaceRLS,
   type AgentOperation,
 } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { requireOAuthPermission, type OAuthAuthContext } from "@lyrashield/auth/server"
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
 import { CANONICAL_OPERATIONS } from "@lyrashield/db"
 
@@ -47,8 +47,8 @@ const MCP_TASK_CANCEL_RETRY_AFTER_MS = 2 * 60 * 1000
  *
  *   1. bearer → connection was already re-read by verifyOAuthBearer on this
  *      request (status, expiry, scopes, authorizationVersion),
- *   2. requirePermission(workspaceId, scan.view|scan.cancel) re-checks live
- *      membership, role and delegated grant,
+ *   2. requireOAuthPermission re-checks the verified OAuth user's live
+ *      membership, role, scopes and delegated grant,
  *   3. the operation row must match the current principal AND the
  *      authorizationVersion persisted at binding time, and
  *   4. the mapping must be inside the retention TTL.
@@ -75,7 +75,7 @@ export interface HostedTaskConnection {
 }
 
 export interface HostedMcpTaskOptions {
-  workspaceId: string
+  oauth: OAuthAuthContext
   connection: HostedTaskConnection
   /** Test hook — the SDK waits `task.pollInterval` between result polls. */
   pollIntervalMs?: number
@@ -119,7 +119,11 @@ function notFound(taskId: string): McpError {
 }
 
 export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTaskBackend {
-  const { workspaceId, connection } = options
+  const { oauth, connection } = options
+  const workspaceId = oauth.workspaceId
+  if (oauth.connectionId !== connection.id || connection.workspaceId !== workspaceId) {
+    throw new Error("Hosted MCP tasks require a matching verified OAuth connection.")
+  }
   const principal = {
     principalType: "OAUTH_CONNECTION" as const,
     principalId: connection.id,
@@ -147,7 +151,7 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
 
     // Live membership/role/scope/delegated-grant check for this request.
     try {
-      await requirePermission(workspaceId, permission)
+      await requireOAuthPermission(oauth, permission)
     } catch {
       return null
     }
@@ -182,6 +186,15 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
   return {
     async createTask({ toolName, toolResult }) {
       assertTaskCapableTool(toolName)
+      try {
+        await requireOAuthPermission(oauth, PERMISSIONS.scan.view)
+      } catch {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          "Task creation was not authorized for this call."
+        )
+      }
+
       const operationId = extractOperationIdFromToolResult(toolResult)
       if (!operationId) {
         if (toolResult.isError) {
@@ -407,6 +420,12 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
     },
 
     async listTasks(cursor) {
+      try {
+        await requireOAuthPermission(oauth, PERMISSIONS.scan.view)
+      } catch {
+        throw new McpError(ErrorCode.InvalidRequest, "Tasks are unavailable.")
+      }
+
       const page = await listAgentOperationsForTasks({
         workspaceId,
         principalType: principal.principalType,

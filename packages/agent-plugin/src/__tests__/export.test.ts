@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { afterEach, describe, expect, it } from "vitest"
-import { createAllTools } from "@lyrashield/mcp"
+import { createAllTools, McpServer } from "@lyrashield/mcp"
 import { exportMarketplace } from "../export.js"
 
 const execFileAsync = promisify(execFile)
@@ -151,7 +151,7 @@ describe("exportMarketplace", () => {
     expect(manifest.forbidden).toContain("apps/worker")
     expect(manifest.manifestSchemaVersion).toBe("marketplace-export/2")
     expect(manifest.sourceCommit).toMatch(/^[a-f0-9]{40}$/)
-    expect(manifest.generator).toEqual({ package: "@lyrashield/agent-plugin", version: "0.1.29" })
+    expect(manifest.generator).toEqual({ package: "@lyrashield/agent-plugin", version: "0.1.30" })
     expect(manifest.publication?.status).toBe("unpublished")
     expect(manifest.files?.some((file) => file.path === "manifest.json")).toBe(false)
     const exportedPaths = manifest.files?.map((file) => file.path) ?? []
@@ -191,7 +191,7 @@ describe("exportMarketplace", () => {
     expect(claudeManifest).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
       repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
-      version: "0.1.29",
+      version: "0.1.30",
     })
     // The marketplace catalog is what makes the exported repo addressable via
     // `/plugin marketplace add` and VS Code's "Install Plugin From Source".
@@ -207,14 +207,14 @@ describe("exportMarketplace", () => {
     expect(marketplace).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-marketplace.json",
       name: "lyrashield-ai",
-      version: "0.1.29",
+      version: "0.1.30",
       owner: { name: "LyraShield AI" },
     })
     expect(marketplace.plugins).toHaveLength(1)
     expect(marketplace.plugins?.[0]).toMatchObject({
       name: "lyrashield",
       source: "./",
-      version: "0.1.29",
+      version: "0.1.30",
       license: "Apache-2.0",
     })
     const codexManifest = JSON.parse(
@@ -234,7 +234,7 @@ describe("exportMarketplace", () => {
     )
     expect(codexMarketplace.plugins?.[0]).toMatchObject({
       name: "lyrashield",
-      version: "0.1.29",
+      version: "0.1.30",
       source: { source: "local", path: "./codex-plugin" },
     })
     const installedCodexManifest = JSON.parse(
@@ -242,7 +242,7 @@ describe("exportMarketplace", () => {
     )
     expect(installedCodexManifest).toMatchObject({
       name: "lyrashield",
-      version: "0.1.29",
+      version: "0.1.30",
       mcpServers: "./.mcp.json",
     })
     expect(
@@ -279,7 +279,7 @@ describe("exportMarketplace", () => {
     ).resolves.toContain("lyrashield-mcp")
     await expect(
       readFile(path.join(output, "codebuff", "lyrashield-review.ts"), "utf8")
-    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.29"[\s\S]*mcpServers:/)
+    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.30"[\s\S]*mcpServers:/)
     await expect(
       readFile(path.join(output, "gemini-extension", "gemini-extension.json"), "utf8")
     ).resolves.toContain("lyrashield-ai")
@@ -360,22 +360,84 @@ describe("exportMarketplace", () => {
 
     // Manifest versions must match each artifact's own source-of-truth file.
     expect(manifest.artifactVersions).toEqual({
-      zed: "0.1.29",
-      gemini: "0.1.29",
-      codebuff: "0.1.29",
-      openclaw: "0.1.29",
+      zed: "0.1.30",
+      gemini: "0.1.30",
+      codebuff: "0.1.30",
+      openclaw: "0.1.30",
     })
   })
 })
 
 describe("exported validator", () => {
+  it("exports runnable verifier fixtures and the required client schema contract", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+    await expect(runValidator(output)).resolves.toContain("Marketplace validation passed")
+    await execFileAsync(
+      process.execPath,
+      ["--test", "scripts/tests/verify-published-mcp.fixtures.mjs"],
+      {
+        cwd: output,
+        timeout: 45000,
+      }
+    )
+    const catalog = new McpServer({ toolContext: { apiBaseUrl: "", apiKey: "" } }).listTools()
+    await execFileAsync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { validateCatalog } from './scripts/verify-published-mcp.mjs'; validateCatalog(${JSON.stringify(catalog)})`,
+      ],
+      { cwd: output }
+    )
+  }, 60000)
+
+  it("rejects published MCP verification with npm lifecycle scripts enabled", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+
+    const verifierFile = "scripts/verify-published-mcp.mjs"
+    const verifierPath = path.join(output, verifierFile)
+    const verifier = await readFile(verifierPath, "utf8")
+    const lifecycleGuard = 'npm_config_ignore_scripts: "true"'
+    expect(verifier).toContain(lifecycleGuard)
+    await writeFile(verifierPath, verifier.replace(lifecycleGuard, ""))
+    await updateManifestHash(output, verifierFile)
+
+    await expect(runValidator(output)).rejects.toThrow(/npm lifecycle scripts/)
+  })
+  it("rejects unreviewed read-only Codebuff tools after hashes are refreshed", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+
+    const codebuffFile = "codebuff/lyrashield-review.ts"
+    const codebuffPath = path.join(output, codebuffFile)
+    const codebuff = await readFile(codebuffPath, "utf8")
+    const reviewedEntry = '    "lyrashield/lyrashield_get_scan_quality",\n'
+    expect(codebuff).toContain(reviewedEntry)
+    await writeFile(
+      codebuffPath,
+      codebuff.replace(
+        reviewedEntry,
+        reviewedEntry + '    "lyrashield/lyrashield_get_scan_eligibility",\n'
+      )
+    )
+    await updateManifestHash(output, codebuffFile)
+
+    await expect(runValidator(output)).rejects.toThrow(/validated curated allowlist/)
+  })
+
   it.each([
-    ["manifest version", "manifest.json", '"version": "0.1.29"', '"version": "9.9.9"'],
-    ["generator version", "manifest.json", '"version": "0.1.29"', '"version": "9.9.9"'],
+    ["manifest version", "manifest.json", '"version": "0.1.30"', '"version": "9.9.9"'],
+    ["generator version", "manifest.json", '"version": "0.1.30"', '"version": "9.9.9"'],
     [
       "installed Codex version",
       "codex-plugin/.codex-plugin/plugin.json",
-      '"version": "0.1.29"',
+      '"version": "0.1.30"',
       '"version": "9.9.9"',
     ],
     [
@@ -387,8 +449,8 @@ describe("exported validator", () => {
     [
       "Codebuff executable pin with approved comment",
       "codebuff/lyrashield-review.ts",
-      'args: ["-y", "@lyrashield/mcp@0.2.10"]',
-      'args: ["-y", "@lyrashield/mcp@9.9.9"], // @lyrashield/mcp@0.2.10',
+      'args: ["-y", "@lyrashield/mcp@0.2.11"]',
+      'args: ["-y", "@lyrashield/mcp@9.9.9"], // @lyrashield/mcp@0.2.11',
     ],
   ])("rejects %s drift after hashes are refreshed", async (_label, file, before, after) => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
@@ -430,7 +492,7 @@ describe("exported validator", () => {
       '"command": "npx"',
       '"env": {"LYRASHIELD_API_URL":"https://app.lyrashieldai.com"}, "command": "npx"',
     ],
-    ["gemini-extension.json", "@lyrashield/mcp@0.2.10", "@lyrashield/mcp"],
+    ["gemini-extension.json", "@lyrashield/mcp@0.2.11", "@lyrashield/mcp"],
     ["codebuff/lyrashield-review.ts", '"read_files"', '"run_terminal_command", "read_files"'],
     ["openclaw/SKILL.md", "pull requests never auto-merge", "pull requests auto-merge"],
   ])("rejects unsafe distribution drift in %s", async (file, before, after) => {
@@ -468,6 +530,12 @@ describe("exported validator", () => {
       execFileAsync(process.execPath, [validator], {
         cwd: output,
         env: { ...process.env, GITHUB_REF: "refs/tags/v0.1.29" },
+      })
+    ).rejects.toThrow(/release tag version must match/)
+    await expect(
+      execFileAsync(process.execPath, [validator], {
+        cwd: output,
+        env: { ...process.env, GITHUB_REF: "refs/tags/v0.1.30" },
       })
     ).resolves.toMatchObject({ stdout: expect.stringContaining("Marketplace validation passed") })
   })

@@ -16,6 +16,7 @@ vi.mock("@lyrashield/db", () => ({
   claimOrGetAgentOperation: vi.fn(),
   completeAgentOperation: vi.fn(),
   failAgentOperation: vi.fn(),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   prisma: { auditLog: { create: vi.fn() } },
 }))
 
@@ -27,6 +28,8 @@ vi.mock("@lyrashield/auth/server", () => ({
 vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: { scan: { view: "scan:view", cancel: "scan:cancel", remove: "scan:remove" } },
 }))
+
+vi.mock("@lyrashield/integrations", () => ({ getScanQueuePosition: vi.fn() }))
 
 vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
@@ -44,6 +47,8 @@ import {
   removeScan,
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
+import { getScanQueuePosition } from "@lyrashield/integrations"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const routeParams = { params: Promise.resolve({ id: "scan-1" }) }
 
@@ -71,6 +76,196 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:view")
     // No `eventsAfter` param = no cursor: the full event window is returned.
     expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1", { eventsAfter: undefined })
+  })
+
+  it("omits cost fields and internal accounting events from the dashboard response", async () => {
+    const createdAt = new Date("2026-09-29T12:00:00.000Z")
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      status: "COMPLETED",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      triggerType: "manual",
+      startedAt: createdAt,
+      endedAt: createdAt,
+      summary: null,
+      errorCategory: null,
+      errorMessage: null,
+      createdAt,
+      updatedAt: createdAt,
+      providerCostUsd: "0.435436",
+      billedCostUsd: "0.435436",
+      actualCostCents: 44,
+      llmRequestCount: 381,
+      llmInputTokens: 16_786_451,
+      llmCachedInputTokens: 14_406_097,
+      llmOutputTokens: 79_523,
+      events: [
+        {
+          id: "usage-event",
+          stage: "llm_usage",
+          level: "info",
+          message: "AI usage counters recorded",
+          metadata: { calculatedCostUsd: 0.435436, engineReportedCostUsd: 0.435435945 },
+          createdAt,
+        },
+        {
+          id: "settlement-event",
+          stage: "billing_settlement_intent",
+          level: "info",
+          message: "Settlement recorded",
+          metadata: { quantity: 16 },
+          createdAt,
+        },
+        {
+          id: "budget-cap-event",
+          stage: "budget_cap",
+          level: "warning",
+          message: "Protected budget cap checked",
+          metadata: { providerCostUsd: 0.435436 },
+          createdAt,
+        },
+        {
+          id: "budget-exceeded-event",
+          stage: "budget_exceeded",
+          level: "error",
+          message: "Protected run limit reached",
+          metadata: { billedCostUsd: 0.435436 },
+          createdAt,
+        },
+        {
+          id: "visible-event",
+          stage: "engine_progress",
+          level: "info",
+          message: "Engine review completed",
+          metadata: { completed: true },
+          createdAt,
+        },
+      ],
+      coverageReceipts: [],
+      resultManifest: { checksum: "manifest-checksum" },
+    } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.data).not.toHaveProperty("providerCostUsd")
+    expect(payload.data).not.toHaveProperty("billedCostUsd")
+    expect(payload.data).not.toHaveProperty("actualCostCents")
+    expect(payload.data).not.toHaveProperty("llmRequestCount")
+    expect(payload.data).not.toHaveProperty("llmInputTokens")
+    expect(payload.data).not.toHaveProperty("llmCachedInputTokens")
+    expect(payload.data).not.toHaveProperty("llmOutputTokens")
+    expect(payload.data.events.map((event: { id: string }) => event.id)).toEqual(["visible-event"])
+    expect(JSON.stringify(payload)).not.toContain("0.435")
+  })
+
+  it("does not change the response ETag for accounting-only event changes", async () => {
+    const createdAt = new Date("2026-09-29T12:00:00.000Z")
+    const scan = {
+      id: "scan-1",
+      workspaceId: "ws-1",
+      status: "COMPLETED",
+      updatedAt: createdAt,
+      events: [
+        {
+          id: "usage-event",
+          stage: "llm_usage",
+          level: "info",
+          message: "AI usage counters recorded",
+          metadata: { calculatedCostUsd: 0.25 },
+          createdAt,
+        },
+      ],
+    }
+    vi.mocked(getScanWithEvents)
+      .mockResolvedValueOnce(scan as never)
+      .mockResolvedValueOnce({
+        ...scan,
+        events: [
+          {
+            ...scan.events[0],
+            metadata: { calculatedCostUsd: 0.5 },
+          },
+        ],
+      } as never)
+    const url = "http://localhost/api/scans/scan-1?workspaceId=ws-1"
+    const first = await GET(new Request(url), routeParams)
+    const second = await GET(
+      new Request(url, { headers: { "if-none-match": first.headers.get("ETag")! } }),
+      routeParams
+    )
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(304)
+  })
+
+  it("returns an updated queued position when the scan row and events are unchanged", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      status: "QUEUED",
+      updatedAt: new Date("2026-09-28T00:00:00.000Z"),
+      events: [],
+    } as never)
+    vi.mocked(getScanQueuePosition)
+      .mockResolvedValueOnce({ position: 3, waiting: 3 })
+      .mockResolvedValueOnce({ position: 2, waiting: 2 })
+    const url = "http://localhost/api/scans/scan-1?workspaceId=ws-1"
+
+    const first = await GET(new Request(url), routeParams)
+    const second = await GET(
+      new Request(url, { headers: { "If-None-Match": first.headers.get("ETag")! } }),
+      routeParams
+    )
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    expect(second.headers.get("ETag")).not.toBe(first.headers.get("ETag"))
+    expect((await second.json()).data.queuePosition).toEqual({ position: 2, waiting: 2 })
+    expect(getScanQueuePosition).toHaveBeenCalledTimes(2)
+  })
+
+  it("returns 304 for an unchanged completed scan", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      status: "COMPLETED",
+      updatedAt: new Date("2026-09-28T00:00:00.000Z"),
+      events: [],
+    } as never)
+    const url = "http://localhost/api/scans/scan-1?workspaceId=ws-1"
+    const first = await GET(new Request(url), routeParams)
+    const second = await GET(
+      new Request(url, { headers: { "If-None-Match": first.headers.get("ETag")! } }),
+      routeParams
+    )
+
+    expect(second.status).toBe(304)
+    expect(getScanQueuePosition).not.toHaveBeenCalled()
+  })
+
+  it("denies reading a scan without scan:view", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/scans/[id]",
+      "GET"
+    )
+    expect(getScanWithEvents).not.toHaveBeenCalled()
   })
 
   it("passes a well-formed eventsAfter cursor through to the service", async () => {
@@ -110,6 +305,29 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:cancel")
     expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(expect.anything(), "target-1")
     expect(cancelScan).toHaveBeenCalledWith("scan-1", "ws-1")
+  })
+
+  it("denies cancellation without scan:cancel", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+
+    const response = await POST(
+      new Request("http://localhost/api/scans/scan-1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: "ws-1" }),
+      }),
+      routeParams
+    )
+
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/scans/[id]",
+      "POST"
+    )
+    expect(getScanWithEvents).not.toHaveBeenCalled()
+    expect(cancelScan).not.toHaveBeenCalled()
   })
 
   it("does not cancel when delegated target scope rejects the scan target", async () => {
@@ -248,6 +466,25 @@ describe("/api/scans/[id] workspace boundary", () => {
         }),
       })
     )
+  })
+
+  it("denies removal without scan:remove", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+
+    const response = await DELETE(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1", { method: "DELETE" }),
+      routeParams
+    )
+
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/scans/[id]",
+      "DELETE"
+    )
+    expect(getScanWithEvents).not.toHaveBeenCalled()
+    expect(removeScan).not.toHaveBeenCalled()
   })
 
   it("returns SCAN_NOT_FOUND when the scan is not in the authorized workspace", async () => {

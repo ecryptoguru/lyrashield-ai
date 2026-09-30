@@ -572,7 +572,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           scanId,
           "scanners_complete",
           "info",
-          `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, url=${orchestratorResult.urlFindings.length}, agent_config=${orchestratorResult.agentConfigFindings.length}, sast=${orchestratorResult.sastFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
+          `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, url=${orchestratorResult.urlFindings.length}, agent_config=${orchestratorResult.agentConfigFindings.length}, sast=${orchestratorResult.sastFindings.length}, iac=${orchestratorResult.iacFindings.length}, ml_supply_chain=${orchestratorResult.mlSupplyChainFindings.length}, ai_app_security=${orchestratorResult.aiAppSecurityFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
           {
             engine: orchestratorResult.engineFindings.length,
             sca: orchestratorResult.scaFindings.length,
@@ -580,6 +580,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             url: orchestratorResult.urlFindings.length,
             agentConfig: orchestratorResult.agentConfigFindings.length,
             sast: orchestratorResult.sastFindings.length,
+            iac: orchestratorResult.iacFindings.length,
+            mlSupplyChain: orchestratorResult.mlSupplyChainFindings.length,
+            aiAppSecurity: orchestratorResult.aiAppSecurityFindings.length,
             falsePositivesFiltered: orchestratorResult.filteredFalsePositives,
             stats: orchestratorResult.stats,
           }
@@ -705,12 +708,48 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       try {
         const criticalFindings = persistedFindings.filter((f) => f.severity === "CRITICAL")
-        const notifications = await Promise.allSettled([
-          notifyScanCompleted(workspaceId, scanId, scanSummary, persistedFindings.length),
-          ...criticalFindings.map((finding) =>
-            notifyCriticalFinding(workspaceId, finding.id, finding.title, target.name)
+        let workspaceName: string | undefined
+        try {
+          workspaceName = (
+            await prisma.workspace.findFirst({
+              where: { id: workspaceId },
+              select: { name: true },
+            })
+          )?.name
+        } catch (workspaceError) {
+          log.warn("Failed to resolve workspace name for scan completion notifications", {
+            scanId,
+            error:
+              workspaceError instanceof Error ? workspaceError.message : String(workspaceError),
+          })
+        }
+
+        const tasks = [
+          () =>
+            notifyScanCompleted(
+              workspaceId,
+              scanId,
+              scanSummary,
+              persistedFindings.length,
+              workspaceName
+            ),
+          ...criticalFindings.map(
+            (finding) => () =>
+              notifyCriticalFinding(
+                workspaceId,
+                finding.id,
+                finding.title,
+                target.name,
+                workspaceName
+              )
           ),
-        ])
+        ]
+        const notifications: PromiseSettledResult<void>[] = []
+        for (let start = 0; start < tasks.length; start += 2) {
+          notifications.push(
+            ...(await Promise.allSettled(tasks.slice(start, start + 2).map((notify) => notify())))
+          )
+        }
         const failedNotifications = notifications.filter(
           (notification): notification is PromiseRejectedResult =>
             notification.status === "rejected"

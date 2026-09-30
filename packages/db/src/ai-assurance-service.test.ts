@@ -121,10 +121,13 @@ describe("ai-assurance-service", () => {
         version: 1,
         status: "SUBMITTED",
         attestation: "audit log present",
+        reviewedById: null,
+        reviewedAt: null,
         expiresAt: null,
         artifactManifest: [],
         checksum: "sha-1",
         createdById: "user-1",
+        createdAt: new Date("2026-08-13T00:00:00Z"),
       })
 
       const version = await createControlEvidence({
@@ -139,6 +142,8 @@ describe("ai-assurance-service", () => {
       expect(version.status).toBe("SUBMITTED")
       expect(version.version).toBe(1)
       expect(version.id).toBe("v-1")
+      expect(version.artifactManifest).toEqual([])
+      expect(version.createdAt).toEqual(new Date("2026-08-13T00:00:00Z"))
       expect(mockPrisma.controlEvidence.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -178,6 +183,7 @@ describe("ai-assurance-service", () => {
         version: 1,
         status: "NOT_APPLICABLE",
         attestation: "No automated deployments for this target",
+        artifactManifest: [],
       })
 
       const version = await markControlEvidenceNotApplicable({
@@ -249,6 +255,7 @@ describe("ai-assurance-service", () => {
           version: 2,
           status: "ACCEPTED",
           attestation: "old",
+          artifactManifest: [],
           createdById: "user-reviewer",
         })
         .mockResolvedValueOnce({
@@ -256,6 +263,7 @@ describe("ai-assurance-service", () => {
           version: 3,
           status: "SUBMITTED",
           attestation: "new proof",
+          artifactManifest: [],
           createdById: "user-member",
         })
 
@@ -280,6 +288,49 @@ describe("ai-assurance-service", () => {
       expect(revised.status).toBe("SUBMITTED")
       expect(revised.id).not.toBe(accepted.id)
       expect(revised.attestation).toBe("new proof")
+    })
+
+    it("fails closed when persisted artifact manifest data is corrupt", async () => {
+      mockPrisma.controlEvidence.findFirst.mockResolvedValue({
+        id: "ce-1",
+        workspaceId: "ws-1",
+        currentVersionId: "v-1",
+      })
+      mockPrisma.controlEvidenceVersion.findUnique.mockResolvedValue({
+        id: "v-1",
+        controlEvidenceId: "ce-1",
+        version: 1,
+        status: "ACCEPTED",
+        attestation: "reviewed proof",
+        reviewedById: "reviewer-1",
+        reviewedAt: new Date("2026-08-13T00:00:00Z"),
+        expiresAt: null,
+        artifactManifest: [
+          {
+            id: "artifact-1",
+            filename: "proof.pdf",
+            mediaType: "application/pdf",
+            byteLength: "12",
+            storageUri: "s3://private/proof",
+            checksum: "sha-1",
+            encryptionKeyRef: "key-1",
+          },
+        ],
+        checksum: "sha-1",
+        createdById: "user-1",
+        createdAt: new Date("2026-08-13T00:00:00Z"),
+      })
+
+      await expect(
+        reviseControlEvidence({
+          workspaceId: "ws-1",
+          evidenceId: "ce-1",
+          attestation: "updated proof",
+          expiresAt: null,
+          createdById: "user-1",
+        })
+      ).rejects.toThrow("EVIDENCE_MANIFEST_CORRUPT")
+      expect(mockPrisma.controlEvidenceVersion.create).not.toHaveBeenCalled()
     })
 
     it("rejects a review that targets a missing evidence record", async () => {
@@ -333,6 +384,7 @@ describe("ai-assurance-service", () => {
         id: "v-2",
         controlEvidenceId: "ce-1",
         status: "SUBMITTED",
+        artifactManifest: [],
       })
 
       await addControlEvidenceArtifacts({
@@ -401,7 +453,23 @@ describe("ai-assurance-service", () => {
           version: 1,
           status: "SUBMITTED",
           attestation: "audit log present",
-          artifactManifest: [],
+          reviewedById: null,
+          reviewedAt: null,
+          expiresAt: null,
+          artifactManifest: [
+            {
+              id: "artifact-1",
+              filename: "proof.pdf",
+              mediaType: "application/pdf",
+              byteLength: 12,
+              storageUri: "s3://private/proof",
+              checksum: "sha-1",
+              encryptionKeyRef: "key-1",
+            },
+          ],
+          checksum: "sha-1",
+          createdById: "user-1",
+          createdAt: new Date("2026-08-13T00:00:00Z"),
         },
       ])
 
@@ -414,6 +482,17 @@ describe("ai-assurance-service", () => {
       expect(result[0]?.id).toBe("ce-1")
       expect(result[0]?.controlId).toBe("vibe-34")
       expect(result[0]?.currentVersion?.id).toBe("v-1")
+      expect(result[0]?.currentVersion?.artifactManifest).toEqual([
+        {
+          id: "artifact-1",
+          filename: "proof.pdf",
+          mediaType: "application/pdf",
+          byteLength: 12,
+          storageUri: "s3://private/proof",
+          checksum: "sha-1",
+          encryptionKeyRef: "key-1",
+        },
+      ])
       expect(mockPrisma.controlEvidenceVersion.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: { in: ["v-1"] } },

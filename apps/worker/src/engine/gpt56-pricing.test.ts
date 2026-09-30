@@ -5,6 +5,8 @@ import {
   calculateGpt56CostUsdFromModelBuckets,
   GPT_6_PRICING_USD_PER_MILLION,
   GPT_56_PRICING_USD_PER_MILLION,
+  sumUsdCosts,
+  usdCostsMatch,
 } from "./gpt56-pricing"
 
 describe("GPT-5.6 official pricing", () => {
@@ -135,6 +137,22 @@ describe("GPT-6 published pricing", () => {
     ).toBe(0.001395)
   })
 
+  it("prices identical short-context Luna usage at less than half the GPT-5.6 rate", () => {
+    const usage = {
+      inputTokens: 100_000,
+      cachedInputTokens: 40_000,
+      cacheWriteInputTokens: 20_000,
+      outputTokens: 50_000,
+    }
+
+    const previousRate = calculateGpt56CostUsd("azure_ai/gpt-5.6-luna", usage)
+    const currentRate = calculateGpt56CostUsd("azure_ai/gpt-6-luna", usage)
+
+    expect(previousRate).not.toBeNull()
+    expect(currentRate).not.toBeNull()
+    expect(currentRate!).toBeLessThan(previousRate! / 2)
+  })
+
   it("applies long-context multipliers to every bucket of the request", () => {
     expect(
       calculateGpt56CostUsdFromBuckets("azure_ai/gpt-6-sol", {
@@ -148,5 +166,37 @@ describe("GPT-6 published pricing", () => {
         longOutputTokens: 2_000,
       })
     ).toBe(0.97)
+  })
+
+  it("retains sub-micro costs across model buckets and ancillary charges", () => {
+    const tinyModelTotal = calculateGpt56CostUsdFromModelBuckets([
+      {
+        model: "azure_ai/gpt-6-luna",
+        standardInputTokens: 1,
+        standardCachedInputTokens: 1,
+        standardCacheWriteInputTokens: 0,
+        standardOutputTokens: 0,
+        longInputTokens: 0,
+        longCachedInputTokens: 0,
+        longCacheWriteInputTokens: 0,
+        longOutputTokens: 0,
+      },
+      {
+        model: "azure_ai/gpt-6-sol",
+        standardInputTokens: 1,
+        standardCachedInputTokens: 1,
+        standardCacheWriteInputTokens: 0,
+        standardOutputTokens: 0,
+        longInputTokens: 0,
+        longCachedInputTokens: 0,
+        longCacheWriteInputTokens: 0,
+        longOutputTokens: 0,
+      },
+    ])
+
+    expect(tinyModelTotal).toBe(0.00000021)
+    expect(sumUsdCosts(0.00015, 0.01)).toBe(0.01015)
+    expect(usdCostsMatch(0.010150000000000001, 0.01015)).toBe(true)
+    expect(usdCostsMatch(0.0101500001, 0.01015)).toBe(false)
   })
 })

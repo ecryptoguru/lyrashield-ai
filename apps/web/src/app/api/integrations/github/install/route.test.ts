@@ -27,7 +27,11 @@ const {
 
 vi.mock("../../../../../lib/api-auth", () => ({
   withCookieMutation: (handler: unknown) => handler,
-  authErrorResponse: vi.fn(() => null),
+  authErrorResponse: vi.fn((error: unknown) =>
+    error instanceof Error && error.message === "FORBIDDEN"
+      ? Response.json({ success: false, error: { code: "FORBIDDEN" } }, { status: 403 })
+      : null
+  ),
 }))
 
 vi.mock("@/lib/oauth-onboarding-return", () => ({
@@ -79,7 +83,8 @@ vi.mock("../../../../../lib/github-install-state", () => ({
   verifyInstallState,
 }))
 
-import { GET } from "./route"
+import { GET, POST } from "./route"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const INSTALLATION_ID = "777"
 
@@ -139,6 +144,42 @@ describe("GET /api/integrations/github/install", () => {
         }),
       })
     )
+  })
+
+  it("denies an install callback without integration:manage", async () => {
+    requirePermission.mockRejectedValueOnce(new Error("FORBIDDEN"))
+
+    const res = await GET(callback("&code=oauth-code"))
+
+    expectPermissionDenied(
+      res,
+      requirePermission.mock.calls,
+      "ws-1",
+      "/api/integrations/github/install",
+      "GET"
+    )
+    expect(getAppInstallations).not.toHaveBeenCalled()
+    expect(integrationCreate).not.toHaveBeenCalled()
+  })
+
+  it("denies starting an install without integration:manage", async () => {
+    requirePermission.mockRejectedValueOnce(new Error("FORBIDDEN"))
+    const request = new NextRequest("https://app.test/api/integrations/github/install", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId: "ws-1" }),
+    })
+
+    const res = await POST(request)
+
+    expectPermissionDenied(
+      res,
+      requirePermission.mock.calls,
+      "ws-1",
+      "/api/integrations/github/install",
+      "POST"
+    )
+    expect(auditLogCreate).not.toHaveBeenCalled()
   })
 
   it("leaves resources unconstrained for an all-repositories installation", async () => {

@@ -36,22 +36,35 @@ describe("evidence-storage", () => {
 
   it("throws a configuration error when storage is not configured", async () => {
     const original = process.env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE
-    process.env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE = "0"
-    vi.resetModules()
-    const freshMod = await import("./index")
-    await expect(
-      freshMod.uploadEncryptedArtifact({
-        workspaceId: "ws-1",
-        ownerId: "owner-1",
-        type: "proof",
-        content: Buffer.from("a"),
-      })
-    ).rejects.toThrow(freshMod.EvidenceStorageConfigurationError)
-    process.env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE = original
-    vi.resetModules()
-    const mod = await import("./index")
-    uploadEncryptedArtifact = mod.uploadEncryptedArtifact
-    evidenceStorageImport = mod
+    const s3Keys = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_REGION"]
+    const originalS3 = Object.fromEntries(s3Keys.map((key) => [key, process.env[key]]))
+    try {
+      // The core-test helper may inject developer S3 settings. This assertion
+      // specifically exercises the unconfigured-storage path.
+      for (const key of s3Keys) delete process.env[key]
+      process.env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE = "0"
+      vi.resetModules()
+      const freshMod = await import("./index")
+      await expect(
+        freshMod.uploadEncryptedArtifact({
+          workspaceId: "ws-1",
+          ownerId: "owner-1",
+          type: "proof",
+          content: Buffer.from("a"),
+        })
+      ).rejects.toThrow(freshMod.EvidenceStorageConfigurationError)
+    } finally {
+      for (const [key, value] of Object.entries(originalS3)) {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+      if (original === undefined) delete process.env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE
+      else process.env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE = original
+      vi.resetModules()
+      const mod = await import("./index")
+      uploadEncryptedArtifact = mod.uploadEncryptedArtifact
+      evidenceStorageImport = mod
+    }
   })
 
   it("stores encrypted artifacts locally without exposing raw content on disk", async () => {

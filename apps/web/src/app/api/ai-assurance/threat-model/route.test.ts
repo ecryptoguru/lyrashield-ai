@@ -14,7 +14,9 @@ vi.mock("@lyrashield/auth", () => ({
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
 import { getThreatModel, saveThreatModel } from "@lyrashield/db"
+import { requirePermission } from "@lyrashield/auth/server"
 import { GET, POST } from "./route"
+import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const body = {
   workspaceId: "ws-1",
@@ -73,6 +75,41 @@ describe("/api/ai-assurance/threat-model", () => {
       })
     )
     expect(response.status).toBe(400)
+    expect(saveThreatModel).not.toHaveBeenCalled()
+  })
+
+  it("denies threat-model reads without aiAssurance:view", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await GET(
+      new Request(
+        "http://localhost/api/ai-assurance/threat-model?workspaceId=ws-1&targetId=target-1"
+      )
+    )
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/ai-assurance/threat-model",
+      "GET"
+    )
+    expect(getThreatModel).not.toHaveBeenCalled()
+  })
+
+  it("denies threat-model writes without aiAssurance:manage", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
+    const response = await POST(
+      new Request("http://localhost/api/ai-assurance/threat-model", {
+        method: "POST",
+        body: JSON.stringify(body),
+      })
+    )
+    expectPermissionDenied(
+      response,
+      vi.mocked(requirePermission).mock.calls,
+      "ws-1",
+      "/api/ai-assurance/threat-model",
+      "POST"
+    )
     expect(saveThreatModel).not.toHaveBeenCalled()
   })
 })

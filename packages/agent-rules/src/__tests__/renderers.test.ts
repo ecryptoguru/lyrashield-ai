@@ -48,6 +48,16 @@ describe("rule renderers", () => {
     }
   }
 
+  it("separates generated sections after lists", () => {
+    const rule = renderRule({
+      format: "agents-md",
+      file: "AGENTS.md",
+      agentId: "test-agent",
+    })
+    expect(rule.inner).toMatch(/acceptable\.\n\n## Post-fix verification/)
+    expect(rule.inner).toMatch(/authorization\.\n\n## Honesty clause/)
+  })
+
   it("cursor mdc includes globs and frontmatter", () => {
     const mdc = renderRule({
       format: "cursor",

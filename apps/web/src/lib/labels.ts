@@ -1,6 +1,6 @@
 import type { ScanMode, FindingSeverity } from "@lyrashield/types"
 
-const GOAL_OPTIONS = [
+export const GOAL_OPTIONS = [
   {
     value: "CHECK_PR",
     label: "Check a PR",
@@ -30,6 +30,11 @@ const GOAL_OPTIONS = [
     value: "COMPLIANCE_REVIEW",
     label: "Compliance scan",
     description: "Map findings to compliance objectives.",
+  },
+  {
+    value: "SECURITY_REVIEW",
+    label: "Security scan",
+    description: "Legacy scan goal retained for historical scans.",
   },
 ] as const
 

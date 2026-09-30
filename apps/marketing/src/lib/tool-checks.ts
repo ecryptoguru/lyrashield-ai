@@ -34,10 +34,10 @@ const SECRET_PATTERNS: readonly SecretPattern[] = [
   {
     kind: "Assigned credential",
     // The optional quote sits before the separator so a quoted JSON key matches.
-    // Keep names specific: a bare `secret:` commonly names a variable holding an
-    // environment reference, not an inlined credential.
+    // A generic `secret:` key can hold an actual credential. Exclude recognized
+    // `process.env.NAME` references so source code does not look like a literal.
     pattern:
-      /(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|password)["']?[ \t]{0,128}[:=][ \t]{0,4}["']?([A-Za-z0-9._~+/=-]{16,})/gi,
+      /(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|password|secret)["']?[ \t]{0,128}[:=][ \t]{0,4}["']?(?!process\.env\.[A-Za-z_][A-Za-z0-9_]*)([A-Za-z0-9._~+/=-]{16,})/gi,
     valueGroup: 1,
   },
 ]

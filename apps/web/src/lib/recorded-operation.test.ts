@@ -3,6 +3,7 @@ vi.mock("@lyrashield/db", () => ({
   claimOrGetAgentOperation: vi.fn(),
   completeAgentOperation: vi.fn(),
   failAgentOperation: vi.fn(),
+  toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
 }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 import {
@@ -59,6 +60,19 @@ describe("durable REST operation execution", () => {
     const replay = await recordedOperation(request(), params, execute)
     expect(await replay.json()).toEqual(await created.json())
     expect(execute).toHaveBeenCalledTimes(1)
+  })
+  it("does not replay a malformed stored result or execute the operation again", async () => {
+    vi.mocked(claimOrGetAgentOperation).mockResolvedValue({
+      status: "REPLAY",
+      operation: { id: "op", result: "corrupt" },
+    } as never)
+    const execute = vi.fn()
+
+    const response = await recordedOperation(request(), params, execute)
+
+    expect(response.status).toBe(409)
+    expect((await response.json()).error.code).toBe("OPERATION_RESULT_UNAVAILABLE")
+    expect(execute).not.toHaveBeenCalled()
   })
   it("records the approval id for a pending fix PR request", async () => {
     vi.mocked(claimOrGetAgentOperation).mockResolvedValue({
