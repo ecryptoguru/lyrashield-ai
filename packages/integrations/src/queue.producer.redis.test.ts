@@ -32,6 +32,7 @@ const sockets = new Set<Socket>()
 const backends = new Set<Socket>()
 let blockedId = ""
 let blackhole = false
+let refuseConnections = false
 function setBlackhole(value: boolean) {
   blackhole = value
   // Stall response delivery without discarding bytes from an ordered TCP stream.
@@ -41,6 +42,10 @@ function setBlackhole(value: boolean) {
   }
 }
 const server = createServer((client) => {
+  if (refuseConnections) {
+    client.destroy()
+    return
+  }
   sockets.add(client)
   const destination = new URL(backendUrl)
   const backend = connect(Number(destination.port), destination.hostname)
@@ -91,6 +96,7 @@ describe.skipIf(!enabled)("bounded producers against disposable Redis", () => {
   afterAll(async () => {
     setBlackhole(false)
     blockedId = ""
+    refuseConnections = false
     await api?.unregisterScanWorker(workerId)
     await inspect?.close()
     redis?.disconnect()
@@ -213,4 +219,48 @@ describe.skipIf(!enabled)("bounded producers against disposable Redis", () => {
     expect(await inspect.getJob(scanId)).toBeUndefined()
     await (await inspect.getJob(freshId))?.remove()
   }, 10_000)
+
+  it("revives ended scan and webhook producers for maintenance reads without an enqueue", async () => {
+    const oldScanQueue = api.getScanQueue()
+    const oldWebhookQueue = api.getWebhookTrackRetryQueue()
+    await Promise.all([oldScanQueue.waitUntilReady(), oldWebhookQueue.waitUntilReady()])
+    const scanConnection = oldScanQueue.opts.connection as Redis
+    const webhookConnection = oldWebhookQueue.opts.connection as Redis
+    const absentId = `producer-fixture-${randomUUID()}`
+    refuseConnections = true
+    const producerPorts = new Set([
+      scanConnection.stream.localPort,
+      webhookConnection.stream.localPort,
+    ])
+    for (const socket of sockets) {
+      if (producerPorts.has(socket.remotePort)) socket.destroy()
+    }
+    try {
+      await expect(oldWebhookQueue.getJob(absentId)).rejects.toThrow()
+      await vi.waitFor(
+        () => {
+          expect(scanConnection.status).toBe("end")
+          expect(webhookConnection.status).toBe("end")
+        },
+        { timeout: 5_000 }
+      )
+    } finally {
+      refuseConnections = false
+    }
+
+    const restored = new Redis(process.env.BULLMQ_TEST_PROXY_URL!, {
+      maxRetriesPerRequest: 1,
+      connectTimeout: 1_000,
+      commandTimeout: 2_000,
+    })
+    try {
+      expect(await restored.ping()).toBe("PONG")
+      await expect(api.getWebhookTrackRetryQueue().getJob(absentId)).resolves.toBeUndefined()
+      await expect(api.getScanQueue().getJob(absentId)).resolves.toBeUndefined()
+      expect(api.getWebhookTrackRetryQueue()).not.toBe(oldWebhookQueue)
+      expect(api.getScanQueue()).not.toBe(oldScanQueue)
+    } finally {
+      restored.disconnect()
+    }
+  }, 15_000)
 })
