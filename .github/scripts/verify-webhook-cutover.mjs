@@ -96,7 +96,7 @@ for (const name of [
 
 // Inspect the running container only; no one-shot job, restart, queue write or secret read.
 const code =
-  'const billing=await import("@lyrashield/billing"); const {getSystemPrisma}=await import("@lyrashield/db"); const prisma=getSystemPrisma(); try { const rows=await prisma.$queryRawUnsafe(`SELECT count(*)::int AS count FROM "_prisma_migrations" WHERE migration_name = \'20260930120000_webhook_track_claims\' AND finished_at IS NOT NULL AND rolled_back_at IS NULL`); console.log(JSON.stringify({protocol:billing.WEBHOOK_TRACK_CLAIM_PROTOCOL,product:process.env.LYRASHIELD_PRODUCT_REVISION,digest:process.env.LYRASHIELD_WORKER_IMAGE_DIGEST,engine:process.env.LYRASHIELD_ENGINE_REVISION,migrated:rows[0]?.count===1})); } finally { await prisma.$disconnect(); }'
+  'const billing=await import("@lyrashield/billing"); const {getSystemPrisma}=await import("@lyrashield/db"); const prisma=getSystemPrisma(); try { const rows=await prisma.$queryRawUnsafe(`SELECT count(*)::int AS count FROM "_prisma_migrations" WHERE migration_name = $1 AND finished_at IS NOT NULL AND rolled_back_at IS NULL`, "20260930120000_webhook_track_claims"); console.log(JSON.stringify({protocol:billing.WEBHOOK_TRACK_CLAIM_PROTOCOL,product:process.env.LYRASHIELD_PRODUCT_REVISION,digest:process.env.LYRASHIELD_WORKER_IMAGE_DIGEST,engine:process.env.LYRASHIELD_ENGINE_REVISION,migrated:rows[0]?.count===1})); } finally { await prisma.$disconnect(); }'
 // Constant script text; no user-controlled shell interpolation.
 const script = `set -eu
 systemctl is-active --quiet lyrashield-worker.service
