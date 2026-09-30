@@ -355,6 +355,56 @@ function responseGate() {
   })
   return { promise, release }
 }
+
+test("initial unavailable-target recovery survives client hydration and clears on a scope change", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await composerRoutes(page)
+  await page.goto("polling.html?polling=scope&unavailable")
+  const dialog = page.getByRole("dialog", { name: "Start a scan" })
+  await expect(dialog).toBeVisible()
+  // Eligibility has completed after mounting; this observes the state after client effects run.
+  await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeEnabled()
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "This target is no longer available. Choose another target."
+  )
+  await page.keyboard.press("Escape")
+  await page.getByRole("button", { name: "Switch workspace", exact: true }).click()
+  await expect(page.getByLabel("Current scope")).toHaveText("user-a:ws-b")
+  await page.getByRole("button", { name: /^New scan$/i }).click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole("alert")).toHaveCount(0)
+})
+
+test("incoming scope keeps its server recovery message while replacing an old client error", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await composerRoutes(page)
+  await page.route("**/api/scans", (route) =>
+    route.fulfill({
+      status: 503,
+      json: {
+        success: false,
+        error: { code: "WORKER_UNAVAILABLE", message: "Old workspace error" },
+      },
+    })
+  )
+  await page.goto("polling.html?polling=scope&incoming-unavailable")
+  await page.getByRole("button", { name: /^New scan$/i }).click()
+  const dialog = page.getByRole("dialog", { name: "Start a scan" })
+  await dialog.getByRole("button", { name: /^Start scan$/i }).click()
+  await expect(dialog.getByRole("alert")).toHaveText("Old workspace error")
+  await page.keyboard.press("Escape")
+  await page.getByRole("button", { name: "Switch workspace", exact: true }).click()
+  await expect(page.getByLabel("Current scope")).toHaveText("user-a:ws-b")
+  await page.getByRole("button", { name: /^New scan$/i }).click()
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "This target is no longer available. Choose another target."
+  )
+})
+
 const lateAcceptedScan = {
   id: "accepted-in-old-scope",
   status: "QUEUED",

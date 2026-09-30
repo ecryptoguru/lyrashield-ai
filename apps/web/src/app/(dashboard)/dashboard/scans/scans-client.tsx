@@ -161,6 +161,7 @@ export function ScansClient({
   const scanSubmissionLock = useRef({ current: false })
   const scopeGenerationRef = useRef(0)
   const operationRequestRef = useRef(0)
+  const errorScopeRef = useRef({ principalId, workspaceId })
   const [pendingScanSubmission, setPendingScanSubmission] = useState<PendingScanSubmission | null>(
     null
   )
@@ -407,8 +408,6 @@ export function ScansClient({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCreating(false)
     setCheckingScanOperation(false)
-    setError(null)
-    setErrorCode(null)
     setScanOperationStatus(null)
     setScanRecoveryError(null)
     setScanRecoveryUnavailable(false)
@@ -426,6 +425,19 @@ export function ScansClient({
       ++scopeGeneration.current
     }
   }, [principalId, workspaceId])
+
+  useEffect(() => {
+    const previous = errorScopeRef.current
+    if (previous.principalId === principalId && previous.workspaceId === workspaceId) return
+    errorScopeRef.current = { principalId, workspaceId }
+    // Keep the server's recovery message on hydration and use the incoming scope's snapshot.
+    setError(
+      initialRecoveryUnavailable
+        ? "This target is no longer available. Choose another target."
+        : null
+    )
+    setErrorCode(null)
+  }, [initialRecoveryUnavailable, principalId, workspaceId])
 
   async function checkPendingScanOperation(submission: PendingScanSubmission) {
     if (!submission.operationId) return
