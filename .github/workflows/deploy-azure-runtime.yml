@@ -485,6 +485,7 @@ jobs:
           CLOUDFLARE_ORIGIN_MTLS: ${{ env.CLOUDFLARE_ORIGIN_MTLS }}
         run: bash .github/scripts/deploy-azure-rollout.sh smoke-candidate-revisions
       - name: Verify worker queues are empty before traffic promotion
+        timeout-minutes: 5
         if: inputs.webhook_claims_cutover != true
         id: worker-preflight
         env:

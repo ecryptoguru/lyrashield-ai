@@ -1,12 +1,17 @@
 #!/bin/sh
 set -eu
 
+real_timeout=$(command -v timeout || true)
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT
 
 cat >"$test_dir/az" <<'EOF'
 #!/bin/sh
 set -eu
+if [ "${FAKE_AZ_IGNORE_TERM:-0}" = 1 ]; then
+  trap '' TERM
+  while :; do /bin/sleep 0.1; done
+fi
 attempt_file=${FAKE_AZ_ATTEMPT_FILE:?}
 attempt=$(cat "$attempt_file")
 attempt=$((attempt + 1))
@@ -28,7 +33,7 @@ set -eu
 if [ -n "${FAKE_TIMEOUT_STATUS:-}" ]; then
   exit "$FAKE_TIMEOUT_STATUS"
 fi
-[ "$1" = "--foreground" ]
+[ "$1" = "--kill-after=10s" ]
 shift 2
 exec "$@"
 EOF
@@ -80,3 +85,23 @@ if azure_vm_run_command_with_retry --name worker >/dev/null 2>&1; then
   exit 1
 fi
 [ "$(cat "$FAKE_AZ_ATTEMPT_FILE")" = "0" ]
+
+# Exercise a real process ignoring TERM: the stubbed timeout cannot prove KILL.
+unset FAKE_TIMEOUT_STATUS
+if [ -n "$real_timeout" ] && "$real_timeout" --version >/dev/null 2>&1; then
+  rm "$test_dir/timeout"
+  export FAKE_AZ_IGNORE_TERM=1 AZURE_VM_RUN_COMMAND_TIMEOUT_SECONDS=1
+  start=$(date +%s)
+  if azure_vm_run_command_with_retry --name worker >/dev/null 2>&1; then
+    echo "TERM-ignoring Azure client must fail closed" >&2
+    exit 1
+  fi
+  elapsed=$(( $(date +%s) - start ))
+  [ "$elapsed" -le 15 ]
+  echo "Real TERM-ignoring client terminated within forced-kill deadline"
+elif [ "${CI:-}" = true ]; then
+  echo "CI requires GNU timeout for the real termination regression" >&2
+  exit 1
+else
+  echo "Real timeout check requires Linux GNU timeout; run in the Linux fixture"
+fi
