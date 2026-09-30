@@ -72,6 +72,7 @@ vi.mock("bullmq", () => ({
     constructor(_name: string, options: Record<string, unknown>) {
       mocks.queueOptions.push(options)
     }
+    close = vi.fn(async () => {})
     add = mocks.queueAdd
     on() {
       return this

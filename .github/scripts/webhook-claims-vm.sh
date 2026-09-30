@@ -64,7 +64,7 @@ verify_retained_candidate() {
   previous=$(oneshot 'console.log(JSON.parse(process.argv[1]).previousWorkerImage);' "$saved")
   if [ "$image" != "$previous" ]; then
     product=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
-    engine=$(docker image inspect --format '{{index .Config.Labels "ai.lyrashield.engine.revision"}}' "$image")
+    engine=$(docker image inspect --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}' "$image")
     oneshot 'const [saved,image,revision,engine]=process.argv.slice(1); const receipt=JSON.parse(saved); const {WEBHOOK_TRACK_CLAIM_PROTOCOL}=await import("@lyrashield/billing"); if(![receipt.candidateWorkerImage,receipt.previousCandidateWorkerImage].includes(image)||receipt.candidateProductRevision!==revision||receipt.productRevision!==revision||receipt.candidateEngineRevision!==engine||receipt.candidateWebhookTrackClaimProtocol!=="durable-claims/1"||WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/1")throw new Error("Retained candidate capability identity mismatch");' "$saved" "$image" "$product" "$engine"
   fi
 }

@@ -220,6 +220,23 @@ describe.skipIf(!enabled)("bounded producers against disposable Redis", () => {
     await (await inspect.getJob(freshId))?.remove()
   }, 10_000)
 
+  it("closes owned producer sockets and recreates queues for maintenance reads", async () => {
+    const scan = api.getScanQueue()
+    const webhook = api.getWebhookTrackRetryQueue()
+    await Promise.all([scan.waitUntilReady(), webhook.waitUntilReady()])
+    const scanConnection = scan.opts.connection as Redis
+    const webhookConnection = webhook.opts.connection as Redis
+    await Promise.all([scan.close(), webhook.close()])
+    await vi.waitFor(() => {
+      expect(scanConnection.status).toBe("end")
+      expect(webhookConnection.status).toBe("end")
+    })
+    expect(api.getScanQueue()).not.toBe(scan)
+    expect(api.getWebhookTrackRetryQueue()).not.toBe(webhook)
+    await expect(api.getScanQueue().getJobCounts("active")).resolves.toEqual({ active: 0 })
+    await Promise.all([api.getScanQueue().close(), api.getWebhookTrackRetryQueue().close()])
+  })
+
   it("revives ended scan and webhook producers for maintenance reads without an enqueue", async () => {
     const oldScanQueue = api.getScanQueue()
     const oldWebhookQueue = api.getWebhookTrackRetryQueue()

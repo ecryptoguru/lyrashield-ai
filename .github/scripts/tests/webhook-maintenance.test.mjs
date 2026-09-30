@@ -78,7 +78,7 @@ function setup(t, scenario = "normal") {
   )
   executable(
     "docker",
-    `const {spawnSync}=require("node:child_process"); if(args[0]==="ps"){if(state.container)console.log("lyrashield-worker");}else if(args[0]==="image"){console.log(args.at(-1).includes("engine.revision")?${JSON.stringify("d".repeat(40))}:${JSON.stringify("b".repeat(40))});}else if(args[0]==="container" || args[0]==="inspect"){if(!state.container)process.exit(1);console.log(args.includes("{{.Config.Image}}")?${JSON.stringify(image)}:"true");}else if(args[0]==="run" || args[0]==="exec"){let code=args[args.indexOf("-e")+1]; for(const [from,to] of ${JSON.stringify(
+    `const {spawnSync}=require("node:child_process"); if(args[0]==="ps"){if(state.container)console.log("lyrashield-worker");}else if(args[0]==="image"){const format=args[args.indexOf("--format")+1];console.log(format.includes("io.lyrashield.engine.revision")?${JSON.stringify("d".repeat(40))}:format.includes("engine.revision")?"":args.at(-1).match(/:([a-f0-9]{40})@/)?.[1]??${JSON.stringify("b".repeat(40))});}else if(args[0]==="container" || args[0]==="inspect"){if(!state.container)process.exit(1);console.log(args.includes("{{.Config.Image}}")?${JSON.stringify(image)}:"true");}else if(args[0]==="run" || args[0]==="exec"){let code=args[args.indexOf("-e")+1]; if(code.includes("Cutover worker environment does not match owned receipt")){const values=args.flatMap((arg,i)=>arg==="--env" && args[i+1]?.startsWith("TMPDIR=")?[args[i+1]]:[]); if(values.at(-1)!=="TMPDIR=/tmp" || !args.includes("/tmp:rw,nosuid,nodev,noexec,size=64m"))process.exit(13);} for(const [from,to] of ${JSON.stringify(
       [
         ["@lyrashield/db", db],
         ["@lyrashield/integrations", integration],
@@ -246,11 +246,36 @@ test("launch checks refreshed secrets before any worker queue consumer starts", 
   const run = (overrides = {}) =>
     spawnSync(
       "sh",
-      ["-eu", "-c", `environment_file="$LYRASHIELD_WORKER_ENV_FILE"; env_args=""; ${block}`],
+      [
+        "-eu",
+        "-c",
+        `environment_file="$LYRASHIELD_WORKER_ENV_FILE"; env_args="--env TMPDIR=/var/lib/lyrashield/worker/tmp"; ${block}`,
+      ],
       { encoding: "utf8", env: { ...f.env, LYRASHIELD_WORKER_IMAGE: image, ...overrides } }
     )
   assert.equal(run().status, 0)
   assert.notEqual(run({ REDIS_URL: "rotated-endpoint" }).status, 0)
+})
+
+test("retained compatible candidate uses the image engine label during claim recovery", (t) => {
+  const f = setup(t)
+  assert.equal(f.vm("claim").status, 0)
+  assert.equal(f.local("quiesce").status, 0)
+  const candidate = `ghcr.io/example/worker:${revision}@sha256:${"e".repeat(64)}`
+  const receipt = JSON.parse(readFileSync(f.receipt))
+  Object.assign(receipt, {
+    candidateWorkerImage: candidate,
+    candidateProductRevision: revision,
+    candidateEngineRevision: "d".repeat(40),
+    candidateWebhookTrackClaimProtocol: "durable-claims/1",
+  })
+  writeFileSync(f.receipt, JSON.stringify(receipt), { mode: 0o600 })
+  writeFileSync(
+    f.env.LYRASHIELD_WORKER_RUNTIME_CONFIG,
+    readFileSync(f.env.LYRASHIELD_WORKER_RUNTIME_CONFIG, "utf8").replace(image, candidate)
+  )
+  const result = f.vm("claim", { TEST_OWNER: "123:2" })
+  assert.equal(result.status, 0, result.stderr)
 })
 
 test("same GitHub run rerun preserves the original nonce and owner after stopping writers", (t) => {
