@@ -406,7 +406,7 @@ test("history error retries and empty sync stays a zero-selection no-op", async 
   await page.goto("?desktop=app")
   await expect(page.getByRole("alert")).toContainText("History unavailable")
   await page.getByRole("button", { name: "Retry history" }).click()
-  await expect(page.getByText("No local scans yet.")).toBeVisible()
+  await expect(page.getByText("No scans yet.")).toBeVisible()
   await page.getByRole("button", { name: "Sync", exact: true }).click()
   await expect(page.getByText("No local findings available.")).toBeVisible()
   await expect(page.getByRole("button", { name: "Sync 0 Findings" })).toBeDisabled()
