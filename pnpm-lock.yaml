@@ -83,7 +83,7 @@ overrides:
   postcss@<8.5.23: ^8.5.26
   sharp@<0.35.4: ^0.35.4
   undici@>=7 <7.29.1: ^7.29.1
-  undici@>=8 <8.10.0: 8.10.0
+  undici@>=8 <8.10.2: 8.10.2
   js-yaml@<4.3.2: ^4.3.2
   svgo@<4.1.0: ^4.1.0
   qs@<6.16.0: ^6.16.0
@@ -840,8 +840,8 @@ importers:
         specifier: workspace:*
         version: link:../security
       undici:
-        specifier: 8.10.0
-        version: 8.10.0
+        specifier: 8.10.2
+        version: 8.10.2
       zod:
         specifier: 'catalog:'
         version: 4.5.4
@@ -1062,8 +1062,8 @@ importers:
         specifier: 'catalog:'
         version: 6.0.3
       undici:
-        specifier: 8.10.0
-        version: 8.10.0
+        specifier: 8.10.2
+        version: 8.10.2
       zod:
         specifier: 'catalog:'
         version: 4.5.4
@@ -8015,8 +8015,8 @@ packages:
     resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
     engines: {node: '>=20.18.1'}
 
-  undici@8.10.0:
-    resolution: {integrity: sha512-HvltHd7avK13QIw/oLe4qoOLyoVSoafqJ2jYOrtMRBkbYT31eiBQ8O0ehRKZiEZCMEyLFQNIADpgCWC5fALvYQ==}
+  undici@8.10.2:
+    resolution: {integrity: sha512-/y4/bH9YNU5hi9NIrpOuvGXFcxrj3CMrV+/AYpowAYTpHn8gX/XPFjNy766FPoYY0miQhdW977JFWKGNhBdwyQ==}
     engines: {node: '>=22.19.0'}
 
   unenv@2.0.0-rc.24:
@@ -16296,7 +16296,7 @@ snapshots:
 
   undici@7.29.1: {}
 
-  undici@8.10.0: {}
+  undici@8.10.2: {}
 
   unenv@2.0.0-rc.24:
     dependencies:
@@ -16318,7 +16318,7 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
       ohash: 2.0.11
-      undici: 8.10.0
+      undici: 8.10.2
 
   unist-util-find-after@5.0.0:
     dependencies:
