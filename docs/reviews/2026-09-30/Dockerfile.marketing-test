@@ -1,0 +1,10 @@
+# Runs the generated Cloudflare artifact with strictly local bindings.
+FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+ENV CI=1 WRANGLER_SEND_METRICS=false
+RUN npm install --global --ignore-scripts wrangler@4.125.0 && mkdir -p /app /state && chown node:node /app /state
+WORKDIR /app
+COPY --chown=node:node dist ./dist
+COPY --chown=node:node migrations ./migrations
+USER node
+EXPOSE 8787
+CMD ["sh", "-c", "wrangler d1 migrations apply lyrashield-marketing-waitlist --local --config dist/server/wrangler.json --persist-to /state && exec wrangler dev --local --config dist/server/wrangler.json --persist-to /state --ip 0.0.0.0 --port 8787 --var WAITLIST_IP_SALT:ls-fixture-waitlist-salt-review-only-20260930 --var PUBLIC_SITE_URL:http://localhost:33010 --var PUBLIC_APP_URL:http://localhost:33009 --var PUBLIC_SCANNER_URL:http://localhost:33011 --var PUBLIC_INDEXABLE:false --var PUBLIC_MYRA_MARKETING_ENABLED:0"]

@@ -475,6 +475,15 @@ jobs:
           fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
+      - name: Prove metering and queue invariants with disposable services
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BILLING_METER_POSTGRES_TEST=1 pnpm exec vitest run packages/billing/src/usage/meter.postgres.test.ts
+          WEBHOOK_TRACK_POSTGRES_REDIS_TEST=1 pnpm exec vitest run apps/worker/src/jobs/webhook-track-retry.postgres-redis.test.ts
+          BULLMQ_PRODUCER_REDIS_TEST=1 BULLMQ_TEST_REDIS_URL="$REDIS_URL" pnpm exec vitest run packages/integrations/src/queue.producer.redis.test.ts
+
       - name: Upload informational web coverage summary
         if: always() && (needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true')
         continue-on-error: true
@@ -742,6 +751,24 @@ jobs:
 
       - name: Verify pinned engine-worker contract
         run: bash .github/scripts/verify-engine-worker-contract.sh lyrashield-engine "$GITHUB_WORKSPACE"
+
+      # Premerge compatibility proof only; release pins retain merged-engine authority.
+      # Remove this companion proof after the reviewed candidate is promoted.
+      - name: Checkout reviewed engine candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/lyrashield-engine
+          ref: c0cf936b4c3ee6f8f331681802645cc044d60911
+          path: engine-candidate
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Verify exact candidate engine-worker contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C engine-candidate rev-parse HEAD)" = "c0cf936b4c3ee6f8f331681802645cc044d60911"
+          bash .github/scripts/verify-engine-worker-contract.sh engine-candidate "$GITHUB_WORKSPACE"
 
   deploy-marketing:
     name: Deploy Marketing to Cloudflare

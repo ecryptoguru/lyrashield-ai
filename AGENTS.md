@@ -139,10 +139,10 @@ Local gates — run the ones a change touches before opening a PR:
 - `pnpm verify:worker-image` — worker image contract on the checked-out Dockerfile and host assets.
 - Deploy-script suites: `node --test .github/scripts/tests/*.test.mjs` and `for t in .github/scripts/tests/*.sh; do bash "$t" || exit 1; done`. These mock `docker`/`systemctl`/`curl` and never touch a real VM.
 
-Release pipeline — GitHub Actions only; production steps are founder-dispatched:
+Release pipeline — GitHub Actions only; qualifying main merges can trigger production automatically:
 
-- `ci.yml` gates every PR: SCA/secret scan, path classification, lint/typecheck/test/build, pinned engine-worker contract, desktop jobs, marketing deploy on main push.
-- `release-production.yml` dispatches `deploy-azure.yml`: builds the digest-pinned worker image, promotes `lyrashield-worker.service` through `.github/scripts/promote-worker-vm.sh` (admission stop → secrets refresh → empty-queue preflight → restart → readiness), then rolls app/scanner and the Cloudflare marketing worker.
+- `ci.yml` gates PRs targeting main: SCA/secret scan, path classification, lint/typecheck/test/build, pinned engine-worker contract and desktop jobs. Qualifying main pushes automatically deploy marketing after successful required CI jobs.
+- `release-production.yml` runs after successful main CI and automatically calls `deploy-azure.yml` when the routing receipt requires Azure deployment and the tested SHA is still current main. The runtime workflow deploys and promotes app, scanner and egress-proxy revisions before promoting the digest-pinned worker through `.github/scripts/promote-worker-vm.sh` (admission stop → secrets refresh → empty-queue preflight → restart → readiness). Manual emergency dispatch separately requires the current main SHA and exact confirmation; a merge must be authorized with its automatic deployment effects in mind.
 - `promote-worker-vm.sh --preflight` runs only the queue check against the refreshed environment file; it never restarts the live worker.
 - `production-scan-readiness.yml` probes `https://app.lyrashieldai.com/api/ready/scans` and writes the probe status/body to the step summary on failure.
 - Local `.env` values are developer-specific (Myra flags, provider credentials); a red `env-runtime` test or web build caused by them is environmental, not a regression — compare against a clean checkout before claiming breakage.

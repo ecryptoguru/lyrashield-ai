@@ -16,12 +16,18 @@ import { logger } from "@lyrashield/logger"
 import { processBillingDowngradeJob } from "./jobs/billing-downgrade.job"
 import { processBillingExpirePacksJob } from "./jobs/billing-expire-packs.job"
 import { replenishAllowanceCycles } from "./jobs/billing-allowance-replenishment.job"
+import { recoverDueWebhookTrackRetries } from "./jobs/webhook-track-retry.job"
 import { runBillingReconciliation } from "./jobs/billing-reconciliation.job"
 
 const BILLING_JOB_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
 const BILLING_RECONCILIATION_INTERVAL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 function runBillingDowngrade(): void {
+  void recoverDueWebhookTrackRetries().catch((error) => {
+    logger.error("Webhook due retry recovery failed", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
   void processBillingDowngradeJob({ scheduledAt: new Date().toISOString() }).catch((error) => {
     logger.error("Billing downgrade job failed", {
       error: error instanceof Error ? error.message : String(error),
