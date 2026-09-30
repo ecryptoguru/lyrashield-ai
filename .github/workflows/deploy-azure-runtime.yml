@@ -135,6 +135,18 @@ jobs:
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
 
+      # Read-only guard runs before production configuration or migration mutations.
+      # First claims cutover is a separately approved maintenance operation.
+      - name: Verify compatible webhook cutover baseline
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          GHCR_USERNAME: ${{ github.repository_owner }}
+        run: node .github/scripts/verify-webhook-cutover.mjs
+
       - name: Preserve live Cloud billing admission
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
@@ -461,8 +473,10 @@ jobs:
       # 1. The empty-queue preflight above already verified the worker queues
       #    are drained BEFORE traffic was promoted, so the gap window carries
       #    only jobs created by the NEW app after cutover.
-      # 2. Those jobs are consumed by the OLD worker, which is safe because
-      #    the app↔worker contract is pinned and CI-enforced in both
+      # 2. The early cutover guard independently proves all current billing
+      #    writers and rollback images support durable claims. Engine pins alone
+      #    do not prove billing compatibility. Engine job/result compatibility
+      #    remains pinned and CI-enforced in both
       #    directions: the app's ENGINE_REVISION pin (verified by
       #    verify-engine-revision.sh with green engine checks at that exact
       #    SHA) and the engine's .lyrashield-worker-pin contract tests. A

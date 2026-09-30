@@ -26,6 +26,8 @@ import { issueLicenseForProviderOrder } from "./license-fulfillment"
 import { normalizeProviderEvent, type NormalizedBillingEvent } from "./domain-events"
 import { assertProviderCatalogEvent } from "./provider-catalog-validation"
 
+export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "durable-claims/1"
+
 export const WEBHOOK_TRACK_IDS = ["billing", "license", "affiliate"] as const
 export type WebhookTrackId = (typeof WEBHOOK_TRACK_IDS)[number]
 

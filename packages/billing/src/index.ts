@@ -200,6 +200,7 @@ export {
   computeApplicableTracks,
   ensureWebhookTrackRows,
   markTrackSucceeded,
+  WEBHOOK_TRACK_CLAIM_PROTOCOL,
   markTrackFailed,
   syncDerivedProcessedState,
   boundTrackError,
