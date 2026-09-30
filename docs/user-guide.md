@@ -453,7 +453,7 @@ Payouts:
 - $100 minimum, monthly net-30 on the 15th, with a 30-day hold.
 - Tax form required (W-9 or W-8BEN).
 - New affiliates carry a 25% reserve for the first 90 days. See [affiliate terms](../PRD.md#affiliate-terms).
-- Rails: RazorpayX (India, IMPS/UPI) or Payoneer (global).
+- Payouts are disabled pending provider and tax operations. RazorpayX is the only implemented rail (India); non-India applicants can apply without selecting a payout method while a provider is unapproved.
 
 ### 20.4 LyraShield Local/Desktop (BYOK)
 

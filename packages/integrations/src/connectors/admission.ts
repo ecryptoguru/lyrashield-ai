@@ -17,7 +17,6 @@ export function getConnectorAdmission(workspaceId: string): ConnectorAdmissionDe
 
 export {
   evaluateConnectorAdmission,
-  parseConnectorCanaryWorkspaceIds,
   type ConnectorAdmissionDecision,
   type ConnectorAdmissionMode,
   type ConnectorAdmissionReason,

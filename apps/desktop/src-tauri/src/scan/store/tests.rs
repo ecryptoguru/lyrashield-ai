@@ -27,6 +27,144 @@ fn browser_fixtures_match_real_native_wire_and_export_inputs() {
     );
 }
 
+#[tokio::test]
+async fn scan_history_uses_bounded_stable_pages_with_duplicate_timestamps() {
+    let store = super::TestStorage::new_in_memory();
+    let timestamp = "2026-09-30T12:00:00Z";
+    let sort_key = super::scan_started_at_sort_key(timestamp);
+    for index in 0..1_001 {
+        store
+            .execute(
+                "INSERT INTO scans (scan_id,target,mode,status,started_at,started_at_sort) VALUES (?, 'local', 'standard', 'completed', ?, ?)",
+                vec![
+                    format!("scan-{index:04}").into(),
+                    timestamp.into(),
+                    sort_key.clone().into(),
+                ],
+            )
+            .await
+            .unwrap();
+    }
+
+    assert_eq!(super::bounded_scan_page_size(None), 50);
+    assert_eq!(super::bounded_scan_page_size(Some(0)), 1);
+    assert_eq!(super::bounded_scan_page_size(Some(1_000)), 100);
+
+    let mut cursor = None;
+    let mut ids = Vec::new();
+    loop {
+        let page = super::list_scan_page_from_storage(
+            &store,
+            cursor,
+            super::bounded_scan_page_size(Some(500)),
+        )
+        .await
+        .unwrap();
+        assert!(page.scans.len() <= 100);
+        ids.extend(page.scans.into_iter().map(|scan| scan.scan_id));
+        match page.next_cursor {
+            Some(next) => cursor = Some(next),
+            None => break,
+        }
+    }
+
+    let expected = (0..1_001)
+        .rev()
+        .map(|index| format!("scan-{index:04}"))
+        .collect::<Vec<_>>();
+    assert_eq!(ids, expected);
+
+    let all_scans = super::list_all_scans_from_storage(&store).await.unwrap();
+    assert_eq!(
+        all_scans.len(),
+        1_001,
+        "legacy list_scans stays untruncated"
+    );
+    assert_eq!(all_scans.first().unwrap().scan_id, "scan-1000");
+    assert_eq!(all_scans.last().unwrap().scan_id, "scan-0000");
+}
+
+#[tokio::test]
+async fn scan_history_normalizes_fractional_and_offset_timestamps_before_sorting() {
+    let store = super::TestStorage::new_in_memory();
+    for (scan_id, started_at) in [
+        ("exact-second", "2026-09-30T12:00:00Z"),
+        ("fractional", "2026-09-30T12:00:00.100Z"),
+        ("offset-same-instant", "2026-09-30T13:00:00+01:00"),
+    ] {
+        store
+            .execute(
+                "INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES (?, 'local', 'standard', 'completed', ?)",
+                vec![scan_id.into(), started_at.into()],
+            )
+            .await
+            .unwrap();
+    }
+    {
+        let mut conn = store.conn.lock().unwrap();
+        super::backfill_scan_started_at_sort(&mut conn).unwrap();
+    }
+
+    let first = super::list_scan_page_from_storage(&store, None, 2)
+        .await
+        .unwrap();
+    assert_eq!(
+        first
+            .scans
+            .iter()
+            .map(|scan| scan.scan_id.as_str())
+            .collect::<Vec<_>>(),
+        ["fractional", "offset-same-instant"]
+    );
+    assert_eq!(
+        first.next_cursor.as_ref().unwrap().started_at,
+        "2026-09-30T12:00:00.000000000Z"
+    );
+    let second = super::list_scan_page_from_storage(&store, first.next_cursor, 2)
+        .await
+        .unwrap();
+    assert_eq!(second.scans[0].scan_id, "exact-second");
+    assert!(second.next_cursor.is_none());
+}
+
+#[test]
+fn scan_history_order_backfill_handles_more_than_one_batch() {
+    let store = super::TestStorage::new_in_memory();
+    {
+        let mut conn = store.conn.lock().unwrap();
+        let tx = conn.transaction().unwrap();
+        for index in 0..=super::SCAN_HISTORY_ORDER_BACKFILL_BATCH_SIZE {
+            tx.execute(
+                "INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES (?, 'local', 'standard', 'completed', '2026-09-30T12:00:00Z')",
+                [format!("legacy-{index:04}")],
+            )
+            .unwrap();
+        }
+        tx.commit().unwrap();
+    }
+
+    {
+        let mut conn = store.conn.lock().unwrap();
+        super::backfill_scan_started_at_sort(&mut conn).unwrap();
+        let missing: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM scans WHERE started_at_sort IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(missing, 0);
+        let last_key: String = conn
+            .query_row(
+                "SELECT started_at_sort FROM scans WHERE scan_id='legacy-0500'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(last_key, "2026-09-30T12:00:00.000000000Z");
+    }
+}
+
 #[test]
 fn completed_scan_rejects_late_cancel_and_failure_preserves_exit_code() {
     let dir = tempfile::tempdir().unwrap();
@@ -34,6 +172,11 @@ fn completed_scan_rejects_late_cancel_and_failure_preserves_exit_code() {
     for id in ["done", "failed"] {
         conn.execute("INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES (?1,'local','standard','running','now')", [id]).unwrap();
     }
+    conn.execute(
+        "INSERT INTO findings (id,scan_id,severity,title,detected_at) VALUES ('finding-1','done','HIGH','Persisted finding','now')",
+        [],
+    )
+    .unwrap();
     super::persist_terminal_in(
         &mut conn,
         "done",
@@ -60,6 +203,15 @@ fn completed_scan_rejects_late_cancel_and_failure_preserves_exit_code() {
         })
         .unwrap(),
         "completed"
+    );
+    assert_eq!(
+        conn.query_row(
+            "SELECT finding_count FROM scans WHERE scan_id='done'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1
     );
     assert_eq!(
         conn.query_row(
@@ -177,6 +329,7 @@ fn opens_an_existing_sqlx_database_without_rewriting_its_receipt() {
     // SHA-384 of the shipped v1 SQL, matching SQLx Migration::new.
     conn.execute("INSERT INTO _sqlx_migrations (version,description,success,checksum,execution_time) VALUES (1,'create scans and findings tables',1,x'3a07a2a94f5c125f3e6e67331ceb6b900897c7c1c7bf58a505e202c4e14844d440e510be74038e6df9273660cd18d4c8',42)", []).unwrap();
     conn.execute("INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES ('legacy','local','standard','completed','before-upgrade')", []).unwrap();
+    conn.execute("INSERT INTO scans (scan_id,target,mode,status,started_at) VALUES ('legacy-time','local','standard','completed','2026-09-30T13:00:00.100+01:00')", []).unwrap();
     drop(conn);
     let conn = open_database(&path).unwrap();
     assert_eq!(
@@ -188,6 +341,15 @@ fn opens_an_existing_sqlx_database_without_rewriting_its_receipt() {
         .unwrap(),
         "before-upgrade"
     );
+    let (started_at, started_at_sort): (String, String) = conn
+        .query_row(
+            "SELECT started_at, started_at_sort FROM scans WHERE scan_id='legacy-time'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(started_at, "2026-09-30T13:00:00.100+01:00");
+    assert_eq!(started_at_sort, "2026-09-30T12:00:00.100000000Z");
     assert_eq!(
         conn.query_row(
             "SELECT execution_time FROM _sqlx_migrations WHERE version=1",
@@ -296,7 +458,8 @@ fn disk_database_preserves_sqlx_migrations_and_existing_history() {
         MIGRATIONS[0],
         MIGRATIONS[1],
         MIGRATIONS[2],
-        (4, "next", "CREATE TABLE next_version (id INTEGER);"),
+        MIGRATIONS[3],
+        (5, "next", "CREATE TABLE next_version (id INTEGER);"),
     ];
     migrate_database(&mut conn, &next).unwrap();
     migrate_database(&mut conn, &next).unwrap();
@@ -304,7 +467,7 @@ fn disk_database_preserves_sqlx_migrations_and_existing_history() {
         conn.query_row("SELECT count(*) FROM _sqlx_migrations", [], |row| row
             .get::<_, i64>(0))
             .unwrap(),
-        4
+        5
     );
 }
 

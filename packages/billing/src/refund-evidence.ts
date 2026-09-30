@@ -6,7 +6,7 @@ import {
 import { parseLocalProductIds } from "./license-fulfillment"
 import type { BillingProviderName, ProductKind } from "./domain-events"
 
-export type RefundClassification = "full" | "partial" | "unknown"
+type RefundClassification = "full" | "partial" | "unknown"
 
 export interface ProviderRefundEvidence {
   classification: RefundClassification

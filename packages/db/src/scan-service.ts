@@ -572,7 +572,7 @@ export interface ListScansParams {
  * active-scan poll tick, so those columns would be read and serialized
  * continuously for nothing.
  */
-export const SCAN_LIST_SELECT = {
+const SCAN_LIST_SELECT = {
   id: true,
   status: true,
   goal: true,
@@ -620,7 +620,7 @@ export interface ScanListItem {
 }
 
 /** Flatten immutable candidate associations into the historical list count. */
-export function toScanListItem(
+function toScanListItem(
   scan: Omit<ScanListItem, "findingCount"> & {
     findingCandidates?: Array<{ findingId: string | null }> | null
   }

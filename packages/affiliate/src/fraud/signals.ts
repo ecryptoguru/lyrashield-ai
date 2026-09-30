@@ -3,7 +3,7 @@
  * Rate-limit signups per IP/device.
  */
 
-export type FraudSignalType =
+type FraudSignalType =
   | "DISPOSABLE_EMAIL"
   | "PROXY_VPN"
   | "DEVICE_FINGERPRINT_DUPLICATE"

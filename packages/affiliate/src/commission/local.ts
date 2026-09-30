@@ -9,7 +9,7 @@ import { Prisma } from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
-import { LOCAL_RATE_BPS, DEFAULT_HOLD_DAYS, AFFILIATE_RULE_VERSION } from "../index"
+import { LOCAL_RATE_BPS, DEFAULT_HOLD_DAYS, AFFILIATE_RULE_VERSION } from "../constants"
 import { resolveAttribution } from "../attribution/resolve"
 import { loadActiveProgram } from "../program"
 

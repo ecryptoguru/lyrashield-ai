@@ -62,6 +62,14 @@ import {
   type Repo,
 } from "./onboarding-step-views"
 
+function existingTargetIdFromError(cause: unknown): string | null {
+  if (!(cause instanceof ApiError) || cause.code !== "TARGET_EXISTS") return null
+  if (typeof cause.details !== "object" || cause.details === null) return null
+  if (!("existingTargetId" in cause.details)) return null
+  const parsed = z.string().min(1).safeParse(cause.details.existingTargetId)
+  return parsed.success ? parsed.data : null
+}
+
 export function OnboardingWizard({
   principalId,
   initialState,
@@ -128,6 +136,7 @@ export function OnboardingWizard({
   const [buildTool, setBuildTool] = useState<string | null>(initialState.buildTool ?? null)
   const autoFetchAttempted = useRef(false)
   const repoRequest = useRef("")
+  const targetRecovery = useRef<{ identity: string; targetId: string } | null>(null)
   const reviewOptions = getOnboardingReviewOptions(path)
   const selectedReview =
     reviewOptions.find((option) => option.goal === selectedGoal) ?? reviewOptions[0]
@@ -562,38 +571,68 @@ export function OnboardingWizard({
       setScanRecoveryError(null)
       if (startNewScan) startNewScanAfterPreflight.current = true
       try {
-        const targetId = await ensureOnboardingTargetId(data.targetId, async () => {
-          if (needsRepo && selectedRepo) {
-            const target = await apiPost(
-              "/api/targets",
-              {
-                workspaceId: data.workspaceId,
-                name: productName.trim(),
-                type: "REPO",
-                repoProvider: "github",
-                repoOwner: selectedRepo.owner,
-                repoName: selectedRepo.name,
-                installationId: selectedRepo.installationId,
-                branch: selectedRepo.defaultBranch,
-                environment,
-              },
-              { schema: idSchema }
-            )
-            return target.id
+        const targetIdentity = JSON.stringify([
+          workspaceId,
+          needsRepo
+            ? [
+                "REPO",
+                selectedRepo?.owner,
+                selectedRepo?.name,
+                selectedRepo?.defaultBranch,
+                selectedRepo?.installationId,
+              ]
+            : [path, urlForm.url.trim()],
+          productName.trim(),
+          environment,
+        ])
+        const recoveredTargetId =
+          targetRecovery.current?.identity === targetIdentity
+            ? targetRecovery.current.targetId
+            : null
+        const targetId = await ensureOnboardingTargetId(
+          data.targetId ?? recoveredTargetId,
+          async () => {
+            let targetId: string
+            try {
+              if (needsRepo && selectedRepo) {
+                const target = await apiPost(
+                  "/api/targets",
+                  {
+                    workspaceId: data.workspaceId,
+                    name: productName.trim(),
+                    type: "REPO",
+                    repoProvider: "github",
+                    repoOwner: selectedRepo.owner,
+                    repoName: selectedRepo.name,
+                    installationId: selectedRepo.installationId,
+                    branch: selectedRepo.defaultBranch,
+                    environment,
+                  },
+                  { schema: idSchema }
+                )
+                targetId = target.id
+              } else {
+                const target = buildUrlTargetPayload({
+                  workspaceId: data.workspaceId,
+                  path,
+                  name: productName,
+                  url: urlForm.url,
+                  environment,
+                  ownershipAttested: urlForm.ownershipAttested,
+                })
+                if (!target) throw new Error("Target details are required.")
+                const created = await apiPost("/api/targets", target, { schema: idSchema })
+                targetId = created.id
+              }
+            } catch (cause) {
+              const existingTargetId = existingTargetIdFromError(cause)
+              if (!existingTargetId) throw cause
+              targetId = existingTargetId
+            }
+            targetRecovery.current = { identity: targetIdentity, targetId }
+            return targetId
           }
-
-          const target = buildUrlTargetPayload({
-            workspaceId: data.workspaceId,
-            path,
-            name: productName,
-            url: urlForm.url,
-            environment,
-            ownershipAttested: urlForm.ownershipAttested,
-          })
-          if (!target) throw new Error("Target details are required.")
-          const created = await apiPost("/api/targets", target, { schema: idSchema })
-          return created.id
-        })
+        )
         if (data.targetId !== targetId || data.selectedGoal !== selectedReview.goal) {
           await persist({
             targetId,

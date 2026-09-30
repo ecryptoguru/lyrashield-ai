@@ -10,6 +10,8 @@ import type {
   RuntimeStatus,
   ScanEvent,
   ScanDetail,
+  ScanHistoryCursor,
+  ScanHistoryPage,
   ScanMode,
   ScanSummary,
   ScanTarget,
@@ -62,6 +64,10 @@ type NativeScanSummary = Omit<
   contract_version: string | null
   diff_base: string | null
   diff_head: string | null
+}
+type NativeScanHistoryPage = {
+  scans: NativeScanSummary[]
+  nextCursor: ScanHistoryCursor | null
 }
 type NativeScanEvent =
   | { type: "started" | "cancelled"; scan_id: string }
@@ -264,8 +270,15 @@ export async function listCloudTargets(
 export async function cancelScan(scanId: string): Promise<void> {
   return invoke("cancel_scan", { scanId })
 }
-export async function listScans(): Promise<ScanSummary[]> {
-  return (await invoke<NativeScanSummary[]>("list_scans")).map(fromNativeSummary)
+export async function listScanPage(
+  cursor?: ScanHistoryCursor,
+  limit = 50
+): Promise<ScanHistoryPage> {
+  const page = await invoke<NativeScanHistoryPage>("list_scan_page", {
+    cursor: cursor ?? null,
+    limit,
+  })
+  return { scans: page.scans.map(fromNativeSummary), nextCursor: page.nextCursor }
 }
 export async function getScanDetail(scanId: string): Promise<ScanDetail> {
   const { findings, threat_model_available, ...summary } = await invoke<

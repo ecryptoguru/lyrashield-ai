@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { Button, Spinner } from "./"
+import { Button } from "./button"
+import { Spinner } from "./spinner"
 
 interface LoadMoreProps<T> {
   /** Fetch the next page. Returns items + nextCursor. */

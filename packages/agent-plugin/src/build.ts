@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { renderMarkdownBody } from "@lyrashield/agent-rules/renderers/shared.js"
 import { LYRASHIELD_POLICY } from "@lyrashield/agent-rules/policy.js"
-import { getPluginDir } from "./index.js"
+import { getPluginDir } from "./plugin-dir.js"
 
 const CLIENTS = ["claude", "cursor", "codex", "kiro"] as const
 

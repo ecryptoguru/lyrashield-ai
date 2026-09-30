@@ -7,8 +7,8 @@ const URL_PROPERTIES = [
   "referrer",
 ]
 
-export const ANALYTICS_PREFERENCE_COOKIE = "lyrashield-analytics"
-export const ANALYTICS_PREFERENCE_MAX_AGE = 180 * 24 * 60 * 60
+const ANALYTICS_PREFERENCE_COOKIE = "lyrashield-analytics"
+const ANALYTICS_PREFERENCE_MAX_AGE = 180 * 24 * 60 * 60
 const OPTIONAL_TRACKING_COOKIES = [
   "lyrashield-acq",
   "ls_ref",

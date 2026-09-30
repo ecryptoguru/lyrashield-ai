@@ -55,16 +55,8 @@ export function recordCoverageIssue(
  * namespacing guarantees no collision with `vibe-NN` control ids or family
  * names — deterministic consumers filter on these prefixes.
  */
-export const ENGINE_SCOPE_RECEIPT_PREFIX = "engine-scope:"
-export const ENGINE_GAP_RECEIPT_PREFIX = "engine-gap:"
-
-/** True for namespaced engine-declared coverage receipts, never for control ids. */
-export function isEngineDeclaredCoverageId(controlId: string): boolean {
-  return (
-    controlId.startsWith(ENGINE_SCOPE_RECEIPT_PREFIX) ||
-    controlId.startsWith(ENGINE_GAP_RECEIPT_PREFIX)
-  )
-}
+const ENGINE_SCOPE_RECEIPT_PREFIX = "engine-scope:"
+const ENGINE_GAP_RECEIPT_PREFIX = "engine-gap:"
 
 /**
  * Declared outcome → receipt status. "needs_follow_up" and runtime-declared
@@ -73,7 +65,7 @@ export function isEngineDeclaredCoverageId(controlId: string): boolean {
  * but always carry `declaredBy: "engine_model"` metadata so a reader can tell
  * a self-report from a deterministic outcome.
  */
-export const SCOPED_COVERAGE_STATUS: Record<
+const SCOPED_COVERAGE_STATUS: Record<
   ScopedCoverageOutcome,
   "COMPLETED" | "NOT_APPLICABLE" | "PARTIAL"
 > = {

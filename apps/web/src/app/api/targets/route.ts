@@ -12,6 +12,85 @@ import { apiError, apiPaginated, parsePaginationParams } from "../../../lib/api-
 import { assertTargetAllowed } from "@lyrashield/billing"
 import { getTargetDomainStatuses } from "@/lib/target-domain-status"
 
+type TargetInput =
+  ReturnType<typeof CreateRepoTargetSchema.parse> | ReturnType<typeof CreateUrlTargetSchema.parse>
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+const conflictTargetSelect = {
+  id: true,
+  type: true,
+  name: true,
+  projectId: true,
+  environment: true,
+  repoFullName: true,
+  repoProvider: true,
+  branch: true,
+  installationId: true,
+  url: true,
+  apiSpecUrl: true,
+} as const
+
+async function findExistingTarget(data: TargetInput) {
+  return prisma.target.findFirst({
+    where: {
+      workspaceId: data.workspaceId,
+      deletedAt: null,
+      ...(data.type === "REPO"
+        ? { repoFullName: `${data.repoOwner}/${data.repoName}` }
+        : { url: data.url }),
+    },
+    select: conflictTargetSelect,
+  })
+}
+
+function isCompatibleTarget(
+  data: TargetInput,
+  target: NonNullable<Awaited<ReturnType<typeof findExistingTarget>>>
+) {
+  if (
+    target.type !== data.type ||
+    target.name !== data.name ||
+    target.projectId !== (data.projectId ?? null) ||
+    target.environment !== data.environment
+  ) {
+    return false
+  }
+
+  if (data.type === "REPO") {
+    return (
+      target.repoFullName === `${data.repoOwner}/${data.repoName}` &&
+      target.repoProvider === data.repoProvider &&
+      target.branch === (data.branch ?? null) &&
+      (!data.installationId || target.installationId === data.installationId)
+    )
+  }
+
+  return target.url === data.url && target.apiSpecUrl === (data.apiSpecUrl ?? null)
+}
+
+function targetExistsResponse(
+  existing: Awaited<ReturnType<typeof findExistingTarget>>,
+  compatible: boolean
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code: "TARGET_EXISTS",
+        message:
+          "A target for this source already exists in the workspace. Open Targets to review it before continuing.",
+        ...(compatible && existing
+          ? { details: { existingTargetId: existing.id }, existingTargetId: existing.id }
+          : { existingTargetId: null }),
+      },
+    },
+    { status: 409 }
+  )
+}
+
 async function post(request: Request) {
   let body: unknown
   try {
@@ -26,8 +105,7 @@ async function post(request: Request) {
     )
   }
 
-  const isRepo =
-    typeof body === "object" && body !== null && (body as Record<string, unknown>).type === "REPO"
+  const isRepo = isRecord(body) && body.type === "REPO"
   const parsed = isRepo
     ? CreateRepoTargetSchema.safeParse(body)
     : CreateUrlTargetSchema.safeParse(body)
@@ -98,6 +176,9 @@ async function post(request: Request) {
     // account-owned, so a member's limits travel with them across workspaces.
     const entitlement = await assertTargetAllowed(workspaceId, session.userId)
     if (!entitlement.allowed) {
+      const existing = await findExistingTarget(data)
+      if (existing) return targetExistsResponse(existing, isCompatibleTarget(data, existing))
+
       return apiError(
         entitlement.code ?? "TARGET_NOT_ALLOWED",
         entitlement.message ?? "Target not allowed",
@@ -176,7 +257,7 @@ async function post(request: Request) {
         : {
             workspaceId,
             projectId: data.projectId ?? null,
-            type: data.type as "WEB_APP" | "API",
+            type: data.type,
             name: data.name,
             url: data.url,
             apiSpecUrl: data.apiSpecUrl ?? null,
@@ -194,29 +275,12 @@ async function post(request: Request) {
         typeof error === "object" &&
         error !== null &&
         "code" in error &&
-        (error as { code: unknown }).code === "P2002"
+        error.code === "P2002"
       ) {
-        const existing = await prisma.target.findFirst({
-          where: {
-            workspaceId,
-            deletedAt: null,
-            ...(data.type === "REPO"
-              ? { repoFullName: `${data.repoOwner}/${data.repoName}` }
-              : { url: data.url }),
-          },
-          select: { id: true },
-        })
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: "TARGET_EXISTS",
-              message:
-                "A target for this source already exists in the workspace. Continue with the existing target.",
-              existingTargetId: existing?.id ?? null,
-            },
-          },
-          { status: 409 }
+        const existing = await findExistingTarget(data)
+        return targetExistsResponse(
+          existing,
+          Boolean(existing && isCompatibleTarget(data, existing))
         )
       }
       throw error

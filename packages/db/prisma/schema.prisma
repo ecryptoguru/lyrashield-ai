@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -664,8 +665,8 @@ model Target {
   controlEvidence          ControlEvidence[]
   liveAiSafetyPlans        LiveAiSafetyPlan[]
 
-  @@unique([workspaceId, repoFullName])
-  @@unique([workspaceId, url])
+  @@unique([workspaceId, repoFullName], where: { deletedAt: null }, map: "Target_workspaceId_repoFullName_key")
+  @@unique([workspaceId, url], where: { deletedAt: null }, map: "Target_workspaceId_url_key")
   @@index([workspaceId])
   @@index([projectId])
   @@index([installationId])
@@ -1468,6 +1469,7 @@ model ScorecardShare {
   referralCode ReferralCode?    @relation(fields: [referralCodeId], references: [id], onDelete: SetNull)
   events       ScorecardEvent[]
 
+  @@unique([snapshotId], where: { revokedAt: null }, map: "ScorecardShare_snapshotId_active_key")
   @@index([snapshotId])
 }
 
@@ -2168,16 +2170,15 @@ model LicenseKey {
   licenseId               String    @unique
   workspaceId             String?
   keyHash                 String    @unique
-  /// Partial unique index enforced via migration 20260822220000_license_issued_provider_unique:
-  /// CREATE UNIQUE INDEX "LicenseKey_issuedByProvider_key" ON "LicenseKey"("issuedByProvider") WHERE "issuedByProvider" IS NOT NULL
-  issuedByProvider        String
+  /// Partial unique index enforced by migration 20260822220000_license_issued_provider_unique.
+  issuedByProvider        String    @unique(where: raw("\"issuedByProvider\" IS NOT NULL"))
   providerProductId       String?
   // Fulfillment lifecycle: MINTED -> DELIVERING -> DELIVERED | DELIVERY_FAILED (retryable via webhook-track queue)
   fulfillmentStatus       String    @default("DELIVERED")
   deliveryAttempts        Int       @default(0)
   lastDeliveryError       String?
   // One-time retrieval token (hashed sha256, expires, single-use)
-  retrievalTokenHash      String?   @unique
+  retrievalTokenHash      String?   @unique(where: raw("\"retrievalTokenHash\" IS NOT NULL"))
   retrievalTokenExpiresAt DateTime?
   retrievalTokenUsedAt    DateTime?
   // AES-256-GCM encrypted raw key for one-time retrieval (cleared atomically after use).
@@ -2405,9 +2406,8 @@ model Commission {
 
   conversion  Conversion   @relation(fields: [conversionId], references: [id], onDelete: Cascade)
   affiliate   Affiliate    @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
-  // A commission can have up to two payout items: the main payout, and a
-  // later reserve-release payout for the reserved portion held back during
-  // the new-affiliate reserve period.
+  // A commission has one ordinary payout item and may have multiple historical
+  // reserve-release attempts after confirmed provider rejections.
   payoutItems PayoutItem[]
 
   @@unique([conversionId, affiliateId])
@@ -2438,13 +2438,12 @@ model Payout {
 model PayoutItem {
   id               String  @id @default(cuid())
   payoutId         String
-  // A commission can have up to two payout items: the main payout, and a
-  // later reserve-release payout for the reserved portion that was held back
-  // during the new-affiliate reserve period. The ordinary (non-reserve) payout
-  // item is unique per commission via a partial unique index:
+  // A commission has one ordinary payout item and may have multiple reserve-
+  // release attempt items. The ordinary payout item is unique per commission
+  // via a partial unique index:
   //   CREATE UNIQUE INDEX ... ON "PayoutItem"("commissionId") WHERE "isReserveRelease"=false
-  // Prisma cannot express partial indexes, so the index is created in raw SQL
-  // migration 20260822200000_payout_item_ordinary_unique.
+  // The partial unique index is defined here and created by migration
+  // 20260822200000_payout_item_ordinary_unique.
   commissionId     String
   amount           Decimal @db.Decimal(19, 4)
   isReserveRelease Boolean @default(false)
@@ -2452,6 +2451,7 @@ model PayoutItem {
   payout     Payout     @relation(fields: [payoutId], references: [id], onDelete: Cascade)
   commission Commission @relation(fields: [commissionId], references: [id], onDelete: Restrict)
 
+  @@unique([commissionId], where: { isReserveRelease: false }, map: "PayoutItem_commissionId_ordinary_unique")
   @@index([commissionId])
   @@index([payoutId])
 }

@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   security:
@@ -62,6 +62,10 @@ jobs:
   changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
     outputs:
       docs-only: ${{ steps.classify.outputs.docs-only }}
       tooling-only: ${{ steps.classify.outputs.tooling-only }}
@@ -71,6 +75,7 @@ jobs:
       shared: ${{ steps.classify.outputs.shared }}
       marketing-deploy: ${{ steps.classify.outputs.marketing-deploy }}
       azure-deploy: ${{ steps.classify.outputs.azure-deploy }}
+      current-main: ${{ steps.classify.outputs.current-main }}
     steps:
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
@@ -106,23 +111,23 @@ jobs:
       - name: Classify changed files
         id: classify
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_HEAD_SHA: ${{ github.event.after || github.sha }}
         run: |
           set -euo pipefail
-          # Determine the diff range.
-          # - pull_request: base..head SHA from the event payload.
-          # - push to main: before..after, falling back to HEAD~1 for the
-          #   first push (before = 0000000).
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            HEAD_SHA="$CI_HEAD_SHA" bash .github/scripts/classify-main-change-gap.sh
+            exit 0
+          fi
+
+          # Pull requests retain their event base..head diff.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="${{ github.event.pull_request.base.sha }}"
             HEAD="${{ github.event.pull_request.head.sha }}"
           else
-            BEFORE="${{ github.event.before }}"
-            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-              BASE="HEAD~1"
-            else
-              BASE="$BEFORE"
-            fi
-            HEAD="${{ github.event.after }}"
+            BASE="HEAD~1"
+            HEAD="HEAD"
           fi
           if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
             BASE="HEAD~1"
@@ -131,7 +136,7 @@ jobs:
             HEAD="HEAD"
           fi
 
-          files=$(git diff --name-only "$BASE" "$HEAD" || true)
+          files=$(git diff --no-renames --name-only "$BASE" "$HEAD")
           echo "Changed files:"
           echo "$files"
 
@@ -147,8 +152,8 @@ jobs:
           mkdir -p ci-routing
           printf '%s\n' '${{ steps.classify.outputs.azure-deploy }}' > ci-routing/azure-deploy
 
-      # workflow_run events cannot read job outputs. This artifact preserves the
-      # exact push/PR diff decision for the production-release workflow.
+      # workflow_run events cannot read job outputs. This artifact carries the
+      # current-main Azure route derived from the last successful deployment.
       - name: Upload production release routing decision
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -189,6 +194,9 @@ jobs:
           --health-retries 5
 
     env:
+      # Vitest validates every database/Redis URL against the local disposable
+      # service before loading integration suites. Developer unit runs omit this.
+      LYRASHIELD_TEST_DB_DISPOSABLE: "1"
       DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
       SHADOW_DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public"
       # v16 2.2: getSystemPrisma() no longer silently falls back to the RLS
@@ -776,28 +784,18 @@ jobs:
 
   deploy-marketing:
     name: Deploy Marketing to Cloudflare
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.marketing-deploy == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.current-main == 'true' && needs.changes.outputs.marketing-deploy == 'true'
     needs: [security, lint-and-typecheck, changes]
     runs-on: ubuntu-latest
     environment:
       name: cloudflare-production
       url: https://lyrashieldai.com
     steps:
-      # This job deploys when marketing source or a dependency that affects its
-      # Worker artifact changes. CI/tooling changes still receive broad
-      # validation, but must not trigger a production deployment.
-      #
-      # It previously skipped unless the single push diff (github.event.before..github.sha)
-      # touched apps/marketing. That stranded builds: when a push containing marketing
-      # changes failed CI, `needs` skipped the deploy, and every later push that fixed CI
-      # without touching apps/marketing then evaluated changed=false and skipped it again.
-      # The marketing fix from 2026-07-29 sat merged-but-undeployed for exactly this reason.
-      #
-      # Shared changes (packages/, root config) can affect the marketing build, so they
-      # also trigger a deploy. App-only changes (apps/web, apps/worker) do not
-      # affect the Cloudflare marketing Worker and skip this deploy. If a direct push to
-      # main includes marketing changes that fail CI, fix them in a push that touches
-      # marketing or shared files.
+      # Routing compares the current source with Cloudflare's exact homepage
+      # revision marker, so a later docs-only push still carries any earlier
+      # undeployed marketing or shared changes into CI and deployment routing.
+      # App-only changes do not affect the marketing Worker. Unknown production
+      # baselines fail closed to full validation and both release routes.
       # The smoke step below is what actually proves the deploy landed.
       - name: Configure git default branch
         run: git config --global init.defaultBranch main

@@ -10,7 +10,7 @@ interface PayoutMethodFormProps {
 
 export function PayoutMethodForm({ affiliateId, currentMethod }: PayoutMethodFormProps) {
   const router = useRouter()
-  const [type, setType] = useState((currentMethod?.type as string) ?? "")
+  const [type, setType] = useState(currentMethod?.type === "razorpayx" ? "razorpayx" : "")
   const [providerRecipientId, setProviderRecipientId] = useState("")
   const [maskedDisplay, setMaskedDisplay] = useState("")
   const [taxFormType, setTaxFormType] = useState("")
@@ -23,10 +23,7 @@ export function PayoutMethodForm({ affiliateId, currentMethod }: PayoutMethodFor
     setLoading(true)
     setMessage(null)
     setFailed(false)
-    const payoutMethod =
-      type === "razorpayx"
-        ? { type, fundAccountId: providerRecipientId, maskedDisplay }
-        : { type, payeeId: providerRecipientId, maskedDisplay }
+    const payoutMethod = { type: "razorpayx", fundAccountId: providerRecipientId, maskedDisplay }
     try {
       const response = await fetch("/affiliates/api/payouts/method", {
         method: "POST",
@@ -64,14 +61,11 @@ export function PayoutMethodForm({ affiliateId, currentMethod }: PayoutMethodFor
         >
           <option value="">Select…</option>
           <option value="razorpayx">RazorpayX hosted recipient (India)</option>
-          <option value="payoneer" disabled>
-            Payoneer (not yet available)
-          </option>
         </select>
       </div>
       <div>
         <label htmlFor="provider-recipient" className="block text-sm font-medium">
-          {type === "razorpayx" ? "RazorpayX fund account ID" : "Provider recipient ID"}
+          RazorpayX fund account ID
         </label>
         <input
           id="provider-recipient"
@@ -79,7 +73,7 @@ export function PayoutMethodForm({ affiliateId, currentMethod }: PayoutMethodFor
           onChange={(event) => setProviderRecipientId(event.target.value)}
           required
           maxLength={128}
-          placeholder={type === "razorpayx" ? "fa_…" : "Provider-hosted ID"}
+          placeholder="fa_…"
           className="mt-1 block w-full rounded-md border px-3 py-2"
         />
         <p className="mt-1 text-xs text-muted-foreground">

@@ -14,7 +14,8 @@
 
 import { createHash } from "node:crypto"
 
-import { GATE_STANDARD_VERSION, type GateEvidenceInput, type GateVerdictResult } from "./index"
+import { GATE_STANDARD_VERSION } from "./version"
+import type { GateEvidenceInput, GateVerdictResult } from "./types"
 
 /** Stable stringify: sorts object keys recursively so the hash is order-independent. */
 function canonicalize(value: unknown): unknown {

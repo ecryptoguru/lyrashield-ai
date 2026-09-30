@@ -6,8 +6,8 @@ import { computeAuditHash } from "./audit-hash"
 import { createBoundedPgAdapter } from "./pool"
 import { registerSlowQueryLogging } from "./slow-query-log"
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: ReturnType<typeof createPrismaClient> | undefined
+const globalForPrisma = globalThis as typeof globalThis & {
+  prisma?: ReturnType<typeof createPrismaClient>
 }
 
 function createPrismaClient() {

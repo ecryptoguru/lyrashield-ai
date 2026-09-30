@@ -17,7 +17,7 @@ const STABLE_TAGS = new Set([
 // `updatedDate:`, Zod dropped the unknown key, and no "Updated" badge or
 // dateModified ever rendered. An unknown key is now a hard validation error
 // instead of a silent no-op.
-export const BLOG_FRONTMATTER_KEYS = Object.freeze([
+const BLOG_FRONTMATTER_KEYS = Object.freeze([
   "title",
   "description",
   "pubDate",
@@ -63,7 +63,7 @@ export const PROGRAM_ARTICLE_COUNT = 166
 
 export const IMAGE_CORPUS = Object.freeze({ authority: 1, shared: 74 })
 
-export const MAX_SHARED_IMAGE_USAGE = 3
+const MAX_SHARED_IMAGE_USAGE = 3
 
 const ALL_FREE_TOOL_ROUTES = Object.freeze([
   "/tools/ai-app-security-checklist",
@@ -370,7 +370,7 @@ function firstProseParagraph(body) {
   return ""
 }
 
-export function extractLinks(markdown) {
+function extractLinks(markdown) {
   const links = []
   const pattern = /(?<!!)\[[^\]]*\]\(\s*([^\s)]+)(?:\s+["'][^"']*["'])?\s*\)/g
   for (const match of markdown.matchAll(pattern)) links.push(match[1])

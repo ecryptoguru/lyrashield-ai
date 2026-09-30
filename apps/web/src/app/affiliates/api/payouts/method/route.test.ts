@@ -98,4 +98,21 @@ describe("affiliate payout method", () => {
     expect(response.status).toBe(400)
     expect(affiliate.update).not.toHaveBeenCalled()
   })
+
+  it("rejects unavailable Payoneer even when the browser form is bypassed", async () => {
+    const response = await POST(
+      request({
+        affiliateId: "aff-1",
+        payoutMethod: {
+          type: "payoneer",
+          payeeId: "payee_123",
+          maskedDisplay: "Payoneer •••• 4242",
+        },
+      })
+    )
+
+    expect(response.status).toBe(400)
+    expect(affiliate.findUnique).not.toHaveBeenCalled()
+    expect(affiliate.update).not.toHaveBeenCalled()
+  })
 })

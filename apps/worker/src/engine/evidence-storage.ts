@@ -1,5 +1,4 @@
 import {
-  EVIDENCE_KEY_REF,
   EvidenceStorageConfigurationError,
   assertEvidenceStorageConfigured,
   deleteEncryptedArtifact,
@@ -7,7 +6,6 @@ import {
 } from "@lyrashield/evidence-storage"
 
 export {
-  EVIDENCE_KEY_REF,
   EvidenceStorageConfigurationError,
   assertEvidenceStorageConfigured,
   deleteEncryptedArtifact,

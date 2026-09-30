@@ -1,7 +1,7 @@
 import { env } from "@lyrashield/config"
 import { ENGINE_TEMP_ROOT } from "./workspace-path"
 
-export type ReasoningEffort = "medium" | "high"
+type ReasoningEffort = "medium" | "high"
 
 export interface EngineProfile {
   model?: string

@@ -12,7 +12,7 @@ import { createHash } from "node:crypto"
 import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { isSelfReferral } from "../fraud/selfreferral"
-import { AFFILIATE_RULE_VERSION } from "../index"
+import { AFFILIATE_RULE_VERSION } from "../constants"
 
 export interface SignupAttributionInput {
   /** The newly created user id. */

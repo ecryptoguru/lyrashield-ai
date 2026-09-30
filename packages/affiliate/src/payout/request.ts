@@ -29,6 +29,7 @@ export async function requestPayout(params: {
   provider?: string
   sendFn?: (
     payoutId: string,
+    idempotencyKey: string,
     amount: string,
     currency: string,
     payoutMethod: unknown
@@ -59,6 +60,7 @@ export async function requestPayout(params: {
 
   let payout: {
     id: string
+    idempotencyKey: string
     amount: Prisma.Decimal
     currency: string
     itemCount: number
@@ -124,16 +126,15 @@ export async function requestPayout(params: {
         items.push({ commissionId: c.id, amount: itemAmount })
       }
 
-      const payoutId = crypto.randomUUID()
+      const idempotencyKey = crypto.randomUUID()
       const newPayout = await tx.payout.create({
         data: {
-          id: payoutId,
           affiliateId,
           amount: totalAmount,
           currency,
           status: "PROCESSING",
           provider: provider ?? "manual",
-          idempotencyKey: payoutId,
+          idempotencyKey,
         },
       })
 
@@ -150,6 +151,7 @@ export async function requestPayout(params: {
 
       return {
         id: newPayout.id,
+        idempotencyKey,
         amount: totalAmount,
         currency,
         itemCount: items.length,
@@ -183,6 +185,7 @@ export async function requestPayout(params: {
     try {
       result = await providerSend(
         payout.id,
+        payout.idempotencyKey,
         payout.amount.toString(),
         payout.currency,
         affiliate.payoutMethod
@@ -287,7 +290,11 @@ export async function requestPayout(params: {
     await prisma.$transaction(async (tx) => {
       const updated = await tx.payout.updateMany({
         where: { id: payout.id, status: "PROCESSING" },
-        data: { status: "FAILED", failureCode: "PROVIDER_ERROR" },
+        data: {
+          status: "FAILED",
+          failureCode: "PROVIDER_ERROR",
+          ...(result.providerPayoutId ? { providerPayoutId: result.providerPayoutId } : {}),
+        },
       })
       if (updated.count === 0) return
       await tx.commission.updateMany({

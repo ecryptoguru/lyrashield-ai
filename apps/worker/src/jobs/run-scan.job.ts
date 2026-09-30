@@ -12,15 +12,13 @@ import type { checkoutDeterministicRetest } from "../engine/deterministic-retest
 import { summarizeVibeSecurityCoverage } from "@lyrashield/security"
 import { executeScanTarget, resolveEngineTerminalError } from "./run-scan/execution"
 import { createEngineMinuteMeter, type ScanTerminalError } from "./run-scan/settlement"
-import { finalizeScanLifecycle } from "./run-scan/finalization"
-import { runEngineTriageOverlay } from "./run-scan/triage"
 import {
-  updateScanStatus,
-  addScanEvent,
-  createAiSecurityScoreSnapshot,
-  qualifyReferralForWorkspace,
-  type ScanStatus,
-} from "@lyrashield/db"
+  finalizeEarlyEngineTerminal,
+  finalizeScanLifecycle,
+  runScanCompletionFollowups,
+} from "./run-scan/finalization"
+import { runEngineTriageOverlay } from "./run-scan/triage"
+import { updateScanStatus, addScanEvent, type ScanStatus } from "@lyrashield/db"
 import { resolveScanProfile, type UrlScanProfile } from "@lyrashield/types"
 import { prepareScanExecution } from "./run-scan/preparation"
 import {
@@ -33,13 +31,8 @@ import { engineWorkspacePath } from "../engine/workspace-path"
 import type { TargetType } from "../engine/command-builder"
 import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
-import {
-  completeRetestsForScan,
-  failTerminalRetestsForScan,
-  markRetestsRunning,
-  persistResultManifest,
-} from "../engine/result-integrity"
-import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
+import { failTerminalRetestsForScan, markRetestsRunning } from "../engine/result-integrity"
+import { notifyScanFailed } from "../notifications"
 import { type ScanJobData, type ScanJobResult } from "../types"
 import { verifyScanJobAuthority } from "./run-scan/authority"
 import { verifyScanAdmission } from "./run-scan/admission"
@@ -389,56 +382,27 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       if (engineResult.budgetKilled) {
         const budgetMessage = "Protected run limit reached"
-        await persistResultManifest({
+        return finalizeEarlyEngineTerminal({
           scanId,
-          target: {
-            id: target.id,
-            type: target.type,
-            repoFullName: target.repoFullName,
-            branch: target.branch,
-            url: target.url,
-          },
+          workspaceId,
+          target,
           engineBacked,
-          sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
-          engineFindingCount: 0,
-          coverageIssues: [{ scanner: "engine", status: "bounded", reason: budgetMessage }],
-          engineExecution,
-          accounting: {
-            maxBudgetUsd,
-            billedCostUsd,
-            reconciled: costReconciled,
-            ...(reconciliationReason ? { reconciliationReason } : {}),
-          },
+          engineResult,
           workerExecution,
-          ...(stagedAttachments ? { attachments: stagedAttachments } : {}),
+          engineExecution,
+          ...(stagedAttachments ? { stagedAttachments } : {}),
           terminalOutcome: {
             status: "STOPPED_BUDGET",
             errorCategory: "BUDGET_EXCEEDED",
             errorMessage: budgetMessage,
           },
-        })
-        await completeRetestsForScan({ scanId, workspaceId })
-        await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
-          errorCategory: "BUDGET_EXCEEDED",
-          errorMessage: budgetMessage,
+          maxBudgetUsd,
+          billedCostUsd,
+          costReconciled,
+          reconciliationReason,
           ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
+          notificationDescription: "budget-stop",
         })
-        try {
-          await notifyScanFailed(workspaceId, scanId, budgetMessage)
-        } catch (notificationError) {
-          log.warn("Failed to send budget-stop notification", {
-            scanId,
-            error:
-              notificationError instanceof Error
-                ? notificationError.message
-                : String(notificationError),
-          })
-        }
-        return {
-          status: "failed",
-          errorCategory: "BUDGET_EXCEEDED",
-          errorMessage: budgetMessage,
-        }
       }
 
       if (engineResult.timedOut) {
@@ -449,55 +413,26 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           : llmStalled
             ? "Scan engine stalled: no model activity was observed while the run stayed active"
             : "Scan engine timed out before completing"
-        await persistResultManifest({
+        return finalizeEarlyEngineTerminal({
           scanId,
-          target: {
-            id: target.id,
-            type: target.type,
-            repoFullName: target.repoFullName,
-            branch: target.branch,
-            url: target.url,
-          },
+          workspaceId,
+          target,
           engineBacked,
-          sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
-          engineFindingCount: 0,
-          coverageIssues: [{ scanner: "engine", status: "bounded", reason: timeoutMessage }],
-          engineExecution,
-          accounting: {
-            maxBudgetUsd,
-            billedCostUsd,
-            reconciled: costReconciled,
-            ...(reconciliationReason ? { reconciliationReason } : {}),
-          },
+          engineResult,
           workerExecution,
-          ...(stagedAttachments ? { attachments: stagedAttachments } : {}),
+          engineExecution,
+          ...(stagedAttachments ? { stagedAttachments } : {}),
           terminalOutcome: {
             status: "FAILED",
             errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
             errorMessage: timeoutMessage,
           },
+          maxBudgetUsd,
+          billedCostUsd,
+          costReconciled,
+          reconciliationReason,
+          notificationDescription: "scan timeout",
         })
-        await completeRetestsForScan({ scanId, workspaceId })
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
-          errorMessage: timeoutMessage,
-        })
-        try {
-          await notifyScanFailed(workspaceId, scanId, timeoutMessage)
-        } catch (notificationError) {
-          log.warn("Failed to send scan timeout notification", {
-            scanId,
-            error:
-              notificationError instanceof Error
-                ? notificationError.message
-                : String(notificationError),
-          })
-        }
-        return {
-          status: "failed",
-          errorCategory: inactive || llmStalled ? "ENGINE_INACTIVE" : "TIMEOUT",
-          errorMessage: timeoutMessage,
-        }
       }
 
       // Capture the engine's real terminal cause, but do not return early.
@@ -668,112 +603,19 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         return terminalResult
       }
 
-      if (orchestratorResult.aiAppSecurityCoverage) {
-        try {
-          await createAiSecurityScoreSnapshot(scanId, workspaceId, {
-            signals: aiSecuritySignals,
-            coverage: orchestratorResult.aiAppSecurityCoverage,
-            ai03: orchestratorResult.ai03Coverage ?? {
-              resolutionStatus: "UNSUPPORTED",
-              advisoryStatus: "UNAVAILABLE",
-              fresh: false,
-            },
-            ...(triageSnapshot ? { triage: triageSnapshot } : {}),
-          })
-        } catch (aiScoreErr) {
-          log.warn("Failed to create AI security score snapshot", {
-            scanId,
-            error: aiScoreErr instanceof Error ? aiScoreErr.message : String(aiScoreErr),
-          })
-        }
-      }
-      try {
-        await qualifyReferralForWorkspace(workspaceId)
-      } catch (referralError) {
-        // Referral accounting is downstream of scan completion. An outage here
-        // must not retry or reverse a scan that has already completed atomically.
-        log.warn("Failed to qualify referral after scan completion", {
-          scanId,
-          error: referralError instanceof Error ? referralError.message : String(referralError),
-        })
-      }
-
-      log.info("Scan job completed", {
+      await runScanCompletionFollowups({
         scanId,
+        workspaceId,
         targetId,
+        targetName: target.name,
         exitCode: engineResult.exitCode,
-        findings: persistedFindings.length,
+        scanSummary,
         newFindings,
+        persistedFindings,
+        orchestratorResult,
+        aiSecuritySignals,
+        ...(triageSnapshot ? { triageSnapshot } : {}),
       })
-
-      try {
-        const criticalFindings = persistedFindings.filter((f) => f.severity === "CRITICAL")
-        let workspaceName: string | undefined
-        try {
-          workspaceName = (
-            await prisma.workspace.findFirst({
-              where: { id: workspaceId },
-              select: { name: true },
-            })
-          )?.name
-        } catch (workspaceError) {
-          log.warn("Failed to resolve workspace name for scan completion notifications", {
-            scanId,
-            error:
-              workspaceError instanceof Error ? workspaceError.message : String(workspaceError),
-          })
-        }
-
-        const tasks = [
-          () =>
-            notifyScanCompleted(
-              workspaceId,
-              scanId,
-              scanSummary,
-              persistedFindings.length,
-              workspaceName
-            ),
-          ...criticalFindings.map(
-            (finding) => () =>
-              notifyCriticalFinding(
-                workspaceId,
-                finding.id,
-                finding.title,
-                target.name,
-                workspaceName
-              )
-          ),
-        ]
-        const notifications: PromiseSettledResult<void>[] = []
-        for (let start = 0; start < tasks.length; start += 2) {
-          notifications.push(
-            ...(await Promise.allSettled(tasks.slice(start, start + 2).map((notify) => notify())))
-          )
-        }
-        const failedNotifications = notifications.filter(
-          (notification): notification is PromiseRejectedResult =>
-            notification.status === "rejected"
-        )
-        if (failedNotifications.length > 0) {
-          log.warn("Some scan completion notifications failed", {
-            scanId,
-            failures: failedNotifications.map((notification) =>
-              notification.reason instanceof Error
-                ? notification.reason.message
-                : String(notification.reason)
-            ),
-          })
-        }
-      } catch (notificationError) {
-        // A notification provider outage must not retry or reverse an already-completed scan.
-        log.warn("Failed to send scan completion notification", {
-          scanId,
-          error:
-            notificationError instanceof Error
-              ? notificationError.message
-              : String(notificationError),
-        })
-      }
 
       return {
         status: "completed",

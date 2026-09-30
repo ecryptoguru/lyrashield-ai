@@ -13,7 +13,6 @@ import type { ScanMode } from "@lyrashield/types"
 import { resolveAccountBilling, type ResolvedAccountBilling } from "./account"
 import { getUsageBalance, getUsageBalanceForTx, resolveBalanceCycleStart } from "./usage/balance"
 import { getAccountTrialState, blockOnExpiry, TRIAL_DURATION_DAYS, type TrialState } from "./trial"
-import { getGraceState as getGraceStateFromGrace } from "./grace"
 import { resolveWorkspaceScanSponsor } from "./agency-sponsor"
 
 export type ScanModeAllowed = "SAFE" | "QUICK" | "STANDARD" | "DEEP" | "CUSTOM"
@@ -398,11 +397,4 @@ export async function assertTargetAllowed(
     targetsUsed: targetCount,
     targetCap,
   }
-}
-
-/**
- * Get the grace state for an account (used by the worker mid-scan).
- */
-export async function getGraceState(accountId: string) {
-  return getGraceStateFromGrace(accountId)
 }

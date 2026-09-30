@@ -67,6 +67,16 @@ describe("provider catalog entitlement validation", () => {
     ).toEqual({ kind: "pack", packId: "pack_100" })
   })
 
+  it("rejects inherited object keys as Local SKUs", () => {
+    envState.POLAR_LOCAL_PRODUCT_IDS = JSON.stringify({ toString: "polar-local-prototype" })
+    expect(() =>
+      resolvePolarCatalogEvent("subscription.active", {
+        product_id: "polar-local-prototype",
+        metadata: { sku: "toString" },
+      })
+    ).toThrow(/catalog evidence/)
+  })
+
   it("rejects Polar metadata escalation and underpayment", () => {
     expect(() =>
       resolvePolarCatalogEvent("order.paid", {

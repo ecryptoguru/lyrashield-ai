@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { prisma } from "./client"
 import { softDeleteTarget, TargetHasActiveScanError, TargetNotFoundError } from "./target-service"
+import { withWorkspaceRLS } from "./rls"
 
 /**
  * Live-Postgres coverage for target soft delete: history survives, schedules
@@ -19,6 +20,43 @@ const busyScanId = `sd-busyscan-${suffix}`
 const findingId = `sd-finding-${suffix}`
 const verdictId = `sd-verdict-${suffix}`
 const scheduleId = `sd-sched-${suffix}`
+
+type TargetIdentityFixture = {
+  id: string
+  type: "WEB_APP" | "REPO"
+  name: string
+  url?: string
+  repoFullName?: string
+}
+
+function createIdentityTarget(data: TargetIdentityFixture) {
+  return withWorkspaceRLS(workspaceId, (tx) => tx.target.create({ data: { ...data, workspaceId } }))
+}
+
+async function assertActiveIdentityUniqueAfterSoftDelete(
+  identity: Omit<TargetIdentityFixture, "id" | "name">,
+  label: string
+) {
+  const originalId = `sd-${label}-old-${suffix}`
+  const duplicateId = `sd-${label}-duplicate-${suffix}`
+  const replacementId = `sd-${label}-replacement-${suffix}`
+  const replacementDuplicateId = `sd-${label}-replacement-duplicate-${suffix}`
+  const name = `${label} target`
+
+  await createIdentityTarget({ id: originalId, name, ...identity })
+  await expect(createIdentityTarget({ id: duplicateId, name, ...identity })).rejects.toMatchObject({
+    code: "P2002",
+  })
+
+  await softDeleteTarget(workspaceId, originalId, userId)
+
+  await expect(
+    createIdentityTarget({ id: replacementId, name, ...identity })
+  ).resolves.toMatchObject({ id: replacementId })
+  await expect(
+    createIdentityTarget({ id: replacementDuplicateId, name, ...identity })
+  ).rejects.toMatchObject({ code: "P2002" })
+}
 
 beforeAll(async () => {
   await prisma.user.create({
@@ -128,6 +166,20 @@ afterAll(async () => {
 })
 
 describe("softDeleteTarget", () => {
+  it("allows a new URL target after soft deletion and keeps active URLs unique", async () => {
+    await assertActiveIdentityUniqueAfterSoftDelete(
+      { type: "WEB_APP", url: `https://url-${suffix}.example.invalid` },
+      "url"
+    )
+  })
+
+  it("allows a new repository target after soft deletion and keeps active repositories unique", async () => {
+    await assertActiveIdentityUniqueAfterSoftDelete(
+      { type: "REPO", repoFullName: `example-org/soft-repo-${suffix}` },
+      "repo"
+    )
+  })
+
   it("refuses while a scan is queued or running", async () => {
     await expect(softDeleteTarget(workspaceId, busyTargetId, userId)).rejects.toThrow(
       TargetHasActiveScanError

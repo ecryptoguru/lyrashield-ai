@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { resolveSigningPrivateKey } from "./license-fulfillment"
 
 const envState = vi.hoisted(() => ({
   NODE_ENV: "production",
@@ -22,23 +23,17 @@ describe("production license signing key resolution", () => {
   })
 
   it("fails closed instead of using the development PEM fallback", async () => {
-    const { resolveSigningPrivateKey } = await import("./license-fulfillment")
-
     await expect(resolveSigningPrivateKey()).rejects.toThrow("LYRASHIELD_KEY_VAULT_NAME")
   })
 
   it("retains the explicit local development fallback", async () => {
     envState.NODE_ENV = "development"
-    const { resolveSigningPrivateKey } = await import("./license-fulfillment")
-
     await expect(resolveSigningPrivateKey()).resolves.toBe("dev-only-private-key")
   })
 
   it("allows the throwaway signing key only for the fixed loopback E2E runtime", async () => {
     envState.LICENSE_SIGNING_KEY_ID = "e2e-license-key-v1"
     envState.BETTER_AUTH_URL = "http://127.0.0.1:3100"
-    const { resolveSigningPrivateKey } = await import("./license-fulfillment")
-
     await expect(resolveSigningPrivateKey()).resolves.toBe("dev-only-private-key")
   })
 })

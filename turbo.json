@@ -122,10 +122,29 @@
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "lint": {
-      "dependsOn": ["^build"]
+      "dependsOn": []
     },
     "typecheck": {
-      "dependsOn": ["^build", "^generate", "generate"]
+      "dependsOn": ["^generate", "generate"]
+    },
+    "@lyrashield/web#build": {
+      "dependsOn": ["^build", "^generate"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "env": ["MYRA_WRITES_ENABLED"]
+    },
+    "@lyrashield/mcp#typecheck": {
+      "dependsOn": ["@lyrashield/sdk#build", "^generate", "generate"]
+    },
+    "@lyrashield/agent-plugin#typecheck": {
+      "dependsOn": ["@lyrashield/mcp#build", "^generate", "generate"]
+    },
+    "lyrashield#typecheck": {
+      "dependsOn": [
+        "@lyrashield/agent-plugin#build",
+        "@lyrashield/sdk#build",
+        "^generate",
+        "generate"
+      ]
     },
     "generate": {
       "cache": false

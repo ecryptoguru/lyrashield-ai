@@ -82,7 +82,7 @@ const URL_LIMITS: Record<string, string> = {
   DEEP: "Up to 40 minutes of engine time",
 }
 
-export type ScanWorkflowId = "REVIEW_TARGET" | "REVIEW_CHANGES" | "AUTHENTICATED_ASSESSMENT"
+type ScanWorkflowId = "REVIEW_TARGET" | "REVIEW_CHANGES" | "AUTHENTICATED_ASSESSMENT"
 
 export type ManualScanOption = {
   id: string

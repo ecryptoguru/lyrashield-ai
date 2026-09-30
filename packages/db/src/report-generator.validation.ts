@@ -11,7 +11,7 @@ export const CONTROL_TITLE_BY_ID: Record<string, string> = Object.fromEntries(
   VIBE_SECURITY_CONTROLS.map((control) => [`vibe-${control.rank}`, control.title])
 )
 
-export const WEBMCP_CONTROL_ID_BY_TITLE = new Map(
+const WEBMCP_CONTROL_ID_BY_TITLE = new Map(
   WEBMCP_CONTROLS.map((control) => [control.title, control.id] as const)
 )
 
@@ -517,8 +517,9 @@ function parseSourceSelection(value: unknown): WebMcpCoverageReceipt["sourceSele
     "maxWalkEntries",
     "maxWalkDepth",
   ])
-  const limitsReached = Array.isArray(raw.limitsReached)
-    ? raw.limitsReached.filter(
+  const rawLimitsReached = raw.limitsReached
+  const limitsReached = Array.isArray(rawLimitsReached)
+    ? rawLimitsReached.filter(
         (limit): limit is WebMcpCoverageReceipt["limitsReached"][number] =>
           typeof limit === "string" && WEBMCP_SCAN_LIMITS.has(limit)
       )
@@ -527,7 +528,8 @@ function parseSourceSelection(value: unknown): WebMcpCoverageReceipt["sourceSele
     !skippedByReason ||
     !limits ||
     !limitsReached ||
-    limitsReached.length !== (raw.limitsReached as unknown[]).length ||
+    !Array.isArray(rawLimitsReached) ||
+    limitsReached.length !== rawLimitsReached.length ||
     limitsReached.length > WEBMCP_SCAN_LIMITS.size ||
     new Set(limitsReached).size !== limitsReached.length
   ) {
@@ -576,12 +578,14 @@ export function parseWebMcpAssurance(value: unknown): ReportWebMcpAssurance | nu
   ) {
     return null
   }
+  const rawLimitsReached = raw.limitsReached
   if (
-    !Array.isArray(raw.limitsReached) ||
-    raw.limitsReached.length > WEBMCP_SCAN_LIMITS.size ||
-    new Set(raw.limitsReached).size !== raw.limitsReached.length ||
-    raw.limitsReached.some(
-      (limit) => typeof limit !== "string" || !WEBMCP_SCAN_LIMITS.has(limit)
+    !Array.isArray(rawLimitsReached) ||
+    rawLimitsReached.length > WEBMCP_SCAN_LIMITS.size ||
+    new Set(rawLimitsReached).size !== rawLimitsReached.length ||
+    !rawLimitsReached.every(
+      (limit): limit is WebMcpCoverageReceipt["limitsReached"][number] =>
+        typeof limit === "string" && WEBMCP_SCAN_LIMITS.has(limit)
     ) ||
     !Array.isArray(raw.methodology) ||
     raw.methodology.length > 10 ||
@@ -624,7 +628,7 @@ export function parseWebMcpAssurance(value: unknown): ReportWebMcpAssurance | nu
     raw.coverageState === "COMPLETE" &&
     sourceSelection?.skippedFiles === 0 &&
     sourceSelection.limitsReached.length === 0 &&
-    (raw.limitsReached as unknown[]).length === 0 &&
+    rawLimitsReached.length === 0 &&
     (raw.incompleteDefinitions as number) === 0 &&
     (raw.scannedFiles as number) === (raw.eligibleFiles as number) &&
     (raw.toolDefinitionsAssessed as number) === (raw.toolDefinitionsFound as number)
@@ -643,7 +647,7 @@ export function parseWebMcpAssurance(value: unknown): ReportWebMcpAssurance | nu
     incompleteDefinitions: raw.incompleteDefinitions as number,
     imperativeDefinitions: raw.imperativeDefinitions as number,
     declarativeDefinitions: raw.declarativeDefinitions as number,
-    limitsReached: raw.limitsReached as WebMcpCoverageReceipt["limitsReached"],
+    limitsReached: rawLimitsReached,
     inventoryChecksum: String(raw.inventoryChecksum),
     ...(sourceSelection ? { sourceSelection } : {}),
     toolCounts: { byKind, byBehavior },

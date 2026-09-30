@@ -163,8 +163,8 @@ export default async function AffiliateLandingPage() {
             {terms.reserveDays} days
           </li>
           <li>
-            <strong>Payout methods:</strong> RazorpayX (India), Payoneer (global), BriskPe
-            (RBI-native fallback)
+            <strong>Payout methods:</strong> RazorpayX (India; payout admission is currently
+            disabled)
           </li>
           <li>
             <strong>No commission on:</strong> Minute packs, trial signups, or self-referrals

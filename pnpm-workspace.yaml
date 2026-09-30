@@ -28,6 +28,8 @@ overrides:
   "nanoid@<3.3.18": "^3.3.19"
   # GHSA-9mqv-5hh9-4cgg and GHSA-frvp-7c67-39w9: patch node-server 2.x.
   "@hono/node-server@<2.0.10": "^2.0.10"
+  # GHSA-p98j-92pf-mc4p: patch the affected DOMPurify 3.4.x range.
+  "dompurify@>=3.4.13 <3.4.16": "3.4.16"
   # Kept pending auth-owner confirmation of the original pin in #273.
   "@better-auth/core": "1.7.1"
   # GHSA-gv7w-rqvm-qjhr and GHSA-g7r4-m6w7-qqqr: keep affected esbuild below 0.28.1 out.
@@ -44,7 +46,9 @@ overrides:
   # GHSA-rgw5-rvv9-x895, GHSA-qhr7-859c-m2p7 and GHSA-6j4f-fj2g-mc7p:
   # patch brace-expansion 1.x and 5.x without changing majors.
   "brace-expansion@<1.1.18": "^1.1.21"
-  "brace-expansion@>=5 <5.0.11": "^5.0.11"
+  "brace-expansion@>=5 <5.0.12": "^5.0.12"
+  # GHSA-542g-h47m-68v8: Razorpay's transitive Axios must include the HTTP/2 fix.
+  "axios@<1.20.0": "1.20.0"
   # GHSA-7r86-cg39-jmmj and GHSA-23c5-xmqv-rm74: keep affected minimatch lines patched.
   "minimatch@<3.1.4": "^3.1.5"
   "minimatch@>=10 <10.2.3": "^10.2.3"
@@ -108,5 +112,3 @@ minimumReleaseAgeExclude:
   # would deadlock the publish pipeline and buys nothing (we control the
   # artifact end-to-end). Exempt the whole scope permanently.
   - "@lyrashield/*"
-  # Keep the reviewed SDK release out of the 7-day gate until 2026-09-30.
-  - "@modelcontextprotocol/sdk@1.30.1"

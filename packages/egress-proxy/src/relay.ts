@@ -52,7 +52,7 @@ const HOP_BY_HOP_HEADERS = new Set([
   "x-lyra-relay-grant",
 ])
 
-export interface RelayAuditEntry {
+interface RelayAuditEntry {
   ts: number
   type: "request" | "tunnel" | "denied"
   method?: string

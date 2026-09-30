@@ -260,6 +260,61 @@ it("renders the Agency plan as a human-readable onboarding label", () => {
   expect(elements(tree).some((element) => element.props.children === "Agency")).toBe(true)
 })
 
+it("reuses a created target when the onboarding save fails", async () => {
+  const initialState = {
+    currentStep: 1,
+    completed: false,
+    skipped: false,
+    workspaceId: "ws-1",
+    targetId: null,
+    selectedGoal: null,
+    targetType: "API",
+    targetName: "Production API",
+  }
+  api.post.mockResolvedValueOnce({ id: "target-created" })
+  api.patch
+    .mockRejectedValueOnce(new Error("onboarding save failed"))
+    .mockResolvedValueOnce({ ...initialState, targetId: "target-created", currentStep: 3 })
+
+  const setupApiTarget = () => {
+    const details = render("API", initialState)
+    details.find((element) => element.props.id === "url-input")!.props.onChange!({
+      target: { value: "https://api.example.test" },
+    })
+    render("API", initialState).find((element) => element.props.id === "ownership-check")!.props
+      .onChange!({ target: { checked: true } })
+    render("API", initialState).find((element) => element.type === "form")!.props.onSubmit!({
+      preventDefault: vi.fn(),
+    })
+  }
+  const checkAvailability = () =>
+    render("API", initialState).find((element) =>
+      String(element.props.children).includes("Check availability")
+    )!.props.onClick!()
+
+  setupApiTarget()
+  await checkAvailability()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  expect(api.post).toHaveBeenCalledOnce()
+  expect(api.post).toHaveBeenCalledWith(
+    "/api/targets",
+    expect.objectContaining({ workspaceId: "ws-1", url: "https://api.example.test" }),
+    expect.any(Object)
+  )
+  expect(api.patch).toHaveBeenCalledOnce()
+
+  await checkAvailability()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  expect(api.post).toHaveBeenCalledOnce()
+  expect(api.patch).toHaveBeenCalledTimes(2)
+  expect(api.patch).toHaveBeenLastCalledWith(
+    "/api/onboarding",
+    expect.objectContaining({ targetId: "target-created" }),
+    expect.any(Object)
+  )
+})
+
 it("keeps an accepted scan and retries only the onboarding save after its PATCH fails", async () => {
   const storage = new Map<string, string>()
   vi.stubGlobal("window", {

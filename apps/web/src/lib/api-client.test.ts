@@ -12,6 +12,7 @@ const {
   apiPatch,
   apiDelete,
   apiGetPaginated,
+  apiGetPaginatedConditional,
   apiGetConditional,
   ApiError,
 } = await import("./api-client")
@@ -92,9 +93,12 @@ describe("api-client", () => {
       "/api/target-domain-verifications",
       expect.objectContaining({
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId: "ws1", verificationId: "p1" }),
       })
+    )
+    expect(mockFetch.mock.calls[0]![1].headers).toBeInstanceOf(Headers)
+    expect((mockFetch.mock.calls[0]![1].headers as Headers).get("Content-Type")).toBe(
+      "application/json"
     )
   })
   beforeEach(() => {
@@ -121,6 +125,43 @@ describe("api-client", () => {
       await expect(apiGet("/api/test")).rejects.toMatchObject({ code: "TEST_ERROR", status: 400 })
     })
 
+    it("rejects a successful envelope carried by an HTTP error status", async () => {
+      mockFetch.mockResolvedValue(jsonResponse({ id: "unexpected" }, true, 500))
+
+      await expect(apiGet("/api/test")).rejects.toMatchObject({
+        code: "HTTP_ERROR",
+        status: 500,
+      })
+    })
+
+    it("rejects a malformed success envelope", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: "yes", data: { id: "unexpected" } }),
+      })
+
+      await expect(apiGet("/api/test")).rejects.toMatchObject({
+        code: "PARSE_ERROR",
+        status: 200,
+      })
+    })
+
+    it("keeps provider and idempotency headers from any HeadersInit form", async () => {
+      mockFetch.mockResolvedValue(jsonResponse({ id: "created" }))
+      const headers: HeadersInit = [
+        ["Authorization", "Bearer example"],
+        ["Idempotency-Key", "operation-1"],
+      ]
+
+      await apiPost("/api/test", { value: 1 }, { headers })
+
+      const sentHeaders = mockFetch.mock.calls[0]![1].headers as Headers
+      expect(sentHeaders.get("Authorization")).toBe("Bearer example")
+      expect(sentHeaders.get("Idempotency-Key")).toBe("operation-1")
+      expect(sentHeaders.get("Content-Type")).toBe("application/json")
+    })
+
     it("propagates an already-aborted parent signal", async () => {
       mockFetch.mockImplementation(async (_url, init) => {
         expect(init.signal.aborted).toBe(true)
@@ -143,7 +184,7 @@ describe("api-client", () => {
       const call = mockFetch.mock.calls[0]!
       expect(call[0]).toBe("/api/test")
       expect(call[1].method).toBe("POST")
-      expect(call[1].headers["Content-Type"]).toBe("application/json")
+      expect((call[1].headers as Headers).get("Content-Type")).toBe("application/json")
       expect(JSON.parse(call[1].body)).toEqual({ name: "foo" })
     })
 
@@ -220,6 +261,33 @@ describe("api-client", () => {
       expect(url).not.toContain("cursor")
     })
 
+    it("appends params without discarding an existing query or fragment", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, data: { items: [], nextCursor: null } }),
+      })
+
+      await apiGetPaginated("/api/test?workspaceId=ws1#findings", { cursor: "next" })
+
+      expect(mockFetch.mock.calls[0]![0]).toBe("/api/test?workspaceId=ws1&cursor=next#findings")
+    })
+
+    it("appends conditional params before an existing fragment", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ success: true, data: { items: [], nextCursor: null } }),
+      })
+
+      await apiGetPaginatedConditional("/api/test?workspaceId=ws1#findings", {
+        cursor: "next",
+      })
+
+      expect(mockFetch.mock.calls[0]![0]).toBe("/api/test?workspaceId=ws1&cursor=next#findings")
+    })
+
     it("throws ApiError on network failure", async () => {
       mockFetch.mockRejectedValue(new TypeError("Failed to fetch"))
       await expect(apiGet("/api/test")).rejects.toMatchObject({ code: "NETWORK_ERROR", status: 0 })
@@ -268,6 +336,24 @@ describe("api-client", () => {
       expect(result).toEqual({ data: null, etag: '"abc"', status: 304 })
       const headers = mockFetch.mock.calls[0]![1].headers as Headers
       expect(headers.get("If-None-Match")).toBe('"abc"')
+    })
+
+    it("preserves a structured server error from a non-2xx response", async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers(),
+        json: async () => ({
+          success: false,
+          error: { code: "RATE_LIMITED", message: "Try later", details: { retryAfter: 5 } },
+        }),
+      })
+
+      await expect(apiGetConditional("/api/test")).rejects.toMatchObject({
+        code: "RATE_LIMITED",
+        status: 429,
+        details: { retryAfter: 5 },
+      })
     })
 
     it("aborts in flight when the caller's signal aborts", async () => {

@@ -62,6 +62,13 @@ const SCAN_CODES: Record<string, OperationFailurePresentation> = {
     recovery: "Pick another target or re-create it from Targets.",
     recoveryHref: "/dashboard/targets",
   },
+  TARGET_EXISTS: {
+    cause: "A target for this source already exists in your workspace.",
+    effect:
+      "No duplicate target was created; review the existing target's settings before continuing.",
+    recovery: "Open Targets to review the current target list.",
+    recoveryHref: "/dashboard/targets",
+  },
   TARGET_TYPE_UNSUPPORTED: {
     cause: "This target type is not supported by the selected review.",
     effect: "Nothing was started and nothing was charged.",

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   prisma: {
     targetDomainVerification: { findFirst: vi.fn() },
   },
@@ -41,7 +42,7 @@ vi.mock("@lyrashield/db", () => ({
   resolveAuthenticatedAssessmentAuthorization: mocks.resolveAuthenticatedAssessmentAuthorization,
 }))
 vi.mock("@lyrashield/logger", () => ({
-  logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
+  logger: mocks.logger,
 }))
 vi.mock("@lyrashield/security", () => ({
   buildUrlTargetInstruction: vi.fn(() => "instruction"),
@@ -247,6 +248,55 @@ describe("executeScanTarget relay lifecycle", () => {
       ok: false,
       result: { errorCategory: "RELAY_SCOPE_UNAVAILABLE" },
     })
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+
+  it("revokes when relay registration has an ambiguous failure", async () => {
+    mocks.registerRelayGrant.mockRejectedValueOnce(new Error("RELAY_REGISTRATION_FAILED"))
+
+    await expect(executeScanTarget(params())).resolves.toMatchObject({
+      ok: false,
+      result: { errorCategory: "RELAY_SCOPE_UNAVAILABLE" },
+    })
+
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig)
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+
+  it("revokes after relay audit failure without masking it when cleanup fails", async () => {
+    mocks.addScanEvent.mockImplementation(async (_scanId, eventName) => {
+      if (eventName === "relay_scope") throw new Error("relay scope audit unavailable")
+      return { id: "evt-1" }
+    })
+    mocks.revokeRelayGrant.mockRejectedValueOnce(new Error("revoke transport failed"))
+    mocks.logger.error.mockImplementationOnce(() => {
+      throw new Error("cleanup log unavailable")
+    })
+
+    await expect(executeScanTarget(params())).resolves.toMatchObject({
+      ok: false,
+      result: {
+        errorCategory: "RELAY_SCOPE_UNAVAILABLE",
+        errorMessage: "Could not establish relay scope for this verified target.",
+      },
+    })
+
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig)
+    expect(mocks.addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "engine_skipped",
+      "error",
+      "Relay grant could not be minted",
+      expect.objectContaining({ error: "relay scope audit unavailable" })
+    )
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "Failed to revoke relay grant after setup failure",
+      {
+        scanId: "scan-1",
+        setupErrorType: "Error",
+        cleanupErrorType: "Error",
+      }
+    )
     expect(mocks.runEngine).not.toHaveBeenCalled()
   })
 

@@ -79,7 +79,7 @@ test.describe("Affiliate lifecycle", () => {
     await page
       .getByLabel("Promotion Methods")
       .fill("Blog posts and newsletter about AI security tools")
-    await page.getByLabel("Preferred Payout Method").selectOption("payoneer")
+    await page.getByLabel("Preferred Payout Method").selectOption("razorpayx")
     await page.getByLabel("Tax Form Status").selectOption("will_complete")
     // C-L10: the binding terms checkbox is required — check it before submitting.
     await page.locator("#acceptTerms").check()

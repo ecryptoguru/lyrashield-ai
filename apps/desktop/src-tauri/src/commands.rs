@@ -319,6 +319,15 @@ pub async fn list_scans(app: tauri::AppHandle) -> Result<Vec<ScanSummary>, Strin
 }
 
 #[tauri::command]
+pub async fn list_scan_page(
+    app: tauri::AppHandle,
+    cursor: Option<ScanHistoryCursor>,
+    limit: Option<usize>,
+) -> Result<ScanHistoryPage, String> {
+    crate::scan::store::list_scan_page(&app, cursor, limit).await
+}
+
+#[tauri::command]
 pub async fn get_scan_detail(app: tauri::AppHandle, scan_id: String) -> Result<ScanDetail, String> {
     crate::scan::store::get_scan_detail(&app, &scan_id).await
 }

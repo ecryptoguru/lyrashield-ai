@@ -26,7 +26,11 @@ export class ProviderCatalogConfigError extends Error {
 }
 
 function record(value: unknown): UnknownRecord {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as UnknownRecord) : {}
+  return isRecord(value) ? value : {}
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function text(value: unknown): string | null {
@@ -39,6 +43,14 @@ function integer(value: unknown): number | null {
 
 function reject(): never {
   throw new WebhookPayloadError("Provider catalog evidence does not match the configured catalog")
+}
+
+function isLocalSkuId(value: string): value is LocalSkuId {
+  return Object.hasOwn(LOCAL_SKU_MAP, value)
+}
+
+function isPackId(value: string): value is PackId {
+  return Object.hasOwn(MINUTE_PACK_MAP, value)
 }
 
 function configuredProviderKey(
@@ -85,7 +97,15 @@ function configuredProviderKey(
 function parsePlanKey(key: string): { plan: CloudPlanId; interval: BillingInterval } | null {
   const match = /^(starter|pro|launch_assurance)_(monthly|annual)$/.exec(key)
   if (!match) return null
-  return { plan: match[1]!.toUpperCase() as CloudPlanId, interval: match[2] as BillingInterval }
+  const plans: Record<string, CloudPlanId> = {
+    starter: "STARTER",
+    pro: "PRO",
+    launch_assurance: "LAUNCH_ASSURANCE",
+  }
+  const plan = plans[match[1]!]
+  const interval = match[2]
+  if (!plan || (interval !== "monthly" && interval !== "annual")) return null
+  return { plan, interval }
 }
 
 function requireMetadataAgreement(
@@ -168,8 +188,8 @@ export function resolvePolarCatalogEvent(
   }
 
   if (localKey) {
-    if (!(localKey in LOCAL_SKU_MAP)) reject()
-    const sku = localKey as LocalSkuId
+    if (!isLocalSkuId(localKey)) reject()
+    const sku = localKey
     requireMetadataAgreement(metadata, { sku })
     if (eventType === "order.paid") {
       const seats = integer(data.seats) ?? integer(metadata.seats ?? metadata.seatCount) ?? 1
@@ -179,9 +199,9 @@ export function resolvePolarCatalogEvent(
   }
 
   if (!cloudKey) reject()
-  if (cloudKey in MINUTE_PACK_MAP) {
+  if (isPackId(cloudKey)) {
     if (eventType !== "order.paid") reject()
-    const packId = cloudKey as PackId
+    const packId = cloudKey
     requireMetadataAgreement(metadata, { packId })
     requirePolarSubtotal(data, MINUTE_PACK_MAP[packId].priceUsd * 100)
     return { kind: "pack", packId }
@@ -195,10 +215,10 @@ export function resolvePolarCatalogEvent(
 
 export function resolveRazorpayCatalogEvent(
   eventType: string,
-  payload: UnknownRecord
+  payload: unknown
 ): CatalogResolution | null {
   if (eventType === "refund.created") return null
-  const sections = record(payload.payload)
+  const sections = record(record(payload).payload)
   const payment = record(record(sections.payment).entity)
   const subscription = record(record(sections.subscription).entity)
   const paymentLink = record(record(sections.payment_link).entity)
@@ -224,8 +244,8 @@ export function resolveRazorpayCatalogEvent(
     const metadata = record(payment.notes)
     const packId = text(metadata.packId)
     if (!packId) return null
-    if (!(packId in MINUTE_PACK_MAP)) reject()
-    const resolved = packId as PackId
+    if (!isPackId(packId)) reject()
+    const resolved = packId
     requireRazorpayQuote("pack", resolved, metadata, payment)
     return { kind: "pack", packId: resolved }
   }
@@ -234,15 +254,15 @@ export function resolveRazorpayCatalogEvent(
     const metadata = { ...record(paymentLink.notes), ...record(payment.notes) }
     const packId = text(metadata.packId)
     if (packId) {
-      if (!(packId in MINUTE_PACK_MAP)) reject()
-      const resolved = packId as PackId
+      if (!isPackId(packId)) reject()
+      const resolved = packId
       requireRazorpayQuote("pack", resolved, metadata, payment)
       return { kind: "pack", packId: resolved }
     }
     const sku = text(metadata.productId ?? metadata.skuId)
     if (!sku) return null
-    if (!(sku in LOCAL_SKU_MAP)) reject()
-    const resolved = sku as LocalSkuId
+    if (!isLocalSkuId(sku)) reject()
+    const resolved = sku
     requireRazorpayQuote("local", resolved, metadata, payment)
     return { kind: "local", sku: resolved }
   }

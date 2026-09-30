@@ -105,7 +105,7 @@ export function deriveCurrentStage(status: string, events: StageEvent[]): string
   return humanizeScanStatus(status)
 }
 
-export type ScanPhaseState = "done" | "active" | "pending" | "stopped"
+type ScanPhaseState = "done" | "active" | "pending" | "stopped"
 
 export interface ScanPhase {
   key: string

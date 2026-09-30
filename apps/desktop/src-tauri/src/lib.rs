@@ -42,6 +42,7 @@ pub fn run() {
             list_cloud_targets,
             cancel_scan,
             list_scans,
+            list_scan_page,
             get_scan_detail,
             get_scan_events,
             export_sarif,

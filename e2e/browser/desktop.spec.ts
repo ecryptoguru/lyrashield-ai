@@ -59,11 +59,12 @@ async function native(
               perpetualFallbackBuild: "1.0",
               offlineGraceRemainingSeconds: null,
             }
-          if (command === "list_scans") {
+          if (command === "list_scan_page" || command === "list_scans") {
             if (options.historyDelay)
               await new Promise((resolve) => setTimeout(resolve, options.historyDelay))
             if (options.historyFailure && state.failures++ === 0) throw Error("History unavailable")
-            return options.empty ? [] : [detail]
+            const scans = options.empty ? [] : [detail]
+            return command === "list_scan_page" ? { scans, nextCursor: null } : scans
           }
           if (command === "get_scan_detail" && options.detailFailure && state.failures++ === 0)
             throw Error("Detail unavailable")
@@ -405,7 +406,7 @@ test("history error retries and empty sync stays a zero-selection no-op", async 
   await page.goto("?desktop=app")
   await expect(page.getByRole("alert")).toContainText("History unavailable")
   await page.getByRole("button", { name: "Retry history" }).click()
-  await expect(page.getByText("No local scans yet.")).toBeVisible()
+  await expect(page.getByText("No scans yet.")).toBeVisible()
   await page.getByRole("button", { name: "Sync", exact: true }).click()
   await expect(page.getByText("No local findings available.")).toBeVisible()
   await expect(page.getByRole("button", { name: "Sync 0 Findings" })).toBeDisabled()

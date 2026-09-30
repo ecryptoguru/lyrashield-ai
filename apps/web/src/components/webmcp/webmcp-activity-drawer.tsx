@@ -4,9 +4,8 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Link from "next/link"
 import { Activity, CheckCircle2, X, XCircle, AlertTriangle, Loader2, History } from "lucide-react"
 import { Button, Badge, Card } from "@lyrashield/ui"
-import { useWebMcpReceiptStore } from "./webmcp-receipt-provider"
 import { cn } from "@lyrashield/ui"
-import type { WebMcpActivityReceipt } from "@/lib/webmcp/receipts"
+import type { WebMcpActivityReceipt, WebMcpReceiptStore } from "@/lib/webmcp/receipts"
 
 const STATUS_CONFIG: Record<
   WebMcpActivityReceipt["status"],
@@ -36,8 +35,7 @@ const DATA_CLASS_LABEL: Record<WebMcpActivityReceipt["dataClass"], string> = {
   "source-local": "Local source",
 }
 
-export function WebMcpActivityDrawer() {
-  const store = useWebMcpReceiptStore()
+export function WebMcpActivityDrawer({ store }: { store: WebMcpReceiptStore }) {
   const [isOpen, setIsOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
