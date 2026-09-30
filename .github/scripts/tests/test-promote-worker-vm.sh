@@ -190,7 +190,8 @@ globalThis.readAdmission = () => {
   return fs.readFileSync(process.env.MOCK_ADMISSION_STOP, "utf8");
 };
 const billing = `Promise.resolve({WEBHOOK_TRACK_CLAIM_PROTOCOL:${JSON.stringify(process.env.MOCK_CLAIM_PROTOCOL || "durable-claims/1")}})`;
-await eval(`(async () => { ${code.replace('import("ioredis")', replacement).replace('import("@lyrashield/billing")', billing)} })()`);
+const source = code.replace('import("ioredis")', replacement).replace('import("@lyrashield/billing")', billing);
+await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 NODE
         ;;
       *WEBHOOK_TRACK_CLAIM_PROTOCOL*) printf '%s\n' "${MOCK_CLAIM_PROTOCOL:-durable-claims/1}" ;;

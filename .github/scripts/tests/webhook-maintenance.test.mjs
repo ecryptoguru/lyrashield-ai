@@ -74,7 +74,7 @@ function setup(t, scenario = "normal") {
   const redisModule = path.join(directory, "redis.mjs")
   writeFileSync(
     redisModule,
-    `import fs from 'node:fs';import {createHash} from 'node:crypto';const file=createHash('sha256').update(process.env.REDIS_URL??'').digest('hex')===${JSON.stringify(hashes.redisUrlSha256)}?${JSON.stringify(redis)}:${JSON.stringify(otherRedis)};export default class Redis {async get(){return JSON.parse(fs.readFileSync(file))} async set(k,v){if(await this.get()!==null)return null;fs.writeFileSync(file,JSON.stringify(v));return 'OK'}async eval(code,n,k,v){if(await this.get()!==v)return 0;fs.writeFileSync(file,'null');return 1}async quit(){}}`
+    `import fs from 'node:fs';import {createHash} from 'node:crypto';const file=createHash('sha256').update(process.env.REDIS_URL??'').digest('hex')===${JSON.stringify(hashes.redisUrlSha256)}?${JSON.stringify(redis)}:${JSON.stringify(otherRedis)};export default class Redis {async get(){return JSON.parse(fs.readFileSync(file))} async set(k,v){if(await this.get()!==null)return null;fs.writeFileSync(file,JSON.stringify(v));return 'OK'}async ["eval"](code,n,k,v){if(await this.get()!==v)return 0;fs.writeFileSync(file,'null');return 1}async quit(){}}`
   )
   executable(
     "docker",
