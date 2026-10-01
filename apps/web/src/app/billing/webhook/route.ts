@@ -7,6 +7,8 @@ import {
   resolveRazorpayEventIdentity,
   normalizeProviderEvent,
   assertProviderCatalogEvent,
+  recordWebhookRejection,
+  WEBHOOK_REJECTION_REASONS,
   runApplicableTracks,
   getWebhookTrackRetrySchedule,
   WebhookAuthError,
@@ -35,6 +37,11 @@ export const dynamic = "force-dynamic"
  *
  * Flow (synchronous, like the GitHub webhook):
  * 1. Validate signature (401/400 on auth/payload failures — see below)
+ * 1b. Validate catalog evidence. An authentic, identifiable delivery that
+ *    fails catalog validation is persisted as a bounded WebhookEventRejection
+ *    receipt (provider + external identity + event type + reason code only,
+ *    never payload/tenant data) before the 400 answer; a receipt persistence
+ *    failure answers a retriable 5xx instead of a falsely durable 400.
  * 2. Insert WebhookEvent FIRST — the DB unique constraint is the concurrency
  *    arbiter: of simultaneous duplicate deliveries exactly one inserts and
  *    processes; losers answer 200 without side effects.
@@ -203,7 +210,6 @@ export async function POST(request: Request) {
       eventType = event.event
       payload = event
     }
-    assertProviderCatalogEvent(provider, eventType, payload)
   } catch (error) {
     const classified = authErrorResponse(error)
     if (classified) {
@@ -220,6 +226,74 @@ export async function POST(request: Request) {
     }
     logger.error("Webhook validation failed unexpectedly", {
       provider: hasPolarHeaders ? "polar" : "razorpay",
+      reason: "processing_failed",
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+      },
+      { status: 500 }
+    )
+  }
+
+  // ── Phase 1b: catalog validation on the authenticated, identified event ───
+  // Signature and identity are already proven here, so a catalog rejection is
+  // an authentic identifiable rejection: persist one bounded durable receipt
+  // before answering 400. Invalid signatures and unidentifiable payloads never
+  // reach this phase and never produce receipts.
+  try {
+    assertProviderCatalogEvent(provider, eventType, payload)
+  } catch (error) {
+    if (error instanceof WebhookPayloadError) {
+      // Catalog evidence mismatch — record the rejection durably. If the
+      // receipt cannot be persisted, the rejection is NOT durable: answer a
+      // retriable 5xx instead of a falsely final 400.
+      try {
+        await recordWebhookRejection({
+          provider,
+          externalId,
+          identitySource,
+          eventType,
+          reasonCode: WEBHOOK_REJECTION_REASONS.catalogEvidenceMismatch,
+        })
+      } catch (receiptError) {
+        logger.error("Webhook rejection receipt persistence failed", {
+          provider,
+          eventType,
+          externalId,
+          reason: "rejection_persistence_failed",
+          error: receiptError instanceof Error ? receiptError.message : String(receiptError),
+        })
+        return NextResponse.json(
+          {
+            success: false,
+            error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+          },
+          { status: 500 }
+        )
+      }
+      logger.warn("Webhook catalog validation rejected", {
+        provider,
+        eventType,
+        externalId,
+        reason: "catalog_evidence_mismatch",
+      })
+      return NextResponse.json(
+        {
+          success: false,
+          error: { code: "WEBHOOK_MALFORMED_PAYLOAD", message: "Webhook payload rejected" },
+        },
+        { status: 400 }
+      )
+    }
+    // Provider-catalog configuration failures are our problem, not the
+    // delivery's — retriable 5xx, no rejection receipt.
+    logger.error("Webhook catalog validation failed unexpectedly", {
+      provider,
+      eventType,
+      externalId,
       reason: "processing_failed",
       error: error instanceof Error ? error.message : String(error),
     })

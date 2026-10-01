@@ -264,6 +264,8 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     }
     const forcedSystemOnlyTables = {
       billing_reconciliation_state: "Singleton billing reconciliation checkpoint, system-owned",
+      WebhookEventRejection:
+        "Bounded authentic catalog-rejection receipts, system-owned, no tenant access",
     }
     const accountTables = ["account_acquisitions", "account_preferences"]
     // Myra support-agent tables (20260915000000_myra_support_agent): dual-owner

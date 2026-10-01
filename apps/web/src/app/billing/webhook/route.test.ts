@@ -47,6 +47,7 @@ vi.mock("@lyrashield/integrations", () => ({
 const validateRazorpayMock = vi.fn()
 const validatePolarMock = vi.fn()
 const assertCatalogMock = vi.fn()
+const recordRejectionMock = vi.fn()
 const runTracksMock = vi.fn()
 const getRetryScheduleMock = vi
   .fn()
@@ -58,6 +59,7 @@ vi.mock("@lyrashield/billing", async (importOriginal) => {
     validatePolarWebhook: (...args: unknown[]) => validatePolarMock(...args),
     validateRazorpayWebhook: (...args: unknown[]) => validateRazorpayMock(...args),
     assertProviderCatalogEvent: (...args: unknown[]) => assertCatalogMock(...args),
+    recordWebhookRejection: (...args: unknown[]) => recordRejectionMock(...args),
     getWebhookTrackRetrySchedule: (...args: unknown[]) => getRetryScheduleMock(...args),
     runApplicableTracks: (...args: unknown[]) => runTracksMock(...args),
   }
@@ -123,6 +125,7 @@ beforeEach(() => {
   validateRazorpayMock.mockReset()
   validatePolarMock.mockReset()
   assertCatalogMock.mockReset().mockReturnValue(null)
+  recordRejectionMock.mockReset().mockResolvedValue("recorded")
   runTracksMock.mockReset().mockResolvedValue(okSummary())
   dispatchAffiliateMock.mockReset().mockResolvedValue(undefined)
   enqueueRetryMock.mockReset().mockResolvedValue("job_1")
@@ -159,6 +162,100 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
     expect(response.status).toBe(400)
     expect(mockPrisma.webhookEvent.create).not.toHaveBeenCalled()
     expect(runTracksMock).not.toHaveBeenCalled()
+    // …but the authentic rejection IS durably receipted (bounded fields only).
+    expect(recordRejectionMock).toHaveBeenCalledTimes(1)
+    expect(recordRejectionMock).toHaveBeenCalledWith({
+      provider: "razorpay",
+      externalId: expect.stringMatching(/^[0-9a-f]{64}$/),
+      identitySource: "derived",
+      eventType: "subscription.charged",
+      reasonCode: "catalog_evidence_mismatch",
+    })
+  })
+
+  describe("durable catalog rejection receipts (W0.2)", () => {
+    function catalogRejectedEvent() {
+      const event = rzEvent("subscription.charged", "sub_REJECTED", 1_755_086_400)
+      validateRazorpayMock.mockReturnValue(event)
+      assertCatalogMock.mockImplementation(() => {
+        throw new WebhookPayloadError("Provider catalog evidence mismatch")
+      })
+      return event
+    }
+
+    it("one authentic rejection → one bounded receipt + 400; duplicate replay stays one", async () => {
+      const event = catalogRejectedEvent()
+
+      const first = await POST(razorpayRequest(event))
+      expect(first.status).toBe(400)
+      expect(recordRejectionMock).toHaveBeenCalledTimes(1)
+
+      // The dedupe layer reports the same identity already observed.
+      recordRejectionMock.mockResolvedValue("duplicate")
+      const second = await POST(razorpayRequest(event))
+      expect(second.status).toBe(400)
+      // Both deliveries hit the receipt path; the store keeps exactly one row.
+      expect(recordRejectionMock).toHaveBeenCalledTimes(2)
+      // Rejected deliveries never claim a processable receipt.
+      expect(mockPrisma.webhookEvent.create).not.toHaveBeenCalled()
+      expect(runTracksMock).not.toHaveBeenCalled()
+    })
+
+    it("invalid signature writes no rejection receipt", async () => {
+      validateRazorpayMock.mockImplementation(() => {
+        throw new WebhookAuthError("invalid_signature", "Invalid Razorpay webhook signature")
+      })
+
+      const res = await POST(razorpayRequest(rzEvent("subscription.charged", "sub_BAD", 1)))
+
+      expect(res.status).toBe(401)
+      expect(recordRejectionMock).not.toHaveBeenCalled()
+      expect(mockPrisma.webhookEvent.create).not.toHaveBeenCalled()
+    })
+
+    it("a later valid delivery with the same identity still fulfills exactly once", async () => {
+      const event = catalogRejectedEvent()
+      expect((await POST(razorpayRequest(event))).status).toBe(400)
+      expect(recordRejectionMock).toHaveBeenCalledTimes(1)
+
+      // Catalog fixed (or corrected delivery): the same externalId must enter
+      // the normal exactly-once claim path — a rejection receipt never
+      // substitutes for a processable WebhookEvent row.
+      assertCatalogMock.mockReturnValue({ kind: "plan", plan: "PRO", interval: "monthly" })
+      const res = await POST(razorpayRequest(event))
+      expect(res.status).toBe(200)
+      expect(mockPrisma.webhookEvent.create).toHaveBeenCalledTimes(1)
+      expect(runTracksMock).toHaveBeenCalledTimes(1)
+    })
+
+    it("receipt persistence failure answers retriable 5xx, not a falsely durable 400", async () => {
+      catalogRejectedEvent()
+      recordRejectionMock.mockRejectedValue(new Error("db unavailable"))
+
+      const res = await POST(
+        razorpayRequest(rzEvent("subscription.charged", "sub_REJECTED", 1_755_086_400))
+      )
+
+      expect(res.status).toBe(500)
+      await expect(res.json()).resolves.toMatchObject({
+        error: { code: "WEBHOOK_PROCESSING_FAILED" },
+      })
+      expect(mockPrisma.webhookEvent.create).not.toHaveBeenCalled()
+      expect(runTracksMock).not.toHaveBeenCalled()
+    })
+
+    it("catalog configuration errors stay retriable 5xx with no rejection receipt", async () => {
+      const event = rzEvent("subscription.charged", "sub_CFG", 1_755_086_400)
+      validateRazorpayMock.mockReturnValue(event)
+      assertCatalogMock.mockImplementation(() => {
+        throw new Error("RAZORPAY_PLAN_IDS is missing or malformed")
+      })
+
+      const res = await POST(razorpayRequest(event))
+
+      expect(res.status).toBe(500)
+      expect(recordRejectionMock).not.toHaveBeenCalled()
+    })
   })
 
   it("returns 500 for retryable provider-catalog configuration failures", async () => {
