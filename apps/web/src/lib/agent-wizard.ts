@@ -113,6 +113,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     "cursor-agent-plugin": "cursor",
     "openai-codex-agent-plugin": "openai-codex",
     "github-copilot-agent-plugin": "copilot-cli",
+    "vscode-agent-plugin": "vscode",
   }
   const pendingPluginFallback = manualPlugin
     ? getAgent(pendingPluginFallbackId[agent.id] ?? "")
@@ -315,22 +316,6 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
         primaryConfigPath(pendingPluginFallback),
       copyLabel: "Copy current MCP fallback",
       note: "Authenticate with the local CLI separately, restart the client, confirm server and tool discovery, then call lyrashield_list_workspaces to verify authorized access.",
-    })
-  }
-
-  if (agent.id === "vscode-agent-plugin") {
-    const fallback = getAgent("vscode")!
-    steps.push({
-      id: "config-mcp-fallback",
-      kind: "config",
-      title: "VS Code MCP fallback",
-      summary:
-        "Use this current direct-MCP path while a reviewed immutable plugin release is pending. Merge only this server entry, preserving existing servers, comments and settings. Plugin skills are separate.",
-      snippet: buildConfigSnippet(fallback, apiUrl),
-      snippetPath: ".vscode/mcp.json",
-      copyLabel: "Copy VS Code MCP fallback",
-      note: `For this local stdio fallback, run npx -y ${CLI_PACKAGE_SPEC} login --oauth separately. Plugin OAuth authenticates only its remote connection. Reload VS Code and confirm a read-only call; doctor does not establish client acceptance.`,
-      optional: true,
     })
   }
 
