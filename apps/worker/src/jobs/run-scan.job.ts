@@ -18,7 +18,12 @@ import {
   runScanCompletionFollowups,
 } from "./run-scan/finalization"
 import { runEngineTriageOverlay } from "./run-scan/triage"
-import { updateScanStatus, addScanEvent, type ScanStatus } from "@lyrashield/db"
+import {
+  updateScanStatus,
+  addScanEvent,
+  requeueScanForRetry,
+  type ScanStatus,
+} from "@lyrashield/db"
 import { resolveScanProfile, type UrlScanProfile } from "@lyrashield/types"
 import { prepareScanExecution } from "./run-scan/preparation"
 import {
@@ -695,13 +700,25 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         !isTerminalPrerequisiteFailure &&
         (job.attemptsMade ?? 0) + 1 < maxAttempts
       ) {
-        await prisma.scan.updateMany({
-          where: {
-            id: scanId,
-            status: { in: ["PREFLIGHT", "RUNNING", "VERIFYING"] },
-          },
-          data: { status: "QUEUED" },
+        // W2.2: the regression to QUEUED is itself a recorded step. A bare
+        // status write would silently lose the interrupted step and its cause —
+        // after a worker restart the timeline must show exactly where the run
+        // was handed back to the queue. A scan already in a terminal or paused
+        // state is never requeued.
+        const requeue = await requeueScanForRetry({
+          scanId,
+          workspaceId,
+          attempt: (job.attemptsMade ?? 0) + 1,
+          maxAttempts,
+          errorCategory: finalErrorCategory,
+          errorMessage: finalErrorMessage,
         })
+        if (!requeue.requeued) {
+          log.warn("Scan left an active status before retry requeue", {
+            scanId,
+            currentStatus: requeue.currentStatus,
+          })
+        }
         log.warn("Scan job failed and will be retried", {
           scanId,
           attempt: (job.attemptsMade ?? 0) + 1,
