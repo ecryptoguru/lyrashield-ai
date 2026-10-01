@@ -98,29 +98,19 @@ function makeCodexAgent(): AgentEntry {
 }
 
 describe("installAgentPlugin", () => {
-  it("registers the official marketplace before installing the Codex plugin", async () => {
-    execFileMock.mockImplementation(
-      (_command: unknown, _args: unknown, _options: unknown, callback: unknown) => {
-        if (typeof callback === "function") callback(null, "", "")
+  it.each(["openai-codex-agent-plugin", "github-copilot-agent-plugin"])(
+    "keeps the current %s entry manual without running marketplace commands",
+    async (id) => {
+      const agent = getAgent(id)!
+      for (const dryRun of [false, true]) {
+        const result = await installAgentPlugin({ agent, dryRun, yes: true })
+        expect(result.outcome).toBe("MANUAL_REQUIRED")
+        expect(result.message).toContain("reviewed matching immutable package release")
+        expect(result.message).not.toContain("marketplace add")
       }
-    )
-
-    const result = await installAgentPlugin({ agent: makeCodexAgent() })
-
-    expect(result.outcome).toBe("DELEGATED")
-    expect(execFileMock.mock.calls.map((call) => call.slice(0, 2))).toEqual([
-      ["codex", ["plugin", "marketplace", "add", "ecryptoguru/lyrashield-marketplace"]],
-      ["codex", ["plugin", "add", "lyrashield@lyrashield-ai"]],
-    ])
-  })
-
-  it("does not run Codex plugin commands during a dry run", async () => {
-    const result = await installAgentPlugin({ agent: makeCodexAgent(), dryRun: true })
-
-    expect(result.outcome).toBe("DELEGATED")
-    expect(result.message).toContain("Would run codex plugin marketplace add")
-    expect(execFileMock).not.toHaveBeenCalled()
-  })
+      expect(execFileMock).not.toHaveBeenCalled()
+    }
+  )
 
   it("returns exact activation guidance instead of copying to an undiscovered path", async () => {
     const agent = {

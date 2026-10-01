@@ -128,7 +128,9 @@ package-conformance or retained runtime evidence. Presence in the registry means
 render or guide that client's current config shape; it does not claim that every client release
 completed an authenticated runtime matrix.
 
-- Preferred Agent Plugin installs: Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro.
+- Preferred Agent Plugin registry entries: Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro.
+  Registry preference does not establish a released plugin. Claude, Codex and Copilot require the
+  current direct MCP fallback until a reviewed matching immutable plugin release exists.
   Package-conformance checks cover the four generated shims; GitHub Copilot uses the portable root
   manifest and remains `EXPERIMENTAL` until a retained client-runtime receipt exists.
 - VS Code's reserved Agent Plugin entry is experimental and not preferred. Use its verified
@@ -137,7 +139,10 @@ completed an authenticated runtime matrix.
   Amp, Roo Code, MiMo Code, Codebuff, Oh-My-Pi, Copilot CLI, Goose, Aider, Devin CLI, Antigravity,
   Pi (legacy registry ID `picode`), OpenClaw, Hermes and Devin, subject to each registry entry's support tier.
 
-Run `lyrashield init` for detected clients or `lyrashield install <agent>` for one explicit target.
+For current customer setup, follow the [client guides](https://lyrashieldai.com/docs/integrations/agent-plugins)
+using published `@lyrashield/mcp@0.2.11` and separate `npx -y lyrashield@0.2.13 login --oauth`.
+Published CLI config writes and skill installation remain withheld pending release; its old plugin
+guidance must not be used to install the mutable marketplace preparation branch.
 Do not reuse a nearby client's JSON/TOML shape: root keys, transport names, credential interpolation
 and discovery locations differ.
 

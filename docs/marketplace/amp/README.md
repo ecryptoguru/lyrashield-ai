@@ -5,7 +5,11 @@ This package has five task-specific Amp skills. Each skill carries an `mcp.json`
 server uses hosted OAuth at `https://app.lyrashieldai.com/api/mcp`; no API key or local process is
 embedded in this package.
 
-## Install after marketplace export
+## Future install recipe — not currently available
+
+This is a future packaging example, not a current customer install command. No reviewed immutable
+release identity is available here; do not replace the placeholders with the mutable preparation
+branch. Use the [current direct MCP guide](https://lyrashieldai.com/docs/integrations/amp) meanwhile.
 
 The package is prepared in the product source. It is not yet confirmed in a released public
 marketplace export. After an immutable export includes `amp/`, clone that exact marketplace
@@ -13,8 +17,7 @@ release to a separate directory. Run `amp skill add` from the project where you 
 installed, and point it at the package checkout:
 
 ```sh
-git clone https://github.com/ecryptoguru/lyrashield-marketplace.git /tmp/lyrashield-marketplace
-git -C /tmp/lyrashield-marketplace checkout <released-tag-or-commit>
+git clone --branch <reviewed-immutable-release-tag> --depth 1 <released-marketplace-url> /tmp/lyrashield-marketplace
 cd /path/to/your/project
 amp skill add /tmp/lyrashield-marketplace/amp
 ```

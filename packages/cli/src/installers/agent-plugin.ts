@@ -25,7 +25,6 @@ export interface InstallAgentPluginOptions {
 }
 
 const CODEX_PLUGIN_ID = "lyrashield@lyrashield-ai"
-const CODEX_MARKETPLACE = "ecryptoguru/lyrashield-marketplace"
 
 function runCodexPluginCommand(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -34,39 +33,6 @@ function runCodexPluginCommand(args: string[]): Promise<void> {
       else resolve()
     })
   })
-}
-
-async function installCodexPlugin(dryRun?: boolean): Promise<InstallAgentResult> {
-  const commands = [
-    `codex plugin marketplace add ${CODEX_MARKETPLACE}`,
-    `codex plugin add ${CODEX_PLUGIN_ID}`,
-  ]
-  if (dryRun) {
-    return {
-      agent: "openai-codex-agent-plugin",
-      displayName: "OpenAI Codex (Agent Plugin)",
-      outcome: "DELEGATED",
-      message: commands.map((command) => `Would run ${command}`).join("\n"),
-    }
-  }
-
-  try {
-    await runCodexPluginCommand(["plugin", "marketplace", "add", CODEX_MARKETPLACE])
-    await runCodexPluginCommand(["plugin", "add", CODEX_PLUGIN_ID])
-    return {
-      agent: "openai-codex-agent-plugin",
-      displayName: "OpenAI Codex (Agent Plugin)",
-      outcome: "DELEGATED",
-      message: `Installed ${CODEX_PLUGIN_ID}. Restart the ChatGPT desktop app to load it.`,
-    }
-  } catch (error) {
-    return {
-      agent: "openai-codex-agent-plugin",
-      displayName: "OpenAI Codex (Agent Plugin)",
-      outcome: "FAILED",
-      message: `Codex plugin install failed: ${(error as Error).message}`,
-    }
-  }
 }
 
 function resolvePluginLocation(
@@ -180,8 +146,6 @@ export async function installAgentPlugin(
   opts: InstallAgentPluginOptions
 ): Promise<InstallAgentResult> {
   const { agent } = opts
-  if (agent.id === "openai-codex-agent-plugin") return installCodexPlugin(opts.dryRun)
-
   if (agent.id === "kiro-agent-plugin" && opts.transport === "remote-http") {
     return {
       agent: agent.id,
