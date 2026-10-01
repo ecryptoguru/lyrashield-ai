@@ -9,6 +9,8 @@ import {
   checkDelegatedOperationAuthorization,
   completeAgentOperation,
   failAgentOperation,
+  getAgentConnection,
+  retainUnknownAgentOperationResult,
   toJsonObject,
   withWorkspaceRLS,
   TOOL_OPERATION_MAP,
@@ -435,6 +437,57 @@ export function makeRemoteApprovalGate(
             result: recordedResult,
             expectedUpdatedAt: claim.operation.updatedAt,
           })
+        }
+        const lateScanId = extractScanIdFromToolResult(toolResult)
+        if (
+          lateScanId &&
+          finalizedOperation.status === "FAILED" &&
+          finalizedOperation.error === "OPERATION_OUTCOME_UNKNOWN" &&
+          finalizedOperation.result == null &&
+          !finalizedOperation.resultReference &&
+          options.oauthContext
+        ) {
+          try {
+            await requireOAuthPermission(options.oauthContext, permission)
+            const currentConnection = await getAgentConnection(options.connection.id, workspaceId)
+            const currentScope = await resolveDelegatedScope(workspaceId, toolName, toolArgs)
+            if (
+              currentConnection?.userId === apiKeyInfo.createdById &&
+              currentConnection.status === "ACTIVE" &&
+              currentConnection.scopes.some(
+                (scope) => scope === "write" || scope === "lyrashield.write"
+              ) &&
+              currentConnection.authorizationVersion ===
+                options.oauthContext.authorizationVersion &&
+              currentScope &&
+              checkDelegatedOperationAuthorization({
+                connection: currentConnection,
+                workspaceId,
+                operationName: toolName,
+                targetId: currentScope.targetId,
+                profile: currentScope.profile,
+              }).authorized
+            ) {
+              const retained = await retainUnknownAgentOperationResult(
+                claim.operation,
+                workspaceId,
+                {
+                  terminalUpdatedAt: finalizedOperation.updatedAt,
+                  resultReference: lateScanId,
+                  result: recordedResult,
+                  currentAuthorizationVersion: currentConnection.authorizationVersion,
+                  userId: apiKeyInfo.createdById,
+                }
+              )
+              if (retained) finalizedOperation = retained
+            }
+          } catch (error) {
+            logger.warn("Could not retain late delegated scan result", {
+              operationId: claim.operation.id,
+              workspaceId,
+              error: error instanceof Error ? error.name : "UnknownError",
+            })
+          }
         }
         if (finalizedOperation.status !== (stampedResult.isError ? "FAILED" : "COMPLETED")) {
           const retained = McpToolResultSchema.safeParse(finalizedOperation.result)
