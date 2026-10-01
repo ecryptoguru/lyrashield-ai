@@ -309,12 +309,13 @@ for (const width of [375, 1280]) {
     await expect(card).not.toContainText("global: ~/.lyrashield/plugins/lyrashield")
     await page.goto("?agent-wizard=vscode-agent-plugin")
     await expect(page.getByRole("heading", { name: "Manual Agent Plugin setup" })).toBeVisible()
-    const fallback = page.locator("details").filter({ hasText: "VS Code MCP fallback" })
-    await expect(fallback).not.toHaveJSProperty("open", true)
-    await fallback.locator("summary").click()
-    await expect(fallback).toHaveJSProperty("open", true)
-    await expect(fallback.getByText(".vscode/mcp.json", { exact: true })).toBeVisible()
+    const fallback = page.locator("ol li").filter({ hasText: "Current direct MCP fallback" })
+    await expect(fallback).toHaveCount(1)
+    await expect(fallback).toContainText(".vscode/mcp.json")
     await expect(fallback).toContainText("@lyrashield/mcp@0.2.11")
+    await expect(
+      page.locator("ol li").filter({ has: page.getByRole("heading", { name: "Authenticate" }) })
+    ).toContainText("lyrashield@0.2.13 login --oauth")
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth
     )

@@ -54,7 +54,7 @@ describe("agent wizard connection snippets", () => {
     expect(install?.summary).toContain("MANUAL_REQUIRED")
     expect(install?.command).toBeUndefined()
     const fallback = wizard?.steps.find((step) => step.id === "config-mcp-fallback")
-    expect(fallback?.optional).toBe(true)
+    expect(fallback?.optional).toBeUndefined()
     expect(fallback?.snippetPath).toBe(".vscode/mcp.json")
     expect(JSON.parse(fallback?.snippet ?? "null")).toEqual({
       servers: {
@@ -66,7 +66,10 @@ describe("agent wizard connection snippets", () => {
         },
       },
     })
-    expect(wizard?.steps.find((step) => step.id === "api-key")?.summary).toContain("OAuth in")
+    expect(wizard?.steps.find((step) => step.id === "api-key")?.command).toBe(
+      `npx -y ${CLI_PACKAGE_SPEC} login --oauth`
+    )
+    expect(wizard?.steps.find((step) => step.id === "api-key")?.summary).toContain("CLI OAuth")
     expect(wizard?.steps.find((step) => step.id === "verify")?.note).toContain("read-only")
   })
 
