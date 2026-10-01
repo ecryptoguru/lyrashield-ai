@@ -91,6 +91,24 @@ describe("integration guide routes", () => {
     expect(pluginsPage).toMatch(/published CLI installer prints the MCP settings fallback/)
   })
 
+  it("documents Bolt's current remote Connector flow and LyraShield auth boundary", () => {
+    const remotePage = readFileSync(
+      new URL("../pages/docs/integrations/remote-mcp.astro", import.meta.url),
+      "utf8"
+    )
+
+    expect(remotePage).toMatch(/Settings → Connectors →\s+Manage connectors/)
+    expect(remotePage).toContain("custom Connector")
+    expect(remotePage).toContain("Bolt supports HTTP and SSE")
+    expect(remotePage).toContain("LyraShield uses Streamable HTTP")
+    expect(remotePage).toContain("if Bolt offers OAuth for this Connector")
+    expect(remotePage).toContain("https://bolt.new/blog/introducing-connectors")
+    expect(remotePage).toContain("mutating calls return")
+    expect(remotePage).toContain("connect_required")
+    expect(remotePage).toContain("read tools only")
+    expect(remotePage).not.toContain("Bolt.new Desktop")
+  })
+
   it("pins installer examples to the published CLI and scopes them to shipped clients", () => {
     const pluginsPage = readFileSync(
       new URL("../pages/docs/integrations/agent-plugins.astro", import.meta.url),
