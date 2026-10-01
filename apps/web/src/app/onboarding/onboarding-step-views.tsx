@@ -758,3 +758,154 @@ function RefreshCwIcon() {
     </svg>
   )
 }
+
+/**
+ * The wizard's step surface: swaps the four step views inside the bordered
+ * section and keeps the always-present "skip / finish later" escape. All
+ * handlers come from the wizard — this component holds no state.
+ */
+export function OnboardingStepSection({
+  step,
+  path,
+  eyebrow,
+  busy,
+  loading,
+  buildTool,
+  onBuildTool,
+  githubUnavailable,
+  onChoosePath,
+  urlForm,
+  productName,
+  onProductNameChange,
+  onUrlChange,
+  onOwnershipChange,
+  onUrlBack,
+  onUrlSubmit,
+  repos,
+  reposLoaded,
+  selectedRepoId,
+  onSelectRepo,
+  reposLoadFailed,
+  onLoadRepos,
+  onReconnect,
+  onRepoBack,
+  onRepoContinue,
+  retryingExistingTarget,
+  reviewOptions,
+  selectedReview,
+  eligibility,
+  targetId,
+  onSelectGoal,
+  onDetailsBack,
+  onStart,
+  onStartTrial,
+  onSkip,
+}: {
+  step: number
+  path: OnboardingPath
+  eyebrow: string
+  busy: boolean
+  loading: boolean
+  buildTool: string | null
+  onBuildTool: (tool: string | null) => void
+  githubUnavailable: boolean
+  onChoosePath: (next: Exclude<OnboardingPath, null>) => void
+  urlForm: { url: string; ownershipAttested: boolean }
+  productName: string
+  onProductNameChange: (name: string) => void
+  onUrlChange: (url: string) => void
+  onOwnershipChange: (attested: boolean) => void
+  onUrlBack: () => void
+  onUrlSubmit: () => void
+  repos: Repo[]
+  reposLoaded: boolean
+  selectedRepoId: number | null
+  onSelectRepo: (repo: Repo | null) => void
+  reposLoadFailed: boolean
+  onLoadRepos: () => void
+  onReconnect: () => void
+  onRepoBack: () => void
+  onRepoContinue: () => void
+  retryingExistingTarget: boolean
+  reviewOptions: ManualScanOption[]
+  selectedReview: ManualScanOption | undefined
+  eligibility: OnboardingEligibilityState
+  targetId: string | null
+  onSelectGoal: (goal: string) => void
+  onDetailsBack: () => void
+  onStart: (skipEligibilityCheck?: boolean) => void
+  onStartTrial: () => void
+  onSkip: () => void
+}) {
+  return (
+    <section className="rounded-xl border p-5 sm:p-7" aria-live="polite">
+      {step === 1 && path !== "url" && path !== "api" && (
+        <PathChooserView
+          eyebrow={eyebrow}
+          buildTool={buildTool}
+          onBuildTool={onBuildTool}
+          loading={busy}
+          githubUnavailable={githubUnavailable}
+          onChoosePath={onChoosePath}
+        />
+      )}
+
+      {step === 1 && (path === "url" || path === "api") && (
+        <UrlTargetView
+          eyebrow={eyebrow}
+          path={path}
+          productName={productName}
+          onProductNameChange={onProductNameChange}
+          url={urlForm.url}
+          ownershipAttested={urlForm.ownershipAttested}
+          onUrlChange={onUrlChange}
+          onOwnershipChange={onOwnershipChange}
+          loading={loading}
+          onBack={onUrlBack}
+          onSubmit={onUrlSubmit}
+        />
+      )}
+
+      {step === 2 && (
+        <RepoSelectView
+          eyebrow={eyebrow}
+          repos={repos}
+          reposLoaded={reposLoaded}
+          selectedRepoId={selectedRepoId}
+          onSelectRepo={onSelectRepo}
+          loading={loading}
+          loadFailed={reposLoadFailed}
+          onLoadRepos={onLoadRepos}
+          onReconnect={onReconnect}
+          onBack={onRepoBack}
+          onContinue={onRepoContinue}
+        />
+      )}
+
+      {step === 3 && (
+        <TargetDetailsView
+          eyebrow={eyebrow}
+          path={path}
+          productName={productName}
+          onProductNameChange={onProductNameChange}
+          retryingExistingTarget={retryingExistingTarget}
+          reviewOptions={reviewOptions}
+          selectedReview={selectedReview}
+          eligibility={eligibility}
+          targetId={targetId}
+          onSelectGoal={onSelectGoal}
+          loading={busy}
+          onBack={onDetailsBack}
+          onStart={onStart}
+          onStartTrial={onStartTrial}
+        />
+      )}
+
+      <div className="mt-6 flex justify-center border-t pt-4">
+        <Button type="button" variant="ghost" size="sm" onClick={onSkip} disabled={loading}>
+          Skip / finish later
+        </Button>
+      </div>
+    </section>
+  )
+}

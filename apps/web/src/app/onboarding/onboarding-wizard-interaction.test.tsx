@@ -46,6 +46,7 @@ import { getOnboardingReviewOptions } from "./onboarding-flow.utils"
 import { apiPost, apiPatch } from "@/lib/api-client"
 import {
   OnboardingAlerts,
+  OnboardingStepSection,
   PathChooserView,
   RepoSelectView,
   StepProgress,
@@ -74,6 +75,7 @@ type Element = ReactElement<{
 const VIEW_COMPONENTS = new Set<unknown>([
   OnboardingAlerts,
   OnboardingScanRecovery,
+  OnboardingStepSection,
   PathChooserView,
   RepoSelectView,
   StepProgress,
