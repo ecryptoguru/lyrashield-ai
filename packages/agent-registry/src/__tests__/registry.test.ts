@@ -181,6 +181,12 @@ describe("agent registry", () => {
     expect(copilotCloud.manualInstructions).toContain("COPILOT_MCP_LYRASHIELD_API_KEY")
     expect(copilotCloud.manualInstructions).toContain("connect_required")
     expect(copilotCloud.manualInstructions).toContain("does not support remote OAuth")
+    expect(copilotCloud.manualInstructions).toContain("extraKnownMarketplaces")
+    expect(copilotCloud.manualInstructions).toContain(
+      '"source":"github","repo":"ecryptoguru/lyrashield-marketplace"'
+    )
+    expect(copilotCloud.manualInstructions).toContain("enabledPlugins")
+    expect(copilotCloud.manualInstructions).toContain("lyrashield@lyrashield-ai")
     expect(copilotCloud.manualInstructions).toContain("lyrashield_check_diff")
     expect(copilotCloud.manualInstructions).toContain(
       "get-started`, `review-changes`, and `launch-readiness"
