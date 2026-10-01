@@ -73,7 +73,7 @@ export async function mergeYaml(opts: YamlMergeOptions): Promise<YamlMergeResult
   // parent is the directory of the resolved installer target path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
-  await atomicWrite(filePath, newContent)
+  await atomicWrite(filePath, newContent, { expectedContent: exists ? content : null })
 
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -129,6 +129,6 @@ export async function removeYaml(opts: YamlRemoveOptions): Promise<boolean> {
     throw new Error(`Cannot safely remove ${rootKey}.${serverName} from this YAML file`)
   }
   await backupFile(filePath)
-  await atomicWrite(filePath, newContent)
+  await atomicWrite(filePath, newContent, { expectedContent: content })
   return true
 }

@@ -26,11 +26,13 @@ export interface JsoncMergeResult {
 export async function mergeJsonc(opts: JsoncMergeOptions): Promise<JsoncMergeResult> {
   const { filePath, rootKey, serverName, value, dryRun } = opts
   let original = "{}"
+  let exists = false
   try {
     await access(filePath)
     // filePath is the resolved installer target path for this workspace.
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     original = await readFile(filePath, "utf-8")
+    exists = true
   } catch {
     // new file
   }
@@ -73,7 +75,7 @@ export async function mergeJsonc(opts: JsoncMergeOptions): Promise<JsoncMergeRes
   // parent is the directory of the resolved installer target path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
-  await atomicWrite(filePath, newContent)
+  await atomicWrite(filePath, newContent, { expectedContent: exists ? original : null })
 
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -130,6 +132,6 @@ export async function removeJsonc(opts: JsoncRemoveOptions): Promise<boolean> {
     throw new Error(`Cannot safely remove ${rootKey}.${serverName} from this JSONC file`)
   }
   await backupFile(filePath)
-  await atomicWrite(filePath, newContent)
+  await atomicWrite(filePath, newContent, { expectedContent: original })
   return true
 }

@@ -40,7 +40,8 @@ function equals(a: unknown, b: unknown): boolean {
 function findSectionRange(
   text: string,
   rootKey: string,
-  serverName: string
+  serverName: string,
+  fromOffset = 0
 ): { start: number; end: number } | undefined {
   const header = `[${rootKey}.${serverName}]`
   let start = -1
@@ -48,7 +49,7 @@ function findSectionRange(
   for (const line of text.split("\n")) {
     const leadingWhitespace = line.match(/^[\t ]*/)?.[0] ?? ""
     const candidate = line.slice(leadingWhitespace.length)
-    if (candidate.startsWith(header)) {
+    if (lineOffset >= fromOffset && candidate.startsWith(header)) {
       const suffix = candidate.slice(header.length).trimStart()
       if (suffix.length === 0 || suffix.startsWith("#")) {
         start = lineOffset
@@ -152,7 +153,7 @@ export async function mergeToml(opts: TomlMergeOptions): Promise<TomlMergeResult
   // parent is the directory of the resolved installer target path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
-  await atomicWrite(filePath, newContent)
+  await atomicWrite(filePath, newContent, { expectedContent: exists ? original : null })
 
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -187,14 +188,37 @@ export async function removeToml(opts: TomlRemoveOptions): Promise<boolean> {
   if (Object.prototype.hasOwnProperty.call(parsed, rootKey) && !isJsonObject(parsed[rootKey])) {
     throw new Error(`Cannot remove from the existing non-table value at ${rootKey}`)
   }
-  const range = findSectionRange(original, rootKey, serverName)
-  if (!range) return false
+  const root = isJsonObject(parsed[rootKey]) ? parsed[rootKey] : undefined
+  if (!root || !Object.prototype.hasOwnProperty.call(root, serverName)) return false
+  const expected = structuredClone(parsed)
+  const expectedRoot = expected[rootKey] as Record<string, unknown>
+  delete expectedRoot[serverName]
+  if (Object.keys(expectedRoot).length === 0) delete expected[rootKey]
 
-  let newContent = original.slice(0, range.start) + original.slice(range.end)
-  // remove trailing blank lines
-  newContent = newContent.replace(/\n\n\n+/g, "\n\n")
-  TOML.parse(newContent)
+  let newContent: string | undefined
+  let searchFrom = 0
+  for (;;) {
+    const range = findSectionRange(original, rootKey, serverName, searchFrom)
+    if (!range) break
+    searchFrom = range.start + 1
+
+    let candidateContent = original.slice(0, range.start) + original.slice(range.end)
+    // remove trailing blank lines
+    candidateContent = candidateContent.replace(/\n\n\n+/g, "\n\n")
+    try {
+      const candidate = TOML.parse(candidateContent) as Record<string, unknown>
+      if (equals(candidate, expected)) {
+        newContent = candidateContent
+        break
+      }
+    } catch {
+      // A table-looking line inside a multiline string is not a removable table.
+    }
+  }
+  if (newContent === undefined) {
+    throw new Error(`Cannot safely remove ${rootKey}.${serverName} from this TOML file`)
+  }
   await backupFile(filePath)
-  await atomicWrite(filePath, newContent)
+  await atomicWrite(filePath, newContent, { expectedContent: original })
   return true
 }

@@ -1,4 +1,4 @@
-import { lstat, open, realpath, rename, rm } from "node:fs/promises"
+import { lstat, open, readFile, realpath, rename, rm } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { dirname, resolve } from "node:path"
 import type { Stats } from "node:fs"
@@ -61,7 +61,7 @@ async function assertNoSymlinkedAncestor(dir: string): Promise<void> {
 export async function atomicWrite(
   filePath: string,
   content: string,
-  options: { mode?: number } = {}
+  options: { mode?: number; expectedContent?: string | null } = {}
 ): Promise<void> {
   const absolutePath = resolve(filePath)
 
@@ -93,6 +93,18 @@ export async function atomicWrite(
     const currentDestinationStat = await getRegularDestinationStat(absolutePath)
     if (!sameDestination(destinationStat, currentDestinationStat)) {
       throw new Error(`The destination changed during the atomic write: ${absolutePath}`)
+    }
+    if (Object.prototype.hasOwnProperty.call(options, "expectedContent")) {
+      // absolutePath is resolved and validated as a regular destination above.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const currentContent = currentDestinationStat ? await readFile(absolutePath, "utf-8") : null
+      if (currentContent !== options.expectedContent) {
+        throw new Error(`The destination contents changed during the atomic write: ${absolutePath}`)
+      }
+      const afterReadStat = await getRegularDestinationStat(absolutePath)
+      if (!sameDestination(currentDestinationStat, afterReadStat)) {
+        throw new Error(`The destination changed during the atomic write: ${absolutePath}`)
+      }
     }
 
     // filePath is the resolved installer target path selected for this workspace.

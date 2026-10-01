@@ -417,13 +417,16 @@ export async function uninstallAgentPlugin(
       message: `Would remove ${dest}`,
     }
   try {
-    await rm(dest, { recursive: true, force: true })
+    await assertContainedPluginDest(dest, loc, opts)
+    const backupPath = `${dest}.lyrashield-backup-${randomUUID()}`
+    await rename(dest, backupPath)
     return {
       agent: agent.id,
       displayName: agent.displayName,
       outcome: "CONFIGURED",
       path: dest,
-      message: "Plugin removed.",
+      backupPath,
+      message: `Plugin removed. Previous files retained at ${backupPath}`,
     }
   } catch (error) {
     return {

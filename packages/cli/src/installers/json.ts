@@ -100,7 +100,7 @@ export async function mergeJson(opts: JsonMergeOptions): Promise<JsonMergeResult
   // parent is the directory of the resolved installer target path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
-  await atomicWrite(filePath, newContent)
+  await atomicWrite(filePath, newContent, { expectedContent: exists ? original : null })
 
   // re-read and verify
   // filePath is the resolved installer target path for this workspace.
@@ -142,6 +142,8 @@ export async function removeJson(opts: JsonRemoveOptions): Promise<boolean> {
   const indent = detectIndent(original)
   const trailing = original.match(/\n\s*$/) ? "\n" : ""
   await backupFile(filePath)
-  await atomicWrite(filePath, JSON.stringify(parsed, null, indent) + trailing)
+  await atomicWrite(filePath, JSON.stringify(parsed, null, indent) + trailing, {
+    expectedContent: original,
+  })
   return true
 }

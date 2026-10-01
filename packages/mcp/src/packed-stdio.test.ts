@@ -37,12 +37,6 @@ async function readSharedToolPolicyArtifact(): Promise<Buffer | undefined> {
 }
 
 beforeAll(async () => {
-  // Sweep leftovers from killed runs so they can never be packed or committed.
-  for (const entry of await readdir(PACKAGE_ROOT)) {
-    if (entry.startsWith(".packed-stdio-")) {
-      await rm(path.join(PACKAGE_ROOT, entry), { recursive: true, force: true })
-    }
-  }
   extractDir = await mkdtemp(path.join(PACKAGE_ROOT, ".packed-stdio-"))
   const sharedToolPolicyBefore = await readSharedToolPolicyArtifact()
   const stagingDir = path.join(extractDir, "staging")

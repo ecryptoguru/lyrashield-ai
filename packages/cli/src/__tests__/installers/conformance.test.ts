@@ -596,4 +596,42 @@ command = "acme-mcp"
     expect(await readFile(filePath, "utf-8")).toBe(content)
     expect(await readdir(cwd)).toEqual(["commented-section.toml"])
   })
+
+  it("skips TOML table-looking lines inside multiline strings during removal", async () => {
+    const filePath = path.join(cwd, "multiline-string-section.toml")
+    const content = `message = """A table-like string follows
+[mcp_servers.lyrashield]
+command = "not a table"
+"""
+
+[mcp_servers.lyrashield]
+command = "npx"
+
+[mcp_servers.acme]
+command = "acme-mcp"
+`
+    await writeFile(filePath, content, "utf-8")
+
+    const removed = await removeFile({
+      filePath,
+      format: "toml",
+      rootKey: "mcp_servers",
+      serverName: "lyrashield",
+    })
+
+    expect(removed).toBe(true)
+    const result = await readFile(filePath, "utf-8")
+    expect(result).toContain('message = """A table-like string follows\n[mcp_servers.lyrashield]')
+    expect(result).toContain('[mcp_servers.acme]\ncommand = "acme-mcp"')
+    const parsed = TOML.parse(result) as { mcp_servers?: Record<string, unknown> }
+    expect(parsed).toMatchObject({
+      message: 'A table-like string follows\n[mcp_servers.lyrashield]\ncommand = "not a table"\n',
+      mcp_servers: { acme: { command: "acme-mcp" } },
+    })
+    expect(parsed.mcp_servers).not.toHaveProperty("lyrashield")
+    expect((await readdir(cwd)).sort()).toHaveLength(2)
+    const backupName = (await readdir(cwd)).find((entry) => entry.includes("lyrashield-backup"))
+    expect(backupName).toBeDefined()
+    expect(await readFile(path.join(cwd, backupName!), "utf-8")).toBe(content)
+  })
 })

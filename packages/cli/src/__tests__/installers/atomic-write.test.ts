@@ -144,6 +144,47 @@ describe("atomicWrite", () => {
     await expect(readFile(expectedTmp, "utf-8")).rejects.toThrow()
   })
 
+  it("preserves a same-inode edit made after the write began", async () => {
+    const target = path.join(cwd, "config.json")
+    await writeFile(target, "original", "utf-8")
+    mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000012")
+    let destinationChecks = 0
+
+    mockedLstat.mockImplementation(async (p) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      if (p === target && ++destinationChecks === 2) {
+        await writeFile(target, "concurrent edit", "utf-8")
+      }
+      return actual.lstat(p as string)
+    })
+
+    await expect(
+      atomicWrite(target, "replacement", { expectedContent: "original" })
+    ).rejects.toThrow(/contents changed/i)
+
+    expect(await readFile(target, "utf-8")).toBe("concurrent edit")
+  })
+
+  it("requires an expected-absent destination to remain absent", async () => {
+    const target = path.join(cwd, "new-config.json")
+    mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000013")
+    let destinationChecks = 0
+
+    mockedLstat.mockImplementation(async (p) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      if (p === target && ++destinationChecks === 2) {
+        await writeFile(target, "concurrent creation", "utf-8")
+      }
+      return actual.lstat(p as string)
+    })
+
+    await expect(atomicWrite(target, "replacement", { expectedContent: null })).rejects.toThrow(
+      /destination changed/i
+    )
+
+    expect(await readFile(target, "utf-8")).toBe("concurrent creation")
+  })
+
   it("fails when an attacker pre-created the temp path as a file", async () => {
     const target = path.join(cwd, "config.json")
     const fixedUuid = "00000000-0000-0000-0000-000000000003"

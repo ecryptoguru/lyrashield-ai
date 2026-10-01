@@ -332,6 +332,30 @@ describe("uninstallAgentPlugin", () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
+  it("moves customized plugin files to a unique sibling backup on uninstall", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
+    const dest = path.join(tempDir, "plugins", "lyrashield")
+    const agent = makeAgent(dest)
+    await mkdir(dest, { recursive: true })
+    await writeFile(path.join(dest, "plugin.json"), '{"name":"lyrashield"}\n', "utf-8")
+    await writeFile(path.join(dest, "custom-skill.md"), "User customization\n", "utf-8")
+
+    const result = await uninstallAgentPlugin({ agent, cwd: tempDir })
+
+    expect(result.outcome).toBe("CONFIGURED")
+    expect(result.backupPath).toContain(`${dest}.lyrashield-backup-`)
+    expect(result.message).toContain(result.backupPath)
+    await expect(access(dest)).rejects.toThrow()
+    expect(await readFile(path.join(result.backupPath!, "custom-skill.md"), "utf-8")).toBe(
+      "User customization\n"
+    )
+    expect(await readFile(path.join(result.backupPath!, "plugin.json"), "utf-8")).toBe(
+      '{"name":"lyrashield"}\n'
+    )
+
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
   it("reports already-configured when plugin is not present", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
     const dest = path.join(tempDir, "plugins", "lyrashield")
