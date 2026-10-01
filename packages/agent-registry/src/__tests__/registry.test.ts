@@ -73,11 +73,11 @@ describe("agent registry", () => {
     const plugin = AGENTS.filter((a) => a.installStrategy === "agent-plugin")
 
     // Total registered agents (non-plugin + plugin).
-    expect(AGENTS.length).toBe(30)
+    expect(AGENTS.length).toBe(48)
     // Plugin agents (launch clients).
     expect(plugin.length).toBe(6)
     // Non-plugin agents — the docs index references this set.
-    expect(configFile.length + vendorCli.length + guided.length).toBe(24)
+    expect(configFile.length + vendorCli.length + guided.length).toBe(42)
   })
 
   it("has unique ids and display names", () => {
@@ -85,6 +85,118 @@ describe("agent registry", () => {
     const names = AGENTS.map((a) => a.displayName)
     expect(new Set(ids).size).toBe(ids.length)
     expect(new Set(names).size).toBe(names.length)
+    const aliases = AGENTS.flatMap((agent) => agent.aliases ?? [])
+    expect(new Set(aliases).size).toBe(aliases.length)
+    expect(aliases.some((alias) => ids.includes(alias))).toBe(false)
+  })
+
+  it("preserves validated optional client version constraints", () => {
+    const constrainedEntry = {
+      ...AGENTS.find((agent) => agent.id === "devin-cli")!,
+      versionConstraints: {
+        minimum: "3000.3",
+        note: "Dedicated MCP configuration files are supported from this CLI version.",
+      },
+    }
+    const parsed = agentEntrySchema.safeParse(constrainedEntry)
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data.versionConstraints).toEqual(constrainedEntry.versionConstraints)
+    }
+
+    expect(
+      agentEntrySchema.safeParse({
+        ...constrainedEntry,
+        versionConstraints: { minimum: "" },
+      }).success
+    ).toBe(false)
+
+    expect(getAgent("devin-cli")?.versionConstraints?.minimum).toBe("3000.3")
+    expect(getAgent("kiro-agent-plugin")?.versionConstraints?.minimum).toBe("3")
+    expect(getAgent("opencode-v2")?.versionConstraints?.minimum).toBe("2")
+  })
+
+  it("records Wave 3 and separated JetBrains surfaces as documentation-only", () => {
+    const ids = [
+      "auggie",
+      "factory-droid",
+      "qoder",
+      "qoder-cli",
+      "qwen-code",
+      "continue",
+      "mistral-vibe",
+      "lovable",
+      "v0",
+      "replit-agent",
+      "claude-desktop",
+      "claude-web",
+      "junie",
+      "junie-cli",
+      "jetbrains-claude-agent",
+      "jetbrains-codex-agent",
+      "opencode-v2",
+    ]
+
+    for (const id of ids) {
+      const agent = getAgent(id)
+      expect(agent, id).toBeDefined()
+      expect(["COMPATIBLE", "EXPERIMENTAL"]).toContain(agent!.supportTier)
+      expect(agent!.verification?.evidence).toBe("DOCUMENTATION")
+      expect(agent!.verification?.checkedOn).toBe("2026-10-01")
+      expect(agent!.verification?.clientVersion).toBeNull()
+      expect(agent!.verification?.receipt).toBeNull()
+    }
+
+    expect(getAgent("claude-desktop")?.surface).toBe("desktop")
+    expect(getAgent("claude-web")?.surface).toBe("web")
+    expect(getAgent("qoder")?.installStrategy).toBe("guided-manual")
+    expect(getAgent("qoder")?.locations).toEqual([])
+    expect(getAgent("qoder-cli")?.locations).toContainEqual(
+      expect.objectContaining({ path: ".qoder/settings.json", scope: "project" })
+    )
+    expect(getAgent("qoder-cli")?.remoteAuth).toBe("oauth")
+    expect(getAgent("continue")?.skillLocations).toBeUndefined()
+    expect(getAgent("qwen-code")?.locations).toContainEqual(
+      expect.objectContaining({ path: ".qwen/settings.json", scope: "project" })
+    )
+    expect(getAgent("auggie")?.distribution?.state).toBe("PREPARATION")
+    expect(getAgent("antigravity")?.nativeCapabilities).toEqual(
+      expect.arrayContaining(["skills", "rules"])
+    )
+    expect(getAgent("antigravity")?.nativeCapabilities).not.toContain("plugin")
+  })
+
+  it("records one documented primary skill location per scope", () => {
+    const expectedPaths: Record<string, string[]> = {
+      amp: [".agents/skills", "~/.config/agents/skills"],
+      cline: [".cline/skills", "~/.cline/skills"],
+      "devin-desktop": [".devin/skills"],
+      "gemini-cli": [".gemini/skills", "~/.gemini/skills"],
+      "kilo-code": [".kilo/skills", "~/.kilo/skills"],
+      opencode: [".opencode/skills", "~/.config/opencode/skills"],
+      "opencode-v2": [".opencode/skills", "~/.config/opencode/skills"],
+      picode: ["~/.pi/agent/skills", ".pi/skills"],
+      "qoder-cli": [".qoder/skills", "~/.qoder/skills"],
+      "replit-agent": [".agents/skills"],
+      antigravity: [".agents/skills", "~/.gemini/config/skills"],
+      "mistral-vibe": [".vibe/skills", "~/.vibe/skills"],
+      "jetbrains-claude-agent": [".claude/skills"],
+      "jetbrains-codex-agent": [".codex/skills"],
+    }
+
+    for (const [id, paths] of Object.entries(expectedPaths)) {
+      const agent = getAgent(id)!
+      const locations = agent.skillLocations ?? []
+      expect(
+        locations.map((location) => location.path),
+        id
+      ).toEqual(paths)
+      const scopes = locations.map((location) => location.scope)
+      expect(new Set(scopes).size, id).toBe(scopes.length)
+    }
+    expect(getAgent("qoder")?.skillLocations).toBeUndefined()
+    expect(getAgent("continue")?.skillLocations).toBeUndefined()
+    expect(getAgent("qwen-code")?.skillLocations).toBeUndefined()
   })
 
   it("validates every entry against agentEntrySchema", () => {
@@ -136,13 +248,13 @@ describe("agent registry", () => {
 
   it("marks standalone workflows without an MCP transport or config", () => {
     const preferred = listPreferredAgents()
-    expect(preferred).toHaveLength(26)
+    expect(preferred).toHaveLength(44)
     expect(
       preferred
         .filter((agent) => agent.integrationKind === "standalone-cli")
         .map((agent) => agent.id)
         .sort()
-    ).toEqual(["aider", "picode"])
+    ).toEqual(["aider"])
     for (const agent of preferred) {
       if (agent.integrationKind === "standalone-cli") {
         expect(agent.transports).toEqual([])
@@ -157,6 +269,18 @@ describe("agent registry", () => {
   it("does not promote reserved plugin entries without runtime receipts", () => {
     expect(getAgent("vscode-agent-plugin")?.supportTier).toBe("EXPERIMENTAL")
     expect(getAgent("github-copilot-agent-plugin")?.supportTier).toBe("EXPERIMENTAL")
+  })
+
+  it("prefers Kiro Power import and labels the MCP config as a fallback", () => {
+    const kiro = getAgent("kiro-agent-plugin")!
+    expect(kiro.manualInstructions).toContain("Import the LyraShield Power")
+    expect(kiro.manualInstructions).toContain("MCP-only fallback")
+    expect(kiro.distribution?.state).toBe("PREPARATION")
+    expect(kiro.supportTier).toBe("COMPATIBLE")
+    expect(kiro.verification?.evidence).toBe("PACKAGE_CONFORMANCE")
+    expect(kiro.pluginLocations).toContainEqual(
+      expect.objectContaining({ path: "~/.kiro/powers/lyrashield", scope: "global" })
+    )
   })
 
   it("rejects NATIVE and VERIFIED claims without client-runtime receipts", () => {
@@ -329,13 +453,33 @@ describe("renderEntry returns correct structural patch", () => {
     })
   })
 
-  it("Devin is configured through its MCP Marketplace, not a legacy Windsurf file", () => {
+  it("separates Devin cloud, Desktop/Cascade and CLI surfaces while retaining the Windsurf alias", () => {
     const agent = getAgent("devin")!
     expect(agent.displayName).toBe("Devin")
+    expect(agent.surface).toBe("cloud")
     expect(agent.installStrategy).toBe("guided-manual")
     expect(agent.locations).toEqual([])
     expect(agent.source?.url).toBe("https://docs.devin.ai/work-with-devin/mcp")
-    expect(getAgent("windsurf")).toBeUndefined()
+    const desktop = getAgent("devin-desktop")!
+    expect(desktop.surface).toBe("desktop")
+    expect(getAgent("windsurf")).toBe(desktop)
+    expect(desktop.skillLocations?.[0]?.path).toBe(".devin/skills")
+    expect(getAgent("devin-cli")?.surface).toBe("cli")
+  })
+
+  it("uses Pi's built-in MCP and OAuth config and retains its legacy id", () => {
+    const pi = getAgent("picode")!
+    expect(pi.displayName).toBe("Pi")
+    expect(pi.installStrategy).toBe("config-file")
+    expect(pi.locations.map((location) => location.path)).toEqual([
+      "~/.pi/agent/mcp.json",
+      ".pi/mcp.json",
+    ])
+    expect(pi.remoteAuth).toBe("oauth")
+    expect(getAgent("pi")).toBe(pi)
+    expect(getPreferredAgent("pi")).toBe(pi)
+    expect(pi.supportTier).toBe("COMPATIBLE")
+    expect(pi.verification?.evidence).toBe("DOCUMENTATION")
   })
 
   it("antigravity — remote uses `serverUrl` instead of `url`", () => {
@@ -397,7 +541,7 @@ describe("gotchas from §3.4 are represented", () => {
     "Settings → MCP Marketplace → Add Your Own",
     "Kilo Code's file is JSONC",
     "Amp takes no --env flags",
-    "JetBrains has no file we can write",
+    "JetBrains AI Assistant has no stable MCP file path",
     "repeated `--arg` flags",
   ]
 

@@ -52,6 +52,7 @@ const COMMANDS: Record<string, CommandThunk> = {
   project: () => import("./commands/project.js").then((m) => m.handleProject),
   targets: () => import("./commands/targets.js").then((m) => m.handleTargets),
   rules: () => import("./commands/rules.js").then((m) => m.handleRules),
+  skills: () => import("./commands/skills.js").then((m) => m.handleSkills),
   hook: () => import("./commands/hook.js").then((m) => m.handleHook),
   approvals: () => import("./commands/approvals.js").then((m) => m.handleApprovals),
   mcp: () => import("./commands/mcp.js").then((m) => m.handleMcp),
@@ -96,6 +97,8 @@ Commands:
   rules add <agent>    Write an agent rules file
   rules remove <agent> Remove an agent rules file
   rules check          Validate agent rule checksums
+  skills install <agent> Install shared agent skills
+  skills remove <agent>  Remove unmodified LyraShield-owned skill files
   hook install         Install a pre-commit hook
   approvals            List, create, approve, or deny agent approvals
   mcp call <tool>      Call a remote MCP tool

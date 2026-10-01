@@ -180,12 +180,26 @@ await scanSecrets(root)
 
 const portableMcp = await readJson("mcp.json")
 const claudeMcp = await readJson(".mcp.json")
-for (const [name, config] of Object.entries({ portableMcp, claudeMcp })) {
-  const server = config.mcpServers?.lyrashield
-  assert(server?.type === "http", `${name} must use Streamable HTTP`)
-  assert(server?.url === "https://app.lyrashieldai.com/api/mcp", `${name} has the wrong MCP URL`)
-  assert(!("headers" in server), `${name} must allow the hosted OAuth flow to authenticate`)
-}
+const portableMcpServer = portableMcp.mcpServers?.lyrashield
+assert(
+  portableMcpServer?.type === "streamable-http",
+  "portable mcp.json must use the Agent Plugins transport"
+)
+assert(
+  portableMcpServer?.url === "https://app.lyrashieldai.com/api/mcp",
+  "portable mcp.json has the wrong MCP URL"
+)
+assert(
+  !("headers" in portableMcpServer),
+  "portable mcp.json must allow hosted OAuth authentication"
+)
+const claudeMcpServer = claudeMcp.mcpServers?.lyrashield
+assert(claudeMcpServer?.type === "http", ".mcp.json must use Claude Code's HTTP transport")
+assert(
+  claudeMcpServer?.url === "https://app.lyrashieldai.com/api/mcp",
+  ".mcp.json has the wrong MCP URL"
+)
+assert(!("headers" in claudeMcpServer), ".mcp.json must allow hosted OAuth authentication")
 
 const codexPlugin = await readJson(".codex-plugin/plugin.json")
 const codexMcp = await readJson(".mcp.codex.json")
@@ -257,6 +271,72 @@ assert(
 const rootEntries = await readdir(root)
 assert(rootEntries.includes("plugin.json"), "root plugin.json is missing")
 assert(rootEntries.includes("skills"), "root skills directory is missing")
+
+// Antigravity has a separate, strict manifest and MCP config from portable Agent Plugins.
+const antigravityPlugin = await readJson("antigravity/plugin.json")
+assert(
+  antigravityPlugin.$schema === "https://antigravity.google/schemas/v1/plugin.json" &&
+    antigravityPlugin.name === "lyrashield" &&
+    typeof antigravityPlugin.description === "string" &&
+    antigravityPlugin.description.length > 0 &&
+    Object.keys(antigravityPlugin).sort().join(",") === "$schema,description,name",
+  "Antigravity plugin.json must follow Google's native manifest schema"
+)
+const antigravityMcp = await readJson("antigravity/mcp_config.json")
+const antigravityServer = antigravityMcp.mcpServers?.lyrashield
+assert(
+  antigravityServer?.serverUrl === "https://app.lyrashieldai.com/api/mcp" &&
+    Object.keys(antigravityMcp.mcpServers ?? {}).join(",") === "lyrashield" &&
+    Object.keys(antigravityServer).join(",") === "serverUrl",
+  "Antigravity MCP config must use only the documented hosted serverUrl field"
+)
+
+const openCodeConfig = await readJson("opencode/opencode.json")
+const openCodeServer = openCodeConfig.mcp?.lyrashield
+assert(
+  openCodeConfig.$schema === "https://opencode.ai/config.json" &&
+    openCodeServer?.type === "remote" &&
+    openCodeServer?.url === "https://app.lyrashieldai.com/api/mcp" &&
+    openCodeServer?.oauth?.scope === "lyrashield.read" &&
+    Object.keys(openCodeServer).sort().join(",") === "oauth,type,url",
+  "OpenCode MCP config must use remote OAuth with the read-only scope"
+)
+const exportedSkills = (await readdir(path.join(root, "skills"))).sort()
+assert(
+  JSON.stringify((await readdir(path.join(root, "opencode", "skills"))).sort()) ===
+    JSON.stringify(exportedSkills),
+  "OpenCode skills must match the portable skill set"
+)
+for (const skill of exportedSkills) {
+  assert(
+    (await readFile(path.join(root, "opencode", "skills", skill, "SKILL.md"), "utf8")) ===
+      (await readFile(path.join(root, "skills", skill, "SKILL.md"), "utf8")),
+    `OpenCode ${skill} skill drifted from the portable skill`
+  )
+}
+
+for (const skill of [
+  "get-started",
+  "review-changes",
+  "scan-project",
+  "fix-and-retest",
+  "launch-readiness",
+]) {
+  const ampSkill = await readFile(path.join(root, "amp", skill, "SKILL.md"), "utf8")
+  assert(
+    ampSkill === (await readFile(path.join(root, "skills", skill, "SKILL.md"), "utf8")),
+    `Amp ${skill} skill drifted from the portable skill`
+  )
+  const ampMcp = await readJson(`amp/${skill}/mcp.json`)
+  const server = ampMcp.lyrashield
+  assert(
+    server?.url === "https://app.lyrashieldai.com/api/mcp" &&
+      Array.isArray(server.includeTools) &&
+      server.includeTools.length > 0 &&
+      Object.keys(server).sort().join(",") === "includeTools,url",
+    `Amp ${skill} MCP config must use a bounded hosted tool list`
+  )
+}
 
 // The marketplace catalog is what makes this repository installable rather than merely
 // readable: `/plugin marketplace add` and VS Code's "Install Plugin From Source" both
@@ -348,31 +428,43 @@ assert(
   "Zed Cargo version must match plugin.json"
 )
 
-// The Gemini extension must exclude exactly the catalog-derived mutating tool
-// set recorded in the manifest by the exporter.
-const excluded = manifest.mutatingTools
+// Explicit user-invoked scan workflows may call the two scan tools. All other
+// mutating MCP operations stay excluded from the Gemini extension.
+const allMutating = manifest.mutatingTools
+const allowed = manifest.geminiAllowedMutatingTools
+const excluded = manifest.geminiExcludedTools
 assert(
-  Array.isArray(excluded) && excluded.length > 0,
+  Array.isArray(allMutating) && allMutating.length > 0,
   "manifest.mutatingTools must be a non-empty array"
 )
-for (const name of excluded) {
+for (const name of allMutating) {
   assert(
     typeof name === "string" && name.startsWith("lyrashield_"),
     `unexpected tool name in manifest.mutatingTools: ${name}`
   )
 }
+assert(
+  JSON.stringify(allowed) === JSON.stringify(["lyrashield_scan_target", "lyrashield_run_pr_scan"]),
+  "manifest.geminiAllowedMutatingTools must contain only the supported scan operations"
+)
+assert(Array.isArray(excluded), "manifest.geminiExcludedTools must be an array")
+assert(
+  allMutating.length === allowed.length + excluded.length &&
+    allMutating.every((name) => allowed.includes(name) !== excluded.includes(name)),
+  "Gemini allow/exclude lists must partition all mutating MCP tools"
+)
 const geminiManifest = await readJson("gemini-extension/gemini-extension.json")
 assert(
   JSON.stringify(geminiManifest.excludeTools) === JSON.stringify(excluded),
-  "gemini-extension.json excludeTools must equal the manifest-recorded mutating tool set"
+  "gemini-extension.json excludeTools must equal the manifest-recorded excluded tool set"
 )
 const rootGemini = await readJson("gemini-extension.json")
 assert(
   JSON.stringify(rootGemini.excludeTools) === JSON.stringify(excluded),
-  "root gemini-extension.json excludeTools must equal the manifest-recorded mutating tool set"
+  "root gemini-extension.json excludeTools must equal the manifest-recorded excluded tool set"
 )
 
-const expectedPackage = "@lyrashield/mcp@0.2.11"
+const expectedPackage = "@lyrashield/mcp@0.2.12"
 const publishedMcpVerifier = await readFile(
   path.join(root, "scripts/verify-published-mcp.mjs"),
   "utf8"
@@ -398,6 +490,79 @@ assert(
   kiro?.command === "npx" && JSON.stringify(kiro.args) === JSON.stringify(["-y", expectedPackage]),
   "Kiro executable pin differs"
 )
+const sharedSkillNames = [
+  "lyrashield",
+  "get-started",
+  "review-changes",
+  "scan-project",
+  "fix-and-retest",
+  "launch-readiness",
+]
+assert(
+  JSON.stringify((await readdir(path.join(root, "antigravity", "skills"))).sort()) ===
+    JSON.stringify([...sharedSkillNames].sort()),
+  "Antigravity plugin must bundle exactly the shared LyraShield skills"
+)
+for (const skill of sharedSkillNames) {
+  assert(
+    (await readFile(path.join(root, "antigravity", "skills", skill, "SKILL.md"), "utf8")) ===
+      (await readFile(path.join(root, "skills", skill, "SKILL.md"), "utf8")),
+    `Antigravity skill ${skill} must match the canonical shared skill`
+  )
+}
+
+// Kilo installs MCP companion skills by resolving each top-level `skills` ID
+// to a published skill archive. Keep the source folders, frontmatter IDs, and
+// MCP.yaml list in sync before the official packaging/generation step.
+const kiloSkillEntries = await readdir(path.join(root, "kilo", "skills"), { withFileTypes: true })
+assert(
+  kiloSkillEntries.every((entry) => entry.isDirectory()),
+  "Kilo skills root must contain skill directories only"
+)
+const kiloSkillNames = kiloSkillEntries.map((entry) => entry.name).sort()
+assert(
+  JSON.stringify(kiloSkillNames) === JSON.stringify([...sharedSkillNames].sort()),
+  "Kilo must bundle exactly the shared LyraShield skills"
+)
+for (const skill of sharedSkillNames) {
+  const kiloSkill = await readFile(path.join(root, "kilo", "skills", skill, "SKILL.md"), "utf8")
+  const frontmatter = kiloSkill.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)
+  assert(frontmatter, `Kilo skill ${skill} must have YAML frontmatter`)
+  const scalar = (value) => {
+    const trimmed = value.trim()
+    return /^(["']).*\1$/.test(trimmed) ? trimmed.slice(1, -1).trim() : trimmed
+  }
+  const rawName = frontmatter[1].match(/^name:\s*([^\r\n]+)\s*$/m)?.[1]
+  const rawDescription = frontmatter[1].match(/^description:\s*(.+)\s*$/m)?.[1]
+  const skillName = rawName ? scalar(rawName) : undefined
+  const description = rawDescription ? scalar(rawDescription) : undefined
+  assert(skillName === skill, `Kilo skill ${skill} frontmatter name must match its directory`)
+  assert(description, `Kilo skill ${skill} must have a non-empty frontmatter description`)
+  assert(
+    kiloSkill === (await readFile(path.join(root, "skills", skill, "SKILL.md"), "utf8")),
+    `Kilo skill ${skill} must match the canonical shared skill`
+  )
+}
+const kiloMcpYaml = await readFile(
+  path.join(root, "kilo", "mcps", "lyrashield", "MCP.yaml"),
+  "utf8"
+)
+const kiloSkillsSections = kiloMcpYaml.match(/^skills:\s*$/gm) ?? []
+assert(kiloSkillsSections.length === 1, "Kilo MCP.yaml must declare one top-level skills list")
+const kiloSkillsStart = kiloMcpYaml.search(/^skills:\s*$/m)
+const kiloSkillsIds = []
+for (const line of kiloMcpYaml.slice(kiloSkillsStart).split(/\r?\n/).slice(1)) {
+  if (!line.trim() || /^\s*#/.test(line)) continue
+  if (!/^\s/.test(line)) break
+  const item = line.match(/^  - ([a-z0-9]+(?:-[a-z0-9]+)*)\s*$/)
+  assert(item, `invalid Kilo MCP.yaml skills entry: ${line}`)
+  kiloSkillsIds.push(item[1])
+}
+assert(
+  new Set(kiloSkillsIds).size === kiloSkillsIds.length &&
+    JSON.stringify([...kiloSkillsIds].sort()) === JSON.stringify([...sharedSkillNames].sort()),
+  "Kilo MCP.yaml skills list must match the bundled skill directories"
+)
 for (const file of [
   ".mcp.kiro.json",
   "gemini-extension.json",
@@ -413,7 +578,7 @@ for (const file of [
   )
   if (file.endsWith(".rs")) {
     assert(
-      text.includes('const PACKAGE_VERSION: &str = "0.2.11";'),
+      text.includes('const PACKAGE_VERSION: &str = "0.2.12";'),
       "Zed must pin the published MCP version"
     )
     assert(!text.includes("npm_package_latest_version"), "Zed must not install a floating release")
@@ -563,7 +728,20 @@ for (const file of [
   "kiro-power/POWER.md",
   "GEMINI.md",
 ]) {
-  const text = await readFile(path.join(root, file), "utf8")
+  const requiredKiroSkills = [
+    "lyrashield",
+    "get-started",
+    "review-changes",
+    "scan-project",
+    "fix-and-retest",
+    "launch-readiness",
+  ].map((name) => `kiro-power/skills/${name}/SKILL.md`)
+  const contractFiles = file === "kiro-power/POWER.md" ? [file, ...requiredKiroSkills] : [file]
+  const text = (
+    await Promise.all(
+      contractFiles.map((candidate) => readFile(path.join(root, candidate), "utf8"))
+    )
+  ).join("\n")
   assert(
     text.includes("lyrashield_check_diff") && text.includes("lyrashield_verify_fix"),
     `${file} must use canonical tools`
@@ -572,6 +750,50 @@ for (const file of [
     connectionBoundaryIsIntact(text),
     `${file} must preserve connection authorization and the no-auto-merge boundary`
   )
+}
+
+const workflowSkills = [
+  "get-started",
+  "review-changes",
+  "scan-project",
+  "fix-and-retest",
+  "launch-readiness",
+]
+const workflowSkillRoots = [
+  "amp",
+  "antigravity/skills",
+  "augment/plugins/lyrashield/skills",
+  "cline/skills",
+  "devin-cli/skills",
+  "devin-desktop/skills",
+  "factory/plugins/lyrashield/skills",
+  "gemini-extension/skills",
+  "goose/skills",
+  "hermes/skills",
+  "jetbrains-ai-assistant/skills",
+  "jetbrains-junie/skills",
+  "kilo/skills",
+  "kiro-power/skills",
+  "lovable/skills",
+  "mimo-code/skills",
+  "mistral-vibe/skills",
+  "oh-my-pi/skills",
+  "opencode/skills",
+  "qoder/plugins/lyrashield/skills",
+  "qwen/skills",
+  "replit/skills",
+  "roo-code/skills",
+  "v0/skills",
+]
+for (const skillRoot of workflowSkillRoots) {
+  for (const skill of workflowSkills) {
+    const canonical = await readFile(path.join(root, "skills", skill, "SKILL.md"), "utf8")
+    const clientSkill = await readFile(
+      path.join(root, skillRoot, skill, "SKILL.md"),
+      "utf8"
+    )
+    assert(clientSkill === canonical, `${skillRoot}/${skill} must match the canonical workflow`)
+  }
 }
 
 console.log(

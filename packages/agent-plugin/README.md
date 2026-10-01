@@ -1,5 +1,8 @@
 # @lyrashield/agent-plugin
 
+The source checkout prepares `0.1.31` as an unpublished release candidate. The latest public npm
+version remains `0.1.30` until the coordinated release is published.
+
 Portable **Agent Plugins 1.0.0** package for LyraShield AI. It bundles LyraShield's MCP
 connection and skills into one portable plugin. Conforming clients can load the canonical
 manifest; generated client shims cover the launch clients listed below.
@@ -44,7 +47,7 @@ consumes the generated stdio entry through its workspace or user MCP settings fi
 
 Package-conformance means the generated manifest, schema, transport, version and export
 boundary passed repository tests. It does not mean every client version has completed an
-authenticated runtime matrix. The wider registry contains 30 install entries resolving to 26
+authenticated runtime matrix. The wider registry contains 48 install entries resolving to 44
 preferred client surfaces; use `lyrashield init` or `lyrashield install <agent>` to receive the
 correct direct install or client-owned next step. GitHub Copilot remains `EXPERIMENTAL` until a
 retained client-runtime receipt exists.
@@ -74,7 +77,7 @@ workflows for selected targets and scan profiles so matching calls need no addit
 review; mutating calls from API-key callers receive a `connect_required` response pointing at OAuth
 connect and the legacy exact-input approval path remains only for nondelegated hosted credentials.
 
-Kiro uses the local `npx -y @lyrashield/mcp@0.2.11` stdio adapter. Run `lyrashield login --oauth`
+Kiro uses the local `npx -y @lyrashield/mcp@0.2.12` stdio adapter. Run `lyrashield login --oauth`
 first; the server then reads the user-only `~/.lyrashield/credentials.json` file. Environment
 variables remain an explicit CI/headless fallback, with `LYRASHIELD_API_KEY` taking precedence.
 Headless writes without an approval channel fail closed on the local stdio server; API-key writes
@@ -86,7 +89,7 @@ against the remote endpoint receive `connect_required` instead.
 
 ## Version and release receipts
 
-- Package: `@lyrashield/agent-plugin` 0.1.30; runtime: Node.js 24 or newer.
+- Candidate package: `@lyrashield/agent-plugin` 0.1.31 (unpublished); runtime: Node.js 24 or newer.
 - Standard schema: Agent Plugins 1.0.0.
 - `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
   OAuth-first manifests, mutation exclusions, artifact versions and the public export boundary.

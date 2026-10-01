@@ -52,16 +52,16 @@ If the user does not specify a mode, default to QUICK for pre-PR checks and STAN
 
 ## Example prompts and tool calls
 
-Use these as a guide for common user requests:
+Match the workflow to the user's explicit request:
 
-- "Check this diff before I commit" → Run `lyrashield_check_diff` on the diff. If it reports issues, or the user asks for a full recorded scan, run `lyrashield_run_pr_scan` with goal `CHECK_PR` and mode `QUICK`.
-- "Scan this repo" / "Review this project" → Resolve the current/default target, then run `lyrashield_scan_target` with goal `TEST_APP` and mode `STANDARD`.
-- "Run a launch review" → Run `lyrashield_scan_target` with goal `LAUNCH_REVIEW` and mode `STANDARD`.
-- "Repository pentest" / "Deep security scan" → For an authorized repository target, run `lyrashield_scan_target` with goal `FULL_PENTEST` and mode `DEEP`. For URL/API targets, explain that Deep is non-mutating behavioral review, not live exploit testing.
-- "Explain finding f-123" → Run `lyrashield_explain_finding` with the finding ID.
-- "How do I fix this?" → Run `lyrashield_generate_fix_plan` with the finding ID.
-- "I applied the fix" → Run `lyrashield_verify_fix` with the finding ID, poll the returned retest scan to a terminal state, and include its outcome and scan reference in the PR. Call it independently verified only when a separate independent-verification receipt exists.
-- "Summarize security for this PR" → Run `lyrashield_create_pr_security_recap`.
+- A question about connecting or access: use `lyrashield_list_workspaces` and `lyrashield_list_targets` only.
+- "Check this diff" / "Review my changes": use the read-only advisory `lyrashield_check_diff`; it is not a recorded scan.
+- "Run a Quick scan" / "Scan this project": use `lyrashield_get_scan_eligibility` as an advisory preflight, then `lyrashield_scan_target` or `lyrashield_run_pr_scan` only when requested.
+- "Explain this finding" / "How should I fix it?": use `lyrashield_explain_finding` and `lyrashield_generate_fix_plan` with the selected workspace and finding.
+- "I applied the fix": use `lyrashield_verify_fix` with `workspaceId` and `findingId`, poll the returned retest scan to a terminal state, and include its outcome and scan reference. Call it independently verified only when a separate independent-verification receipt exists.
+- "Is this target ready to ship?": use `lyrashield_get_launch_readiness` for the selected workspace and target, bound to the supplied commit or artifact digest when available.
+
+Read the connected client's current tool schema before building arguments. Tool availability can differ by client; never invent an operation or field, and never replace a missing tool with a guessed API call.
 
 ## Depth and runtime awareness
 

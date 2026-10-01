@@ -82,6 +82,10 @@ describe("conformance: renderConfig round-trips through the format parser", () =
               expect(entry).toHaveProperty("env")
             }
           }
+        } else if (agent.credential.kind === "shell-env" || agent.credential.kind === "env-names") {
+          // These clients authenticate outside the persisted MCP config or
+          // refer to environment variable names rather than literal values.
+          expect(entry).not.toHaveProperty("headers")
         } else {
           expect(entry).toHaveProperty("headers")
         }
@@ -126,7 +130,11 @@ describe("conformance: renderConfig round-trips through the format parser", () =
         }
 
         const { content } = renderConfig(agent, renderOpts(transport, "inline"))
-        expect(content).toContain(API_KEY)
+        if (agent.credential.kind === "shell-env" || agent.credential.kind === "env-names") {
+          expect(content).not.toContain(API_KEY)
+        } else {
+          expect(content).toContain(API_KEY)
+        }
         expect(content).toMatchSnapshot(`${caseName} — inline`)
       })
     }

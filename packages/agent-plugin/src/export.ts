@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { cp, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises"
+import { cp, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { execFile } from "node:child_process"
 import path from "node:path"
@@ -32,14 +32,64 @@ const MARKETPLACE_ARTIFACTS = [
   "zed-extension",
   "codebuff",
   "gemini-extension",
+  "antigravity",
+  "amp",
+  "opencode",
   "kiro-power",
   "cline",
   "kilo",
   "openclaw",
+  "aider",
+  "augment",
+  "continue",
+  "devin-cli",
+  "devin-desktop",
+  "factory",
+  "goose",
+  "hermes",
+  "jetbrains-ai-assistant",
+  "jetbrains-junie",
+  "lovable",
+  "mcp-registry",
+  "mimo-code",
+  "mistral-vibe",
+  "oh-my-pi",
+  "roo-code",
+  "pi",
+  "qoder",
+  "qwen",
+  "replit",
+  "v0",
   "reviewer-pack",
   "assets",
   "scripts",
   ".github",
+] as const
+
+const CLIENT_SKILL_ROOTS = [
+  "antigravity/skills",
+  "augment/plugins/lyrashield/skills",
+  "cline/skills",
+  "devin-cli/skills",
+  "devin-desktop/skills",
+  "factory/plugins/lyrashield/skills",
+  "gemini-extension/skills",
+  "goose/skills",
+  "hermes/skills",
+  "jetbrains-ai-assistant/skills",
+  "jetbrains-junie/skills",
+  "kilo/skills",
+  "kiro-power/skills",
+  "lovable/skills",
+  "mimo-code/skills",
+  "mistral-vibe/skills",
+  "oh-my-pi/skills",
+  "opencode/skills",
+  "qoder/plugins/lyrashield/skills",
+  "qwen/skills",
+  "replit/skills",
+  "roo-code/skills",
+  "v0/skills",
 ] as const
 
 const GENERATED_FILES = [
@@ -57,8 +107,12 @@ export interface MarketplaceExportOptions {
   publish?: boolean
 }
 
-/** Gemini excludes exactly the catalog's mutating tools; the list is never hardcoded here. */
-const GEMINI_EXCLUDED_TOOLS: readonly string[] = MUTATING_TOOL_NAMES
+/** Explicit scan tools remain available to invoked Gemini workflows; every other mutation stays excluded. */
+const GEMINI_EXPLICIT_SCAN_TOOLS = ["lyrashield_scan_target", "lyrashield_run_pr_scan"] as const
+const GEMINI_EXCLUDED_TOOLS: readonly string[] = MUTATING_TOOL_NAMES.filter(
+  (name) =>
+    !GEMINI_EXPLICIT_SCAN_TOOLS.includes(name as (typeof GEMINI_EXPLICIT_SCAN_TOOLS)[number])
+)
 
 function firstMatch(text: string, pattern: RegExp, label: string): string {
   const match = text.match(pattern)
@@ -192,8 +246,34 @@ export async function exportMarketplace(
     await cp(path.join(marketplaceDocs, relative), path.join(destination, relative), {
       recursive: true,
       force: true,
-      filter: (source) => !["target", "node_modules", ".git"].includes(path.basename(source)),
+      filter: (source) => {
+        const basename = path.basename(source)
+        if (["target", "node_modules", ".git"].includes(basename)) return false
+        // Client-bundle validators are source-tree maintainer tools. They refer
+        // to sibling canonical files and must not ship as broken install assets.
+        return !(basename === "validate.mjs" && path.basename(path.dirname(source)) !== "scripts")
+      },
     })
+  }
+
+  // Keep every native Agent Skills package byte-identical to the canonical
+  // procedures while preserving its client-specific manifests and MCP config.
+  for (const relative of CLIENT_SKILL_ROOTS) {
+    const clientSkills = path.join(destination, relative)
+    await rm(clientSkills, { recursive: true, force: true })
+    await cp(path.join(pluginRoot, "skills"), clientSkills, { recursive: true })
+  }
+
+  // Amp discovers skills directly from its package directory.
+  const workflowSkills = (await readdir(path.join(pluginRoot, "skills"))).filter(
+    (name) => name !== "lyrashield"
+  )
+  const ampSkills = path.join(destination, "amp")
+  for (const skill of workflowSkills) {
+    await cp(
+      path.join(pluginRoot, "skills", skill, "SKILL.md"),
+      path.join(ampSkills, skill, "SKILL.md")
+    )
   }
 
   const [pluginContent, generatorContent] = await Promise.all([
@@ -228,7 +308,9 @@ export async function exportMarketplace(
         files,
         generatedFiles: GENERATED_FILES,
         artifactVersions,
-        mutatingTools: [...GEMINI_EXCLUDED_TOOLS],
+        mutatingTools: [...MUTATING_TOOL_NAMES],
+        geminiAllowedMutatingTools: [...GEMINI_EXPLICIT_SCAN_TOOLS],
+        geminiExcludedTools: [...GEMINI_EXCLUDED_TOOLS],
         forbidden: [
           "apps/web",
           "apps/worker",

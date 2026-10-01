@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "lyrashield": {
+      "type": "remote",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "oauth": {
+        "scope": "lyrashield.read"
+      }
+    }
+  }
+}

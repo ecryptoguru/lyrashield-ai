@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { env } from "@lyrashield/config"
-import { listAgents } from "@lyrashield/agent-registry"
+import { getAgent } from "@lyrashield/agent-registry"
 import { ArrowLeft, Puzzle } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
@@ -32,7 +32,7 @@ export default async function AgentWizardPage({
   if (!session) return null
 
   const workspaceId = await getCachedWorkspaceId(session.userId)
-  const agent = listAgents().find((a) => a.id === agentId)
+  const agent = getAgent(agentId)
   if (!agent) notFound()
 
   const appOrigin = ((env.NEXT_PUBLIC_APP_URL as string | undefined) ?? "").replace(/\/+$/, "")
@@ -64,9 +64,9 @@ export default async function AgentWizardPage({
       <div className="space-y-2">
         <h1 className="text-2xl font-bold tracking-tight">Set up {data.displayName}</h1>
         <p className="text-muted-foreground max-w-3xl text-sm leading-6">
-          Follow the steps to connect {data.displayName} to LyraShield — install the integration,
-          authenticate, sync rules and verify. Everything uses the real CLI commands, so you can
-          paste them into your terminal.
+          Follow the steps to install and authenticate the supported {data.displayName} integration,
+          then verify client discovery. A successful setup command does not by itself confirm that
+          the client loaded the integration.
         </p>
       </div>
 

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
+import { listPreferredAgents } from "@lyrashield/agent-registry"
 import { agentOnboarding, renderAgentOnboardingMarkdown } from "../lib/agent-onboarding"
 
 describe("agent onboarding contract", () => {
@@ -10,10 +11,19 @@ describe("agent onboarding contract", () => {
     ])
     expect(agentOnboarding.safety.join(" ")).toContain("Read-only")
     expect(agentOnboarding.safety.join(" ")).toContain("browser-confirmed connection grant")
-    expect(agentOnboarding.clients).toHaveLength(26)
+    expect(agentOnboarding.clients).toHaveLength(listPreferredAgents().length)
+    expect(agentOnboarding.clients.map((client) => client.href)).toContain(
+      "/docs/integrations/claude-web"
+    )
+    expect(agentOnboarding.clients.map((client) => client.href)).toContain(
+      "/docs/integrations/replit-agent"
+    )
+    expect(agentOnboarding.clientGroups.map((group) => group.strategy)).toEqual(
+      expect.arrayContaining(["agent-plugin", "config-file", "guided-manual", "vendor-cli"])
+    )
     expect(
       agentOnboarding.clients.filter((client) => client.integrationKind === "standalone-cli")
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(
       agentOnboarding.clients.every(
         (client) =>

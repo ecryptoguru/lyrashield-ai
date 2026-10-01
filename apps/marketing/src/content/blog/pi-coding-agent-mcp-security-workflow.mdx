@@ -1,60 +1,77 @@
 ---
 title: LyraShield alongside the Pi coding agent
-description: Run LyraShield beside Pi Coding Agent with target-aware CLI scans and a diff-aware CI gate without claiming native MCP support.
+description: Connect Pi Coding Agent to LyraShield through built-in MCP and hosted OAuth, with skills and CLI/CI alternatives.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-22
+updatedDate: 2026-10-01
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-20
 faq:
   - q: "Does Pi Coding Agent include native MCP support?"
-    a: "No. Pi core deliberately excludes MCP. Community extensions may add it, but their config and behavior must be reviewed as separate third-party integrations."
+    a: "Yes. Pi includes built-in MCP over stdio and Streamable HTTP, with OAuth for hosted servers. Pi documents a user-level server file, a trusted project file, and built-in OAuth sign-in."
   - q: "How do I run LyraShield after Pi edits?"
-    a: "Authenticate with npx lyrashield login, verify with npx lyrashield doctor and run npx lyrashield scan from the project root. This proves the standalone CLI path."
+    a: "Use pi mcp add lyrashield --url https://app.lyrashieldai.com/api/mcp, then pi mcp login lyrashield. Confirm tools with pi mcp list and make a read-only call before any scan. CLI and CI remain optional alternatives."
   - q: "Does this support PR gating?"
     a: "Yes. Add the LyraShield GitHub Action, upload SARIF and require the security job in branch protection. The runner-local action remains distinct from a recorded hosted assessment."
   - q: "Will LyraShield create Pi MCP configuration?"
-    a: "No. lyrashield init treats Pi as guided standalone and does not write .mcp.json or .pi/mcp.json files owned by third-party adapters."
+    a: "Pi's MCP file is native. Review npx lyrashield init --agent pi --global --dry-run before installing a managed entry, or use Pi's own pi mcp add command."
 ---
 
-Pi Coding Agent is fast and deliberately small. Its core does not include native MCP support, so the correct LyraShield workflow today uses the standalone CLI after Pi changes and the GitHub Action at pull-request time. Community extensions can add MCP, but they create a separate trust and compatibility boundary. Do not treat an adapter's `.mcp.json`, `.pi/mcp.json`, discovery rules or environment syntax as Pi's official contract.
+Pi Coding Agent is fast and deliberately small, with built-in MCP for stdio and Streamable HTTP, OAuth sign-in, and Agent Skills support. The recommended LyraShield connection uses hosted OAuth through Pi's user-level server configuration. A trusted project can also define a server; a project entry replaces a same-named user entry. Some extensions can replace Pi's built-in MCP implementation, so check which configuration source is active if an extension changes the client.
 
-This guide preserves a clear evidence boundary. A successful CLI call proves LyraShield authentication and the selected scan. It does not prove that Pi discovered tools in its own interface. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why generated code still needs independent checks and the [Pi integration guide](/docs/integrations/picode) records the current supported path.
+This guide preserves a clear evidence boundary. Pi's MCP status command shows configured connections and discovered tools; it does not prove that a LyraShield-authenticated tool call or scan completed. Retain the tool result and scan receipt for that claim. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why generated code still needs independent checks and the [Pi integration guide](/docs/integrations/picode) records the current setup path.
 
 The companion [Pi Coding Agent app security checklist](/blog/pi-coding-agent-app-security-checklist) covers package, extension, skill, credential and tool review. Use both records when a release needs source-change evidence and a review of the agent environment that produced it.
 
-Repeat the local scan after Pi, an extension or a dependency changes the source. If the repository revision changes between the scan and release, treat the earlier result as historical and assess the new revision. Keep incomplete coverage visible and never let a successful doctor command stand in for a completed assessment.
+Reassess after Pi, an extension or a dependency changes the source. Request a scan only when its target and profile are authorized. If the repository revision changes between the scan and release, treat the earlier result as historical and assess the new revision. Keep incomplete coverage visible and never let a successful doctor command stand in for a completed assessment.
 
 ## 1. Prepare the project and authenticate
 
-Use Node.js 24 or newer, Git, Pi installed from its official instructions and an authorized LyraShield workspace. From the repository root, run `npx lyrashield login` so credentials are stored in `~/.lyrashield/credentials.json`. Then run `npx lyrashield doctor` to confirm the API is reachable and the credentials resolve.
+Use Pi installed from its official instructions and an authorized LyraShield workspace. For hosted access, add the URL with Pi's built-in MCP command and sign in:
 
-Do not put a LyraShield token in Pi prompts, package source, skill files, shell transcripts committed to the repository or a third-party extension config. If a key may have entered any of those surfaces, rotate it. The doctor result confirms CLI connectivity only; it does not claim a native Pi tool or community extension is installed.
+```sh
+pi mcp add lyrashield --url https://app.lyrashieldai.com/api/mcp
+pi mcp list
+pi mcp login lyrashield
+```
+
+Pi stores its OAuth tokens in its own user credential store. For a personal setup, Pi writes the server to the user-level configuration. Use the project-level option only for a deliberately shared entry, because Pi reads project configuration only after trust is granted. Alternatively, the LyraShield config installer can prepare the same endpoint:
+
+```sh
+npx lyrashield init --agent pi --global --dry-run
+npx lyrashield init --agent pi --global
+```
+
+Review the dry-run output before writing. For a local stdio or CI workflow, authenticate that separate surface with `npx lyrashield login --oauth` and use `npx lyrashield doctor` to check local credentials.
+
+Do not put a LyraShield token in Pi prompts, package source, skill files, shell transcripts committed to the repository or a project-shared MCP configuration. Pi's hosted OAuth flow requires no static bearer token in that file. If a key may have entered any of those surfaces, rotate it. Check Pi's server status and make a read-only LyraShield call before relying on the connection; setup alone is not an authenticated runtime receipt.
 
 Record the Pi version, enabled packages and extensions, active skills, project revision, LyraShield CLI version and the target you intend to scan. These details make later results reproducible and reveal when an extension upgrade changed the agent's authority.
 
-## 2. Run the standalone LyraShield check after Pi edits
+## 2. Request a scan only for the authorized change
 
-Let Pi make the authorized code change, inspect the diff and run `npx lyrashield scan` from the same project root before committing. Request the exact target and scope that the current credentials may access. Review the returned scan identity and every finding's recorded evidence state, location and limitation.
+Let Pi make the authorized code change and inspect the diff. When a scan is explicitly requested, use the connected LyraShield MCP tool or the CLI against the authorized target and scope; do not let a routine code review trigger paid scan work. Review the returned scan identity and every finding's recorded evidence state, location and limitation.
 
 A finding marked detected remains a candidate for triage. An inconclusive result remains uncertain. Independent verification requires a separate accepted receipt and a fix requires a fresh retest. Pi can help edit code in response to reviewed guidance, but its confidence does not change LyraShield's evidence state.
 
 Use a short project instruction such as:
 
 ```markdown
-After changing authentication, input handling, secrets, dependencies or deployment code, stop for a LyraShield CLI scan. Report the scan identity and preserve each finding's recorded evidence state. Do not call a detected finding verified and do not claim a fix until a fresh retest completes.
+After changing authentication, input handling, secrets, dependencies or deployment code, report the diff and wait for an explicitly requested, authorized LyraShield scan. Preserve each finding's recorded evidence state. Do not call a detected finding verified and do not claim a fix until a fresh retest completes.
 ```
 
-This instruction helps the human remember the check. The CLI and CI commands provide the actual evidence.
+This instruction helps the human remember the check. An authenticated MCP tool call or CLI scan can create the selected recorded evidence; the runner-local CI gate remains a separate diff check.
 
-## 3. Treat community MCP extensions as separate integrations
+## 3. Use Pi's built-in MCP client
 
-Pi's official extension model lets third-party packages register new behavior. If your team wants inline MCP, choose one extension deliberately and review its source, release history, config paths, server lifecycle, environment inheritance, approval UI and tool-name collision behavior. Pin the exact version and test it in an isolated profile before granting access to a real workspace.
+Pi already includes an MCP client. Its user-level server configuration is `~/.pi/agent/mcp.json`; project-level `.pi/mcp.json` is loaded only after the project is trusted, and an entry with the same server name replaces the user-level entry. Use Pi's OAuth sign-in rather than adding a static credential to a shared file.
 
-Do not rely on a blog post that assigns Pi a standard MCP file. Pi core has no such file. An extension may read `.mcp.json`, `.pi/mcp.json`, another agent's config or its own settings, but that behavior belongs to the named extension and version. Acceptance evidence must identify both. A terminal-only LyraShield scan cannot be relabeled as inline Pi acceptance.
+Some installed extensions can replace Pi's built-in MCP support. If one is active, review its source and version, then verify which server file and sign-in flow Pi actually uses. Do not credit an extension path to Pi core. A terminal-only LyraShield scan cannot be relabeled as a Pi MCP runtime receipt.
 
-`npx lyrashield init` therefore returns guided standalone instructions for Pi rather than writing an adapter-specific file. This fail-honest behavior avoids silently creating ignored configuration and avoids exposing credentials to an extension the user did not choose.
+The LyraShield installer can prepare the Pi server entry. Preview the user-level change with `npx lyrashield init --agent pi --global --dry-run` before applying it. Pi's own `pi mcp add` command is also supported. Use `pi mcp list` to inspect the connection and tool discovery; follow with a read-only tool call before relying on the integration.
+
+Pi also discovers Agent Skills from `~/.agents/skills/` and `.agents/skills/`. Review a skill's `SKILL.md` and any scripts before installing it or trusting a project that supplies it. LyraShield's dedicated Pi package/catalog route remains in preparation, so this documents Pi's discovery contract rather than claiming a public Pi listing.
 
 ## 4. Review the result and complete the fix loop
 
@@ -101,7 +118,7 @@ Add reviewed project guidance through the Pi mechanism your team already uses. D
 ```markdown
 # Pi security rules
 
-- Before finishing a feature, stop so a developer can run `npx lyrashield scan` on the changed scope.
+- Before finishing a feature, report the diff and wait for an explicitly requested, authorized LyraShield scan through Pi MCP or the CLI.
 - Surface findings with their evidence states, CWE, file evidence and limitations.
 - For high severity findings, have a developer review remediation guidance, apply the change, record the proposal through an approved surface and queue a retest.
 - On PRs, ensure lyrashield security gate passed and SARIF uploaded.
@@ -111,12 +128,12 @@ Add reviewed project guidance through the Pi mechanism your team already uses. D
 
 This guidance encodes Target to Scan to Evidence State to Fix Proposal to Retest to Report as daily behavior. Store it through your chosen project guidance mechanism so new Pi sessions receive consistent guardrails. Teams that commit this file see identical verification across fresh clones, which reduces drift between what the local agent checks and what CI enforces later in the pull request.
 
-| Stage            | Pi agent behavior                          | LyraShield contribution                                                | Proof artifact               |
-| ---------------- | ------------------------------------------ | ---------------------------------------------------------------------- | ---------------------------- |
-| Local generation | Scaffolds API and UI from terminal prompts | N/A                                                                    | Prompt plus diff             |
-| Local check      | Pauses for the standalone CLI              | Findings with evidence states plus SCA plus secrets with file evidence | Scan and finding identifiers |
-| PR gate          | Pushes diff to GitHub                      | Diff aware scan plus SARIF plus fail on high                           | GitHub check and annotations |
-| Fix loop         | Developer applies a reviewed remediation   | Recorded proposal plus server-owned retest                             | Retest outcome and scan ref  |
+| Stage            | Pi agent behavior                                         | LyraShield contribution                                                | Proof artifact               |
+| ---------------- | --------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------- |
+| Local generation | Scaffolds API and UI from terminal prompts                | N/A                                                                    | Prompt plus diff             |
+| Local check      | Uses configured Pi MCP or waits for an explicit CLI check | Findings with evidence states plus SCA plus secrets with file evidence | Scan and finding identifiers |
+| PR gate          | Pushes diff to GitHub                                     | Diff aware scan plus SARIF plus fail on high                           | GitHub check and annotations |
+| Fix loop         | Developer applies a reviewed remediation                  | Recorded proposal plus server-owned retest                             | Retest outcome and scan ref  |
 
 ## Why pair Pi with LyraShield
 

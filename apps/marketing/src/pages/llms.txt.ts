@@ -239,7 +239,7 @@ export const GET: APIRoute = async (context) => {
     ...publicLinks.map(({ label, url }) => markdownLink(label, url)),
     "",
     "## Agent-native setup",
-    "Use the client-specific guide. Local stdio connections can use `npx lyrashield login --oauth` and `npx lyrashield init`; supported hosted connections authenticate in the client. Aider and Pi use standalone CLI or CI checks. Hosted writes require a browser-confirmed grant and execution-time checks; local stdio clients use local approval.",
+    "Use the client-specific guide. Local stdio connections can use `npx lyrashield login --oauth` and `npx lyrashield init`; supported hosted connections authenticate in the client. Pi supports built-in MCP, hosted OAuth, and Agent Skills; Aider uses standalone CLI or CI checks. Pi setup and authenticated runtime acceptance are separate evidence. Hosted writes require a browser-confirmed grant and execution-time checks; local stdio clients use local approval.",
     `Human-facing setup: ${markdownLink("Coding-agent security", `${origin}/agents`)}. Machine-readable setup contract: ${markdownLink("agents.md", `${origin}/agents.md`)}. Full guide: ${markdownLink("Agent Plugin installation", `${origin}/docs/integrations/agent-plugins`)}.`,
     "",
     "## How to cite this site",
@@ -255,7 +255,7 @@ export const GET: APIRoute = async (context) => {
     "Local stdio mutations use terminal approval. Hosted mutations run only within a browser-confirmed delegated grant and pass execution-time scope, role, target, budget, expiry and idempotency checks; nondelegated writes receive connect_required. Nothing auto-merges.",
     `The passive Lite Check and these ${tools.length} free browser-local tools need no account and run entirely client-side: ${toolList}.`,
     `The full release-assurance platform is in open beta with open registration: ${markdownLink("Create a free LyraShield AI account", "https://app.lyrashieldai.com/sign-up")}. Access is not gated behind a waitlist; the email form on the site is an optional product-updates subscription.`,
-    "LyraShield offers MCP connections for documented coding clients and standalone CLI/CI workflows for Aider and Pi. Setup and runtime evidence are client-specific; the CLI is published on npm.",
+    "LyraShield offers MCP connections for documented coding clients, including Pi's built-in MCP client, and standalone CLI/CI workflows for Aider. Setup and authenticated runtime evidence are client-specific; the CLI is published on npm.",
     `LyraShield AI's ${markdownLink("LyraShield AI source code on GitHub", "https://github.com/ecryptoguru/lyrashield-ai")} is under the MIT License; the LyraShield AI name and logos are not included in that license. This covers the published source, not separately hosted backend services.`,
   ]
 

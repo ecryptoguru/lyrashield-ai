@@ -12,11 +12,11 @@ const buildDate = buildDateFor("src/pages/agents.astro", "src/lib/agent-onboardi
 // Explicit freshness floor: the last content change to this page. The
 // git-derived buildDate wins when it resolves; the floor keeps dateModified
 // honest when the page ships without .git.
-const updatedDate = "2026-09-20"
+const updatedDate = "2026-10-01"
 const dateModified = buildDate ?? `${updatedDate}T00:00:00.000Z`
 
 const answerFirst =
-  `LyraShield documents ${agentOnboarding.clients.length} coding-agent workflows. Most connect through MCP; Aider and Pi use the standalone CLI or CI path. Availability and setup differ by client and the integration labels below show the evidence behind each claim. Read-only tools can retrieve recorded findings; hosted writes run only within a browser-confirmed connection grant and are checked again at execution.`
+  `LyraShield documents ${agentOnboarding.clients.length} coding-agent workflows. Most connect through MCP; Aider uses the standalone CLI or CI path, while Pi has built-in MCP and OAuth support. Availability and setup differ by client and the integration labels below show the evidence behind each claim; LyraShield runtime acceptance remains client-specific. Read-only tools can retrieve recorded findings; hosted writes run only within a browser-confirmed connection grant and are checked again at execution.`
 
 const howToSteps = [
   {
@@ -168,7 +168,7 @@ const jsonLd = [
         ></pre>
       </div>
       <p class="mt-4 max-w-2xl text-sm text-text-muted" data-reveal>
-        These commands prepare local stdio integrations. Hosted OAuth starts inside a supported client; standalone Aider and Pi use CLI or CI checks. Follow the client guide for activation and verification.
+        These commands prepare local stdio integrations. Hosted OAuth starts inside supported clients, including Pi; Aider uses the standalone CLI or CI path. Follow each client guide for activation and verification.
       </p>
       <ol class="mt-8 space-y-4 border-t border-border pt-8" data-reveal-group>
         <li class="flex gap-3" data-reveal>

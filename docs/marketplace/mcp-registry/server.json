@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ecryptoguru/lyrashield-ai",
+  "title": "LyraShield AI",
+  "description": "MCP tools for authorized LyraShield targets, bounded scans, evidence, and retest status.",
+  "websiteUrl": "https://lyrashieldai.com",
+  "repository": {
+    "url": "https://github.com/ecryptoguru/lyrashield-ai",
+    "source": "github"
+  },
+  "version": "0.2.12",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@lyrashield/mcp",
+      "version": "0.2.12",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://app.lyrashieldai.com/api/mcp"
+    }
+  ]
+}

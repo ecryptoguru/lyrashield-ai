@@ -4,7 +4,7 @@ const apiKey = process.env.LYRASHIELD_API_KEY?.trim()
 
 const definition: AgentDefinition = {
   id: "lyrashield-review",
-  version: "0.1.30",
+  version: "0.1.31",
   publisher: "lyrashield",
   displayName: "LyraShield Review",
   model: "anthropic/claude-sonnet-4.5",
@@ -13,7 +13,7 @@ const definition: AgentDefinition = {
   mcpServers: {
     lyrashield: {
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.11"],
+      args: ["-y", "@lyrashield/mcp@0.2.12"],
       env: apiKey ? { LYRASHIELD_API_KEY: apiKey } : {},
     },
   },

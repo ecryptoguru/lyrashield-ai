@@ -1,4 +1,6 @@
-# LyraShield CLI 0.2.13
+# LyraShield CLI 0.2.14 release candidate (unpublished)
+
+The latest public npm version remains `0.2.13` until the coordinated release is published.
 
 The `lyrashield` command-line interface installs, configures, and drives LyraShield scans from a terminal or CI pipeline.
 

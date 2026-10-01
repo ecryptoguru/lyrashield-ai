@@ -34,7 +34,7 @@ const PREFERRED_PLUGIN_ID_BY_AGENT_ID: Readonly<Record<string, string>> = {
 }
 
 export function getAgent(id: string): AgentEntry | undefined {
-  return AGENTS.find((a) => a.id === id)
+  return AGENTS.find((a) => a.id === id || a.aliases?.includes(id))
 }
 
 /** Resolve the one recommended install path without hiding an explicit legacy id. */

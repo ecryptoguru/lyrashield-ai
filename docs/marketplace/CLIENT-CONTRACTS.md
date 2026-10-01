@@ -1,6 +1,8 @@
 # Client configuration receipts
 
-Checked 2026-09-28. These are documentation and local contract receipts, not authenticated client acceptance.
+Updated 2026-10-01. Historical package readbacks remain dated at the time they were collected;
+current local native-client receipts are recorded below. They do not establish authenticated access
+or public marketplace acceptance.
 
 - On 2026-09-28, npm published `@lyrashield/agent-plugin@0.1.30` and `lyrashield@0.2.13` from reviewed tarballs with SHA-256 `7eaa7335bf7c963a6af0d465b5d3a532cded9ac41b8767efd95e66a857fb98b1` and `2fbf951abfd59e29ba6dbbe5488c8e55a4679568334e41203ee137b2a5fe779a`. Registry SHA-1 checksums `c7c3ab6f2411c9737b1855bb558079dd971a4de0` and `6b19ef22cf1bb5e7903a6544b799ffd1580dc660` match those exact tarballs. A clean npm install imported the plugin and ran CLI `--version`/`--help` with lifecycle scripts disabled. This does not establish authenticated client activation or a marketplace release.
 - On 2026-09-27, `npm view @lyrashield/mcp version dist-tags --json` reported `0.2.10` as latest; `npm view @lyrashield/mcp@0.2.10 dist.tarball dist.integrity --json` returned the [registry metadata](https://registry.npmjs.org/%40lyrashield%2fmcp/0.2.10). `npm pack --ignore-scripts` matched its SHA-512 integrity (`sha512-JbxgknLw96e+i1XtHmcrokLt3fidioZH9W9oElicLObLpelhwcXDPSgrWYCX6+K7NT1uyD1w6WPXR2ETegcppw==`) and included the stdio entrypoint. The [published package README](https://www.npmjs.com/package/@lyrashield/mcp/v/0.2.10?activeTab=readme) lists 21 tools; a stdio probe using a synthetic credential and local-only API URL returned MCP initialization and the same 21 `tools/list` names: `lyrashield_list_workspaces`, `lyrashield_list_targets`, `lyrashield_get_scan_status`, `lyrashield_get_scan_quality`, `lyrashield_get_scan_eligibility`, `lyrashield_scan_target`, `lyrashield_cancel_scan`, `lyrashield_get_findings`, `lyrashield_get_launch_readiness`, `lyrashield_create_report`, `lyrashield_check_diff`, `lyrashield_run_pr_scan`, `lyrashield_explain_finding`, `lyrashield_generate_fix_plan`, `lyrashield_record_fix_proposal`, `lyrashield_verify_fix`, `lyrashield_create_pr_security_recap`, `lyrashield_list_scan_attachments`, `lyrashield_upload_scan_attachment`, `lyrashield_delete_scan_attachment`, and `lyrashield_request_fix_pr`. `node scripts/verify-published-mcp.mjs` repeats identity, integrity, entrypoint, initialization and tool-list checks with npm lifecycle scripts disabled. Plugin version `0.1.30` remained unpublished at that time; npm returned `E404` for that version and remote tag `v0.1.30` was absent. Deliberate release updates must update generator, registry, templates, validator and snapshots together.
@@ -12,7 +14,25 @@ Checked 2026-09-28. These are documentation and local contract receipts, not aut
 - [Cursor plugin reference](https://prod.cursor.com/docs/reference/plugins) documents HTTP MCP URLs. Its [first-party install payload](https://cursor.com/install-mcp?config=eyJ0eXBlIjoiaHR0cCIsInVybCI6Imh0dHBzOi8vbWNwLmF0bGFzc2lhbi5jb20vdjEvbWNwIn0%3D&name=atlassian) uses `type: http`.
 - [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins) documents a direct server map or a wrapped `mcp_servers` map for the bundled MCP manifest. The Codex shim points to `.mcp.codex.json`, which uses the direct-map form and leaves authentication to hosted OAuth.
 
-Local checks cover generated configuration, exact package/version parity, secret exclusion, authorization wording and unset/empty/explicit extension credentials with inherited URL overrides. Still required: real installs of every claimed client reaching `lyrashield_list_workspaces` and forced-expiry OAuth sessions. These local receipts do not establish hosted or production acceptance.
+## Local native-client receipts — 2026-10-01
+
+These checks used the fresh generated, unpublished Agent Plugin `0.1.31` export from source commit
+`b92dabdb2f96ceef33e0ddca8eeacf7676590552`; the worktree was dirty, so this was a local candidate,
+not a release export. The root validator passed for 55 generated artifacts and 306 file records.
+Runtime identity is bound to the adapter-folder SHA-256 calculated from the export manifest's sorted
+file records (`JSON.stringify(files)` for paths with the listed prefix):
+
+| Client    | Version / platform              | Adapter bundle SHA-256                                                               | Observed outcome                                                                                                                                                                                                                                      | Limitation                                                                                          |
+| --------- | ------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Codex CLI | `0.159.2`, macOS `27.0.1` arm64 | `d351ab6f04548fe638108cbfabc3142e865b9b66e6cd879705b6961b45fa43d1` (`codex-plugin/`) | Added the local marketplace, listed `lyrashield@lyrashield-ai` at `0.1.31`, installed it in a disposable `CODEX_HOME`, and confirmed the installed plugin was enabled with all six bundled skill files present, including the five focused workflows. | No authenticated OAuth connection or workspace read call; the tested plugin version is unpublished. |
+| OpenCode  | `1.18.30`, macOS `27.0.1` arm64 | `2291654a0531da842829881ff5492376bed44f57b4a37b933d569b0c55b5d84a` (`opencode/`)     | In an isolated project, `debug config` resolved the hosted remote MCP entry and read scope, `debug skill` discovered all five focused workflows from `.opencode/skills`, and `mcp list` showed the endpoint as `needs authentication`.                | No OAuth login or workspace read call; the tested adapter version is unpublished.                   |
+
+These receipts confirm local package installation/configuration and component discovery for these exact
+surfaces. They do not promote any registry tier to `NATIVE` or `VERIFIED`, and do not establish
+authenticated runtime behavior, expiry/reconnect behavior, paid workflow behavior, or acceptance in
+other products, IDEs, cloud surfaces, or marketplace listings.
+
+Local checks cover generated configuration, exact package/version parity, secret exclusion, authorization wording and unset/empty/explicit extension credentials with inherited URL overrides. Still required: authenticated `lyrashield_list_workspaces` calls for Codex and OpenCode, runtime receipts for other claimed client surfaces, and forced-expiry OAuth sessions. These local receipts do not establish hosted or production acceptance.
 
 ## Distribution capability matrix
 

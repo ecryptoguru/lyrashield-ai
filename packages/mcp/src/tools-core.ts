@@ -1,6 +1,7 @@
 import { OperationStatusSchema } from "@lyrashield/sdk"
 import {
   apiCall,
+  IDEMPOTENCY_KEY_PROPERTY,
   makeErrorResult,
   makeToolResult,
   resolveTargetId,
@@ -20,6 +21,7 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: { type: "string", description: "Target ID to scan (or use repo/auto instead)" },
         repo: {
@@ -77,6 +79,7 @@ export function createCancelScanTool(context: ToolHandlerContext): McpTool {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         scanId: { type: "string", description: "Scan ID to cancel" },
       },
@@ -194,6 +197,7 @@ export function createCreateReportTool(context: ToolHandlerContext): McpTool {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         scanId: { type: "string", description: "Optional scan ID to report on" },
         targetId: {

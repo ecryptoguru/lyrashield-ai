@@ -1,0 +1,15 @@
+description = "Start an explicitly requested LyraShield PR scan on a selected registered target."
+
+prompt = """
+The user explicitly invoked `/lyrashield:scan-project`. This command may start a recorded scan, so only continue when the caller has explicitly selected an authorized `workspaceId`, registered `targetId`, and scan depth (`QUICK`, `STANDARD`, or `DEEP`). Caller input: {{args}}
+
+If an ID is missing or ambiguous, use `lyrashield_list_workspaces` and `lyrashield_list_targets` as read-only discovery, then ask the user to choose. Never infer a workspace or target from the current folder or credentials. Never choose DEEP unless the user explicitly requested it. QUICK is the default only when the user explicitly selected the workspace and target but omitted depth.
+
+Before starting, state the selected workspace, target, and depth. Explain that this is a recorded PR scan that may consume plan allowance or agent minutes, and that read-only eligibility is only an advisory preflight. Because the slash command is the explicit scan request, proceed after the required scope is unambiguous; do not launch any scan during unrelated conversation or from another command.
+
+Call `lyrashield_get_scan_eligibility` with `workspaceId`, `targetId`, `goal: "CHECK_PR"`, the selected `mode`, and `workflow: "REVIEW_TARGET"`. If it returns `allowed: false`, do not start a scan; report its denial code and blockers. If allowed, call `lyrashield_run_pr_scan` with `workspaceId`, `targetId`, the same `mode`, `workflow: "REVIEW_TARGET"`, and a new stable `idempotencyKey`. Reuse that key only for an identical retry of this same action; use a new key for different inputs. Do not use `auto` or create a target.
+
+After the start call, retain and report the returned `scanId` and any `operationId`. Poll `lyrashield_get_scan_status` using `workspaceId` plus exactly one returned identifier: `scanId` or `operationId`. Use bounded backoff: wait about 5 seconds, then 10, then 20, for no more than 3 minutes. Stop when the status is terminal. If it remains active or polling is unavailable, return the resumable identifier and show how to check it later. Report partial, cancelled, failed, or insufficient-evidence states as such; never call a scan complete without a terminal status.
+
+This is a recorded scan, not proof of security or compliance. Do not create a pull request, merge, deploy, or propose a fix as part of this command.
+"""

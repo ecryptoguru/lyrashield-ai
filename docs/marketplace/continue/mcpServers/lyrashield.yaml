@@ -1,0 +1,10 @@
+name: LyraShield AI
+version: 0.1.0
+schema: v1
+mcpServers:
+  - name: lyrashield
+    type: stdio
+    command: npx
+    args:
+      - -y
+      - "@lyrashield/mcp@0.2.12"

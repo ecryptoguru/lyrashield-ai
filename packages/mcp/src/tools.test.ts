@@ -54,6 +54,18 @@ describe("MCP safety metadata", () => {
       expect(typeof MCP_TOOL_ANNOTATIONS[tool.name]?.openWorldHint).toBe("boolean")
     }
   })
+
+  it("publishes caller-stable retry keys on every mutating tool", async () => {
+    const { createAllTools } = await import("./tools")
+    for (const tool of createAllTools(context).filter((candidate) => candidate.mutating)) {
+      expect(tool.inputSchema.properties.idempotencyKey, tool.name).toMatchObject({
+        type: "string",
+        minLength: 1,
+        maxLength: 128,
+      })
+      expect(tool.inputSchema.required ?? [], tool.name).not.toContain("idempotencyKey")
+    }
+  })
 })
 
 describe("createScanTargetTool", () => {

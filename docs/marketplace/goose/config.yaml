@@ -1,0 +1,7 @@
+extensions:
+  lyrashield:
+    name: LyraShield
+    type: streamable_http
+    enabled: true
+    uri: https://app.lyrashieldai.com/api/mcp
+    timeout: 300

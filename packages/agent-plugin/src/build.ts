@@ -47,21 +47,98 @@ If the user does not specify a mode, default to QUICK for pre-PR checks and STAN
 
 ## Example prompts and tool calls
 
-Use these as a guide for common user requests:
+Match the workflow to the user's explicit request:
 
-- "Check this diff before I commit" → Run \`lyrashield_check_diff\` on the diff. If it reports issues, or the user asks for a full recorded scan, run \`lyrashield_run_pr_scan\` with goal \`CHECK_PR\` and mode \`QUICK\`.
-- "Scan this repo" / "Review this project" → Resolve the current/default target, then run \`lyrashield_scan_target\` with goal \`TEST_APP\` and mode \`STANDARD\`.
-- "Run a launch review" → Run \`lyrashield_scan_target\` with goal \`LAUNCH_REVIEW\` and mode \`STANDARD\`.
-- "Repository pentest" / "Deep security scan" → For an authorized repository target, run \`lyrashield_scan_target\` with goal \`FULL_PENTEST\` and mode \`DEEP\`. For URL/API targets, explain that Deep is non-mutating behavioral review, not live exploit testing.
-- "Explain finding f-123" → Run \`lyrashield_explain_finding\` with the finding ID.
-- "How do I fix this?" → Run \`lyrashield_generate_fix_plan\` with the finding ID.
-- "I applied the fix" → Run \`lyrashield_verify_fix\` with the finding ID, poll the returned retest scan to a terminal state, and include its outcome and scan reference in the PR. Call it independently verified only when a separate independent-verification receipt exists.
-- "Summarize security for this PR" → Run \`lyrashield_create_pr_security_recap\`.
+- A question about connecting or access: use \`lyrashield_list_workspaces\` and \`lyrashield_list_targets\` only.
+- "Check this diff" / "Review my changes": use the read-only advisory \`lyrashield_check_diff\`; it is not a recorded scan.
+- "Run a Quick scan" / "Scan this project": use \`lyrashield_get_scan_eligibility\` as an advisory preflight, then \`lyrashield_scan_target\` or \`lyrashield_run_pr_scan\` only when requested.
+- "Explain this finding" / "How should I fix it?": use \`lyrashield_explain_finding\` and \`lyrashield_generate_fix_plan\` with the selected workspace and finding.
+- "I applied the fix": use \`lyrashield_verify_fix\` with \`workspaceId\` and \`findingId\`, poll the returned retest scan to a terminal state, and include its outcome and scan reference. Call it independently verified only when a separate independent-verification receipt exists.
+- "Is this target ready to ship?": use \`lyrashield_get_launch_readiness\` for the selected workspace and target, bound to the supplied commit or artifact digest when available.
+
+Read the connected client's current tool schema before building arguments. Tool availability can differ by client; never invent an operation or field, and never replace a missing tool with a guessed API call.
 
 ## Depth and runtime awareness
 
 Deeper modes consume more compute and take longer. Choose the least intensive mode that answers the user's question. Do not run DEEP scans for quick checks, and avoid re-running the same scan repeatedly. When in doubt, ask the user which depth they want.
 `
+
+const WORKFLOW_SKILLS = [
+  {
+    name: "get-started",
+    description: "Connect LyraShield, choose a workspace, and inspect authorized targets.",
+    instructions: `# Get started
+
+Use this workflow when the user asks to connect LyraShield, check access, or find a target.
+
+1. Call \`lyrashield_list_workspaces\` and let the user choose a workspace unless the active client already supplies one and a LyraShield response confirms it.
+2. Call \`lyrashield_list_targets\` with the selected \`workspaceId\`. Follow \`nextCursor\` with \`cursor\` until it is absent before claiming the target list is complete.
+3. Use only a target returned for that workspace. Explain that configuration on disk does not prove the client loaded the server; verify with the client's MCP status or tool list.
+4. Explain hosted OAuth and local stdio/API-key options using the client’s current setup instructions. Never request, print, or store a secret in a shared config file.
+
+This workflow is read-only. Do not start scans or change target, workspace, billing, or authorization state.`,
+  },
+  {
+    name: "review-changes",
+    description: "Review the current diff with LyraShield's read-only advisory check.",
+    instructions: `# Review changes
+
+Use this skill when the user asks for a review of staged or current code changes.
+
+1. Read the requested diff from the working tree. Use \`git diff --cached\` for staged-only changes or \`git diff HEAD\` for the full working-tree change set.
+2. Call \`lyrashield_check_diff\` with its required \`diff\` field. Add \`files\` only when full-file snapshots are available and fit the tool's current limits.
+3. Describe results as advisory heuristics. Preserve the returned coverage state; an incomplete advisory check is not a recorded scan and does not establish that the code is secure.
+4. Start a recorded Quick scan with \`lyrashield_run_pr_scan\` only when the user explicitly requests one, and only after resolving the authorized workspace and target. Do not start one because an advisory finding appeared.
+
+If no diff is available, report that and ask for the intended files or range. Never invent diff content.`,
+  },
+  {
+    name: "scan-project",
+    description: "Start an explicitly requested scan on an authorized LyraShield target.",
+    instructions: `# Scan a project
+
+Start a recorded scan only when the user asks for one.
+
+1. Resolve the selected \`workspaceId\` and an authorized \`targetId\` using \`lyrashield_list_workspaces\` and \`lyrashield_list_targets\` when needed.
+2. Call \`lyrashield_get_scan_eligibility\` as a read-only advisory preflight. A pass does not guarantee that scan creation will be admitted; the server checks again.
+3. Use the least intensive requested profile: QUICK for an ordinary pre-PR check, STANDARD for a general review, and DEEP only when the user explicitly requests it and the selected target/profile permits it. Set the intended goal and mode explicitly.
+4. Call \`lyrashield_scan_target\` or the PR-specific \`lyrashield_run_pr_scan\` using only fields in the current tool schema. Keep retries for the same intended action on the same idempotency key when that field is available.
+5. Save the returned \`scanId\` or \`operationId\`. Poll \`lyrashield_get_scan_status\` with exactly one identifier, back off between checks, stop at a terminal state, and return the resumable identifier if the session ends first.
+
+Never scan a guessed, third-party, or unapproved target. Report failed, cancelled, inconclusive, and insufficient-evidence outcomes explicitly.`,
+  },
+  {
+    name: "fix-and-retest",
+    description: "Review finding evidence, prepare a fix proposal, and verify an applied fix.",
+    instructions: `# Fix and retest
+
+1. Retrieve findings with \`lyrashield_get_findings\` in the selected workspace. Follow every \`nextCursor\` with \`cursor\` before claiming the result set is complete.
+2. Use \`lyrashield_explain_finding\` and \`lyrashield_generate_fix_plan\` with the selected workspace and finding ID. Keep detection, confidence, and verification states distinct.
+3. Treat a generated plan as a proposal. Persist one with \`lyrashield_record_fix_proposal\` only when the user asks to record it; never treat a proposal as a verified fix.
+4. After the user confirms that a fix was applied, call \`lyrashield_verify_fix\` with \`workspaceId\` and \`findingId\`. Reuse the same idempotency key for an identical retry when exposed by the tool.
+5. Poll the returned retest scan with \`lyrashield_get_scan_status\` to a terminal state. Preserve \`FIXED_PENDING_RETEST\`, \`DETECTED\`, \`INCONCLUSIVE\`, and \`INSUFFICIENT_EVIDENCE\` exactly as reported. Claim validation only when the trusted retest evidence establishes it.
+
+Do not create a pull request, merge, or deploy unless the user separately requests that action and the server-authorized workflow supports it.`,
+  },
+  {
+    name: "launch-readiness",
+    description: "Read LyraShield release readiness evidence and explain missing gates.",
+    instructions: `# Launch readiness
+
+Use this workflow only when the user asks whether a registered target is ready for a release.
+
+1. Resolve the selected workspace and authorized target. Call \`lyrashield_get_launch_readiness\` with \`workspaceId\` and \`targetId\`.
+2. Bind the query to the supplied release commit or artifact digest when available. A readiness result is enforceable only when it matches the release identity.
+3. Explain each returned gate and evidence state. Identify missing or stale evidence as unresolved; do not fill gaps from assumptions or a clean advisory diff.
+4. Keep operational readiness separate from a security guarantee, certification, compliance claim, or proof that every vulnerability was detected.
+
+This workflow is read-only. It does not start a scan, deploy an artifact, or change a release gate.`,
+  },
+] as const
+
+function renderWorkflowSkill(skill: (typeof WORKFLOW_SKILLS)[number]): string {
+  return `---\nname: ${skill.name}\ndescription: ${JSON.stringify(skill.description)}\n---\n\n${skill.instructions.trim()}\n`
+}
 
 export async function buildPlugin(): Promise<void> {
   const pluginRoot = getPluginDir()
@@ -79,8 +156,32 @@ ${SKILL_APPENDIX}
 `
 
   await writeGeneratedFile(path.join(skillDir, "SKILL.md"), skillBody.replace(/\n+\s*$/, "\n"))
+  for (const skill of WORKFLOW_SKILLS) {
+    const content = renderWorkflowSkill(skill)
+    await mkdir(path.join(pluginRoot, "skills", skill.name), { recursive: true })
+    await writeGeneratedFile(path.join(pluginRoot, "skills", skill.name, "SKILL.md"), content)
+  }
 
   const manifest = JSON.parse(await readFile(path.join(pluginRoot, "plugin.json"), "utf-8"))
+
+  // Agent Plugins 1.0 uses `streamable-http`; vendor shims below keep each
+  // client's own transport spelling.
+  await writeGeneratedFile(
+    path.join(pluginRoot, "mcp.json"),
+    JSON.stringify(
+      {
+        $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+        mcpServers: {
+          lyrashield: {
+            type: "streamable-http",
+            url: `${LYRASHIELD_API_URL}/api/mcp`,
+          },
+        },
+      },
+      null,
+      2
+    )
+  )
 
   // Kiro loads local stdio MCP config from a separate file. Authentication stays
   // in the user-only credential store rather than the plugin manifest.
@@ -91,7 +192,7 @@ ${SKILL_APPENDIX}
         mcpServers: {
           lyrashield: {
             command: "npx",
-            args: ["-y", "@lyrashield/mcp@0.2.11"],
+            args: ["-y", "@lyrashield/mcp@0.2.12"],
           },
         },
       },
@@ -125,6 +226,13 @@ ${SKILL_APPENDIX}
     path.join(codexRoot, "skills", "lyrashield", "SKILL.md"),
     skillBody.replace(/\n+\s*$/, "\n")
   )
+  for (const skill of WORKFLOW_SKILLS) {
+    await mkdir(path.join(codexRoot, "skills", skill.name), { recursive: true })
+    await writeGeneratedFile(
+      path.join(codexRoot, "skills", skill.name, "SKILL.md"),
+      renderWorkflowSkill(skill)
+    )
+  }
   await writeGeneratedFile(
     path.join(codexRoot, ".mcp.json"),
     JSON.stringify(

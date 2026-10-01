@@ -6,6 +6,7 @@ import {
 import { MCP_RESULT_MAX_BYTES } from "./result-cap"
 import {
   apiCall,
+  IDEMPOTENCY_KEY_PROPERTY,
   makeErrorResult,
   makeToolResult,
   resolveTargetId,
@@ -213,6 +214,7 @@ export function createRunPrScanTool(context: ToolHandlerContext): McpTool {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: {
           type: "string",
@@ -340,6 +342,7 @@ export function createRecordFixProposalTool(context: ToolHandlerContext): McpToo
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         findingId: { type: "string", description: "Finding ID" },
         summary: {
@@ -384,6 +387,7 @@ export function createVerifyFixTool(context: ToolHandlerContext): McpTool {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         findingId: { type: "string", description: "Finding ID to retest" },
       },

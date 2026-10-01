@@ -21,16 +21,46 @@ describe("agent wizard connection snippets", () => {
     expect(wizard?.steps.some((step) => step.id === "config")).toBe(false)
     expect(wizard?.steps.find((step) => step.id === "api-key")?.command).toBeUndefined()
     expect(wizard?.steps.find((step) => step.id === "api-key")?.summary).toContain("OAuth in")
+    expect(wizard?.steps.some((step) => step.kind === "rules")).toBe(false)
   })
 
-  it("uses standalone instructions for Aider and Pi", () => {
-    for (const agentId of ["aider", "picode"]) {
-      const wizard = buildAgentWizard(agentId, "https://app.lyrashieldai.com")
-      expect(wizard?.steps.some((step) => step.title.includes("MCP"))).toBe(false)
-      expect(wizard?.steps.find((step) => step.id === "verify")?.command).toBe(
-        "lyrashield check-diff"
-      )
-    }
+  it("keeps the standalone CLI workflow for Aider", () => {
+    const wizard = buildAgentWizard("aider", "https://app.lyrashieldai.com")
+    expect(wizard?.steps.some((step) => step.title.includes("MCP"))).toBe(false)
+    expect(wizard?.steps.find((step) => step.id === "verify")?.command).toBe(
+      "lyrashield check-diff"
+    )
+  })
+
+  it("uses Pi's native MCP OAuth setup and exposes its distribution state separately", () => {
+    const wizard = buildAgentWizard("pi", "https://app.lyrashieldai.com")
+    const config = wizard?.steps.find((step) => step.id === "config")
+
+    expect(wizard?.displayName).toBe("Pi")
+    expect(config?.snippet).toContain("https://app.lyrashieldai.com/api/mcp")
+    expect(config?.snippet).not.toContain("Authorization")
+    expect(wizard?.steps.find((step) => step.id === "api-key")?.command).toBe(
+      "pi mcp login lyrashield"
+    )
+    expect(wizard?.steps.some((step) => step.kind === "rules")).toBe(false)
+    expect(wizard?.supportTier).toBe("COMPATIBLE")
+    expect(wizard?.verification?.evidence).toBe("DOCUMENTATION")
+    expect(wizard?.distribution?.state).toBe("PREPARATION")
+  })
+
+  it("keeps Devin Desktop distinct from cloud Devin and Devin CLI", () => {
+    const desktop = buildAgentWizard("devin-desktop", "https://app.lyrashieldai.com")
+    const cloud = buildAgentWizard("devin", "https://app.lyrashieldai.com")
+    const cli = buildAgentWizard("devin-cli", "https://app.lyrashieldai.com")
+
+    expect(desktop?.displayName).toContain("Desktop")
+    expect(desktop?.surface).toBe("desktop")
+    expect(desktop?.steps.find((step) => step.id === "config")?.snippet).toContain(
+      "https://app.lyrashieldai.com/api/mcp"
+    )
+    expect(desktop?.steps.some((step) => step.id === "config-local")).toBe(false)
+    expect(cloud?.surface).toBe("cloud")
+    expect(cli?.surface).toBe("cli")
   })
 
   it("includes manual plugin activation and honest client verification", () => {
@@ -64,5 +94,16 @@ describe("agent wizard connection snippets", () => {
         (step) => step.id === "config-remote"
       )?.snippet
     ).toContain('auth: "oauth"')
+  })
+
+  it("keeps scans explicit and gives safe optional hook guidance", () => {
+    const wizard = buildAgentWizard("claude-code", "https://app.lyrashieldai.com")
+    const verify = wizard?.steps.find((step) => step.id === "verify")
+    const hooks = wizard?.steps.find((step) => step.id === "hooks")
+
+    expect(verify?.summary).toContain("Scans remain explicit")
+    expect(verify?.command).toBe("lyrashield doctor")
+    expect(hooks?.note).toContain("refuses to overwrite an existing hook")
+    expect(hooks?.note).not.toContain("delete .git/hooks/pre-commit")
   })
 })

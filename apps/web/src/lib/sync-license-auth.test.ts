@@ -24,6 +24,7 @@ import { createSyncSessionToken } from "./sync-session"
 import { loggerSpies } from "../__tests__/mocks"
 
 const session = { userId: "user_1", sessionId: "apikey:key_1" }
+const BEFORE_LEGACY_SYNC_FALLBACK_SUNSET = Date.parse("2026-09-30T23:59:59.999Z")
 
 describe("sync license authorization", () => {
   beforeEach(() => vi.clearAllMocks())
@@ -66,7 +67,12 @@ describe("sync license authorization", () => {
     })
 
     await expect(
-      resolveSyncCredential({ workspaceId: "workspace_1", session, licenseKey: "legacy-key" })
+      resolveSyncCredential({
+        workspaceId: "workspace_1",
+        session,
+        licenseKey: "legacy-key",
+        now: BEFORE_LEGACY_SYNC_FALLBACK_SUNSET,
+      })
     ).resolves.toMatchObject({ ok: true, legacyLicenseKey: true })
     expect(loggerSpies.warn).toHaveBeenCalledOnce()
 
@@ -87,7 +93,12 @@ describe("sync license authorization", () => {
     mocks.resolveAccountBilling.mockResolvedValue({ effectivePlan: "FREE" })
     mocks.findByKeyHash.mockResolvedValue({ license })
     await expect(
-      resolveSyncCredential({ workspaceId: "workspace_1", session, licenseKey: "legacy-key" })
+      resolveSyncCredential({
+        workspaceId: "workspace_1",
+        session,
+        licenseKey: "legacy-key",
+        now: BEFORE_LEGACY_SYNC_FALLBACK_SUNSET,
+      })
     ).resolves.toMatchObject({ ok: false, code: "SYNC_NOT_ENTITLED" })
 
     const { token } = createSyncSessionToken({

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { buildPlugin } from "../build.js"
 import { getPluginDir } from "../index.js"
-import { access, readFile } from "node:fs/promises"
+import { validatePlugin } from "../validate.js"
+import { access, readFile, readdir } from "node:fs/promises"
 import path from "node:path"
+import { MCP_TOOL_ANNOTATIONS } from "@lyrashield/mcp"
 
 describe("buildPlugin", () => {
   it("publishes without unpublished workspace dependencies", async () => {
@@ -31,10 +33,57 @@ describe("buildPlugin", () => {
     expect(skillContent).toContain(
       '| "Repository pentest" / "Deep security scan" | FULL_PENTEST | DEEP |'
     )
-    expect(skillContent).toContain("authorized repository target")
+    expect(skillContent).toContain("Do not run scans against third-party URLs or repositories")
     expect(skillContent).toContain("poll the returned retest scan to a terminal state")
     expect(skillContent).toContain("outcome and scan reference")
     expect(skillContent).toContain("separate independent-verification receipt")
+
+    const expectedSkills = [
+      "lyrashield",
+      "get-started",
+      "review-changes",
+      "scan-project",
+      "fix-and-retest",
+      "launch-readiness",
+    ]
+    const declaredTools = new Set(Object.keys(MCP_TOOL_ANNOTATIONS))
+    const skillDirectories = await readdir(path.join(pluginRoot, "skills"), {
+      withFileTypes: true,
+    })
+    expect(
+      skillDirectories
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort()
+    ).toEqual([...expectedSkills].sort())
+    for (const skillName of expectedSkills) {
+      const content = await readFile(
+        path.join(pluginRoot, "skills", skillName, "SKILL.md"),
+        "utf-8"
+      )
+      const frontmatter = content.match(/^---\n([\s\S]*?)\n---\n/)
+      expect(frontmatter, `${skillName} must have YAML frontmatter`).not.toBeNull()
+      expect(frontmatter?.[1]?.split(/\r?\n/)).toContain(`name: ${skillName}`)
+      expect(frontmatter?.[1]).toMatch(/^description: .+$/m)
+      for (const [, toolName] of content.matchAll(/\b(lyrashield_[a-z_]+)\b/g)) {
+        expect(declaredTools.has(toolName!), `${skillName} references ${toolName}`).toBe(true)
+      }
+      await expect(
+        readFile(path.join(pluginRoot, "codex-plugin", "skills", skillName, "SKILL.md"), "utf-8")
+      ).resolves.toBe(content)
+      expect(content).not.toMatch(/\blsk_[A-Za-z0-9]{24,}\b/)
+    }
+
+    const portableMcp = JSON.parse(await readFile(path.join(pluginRoot, "mcp.json"), "utf-8")) as {
+      $schema?: string
+      mcpServers?: Record<string, { type?: string; url?: string }>
+    }
+    expect(portableMcp.$schema).toBe("https://agent-plugins.org/schemas/1.0.0/mcp.schema.json")
+    expect(portableMcp.mcpServers?.lyrashield).toEqual({
+      type: "streamable-http",
+      url: "https://app.lyrashieldai.com/api/mcp",
+    })
+    await expect(validatePlugin(pluginRoot)).resolves.toEqual({ ok: true, errors: [] })
 
     // The appendix must not duplicate sections already emitted by LYRASHIELD_POLICY.
     for (const heading of ["## Pre-PR check", "## Post-fix verification", "## Honesty clause"]) {

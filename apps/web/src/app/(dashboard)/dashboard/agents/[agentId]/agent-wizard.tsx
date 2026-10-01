@@ -132,6 +132,79 @@ export function AgentWizard({ data, docsUrl }: { data: AgentWizardData; docsUrl:
 
   return (
     <div className="space-y-5">
+      <section
+        className="grid gap-3 md:grid-cols-2"
+        aria-label="Compatibility and distribution status"
+      >
+        <div className="bg-card space-y-2 rounded-xl border p-4">
+          <h2 className="text-sm font-semibold">Compatibility evidence</h2>
+          <p className="text-sm">
+            Support tier: <span className="font-medium">{data.supportTier}</span>
+            {data.surface ? ` · ${data.surface} surface` : ""}
+          </p>
+          <p className="text-muted-foreground text-xs leading-5">
+            Evidence: {data.verification?.evidence ?? "not recorded"}
+            {data.verification?.checkedOn ? `, checked ${data.verification.checkedOn}` : ""}.
+            {data.verification?.clientVersion
+              ? ` Client version: ${data.verification.clientVersion}.`
+              : " Client version not recorded."}
+          </p>
+          {data.verification?.reference ? (
+            <p className="text-muted-foreground text-xs leading-5">
+              Reference:{" "}
+              {data.verification.reference.startsWith("https://") ? (
+                <a
+                  href={data.verification.reference}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground underline underline-offset-2 hover:no-underline"
+                >
+                  {data.verification.reference}
+                </a>
+              ) : (
+                <code>{data.verification.reference}</code>
+              )}
+            </p>
+          ) : null}
+          {data.nativeCapabilities.length > 0 ? (
+            <p className="text-muted-foreground text-xs leading-5">
+              Client supports (documented): {data.nativeCapabilities.join(", ")}.
+            </p>
+          ) : null}
+          <p className="text-muted-foreground text-xs leading-5">
+            Runtime receipt: {data.verification?.receipt ? "on file" : "not recorded"}. A configured
+            file alone does not confirm the client loaded the integration; verify it below.
+          </p>
+        </div>
+
+        <div className="bg-card space-y-2 rounded-xl border p-4">
+          <h2 className="text-sm font-semibold">Distribution channel</h2>
+          <p className="text-sm">
+            State: <span className="font-medium">{data.distribution?.state ?? "UNKNOWN"}</span>
+          </p>
+          {data.distribution ? (
+            <p className="text-muted-foreground text-xs leading-5">
+              {data.distribution.channel}:{" "}
+              <a
+                href={data.distribution.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground underline underline-offset-2 hover:no-underline"
+              >
+                view channel details
+              </a>
+            </p>
+          ) : (
+            <p className="text-muted-foreground text-xs leading-5">
+              No marketplace or direct-distribution state is recorded.
+            </p>
+          )}
+          <p className="text-muted-foreground text-xs leading-5">
+            Distribution status is separate from client compatibility.
+          </p>
+        </div>
+      </section>
+
       <ol className="space-y-4">
         {data.steps.map((step, index) => (
           <li key={step.id} className="bg-card rounded-xl border shadow-xs">
