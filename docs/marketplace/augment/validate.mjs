@@ -13,12 +13,32 @@ const manifest = JSON.parse(
   await readFile(path.join(plugin, ".augment-plugin/plugin.json"), "utf8")
 )
 const mcp = JSON.parse(await readFile(path.join(plugin, ".mcp.json"), "utf8"))
+const ideGuides = await Promise.all(
+  ["../augment-vscode/README.md", "../augment-jetbrains/README.md"].map((relativePath) =>
+    readFile(path.resolve(root, relativePath), "utf8")
+  )
+)
 
 assert.equal(marketplace.plugins[0].source, "./plugins/lyrashield")
 assert.equal(marketplace.plugins[0].name, manifest.name)
 assert.equal(mcp.mcpServers.lyrashield.type, "http")
 assert.equal(mcp.mcpServers.lyrashield.url, "https://app.lyrashieldai.com/api/mcp")
 assert.doesNotMatch(JSON.stringify(mcp), /lsk_|Authorization|clientSecret/i)
+for (const guide of ideGuides) {
+  const normalizedGuide = guide.replace(/\s+/g, " ")
+  assert.match(normalizedGuide, /PREPARATION ONLY/)
+  assert.match(normalizedGuide, /unpublished CLI `0\.2\.14` and MCP `0\.2\.12`/)
+  assert.match(
+    normalizedGuide,
+    /Direct MCP tools can be connected now with the published CLI `0\.2\.13` and MCP `0\.2\.11` baseline/
+  )
+  assert.match(normalizedGuide, /that baseline does not include these candidate workflow skills/)
+  assert.match(normalizedGuide, /Do not pair the published MCP baseline with candidate skills/)
+  assert.match(normalizedGuide, /lyrashield@0\.2\.14/)
+  assert.match(normalizedGuide, /@lyrashield\/mcp@0\.2\.12/)
+  assert.doesNotMatch(normalizedGuide, /npx[^`]*lyrashield@0\.2\.13/)
+  assert.doesNotMatch(normalizedGuide, /npx[^`]*@lyrashield\/mcp@0\.2\.11/)
+}
 const reviewCommand = await readFile(path.join(plugin, "commands/review-changes.md"), "utf8")
 const scanCommand = await readFile(path.join(plugin, "commands/scan-project.md"), "utf8")
 assert.match(reviewCommand, /lyrashield_check_diff/)

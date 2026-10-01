@@ -22,7 +22,7 @@ async function main() {
   assert.deepEqual(
     (await readdir(piDir)).sort(),
     ["README.md", "mcp.json", "validate.mjs"],
-    "keep this adapter limited to Pi-specific documentation, MCP example, and validator",
+    "keep this adapter limited to Pi-specific documentation, MCP example, and validator"
   )
 
   const readme = (await read("README.md")).replace(/\s+/g, " ").toLowerCase()
@@ -33,7 +33,10 @@ async function main() {
     "pi install git:github.com/ecryptoguru/lyrashield-marketplace@<released-tag>",
     "project trust is granted",
     "does not create or publish a new npm package",
-    "@lyrashield/mcp@0.2.11",
+    "unpublished",
+    "lyrashield@0.2.14",
+    "@lyrashield/mcp@0.2.12",
+    "do not pair the new workflow skills with the older published mcp `0.2.11`",
     "legacy `lyrashield` skill",
     "https://pi.dev/docs/latest/packages",
     "https://pi.dev/docs/latest/skills",
@@ -52,8 +55,16 @@ async function main() {
   assert.deepEqual(Object.keys(config.mcpServers.lyrashield).sort(), ["description", "url"])
   assert.equal(config.mcpServers.lyrashield.url, "https://app.lyrashieldai.com/api/mcp")
   assert.match(config.mcpServers.lyrashield.description, /^LyraShield\b/)
-  assert.doesNotMatch(JSON.stringify(config), /lsk_[A-Za-z0-9]{16,}/, "MCP example must not contain credentials")
-  assert.doesNotMatch(JSON.stringify(config), /authorization|bearer|api[_-]?key/i, "MCP example must not include static authentication")
+  assert.doesNotMatch(
+    JSON.stringify(config),
+    /lsk_[A-Za-z0-9]{16,}/,
+    "MCP example must not contain credentials"
+  )
+  assert.doesNotMatch(
+    JSON.stringify(config),
+    /authorization|bearer|api[_-]?key/i,
+    "MCP example must not include static authentication"
+  )
 
   for (const name of [...expectedSkills, "lyrashield"]) {
     const path = resolve(canonicalSkills, name, "SKILL.md")
@@ -67,10 +78,16 @@ async function main() {
     const description = frontmatter[1].match(/^description:\s*"?([^\r\n"]+)"?\s*$/m)?.[1]
     assert.ok(description?.trim(), name + " canonical skill needs a description")
     assert.ok(description.length <= 1024, name + " skill description exceeds Pi's limit")
-    assert.doesNotMatch(content, /lsk_[A-Za-z0-9]{16,}/, name + " canonical skill must not contain credentials")
+    assert.doesNotMatch(
+      content,
+      /lsk_[A-Za-z0-9]{16,}/,
+      name + " canonical skill must not contain credentials"
+    )
   }
 
-  console.log("Pi preparation valid: secret-free MCP example, five focused skills, and legacy skill; release, catalog, and runtime remain unverified.")
+  console.log(
+    "Pi preparation valid: secret-free MCP example, five focused skills, and legacy skill; release, catalog, and runtime remain unverified."
+  )
 }
 
 main().catch((error) => {

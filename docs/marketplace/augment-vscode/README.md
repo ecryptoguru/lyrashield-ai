@@ -1,15 +1,19 @@
 # LyraShield AI for Augment in VS Code
 
-**State: DIRECT, documentation-only.** Augment has native skills, custom commands, rules and MCP
-support in its VS Code extension. LyraShield has no authenticated Augment runtime receipt or
-marketplace listing for this IDE surface. This guide is for Augment's VS Code extension, not the
-Auggie CLI plugin at [`../augment/`](../augment/README.md).
+**Native workflow bundle: PREPARATION ONLY.** Augment has native skills, custom commands, rules and
+MCP support in its VS Code extension. Direct MCP tools can be connected now with the published CLI
+`0.2.13` and MCP `0.2.11` baseline shown in the setup wizard; that baseline does not include these
+candidate workflow skills. The new workflows require unpublished CLI `0.2.14` and MCP `0.2.12`. Do
+not pair the published MCP baseline with candidate skills or install the candidates until the
+coordinated release and marketplace export are published and read back. No authenticated Augment
+runtime receipt or marketplace listing is confirmed for this IDE surface. This guide is for
+Augment's VS Code extension, not the Auggie CLI plugin at [`../augment/`](../augment/README.md).
 
 ## Install skills and commands
 
 Skills and custom commands are Public Beta opt-ins. Use VS Code extension **0.789.0 or later** and
-enable the relevant features in Augment Settings. Copy only the selected skill directories from the
-released marketplace artifact's `augment/plugins/lyrashield/skills/` to the project
+enable the relevant features in Augment Settings. After the coordinated release, copy only selected
+skill directories from the released marketplace export's `augment/plugins/lyrashield/skills/` to the project
 `.augment/skills/` directory. For user scope, use `~/.augment/skills/`. Inspect any same-named
 destination first and preserve custom content.
 
@@ -27,9 +31,9 @@ current [guidelines documentation](https://docs.augmentcode.com/setup-augment/gu
 Augment's documented custom MCP setup is managed in its Settings Panel or through **Import from
 JSON**. The public custom-server docs do not establish generic OAuth or bearer-header authentication
 for arbitrary remote MCP servers, so use the local stdio server and LyraShield's user-scoped CLI
-credential store:
+credential store after the candidate packages are published:
 
-1. On Node.js 24 or later, run `npx -y lyrashield@0.2.13 login --oauth` in the same OS account that
+1. On Node.js 24 or later, run `npx -y lyrashield@0.2.14 login --oauth` in the same OS account that
    will run VS Code, then select the intended workspace.
 2. Open the Augment panel, open **Settings → MCP → Import from JSON**, and import:
 
@@ -38,7 +42,7 @@ credential store:
      "mcpServers": {
        "lyrashield": {
          "command": "npx",
-         "args": ["-y", "@lyrashield/mcp@0.2.11"]
+         "args": ["-y", "@lyrashield/mcp@0.2.12"]
        }
      }
    }

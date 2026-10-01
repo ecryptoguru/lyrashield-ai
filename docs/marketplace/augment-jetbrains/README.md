@@ -1,15 +1,19 @@
 # LyraShield AI for Augment in JetBrains IDEs
 
-**State: DIRECT, documentation-only.** Augment provides native skills, custom commands, rules and
-MCP support in its JetBrains extension. LyraShield has no authenticated Augment runtime receipt or
-marketplace listing for this IDE surface. This guide is separate from the Auggie CLI plugin at
-[`../augment/`](../augment/README.md).
+**Native workflow bundle: PREPARATION ONLY.** Augment provides native skills, custom commands, rules
+and MCP support in its JetBrains extension. Direct MCP tools can be connected now with the published
+CLI `0.2.13` and MCP `0.2.11` baseline shown in the setup wizard; that baseline does not include
+these candidate workflow skills. The new workflows require unpublished CLI `0.2.14` and MCP
+`0.2.12`. Do not pair the published MCP baseline with candidate skills or install the candidates
+until the coordinated release and marketplace export are published and read back. No authenticated
+Augment runtime receipt or marketplace listing is confirmed for this IDE surface. This guide is
+separate from the Auggie CLI plugin at [`../augment/`](../augment/README.md).
 
 ## Install skills and commands
 
 Skills and custom commands are Public Beta opt-ins. Use JetBrains extension **0.428.8 or later**
-and enable the relevant features in Augment Settings. Copy only the selected skill directories from
-the released marketplace artifact's `augment/plugins/lyrashield/skills/` to the project
+and enable the relevant features in Augment Settings. After the coordinated release, copy only
+selected skill directories from the released marketplace export's `augment/plugins/lyrashield/skills/` to the project
 `.augment/skills/` directory. For user scope, use `~/.augment/skills/`. Inspect any same-named
 destination first and preserve custom content.
 
@@ -26,9 +30,10 @@ rules. Rules have a separate JetBrains extension gate; check Augment's current
 
 The documented custom MCP setup is managed in Augment's Settings Panel. The public custom-server
 docs do not establish generic OAuth or bearer-header authentication for arbitrary remote MCP
-servers, so use the local stdio server and LyraShield's user-scoped CLI credential store:
+servers, so use the local stdio server and LyraShield's user-scoped CLI credential store after the
+candidate packages are published:
 
-1. On Node.js 24 or later, run `npx -y lyrashield@0.2.13 login --oauth` in the same OS account that
+1. On Node.js 24 or later, run `npx -y lyrashield@0.2.14 login --oauth` in the same OS account that
    will run the JetBrains IDE, then select the intended workspace.
 2. Open the Augment panel, open **Settings → MCP → Import from JSON**, and import:
 
@@ -37,7 +42,7 @@ servers, so use the local stdio server and LyraShield's user-scoped CLI credenti
      "mcpServers": {
        "lyrashield": {
          "command": "npx",
-         "args": ["-y", "@lyrashield/mcp@0.2.11"]
+         "args": ["-y", "@lyrashield/mcp@0.2.12"]
        }
      }
    }

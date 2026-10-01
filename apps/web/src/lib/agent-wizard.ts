@@ -108,6 +108,10 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   if (!agent) return null
   const publishedInstallCommand = getPublishedCliInstallCommand(agent)
   const localSetup = agent.surface !== "cloud" && agent.surface !== "web"
+  const augmentWorkflowInPreparation =
+    agent.productFamily?.id === "augment" &&
+    agent.surface === "ide" &&
+    agent.distribution?.state === "PREPARATION"
 
   const steps: WizardStep[] = []
   const metadata = {
@@ -167,14 +171,20 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     steps.push({
       id: "install",
       kind: "install",
-      title: publishedInstallCommand ? "Install" : "Prepare manual setup",
-      summary: !publishedInstallCommand
-        ? agent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE
-          ? "Automatic config writes are withheld until the preservation fixes ship in the next CLI release. Merge the connection values below into your existing client config."
-          : "CLI installation for this setup is prepared for the next release. Use the manual connection steps below."
-        : agent.manualInstructions
-          ? `Follow the documented activation steps for ${agent.displayName}.`
-          : `Prepare the LyraShield integration for ${agent.displayName}.`,
+      title: augmentWorkflowInPreparation
+        ? "Connect current MCP tools"
+        : publishedInstallCommand
+          ? "Install"
+          : "Prepare manual setup",
+      summary: augmentWorkflowInPreparation
+        ? `The published direct-MCP baseline uses ${CLI_PACKAGE_SPEC} and ${MCP_PACKAGE_SPEC}; it provides MCP tools only. Native workflow skills, commands and rules require the coordinated candidate release.`
+        : !publishedInstallCommand
+          ? agent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE
+            ? "Automatic config writes are withheld until the preservation fixes ship in the next CLI release. Merge the connection values below into your existing client config."
+            : "CLI installation for this setup is prepared for the next release. Use the manual connection steps below."
+          : agent.manualInstructions
+            ? `Follow the documented activation steps for ${agent.displayName}.`
+            : `Prepare the LyraShield integration for ${agent.displayName}.`,
       command: publishedInstallCommand ?? undefined,
       copyLabel: `Copy install command for ${agent.displayName}`,
       note:
@@ -276,7 +286,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   steps.push({
     id: "api-key",
     kind: "api-key",
-    title: "Authenticate",
+    title: augmentWorkflowInPreparation ? "Authenticate current MCP server" : "Authenticate",
     summary: usesRemoteApiKey
       ? "Ask a workspace Owner or Admin for a read-only API key from Settings → API keys. Store it only in the client's private secret settings, then add it to the connection."
       : remoteOAuthCommand
@@ -326,9 +336,11 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       id: "skills",
       kind: "skills",
       title: "Native workflow skills",
-      summary: CLI_SKILLS_AVAILABLE
-        ? "Install the focused LyraShield workflows in this client's documented skill directory. Existing customized skills are preserved."
-        : "The focused LyraShield skill bundle is prepared for the next release. You can use the connected MCP tools directly in the meantime.",
+      summary: augmentWorkflowInPreparation
+        ? "The published MCP baseline provides direct tools only. Native workflow skills are in preparation and will be available after the coordinated candidate release."
+        : CLI_SKILLS_AVAILABLE
+          ? "Install the focused LyraShield workflows in this client's documented skill directory. Existing customized skills are preserved."
+          : "The focused LyraShield skill bundle is prepared for the next release. You can use the connected MCP tools directly in the meantime.",
       command: CLI_SKILLS_AVAILABLE
         ? `npx -y ${CLI_PACKAGE_SPEC} skills install ${agent.id}`
         : undefined,
@@ -344,7 +356,9 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     id: "verify",
     kind: "verify",
     title: "Verify it works",
-    summary: "Confirm the setup and make a read-only LyraShield call. Scans remain explicit.",
+    summary: augmentWorkflowInPreparation
+      ? "Confirm the current MCP connection with a read-only LyraShield call. Native workflow skills remain a separate, unpublished release. Scans remain explicit."
+      : "Confirm the setup and make a read-only LyraShield call. Scans remain explicit.",
     command: localSetup ? `npx -y ${CLI_PACKAGE_SPEC} doctor` : undefined,
     copyLabel: "Copy doctor command",
     note: "Reload the client connection, confirm its LyraShield tools and available native workflows, then make a read-only call to list authorized targets in your selected workspace. Doctor only checks local setup; it does not establish authenticated client acceptance.",

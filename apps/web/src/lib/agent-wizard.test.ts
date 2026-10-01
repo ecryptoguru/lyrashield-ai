@@ -49,6 +49,36 @@ describe("agent wizard connection snippets", () => {
     expect(wizard?.distribution?.state).toBe("PREPARATION")
   })
 
+  it("separates Augment's published MCP tools from the unreleased workflow bundle", () => {
+    for (const id of ["augment-vscode", "augment-jetbrains"]) {
+      const wizard = buildAgentWizard(id, "https://app.lyrashieldai.com")
+      const install = wizard?.steps.find((step) => step.id === "install")
+      const config = wizard?.steps.find((step) => step.id === "config")
+      const auth = wizard?.steps.find((step) => step.id === "api-key")
+      const skills = wizard?.steps.find((step) => step.id === "skills")
+      const verify = wizard?.steps.find((step) => step.id === "verify")
+
+      expect(wizard?.distribution?.state, id).toBe("PREPARATION")
+      expect(install?.title, id).toBe("Connect current MCP tools")
+      expect(install?.summary, id).toContain(
+        `published direct-MCP baseline uses ${CLI_PACKAGE_SPEC}`
+      )
+      expect(install?.summary, id).toContain(MCP_PACKAGE_SPEC)
+      expect(install?.summary, id).toContain("MCP tools only")
+      expect(install?.command, id).toBeUndefined()
+      expect(config?.summary, id).toContain("do not pair it with candidate workflow skills")
+      expect(config?.snippet, id).toContain(MCP_PACKAGE_SPEC)
+      expect(auth?.title, id).toBe("Authenticate current MCP server")
+      expect(auth?.command, id).toBe(`npx -y ${CLI_PACKAGE_SPEC} login --oauth`)
+      expect(skills?.summary, id).toContain("published MCP baseline provides direct tools only")
+      expect(skills?.summary, id).toContain("coordinated candidate release")
+      expect(skills?.command, id).toBeUndefined()
+      expect(verify?.summary, id).toContain(
+        "Native workflow skills remain a separate, unpublished release"
+      )
+    }
+  })
+
   it("keeps Devin Desktop distinct from cloud Devin and Devin CLI", () => {
     const desktop = buildAgentWizard("devin-desktop", "https://app.lyrashieldai.com")
     const cloud = buildAgentWizard("devin", "https://app.lyrashieldai.com")

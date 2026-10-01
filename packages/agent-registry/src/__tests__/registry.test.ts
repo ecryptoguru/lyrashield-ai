@@ -225,8 +225,21 @@ describe("agent registry", () => {
     )
     expect(augmentVsCode.transports).toEqual(["stdio"])
     expect(augmentJetBrains.transports).toEqual(["stdio"])
+    expect(augmentVsCode.distribution?.state).toBe("PREPARATION")
+    expect(augmentJetBrains.distribution?.state).toBe("PREPARATION")
     expect(augmentVsCode.rulesFiles).toContain(".augment/rules/lyrashield.md")
     expect(augmentJetBrains.rulesFiles).toContain(".augment/rules/lyrashield.md")
+    for (const augment of [augmentVsCode, augmentJetBrains]) {
+      expect(augment.manualInstructions).toContain("PREPARATION ONLY")
+      expect(augment.manualInstructions).toContain("unpublished CLI 0.2.14 and MCP 0.2.12")
+      expect(augment.manualInstructions).toContain(
+        "published direct-MCP baseline (CLI 0.2.13 and MCP 0.2.11)"
+      )
+      expect(augment.manualInstructions).toContain("lyrashield@0.2.14")
+      expect(augment.manualInstructions).toContain("@lyrashield/mcp@0.2.12")
+      expect(augment.manualInstructions).not.toContain("npx -y lyrashield@0.2.13")
+      expect(augment.manualInstructions).not.toContain("npx -y @lyrashield/mcp@0.2.11")
+    }
   })
 
   it("groups documented product variants without merging their client surfaces", () => {
@@ -435,7 +448,9 @@ describe("preferred agent integrations", () => {
     expect(vscode.locations).toContainEqual(
       expect.objectContaining({ path: ".vscode/mcp.json", scope: "project" })
     )
-    expect(vscode.source?.url).toBe("https://code.visualstudio.com/docs/agent-customization/mcp-servers")
+    expect(vscode.source?.url).toBe(
+      "https://code.visualstudio.com/docs/agent-customization/mcp-servers"
+    )
     expect(getPreferredAgent("vscode")?.id).toBe("vscode")
   })
 
