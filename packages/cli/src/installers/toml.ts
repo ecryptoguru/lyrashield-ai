@@ -1,6 +1,7 @@
 import { access, readFile } from "node:fs/promises"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
+import { isDeepStrictEqual } from "node:util"
 import * as TOML from "@iarna/toml"
 import { isJsonObject } from "@lyrashield/types"
 import { backupFile } from "./backup.js"
@@ -34,7 +35,51 @@ function renderTable(prefix: string, value: Record<string, unknown>): string[] {
 }
 
 function equals(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b)
+  return isDeepStrictEqual(a, b)
+}
+
+type MultilineStringDelimiter = '"""' | "'''"
+
+function scanTomlLine(line: string, multiline: MultilineStringDelimiter | undefined) {
+  let index = 0
+  while (index < line.length) {
+    if (multiline) {
+      if (multiline === '"""' && line[index] === "\\") {
+        index += 2
+      } else if (line.startsWith(multiline, index)) {
+        multiline = undefined
+        index += 3
+      } else {
+        index++
+      }
+      continue
+    }
+
+    const character = line[index]!
+    if (character === "#") break
+    if (line.startsWith('"""', index) || line.startsWith("'''", index)) {
+      multiline = line.slice(index, index + 3) as MultilineStringDelimiter
+      index += 3
+      continue
+    }
+    if (character === '"' || character === "'") {
+      const quote = character
+      index++
+      while (index < line.length) {
+        if (quote === '"' && line[index] === "\\") {
+          index += 2
+        } else if (line[index] === quote) {
+          index++
+          break
+        } else {
+          index++
+        }
+      }
+      continue
+    }
+    index++
+  }
+  return multiline
 }
 
 function findSectionRange(
@@ -44,40 +89,56 @@ function findSectionRange(
   fromOffset = 0
 ): { start: number; end: number } | undefined {
   const header = `[${rootKey}.${serverName}]`
-  let start = -1
-  let lineOffset = 0
-  for (const line of text.split("\n")) {
+  const lines = text.split("\n")
+  const lineStarts: number[] = [0]
+  for (let i = 1; i < lines.length; i++) {
+    lineStarts.push(lineStarts[i - 1]! + lines[i - 1]!.length + 1)
+  }
+
+  let startLine = -1
+  let multiline: MultilineStringDelimiter | undefined
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
     const leadingWhitespace = line.match(/^[\t ]*/)?.[0] ?? ""
     const candidate = line.slice(leadingWhitespace.length)
-    if (lineOffset >= fromOffset && candidate.startsWith(header)) {
+    if (!multiline && lineStarts[i]! >= fromOffset && candidate.startsWith(header)) {
       const suffix = candidate.slice(header.length).trimStart()
       if (suffix.length === 0 || suffix.startsWith("#")) {
-        start = lineOffset
+        startLine = i
+      }
+    }
+
+    if (startLine !== -1 && lineStarts[i]! >= fromOffset) break
+    multiline = scanTomlLine(line, multiline)
+  }
+  if (startLine === -1) return undefined
+
+  const subPrefix = `[${rootKey}.${serverName}.`
+  let endLine = lines.length
+  multiline = undefined
+
+  for (let i = startLine + 1; i < lines.length; i++) {
+    const line = lines[i]!
+    const tableHeader = !multiline && /^\s*\[/.test(line)
+    if (tableHeader) {
+      if (!line.trim().startsWith(subPrefix)) {
+        endLine = i
         break
       }
     }
-    lineOffset += line.length + 1
-  }
-  if (start === -1) return undefined
-
-  const lines = text.slice(start).split("\n")
-  let endOffset = lines[0]!.length
-  const subPrefix = `[${rootKey}.${serverName}.`
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i]!
-    const tableHeader = /^\s*\[/.test(line)
-    if (tableHeader) {
-      if (line.trim().startsWith(subPrefix)) {
-        endOffset += 1 + line.length
-        continue
-      }
-      break
-    }
-    endOffset += 1 + line.length
+    multiline = scanTomlLine(line, multiline)
   }
 
-  return { start, end: start + endOffset }
+  // Keep comments and whitespace that lead into the next table (or trail the
+  // file); TOML convention attaches those lines to the following content.
+  let preservedBlockLine = endLine
+  for (let i = endLine - 1; i > startLine; i--) {
+    const line = lines[i]!.trim()
+    if (line !== "" && !line.startsWith("#")) break
+    preservedBlockLine = i
+  }
+
+  return { start: lineStarts[startLine]!, end: lineStarts[preservedBlockLine]! }
 }
 
 function buildEntry(rootKey: string, serverName: string, value: unknown): string {
@@ -93,6 +154,7 @@ export interface TomlMergeOptions {
   serverName: string
   value: unknown
   dryRun?: boolean
+  mode?: number
 }
 
 export interface TomlMergeResult {
@@ -101,7 +163,7 @@ export interface TomlMergeResult {
 }
 
 export async function mergeToml(opts: TomlMergeOptions): Promise<TomlMergeResult> {
-  const { filePath, rootKey, serverName, value, dryRun } = opts
+  const { filePath, rootKey, serverName, value, dryRun, mode } = opts
   let original = ""
   let exists = false
   try {
@@ -114,15 +176,29 @@ export async function mergeToml(opts: TomlMergeOptions): Promise<TomlMergeResult
     original = ""
   }
 
+  const originalParsed = (exists ? TOML.parse(original) : {}) as Record<string, unknown>
   if (exists) {
-    const parsed = TOML.parse(original) as Record<string, unknown>
-    if (Object.prototype.hasOwnProperty.call(parsed, rootKey) && !isJsonObject(parsed[rootKey])) {
+    if (
+      Object.prototype.hasOwnProperty.call(originalParsed, rootKey) &&
+      !isJsonObject(originalParsed[rootKey])
+    ) {
       throw new Error(`Cannot merge into the existing non-table value at ${rootKey}`)
     }
   }
 
   const newEntry = buildEntry(rootKey, serverName, value)
   const range = exists ? findSectionRange(original, rootKey, serverName) : undefined
+  const originalRoot = isJsonObject(originalParsed[rootKey]) ? originalParsed[rootKey] : undefined
+  if (originalRoot && Object.hasOwn(originalRoot, serverName) && !range) {
+    throw new Error(`Cannot safely replace inline TOML entry at ${rootKey}.${serverName}`)
+  }
+
+  const expected = structuredClone(originalParsed)
+  const expectedRoot: Record<string, unknown> = isJsonObject(expected[rootKey])
+    ? expected[rootKey]
+    : {}
+  expected[rootKey] = expectedRoot
+  expectedRoot[serverName] = value
 
   let newContent: string
   if (!exists) {
@@ -139,9 +215,7 @@ export async function mergeToml(opts: TomlMergeOptions): Promise<TomlMergeResult
   }
 
   const candidate = TOML.parse(newContent) as Record<string, unknown>
-  const candidateRoot = candidate[rootKey]
-  const insertedCandidate = isJsonObject(candidateRoot) ? candidateRoot[serverName] : undefined
-  if (!equals(insertedCandidate, value)) {
+  if (!equals(candidate, expected)) {
     throw new Error(`Cannot safely merge entry at ${rootKey}.${serverName} in this TOML file`)
   }
 
@@ -149,11 +223,11 @@ export async function mergeToml(opts: TomlMergeOptions): Promise<TomlMergeResult
     return { changed: true }
   }
 
-  const backupPath = await backupFile(filePath)
+  const backupPath = await backupFile(filePath, { mode })
   // parent is the directory of the resolved installer target path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
-  await atomicWrite(filePath, newContent, { expectedContent: exists ? original : null })
+  await atomicWrite(filePath, newContent, { expectedContent: exists ? original : null, mode })
 
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -202,9 +276,7 @@ export async function removeToml(opts: TomlRemoveOptions): Promise<boolean> {
     if (!range) break
     searchFrom = range.start + 1
 
-    let candidateContent = original.slice(0, range.start) + original.slice(range.end)
-    // remove trailing blank lines
-    candidateContent = candidateContent.replace(/\n\n\n+/g, "\n\n")
+    const candidateContent = original.slice(0, range.start) + original.slice(range.end)
     try {
       const candidate = TOML.parse(candidateContent) as Record<string, unknown>
       if (equals(candidate, expected)) {

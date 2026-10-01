@@ -385,6 +385,101 @@ args = ["acme-mcp"]`
     })
   })
 
+  it("TOML merge ignores table-looking text inside multiline strings", async () => {
+    const filePath = path.join(cwd, "multiline-string-merge.toml")
+    const content = `message = """A table-like string follows
+[mcp_servers.lyrashield]
+command = "not a table"
+"""
+
+[mcp_servers.lyrashield]
+details = """A table-like string follows
+[mcp_servers.acme]
+command = "not a table"
+"""
+command = "old"
+
+[mcp_servers.acme]
+command = "acme-mcp"
+`
+    await writeFile(filePath, content, "utf-8")
+
+    await mergeFile({
+      filePath,
+      format: "toml",
+      rootKey: "mcp_servers",
+      serverName: "lyrashield",
+      value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+    })
+
+    const result = await readFile(filePath, "utf-8")
+    const parsed = TOML.parse(result) as {
+      message: string
+      mcp_servers: Record<string, unknown>
+    }
+    expect(parsed.message).toBe(
+      'A table-like string follows\n[mcp_servers.lyrashield]\ncommand = "not a table"\n'
+    )
+    expect(parsed.mcp_servers).toMatchObject({
+      acme: { command: "acme-mcp" },
+      lyrashield: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+    })
+  })
+
+  it("refuses to replace an inline existing TOML target without modifying it", async () => {
+    const filePath = path.join(cwd, "inline-target.toml")
+    const content = `mcp_servers = { lyrashield = { command = "npx", args = ["old"] }, acme = { command = "acme-mcp" } }\n`
+    await writeFile(filePath, content, "utf-8")
+
+    await expect(
+      mergeFile({
+        filePath,
+        format: "toml",
+        rootKey: "mcp_servers",
+        serverName: "lyrashield",
+        value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+      })
+    ).rejects.toThrow(/inline TOML entry/i)
+
+    expect(await readFile(filePath, "utf-8")).toBe(content)
+    expect(await readdir(cwd)).toEqual(["inline-target.toml"])
+  })
+
+  it("preserves comments and spacing before the next TOML table on merge and removal", async () => {
+    const filePath = path.join(cwd, "trailing-comments.toml")
+    const content = `[mcp_servers.lyrashield]
+command = "old"
+
+# Keep this note with Acme.
+# Owned by Platform.
+
+[mcp_servers.acme]
+command = "acme-mcp"
+`
+    await writeFile(filePath, content, "utf-8")
+
+    await mergeFile({
+      filePath,
+      format: "toml",
+      rootKey: "mcp_servers",
+      serverName: "lyrashield",
+      value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+    })
+    const merged = await readFile(filePath, "utf-8")
+    const preservedBlock = "# Keep this note with Acme.\n# Owned by Platform.\n\n[mcp_servers.acme]"
+    expect(merged).toContain(preservedBlock)
+
+    await removeFile({
+      filePath,
+      format: "toml",
+      rootKey: "mcp_servers",
+      serverName: "lyrashield",
+    })
+    const removed = await readFile(filePath, "utf-8")
+    expect(removed).toContain(preservedBlock)
+    expect(TOML.parse(removed)).toMatchObject({ mcp_servers: { acme: { command: "acme-mcp" } } })
+  })
+
   it("yaml merge-safety keeps foreign servers and unrelated keys", async () => {
     const fixture = `unrelated: true
 mcp_servers:
