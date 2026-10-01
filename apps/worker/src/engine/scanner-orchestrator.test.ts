@@ -544,9 +544,7 @@ describe("runScannerOrchestrator", () => {
     expect(scanUrl).not.toHaveBeenCalled()
     expect(result.urlFindings).toEqual([])
     expect(result.coverageIssues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ scanner: "url", status: "unsupported" }),
-      ])
+      expect.arrayContaining([expect.objectContaining({ scanner: "url", status: "unsupported" })])
     )
     expect(addScanEvent).toHaveBeenCalledWith(
       "scan-url-no-profile",
@@ -589,9 +587,7 @@ describe("runScannerOrchestrator", () => {
 
     expect(scanUrl).not.toHaveBeenCalled()
     expect(result.coverageIssues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ scanner: "url", status: "unsupported" }),
-      ])
+      expect.arrayContaining([expect.objectContaining({ scanner: "url", status: "unsupported" })])
     )
   })
 

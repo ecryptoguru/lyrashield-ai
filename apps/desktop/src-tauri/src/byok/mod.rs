@@ -502,7 +502,7 @@ mod tests {
 
     fn azure_creds(deployment: &str) -> AzureCredentials {
         AzureCredentials {
-            api_key: "azure-test-key-000000".to_string(), // gitleaks:allow — fixture only
+            api_key: String::from("azure-test-key-000000"), // gitleaks:allow — fixture only
             endpoint: "https://my.openai.azure.com".to_string(),
             deployment: deployment.to_string(),
         }

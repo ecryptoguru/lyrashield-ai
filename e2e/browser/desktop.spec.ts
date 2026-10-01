@@ -122,7 +122,9 @@ async function native(
           if (command === "select_byok_provider") {
             const provider = args?.provider
             const usable =
-              provider === "chatgpt" ? state.byok.chatgptSignedIn : state.byok.azureEndpoint !== null
+              provider === "chatgpt"
+                ? state.byok.chatgptSignedIn
+                : state.byok.azureEndpoint !== null
             if (provider !== "chatgpt" && provider !== "azure") throw Error("unknown BYOK provider")
             if (!usable) throw Error("provider is not configured")
             state.byok.selected = provider

@@ -67,12 +67,14 @@ const PACK_AMOUNT = 150_000
 const NOW_S = Math.floor(Date.now() / 1000)
 
 /** Exact note shape emitted by apps/web/src/app/api/billing/topup/route.ts. */
-function routePackNotes(params: {
-  workspaceId?: string
-  accountId?: string
-  packId?: string
-  amountMinor?: number
-} = {}) {
+function routePackNotes(
+  params: {
+    workspaceId?: string
+    accountId?: string
+    packId?: string
+    amountMinor?: number
+  } = {}
+) {
   const workspaceId = params.workspaceId ?? WORKSPACE
   const accountId = params.accountId ?? ACCOUNT
   const packId = params.packId ?? "pack_100"
@@ -167,9 +169,7 @@ describe("payment.captured settlement — payer-bound exactly-once credit", () =
   it("never credits when the accountId note is missing", async () => {
     const notes: Record<string, unknown> = { ...routePackNotes() }
     delete notes.accountId
-    await expect(
-      processRazorpayEvent(capturedEvent("pay_NOACCT", notes))
-    ).rejects.toThrow()
+    await expect(processRazorpayEvent(capturedEvent("pay_NOACCT", notes))).rejects.toThrow()
     expect(creditTopUp).not.toHaveBeenCalled()
     expect(ledger.rows.size).toBe(0)
   })

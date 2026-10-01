@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react"
-import type {
-  AzureMetadata,
-  ByokProvider,
-  ChatGptAuthStatus,
-  RuntimeStatus,
-} from "../lib/types"
+import type { AzureMetadata, ByokProvider, ChatGptAuthStatus, RuntimeStatus } from "../lib/types"
 import {
   checkChatGptStatus,
   getByokMetadata,

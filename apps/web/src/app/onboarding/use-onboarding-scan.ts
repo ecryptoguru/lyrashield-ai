@@ -212,46 +212,47 @@ async function ensureTargetId(
   return ensureOnboardingTargetId(
     (reusePersisted ? ctx.data.targetId : null) ?? recoveredTargetId,
     async () => {
-    let targetId: string
-    try {
-      if (needsRepo && ctx.selectedRepo) {
-        const target = await apiPost(
-          "/api/targets",
-          {
+      let targetId: string
+      try {
+        if (needsRepo && ctx.selectedRepo) {
+          const target = await apiPost(
+            "/api/targets",
+            {
+              workspaceId: ctx.data.workspaceId,
+              name: ctx.productName.trim(),
+              type: "REPO",
+              repoProvider: "github",
+              repoOwner: ctx.selectedRepo.owner,
+              repoName: ctx.selectedRepo.name,
+              installationId: ctx.selectedRepo.installationId,
+              branch: ctx.selectedRepo.defaultBranch,
+              environment: ctx.environment,
+            },
+            { schema: idSchema }
+          )
+          targetId = target.id
+        } else {
+          const target = buildUrlTargetPayload({
             workspaceId: ctx.data.workspaceId,
-            name: ctx.productName.trim(),
-            type: "REPO",
-            repoProvider: "github",
-            repoOwner: ctx.selectedRepo.owner,
-            repoName: ctx.selectedRepo.name,
-            installationId: ctx.selectedRepo.installationId,
-            branch: ctx.selectedRepo.defaultBranch,
+            path: ctx.path,
+            name: ctx.productName,
+            url: ctx.urlForm.url,
             environment: ctx.environment,
-          },
-          { schema: idSchema }
-        )
-        targetId = target.id
-      } else {
-        const target = buildUrlTargetPayload({
-          workspaceId: ctx.data.workspaceId,
-          path: ctx.path,
-          name: ctx.productName,
-          url: ctx.urlForm.url,
-          environment: ctx.environment,
-          ownershipAttested: ctx.urlForm.ownershipAttested,
-        })
-        if (!target) throw new Error("Target details are required.")
-        const created = await apiPost("/api/targets", target, { schema: idSchema })
-        targetId = created.id
+            ownershipAttested: ctx.urlForm.ownershipAttested,
+          })
+          if (!target) throw new Error("Target details are required.")
+          const created = await apiPost("/api/targets", target, { schema: idSchema })
+          targetId = created.id
+        }
+      } catch (cause) {
+        const existingTargetId = existingTargetIdFromError(cause)
+        if (!existingTargetId) throw cause
+        targetId = existingTargetId
       }
-    } catch (cause) {
-      const existingTargetId = existingTargetIdFromError(cause)
-      if (!existingTargetId) throw cause
-      targetId = existingTargetId
+      ctx.targetRecovery.current = { identity: targetIdentity, targetId }
+      return targetId
     }
-    ctx.targetRecovery.current = { identity: targetIdentity, targetId }
-    return targetId
-  })
+  )
 }
 
 /**

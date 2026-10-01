@@ -8,9 +8,7 @@ const lookupResults: Array<Array<{ id: string; processed?: boolean }>> = []
 const duplicateGroupsResults: Array<
   Array<{ provider: string; objectId: string; receipts: number }>
 > = []
-const orphanedRefundResults: Array<
-  Array<{ id: string; externalId: string; objectId: string }>
-> = []
+const orphanedRefundResults: Array<Array<{ id: string; externalId: string; objectId: string }>> = []
 const loggerMock = vi.hoisted(() => ({
   info: vi.fn(),
   debug: vi.fn(),
@@ -176,7 +174,9 @@ describe("billing-reconciliation.job", () => {
 
     expect(list).toHaveBeenCalledWith({ limit: 100, sorting: ["-created_at"] })
     const lookups = rawQueryMock.mock.calls.filter(([strings]) =>
-      (strings as TemplateStringsArray).join("").includes('SELECT id, processed FROM "WebhookEvent"')
+      (strings as TemplateStringsArray)
+        .join("")
+        .includes('SELECT id, processed FROM "WebhookEvent"')
     )
     expect(lookups).toHaveLength(2)
     expect(lookups.map(([, objectId]) => objectId)).toEqual(["ord_1", "ord_late_paid"])
@@ -211,7 +211,9 @@ describe("billing-reconciliation.job", () => {
 
     expect(all).toHaveBeenCalledWith({ count: 50, skip: 0, from: sinceSeconds, to: nowSeconds })
     const lookups = rawQueryMock.mock.calls.filter(([strings]) =>
-      (strings as TemplateStringsArray).join("").includes('SELECT id, processed FROM "WebhookEvent"')
+      (strings as TemplateStringsArray)
+        .join("")
+        .includes('SELECT id, processed FROM "WebhookEvent"')
     )
     expect(lookups).toHaveLength(2)
     expect(lookups.map(([, objectId]) => objectId)).toEqual(["pay_1", "pay_late_captured"])
@@ -340,7 +342,9 @@ describe("billing-reconciliation.job", () => {
     )
     expect(
       rawQueryMock.mock.calls.filter(([strings]) =>
-        (strings as TemplateStringsArray).join("").includes('SELECT id, processed FROM "WebhookEvent"')
+        (strings as TemplateStringsArray)
+          .join("")
+          .includes('SELECT id, processed FROM "WebhookEvent"')
       )
     ).toHaveLength(1)
     expect(prisma.webhookEvent.findMany).toHaveBeenCalledTimes(1)
@@ -505,9 +509,7 @@ describe("billing-reconciliation.job", () => {
     // First count is the coverage-windowed sweep (0 in-window rows); the second
     // is the pre-window backlog count — a 30-day-old unprocessed Polar row the
     // 24-day baseline can no longer reach.
-    vi.mocked(prisma.webhookEvent.count)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(3)
+    vi.mocked(prisma.webhookEvent.count).mockResolvedValueOnce(0).mockResolvedValueOnce(3)
     vi.mocked(getSystemPrisma().webhookEventTrack.count).mockResolvedValue(2)
 
     const result = await runBillingReconciliation()
@@ -662,9 +664,7 @@ describe("billing-reconciliation.job", () => {
         "operator_alert",
         expect.objectContaining({
           code: "reconciliation_drift",
-          alertSamples: [
-            expect.objectContaining({ provider, type: "settlement_credit_missing" }),
-          ],
+          alertSamples: [expect.objectContaining({ provider, type: "settlement_credit_missing" })],
         })
       )
       // Report-only: the run still completes and never replays or credits.
@@ -805,9 +805,7 @@ describe("billing-reconciliation.job", () => {
         "operator_alert",
         expect.objectContaining({
           code: "reconciliation_drift",
-          alertSamples: [
-            expect.objectContaining({ provider, type: "refund_without_settlement" }),
-          ],
+          alertSamples: [expect.objectContaining({ provider, type: "refund_without_settlement" })],
         })
       )
       expect(result.completed).toBe(true)

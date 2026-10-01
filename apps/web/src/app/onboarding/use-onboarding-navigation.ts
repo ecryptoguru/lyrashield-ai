@@ -55,7 +55,9 @@ export function useOnboardingNavigation(params: {
       try {
         await params.ensureWorkspace()
       } catch (cause) {
-        params.setError(cause instanceof Error ? cause.message : "Could not prepare your workspace.")
+        params.setError(
+          cause instanceof Error ? cause.message : "Could not prepare your workspace."
+        )
         return
       } finally {
         params.setLoading(false)

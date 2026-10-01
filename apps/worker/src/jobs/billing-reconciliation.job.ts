@@ -14,11 +14,7 @@
 import { randomUUID } from "node:crypto"
 import { getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import {
-  getPolarClient,
-  getRazorpayClient,
-  isMinutePackOrderPayload,
-} from "@lyrashield/billing"
+import { getPolarClient, getRazorpayClient, isMinutePackOrderPayload } from "@lyrashield/billing"
 
 export interface ReconciliationResult {
   /** Number of Polar events checked. */
@@ -362,10 +358,7 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
   // Separate backlog/health signal: unresolved billing exceptions that predate
   // (or are invisible to) this run's coverage window stay operator-visible
   // forever — a later, narrower window can never make them disappear.
-  if (
-    result.backlog.unprocessedBeforeCoverage > 0 ||
-    result.backlog.deadLetterTracks > 0
-  ) {
+  if (result.backlog.unprocessedBeforeCoverage > 0 || result.backlog.deadLetterTracks > 0) {
     logger.warn("operator_alert", {
       code: "reconciliation_backlog",
       severity: "warning",
@@ -552,12 +545,7 @@ async function reconcileRazorpay(
               "Razorpay payment not found in WebhookEvent table — webhook may have been missed",
           })
         } else if (receipt.processed) {
-          await verifyPackSettlementCredit(
-            "razorpay",
-            payment.id,
-            entityRecord(payment),
-            result
-          )
+          await verifyPackSettlementCredit("razorpay", payment.id, entityRecord(payment), result)
         }
       }
 

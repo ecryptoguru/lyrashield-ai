@@ -296,17 +296,19 @@ describe("provider catalog entitlement validation", () => {
      * payment-link notes onto the captured payment entity, so both
      * `payment.captured` and `payment_link.paid` deliver this same shape.
      */
-    function routePackNotes(overrides: {
-      workspaceId?: string
-      accountId?: string | null
-      packId?: string
-      amountMinor?: number
-      signAccountId?: string | null
-      signWorkspaceId?: string
-      signCatalogKey?: string
-      signAmountMinor?: number
-      extra?: Record<string, string>
-    } = {}) {
+    function routePackNotes(
+      overrides: {
+        workspaceId?: string
+        accountId?: string | null
+        packId?: string
+        amountMinor?: number
+        signAccountId?: string | null
+        signWorkspaceId?: string
+        signCatalogKey?: string
+        signAmountMinor?: number
+        extra?: Record<string, string>
+      } = {}
+    ) {
       const workspaceId = overrides.workspaceId ?? WORKSPACE
       const accountId = overrides.accountId === undefined ? ACCOUNT : overrides.accountId
       const packId = overrides.packId ?? "pack_100"
@@ -362,12 +364,14 @@ describe("provider catalog entitlement validation", () => {
       const notes = routePackNotes()
       // Razorpay copies payment-link notes onto the payment entity; either
       // carrier must resolve to the same bound quote.
-      expect(
-        resolveRazorpayCatalogEvent("payment_link.paid", linkPaidEvent(notes))
-      ).toEqual({ kind: "pack", packId: "pack_100" })
-      expect(
-        resolveRazorpayCatalogEvent("payment_link.paid", linkPaidEvent({}, notes))
-      ).toEqual({ kind: "pack", packId: "pack_100" })
+      expect(resolveRazorpayCatalogEvent("payment_link.paid", linkPaidEvent(notes))).toEqual({
+        kind: "pack",
+        packId: "pack_100",
+      })
+      expect(resolveRazorpayCatalogEvent("payment_link.paid", linkPaidEvent({}, notes))).toEqual({
+        kind: "pack",
+        packId: "pack_100",
+      })
     })
 
     it("verifies the quote signature against the credited account directly", () => {
@@ -410,9 +414,9 @@ describe("provider catalog entitlement validation", () => {
     it("rejects an accountId grafted onto another payer's signed quote", () => {
       // Note claims a different payer than the one bound into the signature.
       const grafted = routePackNotes({ accountId: "acct_attacker", signAccountId: ACCOUNT })
-      expect(() =>
-        resolveRazorpayCatalogEvent("payment.captured", capturedEvent(grafted))
-      ).toThrow(/catalog evidence/)
+      expect(() => resolveRazorpayCatalogEvent("payment.captured", capturedEvent(grafted))).toThrow(
+        /catalog evidence/
+      )
       expect(() =>
         resolveRazorpayCatalogEvent("payment_link.paid", linkPaidEvent(grafted))
       ).toThrow(/catalog evidence/)
@@ -454,9 +458,7 @@ describe("provider catalog entitlement validation", () => {
       // Non-INR capture can never fulfill an INR quote.
       const usd = capturedEvent(routePackNotes())
       usd.payload.payment.entity.currency = "USD"
-      expect(() => resolveRazorpayCatalogEvent("payment.captured", usd)).toThrow(
-        /catalog evidence/
-      )
+      expect(() => resolveRazorpayCatalogEvent("payment.captured", usd)).toThrow(/catalog evidence/)
 
       // Underpayment against a correctly signed quote.
       expect(() =>
@@ -469,16 +471,16 @@ describe("provider catalog entitlement validation", () => {
 
     it("rejects a tampered quote signature", () => {
       const notes = routePackNotes({ extra: { quoteSignature: "0".repeat(64) } })
-      expect(() =>
-        resolveRazorpayCatalogEvent("payment.captured", capturedEvent(notes))
-      ).toThrow(/catalog evidence/)
+      expect(() => resolveRazorpayCatalogEvent("payment.captured", capturedEvent(notes))).toThrow(
+        /catalog evidence/
+      )
       const flipped = {
         ...routePackNotes(),
         quoteSignature: routePackNotes().quoteSignature.replace(/^./, "f"),
       }
-      expect(() =>
-        resolveRazorpayCatalogEvent("payment.captured", capturedEvent(flipped))
-      ).toThrow(/catalog evidence/)
+      expect(() => resolveRazorpayCatalogEvent("payment.captured", capturedEvent(flipped))).toThrow(
+        /catalog evidence/
+      )
     })
 
     it("preserves account-free Local SKU quote compatibility", () => {

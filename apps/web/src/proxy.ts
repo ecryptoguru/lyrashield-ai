@@ -68,11 +68,7 @@ const HSTS_HEADER = "max-age=63072000; includeSubDomains; preload"
  * redirects, and early-return errors — carries the same CSP/HSTS posture.
  * Centralizing it keeps a new response path from ever shipping bare.
  */
-function applySecurityHeaders(
-  response: NextResponse,
-  csp: string,
-  isLocalPreview: boolean
-): void {
+function applySecurityHeaders(response: NextResponse, csp: string, isLocalPreview: boolean): void {
   response.headers.set("Content-Security-Policy", csp)
   if (!isLocalPreview) {
     response.headers.set("Strict-Transport-Security", HSTS_HEADER)

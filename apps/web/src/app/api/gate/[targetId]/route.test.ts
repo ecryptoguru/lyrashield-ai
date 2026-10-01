@@ -99,10 +99,9 @@ describe("GET /api/gate/[targetId]", () => {
   it("denies a narrowed delegated grant reading another target's verdict (W0.3)", async () => {
     requirePermission.mockResolvedValue({ session: narrowSession })
 
-    const response = await GET(
-      new Request("http://localhost/api/gate/target-b?workspaceId=ws-1"),
-      { params: Promise.resolve({ targetId: "target-b" }) }
-    )
+    const response = await GET(new Request("http://localhost/api/gate/target-b?workspaceId=ws-1"), {
+      params: Promise.resolve({ targetId: "target-b" }),
+    })
 
     expect(response.status).toBe(403)
     expect(getCurrentGateVerdict).not.toHaveBeenCalled()
@@ -116,9 +115,12 @@ describe("POST /api/gate/[targetId] delegated scope (W0.3)", () => {
   })
 
   function postRequest(targetId: string) {
-    return POST(new Request(`http://localhost/api/gate/${targetId}?workspaceId=ws-1`, { method: "POST" }), {
-      params: Promise.resolve({ targetId }),
-    })
+    return POST(
+      new Request(`http://localhost/api/gate/${targetId}?workspaceId=ws-1`, { method: "POST" }),
+      {
+        params: Promise.resolve({ targetId }),
+      }
+    )
   }
 
   it("denies evaluation for a target outside a narrowed grant, before evaluation", async () => {
