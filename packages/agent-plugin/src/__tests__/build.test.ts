@@ -20,6 +20,19 @@ async function createIsolatedPluginRoot(): Promise<string> {
   return pluginRoot
 }
 
+async function createIsolatedPackagedPluginRoot(): Promise<string> {
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "lyrashield-plugin-package-test-"))
+  const pluginRoot = path.join(temporaryRoot, "packages", "agent-plugin", "plugin")
+  onTestFinished(async () => {
+    await rm(temporaryRoot, { recursive: true, force: true })
+  })
+  await cp(getPluginDir(), pluginRoot, {
+    recursive: true,
+    filter: (source) => !source.endsWith(".tmp"),
+  })
+  return pluginRoot
+}
+
 describe("buildPlugin", () => {
   it("publishes without unpublished workspace dependencies", async () => {
     const pluginRoot = getPluginDir()
@@ -30,6 +43,33 @@ describe("buildPlugin", () => {
     expect(
       Object.keys(packageJson.dependencies).filter((name) => name.startsWith("@lyrashield/"))
     ).toEqual([])
+  })
+
+  it("uses the bundled icon when the canonical docs asset is absent from a package tree", async () => {
+    const pluginRoot = await createIsolatedPackagedPluginRoot()
+    const docsAssetPath = path.resolve(
+      pluginRoot,
+      "../../../docs/marketplace/assets/lyrashield-400.png"
+    )
+    await expect(access(docsAssetPath)).rejects.toMatchObject({ code: "ENOENT" })
+
+    const bundledIconPath = path.join(pluginRoot, "assets", "lyrashield-400.png")
+    const bundledIconBefore = await readFile(bundledIconPath)
+    await buildPlugin({ pluginRoot })
+
+    await expect(readFile(bundledIconPath)).resolves.toEqual(bundledIconBefore)
+    await expect(validatePlugin(pluginRoot)).resolves.toEqual({ ok: true, errors: [] })
+  })
+
+  it("does not hide an explicit logo asset error with the bundled icon", async () => {
+    const pluginRoot = await createIsolatedPluginRoot()
+    const missingLogoAssetPath = path.join(pluginRoot, "missing-logo.png")
+
+    await expect(
+      buildPlugin({ pluginRoot, logoAssetPath: missingLogoAssetPath })
+    ).rejects.toMatchObject({
+      code: "ENOENT",
+    })
   })
 
   it("generates SKILL.md and client shims", async () => {

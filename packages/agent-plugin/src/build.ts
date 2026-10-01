@@ -54,14 +54,27 @@ async function prepareOpenAiAssets(
   const openAiInterface = manifest.extensions?.["com.openai"]?.interface
   if (!openAiInterface) return
 
-  const source =
-    logoAssetPath ?? path.resolve(pluginRoot, "../../../docs/marketplace/assets/lyrashield-400.png")
   const destination = resolvePluginAsset(pluginRoot, OPENAI_ICON_RELATIVE_PATH)
   if (!destination) {
     throw new Error("OpenAI icon path must remain inside the plugin root")
   }
 
-  const image = await readFile(source)
+  let image: Buffer
+  if (logoAssetPath !== undefined) {
+    image = await readFile(logoAssetPath)
+  } else {
+    const source = path.resolve(pluginRoot, "../../../docs/marketplace/assets/lyrashield-400.png")
+    try {
+      image = await readFile(source)
+    } catch (error) {
+      const isMissingSource =
+        error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT"
+      if (!isMissingSource) throw error
+      // Published package trees contain their owned icon, while the canonical docs asset only
+      // exists in the source checkout. Fall back only when that default lookup is absent.
+      image = await readFile(destination)
+    }
+  }
   const isPng =
     image.length >= 24 &&
     image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
