@@ -844,6 +844,16 @@ model Scan {
   createdById           String
   // Immutable billing identity for this scan; NULL on legacy scans means createdById.
   sponsorAccountId      String?
+  // The delegated OAuth connection grant that authorized this scan, when it was
+  // created through a hosted MCP/agent credential instead of a browser session
+  // or workspace API key. Persisted at the synchronous admission boundary so
+  // the async execution path re-verifies the exact grant — a revoked, expired,
+  // re-scoped (authorizationVersion bumped), or target-narrowed connection
+  // between queueing and execution denies the run instead of inheriting the
+  // stale request-time allow. NULL for cookie/API-key/schedule/loop-closure
+  // producers, which never carry a delegated grant.
+  delegatedConnectionId         String?
+  delegatedAuthorizationVersion Int?
   deletedAt             DateTime?
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
@@ -1766,6 +1776,32 @@ model WebhookEventTrack {
   @@index([status])
   @@index([track, status])
   @@index([status, nextAttemptAt])
+}
+
+/// Durable receipt for an authentic (provider-signature-valid), identifiable
+/// webhook delivery that failed catalog validation. Bounded identifiers only —
+/// never raw payloads, emails, account secrets, or guessed tenant binding. The
+/// (provider, externalId) unique key dedupes rejected replays and shares the
+/// identity resolution of WebhookEvent.externalId without ever overlaying an
+/// accepted receipt. Global/system-owned: the tenant runtime role has no
+/// access (enforced by migration RLS); written only through the system client.
+/// A rejected receipt is never eligible for entitlement-track processing.
+model WebhookEventRejection {
+  id             String   @id @default(cuid())
+  provider       String
+  // Same identity as WebhookEvent.externalId: provider delivery id when
+  // present, else the deterministic resource digest.
+  externalId     String
+  // "delivery" | "derived" — same vocabulary as WebhookEvent.identitySource.
+  identitySource String?
+  eventType      String
+  // Bounded reason code (e.g. "catalog_evidence_mismatch") — never a message.
+  reasonCode     String
+  observedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@unique([provider, externalId])
+  @@index([provider, observedAt])
 }
 
 /// Global checkpoint and lease for the report-only provider reconciliation job.

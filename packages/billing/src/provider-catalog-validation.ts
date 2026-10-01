@@ -137,12 +137,21 @@ function requireRazorpayQuote(
   if (!workspaceId || !quotedRaw || !/^\d+$/.test(quotedRaw) || paidAmount === null) reject()
   const quotedAmount = Number(quotedRaw)
   if (!Number.isSafeInteger(quotedAmount)) reject()
+  // Pack quotes are payer-bound: the top-up route signs the authenticated
+  // purchasing account into the quote and stamps it as metadata.accountId,
+  // and the adapter credits exactly that note. Requiring the note and folding
+  // it into the reconstructed quote binds the credited payer to the signed
+  // quote — an account-free or grafted accountId can never verify. Local SKU
+  // quotes stay account-free (anonymous buyer flow; no account exists yet).
+  const accountId = kind === "pack" ? text(metadata.accountId) : null
+  if (kind === "pack" && !accountId) reject()
   if (
     !verifyBillingQuote(
       {
         provider: "razorpay",
         kind,
         workspaceId,
+        ...(accountId ? { accountId } : {}),
         catalogKey,
         amountMinor: quotedAmount,
         currency: "INR",
@@ -251,7 +260,16 @@ export function resolveRazorpayCatalogEvent(
   }
 
   if (eventType === "payment_link.paid") {
-    const metadata = { ...record(paymentLink.notes), ...record(payment.notes) }
+    // Razorpay copies payment-link notes onto the captured payment entity, so
+    // both carriers normally agree. A conflicting second account field is
+    // ambiguous payer evidence — never let one source silently override the
+    // other; the signed quote binds a single credited account.
+    const linkNotes = record(paymentLink.notes)
+    const paymentNotes = record(payment.notes)
+    const linkAccountId = text(linkNotes.accountId)
+    const paymentAccountId = text(paymentNotes.accountId)
+    if (linkAccountId && paymentAccountId && linkAccountId !== paymentAccountId) reject()
+    const metadata = { ...linkNotes, ...paymentNotes }
     const packId = text(metadata.packId)
     if (packId) {
       if (!isPackId(packId)) reject()

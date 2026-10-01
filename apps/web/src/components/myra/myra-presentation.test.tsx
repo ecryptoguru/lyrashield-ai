@@ -120,7 +120,7 @@ describe("ProposalActions", () => {
         context={{ ...context, proposalStates: { p2: { state: "cancelled" } } }}
       />
     )
-    expect(html).toContain("Canceled before execution.")
+    expect(html).toContain("Cancelled before execution.")
     expect(html).not.toContain("<button")
   })
 

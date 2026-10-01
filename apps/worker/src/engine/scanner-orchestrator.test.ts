@@ -528,6 +528,69 @@ describe("runScannerOrchestrator", () => {
     )
   })
 
+  it("marks the URL detector as a coverage gap when a URL target has no resolved profile", async () => {
+    const result = await runScannerOrchestrator({
+      scanId: "scan-url-no-profile",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "WEB_APP", name: "Web app", url: "https://example.test" },
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      engineFindings: [],
+    })
+
+    // The detector never ran — a silent skip would leave the url coverage
+    // receipt COMPLETED for a scanner that produced nothing.
+    expect(scanUrl).not.toHaveBeenCalled()
+    expect(result.urlFindings).toEqual([])
+    expect(result.coverageIssues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ scanner: "url", status: "unsupported" })])
+    )
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-url-no-profile",
+      "scanner",
+      "warning",
+      "URL scanner skipped — no resolved profile for this target",
+      expect.any(Object)
+    )
+  })
+
+  it("marks the URL detector as a coverage gap when a resolved profile has no target URL", async () => {
+    const result = await runScannerOrchestrator({
+      scanId: "scan-profile-no-url",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "WEB_APP", name: "Web app" },
+      goal: "TEST_APP",
+      mode: "SAFE",
+      engineFindings: [],
+      urlProfile: {
+        id: "WEB_APP_SAFE",
+        targetType: "WEB_APP",
+        mode: "SAFE",
+        label: "Surface Review",
+        description: "...",
+        maxDocuments: 1,
+        maxAssets: 6,
+        maxDepth: 0,
+        maxTotalBytes: 8 * 1024 * 1024,
+        maxResponseBytes: 3 * 1024 * 1024,
+        maxConcurrency: 3,
+        maxWallTimeMs: 60_000,
+        maxOperations: 0,
+        maxMethodProbes: 0,
+        maxOriginProbes: 0,
+        allowedMethods: ["GET"],
+        requiresApiSpec: false,
+      },
+    })
+
+    expect(scanUrl).not.toHaveBeenCalled()
+    expect(result.coverageIssues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ scanner: "url", status: "unsupported" })])
+    )
+  })
+
   it("persists deterministic scanner coverage limitations as scan evidence", async () => {
     vi.mocked(scanSca).mockImplementationOnce(async (config) => {
       config.coverageIssues?.push({

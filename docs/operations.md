@@ -26,15 +26,26 @@ Founder- and operator-run procedures consolidated from standalone runbooks. Each
 ### Report-only billing reconciliation
 
 The worker checks paid Polar orders, captured Razorpay payments and
-unprocessed webhook events at startup and every 24 hours. Provider order/payment
+unprocessed Polar/Razorpay webhook events at startup and every 24 hours —
+the sweep is scoped to the money rails, so deliveries for other providers are
+never billing drift. Provider order/payment
 status can change after creation, so each run rescans a 24-day window. This
 covers Polar's documented 21-day subscription retry schedule and Razorpay's
 late-authorization capture window with a small scheduler-delay margin. The
 first attempt sets a durable coverage baseline 24 days before that attempt;
 each successful run advances a system-owned checkpoint, and later runs include
-the same 24-day overlap. Provider or database failures leave the checkpoint
+the same 24-day overlap. A completed run suppresses provider re-listing for
+24 hours; replica restarts no longer re-list providers while the lease is
+held. Provider or database failures leave the checkpoint
 unchanged, so a later run catches up across outages. A cross-worker lease
-prevents overlapping sweeps. This job only reports and alerts: it does not
+prevents overlapping sweeps. Each run additionally verifies that every fully
+processed pack settlement produced its `MinutePack` credit keyed by
+(provider, externalId) — a missing credit reports `settlement_credit_missing`
+drift — and reports duplicate settlement receipts (`reconciliation_duplicates`)
+and refunds whose settlement was never recorded (`refund_without_settlement`)
+as operator alerts inside the coverage window. Older unresolved exceptions
+outside the window stay visible through the separate `reconciliation_backlog`
+signal. This job only reports and alerts: it does not
 replay webhook tracks or change billing, entitlements or money. The credential
 scopes and production provider pins still need separate verification before
 this code is considered operational. The first-attempt baseline is the

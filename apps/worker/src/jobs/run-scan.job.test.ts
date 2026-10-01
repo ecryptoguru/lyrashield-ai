@@ -102,6 +102,7 @@ vi.mock("@lyrashield/db", async () => {
       },
     })),
     updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
+    requeueScanForRetry: vi.fn().mockResolvedValue({ requeued: true, fromStatus: "PREFLIGHT" }),
     completeScanWithScore: vi.fn().mockResolvedValue({}),
     createAiSecurityScoreSnapshot: vi.fn().mockResolvedValue({}),
     qualifyReferralForWorkspace: vi.fn().mockResolvedValue(null),
@@ -321,6 +322,7 @@ import {
   completeScanWithScore,
   qualifyReferralForWorkspace,
   updateScanStatus,
+  requeueScanForRetry,
   evaluateGateForTarget,
   addScanEvent,
   withScanFinalizationClaim,
@@ -1466,7 +1468,7 @@ describe("processScanJob", () => {
       expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
     }
   )
-  it.each(["content_filter_stopped", "engine_stopped"])(
+  it.each(["content_filter_stopped", "engine_stopped"] as const)(
     "meters a %s PARTIAL result with affirmative scan-bound usage",
     async (reason) => {
       vi.mocked(runEngine).mockResolvedValueOnce({
@@ -1499,6 +1501,19 @@ describe("processScanJob", () => {
       )
       const manifest = vi.mocked(persistResultManifest).mock.calls.at(-1)?.[0]
       expect(manifest?.engineExecution?.model).toBeUndefined()
+      // A truncated engine run must carry a bounded coverage receipt — a
+      // PARTIAL result without it would present the engine's scope as
+      // complete. Same contract as the runtime_deadline receipt.
+      expect(manifest?.terminalOutcome).toMatchObject({ status: "PARTIAL" })
+      expect(manifest?.coverageIssues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            scanner: "engine",
+            status: "bounded",
+            subject: reason === "engine_stopped" ? "engine-stopped" : "content-filter-stopped",
+          }),
+        ])
+      )
     }
   )
 
@@ -2596,13 +2611,43 @@ describe("processScanJob", () => {
     const retryingJob = retryingJobFixture as never
 
     await expect(processScanJob(retryingJob)).rejects.toThrow("temporary database error")
-    expect(prisma.scan.updateMany).toHaveBeenCalledWith({
-      where: {
-        id: "scan-1",
-        status: { in: ["PREFLIGHT", "RUNNING", "VERIFYING"] },
+    // W2.2: the regression to QUEUED goes through the recorded requeue helper —
+    // a bare status write would silently lose the interrupted step.
+    expect(requeueScanForRetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        attempt: 1,
+        maxAttempts: 3,
+        errorCategory: "INTERNAL_ERROR",
+      })
+    )
+    expect(prisma.scan.updateMany).not.toHaveBeenCalled()
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+  })
+
+  it("still throws for the queue when the scan is no longer requeueable", async () => {
+    vi.mocked(runPreflight).mockRejectedValue(new Error("temporary database error") as never)
+    vi.mocked(requeueScanForRetry).mockResolvedValue({
+      requeued: false,
+      currentStatus: "REQUIRES_APPROVAL",
+    } as never)
+    const retryingJobFixture = {
+      id: "scan-1",
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
       },
-      data: { status: "QUEUED" },
-    })
+    }
+    const retryingJob = retryingJobFixture as never
+
+    await expect(processScanJob(retryingJob)).rejects.toThrow("temporary database error")
+    expect(requeueScanForRetry).toHaveBeenCalled()
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 

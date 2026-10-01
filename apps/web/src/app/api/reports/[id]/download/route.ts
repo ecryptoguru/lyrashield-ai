@@ -12,6 +12,7 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError } from "../../../../../lib/api-response"
+import { notModifiedResponse, representationEtag } from "../../../../../lib/http-etag"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -80,10 +81,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const filename = `${reportRecord?.title.replace(/[^\w -]+/g, "").trim() || `report-${id}`}.html`
     const disposition = searchParams.get("download") === "1" ? "attachment" : "inline"
 
+    // W2.4: the rendered HTML is the representation; a matching conditional
+    // GET answers 304 with no body.
+    const etag = representationEtag(html)
+    const notModified = notModifiedResponse(request, etag)
+    if (notModified) return notModified
+
     return new Response(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Content-Disposition": `${disposition}; filename="${filename}"`,
+        ETag: etag,
       },
     })
   } catch (error) {

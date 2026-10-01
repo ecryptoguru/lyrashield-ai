@@ -14,6 +14,16 @@ export const MAX_CONCURRENT_WORKSPACE_SCANS = 3
 /** Both-sided scorecard referral reward, denominated in agent minutes. */
 export const SCORECARD_REFERRAL_BONUS_MINUTES = 30
 
+/**
+ * The single source of truth for the stored result-manifest schema version.
+ * The producer (`apps/worker` result-integrity manifest writer) stamps this on
+ * every persisted manifest and the consumers (`@lyrashield/db` gate-assessment
+ * snapshot parsing) accept exactly this version — anything else is an
+ * unsupported manifest and fails closed. Bump deliberately; both sides move
+ * together.
+ */
+export const RESULT_MANIFEST_VERSION = 7
+
 export const WorkspaceModeSchema = z.enum(["VIBE", "TEAM", "ENTERPRISE"])
 export const WorkspacePlanSchema = z.enum([
   "FREE",

@@ -153,3 +153,48 @@ describe("POST /api/reports", () => {
     expect(createReport).not.toHaveBeenCalled()
   })
 })
+
+describe("GET /api/reports — conditional GET (W2.4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requirePermission).mockResolvedValue({ session: { userId: "user-1" } } as never)
+    vi.mocked(listReports).mockResolvedValue({
+      items: [{ id: "report-1", title: "Report" }],
+      nextCursor: null,
+    } as never)
+  })
+
+  it("returns an ETag on 200 and a bodyless 304 for a matching If-None-Match", async () => {
+    const first = await GET(new Request("http://localhost/api/reports?workspaceId=ws-1"))
+    expect(first.status).toBe(200)
+    const etag = first.headers.get("ETag")
+    expect(etag).toMatch(/^"[0-9a-f]{64}"$/)
+
+    const second = await GET(
+      new Request("http://localhost/api/reports?workspaceId=ws-1", {
+        headers: { "If-None-Match": etag! },
+      })
+    )
+    expect(second.status).toBe(304)
+    expect(second.headers.get("ETag")).toBe(etag)
+    expect(await second.text()).toBe("")
+  })
+
+  it("serves a fresh representation when the list changed", async () => {
+    const first = await GET(new Request("http://localhost/api/reports?workspaceId=ws-1"))
+    const etag = first.headers.get("ETag")
+
+    vi.mocked(listReports).mockResolvedValue({
+      items: [{ id: "report-2", title: "Report" }],
+      nextCursor: null,
+    } as never)
+
+    const second = await GET(
+      new Request("http://localhost/api/reports?workspaceId=ws-1", {
+        headers: { "If-None-Match": etag! },
+      })
+    )
+    expect(second.status).toBe(200)
+    expect(second.headers.get("ETag")).not.toBe(etag)
+  })
+})

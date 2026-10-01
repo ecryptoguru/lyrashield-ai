@@ -1,5 +1,5 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { evaluateGateForTarget, getCurrentGateVerdict } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
@@ -46,7 +46,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ targ
     }
     const { workspaceId, commit, artifactDigest } = parsed.data
 
-    await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    // Delegated-scope gate (W0.3): a narrowed OAuth connection may read gate
+    // verdicts only for targets inside its grant.
+    assertOAuthDelegatedScope(session, targetId)
     const verdict = await getCurrentGateVerdict(workspaceId, targetId, {
       expectedCommit: commit,
       expectedArtifactDigest: artifactDigest,
@@ -76,7 +79,10 @@ async function post(request: Request, { params }: { params: Promise<{ targetId: 
     const workspaceId = new URL(request.url).searchParams.get("workspaceId")
     if (!workspaceId) return apiError("MISSING_PARAM", "workspaceId is required", 400)
 
-    await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    // Delegated-scope gate (W0.3): evaluation is a target-scoped mutation —
+    // fail closed for delegated grants that do not cover this target.
+    assertOAuthDelegatedScope(session, targetId)
     const result = await evaluateGateForTarget(workspaceId, targetId)
     if (!result) return apiError("NOT_FOUND", "Target not found", 404)
     return apiSuccess(result, 201)

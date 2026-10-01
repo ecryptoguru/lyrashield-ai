@@ -20,6 +20,11 @@ jobs:
     name: Read CI release routing decision
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    # This job only downloads the CI routing artifact and reads the main ref;
+    # registry push rights stay with the reusable deploy job that needs them.
+    permissions:
+      actions: read
+      contents: read
     outputs:
       azure-deploy: ${{ steps.routing.outputs.azure-deploy }}
       current-main: ${{ steps.current-main.outputs.current }}

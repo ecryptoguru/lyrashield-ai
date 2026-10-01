@@ -62,7 +62,7 @@ Only repository targets invoke the external engine. URL/API targets use determin
 QUEUED → PREFLIGHT → RUNNING → VERIFYING → COMPLETED
 ```
 
-Terminal alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved — never reported as `COMPLETED`), `CANCELLED`, `TIMED_OUT`, `STOPPED_BUDGET`, `REQUIRES_APPROVAL`. Queue/database orphans fail after a bounded window and are never auto-replayed. After any terminal state the target's gate verdict is refreshed.
+Terminal alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved — never reported as `COMPLETED`, and every truncation carries a bounded coverage receipt marking the cut-short scope), `CANCELLED`, `TIMED_OUT`, `STOPPED_BUDGET`, `REQUIRES_APPROVAL`. Queue/database orphans fail after a bounded window and are never auto-replayed. After any terminal state the target's gate verdict is refreshed.
 
 ### 1.4 URL/API scan pipeline
 

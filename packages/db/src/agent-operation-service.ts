@@ -1,6 +1,6 @@
 import type { AgentOperation, Prisma } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
-import { createHash } from "node:crypto"
+import { hashOperationInput } from "./agent-operation-hash"
 import { withWorkspaceRLS } from "./rls"
 
 function isPrismaInputJsonValue(value: unknown): value is Prisma.InputJsonValue {
@@ -111,21 +111,10 @@ export type ClaimOperationResult =
       message: string
     }
 
-export function hashOperationInput(operationName: string, input: Record<string, unknown>): string {
-  const canonical = JSON.stringify({ operationName, input }, sortKeysReplacer)
-  return createHash("sha256").update(canonical).digest("hex")
-}
-
-function sortKeysReplacer(_key: string, value: unknown): unknown {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const sorted: Record<string, unknown> = {}
-    for (const k of Object.keys(value as Record<string, unknown>).sort()) {
-      sorted[k] = (value as Record<string, unknown>)[k]
-    }
-    return sorted
-  }
-  return value
-}
+// The canonical input hash lives in agent-operation-hash (a pure module) so
+// unit tests and callers can apply the exact production hashing without
+// importing the Prisma-backed service surface.
+export { hashOperationInput }
 
 export async function claimOrGetAgentOperation(
   params: ClaimAgentOperationParams

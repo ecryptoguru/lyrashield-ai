@@ -112,6 +112,38 @@ done
 out=$(run_classify $'.github/scripts/tests/test-promote-worker-vm.sh')
 assert_eq "Deployment test only: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
+# --- Test 6c: every script and workflow the Azure rollout executes routes to Azure deploy ---
+# Exact-path coverage for the runtime reusable workflow, the rollout/preflight
+# helpers, the webhook-claims cutover scripts (host wrapper and VM payload), the
+# Key Vault secret-set library, the worker provenance record, the migration
+# database identity check and the webhook cutover verifier.
+for path in \
+  .github/workflows/deploy-azure-runtime.yml \
+  .github/scripts/deploy-azure-preflight.sh \
+  .github/scripts/deploy-azure-rollout.sh \
+  .github/scripts/webhook-claims-maintenance.sh \
+  .github/scripts/webhook-claims-vm.sh \
+  .github/scripts/azure_secret_set.sh \
+  .github/scripts/validate-worker-provenance.sh \
+  .github/scripts/migration-database-identity.mjs \
+  .github/scripts/verify-webhook-cutover.mjs; do
+  out=$(run_classify "$path")
+  assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+  assert_eq "$path: tooling" "true" "$(get_field "$out" "tooling-only")"
+done
+
+# Paired negatives: documentation and test/tooling neighbours with lookalike
+# names must not route a production deployment on their own.
+for path in \
+  .github/scripts/tests/test-azure-secret-set.sh \
+  .github/scripts/tests/webhook-cutover.test.mjs \
+  .github/scripts/tests/migration-database-identity.test.mjs \
+  .github/scripts/README.md \
+  docs/webhook-claims-maintenance.md; do
+  out=$(run_classify "$path")
+  assert_eq "$path: Azure deploy negative" "false" "$(get_field "$out" "azure-deploy")"
+done
+
 # --- Test 7: an uncovered path falls back to shared (fail-closed, v13 P1-7) ---
 # ops/, e2e/, root tooling, and new root configs must not silently skip deploys.
 out=$(run_classify $'ops/worker/refresh-egress.sh')

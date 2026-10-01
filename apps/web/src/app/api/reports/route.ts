@@ -5,12 +5,8 @@ import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/s
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
-import {
-  apiError,
-  apiSuccess,
-  apiPaginated,
-  parsePaginationParams,
-} from "../../../lib/api-response"
+import { apiError, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
+import { jsonWithEtag } from "../../../lib/http-etag"
 import { z } from "zod"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
 
@@ -36,7 +32,10 @@ export async function GET(request: Request) {
     const { cursor, limit } = parsePaginationParams(searchParams)
     const { items, nextCursor } = await listReports(workspaceId, cursor ?? undefined, limit)
 
-    return apiPaginated(items, nextCursor)
+    // W2.4: the report list keeps the paginated envelope, but its ETag is
+    // bound to the serialized representation so a matching conditional GET
+    // answers 304 with no body.
+    return jsonWithEtag(request, { items, nextCursor })
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

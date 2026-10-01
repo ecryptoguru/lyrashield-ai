@@ -309,6 +309,80 @@ describe("POST /api/scans", () => {
     expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ policyId: "default-policy" }))
   })
 
+  it("persists the delegated grant identity on the scan row for OAuth sessions (W0.4)", async () => {
+    // The sync/async boundary: the connection identity verified by
+    // assertOAuthDelegatedScope is bound into the durable scan record so the
+    // worker re-verifies the exact grant at execution instead of inheriting
+    // the request-time allow.
+    vi.mocked(requirePermission).mockResolvedValue({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          workspaceId: "ws-1",
+          scopes: ["lyrashield.write"],
+          allowedOperations: ["scan.create"],
+          allowedTargetIds: ["t1"],
+          allTargets: false,
+          authorizationVersion: 3,
+        },
+      },
+      workspace: { id: "ws-1" },
+    } as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(createScan).mockResolvedValue({
+      id: "scan-delegated",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      targetId: "t1",
+      createdAt: new Date(),
+    } as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
+
+    expect(res.status).toBe(201)
+    expect(createScan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        delegatedConnection: { connectionId: "conn-1", authorizationVersion: 3 },
+      })
+    )
+  })
+
+  it("records no delegated grant for cookie sessions", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(createScan).mockResolvedValue({
+      id: "scan-cookie",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      targetId: "t1",
+      createdAt: new Date(),
+    } as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
+
+    expect(res.status).toBe(201)
+    const call = vi.mocked(createScan).mock.calls[0]![0]
+    expect(call).not.toHaveProperty("delegatedConnection")
+  })
+
   it("persists the canonical URL profile instead of its Quick compatibility alias", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "web-1",
@@ -1229,6 +1303,161 @@ describe("POST /api/scans", () => {
 
     expect(res.status).toBe(201)
     expect(enqueueScanJob).toHaveBeenCalled()
+  })
+
+  /**
+   * W2.1 — every admission refusal is explicit and typed
+   * (`error.details.refusal.reason` from the closed ScanRefusalReason
+   * vocabulary) and the reason is persisted as a `scan.refused` audit row
+   * before the response is returned. A bare 4xx/5xx with no refusal marker
+   * must never come out of these paths.
+   */
+  describe("typed, persisted scan refusals (W2.1)", () => {
+    function expectRefusalAudit(reason: string) {
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            workspaceId: expect.any(String),
+            actorUserId: "user-1",
+            action: "scan.refused",
+            resourceType: "target",
+            metadata: expect.objectContaining({ refusalReason: reason }),
+          }),
+        })
+      )
+    }
+
+    it("returns a typed refusal and persists it when the target is missing", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(null as never)
+
+      const res = await POST(
+        makeRequest({ workspaceId: "ws-1", targetId: "gone", goal: "TEST_APP", mode: "SAFE" })
+      )
+
+      expect(res.status).toBe(404)
+      const json = await res.json()
+      expect(json.error.code).toBe("TARGET_NOT_FOUND")
+      expect(json.error.details.refusal).toEqual({ reason: "target_not_found" })
+      expectRefusalAudit("target_not_found")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("returns a typed refusal and persists it when the entitlement gate denies", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue({
+        id: "web-1",
+        type: "WEB_APP",
+        url: "https://free.example.com",
+        apiSpecUrl: null,
+      } as never)
+      vi.mocked(assertScanAllowed).mockResolvedValue({
+        allowed: false,
+        code: "NO_MINUTES_REMAINING",
+        message: "No minutes",
+        plan: "FREE",
+        isTrial: false,
+        remainingMinutes: 0,
+      } as never)
+
+      const res = await POST(
+        makeRequest({ workspaceId: "ws-1", targetId: "web-1", goal: "TEST_APP", mode: "SAFE" })
+      )
+
+      expect(res.status).toBe(403)
+      const json = await res.json()
+      expect(json.error.code).toBe("NO_MINUTES_REMAINING")
+      expect(json.error.details.refusal).toEqual({ reason: "entitlement_denied" })
+      // Existing actionable details are preserved alongside the marker.
+      expect(json.error.details.plan).toBe("FREE")
+      expectRefusalAudit("entitlement_denied")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("returns a typed refusal and persists it when domain proof is missing", async () => {
+      vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "PRO" } as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
+      vi.mocked(prisma.target.findFirst).mockResolvedValue({
+        id: "web-verified",
+        type: "WEB_APP",
+        url: "https://staging.example.com/safety",
+        apiSpecUrl: null,
+      } as never)
+
+      const res = await POST(
+        makeRequest({
+          workspaceId: "ws-paid-proof",
+          targetId: "web-verified",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+        })
+      )
+
+      expect(res.status).toBe(403)
+      const json = await res.json()
+      expect(json.error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+      expect(json.error.details.refusal).toEqual({ reason: "domain_verification_required" })
+      expect(json.error.details.remediation.txtName).toBe("_lyrashield.staging.example.com")
+      expectRefusalAudit("domain_verification_required")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("returns a typed refusal and persists it when no worker is available", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
+      vi.mocked(assertScanWorkerAvailable).mockRejectedValue(new ScanWorkerUnavailableError())
+
+      const res = await POST(
+        makeRequest({ workspaceId: "ws-1", targetId: "t1", goal: "TEST_APP", mode: "SAFE" })
+      )
+
+      expect(res.status).toBe(503)
+      const json = await res.json()
+      expect(json.error.code).toBe("SCAN_SERVICE_UNAVAILABLE")
+      expect(json.error.details.refusal).toEqual({ reason: "worker_unavailable" })
+      expectRefusalAudit("worker_unavailable")
+      expect(createScan).not.toHaveBeenCalled()
+    })
+
+    it("returns a typed refusal and persists it on the concurrency catch path", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
+      vi.mocked(createScan).mockRejectedValue(new WorkspaceScanConcurrencyLimitError() as never)
+
+      const res = await POST(
+        makeRequest({ workspaceId: "ws-1", targetId: "t1", goal: "TEST_APP", mode: "SAFE" })
+      )
+
+      expect(res.status).toBe(409)
+      const json = await res.json()
+      expect(json.error.code).toBe("SCAN_CONCURRENCY_LIMIT")
+      expect(json.error.details.refusal).toEqual({ reason: "concurrency_limit" })
+      expectRefusalAudit("concurrency_limit")
+    })
+
+    it("still returns the typed refusal when the audit write itself fails", async () => {
+      vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(
+        new Error("audit write down") as never
+      )
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(null as never)
+
+      const res = await POST(
+        makeRequest({ workspaceId: "ws-1", targetId: "gone", goal: "TEST_APP", mode: "SAFE" })
+      )
+
+      expect(res.status).toBe(404)
+      const json = await res.json()
+      expect(json.error.code).toBe("TARGET_NOT_FOUND")
+      expect(json.error.details.refusal).toEqual({ reason: "target_not_found" })
+    })
+
+    it("marks every refusal reason as a member of the closed vocabulary", async () => {
+      const { SCAN_REFUSAL_REASONS } = await import("../../../lib/scan-refusal")
+      expect(SCAN_REFUSAL_REASONS).toContain("target_not_found")
+      expect(SCAN_REFUSAL_REASONS).toContain("entitlement_denied")
+      expect(SCAN_REFUSAL_REASONS).toContain("domain_verification_required")
+      expect(SCAN_REFUSAL_REASONS).toContain("worker_unavailable")
+      expect(SCAN_REFUSAL_REASONS).toContain("concurrency_limit")
+      expect(SCAN_REFUSAL_REASONS).toContain("enqueue_failed")
+      expect(SCAN_REFUSAL_REASONS).toContain("ref_unresolved")
+      expect(new Set(SCAN_REFUSAL_REASONS).size).toBe(SCAN_REFUSAL_REASONS.length)
+    })
   })
 })
 

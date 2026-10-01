@@ -51,6 +51,7 @@ import {
   checkScanCreateRateLimit,
   clientIpFromRequest,
 } from "../../../lib/rate-limit"
+import { refuseScan } from "../../../lib/scan-refusal"
 
 /** Full lowercase git object IDs (SHA-1 = 40, SHA-256 = 64) pass through as
  * immutable revisions; anything else resolves through the installation. */
@@ -131,14 +132,27 @@ async function post(request: Request) {
   let submissionAttempted = false
   let submittedScanId: string | undefined
   let operationCompleted = false
+  // Captured once auth succeeds so catch-block refusals can attribute the actor.
+  let actorUserId: string | undefined
   try {
     const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    actorUserId = session.userId
 
     const target = await prisma.target.findFirst({
       where: { id: data.targetId, workspaceId, deletedAt: null },
     })
     if (!target) {
-      return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "target_not_found",
+        code: "TARGET_NOT_FOUND",
+        message: "Target not found in this workspace",
+        status: 404,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
 
     assertOAuthDelegatedScope(session, data.targetId, data.mode)
@@ -153,11 +167,17 @@ async function post(request: Request) {
         await resolveScanAttachments(workspaceId, attachmentIds)
       } catch (error) {
         if (error instanceof ScanAttachmentError) {
-          return apiError(
-            error.code,
-            error.message,
-            error.code === "SCAN_ATTACHMENT_NOT_FOUND" ? 404 : 400
-          )
+          return refuseScan({
+            workspaceId,
+            actorUserId,
+            reason: "attachment_rejected",
+            code: error.code,
+            message: error.message,
+            status: error.code === "SCAN_ATTACHMENT_NOT_FOUND" ? 404 : 400,
+            targetId: data.targetId,
+            mode: data.mode,
+            workflow: data.workflow,
+          })
         }
         throw error
       }
@@ -173,7 +193,17 @@ async function post(request: Request) {
       hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
     })
     if (!urlAdmission.ok) {
-      return apiError(urlAdmission.code, urlAdmission.reason, 400)
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "url_not_admitted",
+        code: urlAdmission.code,
+        message: urlAdmission.reason,
+        status: 400,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
     const urlEngineBacked = urlAdmission.engineBacked
 
@@ -191,42 +221,61 @@ async function post(request: Request) {
         // per client IP; Turnstile is the follow-up.
         const freeUrlLimit = await checkFreeUrlScanRateLimit(clientIpFromRequest(request))
         if (freeUrlLimit.limited) {
-          return apiError(
-            "FREE_URL_SCAN_RATE_LIMITED",
-            "Free-plan remote URL reviews are temporarily limited for your network. Verify the domain or upgrade for unrestricted reviews.",
-            429,
-            { "Retry-After": String(Math.max(freeUrlLimit.retryAfter, 1)) }
-          )
+          return refuseScan({
+            workspaceId,
+            actorUserId,
+            reason: "free_scan_rate_limited",
+            code: "FREE_URL_SCAN_RATE_LIMITED",
+            message:
+              "Free-plan remote URL reviews are temporarily limited for your network. Verify the domain or upgrade for unrestricted reviews.",
+            status: 429,
+            headers: { "Retry-After": String(Math.max(freeUrlLimit.retryAfter, 1)) },
+            targetId: data.targetId,
+            mode: data.mode,
+            workflow: data.workflow,
+          })
         }
       }
       if (sponsorPlan !== "FREE" && urlEngineBacked) {
         const { domain, verified } = await findCurrentDomainProof(workspaceId, target.url)
         if (!verified) {
-          return apiError(
-            "DOMAIN_VERIFICATION_REQUIRED",
-            "Verify control of this domain once to enable engine-backed reviews.",
-            403,
-            undefined,
-            {
+          return refuseScan({
+            workspaceId,
+            actorUserId,
+            reason: "domain_verification_required",
+            code: "DOMAIN_VERIFICATION_REQUIRED",
+            message: "Verify control of this domain once to enable engine-backed reviews.",
+            status: 403,
+            details: {
               remediation: {
                 txtName: domain ? `_lyrashield.${domain}` : null,
                 verifyPath: target.id ? `/dashboard/targets/${target.id}` : null,
               },
-            }
-          )
+            },
+            targetId: data.targetId,
+            mode: data.mode,
+            workflow: data.workflow,
+          })
         }
       }
     }
 
     const canonical = resolveCanonicalReviewMode({ targetType: target.type, mode: data.mode })
     if (!canonical.ok) {
-      return apiError(
-        canonical.code,
-        canonical.code === "TARGET_TYPE_UNSUPPORTED"
-          ? "This target cannot be reviewed yet."
-          : "This review type is not available for the selected target.",
-        400
-      )
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "profile_unavailable",
+        code: canonical.code,
+        message:
+          canonical.code === "TARGET_TYPE_UNSUPPORTED"
+            ? "This target cannot be reviewed yet."
+            : "This review type is not available for the selected target.",
+        status: 400,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
     const canonicalMode = canonical.canonicalMode
 
@@ -236,22 +285,37 @@ async function post(request: Request) {
     // TRIAL/STARTER plans; check usage balance; enforce trial throttle.
     const entitlement = await assertScanAllowed(workspaceId, canonicalMode, session.userId)
     if (!entitlement.allowed) {
-      return apiError(
-        entitlement.code ?? "SCAN_NOT_ALLOWED",
-        entitlement.message ?? "Scan not allowed",
-        403,
-        undefined,
-        {
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "entitlement_denied",
+        code: entitlement.code ?? "SCAN_NOT_ALLOWED",
+        message: entitlement.message ?? "Scan not allowed",
+        status: 403,
+        details: {
           plan: entitlement.plan,
           isTrial: entitlement.isTrial,
           remainingMinutes: entitlement.remainingMinutes,
-        }
-      )
+        },
+        targetId: data.targetId,
+        mode: canonicalMode,
+        workflow: data.workflow,
+      })
     }
 
     const policy = await findScanPolicy(workspaceId, data.policyId)
     if (data.policyId && !policy) {
-      return apiError("POLICY_NOT_FOUND", "Policy not found in this workspace", 404)
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "policy_not_found",
+        code: "POLICY_NOT_FOUND",
+        message: "Policy not found in this workspace",
+        status: 404,
+        targetId: data.targetId,
+        mode: canonicalMode,
+        workflow: data.workflow,
+      })
     }
     const policyId = policy?.id
 
@@ -320,23 +384,35 @@ async function post(request: Request) {
     // many targets, where each scan can commit up to PLATFORM_MAX_SCAN_BUDGET_USD.
     const scanRate = await checkScanCreateRateLimit(workspaceId)
     if (scanRate.limited) {
-      return apiError(
-        "SCAN_RATE_LIMITED",
-        "Too many reviews started in the last minute. Please wait a moment and try again.",
-        429,
-        { "Retry-After": String(Math.max(scanRate.retryAfter, 1)) }
-      )
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "rate_limited",
+        code: "SCAN_RATE_LIMITED",
+        message: "Too many reviews started in the last minute. Please wait a moment and try again.",
+        status: 429,
+        headers: { "Retry-After": String(Math.max(scanRate.retryAfter, 1)) },
+        targetId: data.targetId,
+        mode: canonicalMode,
+        workflow: data.workflow,
+      })
     }
 
     try {
       await assertScanWorkerAvailable()
     } catch (error) {
       if (error instanceof ScanWorkerUnavailableError) {
-        return apiError(
-          "SCAN_SERVICE_UNAVAILABLE",
-          "Scanning is temporarily unavailable. Please try again shortly.",
-          503
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "worker_unavailable",
+          code: "SCAN_SERVICE_UNAVAILABLE",
+          message: "Scanning is temporarily unavailable. Please try again shortly.",
+          status: 503,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       throw error
     }
@@ -353,37 +429,62 @@ async function post(request: Request) {
       // pair; absence of either keeps the workflow unavailable.
       const betaAdmission = authAssessmentAdmission(workspaceId, data.targetId)
       if (!betaAdmission.allowed) {
-        return apiError(
-          "SCAN_WORKFLOW_UNAVAILABLE",
-          "Authenticated assessment is not enabled for this workspace and target.",
-          400
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "workflow_unavailable",
+          code: "SCAN_WORKFLOW_UNAVAILABLE",
+          message: "Authenticated assessment is not enabled for this workspace and target.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       if (target.type !== "WEB_APP" && target.type !== "API") {
-        return apiError(
-          "SCAN_PLAN_INVALID",
-          "Authenticated assessment requires a live web app or API target.",
-          400
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "plan_invalid",
+          code: "SCAN_PLAN_INVALID",
+          message: "Authenticated assessment requires a live web app or API target.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       // The beta never runs under a destructive-allowed policy.
       if (policy?.destructiveTestsAllowed === true) {
-        return apiError(
-          "SCAN_PLAN_DENIED",
-          "The selected policy allows destructive tests, which the authenticated assessment forbids.",
-          400
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "plan_denied",
+          code: "SCAN_PLAN_DENIED",
+          message:
+            "The selected policy allows destructive tests, which the authenticated assessment forbids.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       // The authorization reference must name a recorded, scoped artifact —
       // verified staging consent, current domain proof, incident contact, and
       // a bound short-lived test-session credential — covering this exact
       // target host. The worker re-verifies all of it at execution time.
       if (!data.authorizationRef) {
-        return apiError(
-          "SCAN_AUTHORIZATION_REQUIRED",
-          "Authenticated assessment requires a recorded scoped authorization reference.",
-          400
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "authorization_required",
+          code: "SCAN_AUTHORIZATION_REQUIRED",
+          message: "Authenticated assessment requires a recorded scoped authorization reference.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       try {
         await resolveAuthenticatedAssessmentAuthorization({
@@ -393,28 +494,50 @@ async function post(request: Request) {
         })
       } catch (authErr) {
         if (authErr instanceof LiveAiSafetyError) {
-          return apiError(
-            authErr.code,
-            "The recorded assessment authorization does not cover this target.",
-            authErr.code === "AUTH_ASSESSMENT_PRODUCTION_DENIED" ? 403 : 400
-          )
+          return refuseScan({
+            workspaceId,
+            actorUserId,
+            reason: "authorization_denied",
+            code: authErr.code,
+            message: "The recorded assessment authorization does not cover this target.",
+            status: authErr.code === "AUTH_ASSESSMENT_PRODUCTION_DENIED" ? 403 : 400,
+            targetId: data.targetId,
+            mode: canonicalMode,
+            workflow: data.workflow,
+          })
         }
         throw authErr
       }
     }
     if (data.workflow === "REVIEW_CHANGES") {
       if (target.type !== "REPO") {
-        return apiError("SCAN_PLAN_INVALID", "Review Changes requires a repository target.", 400)
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "plan_invalid",
+          code: "SCAN_PLAN_INVALID",
+          message: "Review Changes requires a repository target.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       const installationId = target.installationId ? Number(target.installationId) : null
       const repoOwner = target.repoOwner ?? target.repoFullName?.split("/")[0]
       const repoName = target.repoName ?? target.repoFullName?.split("/")[1]
       if (!installationId || !repoOwner || !repoName) {
-        return apiError(
-          "SCAN_SOURCE_UNAVAILABLE",
-          "Review Changes requires a repository connected through the GitHub App.",
-          409
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "source_unavailable",
+          code: "SCAN_SOURCE_UNAVAILABLE",
+          message: "Review Changes requires a repository connected through the GitHub App.",
+          status: 409,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
       try {
         const headSha = await resolveRepoRevision(
@@ -439,7 +562,17 @@ async function post(request: Request) {
           headSha
         )
         if (!mergeBaseSha) {
-          return apiError("SCAN_NO_MERGE_BASE", "The selected refs have no common merge base.", 409)
+          return refuseScan({
+            workspaceId,
+            actorUserId,
+            reason: "merge_base_missing",
+            code: "SCAN_NO_MERGE_BASE",
+            message: "The selected refs have no common merge base.",
+            status: 409,
+            targetId: data.targetId,
+            mode: canonicalMode,
+            workflow: data.workflow,
+          })
         }
         planSource = {
           revision: headSha,
@@ -452,11 +585,17 @@ async function post(request: Request) {
           targetId: data.targetId,
           error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr),
         })
-        return apiError(
-          "SCAN_REF_UNRESOLVED",
-          "Could not resolve the requested refs to immutable revisions.",
-          400
-        )
+        return refuseScan({
+          workspaceId,
+          actorUserId,
+          reason: "ref_unresolved",
+          code: "SCAN_REF_UNRESOLVED",
+          message: "Could not resolve the requested refs to immutable revisions.",
+          status: 400,
+          targetId: data.targetId,
+          mode: canonicalMode,
+          workflow: data.workflow,
+        })
       }
     } else if (target.type === "REPO" && target.installationId) {
       // Pin the head revision when the authorized integration can resolve it.
@@ -490,6 +629,17 @@ async function post(request: Request) {
       mode: canonicalMode,
       policyId,
       createdById: session.userId,
+      // W0.4 — bind the delegated grant that just passed assertOAuthDelegatedScope
+      // into the durable scan record, so the async execution boundary re-verifies
+      // the exact connection/version instead of inheriting the request-time allow.
+      ...(session.oauth?.connectionId && session.oauth.authorizationVersion
+        ? {
+            delegatedConnection: {
+              connectionId: session.oauth.connectionId,
+              authorizationVersion: session.oauth.authorizationVersion,
+            },
+          }
+        : {}),
       workflow: data.workflow,
       ...(planSource ? { source: planSource } : {}),
       // Verified above for AUTHENTICATED_ASSESSMENT; the schema rejects it on
@@ -522,11 +672,17 @@ async function post(request: Request) {
         errorMessage: "Scan worker became unavailable while queueing the scan",
       })
       revalidateDashboardAggregates(workspaceId)
-      return apiError(
-        "SCAN_SERVICE_UNAVAILABLE",
-        "Scanning became unavailable while starting this scan. Please try again shortly.",
-        503
-      )
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "enqueue_failed",
+        code: "SCAN_SERVICE_UNAVAILABLE",
+        message: "Scanning became unavailable while starting this scan. Please try again shortly.",
+        status: 503,
+        targetId: data.targetId,
+        mode: canonicalMode,
+        workflow: data.workflow,
+      })
     }
 
     await prisma.auditLog.create({
@@ -600,27 +756,59 @@ async function post(request: Request) {
     )
   } catch (error) {
     if (error instanceof WorkspaceScanConcurrencyLimitError) {
-      return apiError(
-        "SCAN_CONCURRENCY_LIMIT",
-        `This workspace already has ${MAX_CONCURRENT_WORKSPACE_SCANS} reviews running. Wait for one to finish before starting another.`,
-        409
-      )
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "concurrency_limit",
+        code: "SCAN_CONCURRENCY_LIMIT",
+        message: `This workspace already has ${MAX_CONCURRENT_WORKSPACE_SCANS} reviews running. Wait for one to finish before starting another.`,
+        status: 409,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
     if (
       (error && typeof error === "object" && (error as { code?: string }).code === "P2002") ||
       (error instanceof Error && error.message === "Target already has an active scan")
     ) {
-      return apiError(
-        "SCAN_IN_PROGRESS",
-        "Target already has an active scan. Cancel it or wait for completion.",
-        409
-      )
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "scan_in_progress",
+        code: "SCAN_IN_PROGRESS",
+        message: "Target already has an active scan. Cancel it or wait for completion.",
+        status: 409,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
     if (error instanceof Error && error.message === "Target not found in this workspace") {
-      return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "target_not_found",
+        code: "TARGET_NOT_FOUND",
+        message: "Target not found in this workspace",
+        status: 404,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
     if (error instanceof ScanExecutionPlanInputError) {
-      return apiError("SCAN_PLAN_INVALID", error.message, 400)
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "plan_invalid",
+        code: "SCAN_PLAN_INVALID",
+        message: error.message,
+        status: 400,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
     }
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

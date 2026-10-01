@@ -1,10 +1,17 @@
 import { ApiError } from "@/lib/api-client"
 import { planIntentPath } from "@/lib/plan-intent"
+import type { OperationFailurePresentation } from "@/lib/operation-failure"
 import {
   nextStepForPath,
   onboardingPathForTargetType,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
+
+/** Structured operation failure surfaced to the wizard's alert area (W1-07). */
+export type OnboardingFailureState = {
+  presentation: OperationFailurePresentation
+  retry: (() => void) | null
+} | null
 
 export interface OnboardingData {
   updatedAt?: string

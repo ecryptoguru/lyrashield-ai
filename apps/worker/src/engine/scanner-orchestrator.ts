@@ -497,6 +497,38 @@ export async function runScannerOrchestrator(
       }
     )
   }
+  // The URL detector is applicable whenever the target carries an address or
+  // a scan profile was resolved for it. A silent skip would leave the url
+  // coverage receipt COMPLETED for a detector that never ran — record the
+  // gap instead so the result proves the miss.
+  if (targetUrl && !config.urlProfile) {
+    coverageIssues.push({
+      scanner: "url",
+      status: "unsupported",
+      reason: "URL target carries an address but no scan profile was resolved",
+    })
+    await addScanEvent(
+      scanId,
+      "scanner",
+      "warning",
+      "URL scanner skipped — no resolved profile for this target",
+      { targetType: target.type }
+    )
+  } else if (!targetUrl && config.urlProfile) {
+    coverageIssues.push({
+      scanner: "url",
+      status: "unsupported",
+      reason: "A URL scan profile was resolved but the target carries no URL",
+    })
+    await addScanEvent(
+      scanId,
+      "scanner",
+      "warning",
+      "URL scanner skipped — resolved profile has no target URL",
+      { targetType: target.type }
+    )
+  }
+
   // Detectors may ignore abort. Never expose their mutable buffers as final evidence.
   const phaseCoverageIssues: ScannerCoverageIssue[] = []
   const phaseDiscovery: ScannerDiscovery = {}

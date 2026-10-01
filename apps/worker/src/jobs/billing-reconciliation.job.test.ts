@@ -4,7 +4,11 @@ const getPolarClientMock = vi.hoisted(() => vi.fn(() => null as unknown))
 const getRazorpayClientMock = vi.hoisted(() => vi.fn(() => null as unknown))
 const rawQueryMock = vi.hoisted(() => vi.fn())
 const rawExecuteMock = vi.hoisted(() => vi.fn())
-const lookupResults: Array<Array<{ id: string }>> = []
+const lookupResults: Array<Array<{ id: string; processed?: boolean }>> = []
+const duplicateGroupsResults: Array<
+  Array<{ provider: string; objectId: string; receipts: number }>
+> = []
+const orphanedRefundResults: Array<Array<{ id: string; externalId: string; objectId: string }>> = []
 const loggerMock = vi.hoisted(() => ({
   info: vi.fn(),
   debug: vi.fn(),
@@ -16,6 +20,13 @@ const loggerMock = vi.hoisted(() => ({
 vi.mock("@lyrashield/billing", () => ({
   getPolarClient: getPolarClientMock,
   getRazorpayClient: getRazorpayClientMock,
+  // Faithful stand-in for the pack predicate: the topup routes stamp
+  // metadata/notes.packId = "pack_<n>" for pack purchases; any other product
+  // hint is not a minute-pack settlement.
+  isMinutePackOrderPayload: (entity: Record<string, unknown>) => {
+    const meta = (entity.metadata ?? entity.notes) as Record<string, unknown> | undefined
+    return typeof meta?.packId === "string" && meta.packId.startsWith("pack_")
+  },
 }))
 
 // Mock prisma. getSystemPrisma returns the same mock shape: the
@@ -27,7 +38,19 @@ vi.mock("@lyrashield/db", () => {
     findMany: vi.fn(() => Promise.resolve([])),
     count: vi.fn(() => Promise.resolve(0)),
   }
-  const systemPrisma = { webhookEvent, $queryRaw: rawQueryMock, $executeRaw: rawExecuteMock }
+  const webhookEventTrack = {
+    count: vi.fn(() => Promise.resolve(0)),
+  }
+  const minutePack = {
+    findFirst: vi.fn(() => Promise.resolve({ id: "pack_row_1" })),
+  }
+  const systemPrisma = {
+    webhookEvent,
+    webhookEventTrack,
+    minutePack,
+    $queryRaw: rawQueryMock,
+    $executeRaw: rawExecuteMock,
+  }
   return {
     prisma: { webhookEvent },
     getSystemPrisma: () => systemPrisma,
@@ -48,9 +71,23 @@ describe("billing-reconciliation.job", () => {
     vi.mocked(prisma.webhookEvent.findFirst).mockReset().mockResolvedValue(null)
     vi.mocked(prisma.webhookEvent.findMany).mockReset().mockResolvedValue([])
     vi.mocked(prisma.webhookEvent.count).mockReset().mockResolvedValue(0)
+    const { getSystemPrisma } = await import("@lyrashield/db")
+    vi.mocked(getSystemPrisma().webhookEventTrack.count).mockReset().mockResolvedValue(0)
+    vi.mocked(getSystemPrisma().minutePack.findFirst)
+      .mockReset()
+      .mockResolvedValue({ id: "pack_row_1" } as never)
     lookupResults.length = 0
+    duplicateGroupsResults.length = 0
+    orphanedRefundResults.length = 0
     rawQueryMock.mockImplementation((strings: TemplateStringsArray) => {
-      if (strings.join("").includes('SELECT id FROM "WebhookEvent"')) {
+      const sql = strings.join("")
+      if (sql.includes("HAVING")) {
+        return Promise.resolve(duplicateGroupsResults.shift() ?? [])
+      }
+      if (sql.includes("NOT EXISTS")) {
+        return Promise.resolve(orphanedRefundResults.shift() ?? [])
+      }
+      if (sql.includes('FROM "WebhookEvent"')) {
         return Promise.resolve(lookupResults.shift() ?? [])
       }
       return Promise.resolve([
@@ -137,7 +174,9 @@ describe("billing-reconciliation.job", () => {
 
     expect(list).toHaveBeenCalledWith({ limit: 100, sorting: ["-created_at"] })
     const lookups = rawQueryMock.mock.calls.filter(([strings]) =>
-      (strings as TemplateStringsArray).join("").includes('SELECT id FROM "WebhookEvent"')
+      (strings as TemplateStringsArray)
+        .join("")
+        .includes('SELECT id, processed FROM "WebhookEvent"')
     )
     expect(lookups).toHaveLength(2)
     expect(lookups.map(([, objectId]) => objectId)).toEqual(["ord_1", "ord_late_paid"])
@@ -172,7 +211,9 @@ describe("billing-reconciliation.job", () => {
 
     expect(all).toHaveBeenCalledWith({ count: 50, skip: 0, from: sinceSeconds, to: nowSeconds })
     const lookups = rawQueryMock.mock.calls.filter(([strings]) =>
-      (strings as TemplateStringsArray).join("").includes('SELECT id FROM "WebhookEvent"')
+      (strings as TemplateStringsArray)
+        .join("")
+        .includes('SELECT id, processed FROM "WebhookEvent"')
     )
     expect(lookups).toHaveLength(2)
     expect(lookups.map(([, objectId]) => objectId)).toEqual(["pay_1", "pay_late_captured"])
@@ -301,7 +342,9 @@ describe("billing-reconciliation.job", () => {
     )
     expect(
       rawQueryMock.mock.calls.filter(([strings]) =>
-        (strings as TemplateStringsArray).join("").includes('SELECT id FROM "WebhookEvent"')
+        (strings as TemplateStringsArray)
+          .join("")
+          .includes('SELECT id, processed FROM "WebhookEvent"')
       )
     ).toHaveLength(1)
     expect(prisma.webhookEvent.findMany).toHaveBeenCalledTimes(1)
@@ -357,9 +400,19 @@ describe("billing-reconciliation.job", () => {
 
     const result = await runBillingReconciliation()
 
-    expect(prisma.webhookEvent.count).toHaveBeenCalledWith({ where: { processed: false } })
+    expect(prisma.webhookEvent.count).toHaveBeenCalledWith({
+      where: {
+        processed: false,
+        provider: { in: ["polar", "razorpay"] },
+        createdAt: { gte: expect.any(Date), lt: expect.any(Date) },
+      },
+    })
     expect(prisma.webhookEvent.findMany).toHaveBeenCalledWith({
-      where: { processed: false },
+      where: {
+        processed: false,
+        provider: { in: ["polar", "razorpay"] },
+        createdAt: { gte: expect.any(Date), lt: expect.any(Date) },
+      },
       select: { id: true, provider: true, externalId: true, eventType: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: 100,
@@ -426,6 +479,351 @@ describe("billing-reconciliation.job", () => {
     expect(loggerMock.warn).toHaveBeenCalledWith(
       "operator_alert",
       expect.objectContaining({ code: "reconciliation_drift", alertCount: 1 })
+    )
+  })
+
+  it("scopes the unprocessed sweep to billing providers — GitHub rows are never billing drift", async () => {
+    const { prisma } = await import("@lyrashield/db")
+
+    const result = await runBillingReconciliation()
+
+    // Every unprocessed-event query must carry the billing-provider scope; a
+    // pending GitHub delivery sharing the WebhookEvent table is not revenue
+    // drift and must not inflate alert counts or the backlog signal.
+    for (const call of vi.mocked(prisma.webhookEvent.count).mock.calls) {
+      expect(call[0]).toMatchObject({
+        where: { processed: false, provider: { in: ["polar", "razorpay"] } },
+      })
+    }
+    for (const call of vi.mocked(prisma.webhookEvent.findMany).mock.calls) {
+      expect(call[0]).toMatchObject({
+        where: { processed: false, provider: { in: ["polar", "razorpay"] } },
+      })
+    }
+    expect(result.driftAlerts).toBe(0)
+    expect(result.backlog).toEqual({ unprocessedBeforeCoverage: 0, deadLetterTracks: 0 })
+  })
+
+  it("keeps older unresolved Polar rows visible through the backlog signal", async () => {
+    const { prisma, getSystemPrisma } = await import("@lyrashield/db")
+    // First count is the coverage-windowed sweep (0 in-window rows); the second
+    // is the pre-window backlog count — a 30-day-old unprocessed Polar row the
+    // 24-day baseline can no longer reach.
+    vi.mocked(prisma.webhookEvent.count).mockResolvedValueOnce(0).mockResolvedValueOnce(3)
+    vi.mocked(getSystemPrisma().webhookEventTrack.count).mockResolvedValue(2)
+
+    const result = await runBillingReconciliation()
+
+    expect(result.backlog).toEqual({ unprocessedBeforeCoverage: 3, deadLetterTracks: 2 })
+    expect(vi.mocked(prisma.webhookEvent.count).mock.calls[1]?.[0]).toMatchObject({
+      where: {
+        processed: false,
+        provider: { in: ["polar", "razorpay"] },
+        createdAt: { lt: expect.any(Date) },
+      },
+    })
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "operator_alert",
+      expect.objectContaining({
+        code: "reconciliation_backlog",
+        unprocessedBeforeCoverage: 3,
+        deadLetterTracks: 2,
+      })
+    )
+    // Backlog is a health signal only — it is not replayed or per-row drift.
+    expect(result.driftAlerts).toBe(0)
+    expect(result.completed).toBe(true)
+  })
+
+  it("skips provider listing when the durable cursor already completed today's run", async () => {
+    rawQueryMock.mockResolvedValueOnce([
+      {
+        checked_through: new Date(),
+        coverage_from: new Date(Date.now() - 24 * 24 * 60 * 60 * 1000),
+        last_completed_at: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      },
+    ])
+
+    const result = await runBillingReconciliation()
+
+    expect(result.skipped).toBe(true)
+    expect(result.skipReason).toBe("daily_complete")
+    expect(result.completed).toBe(false)
+    expect(getPolarClientMock).not.toHaveBeenCalled()
+    expect(getRazorpayClientMock).not.toHaveBeenCalled()
+    const { prisma } = await import("@lyrashield/db")
+    expect(prisma.webhookEvent.findMany).not.toHaveBeenCalled()
+  })
+
+  it("runs again once the last completed run is outside the daily window", async () => {
+    rawQueryMock.mockResolvedValueOnce([
+      {
+        checked_through: new Date(),
+        coverage_from: new Date(Date.now() - 24 * 24 * 60 * 60 * 1000),
+        last_completed_at: new Date(Date.now() - 25 * 60 * 60 * 1000),
+      },
+    ])
+
+    const result = await runBillingReconciliation()
+
+    expect(result.skipped).toBe(false)
+    expect(getPolarClientMock).toHaveBeenCalled()
+    expect(getRazorpayClientMock).toHaveBeenCalled()
+    expect(result.completed).toBe(true)
+  })
+
+  it("verifies a processed pack settlement produced its MinutePack credit", async () => {
+    const { getSystemPrisma } = await import("@lyrashield/db")
+    const page = {
+      result: {
+        items: [
+          {
+            id: "ord_pack",
+            paid: true,
+            createdAt: new Date(Date.now() - 60_000),
+            metadata: { packId: "pack_100" },
+          },
+        ],
+        pagination: { totalCount: 1, maxPage: 1 },
+      },
+      next: vi.fn().mockResolvedValue(null),
+      async *[Symbol.asyncIterator]() {
+        yield this
+      },
+    }
+    getPolarClientMock.mockReturnValue({ orders: { list: vi.fn().mockResolvedValue(page) } })
+    lookupResults.push([{ id: "evt_pack", processed: true }])
+
+    const result = await runBillingReconciliation()
+
+    // The settlement was received AND applied: the internal credit exists, so
+    // no drift. The credit probe is cross-workspace on the system client and
+    // keyed by the provider object id — the same idempotency key creditTopUp
+    // enforces — so workspace attribution loss cannot hide a real credit.
+    expect(getSystemPrisma().minutePack.findFirst).toHaveBeenCalledWith({
+      where: { provider: "polar", externalId: "ord_pack", deletedAt: null },
+      select: { id: true },
+    })
+    expect(result.packCreditsVerified).toBe(1)
+    expect(result.driftAlerts).toBe(0)
+    expect(result.completed).toBe(true)
+  })
+
+  it.each(["polar", "razorpay"] as const)(
+    "alerts when a processed %s pack settlement never produced its internal credit",
+    async (provider) => {
+      const { getSystemPrisma } = await import("@lyrashield/db")
+      vi.mocked(getSystemPrisma().minutePack.findFirst).mockResolvedValue(null)
+      if (provider === "polar") {
+        const page = {
+          result: {
+            items: [
+              {
+                id: "ord_uncredited",
+                paid: true,
+                createdAt: new Date(Date.now() - 60_000),
+                metadata: { packId: "pack_100" },
+              },
+            ],
+            pagination: { totalCount: 1, maxPage: 1 },
+          },
+          next: vi.fn().mockResolvedValue(null),
+          async *[Symbol.asyncIterator]() {
+            yield this
+          },
+        }
+        getPolarClientMock.mockReturnValue({ orders: { list: vi.fn().mockResolvedValue(page) } })
+      } else {
+        const all = vi.fn().mockResolvedValueOnce({
+          items: [
+            {
+              id: "pay_uncredited",
+              status: "captured",
+              created_at: Math.floor(Date.now() / 1000) - 60,
+              notes: { packId: "pack_100" },
+            },
+          ],
+        })
+        getRazorpayClientMock.mockReturnValue({ payments: { all } })
+      }
+      lookupResults.push([{ id: "evt_done", processed: true }])
+
+      const result = await runBillingReconciliation()
+
+      const objectId = provider === "polar" ? "ord_uncredited" : "pay_uncredited"
+      expect(result.packCreditsVerified).toBe(0)
+      expect(result.driftAlerts).toBe(1)
+      expect(result.alerts).toEqual([
+        expect.objectContaining({
+          provider,
+          externalId: objectId,
+          type: "settlement_credit_missing",
+        }),
+      ])
+      expect(loggerMock.warn).toHaveBeenCalledWith(
+        "operator_alert",
+        expect.objectContaining({
+          code: "reconciliation_drift",
+          alertSamples: [expect.objectContaining({ provider, type: "settlement_credit_missing" })],
+        })
+      )
+      // Report-only: the run still completes and never replays or credits.
+      expect(result.completed).toBe(true)
+      expect(result.replayed).toBe(0)
+    }
+  )
+
+  it("skips the credit probe for settlements that are not pack purchases", async () => {
+    const { getSystemPrisma } = await import("@lyrashield/db")
+    const page = {
+      result: {
+        items: [
+          {
+            id: "ord_local",
+            paid: true,
+            createdAt: new Date(Date.now() - 60_000),
+            metadata: { productId: "local_team" },
+          },
+        ],
+        pagination: { totalCount: 1, maxPage: 1 },
+      },
+      next: vi.fn().mockResolvedValue(null),
+      async *[Symbol.asyncIterator]() {
+        yield this
+      },
+    }
+    getPolarClientMock.mockReturnValue({ orders: { list: vi.fn().mockResolvedValue(page) } })
+    lookupResults.push([{ id: "evt_local", processed: true }])
+
+    const result = await runBillingReconciliation()
+
+    expect(getSystemPrisma().minutePack.findFirst).not.toHaveBeenCalled()
+    expect(result.packCreditsVerified).toBe(0)
+    expect(result.driftAlerts).toBe(0)
+  })
+
+  it("leaves credit verification to the unprocessed sweep when the receipt is not applied", async () => {
+    const { getSystemPrisma } = await import("@lyrashield/db")
+    const page = {
+      result: {
+        items: [
+          {
+            id: "ord_pending_pack",
+            paid: true,
+            createdAt: new Date(Date.now() - 60_000),
+            metadata: { packId: "pack_100" },
+          },
+        ],
+        pagination: { totalCount: 1, maxPage: 1 },
+      },
+      next: vi.fn().mockResolvedValue(null),
+      async *[Symbol.asyncIterator]() {
+        yield this
+      },
+    }
+    getPolarClientMock.mockReturnValue({ orders: { list: vi.fn().mockResolvedValue(page) } })
+    lookupResults.push([{ id: "evt_pending_pack", processed: false }])
+
+    const result = await runBillingReconciliation()
+
+    // The receipt exists but never applied — the unprocessed-event sweep owns
+    // that signal; the credit probe must not double-count it here.
+    expect(getSystemPrisma().minutePack.findFirst).not.toHaveBeenCalled()
+    expect(result.packCreditsVerified).toBe(0)
+    expect(result.driftAlerts).toBe(0)
+  })
+
+  it("reports duplicate settlement deliveries as a receipt-health signal, not per-row drift", async () => {
+    // A provider redelivery mints a fresh delivery id, so one settlement can
+    // legitimately hold several receipts. Duplication is reported once per
+    // settlement object — the money rails stay idempotent by key, so this is
+    // an audit signal rather than per-row drift.
+    duplicateGroupsResults.push([
+      { provider: "polar", objectId: "ord_dup", receipts: 2 },
+      { provider: "razorpay", objectId: "pay_dup", receipts: 3 },
+    ])
+
+    const result = await runBillingReconciliation()
+
+    expect(result.duplicates).toEqual({ settlementDeliveries: 2 })
+    expect(result.driftAlerts).toBe(0)
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "operator_alert",
+      expect.objectContaining({
+        code: "reconciliation_duplicates",
+        severity: "warning",
+        settlementDeliveries: 2,
+      })
+    )
+    expect(result.completed).toBe(true)
+    expect(result.replayed).toBe(0)
+  })
+
+  it("scopes the duplicate scan to billing settlement receipts in the coverage window", async () => {
+    await runBillingReconciliation()
+
+    const dupQuery = rawQueryMock.mock.calls.find(([strings]) =>
+      (strings as TemplateStringsArray).join("").includes("HAVING")
+    )
+    expect(dupQuery).toBeDefined()
+    const sql = (dupQuery?.[0] as TemplateStringsArray).join("")
+    expect(sql).toContain("provider = 'polar' AND \"eventType\" = 'order.paid'")
+    expect(sql).toContain("provider = 'razorpay' AND \"eventType\" = 'payment.captured'")
+    // Window bounds are parameterized — the same coverage window the rest of
+    // the run uses.
+    expect(dupQuery).toEqual(expect.arrayContaining([expect.any(Date), expect.any(Date)]))
+    expect(sql).toContain('"createdAt" >=')
+  })
+
+  it.each(["polar", "razorpay"] as const)(
+    "alerts on a processed %s refund whose settlement was never received",
+    async (provider) => {
+      // Refund applied to a settlement object with no captured/paid receipt:
+      // the refund arrived before (or without) its settlement — out-of-order
+      // drift an operator must see. Report-only; never replayed.
+      orphanedRefundResults.push(
+        provider === "polar"
+          ? [{ id: "evt_ref_polar", externalId: "delivery_1", objectId: "ord_late" }]
+          : [],
+        provider === "razorpay"
+          ? [{ id: "evt_ref_rzp", externalId: "delivery_2", objectId: "pay_late" }]
+          : []
+      )
+
+      const result = await runBillingReconciliation()
+
+      const objectId = provider === "polar" ? "ord_late" : "pay_late"
+      expect(result.driftAlerts).toBe(1)
+      expect(result.alerts).toEqual([
+        expect.objectContaining({
+          provider,
+          externalId: objectId,
+          type: "refund_without_settlement",
+        }),
+      ])
+      expect(loggerMock.warn).toHaveBeenCalledWith(
+        "operator_alert",
+        expect.objectContaining({
+          code: "reconciliation_drift",
+          alertSamples: [expect.objectContaining({ provider, type: "refund_without_settlement" })],
+        })
+      )
+      expect(result.completed).toBe(true)
+    }
+  )
+
+  it("raises no integrity signals for a clean settlement log", async () => {
+    const result = await runBillingReconciliation()
+
+    expect(result.duplicates).toEqual({ settlementDeliveries: 0 })
+    expect(result.driftAlerts).toBe(0)
+    expect(loggerMock.warn).not.toHaveBeenCalledWith(
+      "operator_alert",
+      expect.objectContaining({ code: "reconciliation_duplicates" })
+    )
+    expect(loggerMock.warn).not.toHaveBeenCalledWith(
+      "operator_alert",
+      expect.objectContaining({ code: "reconciliation_drift" })
     )
   })
 })

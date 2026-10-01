@@ -173,6 +173,15 @@ export {
 export { processRazorpayEvent, type RazorpayAdapterResult } from "./providers/razorpay/adapter"
 export { WebhookAuthError, WebhookPayloadError } from "./webhook-errors"
 
+// Durable catalog-rejection receipts (P2-3)
+export {
+  recordWebhookRejection,
+  WEBHOOK_REJECTION_REASONS,
+  type WebhookRejectionInput,
+  type WebhookRejectionOutcome,
+  type WebhookRejectionReason,
+} from "./webhook-rejections"
+
 // Normalized provider domain events (finding 18A)
 export {
   normalizeProviderEvent,

@@ -19,6 +19,10 @@ async function native(
     detailFailure?: boolean
     historyDelay?: number
     holdFirstListener?: boolean
+    cleanProfile?: boolean
+    chatgptSignedIn?: boolean
+    azurePreset?: { endpoint: string; deployment: string }
+    byokSelected?: "chatgpt" | "azure" | null
   } = {}
 ) {
   await page.addInitScript(
@@ -34,8 +38,27 @@ async function native(
         listenCalls: 0,
         resolvedListenCalls: 0,
         releaseListener: null as (() => void) | null,
+        // BYOK/keychain state — empty on a clean profile, seeded only through
+        // the explicit scenario options (an upgrade/stale profile fixture).
+        byok: {
+          chatgptSignedIn: options.chatgptSignedIn ?? false,
+          azureEndpoint: options.azurePreset?.endpoint ?? (null as string | null),
+          azureDeployment: options.azurePreset?.deployment ?? (null as string | null),
+          selected: (options.byokSelected ?? null) as string | null,
+        },
       }
       Object.assign(window, { desktopState: state })
+      const azureMeta = () => ({
+        configured: state.byok.azureEndpoint !== null,
+        endpoint: state.byok.azureEndpoint,
+        deployment: state.byok.azureDeployment,
+        keyMasked: state.byok.azureEndpoint !== null ? "az…0000" : null,
+      })
+      const byokStatus = () => ({
+        chatgpt: { status: state.byok.chatgptSignedIn ? "signed_in" : "signed_out" },
+        azure: azureMeta(),
+        selected: state.byok.selected,
+      })
       const detail = {
         ...wire.detail,
         status: options.running ? "running" : "completed",
@@ -53,17 +76,81 @@ async function native(
         async invoke(command, args) {
           state.calls.push({ command, args, resolvedListeners: state.resolvedListenCalls })
           if (command === "startup_revalidate_license")
+            return options.cleanProfile
+              ? { state: "none" }
+              : {
+                  state: "expired_eligibility",
+                  updateEligibleUntil: "2026-01-01",
+                  perpetualFallbackBuild: "1.0",
+                  offlineGraceRemainingSeconds: null,
+                }
+          // Clean-profile setup surface: license activation, runtime probe and
+          // the BYOK keychain boundary all start empty and fill in only through
+          // real command arguments.
+          if (command === "activate_license")
             return {
-              state: "expired_eligibility",
-              updateEligibleUntil: "2026-01-01",
-              perpetualFallbackBuild: "1.0",
+              state: "active",
+              sku: "individual_launch",
+              seatCount: 1,
+              machineCount: 1,
+              updateEligibleUntil: "2036-01-01T00:00:00Z",
+              updateEligible: true,
+              perpetualFallbackBuild: "1.0.0",
               offlineGraceRemainingSeconds: null,
             }
+          if (command === "get_runtime_status")
+            return {
+              engine: { found: true, path: "/bundled/lyrashield-engine", version: "engine-1.0" },
+              docker: { found: true, running: true, version: "27.0" },
+            }
+          if (command === "check_chatgpt_status")
+            return { status: state.byok.chatgptSignedIn ? "signed_in" : "signed_out" }
+          if (command === "get_byok_metadata") return azureMeta()
+          if (command === "get_byok_status") return byokStatus()
+          if (command === "save_azure_config") {
+            // The native command's arity contract — a missing deployment is a
+            // hard failure, which is what previously broke clean-profile setup.
+            for (const required of ["apiKey", "endpoint", "deployment"] as const) {
+              if (typeof args?.[required] !== "string" || !args?.[required])
+                throw Error(`missing required argument ${required}`)
+            }
+            state.byok.azureEndpoint = args?.endpoint as string
+            state.byok.azureDeployment = args?.deployment as string
+            state.byok.selected = "azure"
+            return null
+          }
+          if (command === "select_byok_provider") {
+            const provider = args?.provider
+            const usable =
+              provider === "chatgpt"
+                ? state.byok.chatgptSignedIn
+                : state.byok.azureEndpoint !== null
+            if (provider !== "chatgpt" && provider !== "azure") throw Error("unknown BYOK provider")
+            if (!usable) throw Error("provider is not configured")
+            state.byok.selected = provider
+            return byokStatus()
+          }
+          if (command === "start_chatgpt_login") {
+            state.byok.chatgptSignedIn = true
+            state.byok.selected = "chatgpt"
+            return null
+          }
+          if (command === "logout_chatgpt") {
+            state.byok.chatgptSignedIn = false
+            if (state.byok.selected === "chatgpt") state.byok.selected = null
+            return null
+          }
+          if (command === "clear_azure_config") {
+            state.byok.azureEndpoint = null
+            state.byok.azureDeployment = null
+            if (state.byok.selected === "azure") state.byok.selected = null
+            return null
+          }
           if (command === "list_scan_page" || command === "list_scans") {
             if (options.historyDelay)
               await new Promise((resolve) => setTimeout(resolve, options.historyDelay))
             if (options.historyFailure && state.failures++ === 0) throw Error("History unavailable")
-            const scans = options.empty ? [] : [detail]
+            const scans = options.empty || options.cleanProfile ? [] : [detail]
             return command === "list_scan_page" ? { scans, nextCursor: null } : scans
           }
           if (command === "get_scan_detail" && options.detailFailure && state.failures++ === 0)
@@ -447,4 +534,91 @@ test("active history can reopen after Back without cancelling execution", async 
       ).desktopState.calls.some((c) => c.command === "cancel_scan")
     )
   ).toBe(false)
+})
+
+// S2 — clean profile: a fresh OS user profile has no stored license, no
+// keychain entries and no recorded provider selection. First launch must walk
+// activation → runtime gate → BYOK setup without a stale-state crash, and the
+// Azure save must carry the deployment identity the native command requires —
+// before the frontend contract was wired, the call omitted `deployment` and a
+// clean profile could never finish setup (missing-config failure).
+test("S2 clean profile: activation, runtime gate and BYOK setup initialize with no stale state", async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  await native(page, { cleanProfile: true })
+  await page.goto("?desktop=app")
+
+  // No stored license on a clean profile → activation, not a crash.
+  await expect(page.getByRole("heading", { name: "Activate LyraShield" })).toBeVisible()
+  await page.getByLabel("License key").fill("LYRA-CLEAN-PROFILE")
+  await page.getByRole("button", { name: "Activate License" }).click()
+
+  // Runtime gate: the bundled engine and Docker report healthy on first run.
+  await expect(page.getByRole("heading", { name: "Setup" })).toBeVisible()
+  await page.getByRole("button", { name: "Continue" }).click()
+
+  // BYOK: no provider is selected or configured yet — the picker must show.
+  await expect(page.getByRole("heading", { name: "Bring Your Own AI" })).toBeVisible()
+  await page.getByRole("button", { name: /Azure OpenAI/ }).click()
+  await page.getByLabel("Azure OpenAI API key").fill("clean-profile-key-000000")
+  await page.getByLabel("Azure OpenAI endpoint").fill("https://clean.openai.azure.com")
+  await page.getByLabel("Azure deployment").selectOption("gpt-6-luna")
+  await page.getByRole("button", { name: "Save & Continue" }).click()
+
+  const save = await page.evaluate(() =>
+    (
+      window as unknown as {
+        desktopState: { calls: { command: string; args?: Record<string, unknown> }[] }
+      }
+    ).desktopState.calls.find((c) => c.command === "save_azure_config")
+  )
+  expect(save?.args).toMatchObject({
+    apiKey: "clean-profile-key-000000",
+    endpoint: "https://clean.openai.azure.com",
+    deployment: "gpt-6-luna",
+  })
+
+  await expect(page.getByRole("heading", { name: "Ready to Scan" })).toBeVisible()
+  await page.getByRole("button", { name: "Continue" }).click()
+  await expect(page.getByRole("heading", { name: "Scan history" })).toBeVisible()
+  await expect(page.getByText("No scans yet.")).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+// Upgrade/stale profile: credentials exist but no provider selection was ever
+// recorded (pre-selection installs). Picking the already-configured provider
+// must go through the native selection command so the scan resolver honors an
+// explicit choice rather than credential presence.
+test("S2 stale profile: picking an already-configured provider records the native selection", async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  await native(page, {
+    cleanProfile: true,
+    azurePreset: { endpoint: "https://upgrade.openai.azure.com", deployment: "gpt-6-sol" },
+    byokSelected: null,
+  })
+  await page.goto("?desktop=app")
+  await page.getByLabel("License key").fill("LYRA-UPGRADE-PROFILE")
+  await page.getByRole("button", { name: "Activate License" }).click()
+  await expect(page.getByRole("heading", { name: "Setup" })).toBeVisible()
+  await page.getByRole("button", { name: "Continue" }).click()
+  await expect(page.getByRole("heading", { name: "Bring Your Own AI" })).toBeVisible()
+  await expect(
+    page.getByText(/Azure configured: https:\/\/upgrade\.openai\.azure\.com/)
+  ).toBeVisible()
+  await page.getByRole("button", { name: /Azure OpenAI/ }).click()
+  const select = await page.evaluate(() =>
+    (
+      window as unknown as {
+        desktopState: { calls: { command: string; args?: Record<string, unknown> }[] }
+      }
+    ).desktopState.calls.find((c) => c.command === "select_byok_provider")
+  )
+  expect(select?.args?.provider).toBe("azure")
+  await expect(page.getByRole("heading", { name: "Ready to Scan" })).toBeVisible()
+  expect(errors).toEqual([])
 })

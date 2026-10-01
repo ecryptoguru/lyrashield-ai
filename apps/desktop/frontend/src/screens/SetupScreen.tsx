@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import type { AzureMetadata, ChatGptAuthStatus, RuntimeStatus } from "../lib/types"
+import type { AzureMetadata, ByokProvider, ChatGptAuthStatus, RuntimeStatus } from "../lib/types"
 import {
   checkChatGptStatus,
   getByokMetadata,
@@ -7,6 +7,7 @@ import {
   getRuntimeStatus,
   logoutChatGpt,
   saveAzureConfig,
+  selectByokProvider,
   startChatGptLogin,
 } from "../lib/tauri"
 import { StatusCard } from "../components/StatusCard"
@@ -23,8 +24,9 @@ export function SetupScreen({ onComplete, onBack }: Props) {
   const [step, setStep] = useState<Step>("runtime")
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null)
   const [chatgptStatus, setChatgptStatus] = useState<ChatGptAuthStatus | null>(null)
-  const [provider, setProvider] = useState<"chatgpt" | "azure" | null>(null)
+  const [provider, setProvider] = useState<ByokProvider | null>(null)
   const [azureEndpoint, setAzureEndpoint] = useState("")
+  const [azureDeployment, setAzureDeployment] = useState("")
   const [azureMeta, setAzureMeta] = useState<AzureMetadata | null>(null)
   // Transient input — cleared after save, never retained in state long-term
   const [azureKeyInput, setAzureKeyInput] = useState("")
@@ -43,6 +45,7 @@ export function SetupScreen({ onComplete, onBack }: Props) {
       .then((meta) => {
         setAzureMeta(meta)
         if (meta.endpoint) setAzureEndpoint(meta.endpoint)
+        if (meta.deployment) setAzureDeployment(meta.deployment)
       })
       .catch(() => {})
   }, [])
@@ -52,6 +55,32 @@ export function SetupScreen({ onComplete, onBack }: Props) {
 
   function handleContinueFromRuntime() {
     if (engineOk && dockerOk) setStep("byok")
+  }
+
+  // Picking a provider that is already configured records the selection
+  // natively — the scan resolver honors exactly this choice. Picking an
+  // unconfigured provider opens its credential form; saving or signing in
+  // records the selection as part of that write.
+  async function handleProviderSelect(choice: ByokProvider) {
+    setValidationError(null)
+    const configured =
+      choice === "chatgpt"
+        ? chatgptStatus?.status === "signed_in"
+        : (azureMeta?.configured ?? false)
+    if (!configured) {
+      setProvider(choice)
+      return
+    }
+    setLoading(true)
+    try {
+      await selectByokProvider(choice)
+      setStep("ready")
+    } catch (e) {
+      setValidationError(String(e))
+      setProvider(choice)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleChatGptLogin() {
@@ -64,7 +93,7 @@ export function SetupScreen({ onComplete, onBack }: Props) {
       if (status.status === "signed_in") {
         // native validation before ready
         const byok = await getByokStatus()
-        if (byok.azure.configured || byok.chatgpt.status === "signed_in") setStep("ready")
+        if (byok.selected !== null) setStep("ready")
       }
     } catch (e) {
       setChatgptStatus({ status: "error", message: String(e) })
@@ -77,14 +106,14 @@ export function SetupScreen({ onComplete, onBack }: Props) {
     setLoading(true)
     setValidationError(null)
     try {
-      await saveAzureConfig(azureKeyInput, azureEndpoint)
+      await saveAzureConfig(azureKeyInput, azureEndpoint, azureDeployment)
       // clear raw key from React state immediately after save
       setAzureKeyInput("")
       const meta = await getByokMetadata()
       setAzureMeta(meta)
       // native validation before transitioning to ready
       const byok = await getByokStatus()
-      if (!byok.azure.configured) {
+      if (!byok.azure.configured || byok.selected !== "azure") {
         setValidationError("Azure credentials failed native validation")
         return
       }
@@ -154,11 +183,12 @@ export function SetupScreen({ onComplete, onBack }: Props) {
           </div>
           {azureMeta?.configured && (
             <p className="text-xs text-muted-foreground">
-              Azure configured: {azureMeta.endpoint} ({azureMeta.keyMasked})
+              Azure configured: {azureMeta.endpoint}
+              {azureMeta.deployment ? ` — ${azureMeta.deployment}` : ""} ({azureMeta.keyMasked})
             </p>
           )}
           {provider === null ? (
-            <ProviderPicker onSelect={setProvider} />
+            <ProviderPicker onSelect={handleProviderSelect} />
           ) : provider === "chatgpt" ? (
             <div className="space-y-4">
               <p className="text-sm text-foreground">Sign in with your ChatGPT subscription.</p>
@@ -168,6 +198,11 @@ export function SetupScreen({ onComplete, onBack }: Props) {
               {chatgptStatus?.status === "error" && (
                 <p role="alert" className="text-sm text-destructive">
                   {chatgptStatus.message}
+                </p>
+              )}
+              {validationError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {validationError}
                 </p>
               )}
               <button
@@ -218,6 +253,24 @@ export function SetupScreen({ onComplete, onBack }: Props) {
                 placeholder="https://your-resource.openai.azure.com"
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
               />
+              <label
+                htmlFor="azure-deployment"
+                className="block text-sm font-medium text-foreground"
+              >
+                Azure deployment
+              </label>
+              <select
+                id="azure-deployment"
+                value={azureDeployment}
+                onChange={(e) => setAzureDeployment(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground"
+              >
+                <option value="" disabled>
+                  Select a deployment
+                </option>
+                <option value="gpt-6-luna">gpt-6-luna</option>
+                <option value="gpt-6-sol">gpt-6-sol</option>
+              </select>
               {validationError && (
                 <p role="alert" className="text-sm text-destructive">
                   {validationError}
@@ -225,7 +278,7 @@ export function SetupScreen({ onComplete, onBack }: Props) {
               )}
               <button
                 onClick={handleAzureSave}
-                disabled={loading || !azureKeyInput || !azureEndpoint}
+                disabled={loading || !azureKeyInput || !azureEndpoint || !azureDeployment}
                 className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 {loading ? "Saving…" : "Save & Continue"}

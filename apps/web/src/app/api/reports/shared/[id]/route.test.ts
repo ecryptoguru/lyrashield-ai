@@ -91,4 +91,27 @@ describe("GET /api/reports/shared/[id]", () => {
       error: { code: "INTERNAL_ERROR" },
     })
   })
+
+  it("returns an ETag on 200 and a bodyless 304 for a matching If-None-Match (W2.4)", async () => {
+    getReportByShareToken.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      shareExpiresAt: null,
+    })
+    getShareableReport.mockResolvedValue({ id: "report-1", title: "Shared report" })
+
+    const first = await GET(request("report-1", "d".repeat(64)), {
+      params: Promise.resolve({ id: "report-1" }),
+    })
+    expect(first.status).toBe(200)
+    const etag = first.headers.get("ETag")
+    expect(etag).toMatch(/^"[0-9a-f]{64}"$/)
+
+    const conditional = request("report-1", "d".repeat(64))
+    conditional.headers.set("If-None-Match", etag!)
+    const second = await GET(conditional, { params: Promise.resolve({ id: "report-1" }) })
+    expect(second.status).toBe(304)
+    expect(second.headers.get("ETag")).toBe(etag)
+    expect(await second.text()).toBe("")
+  })
 })

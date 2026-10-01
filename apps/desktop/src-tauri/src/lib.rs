@@ -35,6 +35,7 @@ pub fn run() {
             logout_chatgpt,
             save_azure_config,
             clear_azure_config,
+            select_byok_provider,
             get_byok_metadata,
             get_byok_status,
             start_scan,

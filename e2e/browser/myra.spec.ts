@@ -10,7 +10,7 @@ const response = (status: string) => ({
 })
 
 for (const [status, copy] of [
-  ["CANCELED", "Canceled before execution."],
+  ["CANCELED", "Cancelled before execution."],
   ["EXECUTING", "Already processing"],
   ["COMPLETED", "Done"],
   ["OUTCOME_UNKNOWN", "Checking the outcome"],

@@ -4,12 +4,14 @@ import {
   generateShareToken,
   revokeShareToken,
   getLaunchReportDetail,
+  resolveReportDelegationTarget,
 } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
+import { jsonWithEtag } from "../../../../lib/http-etag"
 import { z } from "zod"
 
 const ReportActionSchema = z.object({
@@ -41,7 +43,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const launchReport =
       report.type === "launch_readiness" ? await getLaunchReportDetail(id, workspaceId) : null
 
-    return apiSuccess(launchReport ? { ...report, launchReport } : report)
+    // W2.4: ETag bound to the serialized representation — a matching
+    // If-None-Match answers 304 with no body.
+    return jsonWithEtag(request, launchReport ? { ...report, launchReport } : report)
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
@@ -63,12 +67,19 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
 
     const { workspaceId, action } = parsed.data
 
-    await requirePermission(workspaceId, PERMISSIONS.report.create)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.report.create)
 
-    const report = await getShareableReport(id, workspaceId)
-    if (!report) {
+    // Delegated-scope gate (W0.3): share/revoke mutate a report bound to one
+    // persisted target, so a narrowed OAuth connection may act only within its
+    // grant. The PERSISTED binding is authoritative — a request-body targetId
+    // can never steer the check — and an unresolvable binding (workspace-wide
+    // scan, deleted scan, legacy/contradictory provenance) fails closed into
+    // "requires an all-targets grant" rather than "no check".
+    const delegation = await resolveReportDelegationTarget(id, workspaceId)
+    if (!delegation) {
       return apiError("REPORT_NOT_FOUND", "Report not found", 404)
     }
+    assertOAuthDelegatedScope(session, delegation.targetId)
 
     switch (action) {
       case "share": {

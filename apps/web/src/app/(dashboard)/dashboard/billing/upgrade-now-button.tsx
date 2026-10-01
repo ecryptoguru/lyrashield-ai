@@ -58,12 +58,13 @@ export function UpgradeNowButton({ workspaceId }: UpgradeNowButtonProps) {
         </p>
       )}
       <button
+        type="button"
         onClick={handleUpgrade}
         disabled={loading}
         className={`${buttonVariants({ variant: "default" })} w-full`}
       >
-        <TrendingUp className="mr-2 h-4 w-4" />
-        {loading ? "Loading..." : "Upgrade Now"}
+        <TrendingUp className="mr-2 h-4 w-4" aria-hidden="true" />
+        {loading ? "Starting checkout…" : "Upgrade Now"}
       </button>
     </div>
   )

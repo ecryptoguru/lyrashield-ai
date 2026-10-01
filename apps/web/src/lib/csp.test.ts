@@ -325,4 +325,35 @@ describe("CSP nonce proxy", () => {
     expect(response.headers.get("Set-Cookie")).toBeNull()
     expect(affiliate.detectAttribution).not.toHaveBeenCalled()
   })
+
+  it("pins worker-src, media-src and manifest-src instead of relying on default-src alone", async () => {
+    const res = await proxy(makeRequest("/dashboard"))
+    const csp = res.headers.get("Content-Security-Policy")!
+    expect(csp).toContain("worker-src 'self'")
+    expect(csp).toContain("media-src 'self'")
+    expect(csp).toContain("manifest-src 'self'")
+  })
+
+  it("sets CSP on the affiliate subdomain rewrite", async () => {
+    const response = await proxy(
+      new NextRequest("https://affiliates.lyrashieldai.com/program", {
+        headers: { host: "affiliates.lyrashieldai.com" },
+      })
+    )
+
+    // The rewrite must not leave the proxied page without a policy — every
+    // early return in the proxy carries the same headers as a page render.
+    expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'self'")
+  })
+
+  it("sets HSTS on the untracked short-link redirect", async () => {
+    const response = await proxy(
+      new NextRequest("https://app.example.com/r/CODE1234", {
+        headers: { "sec-gpc": "1" },
+      })
+    )
+    expect(response.status).toBe(307)
+    expect(response.headers.get("Content-Security-Policy")).toBeTruthy()
+    expect(response.headers.get("Strict-Transport-Security")).toContain("max-age=63072000")
+  })
 })

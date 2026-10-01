@@ -42,6 +42,20 @@ grep -Fq 'source_sha:' "$workflow"
 echo 'Cloud billing admission workflow static contract passed.'
 
 grep -Fq "if: github.ref == 'refs/heads/main'" "$workflow"
+# Admission tooling must come from reviewed main, not from the input SHA:
+# the script verifies the target commit itself, so it cannot be read from
+# the unverified commit. The input is then bound to the reviewed checkout.
+grep -Fq 'ref: main' "$workflow"
+grep -Fq '[ "$SOURCE_SHA" != "$(git rev-parse HEAD)" ]' "$workflow"
+if grep -Fq 'ref: ${{ inputs.source_sha }}' "$workflow"; then
+  echo 'FAIL: admission scripts must not execute from the unverified input SHA.' >&2
+  exit 1
+fi
+checkout_line=$(grep -nF 'ref: main' "$workflow" | head -1 | cut -d: -f1)
+guard_line=$(grep -nF 'Restrict the deploy target to the reviewed main head' "$workflow" | cut -d: -f1)
+script_line=$(grep -nF 'configure-cloud-billing-admission.sh' "$workflow" | cut -d: -f1)
+[ -n "$checkout_line" ] && [ -n "$guard_line" ] && [ -n "$script_line" ]
+[ "$checkout_line" -lt "$guard_line" ] && [ "$guard_line" -lt "$script_line" ]
 grep -Fq 'properties.configuration.ingress.traffic[?weight==' "$script"
 grep -Fq "group: deploy-azure-\${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-\${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}" "$workflow"
 grep -Fq "group: deploy-azure-\${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-\${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}" .github/workflows/deploy-azure.yml

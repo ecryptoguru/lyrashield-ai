@@ -4,8 +4,8 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError } from "../../../../../lib/api-response"
+import { jsonWithEtag } from "../../../../../lib/http-etag"
 import { z } from "zod"
-import { NextResponse } from "next/server"
 
 const WorkspaceSchema = z.string().min(1)
 
@@ -25,17 +25,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     await requirePermission(workspaceId, PERMISSIONS.scan.view)
     const snapshot = await getAiSecurityScoreSnapshot(id, workspaceId)
 
-    if (!snapshot) {
-      return NextResponse.json(
-        { success: true, data: { score: null } },
-        { headers: { "Cache-Control": "private, no-store" } }
-      )
-    }
-
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
+    const data = snapshot
+      ? {
           score: snapshot.score,
           methodology: snapshot.methodology,
           assessedCount: snapshot.assessedCount,
@@ -45,10 +36,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           reason: (snapshot.breakdown as Record<string, unknown>)?.reason,
           computedAt: snapshot.computedAt,
           shareEligible: false,
-        },
-      },
-      { headers: { "Cache-Control": "private, no-store" } }
-    )
+        }
+      : { score: null }
+
+    // W2.4: the score snapshot is a report representation — ETag on 200 and
+    // a bodyless 304 for a matching conditional GET.
+    return jsonWithEtag(request, data, {
+      headers: { "Cache-Control": "private, no-store" },
+    })
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

@@ -1,0 +1,254 @@
+"use client"
+
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useRouter } from "next/navigation"
+import { ScanQualitySurfaceSchema } from "@lyrashield/types"
+import { findingDetailItemsPaginatedSchema, scanPollDataSchema } from "@/lib/api-schemas"
+import { apiGet, apiGetConditional, apiGetPaginated } from "@/lib/api-client"
+import { isActiveScan } from "@/lib/scan-presentation"
+import type { FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
+import { asIsoString, asMetadata, mergeEvents } from "./scan-detail-utils"
+
+/**
+ * Owns the live-state machinery of the scan detail page: the polled scan and
+ * finding state, the ETag/event-cursor refs, the visibility-aware poll loop,
+ * and the manual full-window refresh. The view stays a pure function of the
+ * state this hook returns.
+ */
+export function useScanDetailPolling(initialScan: ScanData, initialFindings: FindingItem[]) {
+  const router = useRouter()
+  const [scan, setScan] = useState<ScanData>(initialScan)
+  const [currentFindings, setCurrentFindings] = useState<FindingItem[]>(initialFindings)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState(false)
+  const isActive = isActiveScan(scan.status)
+  const etagRef = useRef<string | undefined>(undefined)
+  const activeRequestRef = useRef<{ controller: AbortController; promise: Promise<void> } | null>(
+    null
+  )
+  const scanRef = useRef(scan)
+  useEffect(() => {
+    scanRef.current = scan
+  }, [scan])
+
+  // Incremental event polling cursor: the id of the newest event already held
+  // client-side. Each poll sends `eventsAfter` so the server returns only the
+  // tail. A ref (not state) so the in-flight poll callback always reads the
+  // latest cursor without re-render churn; it only advances after a successful
+  // merge, so a failed or aborted poll re-delivers the same tail next tick.
+  const eventCursorRef = useRef<string | null>(initialScan.events.at(-1)?.id ?? null)
+
+  // A successful commit re-derives the cursor from the merged list (single
+  // source of truth), so a failed, aborted, or validation-rejected poll never
+  // advances it and the next tick re-delivers the same tail.
+  useEffect(() => {
+    eventCursorRef.current = scan.events.at(-1)?.id ?? null
+  }, [scan])
+
+  const refresh = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        // Incremental polling: once a cursor exists, ask only for events after
+        // it. The first tick (or a full-window fallback) repopulates the whole
+        // list; manual refresh clears the cursor below to force that path.
+        const eventCursor = eventCursorRef.current
+        const cursorParam = eventCursor ? `&eventsAfter=${encodeURIComponent(eventCursor)}` : ""
+        const { data, etag, status } = await apiGetConditional<ScanPollData>(
+          `/api/scans/${scan.id}?workspaceId=${encodeURIComponent(scan.workspaceId)}${cursorParam}`,
+          { signal, etag: etagRef.current, schema: scanPollDataSchema }
+        )
+        if (signal.aborted) return
+        etagRef.current = status === 304 ? (etag ?? etagRef.current) : etag
+        setRefreshError(false)
+        if (!data) return
+
+        const updated = data
+        const nextScan: ScanData = {
+          id: updated.id,
+          workspaceId: updated.workspaceId,
+          status: updated.status,
+          goal: updated.goal,
+          mode: updated.mode,
+          triggerType: updated.triggerType,
+          target: scanRef.current.target,
+          startedAt: asIsoString(updated.startedAt),
+          endedAt: asIsoString(updated.endedAt),
+          summary: updated.summary,
+          errorCategory: updated.errorCategory,
+          errorMessage: updated.errorMessage,
+          createdAt: asIsoString(updated.createdAt)!,
+          // The immutable plan is SSR-only; the poll never carries it.
+          executionPlan: scanRef.current.executionPlan,
+          events: mergeEvents(
+            scanRef.current.events,
+            (updated.events ?? []).map((event) => ({
+              id: event.id,
+              stage: event.stage,
+              level: event.level,
+              message: event.message,
+              metadata: asMetadata(event.metadata),
+              createdAt: asIsoString(event.createdAt)!,
+            })),
+            // A tail page is only merged when the server echoes that the
+            // cursor sent on this very request was applied; anything else is a
+            // full replacement.
+            updated.eventsCursorApplied === eventCursor && eventCursor !== null
+          ),
+          integrity: {
+            ...scanRef.current.integrity,
+            manifestChecksum: updated.resultManifest?.checksum ?? null,
+            // urlExecution comes from the server-rendered manifest detail;
+            // the polling payload carries the checksum only.
+            urlExecution: scanRef.current.integrity.urlExecution,
+            coverage: (updated.coverageReceipts ?? []).map((receipt) => ({
+              scanner: receipt.scanner,
+              controlId: receipt.controlId,
+              status: receipt.status,
+              reason: receipt.reason ?? null,
+              subject: receipt.subject ?? null,
+              metadata: asMetadata(receipt.metadata),
+            })),
+          },
+          aiSecurity: scanRef.current.aiSecurity,
+        }
+        let refreshedFindings: FindingItem[] | null = null
+        let refreshedQuality: ScanData["integrity"]["quality"] = null
+        if (
+          ["COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(
+            updated.status
+          )
+        ) {
+          // A single bounded fetch (limit 100) is sufficient for the scan detail
+          // view. Very large finding sets are navigated via the findings page.
+          const page = await apiGetPaginated<FindingItem>(
+            "/api/findings",
+            { workspaceId: updated.workspaceId, scanId: scan.id, limit: "100" },
+            { signal, schema: findingDetailItemsPaginatedSchema }
+          )
+          refreshedFindings = page.items
+          // The poll carries coverage receipts but the evidence-quality
+          // projection is server-rendered. Refresh it after persistence so a
+          // live page cannot show the pre-scan zero beside terminal receipts.
+          try {
+            refreshedQuality = await apiGet(
+              `/api/scans/${scan.id}/quality?workspaceId=${encodeURIComponent(updated.workspaceId)}`,
+              { signal, schema: ScanQualitySurfaceSchema }
+            )
+          } catch {
+            // Keep the terminal outcome visible; omit a stale quality snapshot.
+          }
+          nextScan.integrity.quality = refreshedQuality
+        }
+        if (!signal.aborted) {
+          // Commit the terminal status and its finding list together. If the
+          // finding request fails transiently, the active poll remains alive
+          // and retries instead of rendering a false zero until page reload.
+          setScan(nextScan)
+          if (refreshedFindings) setCurrentFindings(refreshedFindings)
+          if (updated.status === "COMPLETED" && refreshedFindings?.length === 0) {
+            router.refresh()
+          }
+        }
+      } catch {
+        if (!signal.aborted) setRefreshError(true)
+      }
+    },
+    [router, scan.id, scan.workspaceId]
+  )
+
+  const runRefresh = useCallback(
+    (manual = false) => {
+      if (manual) activeRequestRef.current?.controller.abort()
+      else if (activeRequestRef.current) return activeRequestRef.current.promise
+
+      const controller = new AbortController()
+      const promise = refresh(controller.signal).finally(() => {
+        if (activeRequestRef.current?.controller === controller) activeRequestRef.current = null
+      })
+      activeRequestRef.current = { controller, promise }
+      return promise
+    },
+    [refresh]
+  )
+
+  useEffect(() => {
+    if (!isActive) return
+    // SSR safety: the polling loop touches `document`; never assume a DOM.
+    if (typeof document === "undefined") return
+    let timeoutId: number | undefined
+    let isAborted = false
+    let inFlight = false
+    let refreshOnVisible = false
+
+    const nextInterval = (elapsedMs: number): number => {
+      if (elapsedMs < 60_000) return 5_000
+      if (elapsedMs < 5 * 60_000) return 10_000
+      return 60_000
+    }
+
+    // Battery/network: while the tab is hidden the poll loop suspends entirely
+    // — no timer spin and no fetches. `onVisibility` below resumes it with one
+    // immediate refetch when the tab becomes visible, so state catches up right
+    // away instead of waiting out the (up to 60s) backoff interval.
+    const schedule = (delayMs: number) => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+      timeoutId = undefined
+      if (!isAborted && !document.hidden) timeoutId = window.setTimeout(poll, delayMs)
+    }
+
+    const poll = async () => {
+      timeoutId = undefined
+      if (isAborted || document.hidden || inFlight) return
+      inFlight = true
+      try {
+        await runRefresh()
+      } finally {
+        inFlight = false
+        if (!isAborted && !document.hidden) {
+          const startedAtMs = scan.startedAt ? new Date(scan.startedAt).getTime() : Date.now()
+          const delay = refreshOnVisible ? 0 : nextInterval(Date.now() - startedAtMs)
+          refreshOnVisible = false
+          schedule(delay)
+        }
+      }
+    }
+
+    schedule(5_000)
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+        timeoutId = undefined
+        refreshOnVisible = false
+      } else if (isActive && !isAborted) {
+        if (inFlight) refreshOnVisible = true
+        else schedule(0)
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+
+    return () => {
+      isAborted = true
+      activeRequestRef.current?.controller.abort()
+      document.removeEventListener("visibilitychange", onVisibility)
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+    }
+  }, [isActive, runRefresh, scan.startedAt])
+
+  useEffect(() => () => activeRequestRef.current?.controller.abort(), [])
+
+  async function handleManualRefresh() {
+    setRefreshing(true)
+    etagRef.current = undefined
+    // Force a full-window refetch: manual refresh is the user's "prove it"
+    // action, so re-fetch every event instead of trusting the incremental tail.
+    eventCursorRef.current = null
+    try {
+      await runRefresh(true)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  return { scan, currentFindings, isActive, refreshing, refreshError, handleManualRefresh }
+}

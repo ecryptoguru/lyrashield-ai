@@ -105,6 +105,11 @@ export function CreateScanSheet({
   toggleAttachment: (id: string) => void
 }) {
   const returnFocusRef = useRef<HTMLElement | null>(null)
+  // Roving tabindex for the review-type radiogroup: exactly one radio is
+  // tabbable — the selected option, or the first enabled option when nothing
+  // is selected yet. With no selection, `isSelected ? 0 : -1` left the whole
+  // group unreachable by keyboard.
+  const firstEnabledOptionIndex = availableOptions.findIndex((option) => option.available)
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -178,9 +183,11 @@ export function CreateScanSheet({
               </div>
 
               <div role="radiogroup" aria-label="Scan type" className="grid grid-cols-1 gap-3">
-                {availableOptions.map((option) => {
+                {availableOptions.map((option, index) => {
                   const isSelected = selectedOption?.id === option.id
                   const isDisabled = !option.available
+                  const isRovingFocusTarget =
+                    isSelected || (!selectedOption && index === firstEnabledOptionIndex)
                   return (
                     <button
                       key={option.id}
@@ -190,7 +197,7 @@ export function CreateScanSheet({
                       aria-checked={isSelected}
                       aria-disabled={isDisabled}
                       aria-label={`${option.label}: ${option.description}${isDisabled ? ` (${option.disabledReason})` : ""}`}
-                      tabIndex={isSelected ? 0 : -1}
+                      tabIndex={isRovingFocusTarget ? 0 : -1}
                       disabled={isDisabled}
                       onClick={() => !isDisabled && choosePreset(option.id)}
                       onKeyDown={(e) => {

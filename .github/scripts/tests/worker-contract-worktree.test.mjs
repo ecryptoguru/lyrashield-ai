@@ -55,7 +55,15 @@ test("worker contract verification tests the merged app even after a squash", ()
   const git = (...args) => execFileSync("git", args, { cwd: app, encoding: "utf8" })
   const commit = (message) => {
     git("add", "source.txt")
-    git("-c", "user.name=Review Test", "-c", "user.email=review@example.invalid", "commit", "-qm", message)
+    git(
+      "-c",
+      "user.name=Review Test",
+      "-c",
+      "user.email=review@example.invalid",
+      "commit",
+      "-qm",
+      message
+    )
   }
   try {
     git("init", "-q", "-b", "main")
@@ -71,7 +79,10 @@ test("worker contract verification tests the merged app even after a squash", ()
     writeFileSync(path.join(engine, ".lyrashield-worker-pin"), `${reviewed}\n`)
     writeFileSync(path.join(engine, "scripts/worker-contract-tests.txt"), "missing-test.ts\n")
 
-    assert.equal(spawnSync("git", ["merge-base", "--is-ancestor", reviewed, "HEAD"], { cwd: app }).status, 1)
+    assert.equal(
+      spawnSync("git", ["merge-base", "--is-ancestor", reviewed, "HEAD"], { cwd: app }).status,
+      1
+    )
     const result = spawnSync(
       "bash",
       [path.resolve(".github/scripts/verify-engine-worker-contract.sh"), engine, app],
@@ -86,7 +97,9 @@ test("worker contract verification tests the merged app even after a squash", ()
 
 test("engine-worker contract is not skipped on app main or pull requests", () => {
   const workflow = readFileSync(path.resolve(".github/workflows/ci.yml"), "utf8")
-  const job = workflow.split("  engine-worker-contract:")[1]?.split("  deploy-marketing:")[0]
+  // Slice exactly one job: stop at the next two-space job key so sibling
+  // jobs appended after this one cannot leak their own fields into it.
+  const job = workflow.split("  engine-worker-contract:")[1]?.split(/\n  [a-z][a-z-]*:/)[0]
   assert.ok(job)
   assert.match(job, /name: Pinned Engine \/ Worker Contract/)
   assert.doesNotMatch(job, /^    if:/m)

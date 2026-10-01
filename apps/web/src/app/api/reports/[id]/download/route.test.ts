@@ -281,4 +281,31 @@ describe("GET /api/reports/[id]/download", () => {
     expect(response.status).toBe(500)
     expect(update).not.toHaveBeenCalled()
   })
+
+  it("returns an ETag on 200 and a bodyless 304 for a matching If-None-Match (W2.4)", async () => {
+    findFirst.mockResolvedValue({
+      contentJson: { verdictLabel: "Ready to launch" },
+      scanId: null,
+      title: "Launch Readiness",
+      type: "launch_readiness",
+    })
+
+    const first = await GET(
+      new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "report-1" }) }
+    )
+    expect(first.status).toBe(200)
+    const etag = first.headers.get("ETag")
+    expect(etag).toMatch(/^"[0-9a-f]{64}"$/)
+
+    const second = await GET(
+      new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1", {
+        headers: { "If-None-Match": etag! },
+      }),
+      { params: Promise.resolve({ id: "report-1" }) }
+    )
+    expect(second.status).toBe(304)
+    expect(second.headers.get("ETag")).toBe(etag)
+    expect(await second.text()).toBe("")
+  })
 })

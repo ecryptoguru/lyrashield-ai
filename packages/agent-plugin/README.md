@@ -47,7 +47,7 @@ consumes the generated stdio entry through its workspace or user MCP settings fi
 
 Package-conformance means the generated manifest, schema, transport, version and export
 boundary passed repository tests. It does not mean every client version has completed an
-authenticated runtime matrix. The wider registry contains 48 install entries resolving to 44
+authenticated runtime matrix. The wider registry contains 51 install entries resolving to 48
 preferred client surfaces; use `lyrashield init` or `lyrashield install <agent>` to receive the
 correct direct install or client-owned next step. GitHub Copilot remains `EXPERIMENTAL` until a
 retained client-runtime receipt exists.
