@@ -104,6 +104,7 @@ if (coreReportPath && coreResult?.code === 0) {
       "returns an entry whose only matching word is in the topic column",
       "retrieves the expected public source in the top five for at least 90% of 60 questions",
       "executes atomic cleanup, count, TTL, and one warmed EVALSHA per operation",
+      "denies a changed input under the same idempotency key without altering the ledger",
     ])
   } catch (error) {
     console.error("\n==> core environment-gated test guard failed:", error)

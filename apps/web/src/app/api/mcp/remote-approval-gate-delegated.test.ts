@@ -127,6 +127,11 @@ vi.mock("../../../lib/rate-limit", () => ({
 }))
 
 import { makeRemoteApprovalGate as createRemoteApprovalGate } from "./remote-approval-gate"
+// The real canonical-input hasher — a pure module, so it can be imported
+// directly without the mocked @lyrashield/db surface or a Prisma client. A
+// faithful unit ledger must apply the same hashing the Postgres claim path
+// does so a changed input under one idempotency key conflicts.
+import { hashOperationInput as realHashOperationInput } from "@lyrashield/db/src/agent-operation-hash"
 
 function makeRemoteApprovalGate(options: Parameters<typeof createRemoteApprovalGate>[0]) {
   if (options.oauthContext || !options.connection) return createRemoteApprovalGate(options)
@@ -455,6 +460,88 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
       reason: expect.stringContaining("Idempotency conflict"),
     })
     expect(callToolMock).not.toHaveBeenCalled()
+  })
+
+  it("denies a changed input under the same idempotency key — real hashing, untouched ledger", async () => {
+    // A minimal in-memory ledger that applies the REAL hashOperationInput so
+    // this unit test exercises the same hash comparison the restricted-role
+    // Postgres proof (remote-approval-gate.runtime.test.ts) runs against the
+    // live ledger. Denial must leave the stored row — and the tool — untouched.
+    const ledger = new Map<string, { inputHash: string; status: string }>()
+    claimOrGetAgentOperationMock.mockImplementation(
+      async (params: {
+        connectionId?: string
+        operationName: string
+        idempotencyKey: string
+        input: Record<string, unknown>
+      }) => {
+        const ledgerKey = `${params.connectionId}:${params.operationName}:${params.idempotencyKey}`
+        const inputHash = realHashOperationInput(params.operationName, params.input)
+        const existing = ledger.get(ledgerKey)
+        if (existing) {
+          return existing.inputHash === inputHash
+            ? { status: "REPLAY", operation: { id: "op-hash-1", result: null } }
+            : {
+                status: "CONFLICT",
+                message:
+                  "Idempotency key was already used for this operation with different input arguments",
+              }
+        }
+        ledger.set(ledgerKey, { inputHash, status: "EXECUTING" })
+        return { status: "NEW", operation: { id: "op-hash-1" } }
+      }
+    )
+    callToolMock.mockResolvedValueOnce({
+      content: [{ type: "text", text: '{"scanId":"scan-1"}' }],
+      structuredContent: { scanId: "scan-1" },
+    })
+
+    const connection = {
+      id: "conn-1",
+      workspaceId: "ws-1",
+      status: "ACTIVE" as const,
+      authorizationVersion: 1,
+      allowedOperations: ["scan.create"],
+      allowedTargetIds: [],
+      allTargets: true,
+      allowedProfiles: ["STANDARD", "DEEP"],
+      expiresAt: null,
+    }
+    const gate = makeRemoteApprovalGate({ apiKeyInfo, connection, toolContext })
+
+    const first = await gate("lyrashield_scan_target", {
+      targetId: "target-1",
+      mode: "STANDARD",
+      goal: "TEST_APP",
+      idempotencyKey: "idem-hash-1",
+    })
+    expect(first.approved).toBe(true)
+    // The stored hash is of the stripped tool input — the idempotencyKey
+    // control arg is never part of the hashed operation input.
+    const originalHash = realHashOperationInput("scan.create", {
+      targetId: "target-1",
+      mode: "STANDARD",
+      goal: "TEST_APP",
+    })
+    expect(ledger.get("conn-1:scan.create:idem-hash-1")?.inputHash).toBe(originalHash)
+
+    const second = await gate("lyrashield_scan_target", {
+      targetId: "target-1",
+      mode: "DEEP",
+      goal: "TEST_APP",
+      idempotencyKey: "idem-hash-1",
+    })
+
+    expect(second).toMatchObject({
+      approved: false,
+      reason: expect.stringContaining("Idempotency conflict"),
+    })
+    // Ledger untouched and no tool action: the row still carries the first
+    // input's hash, no completion/failure write occurred for the denied call.
+    expect(ledger.get("conn-1:scan.create:idem-hash-1")?.inputHash).toBe(originalHash)
+    expect(callToolMock).toHaveBeenCalledTimes(1)
+    expect(completeAgentOperationMock).toHaveBeenCalledTimes(1)
+    expect(failAgentOperationMock).not.toHaveBeenCalled()
   })
 
   it("requires an explicit scan.cancel grant — a scan.create grant alone does not authorize cancel", async () => {
