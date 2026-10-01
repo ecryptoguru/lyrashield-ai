@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ACQUISITION_COOKIE, track } from "@/lib/analytics"
 import { rememberPlanIntent } from "@/lib/plan-intent"
@@ -25,6 +25,8 @@ import { OnboardingAlerts, OnboardingStepSection, StepProgress } from "./onboard
 import { useOnboardingPersistence } from "./use-onboarding-persistence"
 import { useOnboardingRepos } from "./use-onboarding-repos"
 import { useOnboardingScan } from "./use-onboarding-scan"
+import { useOnboardingTargetBinding } from "./use-onboarding-target-binding"
+import { useOnboardingNavigation } from "./use-onboarding-navigation"
 
 export function OnboardingWizard({
   principalId,
@@ -68,14 +70,6 @@ export function OnboardingWizard({
   const [path, setPath] = useState<OnboardingPath>(initialSelection.path)
   const [urlForm, setUrlForm] = useState({ url: "", ownershipAttested: false })
   const [buildTool, setBuildTool] = useState<string | null>(initialState.buildTool ?? null)
-  // W2.3: a persisted targetId may only be reused while it still describes the
-  // source the wizard shows. Editing the URL / picking a different repo marks
-  // the binding stale, and switching the chooser path invalidates it via the
-  // target-type check below. `boundTargetType` keeps the created target's type
-  // within the session — the onboarding PATCH response drops targetType, so
-  // without the ref a mid-session path switch could reuse a wrong-type target.
-  const [targetSourceEdited, setTargetSourceEdited] = useState(false)
-  const boundTargetType = useRef(initialState.targetType ?? null)
 
   const { data, persist, ensureWorkspace } = useOnboardingPersistence({
     initialState,
@@ -104,14 +98,14 @@ export function OnboardingWizard({
   const reviewOptions = getOnboardingReviewOptions(path)
   const selectedReview =
     reviewOptions.find((option) => option.goal === selectedGoal) ?? reviewOptions[0]
-  const expectedTargetType =
-    path === "github" ? "REPO" : path === "url" ? "WEB_APP" : path === "api" ? "API" : null
-  const persistedTargetReusable =
-    Boolean(data.targetId) &&
-    !targetSourceEdited &&
-    (expectedTargetType === null ||
-      boundTargetType.current === null ||
-      boundTargetType.current === expectedTargetType)
+  const { persistedTargetReusable, onTargetBound, onRepoSelected, onUrlEdited } =
+    useOnboardingTargetBinding({
+      data,
+      path,
+      initialStateTargetType: initialState.targetType ?? null,
+      selectedRepo,
+      setSelectedRepo,
+    })
 
   const {
     pendingScanSubmission,
@@ -143,62 +137,25 @@ export function OnboardingWizard({
     setError,
     setFailure,
     persistedTargetReusable,
-    onTargetBound: (needsRepo: boolean) => {
-      // The bound target now provably matches the visible source.
-      boundTargetType.current = expectedTargetType ?? (needsRepo ? "REPO" : "WEB_APP")
-      setTargetSourceEdited(false)
-    },
+    onTargetBound,
   })
 
   const retryingExistingTarget = persistedTargetReusable
 
-  async function choosePath(next: Exclude<OnboardingPath, null>) {
-    setError(null)
-    setFailure(null)
-    track("onboarding_path_chosen", { path: next })
-    if (next === "skip") {
-      void skipOnboarding()
-      return
-    }
-    if (next === "github") {
-      void connectGitHub()
-      return
-    }
-    // URL / API: the workspace is created lazily here (W2-01) — no naming
-    // step; the default name is editable later in settings.
-    if (!data.workspaceId) {
-      setLoading(true)
-      try {
-        await ensureWorkspace()
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Could not prepare your workspace.")
-        return
-      } finally {
-        setLoading(false)
-      }
-    }
-    // URL / API: prefill a sensible target name, then collect the URL. The
-    // onward step comes from the shared step model so the wizard and the flow
-    // logic cannot diverge.
-    setPath(next)
-    if (!productName) {
-      setProductName(next === "api" ? "Production API" : "Staging Site")
-    }
-  }
-
-  async function skipOnboarding() {
-    setLoading(true)
-    setError(null)
-    setFailure(null)
-    try {
-      await persist({ skipped: true, currentStep: 0 })
-      router.push(completionPath)
-      router.refresh()
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not skip setup.")
-      setLoading(false)
-    }
-  }
+  const { choosePath, skipOnboarding } = useOnboardingNavigation({
+    data,
+    completionPath,
+    productName,
+    router,
+    connectGitHub,
+    ensureWorkspace,
+    persist,
+    setLoading,
+    setError,
+    setFailure,
+    setPath,
+    setProductName,
+  })
 
   // Validate the URL/API inputs and advance to target details. The target is
   // NOT created here — creation is deferred to createTargetAndStart (the same
@@ -309,9 +266,7 @@ export function OnboardingWizard({
         onProductNameChange={setProductName}
         onUrlChange={(url) => {
           setUrlForm({ ...urlForm, url })
-          // Editing the URL after a target exists must not scan the stale
-          // target — the changed source gets its own target row (W2.3).
-          if (data.targetId) setTargetSourceEdited(true)
+          onUrlEdited()
           // W2-02: selection and naming are one step — the name prefills
           // from the parsed host and stays editable.
           if (!productName || productName === "Staging Site" || productName === "Production API") {
@@ -325,15 +280,7 @@ export function OnboardingWizard({
         repos={repos}
         reposLoaded={reposLoaded}
         selectedRepoId={selectedRepo?.id ?? null}
-        onSelectRepo={(repo) => {
-          // A different repo after a target exists makes the persisted
-          // targetId stale — create the matching target, never scan the
-          // old one (W2.3).
-          if (data.targetId && repo && repo.id !== selectedRepo?.id) {
-            setTargetSourceEdited(true)
-          }
-          setSelectedRepo(repo)
-        }}
+        onSelectRepo={onRepoSelected}
         reposLoadFailed={Boolean(error)}
         onLoadRepos={loadRepos}
         onReconnect={connectGitHub}

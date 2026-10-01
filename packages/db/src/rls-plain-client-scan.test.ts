@@ -147,6 +147,8 @@ const ALLOWLIST: Record<string, string> = {
   // verbatim (the coordinator's getSystemPrisma marker moved to authority.ts).
   "apps/worker/src/jobs/run-scan.job.ts":
     "policy read carries explicit workspaceId; scan cancellation check is a bare-id lookup inside the scan pipeline (extension-wrapped)",
+  "apps/worker/src/jobs/run-scan/admission.ts":
+    "delegated-grant re-verification at execution time reads the recorded AgentConnection with an explicit workspaceId filter (extension-wrapped; W0.4)",
   "apps/worker/src/jobs/run-scan/execution.ts":
     "targetDomainVerification read carries explicit workspaceId (extension-wrapped)",
   "apps/worker/src/jobs/run-scan/pending-finalization.ts":

@@ -24,7 +24,9 @@ describe("desktop setup accessibility", () => {
     expect(setup).toContain('htmlFor="azure-api-key"')
     expect(setup).toContain('htmlFor="azure-endpoint"')
     expect(setup).toContain('type="url"')
-    expect(setup.match(/role="alert"/g)).toHaveLength(2)
+    // Every failure surface announces itself: the ChatGPT sign-in status
+    // error, the ChatGPT validation error, and the Azure validation error.
+    expect(setup.match(/role="alert"/g)).toHaveLength(3)
   })
 
   it("labels and bounds the BYOK scan budget before launch", () => {
