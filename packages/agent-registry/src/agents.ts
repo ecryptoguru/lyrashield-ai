@@ -74,6 +74,7 @@ const cursor: AgentEntry = {
 const devin: AgentEntry = {
   id: "devin",
   displayName: "Devin",
+  productFamily: { id: "devin", name: "Devin" },
   surface: "cloud",
   docsSlug: "devin",
   installStrategy: "guided-manual",
@@ -101,6 +102,7 @@ const devinDesktop: AgentEntry = {
   id: "devin-desktop",
   aliases: ["windsurf"],
   displayName: "Devin Desktop / Cascade",
+  productFamily: { id: "devin", name: "Devin" },
   surface: "desktop",
   docsSlug: "devin-desktop",
   installStrategy: "config-file",
@@ -256,6 +258,7 @@ const cline: AgentEntry = {
 const opencode: AgentEntry = {
   id: "opencode",
   displayName: "OpenCode",
+  productFamily: { id: "opencode", name: "OpenCode" },
   surface: "cli",
   nativeCapabilities: ["skills"],
   skillLocations: [
@@ -310,6 +313,7 @@ const opencode: AgentEntry = {
 const opencodeV2: AgentEntry = {
   id: "opencode-v2",
   displayName: "OpenCode V2",
+  productFamily: { id: "opencode", name: "OpenCode" },
   surface: "cli",
   versionConstraints: {
     minimum: "2",
@@ -478,6 +482,7 @@ const jetbrains: AgentEntry = {
   id: "jetbrains",
   aliases: ["jetbrains-ai-assistant"],
   displayName: "JetBrains AI Assistant",
+  productFamily: { id: "jetbrains", name: "JetBrains" },
   surface: "ide",
   docsSlug: "jetbrains",
   installStrategy: "guided-manual",
@@ -505,6 +510,7 @@ const jetbrains: AgentEntry = {
 const junieIde: AgentEntry = {
   id: "junie",
   displayName: "Junie IDE",
+  productFamily: { id: "jetbrains", name: "JetBrains" },
   surface: "ide",
   docsSlug: "junie",
   installStrategy: "config-file",
@@ -553,6 +559,7 @@ const junieIde: AgentEntry = {
 const junieCli: AgentEntry = {
   id: "junie-cli",
   displayName: "Junie CLI",
+  productFamily: { id: "jetbrains", name: "JetBrains" },
   surface: "cli",
   docsSlug: "junie-cli",
   installStrategy: "config-file",
@@ -602,6 +609,7 @@ const junieCli: AgentEntry = {
 const jetbrainsClaudeAgent: AgentEntry = {
   id: "jetbrains-claude-agent",
   displayName: "JetBrains Claude Agent",
+  productFamily: { id: "jetbrains", name: "JetBrains" },
   surface: "ide",
   docsSlug: "jetbrains-claude-agent",
   installStrategy: "guided-manual",
@@ -643,6 +651,7 @@ const jetbrainsClaudeAgent: AgentEntry = {
 const jetbrainsCodexAgent: AgentEntry = {
   id: "jetbrains-codex-agent",
   displayName: "JetBrains Codex Agent",
+  productFamily: { id: "jetbrains", name: "JetBrains" },
   surface: "ide",
   docsSlug: "jetbrains-codex-agent",
   installStrategy: "guided-manual",
@@ -843,14 +852,14 @@ const antigravity: AgentEntry = {
   transports: ["stdio", "remote-http"],
   remoteAuth: "oauth",
   credential: { kind: "inline-env" },
-  nativeCapabilities: ["skills", "rules"],
+  nativeCapabilities: ["plugin", "skills", "rules"],
   skillLocations: [
     { scope: "project", path: ".agents/skills", sharedByConvention: true },
     { scope: "global", path: "~/.gemini/config/skills", sharedByConvention: false },
   ],
   distribution: {
-    channel: "Antigravity Marketplace",
-    url: "https://antigravity.google/docs/marketplace?tab=cli",
+    channel: "Antigravity native plugin; public listing in preparation",
+    url: "https://antigravity.google/docs/plugins",
     state: "PREPARATION",
   },
   transportFields: {
@@ -860,7 +869,7 @@ const antigravity: AgentEntry = {
   rulesFiles: ["GEMINI.md", "AGENTS.md"],
   source: {
     checkedOn: "2026-10-01",
-    url: "https://antigravity.google/docs/skills?tab=ide",
+    url: "https://antigravity.google/docs/plugins",
   },
   supportTier: "COMPATIBLE",
   verification: {
@@ -868,20 +877,21 @@ const antigravity: AgentEntry = {
     checkedOn: "2026-10-01",
     clientVersion: null,
     platforms: [],
-    reference: "https://antigravity.google/docs/skills?tab=ide",
+    reference: "https://antigravity.google/docs/plugins",
     receipt: null,
   },
   gotchas: [
     "Antigravity uses `serverUrl`, not `url`, for HTTP servers — `url` is rejected.",
     "This registry surface targets Antigravity IDE/2.0. The CLI uses `~/.gemini/antigravity-cli/skills` globally, while its project skills use `.agents/skills`.",
     "Rules can live in `AGENTS.md`, `GEMINI.md`, or `.agents/rules/*.md`; Antigravity 2.0 and the CLI also have distinct global rule directories.",
-    "Antigravity documents its own plugin package format and Marketplace. This registry entry does not claim plugin support for LyraShield until a compatible artifact is prepared.",
+    "Antigravity 2.0 and the IDE discover native plugins from `.agents/plugins/` or `~/.gemini/config/plugins/`; the Antigravity CLI installs a local package with `agy plugin install`. LyraShield's plugin artifact is prepared for direct installation, but no public listing or client runtime receipt is confirmed.",
   ],
 }
 
 const copilotCli: AgentEntry = {
   id: "copilot-cli",
   displayName: "GitHub Copilot CLI",
+  productFamily: { id: "github-copilot", name: "GitHub Copilot" },
   docsSlug: "copilot-cli",
   installStrategy: "config-file",
   format: "json",
@@ -919,6 +929,51 @@ const copilotCli: AgentEntry = {
     'Copilot CLI stdio entries use `type: "local"` (or `"stdio"`); remote uses `type: "http"`.',
     'Each entry may carry a `tools` array (e.g. ["*"]) to allowlist server tools.',
     "GitHub's own MCP server is built in — you don't add it manually.",
+  ],
+}
+
+const githubCopilotCloudAgent: AgentEntry = {
+  id: "github-copilot-cloud-agent",
+  displayName: "GitHub Copilot Cloud Agent",
+  productFamily: { id: "github-copilot", name: "GitHub Copilot" },
+  surface: "cloud",
+  docsSlug: "github-copilot-cloud-agent",
+  installStrategy: "guided-manual",
+  format: null,
+  rootKey: null,
+  locations: [],
+  transports: ["remote-http"],
+  preferredTransport: "remote-http",
+  remoteAuth: "api-key",
+  credential: { kind: "ui-fields" },
+  nativeCapabilities: ["plugin", "skills"],
+  skillLocations: [{ scope: "project", path: ".github/skills", sharedByConvention: true }],
+  distribution: {
+    channel: "GitHub Copilot self-hosted Agent Plugin marketplace",
+    url: "https://github.com/ecryptoguru/lyrashield-marketplace",
+    state: "PREPARATION",
+  },
+  manualInstructions:
+    'Copilot Cloud Agent can install plugin skills through the repository `.github/copilot/settings.json` `enabledPlugins` entry, but the plugin’s remote OAuth MCP descriptor does not authenticate Cloud Agent. For this read-only surface, use only the `get-started`, `review-changes`, and `launch-readiness` skills and allow only their read-only tools: `lyrashield_check_diff`, `lyrashield_get_launch_readiness`, `lyrashield_list_targets`, and `lyrashield_list_workspaces`. Configure the remote server separately in GitHub repository Settings → Code, planning, and automation → Copilot → MCP servers with `type: "http"`, `url: "https://app.lyrashieldai.com/api/mcp"`, and `headers.Authorization: "Bearer $COPILOT_MCP_LYRASHIELD_API_KEY"`. Create a read-only LyraShield workspace API key and save it as an Agents secret named `COPILOT_MCP_LYRASHIELD_API_KEY` under Settings → Security → Secrets and variables → Agents. Omit `*` because GitHub lets Cloud Agent use configured tools autonomously. Do not install `scan-project`, `fix-and-retest`, or the backward-compatible `lyrashield` skill on this read-only surface; requested recorded scans, fixes, and retests require an OAuth-capable client. Copilot Cloud Agent does not support remote OAuth, and hosted mutations still return `connect_required`. This documentation-only entry has no authenticated Cloud Agent runtime receipt.',
+  rulesFiles: [".github/copilot-instructions.md"],
+  source: {
+    checkedOn: "2026-10-01",
+    url: "https://docs.github.com/en/copilot/concepts/agents/cloud-agent/mcp-and-cloud-agent",
+  },
+  supportTier: "COMPATIBLE",
+  verification: {
+    evidence: "DOCUMENTATION",
+    checkedOn: "2026-10-01",
+    clientVersion: null,
+    platforms: [],
+    reference: "https://docs.github.com/en/copilot/concepts/agents/cloud-agent/mcp-and-cloud-agent",
+    receipt: null,
+  },
+  gotchas: [
+    "Cloud Agent and Copilot code review share repository MCP settings; configured MCP tools are used autonomously, so allowlist read-only tools and review the target repository before enabling them.",
+    "The supported read-only skill set is `get-started`, `review-changes`, and `launch-readiness`; the allowlist includes only their read-only calls. Recorded scans, fixes and retests require an OAuth-capable client.",
+    "GitHub documents `$COPILOT_MCP_...` substitutions for remote headers and requires those values to come from Agents secrets or variables. The key authenticates read-only calls; it cannot grant hosted mutations, which return `connect_required` without a connected OAuth delegation.",
+    "Remote MCP OAuth is not supported by Copilot Cloud Agent. Portable plugin and skills discovery is separate from service authentication; a plugin install or skill discovery is not evidence that the LyraShield MCP server connected.",
   ],
 }
 
@@ -970,6 +1025,7 @@ const aider: AgentEntry = {
 const devinCli: AgentEntry = {
   id: "devin-cli",
   displayName: "Devin CLI",
+  productFamily: { id: "devin", name: "Devin" },
   surface: "cli",
   versionConstraints: {
     minimum: "3000.3",
@@ -1138,6 +1194,7 @@ const ohMyPi: AgentEntry = {
 const auggie: AgentEntry = {
   id: "auggie",
   displayName: "Auggie CLI",
+  productFamily: { id: "augment", name: "Augment" },
   surface: "cli",
   docsSlug: "auggie",
   installStrategy: "config-file",
@@ -1180,6 +1237,106 @@ const auggie: AgentEntry = {
   ],
 }
 
+const augmentVSCode: AgentEntry = {
+  id: "augment-vscode",
+  displayName: "Augment for VS Code",
+  productFamily: { id: "augment", name: "Augment" },
+  surface: "ide",
+  versionConstraints: {
+    minimum: "0.789.0",
+    note: "Native Skills and custom commands are Public Beta opt-ins on the VS Code extension from 0.789.0; MCP and Rules have separate availability.",
+  },
+  docsSlug: "augment-vscode",
+  installStrategy: "guided-manual",
+  format: null,
+  rootKey: null,
+  locations: [],
+  transports: ["stdio"],
+  preferredTransport: "stdio",
+  credential: { kind: "shell-env" },
+  nativeCapabilities: ["skills", "commands", "rules"],
+  skillLocations: [
+    { scope: "project", path: ".augment/skills", sharedByConvention: true },
+    { scope: "global", path: "~/.augment/skills", sharedByConvention: false },
+  ],
+  distribution: {
+    channel: "Direct Augment IDE skills, commands, rules and MCP settings",
+    url: "https://docs.augmentcode.com/using-augment/skills",
+    state: "DIRECT",
+  },
+  manualInstructions:
+    'This entry is for the Augment VS Code extension, not the Auggie CLI plugin. Copy selected LyraShield workflow skill folders from the Marketplace export into `.augment/skills/` (or `~/.augment/skills/` for user scope); copy optional command Markdown into `.augment/commands/`. Skills and custom commands require the Public Beta opt-in in Augment Settings on VS Code extension 0.789.0 or later. For MCP, first run `npx -y lyrashield@0.2.13 login --oauth`, then use the Augment panel Settings → MCP → Import from JSON with a local stdio entry whose command is `npx` and args are `["-y", "@lyrashield/mcp@0.2.11"]`; Node.js 24 or later is required. Augment documents custom MCP setup through its settings UI/import, but its public docs do not establish generic OAuth or bearer-header setup for custom remote servers, so use local stdio and the user-only credential store. Preserve existing skills and server entries; verify discovery and make a read-only workspace call before treating setup as connected.',
+  rulesFiles: [".augment/rules/lyrashield.md", ".augment-guidelines", "AGENTS.md", "CLAUDE.md"],
+  source: {
+    checkedOn: "2026-10-01",
+    url: "https://docs.augmentcode.com/using-augment/skills",
+  },
+  supportTier: "COMPATIBLE",
+  verification: {
+    evidence: "DOCUMENTATION",
+    checkedOn: "2026-10-01",
+    clientVersion: null,
+    platforms: [],
+    reference: "https://docs.augmentcode.com/using-augment/skills",
+    receipt: null,
+  },
+  gotchas: [
+    "Skills, commands, MCP servers and rules are configured separately from Auggie CLI plugins. This entry has no persistent MCP config file because the IDE docs provide Settings Panel and JSON import rather than a stable on-disk path.",
+    "Custom MCP remote HTTP/SSE configuration is documented, but generic OAuth or bearer-header authentication for arbitrary custom servers is not. Use local stdio with the LyraShield CLI credential store unless Augment documents that auth contract.",
+    "VS Code Skills and custom commands are Public Beta opt-ins from extension 0.789.0. User guidelines have a separate VS Code extension version gate; see the official rules guide.",
+  ],
+}
+
+const augmentJetBrains: AgentEntry = {
+  id: "augment-jetbrains",
+  displayName: "Augment for JetBrains",
+  productFamily: { id: "augment", name: "Augment" },
+  surface: "ide",
+  versionConstraints: {
+    minimum: "0.428.8",
+    note: "Native Skills and custom commands are Public Beta opt-ins on JetBrains extension 0.428.8+; rules have a separate plugin version gate.",
+  },
+  docsSlug: "augment-jetbrains",
+  installStrategy: "guided-manual",
+  format: null,
+  rootKey: null,
+  locations: [],
+  transports: ["stdio"],
+  preferredTransport: "stdio",
+  credential: { kind: "shell-env" },
+  nativeCapabilities: ["skills", "commands", "rules"],
+  skillLocations: [
+    { scope: "project", path: ".augment/skills", sharedByConvention: true },
+    { scope: "global", path: "~/.augment/skills", sharedByConvention: false },
+  ],
+  distribution: {
+    channel: "Direct Augment IDE skills, commands, rules and MCP settings",
+    url: "https://docs.augmentcode.com/jetbrains/using-augment/skills",
+    state: "DIRECT",
+  },
+  manualInstructions:
+    'This entry is for Augment in JetBrains IDEs, not the Auggie CLI plugin. Copy selected LyraShield workflow skill folders from the Marketplace export into `.augment/skills/` (or `~/.augment/skills/` for user scope); copy optional command Markdown into `.augment/commands/`. Skills and custom commands require the Public Beta opt-in in Augment Settings on JetBrains extension 0.428.8 or later. For MCP, first run `npx -y lyrashield@0.2.13 login --oauth`, then use the Augment panel Settings → MCP → Import from JSON with a local stdio entry whose command is `npx` and args are `["-y", "@lyrashield/mcp@0.2.11"]`; Node.js 24 or later is required. Augment documents custom MCP setup through its settings panel, but its public docs do not establish generic OAuth or bearer-header setup for custom remote servers, so use local stdio and the user-only credential store. Preserve existing skills and server entries; verify discovery and make a read-only workspace call before treating setup as connected.',
+  rulesFiles: [".augment/rules/lyrashield.md", ".augment-guidelines", "AGENTS.md", "CLAUDE.md"],
+  source: {
+    checkedOn: "2026-10-01",
+    url: "https://docs.augmentcode.com/jetbrains/using-augment/skills",
+  },
+  supportTier: "COMPATIBLE",
+  verification: {
+    evidence: "DOCUMENTATION",
+    checkedOn: "2026-10-01",
+    clientVersion: null,
+    platforms: [],
+    reference: "https://docs.augmentcode.com/jetbrains/using-augment/skills",
+    receipt: null,
+  },
+  gotchas: [
+    "Skills, commands, MCP servers and rules are configured separately from Auggie CLI plugins. This entry has no persistent MCP config file because the IDE docs provide Settings Panel rather than a stable on-disk path.",
+    "Custom MCP remote HTTP/SSE configuration is documented, but generic OAuth or bearer-header authentication for arbitrary custom servers is not. Use local stdio with the LyraShield CLI credential store unless Augment documents that auth contract.",
+    "JetBrains Skills and custom commands are Public Beta opt-ins from extension 0.428.8; the official docs give no runtime receipt for this registry entry.",
+  ],
+}
+
 const factoryDroid: AgentEntry = {
   id: "factory-droid",
   displayName: "Factory Droid",
@@ -1190,9 +1347,9 @@ const factoryDroid: AgentEntry = {
   rootKey: null,
   locations: [],
   transports: ["stdio", "remote-http"],
-  preferredTransport: "stdio",
-  remoteAuth: "api-key",
-  credential: { kind: "shell-env" },
+  preferredTransport: "remote-http",
+  remoteAuth: "oauth",
+  credential: { kind: "ui-fields" },
   nativeCapabilities: ["plugin", "skills", "commands", "hooks"],
   skillLocations: [
     { scope: "project", path: ".factory/skills", sharedByConvention: true },
@@ -1200,15 +1357,15 @@ const factoryDroid: AgentEntry = {
   ],
   distribution: {
     channel: "Factory Droid plugin marketplace",
-    url: "https://docs.factory.ai/harness/plugins",
+    url: "https://docs.factory.com/harness/plugins",
     state: "PREPARATION",
   },
   manualInstructions:
-    "In a Droid session, use `/mcp` to add a server or run the documented `droid mcp add` command. Configure LyraShield over local stdio with a user-scoped credential for direct workflows. Droid's documented remote MCP setup uses static headers; do not treat a hosted API key as OAuth delegation. The LyraShield Droid plugin marketplace package is still in preparation.",
+    "For the hosted endpoint, run `droid mcp add lyrashield https://app.lyrashieldai.com/api/mcp --type http` or add the same remote server in `/mcp`. Factory Droid uses zero-configuration OAuth Dynamic Client Registration by default and stores tokens in the system keyring; do not add `--no-oauth` or copy a bearer token into project config. Complete browser consent, select one LyraShield workspace, then verify a read-only call. Local stdio with the authenticated LyraShield CLI credential store remains an alternative. The LyraShield Droid plugin marketplace package is still in preparation, and this entry has no authenticated runtime receipt.",
   rulesFiles: [],
   source: {
     checkedOn: "2026-10-01",
-    url: "https://docs.factory.ai/harness/plugins",
+    url: "https://docs.factory.com/harness/mcp",
   },
   supportTier: "COMPATIBLE",
   verification: {
@@ -1216,12 +1373,12 @@ const factoryDroid: AgentEntry = {
     checkedOn: "2026-10-01",
     clientVersion: null,
     platforms: [],
-    reference: "https://docs.factory.ai/harness/plugins",
+    reference: "https://docs.factory.com/harness/mcp",
     receipt: null,
   },
   gotchas: [
     "Droid's plugin system bundles skills, slash commands, hooks, MCP servers, and other components. User and project marketplace scopes are separate.",
-    "The documented MCP CLI supports remote HTTP and static headers, and the `/mcp` manager supports interactive setup. Current docs do not establish an OAuth flow for LyraShield's hosted endpoint.",
+    "Remote HTTP MCP uses OAuth Dynamic Client Registration by default and stores tokens in the system keyring or a fallback file. Keep secrets out of project-level `.factory/mcp.json`; the hosted LyraShield endpoint is read-only unless an authorized browser-confirmed delegation is recorded.",
     "Skills can also be installed in `.factory/skills` or `~/.factory/skills`; avoid committing credentials in project settings.",
   ],
 }
@@ -1229,6 +1386,7 @@ const factoryDroid: AgentEntry = {
 const qoder: AgentEntry = {
   id: "qoder",
   displayName: "Qoder IDE",
+  productFamily: { id: "qoder", name: "Qoder" },
   surface: "ide",
   docsSlug: "qoder",
   installStrategy: "guided-manual",
@@ -1270,6 +1428,7 @@ const qoder: AgentEntry = {
 const qoderCli: AgentEntry = {
   id: "qoder-cli",
   displayName: "Qoder CLI",
+  productFamily: { id: "qoder", name: "Qoder" },
   surface: "cli",
   docsSlug: "qoder-cli",
   installStrategy: "config-file",
@@ -1581,6 +1740,7 @@ const replitAgent: AgentEntry = {
 const claudeDesktop: AgentEntry = {
   id: "claude-desktop",
   displayName: "Claude Desktop (Remote Connector)",
+  productFamily: { id: "claude", name: "Claude" },
   surface: "desktop",
   docsSlug: "claude-desktop",
   installStrategy: "guided-manual",
@@ -1621,6 +1781,7 @@ const claudeDesktop: AgentEntry = {
 const claudeWeb: AgentEntry = {
   id: "claude-web",
   displayName: "Claude Web (Remote Connector)",
+  productFamily: { id: "claude", name: "Claude" },
   surface: "web",
   docsSlug: "claude-web",
   installStrategy: "guided-manual",
@@ -1661,6 +1822,7 @@ const claudeWeb: AgentEntry = {
 const claudeCodePlugin: AgentEntry = {
   id: "claude-code-agent-plugin",
   displayName: "Claude Code (Agent Plugin)",
+  productFamily: { id: "claude", name: "Claude" },
   docsSlug: "claude-code",
   installStrategy: "agent-plugin",
   format: null,
@@ -1743,7 +1905,7 @@ const vscodePlugin: AgentEntry = {
   gotchas: [
     "VS Code reads the portable root `plugin.json`; there is no VS Code-specific shim directory. Our manifest declares the Agent Plugins 1.0 `$schema`, so VS Code classifies it as Agent Plugins 1.0 and takes MCP servers from the root `mcp.json`.",
     "Auto-registration is NOT wired yet, so this path is a staging copy rather than a discovery path. VS Code only auto-discovers plugins under `~/.copilot/installed-plugins/`; everything else arrives via a configured marketplace, Install-from-Source or an explicit entry in the `chat.pluginLocations` setting.",
-    "Until marketplace or Install-from-Source registration ships, install VS Code through its verified config-file path: `lyrashield install vscode` writes `.vscode/mcp.json`. Agent plugins additionally require the `chat.plugins.enabled` setting.",
+    "If plugin installation is unavailable, use the documented `.vscode/mcp.json` MCP configuration fallback. Agent plugins additionally require the `chat.plugins.enabled` setting. Configuration does not establish authenticated client acceptance.",
     "Authenticate through the client-hosted OAuth flow when connecting the remote MCP server.",
   ],
 }
@@ -1780,6 +1942,7 @@ const openaiCodexPlugin: AgentEntry = {
 const githubCopilotPlugin: AgentEntry = {
   id: "github-copilot-agent-plugin",
   displayName: "GitHub Copilot (Agent Plugin)",
+  productFamily: { id: "github-copilot", name: "GitHub Copilot" },
   docsSlug: "github-copilot",
   installStrategy: "agent-plugin",
   format: null,
@@ -1884,6 +2047,7 @@ export const AGENTS: readonly RegistryAgentEntry[] = [
   hermes,
   antigravity,
   copilotCli,
+  githubCopilotCloudAgent,
   goose,
   aider,
   devinCli,
@@ -1892,6 +2056,8 @@ export const AGENTS: readonly RegistryAgentEntry[] = [
   codebuff,
   ohMyPi,
   auggie,
+  augmentVSCode,
+  augmentJetBrains,
   factoryDroid,
   qoder,
   qoderCli,

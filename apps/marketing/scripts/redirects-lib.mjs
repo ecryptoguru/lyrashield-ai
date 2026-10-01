@@ -24,6 +24,20 @@ const { listGeneratedIntegrationDocs } = await import("../src/lib/integration-do
 const here = dirname(fileURLToPath(import.meta.url))
 const marketingRoot = join(here, "..")
 
+/** Permanent aliases retained after canonical route changes. */
+export const LEGACY_REDIRECTS = [
+  {
+    source: "/docs/integrations/picode",
+    target: "/docs/integrations/pi",
+    code: "301",
+  },
+  {
+    source: "/docs/integrations/picode/",
+    target: "/docs/integrations/pi",
+    code: "301",
+  },
+]
+
 /** Pages excluded from trailing-slash rules. */
 const EXCLUDED_PAGES = new Set(["index", "404"])
 

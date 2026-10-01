@@ -1,5 +1,14 @@
 import type { AgentEntry } from "@lyrashield/agent-registry"
-import { getAgent, renderConfig } from "@lyrashield/agent-registry"
+import {
+  CLI_PACKAGE_SPEC,
+  CLI_CONFIG_WRITES_AVAILABLE,
+  CLI_SKILLS_AVAILABLE,
+  MCP_PACKAGE_SPEC,
+  getAgent,
+  getPublishedCliInstallCommand,
+  renderConfig,
+  renderEntry,
+} from "@lyrashield/agent-registry"
 
 /**
  * Per-agent integration wizard data model.
@@ -10,7 +19,7 @@ import { getAgent, renderConfig } from "@lyrashield/agent-registry"
  * fallback for the guided-manual agents that have no config file.
  */
 
-type WizardStepKind = "install" | "config" | "api-key" | "rules" | "hooks" | "verify"
+type WizardStepKind = "install" | "config" | "api-key" | "rules" | "skills" | "hooks" | "verify"
 
 export interface WizardStep {
   id: string
@@ -28,6 +37,8 @@ export interface WizardStep {
   copyLabel?: string
   /** Gotcha / caveat shown as a subtle note. */
   note?: string
+  /** Optional alternatives never appear as required setup steps. */
+  optional?: boolean
 }
 
 export interface AgentWizardData {
@@ -40,10 +51,9 @@ export interface AgentWizardData {
   supportTier: NonNullable<AgentEntry["supportTier"]>
   verification: AgentEntry["verification"] | null
   distribution: AgentEntry["distribution"] | null
+  versionConstraints: AgentEntry["versionConstraints"] | null
   steps: WizardStep[]
 }
-
-const API_KEY_PLACEHOLDER = "<paste lsk_ key>"
 
 function primaryConfigPath(agent: AgentEntry): string | undefined {
   const loc = agent.locations.find((location) => location.sharedByConvention) ?? agent.locations[0]
@@ -51,35 +61,38 @@ function primaryConfigPath(agent: AgentEntry): string | undefined {
 }
 
 function buildConfigSnippet(agent: AgentEntry, apiUrl: string): string | undefined {
-  // renderConfig only supports config-file agents (json/toml/yaml). jsonc agents
-  // and guided-manual agents get a fallback handled by the caller.
-  if (
-    agent.installStrategy !== "config-file" ||
-    agent.format === "jsonc" ||
-    !agent.transports.includes("stdio")
-  )
+  if (agent.installStrategy !== "config-file" || !agent.transports.includes("stdio"))
     return undefined
   try {
-    const rendered = renderConfig(agent, {
+    const options = {
       transport: "stdio",
       apiUrl,
       secretMode: "shell",
-    })
-    return rendered.content
+    } as const
+    if (agent.format === "jsonc") {
+      const { rootKey, entryKey, value } = renderEntry(agent, options)
+      return JSON.stringify({ [rootKey]: { [entryKey]: value } }, null, 2)
+    }
+    return renderConfig(agent, options).content
   } catch {
     return undefined
   }
 }
 
 function buildRemoteSnippet(agent: AgentEntry, apiUrl: string): string | undefined {
-  if (agent.installStrategy !== "config-file" || agent.format === "jsonc") return undefined
+  if (agent.installStrategy !== "config-file") return undefined
   if (!agent.transports.includes("remote-http")) return undefined
   try {
-    return renderConfig(agent, {
+    const options = {
       transport: "remote-http",
       apiUrl,
       secretMode: agent.remoteAuth === "oauth" ? "shell" : "header",
-    }).content
+    } as const
+    if (agent.format === "jsonc") {
+      const { rootKey, entryKey, value } = renderEntry(agent, options)
+      return JSON.stringify({ [rootKey]: { [entryKey]: value } }, null, 2)
+    }
+    return renderConfig(agent, options).content
   } catch {
     return undefined
   }
@@ -93,6 +106,8 @@ function buildRemoteSnippet(agent: AgentEntry, apiUrl: string): string | undefin
 export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardData | null {
   const agent = getAgent(agentId)
   if (!agent) return null
+  const publishedInstallCommand = getPublishedCliInstallCommand(agent)
+  const localSetup = agent.surface !== "cloud" && agent.surface !== "web"
 
   const steps: WizardStep[] = []
   const metadata = {
@@ -105,6 +120,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     supportTier: agent.supportTier ?? "COMPATIBLE",
     verification: agent.verification ?? null,
     distribution: agent.distribution ?? null,
+    versionConstraints: agent.versionConstraints ?? null,
   } satisfies Omit<AgentWizardData, "steps">
   if (agent.integrationKind === "standalone-cli") {
     steps.push({
@@ -112,7 +128,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       kind: "install",
       title: "Use the standalone workflow",
       summary: agent.manualInstructions ?? "Run LyraShield CLI checks beside this coding agent.",
-      command: "npx lyrashield --help",
+      command: `npx -y ${CLI_PACKAGE_SPEC} --help`,
       copyLabel: "Copy LyraShield CLI help command",
     })
     steps.push({
@@ -121,7 +137,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       title: "Verify the CLI or CI check",
       summary:
         "Run a read-only check on an authorized target and retain its result. This client does not have native MCP integration.",
-      command: "lyrashield check-diff",
+      command: `npx -y ${CLI_PACKAGE_SPEC} check-diff`,
       copyLabel: "Copy check-diff command",
     })
     return {
@@ -131,6 +147,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   }
   const configPath = primaryConfigPath(agent)
   const usesRemoteOAuth = agent.preferredTransport === "remote-http" && agent.remoteAuth === "oauth"
+  const usesRemoteApiKey = agent.preferredTransport === "remote-http" && !usesRemoteOAuth
   const remoteOAuthCommand =
     usesRemoteOAuth && agent.id === "picode" ? "pi mcp login lyrashield" : undefined
 
@@ -142,7 +159,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       kind: "install",
       title: "Install",
       summary: `${agent.displayName} manages MCP servers with its own CLI. The LyraShield CLI delegates to it for you.`,
-      command: `npx lyrashield install ${agent.id}`,
+      command: publishedInstallCommand ?? undefined,
       copyLabel: `Copy install command for ${agent.displayName}`,
       note: `Under the hood this runs \`${vendorCmd}\`.`,
     })
@@ -150,15 +167,21 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     steps.push({
       id: "install",
       kind: "install",
-      title: "Install",
-      summary: agent.manualInstructions
-        ? `Follow the documented activation steps for ${agent.displayName}.`
-        : `Prepare the LyraShield integration for ${agent.displayName}.`,
-      command: `npx lyrashield install ${agent.id}`,
+      title: publishedInstallCommand ? "Install" : "Prepare manual setup",
+      summary: !publishedInstallCommand
+        ? agent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE
+          ? "Automatic config writes are withheld until the preservation fixes ship in the next CLI release. Merge the connection values below into your existing client config."
+          : "CLI installation for this setup is prepared for the next release. Use the manual connection steps below."
+        : agent.manualInstructions
+          ? `Follow the documented activation steps for ${agent.displayName}.`
+          : `Prepare the LyraShield integration for ${agent.displayName}.`,
+      command: publishedInstallCommand ?? undefined,
       copyLabel: `Copy install command for ${agent.displayName}`,
       note:
         agent.installStrategy === "guided-manual"
-          ? `${agent.displayName} has no config file the CLI can write — the command prints exact values to paste.`
+          ? publishedInstallCommand
+            ? `${agent.displayName} has no config file the CLI can write — the command prints exact values to paste.`
+            : `${agent.displayName} uses its documented MCP setup UI. Follow the connection steps below.`
           : undefined,
     })
   }
@@ -168,6 +191,12 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   const remoteSnippet = buildRemoteSnippet(agent, apiUrl)
   const primarySnippet = agent.preferredTransport === "remote-http" ? remoteSnippet : localSnippet
   const alternateSnippet = agent.preferredTransport === "remote-http" ? localSnippet : remoteSnippet
+  const alternateAuthNote =
+    agent.preferredTransport === "remote-http"
+      ? `This local alternative uses a separate credential store. Run \`npx -y ${CLI_PACKAGE_SPEC} login --oauth\` before starting the local server; client OAuth authenticates only the remote connection.`
+      : agent.remoteAuth === "oauth"
+        ? "Complete OAuth inside this client for the remote alternative. CLI OAuth authenticates only local stdio. Hosted scans require an explicit browser-confirmed delegation."
+        : "The remote alternative requires a separate read-only API key from a workspace Owner or Admin, stored in the client's private secret or header settings. CLI OAuth authenticates only local stdio. Never commit a key or paste it into an agent prompt. Hosted mutations return connect_required without a valid OAuth delegation."
   if (agent.installStrategy === "agent-plugin") {
     if (agent.manualInstructions) {
       steps.push({
@@ -183,7 +212,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       id: "config",
       kind: "config",
       title: "Add the MCP config",
-      summary: `Paste this into ${configPath ?? "your MCP config"}. The CLI's install command writes it for you — this is the manual path or a reference.`,
+      summary: `Merge this server entry into ${configPath ?? "your MCP config"}, preserving existing servers and comments.${publishedInstallCommand ? " The install command above can do this for you." : ""}`,
       snippet: primarySnippet,
       snippetPath: configPath,
       copyLabel: `Copy ${agent.displayName} MCP config`,
@@ -206,10 +235,12 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
         snippet: alternateSnippet,
         snippetPath: configPath,
         copyLabel: `Copy ${agent.displayName} alternate MCP config`,
+        note: alternateAuthNote,
+        optional: true,
       })
     }
   } else {
-    // guided-manual / jsonc fallback — point at the agent's UI + endpoint.
+    // Guided clients use their own UI rather than a guessed config file.
     steps.push({
       id: "config",
       kind: "config",
@@ -219,11 +250,26 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
         `${agent.displayName} uses its own MCP setup UI. Add the connection values below.`,
       snippet:
         agent.preferredTransport === "remote-http"
-          ? `URL: ${apiUrl}/api/mcp\nAuthentication: ${usesRemoteOAuth ? "OAuth" : `Bearer ${API_KEY_PLACEHOLDER}`}`
-          : `Run: npx -y @lyrashield/mcp\nEnv: LYRASHIELD_API_KEY=${API_KEY_PLACEHOLDER}`,
+          ? `URL: ${apiUrl}/api/mcp\nAuthentication: ${usesRemoteOAuth ? "OAuth" : "read-only API key in the client's private secret settings"}`
+          : `Run: npx -y ${MCP_PACKAGE_SPEC}\nEnvironment: LYRASHIELD_API_URL=${apiUrl}\nCredentials: selected CLI workspace`,
       copyLabel: `Copy ${agent.displayName} connection values`,
       note: agent.gotchas[0],
     })
+    if (agent.transports.includes("stdio") && agent.transports.includes("remote-http")) {
+      const alternativeIsLocal = agent.preferredTransport === "remote-http"
+      steps.push({
+        id: alternativeIsLocal ? "config-local" : "config-remote",
+        kind: "config",
+        title: alternativeIsLocal ? "Local stdio alternative" : "Remote HTTP alternative",
+        summary: "Use this alternative only through this client's documented MCP setup UI.",
+        snippet: alternativeIsLocal
+          ? `Run: npx -y ${MCP_PACKAGE_SPEC}\nEnvironment: LYRASHIELD_API_URL=${apiUrl}\nCredentials: selected CLI workspace`
+          : `URL: ${apiUrl}/api/mcp\nAuthentication: ${agent.remoteAuth === "oauth" ? "OAuth" : "read-only API key in the client's private secret settings"}`,
+        copyLabel: `Copy ${agent.displayName} alternate connection values`,
+        note: alternateAuthNote,
+        optional: true,
+      })
+    }
   }
 
   // 3) Authentication
@@ -231,20 +277,30 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     id: "api-key",
     kind: "api-key",
     title: "Authenticate",
-    summary: remoteOAuthCommand
-      ? `Run the Pi OAuth login, select one workspace and approve the requested access once.`
+    summary: usesRemoteApiKey
+      ? "Ask a workspace Owner or Admin for a read-only API key from Settings → API keys. Store it only in the client's private secret settings, then add it to the connection."
+      : remoteOAuthCommand
+        ? `Run the Pi OAuth login, select one workspace and approve the requested access once.`
+        : usesRemoteOAuth
+          ? `Complete OAuth in ${agent.displayName}, select one workspace and approve the requested access once.`
+          : "Sign in with the OAuth device flow so the CLI and local MCP server can use your selected workspace.",
+    command: usesRemoteApiKey
+      ? undefined
       : usesRemoteOAuth
-        ? `Complete OAuth in ${agent.displayName}, select one workspace and approve the requested access once.`
-        : "Sign in with the OAuth device flow so the CLI and local MCP server can use your selected workspace.",
-    command: usesRemoteOAuth ? remoteOAuthCommand : "lyrashield login --oauth",
-    copyLabel: usesRemoteOAuth
-      ? remoteOAuthCommand
-        ? "Copy Pi OAuth login command"
-        : undefined
-      : "Copy login command",
-    note: usesRemoteOAuth
-      ? "Matching actions then run within your workspace role, connection scope, target access and budget. Reconnect only after revocation, expiry or a scope change."
-      : "Credentials are stored at ~/.lyrashield/credentials.json. For API-key-only clients, create an lsk_ key in Settings → API keys and run `lyrashield login` instead.",
+        ? remoteOAuthCommand
+        : `npx -y ${CLI_PACKAGE_SPEC} login --oauth`,
+    copyLabel: usesRemoteApiKey
+      ? undefined
+      : usesRemoteOAuth
+        ? remoteOAuthCommand
+          ? "Copy Pi OAuth login command"
+          : undefined
+        : "Copy login command",
+    note: usesRemoteApiKey
+      ? "This connection uses read-only API-key access. Hosted mutations return connect_required; an API key cannot replace browser-confirmed OAuth delegation. Use an OAuth-capable client for delegated scan and retest workflows. Never commit a key or paste it into an agent prompt."
+      : usesRemoteOAuth
+        ? "OAuth starts with read-only access. Scans and other hosted mutations require an explicit browser-confirmed delegation for the workflow, target and scan depth; the server rechecks it at execution. Reconnect after revocation, expiry or a scope change."
+        : `Credentials are stored at ~/.lyrashield/credentials.json. For API-key-only local clients, create a scoped key in Settings → API keys and run \`npx -y ${CLI_PACKAGE_SPEC} login\` instead.`,
   })
 
   // 4) Rules / skills
@@ -253,24 +309,35 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     steps.push({
       id: "rules",
       kind: "rules",
-      title: "Install rules / skills",
+      title: "Install rules",
       summary: `Keep ${agent.displayName}'s LyraShield rules in sync (${agent.rulesFiles.join(", ")}).`,
-      command: `lyrashield rules add ${agent.id}`,
+      command: publishedInstallCommand
+        ? `npx -y ${CLI_PACKAGE_SPEC} rules add ${agent.id}`
+        : undefined,
       copyLabel: `Copy rules install command for ${agent.displayName}`,
-      note: "Remove anytime with `lyrashield rules remove`.",
+      note: publishedInstallCommand
+        ? `Remove LyraShield-owned rules with \`npx -y ${CLI_PACKAGE_SPEC} rules remove ${agent.id}\`.`
+        : "Rules installation for this client is prepared for the next CLI release. Follow the client guide for manual setup.",
     })
   }
 
-  // 5) Hooks (optional, pre-commit only — the CLI has no pre-push command today)
-  steps.push({
-    id: "hooks",
-    kind: "hooks",
-    title: "Optional: pre-commit gate",
-    summary: "Add an advisory pre-commit check that scans your staged diff before you commit.",
-    command: "lyrashield hook install",
-    copyLabel: "Copy hook install command",
-    note: "Advisory only; it warns but won't block and is skipped by default. The installer refuses to overwrite an existing hook. There is no automated removal command: inspect the file first and remove it only if it contains no other commands.",
-  })
+  if (agent.skillLocations?.length && !pluginProvidesSkills) {
+    steps.push({
+      id: "skills",
+      kind: "skills",
+      title: "Native workflow skills",
+      summary: CLI_SKILLS_AVAILABLE
+        ? "Install the focused LyraShield workflows in this client's documented skill directory. Existing customized skills are preserved."
+        : "The focused LyraShield skill bundle is prepared for the next release. You can use the connected MCP tools directly in the meantime.",
+      command: CLI_SKILLS_AVAILABLE
+        ? `npx -y ${CLI_PACKAGE_SPEC} skills install ${agent.id}`
+        : undefined,
+      copyLabel: `Copy skills install command for ${agent.displayName}`,
+      note: CLI_SKILLS_AVAILABLE
+        ? `Remove only LyraShield-owned skills with \`npx -y ${CLI_PACKAGE_SPEC} skills remove ${agent.id}\`.`
+        : "Client skill discovery is documented; package publication and runtime acceptance are separate checks.",
+    })
+  }
 
   // 6) Verify
   steps.push({
@@ -278,10 +345,30 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     kind: "verify",
     title: "Verify it works",
     summary: "Confirm the setup and make a read-only LyraShield call. Scans remain explicit.",
-    command: "lyrashield doctor",
+    command: localSetup ? `npx -y ${CLI_PACKAGE_SPEC} doctor` : undefined,
     copyLabel: "Copy doctor command",
-    note: "Restart the client, confirm its LyraShield tools and native workflows, then make a read-only call. Doctor only checks the local setup.",
+    note: "Reload the client connection, confirm its LyraShield tools and available native workflows, then make a read-only call to list authorized targets in your selected workspace. Doctor only checks local setup; it does not establish authenticated client acceptance.",
   })
+
+  if (localSetup) {
+    steps.push({
+      id: "hooks",
+      kind: "hooks",
+      optional: true,
+      title: "Optional: advisory pre-commit check",
+      summary:
+        "Run a local staged-diff check before commits. This is separate from recorded scans and does not start paid work.",
+      note: `Off by default. The safer offline hook installer is prepared for the next release. Until then, run \`npx -y ${CLI_PACKAGE_SPEC} check-diff --staged\` explicitly. Remove only LyraShield-owned commands from an existing hook and preserve every unrelated command. Never delete a user-owned hook.`,
+    })
+  }
+
+  // The published CLI requires credentials before installing stdio configs.
+  // Keep the first copyable command usable on a fresh machine.
+  if (agent.preferredTransport === "stdio" && agent.installStrategy !== "agent-plugin") {
+    const authenticationIndex = steps.findIndex((step) => step.kind === "api-key")
+    const [authentication] = steps.splice(authenticationIndex, 1)
+    if (authentication) steps.unshift(authentication)
+  }
 
   return {
     ...metadata,

@@ -7,6 +7,7 @@ import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { afterEach, describe, expect, it } from "vitest"
 import { createAllTools, McpServer } from "@lyrashield/mcp"
+import { buildPlugin } from "../build.js"
 import { exportMarketplace } from "../export.js"
 import { validatePlugin } from "../validate.js"
 
@@ -33,7 +34,56 @@ afterEach(async () => {
   )
 })
 
+function splitSkillDocument(text: string): { frontmatter: string; body: string } {
+  const match = text.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/)
+  if (!match) throw new Error("Skill document is missing YAML frontmatter")
+  return { frontmatter: match[0], body: text.slice(match[0].length) }
+}
+
 describe("exportMarketplace", () => {
+  it("preserves client skill frontmatter and keeps Lovable ZIPs in source parity", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-skills-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+
+    for (const skill of [
+      "get-started",
+      "review-changes",
+      "scan-project",
+      "fix-and-retest",
+      "launch-readiness",
+    ]) {
+      const canonical = splitSkillDocument(
+        await readFile(
+          path.join(repoRoot, "packages/agent-plugin/plugin/skills", skill, "SKILL.md"),
+          "utf8"
+        )
+      )
+      const mistral = splitSkillDocument(
+        await readFile(path.join(output, "mistral-vibe/skills", skill, "SKILL.md"), "utf8")
+      )
+      expect(mistral.frontmatter).toContain("user-invocable: true")
+      expect(mistral.body).toBe(canonical.body)
+
+      const lovable = splitSkillDocument(
+        await readFile(path.join(output, "lovable/skills", skill, "SKILL.md"), "utf8")
+      )
+      expect(lovable.frontmatter).toContain('description: "Use when the user asks to')
+      expect(lovable.body).toBe(canonical.body)
+    }
+
+    // The shipped validator parses the actual ZIP headers, requires ZIP_STORED,
+    // and compares each archive's root SKILL.md bytes with the exported source.
+    await expect(runValidator(output)).resolves.toContain("Marketplace validation passed")
+  }, 60000)
+
+  it("exports safely while plugin-generated files are atomically refreshed", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-concurrent-"))
+    outputs.push(output)
+    await Promise.all([buildPlugin(), exportMarketplace(output)])
+    await expect(runValidator(output)).resolves.toContain("Marketplace validation passed")
+  }, 60000)
+
   it("rejects release-candidate exports from a dirty source checkout", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     const dirtyMarker = path.join(

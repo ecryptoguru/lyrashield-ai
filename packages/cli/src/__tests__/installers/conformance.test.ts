@@ -1,11 +1,21 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest"
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises"
+import {
+  lstat,
+  mkdtemp,
+  readFile,
+  readlink,
+  readdir,
+  rm,
+  symlink,
+  stat,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { execFileSync } from "node:child_process"
 import path from "node:path"
 import { getAgent } from "@lyrashield/agent-registry"
 import { installAgent, uninstallAgent } from "../../installers/install.js"
-import { mergeFile } from "../../installers/merge.js"
+import { mergeFile, removeFile } from "../../installers/merge.js"
 import { parse as parseJsonc } from "jsonc-parser"
 import * as TOML from "@iarna/toml"
 import YAML from "yaml"
@@ -411,4 +421,156 @@ mcp_servers:
     expect(lyra).toHaveProperty("command", "npx")
     expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp@0.2.11"])
   })
+
+  it.each([
+    {
+      format: "json",
+      rootKey: "mcpServers",
+      content: '{"mcpServers": null}\n',
+      extension: "json",
+    },
+    {
+      format: "jsonc",
+      rootKey: "mcp",
+      content: '{\n  // user-owned value\n  "mcp": null\n}\n',
+      extension: "jsonc",
+    },
+    {
+      format: "toml",
+      rootKey: "mcp_servers",
+      content: 'mcp_servers = "user-owned value"\n',
+      extension: "toml",
+    },
+    {
+      format: "toml",
+      rootKey: "mcp_servers",
+      content: 'mcp_servers = { acme = { command = "acme-mcp" } }\n',
+      extension: "toml-inline",
+    },
+    {
+      format: "yaml",
+      rootKey: "mcp_servers",
+      content: "mcp_servers: null\n",
+      extension: "yaml",
+    },
+  ] as const)(
+    "refuses to replace a non-table $format root",
+    async ({ format, rootKey, content, extension }) => {
+      const filePath = path.join(cwd, `occupied-root.${extension}`)
+      await writeFile(filePath, content, "utf-8")
+
+      await expect(
+        mergeFile({
+          filePath,
+          format,
+          rootKey,
+          serverName: "lyrashield",
+          value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+        })
+      ).rejects.toThrow()
+
+      expect(await readFile(filePath, "utf-8")).toBe(content)
+      expect(await readdir(cwd)).toEqual([`occupied-root.${extension}`])
+    }
+  )
+
+  it("does not create a backup or modify a target when a config path is a symlink", async () => {
+    const target = path.join(cwd, "shared-config.json")
+    const linkPath = path.join(cwd, "client-config.json")
+    const original = '{"mcpServers":{"acme":{"command":"acme-mcp"}}}\n'
+    await writeFile(target, original, "utf-8")
+    await symlink(target, linkPath)
+
+    await expect(
+      mergeFile({
+        filePath: linkPath,
+        format: "json",
+        rootKey: "mcpServers",
+        serverName: "lyrashield",
+        value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+      })
+    ).rejects.toThrow(/symlink/i)
+
+    expect((await lstat(linkPath)).isSymbolicLink()).toBe(true)
+    expect(await readlink(linkPath)).toBe(target)
+    expect(await readFile(target, "utf-8")).toBe(original)
+    expect((await readdir(cwd)).sort()).toEqual(["client-config.json", "shared-config.json"])
+  })
+
+  it("preserves restrictive permissions on config edits and their backups", async () => {
+    const filePath = path.join(cwd, "private-config.json")
+    await writeFile(filePath, '{"unrelated":true}\n', { encoding: "utf-8", mode: 0o600 })
+
+    const result = await mergeFile({
+      filePath,
+      format: "json",
+      rootKey: "mcpServers",
+      serverName: "lyrashield",
+      value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+    })
+
+    expect(result.backupPath).toBeDefined()
+    expect((await stat(filePath)).mode & 0o777).toBe(0o600)
+    expect((await stat(result.backupPath!)).mode & 0o777).toBe(0o600)
+  })
+
+  it.each([
+    {
+      format: "json",
+      rootKey: "mcpServers",
+      content: '{"mcpServers":{"lyrashield":{"command":"npx"}},"broken": }\n',
+      extension: "json",
+    },
+    {
+      format: "jsonc",
+      rootKey: "mcp",
+      content: '{\n  "mcp": { "lyrashield": { "command": "npx" } },\n  "broken": }\n',
+      extension: "jsonc",
+    },
+    {
+      format: "toml",
+      rootKey: "mcp_servers",
+      content: '[mcp_servers.lyrashield]\ncommand = "npx"\nbroken =\n',
+      extension: "toml",
+    },
+    {
+      format: "yaml",
+      rootKey: "mcp_servers",
+      content: "mcp_servers:\n  lyrashield:\n    command: npx\n  broken: [unterminated\n",
+      extension: "yaml",
+    },
+  ] as const)(
+    "refuses to remove from malformed $format config without a backup",
+    async ({ format, rootKey, content, extension }) => {
+      const filePath = path.join(cwd, `malformed.${extension}`)
+      await writeFile(filePath, content, "utf-8")
+
+      await expect(
+        removeFile({ filePath, format, rootKey, serverName: "lyrashield" })
+      ).rejects.toThrow()
+
+      expect(await readFile(filePath, "utf-8")).toBe(content)
+      expect(await readdir(cwd)).toEqual([`malformed.${extension}`])
+    }
+  )
+
+  it.each([
+    { format: "json", rootKey: "mcpServers", content: '{"mcpServers":null}\n' },
+    { format: "jsonc", rootKey: "mcp", content: '{ "mcp": null }\n' },
+    { format: "toml", rootKey: "mcp_servers", content: 'mcp_servers = "occupied"\n' },
+    { format: "yaml", rootKey: "mcp_servers", content: "mcp_servers: null\n" },
+  ] as const)(
+    "refuses to remove from a non-object $format root without a backup",
+    async ({ format, rootKey, content }) => {
+      const filePath = path.join(cwd, `wrong-root.${format}`)
+      await writeFile(filePath, content, "utf-8")
+
+      await expect(
+        removeFile({ filePath, format, rootKey, serverName: "lyrashield" })
+      ).rejects.toThrow()
+
+      expect(await readFile(filePath, "utf-8")).toBe(content)
+      expect(await readdir(cwd)).toEqual([`wrong-root.${format}`])
+    }
+  )
 })

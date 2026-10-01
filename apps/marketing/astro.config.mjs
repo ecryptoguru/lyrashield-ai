@@ -9,6 +9,7 @@ import sitemap from "@astrojs/sitemap"
 import tailwindcss from "@tailwindcss/vite"
 import { parseJsonc } from "./src/lib/jsonc"
 import { tools } from "./src/lib/tools"
+import { listGeneratedIntegrationDocLastmods } from "./src/lib/integration-doc-routes"
 import { isFutureDated } from "./src/lib/blog-publishing"
 
 // Code-block palette. Astro's markdown pipeline (@astrojs/markdown-satteri →
@@ -100,6 +101,14 @@ function contentLastmod() {
     }
   }
   walkDocs(docsDir, docsDir)
+
+  // Generated client guides use their registry verification date as the page's
+  // displayed dateModified; the dynamic Astro route has no literal date for
+  // the docs-source walk above to parse.
+  for (const { path, date: rawDate } of listGeneratedIntegrationDocLastmods()) {
+    const date = new Date(rawDate)
+    if (!Number.isNaN(date.valueOf())) map.set(path, date)
+  }
 
   // Free tools: the registry now carries an updatedDate for every tool.
   const toolDate = tools[0]?.updatedDate ? new Date(tools[0].updatedDate) : undefined

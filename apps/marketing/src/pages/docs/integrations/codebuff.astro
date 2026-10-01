@@ -1,6 +1,7 @@
 ---
 import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
+import CliConfigPreview from "@components/integrations/CliConfigPreview.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -64,14 +65,7 @@ const jsonLd: unknown[] = [
     remote HTTP entries.
   </p>
 
-  <h2>Install with the CLI (fastest)</h2>
-  <p>
-    Run <code>npx lyrashield install codebuff</code> from your project root. It detects Codebuff,
-    writes the correct config automatically and never inlines your API key into a file you might
-    commit. Add <code>--dry-run</code> first to preview the change with no write or run{" "}
-    <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
-  </p>
-  <pre><code>npx lyrashield install codebuff</code></pre>
+  <CliConfigPreview agentId="codebuff" />
   <p>Prefer to see exactly what gets written or set it up without Node.js? Configure it by hand below.</p>
 
   <h2>Local stdio setup</h2>

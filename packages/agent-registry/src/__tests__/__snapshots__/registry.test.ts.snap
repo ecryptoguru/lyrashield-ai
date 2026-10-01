@@ -67,6 +67,10 @@ exports[`renderConfig snapshot — every agent × every transport > auggie × st
 }"
 `;
 
+exports[`renderConfig snapshot — every agent × every transport > augment-jetbrains × stdio 1`] = `[Error: Agent "augment-jetbrains" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > augment-vscode × stdio 1`] = `[Error: Agent "augment-vscode" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > claude-code × remote-http 1`] = `
 "{
   "mcpServers": {
@@ -320,6 +324,8 @@ exports[`renderConfig snapshot — every agent × every transport > gemini-cli �
 `;
 
 exports[`renderConfig snapshot — every agent × every transport > github-copilot-agent-plugin × remote-http 1`] = `[Error: Agent "github-copilot-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > github-copilot-cloud-agent × remote-http 1`] = `[Error: Agent "github-copilot-cloud-agent" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > goose × remote-http 1`] = `[Error: Agent "goose" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 

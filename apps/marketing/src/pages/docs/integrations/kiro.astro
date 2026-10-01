@@ -3,10 +3,10 @@ import DocsLayout from "@layouts/DocsLayout.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-const title = "LyraShield MCP for Kiro — Setup Guide"
+const title = "LyraShield for Kiro — Power and MCP Setup"
 const description =
-  "Connect LyraShield to Kiro through its documented workspace or user MCP settings file."
-const updatedDate = "2026-09-19"
+  "Use LyraShield's native Kiro Power when it is publicly available, or connect through Kiro's local MCP configuration today."
+const updatedDate = "2026-10-01"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
@@ -21,18 +21,18 @@ const jsonLd: unknown[] = [
   {
     "@context": "https://schema.org",
     "@type": "HowTo",
-    name: "Configure LyraShield MCP for Kiro",
+    name: "Configure LyraShield's local MCP fallback for Kiro",
     step: [
       {
         "@type": "HowToStep",
         position: 1,
         name: "Log in to LyraShield",
-        text: "Run npx lyrashield login --oauth to select a workspace and save the local OAuth credential.",
+        text: "Run npx --yes lyrashield@0.2.13 login --oauth to select a workspace and save the local OAuth credential.",
       },
       {
         "@type": "HowToStep",
         position: 2,
-        name: "Add the MCP entry",
+        name: "Add the local MCP entry",
         text: "Merge the LyraShield entry into .kiro/settings/mcp.json or ~/.kiro/settings/mcp.json.",
       },
       {
@@ -55,18 +55,38 @@ const jsonLd: unknown[] = [
   updatedDate={updatedDate}
   currentPath="/docs/integrations/kiro"
 >
-  <h1>Kiro</h1>
+  <h1>Kiro Power and MCP setup</h1>
   <p>
-    Kiro reads MCP servers from <code>.kiro/settings/mcp.json</code> for one workspace or{" "}
-    <code>~/.kiro/settings/mcp.json</code> for the current user. LyraShield supplies the server
-    entry; copying a plugin folder alone does not activate it.
+    Kiro's native Power path is the intended LyraShield integration. Kiro supports Powers in its IDE
+    and web surfaces, and the CLI supports them from v3. LyraShield's Power distribution is still in
+    preparation, so there is no public Power package to install yet. The local MCP fallback below
+    uses the published LyraShield MCP package and can be set up now.
   </p>
 
-  <h2>Configure LyraShield</h2>
+  <h2>Native path: Kiro Power</h2>
   <p>
-    Log in locally, then merge the entry below into one of Kiro's documented settings files:
+    When LyraShield's Power is published, install it through Kiro's Power panel or the official
+    Power page. A Power owns activation of its bundled MCP server and native components. Until then,
+    treat the LyraShield Power as preparation only: it is not publicly installable and has no
+    Kiro-authenticated runtime receipt.
   </p>
-  <pre><code>npx lyrashield login --oauth</code></pre>
+  <p>
+    <a href="https://kiro.dev/docs/powers/installation/" target="_blank" rel="noreferrer">
+      Kiro Power installation documentation
+    </a>
+    · <a href="https://kiro.dev/powers/" target="_blank" rel="noreferrer">Kiro Powers</a>
+    · <a href="https://kiro.dev/docs/mcp/configuration/" target="_blank" rel="noreferrer">
+      Kiro MCP configuration
+    </a>
+  </p>
+
+  <h2>Current fallback: local MCP in Kiro IDE or CLI</h2>
+  <p>
+    For a Kiro surface with local MCP settings, log in and merge this entry into the workspace file{" "}
+    <code>.kiro/settings/mcp.json</code> or the user file <code>~/.kiro/settings/mcp.json</code>.
+    The command uses the currently published MCP package.
+  </p>
+  <pre><code>npx --yes lyrashield@0.2.13 login --oauth</code></pre>
   <pre><code>{`{
   "mcpServers": {
     "lyrashield": {
@@ -76,21 +96,23 @@ const jsonLd: unknown[] = [
   }
 }`}</code></pre>
   <p>
-    <code>npx lyrashield install kiro</code> prints this exact recovery path. It preserves existing
-    Kiro servers and does not write credentials into the settings file.
+    Merge only the <code>lyrashield</code> entry so existing servers stay intact. Credentials remain
+    in the local LyraShield credential store and do not belong in Kiro's settings file.
   </p>
 
   <div class="callout">
-    <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>, the
+    <strong>No credential in committed files:</strong> After{" "}
+    <code>npx --yes lyrashield@0.2.13 login --oauth</code>, the
     local MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the{" "}
     <code>LYRASHIELD_API_KEY</code> environment variable). Nothing with a key needs to be committed.
   </div>
 
-  <h2>Remote OAuth alternative</h2>
+  <h2>Hosted MCP option</h2>
   <p>
-    Current Kiro supports URL-only remote MCP servers and browser OAuth. The registry retains
-    local stdio as the preferred workflow until a real Kiro read call and lifecycle receipt are
-    retained for hosted OAuth. Do not create a duplicate if a local LyraShield entry already works.
+    Where your Kiro surface supports remote MCP and browser OAuth, you can connect to LyraShield's
+    hosted endpoint without the local MCP process. This setup path is documented but does not yet
+    have a retained Kiro-authenticated runtime receipt. Do not create a duplicate connection if a
+    working LyraShield entry is already present.
   </p>
   <pre><code>{`{
   "mcpServers": {
@@ -100,12 +122,14 @@ const jsonLd: unknown[] = [
 
   <h2>Verify the connection</h2>
   <p>
-    Restart Kiro or reconnect MCP servers, then run a read-only LyraShield workspace query. Treat
-    an install receipt separately from authenticated tool execution.
+    Restart Kiro or reconnect MCP servers, then run a read-only LyraShield workspace query. An
+    installed entry does not establish that the client loaded the tools or completed an
+    authenticated call.
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirement:</strong> Node.js 24+ and a LyraShield workspace OAuth login. Kiro launches
-    the local MCP package over stdio; the package reads the user-only credential store.
+    <strong>Local MCP requirement:</strong> Node.js 24+ and a LyraShield workspace OAuth login. Kiro
+    launches the published local MCP package over stdio; the package reads the user-only credential
+    store. Kiro CLI Powers require v3 or later.
   </div>
 </DocsLayout>

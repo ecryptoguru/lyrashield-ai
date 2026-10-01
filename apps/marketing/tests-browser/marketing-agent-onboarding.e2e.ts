@@ -5,8 +5,8 @@ test("agent onboarding distinguishes local setup and scoped hosted writes", asyn
   await expect(page).toHaveTitle(/coding agents/i)
   // The commands render in both the setup <pre> block and the numbered-step
   // inline <code> elements — first() avoids the strict-mode multiple match.
-  await expect(page.getByText("npx lyrashield login --oauth").first()).toBeVisible()
-  await expect(page.getByText("npx lyrashield init").first()).toBeVisible()
+  await expect(page.getByText("npx --yes lyrashield@0.2.13 login --oauth").first()).toBeVisible()
+  await expect(page.getByText("npx --yes lyrashield@0.2.13 init --dry-run").first()).toBeVisible()
   await expect(
     page.locator("#setup").getByText(/browser-confirmed grant and execution-time checks/i)
   ).toBeVisible()

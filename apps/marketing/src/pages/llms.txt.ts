@@ -10,6 +10,7 @@ const docsSources = import.meta.glob("./docs/**/*.astro", {
 }) as Record<string, string>
 import { tools } from "../lib/tools"
 import { categoryHref, getCategoriesWithCounts } from "../lib/blog-categories"
+import { listGeneratedIntegrationDocs } from "../lib/integration-doc-routes"
 import { BUILD_DATE, clampToBuildDate, isNotAfterBuildDate } from "../lib/blog-publishing"
 // Relative filesystem import on purpose, not "@lyrashield/security" — see the
 // identical note in vibe-security-50.astro. The package index re-exports the
@@ -107,7 +108,11 @@ const docsLinks = [
   { label: "OpenAI Codex integration", path: "/docs/integrations/openai-codex" },
   { label: "OpenClaw integration", path: "/docs/integrations/openclaw" },
   { label: "OpenCode integration", path: "/docs/integrations/opencode" },
-  { label: "Pi coding agent integration", path: "/docs/integrations/picode" },
+  { label: "Pi coding agent integration", path: "/docs/integrations/pi" },
+  ...listGeneratedIntegrationDocs().map((agent) => ({
+    label: `${agent.displayName} integration`,
+    path: `/docs/integrations/${agent.docsSlug}`,
+  })),
   { label: "Remote MCP setup", path: "/docs/integrations/remote-mcp" },
   { label: "REST API integration", path: "/docs/integrations/rest-api" },
   { label: "Roo Code integration", path: "/docs/integrations/roo-code" },

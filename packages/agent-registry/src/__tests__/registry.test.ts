@@ -73,11 +73,11 @@ describe("agent registry", () => {
     const plugin = AGENTS.filter((a) => a.installStrategy === "agent-plugin")
 
     // Total registered agents (non-plugin + plugin).
-    expect(AGENTS.length).toBe(48)
+    expect(AGENTS.length).toBe(51)
     // Plugin agents (launch clients).
     expect(plugin.length).toBe(6)
     // Non-plugin agents — the docs index references this set.
-    expect(configFile.length + vendorCli.length + guided.length).toBe(42)
+    expect(configFile.length + vendorCli.length + guided.length).toBe(45)
   })
 
   it("has unique ids and display names", () => {
@@ -135,6 +135,9 @@ describe("agent registry", () => {
       "jetbrains-claude-agent",
       "jetbrains-codex-agent",
       "opencode-v2",
+      "github-copilot-cloud-agent",
+      "augment-vscode",
+      "augment-jetbrains",
     ]
 
     for (const id of ids) {
@@ -161,9 +164,97 @@ describe("agent registry", () => {
     )
     expect(getAgent("auggie")?.distribution?.state).toBe("PREPARATION")
     expect(getAgent("antigravity")?.nativeCapabilities).toEqual(
-      expect.arrayContaining(["skills", "rules"])
+      expect.arrayContaining(["plugin", "skills", "rules"])
     )
-    expect(getAgent("antigravity")?.nativeCapabilities).not.toContain("plugin")
+    expect(getAgent("antigravity")?.distribution?.state).toBe("PREPARATION")
+    expect(getAgent("antigravity")?.gotchas?.join(" ")).not.toContain(
+      "does not claim plugin support"
+    )
+
+    const copilotCloud = getAgent("github-copilot-cloud-agent")!
+    expect(copilotCloud.surface).toBe("cloud")
+    expect(copilotCloud.installStrategy).toBe("guided-manual")
+    expect(copilotCloud.remoteAuth).toBe("api-key")
+    expect(copilotCloud.transports).toEqual(["remote-http"])
+    expect(copilotCloud.locations).toEqual([])
+    expect(copilotCloud.nativeCapabilities).toEqual(expect.arrayContaining(["plugin", "skills"]))
+    expect(copilotCloud.manualInstructions).toContain("COPILOT_MCP_LYRASHIELD_API_KEY")
+    expect(copilotCloud.manualInstructions).toContain("connect_required")
+    expect(copilotCloud.manualInstructions).toContain("does not support remote OAuth")
+    expect(copilotCloud.manualInstructions).toContain("lyrashield_check_diff")
+    expect(copilotCloud.manualInstructions).toContain(
+      "get-started`, `review-changes`, and `launch-readiness"
+    )
+    expect(copilotCloud.manualInstructions).toContain("scan-project`, `fix-and-retest")
+    for (const readOnlyTool of [
+      "lyrashield_check_diff",
+      "lyrashield_get_launch_readiness",
+      "lyrashield_list_targets",
+      "lyrashield_list_workspaces",
+    ]) {
+      expect(copilotCloud.manualInstructions).toContain(readOnlyTool)
+    }
+    for (const unsupportedTool of [
+      "lyrashield_get_findings",
+      "lyrashield_get_scan_status",
+      "lyrashield_get_scan_eligibility",
+      "lyrashield_get_scan_quality",
+      "lyrashield_run_pr_scan",
+      "lyrashield_verify_fix",
+    ]) {
+      expect(copilotCloud.manualInstructions).not.toContain(unsupportedTool)
+    }
+
+    const augmentVsCode = getAgent("augment-vscode")!
+    const augmentJetBrains = getAgent("augment-jetbrains")!
+    expect(augmentVsCode.surface).toBe("ide")
+    expect(augmentJetBrains.surface).toBe("ide")
+    expect(augmentVsCode.versionConstraints?.minimum).toBe("0.789.0")
+    expect(augmentJetBrains.versionConstraints?.minimum).toBe("0.428.8")
+    expect(augmentVsCode.nativeCapabilities).toEqual(
+      expect.arrayContaining(["skills", "commands", "rules"])
+    )
+    expect(augmentJetBrains.nativeCapabilities).toEqual(
+      expect.arrayContaining(["skills", "commands", "rules"])
+    )
+    expect(augmentVsCode.transports).toEqual(["stdio"])
+    expect(augmentJetBrains.transports).toEqual(["stdio"])
+    expect(augmentVsCode.rulesFiles).toContain(".augment/rules/lyrashield.md")
+    expect(augmentJetBrains.rulesFiles).toContain(".augment/rules/lyrashield.md")
+  })
+
+  it("groups documented product variants without merging their client surfaces", () => {
+    for (const [id, family] of [
+      ["claude-code-agent-plugin", { id: "claude", name: "Claude" }],
+      ["claude-desktop", { id: "claude", name: "Claude" }],
+      ["claude-web", { id: "claude", name: "Claude" }],
+      ["devin", { id: "devin", name: "Devin" }],
+      ["devin-cli", { id: "devin", name: "Devin" }],
+      ["devin-desktop", { id: "devin", name: "Devin" }],
+      ["jetbrains", { id: "jetbrains", name: "JetBrains" }],
+      ["junie", { id: "jetbrains", name: "JetBrains" }],
+      ["junie-cli", { id: "jetbrains", name: "JetBrains" }],
+      ["jetbrains-claude-agent", { id: "jetbrains", name: "JetBrains" }],
+      ["jetbrains-codex-agent", { id: "jetbrains", name: "JetBrains" }],
+      ["opencode", { id: "opencode", name: "OpenCode" }],
+      ["opencode-v2", { id: "opencode", name: "OpenCode" }],
+      ["qoder", { id: "qoder", name: "Qoder" }],
+      ["qoder-cli", { id: "qoder", name: "Qoder" }],
+      ["copilot-cli", { id: "github-copilot", name: "GitHub Copilot" }],
+      ["github-copilot-agent-plugin", { id: "github-copilot", name: "GitHub Copilot" }],
+      ["github-copilot-cloud-agent", { id: "github-copilot", name: "GitHub Copilot" }],
+      ["augment-vscode", { id: "augment", name: "Augment" }],
+      ["augment-jetbrains", { id: "augment", name: "Augment" }],
+    ] as const) {
+      expect(getAgent(id)?.productFamily, id).toEqual(family)
+    }
+
+    expect(
+      agentEntrySchema.safeParse({
+        ...getAgent("junie-cli"),
+        productFamily: { id: "JetBrains", name: "" },
+      }).success
+    ).toBe(false)
   })
 
   it("records one documented primary skill location per scope", () => {
@@ -182,6 +273,9 @@ describe("agent registry", () => {
       "mistral-vibe": [".vibe/skills", "~/.vibe/skills"],
       "jetbrains-claude-agent": [".claude/skills"],
       "jetbrains-codex-agent": [".codex/skills"],
+      "augment-vscode": [".augment/skills", "~/.augment/skills"],
+      "augment-jetbrains": [".augment/skills", "~/.augment/skills"],
+      "github-copilot-cloud-agent": [".github/skills"],
     }
 
     for (const [id, paths] of Object.entries(expectedPaths)) {
@@ -248,7 +342,7 @@ describe("agent registry", () => {
 
   it("marks standalone workflows without an MCP transport or config", () => {
     const preferred = listPreferredAgents()
-    expect(preferred).toHaveLength(44)
+    expect(preferred).toHaveLength(47)
     expect(
       preferred
         .filter((agent) => agent.integrationKind === "standalone-cli")
@@ -494,6 +588,19 @@ describe("renderEntry returns correct structural patch", () => {
       },
     })
     expect(entry.value).not.toHaveProperty("url")
+  })
+
+  it("Factory Droid — prefers documented remote OAuth with local stdio as fallback", () => {
+    const factory = getAgent("factory-droid")!
+    expect(factory.transports).toEqual(["stdio", "remote-http"])
+    expect(factory.preferredTransport).toBe("remote-http")
+    expect(factory.remoteAuth).toBe("oauth")
+    expect(factory.manualInstructions).toContain("OAuth")
+    expect(factory.manualInstructions).toContain("droid mcp add lyrashield")
+    expect(factory.manualInstructions).toContain("stdio")
+    expect(factory.supportTier).toBe("COMPATIBLE")
+    expect(factory.verification?.evidence).toBe("DOCUMENTATION")
+    expect(factory.verification?.receipt).toBeNull()
   })
 
   it.each(["claude-code", "openai-codex", "opencode", "hermes", "antigravity"])(

@@ -109,7 +109,9 @@ The root GitHub Action v2 source supports local `SAFE` and `AGGRESSIVE` modes on
 - `report [--title ... --scan <scanId> --type executive|developer|compliance]` — list or create reports
 - `approvals list|create <actionName>|approve <approvalId>|deny <approvalId>` — manage agent-approval requests
 - `mcp call <tool> [--input '{...}']` — call a remote MCP tool
-- `hook install` — install a pre-commit hook that runs `lyrashield check-diff`
+- `hook install|remove` — optionally install or remove LyraShield's marked advisory block in Git's active `pre-commit` hook, including worktrees and `core.hooksPath` configurations. Existing hook commands, comments, line endings and permissions are preserved.
+
+The hook runs the local `lyrashield check-diff --staged` command only when `lyrashield` is available on `PATH`; otherwise it prints a skip message and allows the commit. It does not use `npx`, access the network, or start a paid scan. The hook is opt-in. `hook remove` removes only LyraShield's intact marked block and leaves other hook content in place. `hook install` migrates the exact legacy LyraShield network hook in place; if that legacy command appears alongside custom content, installation stops and asks you to remove only the old LyraShield lines manually. Installation refuses existing non-shell shebangs; a hook without a shebang must already be POSIX shell-compatible (Git's shell fallback can vary by host). Existing file permissions are preserved, and the command warns when the hook is not executable.
 
 ## Exit codes
 

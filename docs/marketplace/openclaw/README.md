@@ -1,5 +1,9 @@
 # LyraShield AI OpenClaw skill
 
+**State: PREPARATION.** The local `0.1.31` skill artifact is an unpublished candidate. The
+`0.1.28` release notes below are historical repository records; the current ClawHub listing version
+and whether this candidate has been read back are unverified. Do not claim the candidate is listed.
+
 The marketplace repository remains Apache-2.0. Only the files in this `openclaw/` directory are
 also available under MIT-0 so they can be published at
 [ClawHub](https://clawhub.ai/ecryptoguru/skills/lyrashield), which requires that license for skill

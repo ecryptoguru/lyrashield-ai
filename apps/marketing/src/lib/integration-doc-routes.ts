@@ -22,6 +22,7 @@ export const EXPLICIT_INTEGRATION_DOC_SLUGS = [
   "kiro",
   "mimo-code",
   "oh-my-pi",
+  "pi",
   "openai-codex",
   "openclaw",
   "opencode",
@@ -43,4 +44,15 @@ export function listGeneratedIntegrationDocs(): RegistryAgentEntry[] {
     }
   }
   return [...bySlug.values()]
+}
+
+/** Freshness metadata consumed by the sitemap for generated routes. */
+export function listGeneratedIntegrationDocLastmods(): Array<{
+  path: string
+  date: string
+}> {
+  return listGeneratedIntegrationDocs().map((agent) => ({
+    path: `/docs/integrations/${agent.docsSlug}`,
+    date: agent.verification.checkedOn,
+  }))
 }

@@ -1,6 +1,7 @@
 ---
 import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
+import CliConfigPreview from "@components/integrations/CliConfigPreview.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -34,13 +35,7 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
     IDE extensions expose their own MCP settings JSON through the MCP Servers panel.
   </p>
 
-  <h2>Get the exact values with the CLI</h2>
-  <p>
-    Run <code>npx lyrashield install cline --global</code> to merge the LyraShield entry into the
-    Cline CLI config while preserving other servers. For the IDE extension, copy the generated entry
-    into the JSON opened by Cline's MCP Servers panel.
-  </p>
-  <pre><code>npx lyrashield install cline --global</code></pre>
+  <CliConfigPreview agentId="cline" scope="global" />
 
   <h2>Local stdio setup</h2>
   <AgentSnippet agentId="cline" transport="stdio" />

@@ -39,16 +39,24 @@ decision instead, add this to `.claude/settings.json` or `.github/copilot/settin
 }
 ```
 
-Neither marketplace path inlines a credential. Their remote MCP connection completes hosted OAuth
-inside the client. The Kiro stdio adapter is the path that reads
-`~/.lyrashield/credentials.json` after `npx -y lyrashield@0.2.14 login --oauth`.
+These Claude Code, Copilot CLI and VS Code plugin paths inline no credential; their remote MCP
+connection uses hosted OAuth in clients that support it. GitHub Copilot Cloud Agent is a separate
+surface: its repository MCP configuration is shared with Copilot code review, and GitHub currently
+does not support remote MCP OAuth there. Follow the [Copilot Cloud Agent guide](./github-copilot-cloud-agent/README.md)
+for the documented read-only API-key setup. Plugin/skill installation and service authentication
+are separate; the portable plugin's OAuth MCP descriptor does not authenticate Cloud Agent.
+
+The Kiro stdio adapter is the path that reads `~/.lyrashield/credentials.json` after
+`npx -y lyrashield@0.2.14 login --oauth`.
 
 For local stdio clients (Kiro, Gemini CLI, Zed and Codebuff), use Node.js 24 and run the pinned
 CLI login command above before starting the client. Select one workspace in the browser. First
 call `lyrashield_list_workspaces`, then `lyrashield_list_targets` for an authorized target. If
 authorization expires or is revoked, repeat the CLI login and restart the client. Hosted HTTP
-clients complete OAuth inside their connection UI. Keep API keys in user-level settings, never a
-committed project file or agent prompt.
+clients that document remote OAuth complete it inside their connection UI. GitHub Copilot Cloud
+Agent uses the read-only API-key configuration described above; it cannot use remote OAuth or
+authorize hosted mutations. Keep API keys in a private secret store, never a committed project
+file or agent prompt.
 
 LyraShield is not yet listed in a published VS Code plugin marketplace, so there is no one-click
 marketplace install for VS Code today. Install-from-source and the marketplace-by-URL paths above
@@ -74,6 +82,11 @@ service source or generated build caches. Run
 `pnpm --filter @lyrashield/agent-plugin export:marketplace /path/to/export` to create the
 deterministic release boundary. `manifest.json` records the source package, version, generated
 files and forbidden hosted-service paths; the export test fails if an artifact disappears.
+
+Before releasing this candidate, publish and verify MCP `0.2.12`, update every stdio runtime pin
+from the currently published `0.2.11`, then regenerate, pack and verify the exact plugin and CLI
+artifacts. The new recorded-scan and retest skills require the explicit `idempotencyKey` fields
+in the new MCP tool schemas; do not release those workflows against an older stdio server.
 
 The export includes native artifacts from each supported client wave. Listing applications remain
 separate; the [channel ledger](./channels.md) records the verified intake route, package identity,

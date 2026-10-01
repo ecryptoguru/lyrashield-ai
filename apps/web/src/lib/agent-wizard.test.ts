@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { CLI_PACKAGE_SPEC, MCP_PACKAGE_SPEC, getAgent } from "@lyrashield/agent-registry"
 import { buildAgentWizard } from "./agent-wizard"
 
 describe("agent wizard connection snippets", () => {
@@ -28,7 +29,7 @@ describe("agent wizard connection snippets", () => {
     const wizard = buildAgentWizard("aider", "https://app.lyrashieldai.com")
     expect(wizard?.steps.some((step) => step.title.includes("MCP"))).toBe(false)
     expect(wizard?.steps.find((step) => step.id === "verify")?.command).toBe(
-      "lyrashield check-diff"
+      `npx -y ${CLI_PACKAGE_SPEC} check-diff`
     )
   })
 
@@ -66,6 +67,7 @@ describe("agent wizard connection snippets", () => {
   it("includes manual plugin activation and honest client verification", () => {
     const wizard = buildAgentWizard("kiro-agent-plugin", "https://app.lyrashieldai.com")
     expect(wizard?.steps.find((step) => step.id === "config")?.summary).toContain(".mcp.kiro.json")
+    expect(wizard?.versionConstraints?.note).toContain("CLI")
     expect(wizard?.steps.find((step) => step.id === "verify")?.note).toContain("read-only")
   })
 
@@ -102,8 +104,85 @@ describe("agent wizard connection snippets", () => {
     const hooks = wizard?.steps.find((step) => step.id === "hooks")
 
     expect(verify?.summary).toContain("Scans remain explicit")
-    expect(verify?.command).toBe("lyrashield doctor")
-    expect(hooks?.note).toContain("refuses to overwrite an existing hook")
+    expect(verify?.command).toBe(`npx -y ${CLI_PACKAGE_SPEC} doctor`)
+    expect(hooks?.note).toContain("safer offline hook installer is prepared")
+    expect(hooks?.command).toBeUndefined()
     expect(hooks?.note).not.toContain("delete .git/hooks/pre-commit")
+    expect(hooks?.optional).toBe(true)
+  })
+
+  it("renders valid JSONC-compatible snippets and marks alternate transport optional", () => {
+    for (const id of ["cline", "kilo-code"]) {
+      const wizard = buildAgentWizard(id, "https://app.lyrashieldai.com")
+      const config = wizard?.steps.find((step) => step.id === "config")
+      const parsed = JSON.parse(config?.snippet ?? "null")
+      expect(parsed?.[getAgent(id)!.rootKey!]?.lyrashield).toBeDefined()
+      expect(config?.snippetPath).toBeTruthy()
+      expect(config?.summary).toContain("preserving existing servers and comments")
+      expect(wizard?.steps.find((step) => step.id === "config-remote")?.optional).toBe(true)
+    }
+  })
+
+  it("authenticates before fresh stdio installation and pins the MCP fallback", () => {
+    const wizard = buildAgentWizard("zed", "https://app.lyrashieldai.com")
+    expect(wizard?.steps[0]?.id).toBe("api-key")
+    expect(wizard?.steps[0]?.command).toBe(`npx -y ${CLI_PACKAGE_SPEC} login --oauth`)
+    const guided = buildAgentWizard("jetbrains", "https://app.lyrashieldai.com")
+    expect(guided?.steps.find((step) => step.id === "config")?.snippet).toContain(MCP_PACKAGE_SPEC)
+    expect(guided?.steps.find((step) => step.id === "config")?.snippet).not.toContain(
+      "LYRASHIELD_API_KEY"
+    )
+  })
+
+  it("explains independent authentication for alternate transports and gates unpublished rule writes", () => {
+    const local = buildAgentWizard("mistral-vibe", "https://app.lyrashieldai.com")
+    const remote = local?.steps.find((step) => step.id === "config-remote")
+    expect(remote?.optional).toBe(true)
+    expect(remote?.note).toContain("separate read-only API key")
+    expect(remote?.note).toContain("CLI OAuth authenticates only local stdio")
+    expect(remote?.note).toContain("Never commit")
+    const rules = buildAgentWizard("cline", "https://app.lyrashieldai.com")?.steps.find(
+      (step) => step.id === "rules"
+    )
+    expect(rules?.command).toBeUndefined()
+    expect(rules?.note).toContain("next CLI release")
+    const piLocal = buildAgentWizard("pi", "https://app.lyrashieldai.com")?.steps.find(
+      (step) => step.id === "config-local"
+    )
+    expect(piLocal?.note).toContain(`npx -y ${CLI_PACKAGE_SPEC} login --oauth`)
+  })
+
+  it("keeps web and cloud setup inside the client without local repository hooks", () => {
+    for (const id of ["lovable", "replit-agent", "v0", "devin", "claude-web"]) {
+      const wizard = buildAgentWizard(id, "https://app.lyrashieldai.com")
+      expect(
+        wizard?.steps.some((step) => step.id === "hooks"),
+        id
+      ).toBe(false)
+      expect(wizard?.steps.find((step) => step.id === "verify")?.command, id).toBeUndefined()
+      expect(wizard?.steps.find((step) => step.id === "api-key")?.note).toContain("read-only")
+    }
+  })
+
+  it("separates native skills from rules and does not copy unpublished installers", () => {
+    for (const id of ["picode", "devin-desktop", "mistral-vibe", "replit-agent"]) {
+      const wizard = buildAgentWizard(id, "https://app.lyrashieldai.com")
+      const skills = wizard?.steps.find((step) => step.id === "skills")
+      expect(skills?.kind, id).toBe("skills")
+      expect(skills?.command, id).toBeUndefined()
+      expect(skills?.summary, id).toContain("next release")
+      expect(wizard?.steps.find((step) => step.id === "install")?.command, id).toBeUndefined()
+    }
+  })
+
+  it("keeps Copilot cloud API-key setup separate from OAuth and hosted mutations", () => {
+    const wizard = buildAgentWizard("github-copilot-cloud-agent", "https://app.lyrashieldai.com")
+    expect(wizard?.surface).toBe("cloud")
+    const auth = wizard?.steps.find((step) => step.id === "api-key")
+    expect(auth?.command).toBeUndefined()
+    expect(auth?.summary).toContain("read-only API key")
+    expect(auth?.note).toContain("connect_required")
+    expect(auth?.note).toContain("Never commit")
+    expect(wizard?.steps.some((step) => step.id === "hooks")).toBe(false)
   })
 })

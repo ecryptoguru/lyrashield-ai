@@ -1,5 +1,15 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile, readFile } from "node:fs/promises"
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir as osTmpdir } from "node:os"
 import path from "node:path"
 
@@ -79,6 +89,59 @@ describe("atomicWrite", () => {
     await atomicWrite(target, "new")
 
     expect(await readFile(target, "utf-8")).toBe("new")
+  })
+
+  it("preserves the mode of an existing config file", async () => {
+    const target = path.join(cwd, "private.json")
+    await writeFile(target, "old", { encoding: "utf-8", mode: 0o600 })
+    mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000009")
+
+    await atomicWrite(target, "new")
+
+    expect((await stat(target)).mode & 0o777).toBe(0o600)
+    expect(await readFile(target, "utf-8")).toBe("new")
+  })
+
+  it("refuses a symlink destination without changing the link or its target", async () => {
+    const target = path.join(cwd, "shared.json")
+    const linkPath = path.join(cwd, "config.json")
+    await writeFile(target, "shared config", "utf-8")
+    await symlink(target, linkPath)
+    mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000010")
+
+    await expect(atomicWrite(linkPath, "replacement")).rejects.toThrow(/symlink/i)
+
+    expect((await lstat(linkPath)).isSymbolicLink()).toBe(true)
+    expect(await readlink(linkPath)).toBe(target)
+    expect(await readFile(target, "utf-8")).toBe("shared config")
+  })
+
+  it("removes the temporary file when the destination changes before rename", async () => {
+    const target = path.join(cwd, "config.json")
+    const fixedUuid = "00000000-0000-0000-0000-000000000011"
+    const expectedTmp = `${target}.${fixedUuid}.lyrashield-tmp`
+    await writeFile(target, "original", "utf-8")
+    mockedRandomUUID.mockReturnValue(fixedUuid)
+    let destinationChecks = 0
+
+    mockedLstat.mockImplementation(async (p) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      const result = await actual.lstat(p as string)
+      if (p === target && ++destinationChecks === 2) {
+        return {
+          dev: result.dev,
+          ino: result.ino + 1,
+          isFile: () => true,
+          isSymbolicLink: () => false,
+        } as unknown as Awaited<ReturnType<typeof lstat>>
+      }
+      return result
+    })
+
+    await expect(atomicWrite(target, "replacement")).rejects.toThrow(/destination changed/i)
+
+    expect(await readFile(target, "utf-8")).toBe("original")
+    await expect(readFile(expectedTmp, "utf-8")).rejects.toThrow()
   })
 
   it("fails when an attacker pre-created the temp path as a file", async () => {
@@ -168,10 +231,19 @@ describe("atomicWrite", () => {
   it("rejects the final path when it is not a regular file after rename", async () => {
     const target = path.join(cwd, "config.json")
     mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000005")
+    let destinationChecks = 0
 
     mockedLstat.mockImplementation(async (p) => {
       if (p === target) {
-        return { isFile: () => false } as unknown as ReturnType<typeof lstat>
+        const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+        if (++destinationChecks >= 3) {
+          return {
+            isFile: () => false,
+            isSymbolicLink: () => false,
+          } as unknown as Awaited<ReturnType<typeof lstat>>
+        }
+        const result = await actual.lstat(p as string)
+        return result
       }
       const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
       return actual.lstat(p as string)

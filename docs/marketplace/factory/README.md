@@ -49,5 +49,5 @@ does not prove MCP authentication or tool behavior. From the LyraShield AI sourc
 
 Official references checked 2026-10-01:
 
-- [Factory plugins and marketplaces](https://docs.factory.ai/harness/plugins)
-- [Factory MCP and OAuth](https://docs.factory.ai/harness/mcp)
+- [Factory plugins and marketplaces](https://docs.factory.com/harness/plugins)
+- [Factory MCP and OAuth](https://docs.factory.com/harness/mcp)

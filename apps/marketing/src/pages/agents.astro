@@ -212,9 +212,11 @@ const jsonLd = [
       </h2>
       <p class="mt-4 max-w-2xl leading-7 text-text-muted" data-reveal>
         <code class="rounded bg-bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-text"
-          >npx lyrashield init</code
-        > detects supported local clients and prepares eligible integrations. Marketplace activation,
-        hosted authentication and standalone workflows have additional client-specific steps.
+          >npx --yes lyrashield@0.2.13 init --dry-run</code
+        > previews setup paths included in the published release. Config-file writes are on hold
+        pending the safe-writer fix. Follow each guide to merge only LyraShield's entry while
+        preserving existing settings, comments where supported, and symlinks; preview output does
+        not establish client discovery or authentication.
       </p>
       {
         agentOnboarding.clientGroups.map((group) => (

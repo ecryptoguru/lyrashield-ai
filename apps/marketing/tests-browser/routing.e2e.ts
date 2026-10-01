@@ -51,6 +51,14 @@ test("trailing-slash URLs redirect 301 to the canonical slash-less URL", async (
   }
 })
 
+test("legacy Pi integration URLs redirect permanently to the canonical guide", async ({ page }) => {
+  for (const path of ["/docs/integrations/picode", "/docs/integrations/picode/"]) {
+    const res = await page.request.get(path, { maxRedirects: 0 })
+    expect(res.status(), `${path} must be 301`).toBe(301)
+    expect(res.headers()["location"]).toBe("/docs/integrations/pi")
+  }
+})
+
 test("/index.html requests redirect 301 to the page route", async ({ page }) => {
   for (const path of ["/pricing/index.html", "/blog/index.html"]) {
     const res = await page.request.get(path, { maxRedirects: 0 })

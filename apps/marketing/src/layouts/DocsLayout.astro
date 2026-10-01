@@ -28,8 +28,7 @@ const {
 } = Astro.props
 
 // Derived from the registry rather than hand-listed: a hard-coded list silently
-// drops every newly shipped agent, which is how 11 shipped guides ended up
-// unreachable from the sidebar. `listPreferredAgents` is the same source the
+// drops newly shipped agents. `listPreferredAgents` is the same source the
 // integrations index and the dashboard use, so the three stay in sync.
 // The "(Agent Plugin)" suffix is display detail for a card, not a nav label.
 const agentNavLinks: NavLink[] = listPreferredAgents()
@@ -53,7 +52,7 @@ const guideNavLinks: NavLink[] = [
 const resolvedPath = currentPath || Astro.url.pathname
 
 // A caller-supplied list stays one flat group; the derived default splits into
-// guides and the 26 per-agent guides so the agent list stays scannable.
+// guides and the per-agent guides so the agent list stays scannable.
 const navGroups: { heading: string; links: NavLink[] }[] =
   navLinks.length > 0
     ? [{ heading: "Integrations", links: navLinks }]
@@ -74,29 +73,34 @@ const navGroups: { heading: string; links: NavLink[] }[] =
 >
   <div class="docs-shell">
     <aside class="docs-sidebar" aria-label="Docs navigation">
-      <nav>
-        {navGroups.map((group) => (
-          <>
-            <p class="docs-sidebar__heading">{group.heading}</p>
-            <ul class="docs-sidebar__list">
-              {group.links.map((link) => (
-                <li>
-                  <a
-                    href={link.href}
-                    class:list={[
-                      "docs-sidebar__link",
-                      { "docs-sidebar__link--active": resolvedPath === link.href },
-                    ]}
-                    aria-current={resolvedPath === link.href ? "page" : undefined}
-                  >
-                    {link.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </>
-        ))}
-      </nav>
+      <details class="docs-sidebar__browse" open>
+        <summary class="docs-sidebar__summary">
+          <span>Browse documentation</span>
+        </summary>
+        <nav>
+          {navGroups.map((group) => (
+            <>
+              <p class="docs-sidebar__heading">{group.heading}</p>
+              <ul class="docs-sidebar__list">
+                {group.links.map((link) => (
+                  <li>
+                    <a
+                      href={link.href}
+                      class:list={[
+                        "docs-sidebar__link",
+                        { "docs-sidebar__link--active": resolvedPath === link.href },
+                      ]}
+                      aria-current={resolvedPath === link.href ? "page" : undefined}
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ))}
+        </nav>
+      </details>
     </aside>
 
     <div class="docs-main">
@@ -151,6 +155,19 @@ const navGroups: { heading: string; links: NavLink[] }[] =
 
   addCopyButtons()
   document.addEventListener("astro:after-swap", addCopyButtons)
+
+  // The server-rendered disclosure stays open for desktop and no-script users.
+  // Collapse it on narrow viewports before the page's load event, and keep it
+  // aligned when a reader rotates or resizes the browser.
+  const docsBrowseMedia = window.matchMedia("(max-width: 768px)")
+  function syncDocsBrowseDisclosure() {
+    const browse = document.querySelector<HTMLDetailsElement>(".docs-sidebar__browse")
+    if (browse) browse.open = !docsBrowseMedia.matches
+  }
+
+  syncDocsBrowseDisclosure()
+  docsBrowseMedia.addEventListener("change", syncDocsBrowseDisclosure)
+  document.addEventListener("astro:after-swap", syncDocsBrowseDisclosure)
 </script>
 
 <style>
@@ -167,6 +184,12 @@ const navGroups: { heading: string; links: NavLink[] }[] =
   .docs-sidebar {
     position: sticky;
     top: 5rem;
+  }
+
+  /* The details element is open in server HTML so desktop and no-JS users retain
+     the existing navigation. The bundled enhancement closes it on mobile. */
+  .docs-sidebar__summary {
+    display: none;
   }
 
   .docs-sidebar__heading {
@@ -480,6 +503,52 @@ const navGroups: { heading: string; links: NavLink[] }[] =
 
     .docs-sidebar {
       position: static;
+    }
+
+    .docs-sidebar__summary {
+      display: flex;
+      min-height: 2.75rem;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.55rem 0.85rem;
+      border: 1px solid var(--color-border);
+      border-radius: 0.55rem;
+      color: var(--color-text);
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      list-style: none;
+    }
+
+    .docs-sidebar__summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .docs-sidebar__summary::after {
+      content: "+";
+      color: var(--color-text-muted);
+      font-family: "JetBrains Mono Variable", monospace;
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+
+    .docs-sidebar__browse[open] > .docs-sidebar__summary::after {
+      content: "−";
+    }
+
+    .docs-sidebar__summary:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+
+    .docs-sidebar__browse:not([open]) > nav {
+      display: none;
+    }
+
+    .docs-sidebar__browse[open] > nav {
+      display: block;
+      margin-top: 0.85rem;
     }
 
     .docs-sidebar__list {

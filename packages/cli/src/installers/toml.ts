@@ -100,6 +100,13 @@ export async function mergeToml(opts: TomlMergeOptions): Promise<TomlMergeResult
     original = ""
   }
 
+  if (exists) {
+    const parsed = TOML.parse(original) as Record<string, unknown>
+    if (Object.prototype.hasOwnProperty.call(parsed, rootKey) && !isJsonObject(parsed[rootKey])) {
+      throw new Error(`Cannot merge into the existing non-table value at ${rootKey}`)
+    }
+  }
+
   const newEntry = buildEntry(rootKey, serverName, value)
   const range = exists ? findSectionRange(original, rootKey, serverName) : undefined
 
@@ -115,6 +122,13 @@ export async function mergeToml(opts: TomlMergeOptions): Promise<TomlMergeResult
 
   if (exists && original === newContent) {
     return { changed: false }
+  }
+
+  const candidate = TOML.parse(newContent) as Record<string, unknown>
+  const candidateRoot = candidate[rootKey]
+  const insertedCandidate = isJsonObject(candidateRoot) ? candidateRoot[serverName] : undefined
+  if (!equals(insertedCandidate, value)) {
+    throw new Error(`Cannot safely merge entry at ${rootKey}.${serverName} in this TOML file`)
   }
 
   if (dryRun) {
@@ -156,12 +170,17 @@ export async function removeToml(opts: TomlRemoveOptions): Promise<boolean> {
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const original = await readFile(filePath, "utf-8")
+  const parsed = TOML.parse(original) as Record<string, unknown>
+  if (Object.prototype.hasOwnProperty.call(parsed, rootKey) && !isJsonObject(parsed[rootKey])) {
+    throw new Error(`Cannot remove from the existing non-table value at ${rootKey}`)
+  }
   const range = findSectionRange(original, rootKey, serverName)
   if (!range) return false
 
   let newContent = original.slice(0, range.start) + original.slice(range.end)
   // remove trailing blank lines
   newContent = newContent.replace(/\n\n\n+/g, "\n\n")
+  TOML.parse(newContent)
   await backupFile(filePath)
   await atomicWrite(filePath, newContent)
   return true

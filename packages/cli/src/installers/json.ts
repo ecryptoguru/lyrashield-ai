@@ -20,7 +20,11 @@ function setIn(
   for (let i = 0; i < path.length - 1; i++) {
     const key = path[i]!
     let next = current[key] as Record<string, unknown> | undefined
-    if (!next || typeof next !== "object" || Array.isArray(next)) {
+    if (Object.prototype.hasOwnProperty.call(current, key)) {
+      if (!isJsonObject(next)) {
+        throw new Error(`Cannot merge into the existing non-object value at ${key}`)
+      }
+    } else {
       next = {}
       current[key] = next
     }
@@ -128,6 +132,9 @@ export async function removeJson(opts: JsonRemoveOptions): Promise<boolean> {
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const original = await readFile(filePath, "utf-8")
   const parsed = parseJsonObject(original, filePath)
+  if (Object.prototype.hasOwnProperty.call(parsed, rootKey) && !isJsonObject(parsed[rootKey])) {
+    throw new Error(`Cannot remove from the existing non-object value at ${rootKey}`)
+  }
   const root = isJsonObject(parsed[rootKey]) ? parsed[rootKey] : undefined
   if (!root || !(serverName in root)) return false
   delete root[serverName]

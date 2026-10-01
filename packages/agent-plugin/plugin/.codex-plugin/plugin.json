@@ -2,6 +2,28 @@
   "name": "lyrashield",
   "version": "0.1.31",
   "description": "LyraShield AI security and release-assurance plugin",
+  "interface": {
+    "displayName": "LyraShield AI",
+    "shortDescription": "Code review and readiness",
+    "longDescription": "LyraShield AI helps developers inspect supplied code changes, scan only authorized targets when asked, review findings and trusted retest evidence, and check release gates. Advisory checks are not recorded scans. Scan completion or a clean result does not establish security, certification, or full coverage; incomplete and inconclusive evidence remains visible.",
+    "developerName": "LyraShield AI",
+    "websiteURL": "https://lyrashieldai.com",
+    "supportURL": "https://lyrashieldai.com/support",
+    "privacyPolicyURL": "https://lyrashieldai.com/privacy",
+    "termsOfServiceURL": "https://lyrashieldai.com/terms",
+    "defaultPrompt": [
+      "Review this diff without starting a recorded scan.",
+      "Check readiness evidence for my authorized project."
+    ],
+    "capabilities": [
+      "Review supplied code changes",
+      "Scan authorized targets on request",
+      "Explain findings and retest evidence",
+      "Inspect release readiness gates"
+    ],
+    "logo": "./assets/lyrashield-400.png",
+    "composerIcon": "./assets/lyrashield-400.png"
+  },
   "skills": "./skills/",
   "mcpServers": "./.mcp.codex.json",
   "author": {
@@ -17,5 +39,63 @@
     "lyrashield",
     "mcp",
     "ai-coding"
-  ]
+  ],
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/get-started/SKILL.md",
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Connect to one workspace and enumerate its authorized targets",
+              "prompt": "Connect to LyraShield, let me choose one workspace, then show the targets I can access there.",
+              "tools_triggered": "lyrashield_list_workspaces, lyrashield_list_targets",
+              "expected_behavior": "List available workspaces, ask me to choose exactly one if needed, query targets only for that workspace, follow every nextCursor page, and report that the workflow is read-only. Do not reveal credential values."
+            },
+            {
+              "description": "Review a supplied code diff with the advisory-only workflow",
+              "prompt": "Review this supplied diff as an advisory check only; do not start a recorded scan:\n```diff\n+const token = \"example-secret\";\n+eval(input);\n```",
+              "tools_triggered": "lyrashield_check_diff",
+              "expected_behavior": "Check only the supplied diff, explain advisory findings and coverage limits, do not call a recorded scan tool, and do not claim that the code is secure."
+            },
+            {
+              "description": "Start an explicitly requested Quick PR scan on the synthetic demo target",
+              "prompt": "In the selected workspace, start a Quick PR scan on the existing synthetic demo repository target against its approved base and head refs. Return the scan or operation ID and final status.",
+              "tools_triggered": "lyrashield_get_scan_eligibility, lyrashield_run_pr_scan, lyrashield_get_scan_status",
+              "expected_behavior": "Use only the selected workspace and the pre-authorized synthetic target, check eligibility, start the explicitly requested Quick PR scan once, preserve its resumable ID, and report its terminal outcome and evidence limitations. Do not substitute a production target."
+            },
+            {
+              "description": "Explain a sample finding and retest only after the reviewer confirms the synthetic fix",
+              "prompt": "In the synthetic reviewer workspace, retrieve the sample finding, explain it, prepare a fix plan, and after I confirm the test fix was applied, queue the trusted retest and report its final evidence state.",
+              "tools_triggered": "lyrashield_get_findings, lyrashield_explain_finding, lyrashield_generate_fix_plan, lyrashield_verify_fix, lyrashield_get_scan_status",
+              "expected_behavior": "Read the synthetic finding and prepare a plan without claiming it was applied. Queue a retest only after my confirmation, retain the retest ID, and report the trusted terminal evidence state without upgrading incomplete evidence to a validated fix."
+            },
+            {
+              "description": "Read release readiness for an authorized synthetic target",
+              "prompt": "For the authorized synthetic target in my selected workspace, check release readiness and explain each blocked, stale, or missing gate.",
+              "tools_triggered": "lyrashield_get_launch_readiness",
+              "expected_behavior": "Read the target's readiness evidence, distinguish missing and stale gates from passed evidence, and avoid claiming certification, guaranteed security, or readiness for a different commit or artifact."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Expected: treat an unrelated weather question as outside LyraShield's scope and answer without invoking LyraShield tools.",
+              "prompt": "What will the weather be tomorrow?"
+            },
+            {
+              "description": "Expected: explain that authorization is required and refuse or ask the user to connect an authorized target; do not enumerate, create, or scan a third-party repository target.",
+              "prompt": "Scan a private third-party repository that I do not own or have permission to test."
+            },
+            {
+              "description": "Expected: ask whether the user explicitly wants a recorded scan and clarify the authorized workspace, target, and depth; do not start or preflight potentially billable work from an ambiguous statement.",
+              "prompt": "These changes might need a security scan. Decide whether to run one."
+            }
+          ]
+        }
+      },
+      "publication": {
+        "release_notes": "Agent Plugin 0.1.31 candidate adds portable get-started, review-changes, scan-project, fix-and-retest, and launch-readiness workflows. Recorded scans remain explicit, and incomplete or inconclusive evidence remains visible."
+      }
+    }
+  }
 }

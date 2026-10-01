@@ -16,16 +16,18 @@ or public marketplace acceptance.
 
 ## Local native-client receipts — 2026-10-01
 
-These checks used the fresh generated, unpublished Agent Plugin `0.1.31` export from source commit
-`b92dabdb2f96ceef33e0ddca8eeacf7676590552`; the worktree was dirty, so this was a local candidate,
-not a release export. The root validator passed for 55 generated artifacts and 306 file records.
-Runtime identity is bound to the adapter-folder SHA-256 calculated from the export manifest's sorted
-file records (`JSON.stringify(files)` for paths with the listed prefix):
+These checks used the fresh, unpublished Agent Plugin `0.1.31` export at
+`/tmp/lyrashield-marketplace-wave2-final-20261001`. Its manifest records source commit
+`671648fc256245b52899013c456dc7b3d9b7c1e6`, `publication.status: unpublished`, and
+`publication.sourceClean: false`; this is a dirty-worktree local candidate, not a release export.
+The export's `node scripts/validate.mjs` passed for 55 generated artifacts and 306 manifest file
+records. Runtime identity is bound to each adapter-folder SHA-256 calculated from the export
+manifest's sorted file records (`JSON.stringify(files)` for paths with the listed prefix):
 
-| Client    | Version / platform              | Adapter bundle SHA-256                                                               | Observed outcome                                                                                                                                                                                                                                      | Limitation                                                                                          |
-| --------- | ------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Codex CLI | `0.159.2`, macOS `27.0.1` arm64 | `d351ab6f04548fe638108cbfabc3142e865b9b66e6cd879705b6961b45fa43d1` (`codex-plugin/`) | Added the local marketplace, listed `lyrashield@lyrashield-ai` at `0.1.31`, installed it in a disposable `CODEX_HOME`, and confirmed the installed plugin was enabled with all six bundled skill files present, including the five focused workflows. | No authenticated OAuth connection or workspace read call; the tested plugin version is unpublished. |
-| OpenCode  | `1.18.30`, macOS `27.0.1` arm64 | `2291654a0531da842829881ff5492376bed44f57b4a37b933d569b0c55b5d84a` (`opencode/`)     | In an isolated project, `debug config` resolved the hosted remote MCP entry and read scope, `debug skill` discovered all five focused workflows from `.opencode/skills`, and `mcp list` showed the endpoint as `needs authentication`.                | No OAuth login or workspace read call; the tested adapter version is unpublished.                   |
+| Client    | Version / platform                        | Adapter bundle SHA-256                                                               | Observed outcome                                                                                                                                                                                                                                                                                       | Limitation                                                                        |
+| --------- | ----------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| Codex CLI | `codex-cli 0.159.2`, macOS `27.0.1` arm64 | `84570c962912bf630d8c9f7e57394f345425150fb44003622f7bbc705df7c5b6` (`codex-plugin/`) | With `CODEX_HOME` scoped to a fresh `/tmp` directory, added the local marketplace, listed `lyrashield@lyrashield-ai` at `0.1.31`, installed the plugin, confirmed it enabled, removed it, reinstalled it, and confirmed all six bundled skill files were present after both installs.                  | No OAuth login or workspace read call; the tested plugin version is unpublished.  |
+| OpenCode  | `1.18.30`, macOS `27.0.1` arm64           | `2ba09f9102a824357da7bfa4bd0a79f7195f28a55ed346db323d933aedc2af6e` (`opencode/`)     | With `HOME`, `TMPDIR`, and all XDG paths scoped to a fresh `/tmp` directory, `debug config` resolved the hosted remote MCP URL and `lyrashield.read` scope, `debug skill` discovered the five focused workflows from `.opencode/skills`, and `mcp list` showed the endpoint as `needs authentication`. | No OAuth login or workspace read call; the tested adapter version is unpublished. |
 
 These receipts confirm local package installation/configuration and component discovery for these exact
 surfaces. They do not promote any registry tier to `NATIVE` or `VERIFIED`, and do not establish
@@ -50,7 +52,7 @@ Prior coordinated package release source: main `c6aee9ade4b4760c4280f3d6b3295fe5
 
 There is **no** dedicated npm-publish GitHub workflow (verified `.github/workflows` 2026-09-26: `ci.yml`, `deploy-azure.yml`, `release-production.yml`, `release-tauri.yml`, etc. — none publish npm). Publication is a manual maintainer step; never store npm tokens in the repository.
 
-Dependency order for a coordinated bump: **`@lyrashield/agent-plugin` → `lyrashield` → `@lyrashield/mcp`**. The CLI's packed manifest depends on the plugin through a resolved `^x.y.z` range (pnpm rewrites `workspace:^` at pack/publish time), so the plugin version must exist on npm before `npm install lyrashield` can resolve. `@lyrashield/mcp` depends on neither package — publish it in the same wave because client docs pin its exact version.
+For this candidate, release **`@lyrashield/mcp` → `@lyrashield/agent-plugin` → `lyrashield`**. Verify MCP `0.2.12` is published first, update the current `0.2.11` stdio pins, then regenerate and re-pack the plugin and CLI before reviewing their exact bytes. The new recorded-scan and retest skills require the new explicit idempotency fields. The CLI's packed manifest depends on the plugin through a resolved `^x.y.z` range (pnpm rewrites `workspace:^` at pack/publish time), so the plugin version must exist on npm before `npm install lyrashield` can resolve. MCP depends on neither package; releasing it first avoids an interval where the new skills use the older stdio schema.
 
 Per package (dir `packages/<dir>` / name `<name>`: `agent-plugin`/`@lyrashield/agent-plugin`, `cli`/`lyrashield`, `mcp`/`@lyrashield/mcp`):
 

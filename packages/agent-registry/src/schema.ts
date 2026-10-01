@@ -34,6 +34,9 @@ export const agentEntrySchema = z
     id: z.string().regex(/^[a-z0-9-]+$/),
     aliases: z.array(z.string().regex(/^[a-z0-9-]+$/)).optional(),
     displayName: z.string().min(1),
+    productFamily: z
+      .object({ id: z.string().regex(/^[a-z0-9-]+$/), name: z.string().min(1) })
+      .optional(),
     surface: z.enum(["cli", "ide", "desktop", "web", "cloud"]).optional(),
     versionConstraints: z
       .object({

@@ -1,5 +1,9 @@
 import type { Metadata } from "next"
-import { listPreferredAgents } from "@lyrashield/agent-registry"
+import {
+  CLI_PACKAGE_VERSION,
+  getPublishedCliInstallCommand,
+  listPreferredAgents,
+} from "@lyrashield/agent-registry"
 import { env } from "@lyrashield/config"
 import { Bot } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
@@ -10,8 +14,11 @@ import { AgentsGrid, type AgentCardData } from "./agents-grid"
 function mapAgentsToCardData(): AgentCardData[] {
   return listPreferredAgents().map((agent) => ({
     id: agent.id,
+    aliases: agent.aliases,
     displayName: agent.displayName,
+    productFamily: agent.productFamily,
     docsSlug: agent.docsSlug,
+    surface: agent.surface,
     installStrategy: agent.installStrategy,
     locations: agent.locations.map((location) => ({
       scope: location.scope,
@@ -23,7 +30,15 @@ function mapAgentsToCardData(): AgentCardData[] {
       path: location.path,
       sharedByConvention: location.sharedByConvention,
     })),
+    skillLocations: agent.skillLocations?.map((location) => ({
+      scope: location.scope,
+      path: location.path,
+      sharedByConvention: location.sharedByConvention,
+    })),
+    nativeCapabilities: [...(agent.nativeCapabilities ?? [])],
     rulesFiles: [...agent.rulesFiles],
+    manualInstructions: agent.manualInstructions,
+    installCommand: getPublishedCliInstallCommand(agent),
   }))
 }
 
@@ -61,6 +76,7 @@ export default async function AgentsPage() {
       <AgentsGrid
         agents={mapAgentsToCardData()}
         docsBaseUrl={`${marketingUrl}/docs/integrations`}
+        publishedCliVersion={CLI_PACKAGE_VERSION}
       />
     </div>
   )

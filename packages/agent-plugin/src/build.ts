@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { writeFile, mkdir, readFile, rename } from "node:fs/promises"
+import { writeFile, mkdir, readFile, rename, rm } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { renderMarkdownBody } from "@lyrashield/agent-rules/renderers/shared.js"
@@ -9,6 +9,18 @@ import { getPluginDir } from "./plugin-dir.js"
 const CLIENTS = ["claude", "cursor", "codex", "kiro"] as const
 
 const LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
+const OPENAI_ICON_RELATIVE_PATH = "./assets/lyrashield-400.png"
+
+type PluginManifest = {
+  extensions?: Record<string, { interface?: Record<string, unknown> }>
+}
+
+export interface BuildPluginOptions {
+  /** Optional isolated tree for consumers that need generated output without mutating source. */
+  pluginRoot?: string
+  /** Explicit owned icon path when building an isolated plugin tree. */
+  logoAssetPath?: string
+}
 
 // Marketplace identifier users type when installing: `/plugin install lyrashield@lyrashield-ai`.
 // Kept distinct from the plugin name ("lyrashield") so the two are unambiguous in install strings.
@@ -16,8 +28,75 @@ const MARKETPLACE_NAME = "lyrashield-ai"
 
 async function writeGeneratedFile(file: string, content: string): Promise<void> {
   const temporary = `${file}.${randomUUID()}.tmp`
-  await writeFile(temporary, content.endsWith("\n") ? content : `${content}\n`, "utf-8")
-  await rename(temporary, file)
+  try {
+    await writeFile(temporary, content.endsWith("\n") ? content : `${content}\n`, "utf-8")
+    await rename(temporary, file)
+  } finally {
+    await rm(temporary, { force: true })
+  }
+}
+
+async function writeGeneratedAsset(file: string, content: Buffer): Promise<void> {
+  const temporary = `${file}.${randomUUID()}.tmp`
+  try {
+    await writeFile(temporary, content)
+    await rename(temporary, file)
+  } finally {
+    await rm(temporary, { force: true })
+  }
+}
+
+async function prepareOpenAiAssets(
+  pluginRoot: string,
+  manifest: PluginManifest,
+  logoAssetPath?: string
+): Promise<void> {
+  const openAiInterface = manifest.extensions?.["com.openai"]?.interface
+  if (!openAiInterface) return
+
+  const source =
+    logoAssetPath ?? path.resolve(pluginRoot, "../../../docs/marketplace/assets/lyrashield-400.png")
+  const destination = resolvePluginAsset(pluginRoot, OPENAI_ICON_RELATIVE_PATH)
+  if (!destination) {
+    throw new Error("OpenAI icon path must remain inside the plugin root")
+  }
+
+  const image = await readFile(source)
+  const isPng =
+    image.length >= 24 &&
+    image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  const width = isPng ? image.readUInt32BE(16) : 0
+  const height = isPng ? image.readUInt32BE(20) : 0
+  if (!isPng || width !== 400 || height !== 400) {
+    throw new Error("OpenAI logo and composer icon must resolve to the owned 400 x 400 PNG asset")
+  }
+
+  await mkdir(path.dirname(destination), { recursive: true })
+  await writeGeneratedAsset(destination, image)
+
+  for (const key of ["logo", "composerIcon"] as const) {
+    const configuredPath = openAiInterface[key]
+    if (configuredPath !== OPENAI_ICON_RELATIVE_PATH) {
+      throw new Error(`OpenAI ${key} must reference ${OPENAI_ICON_RELATIVE_PATH}`)
+    }
+    if (!resolvePluginAsset(pluginRoot, configuredPath)) {
+      throw new Error(`OpenAI ${key} path must remain inside the plugin root`)
+    }
+  }
+}
+
+function resolvePluginAsset(pluginRoot: string, configuredPath: unknown): string | null {
+  if (typeof configuredPath !== "string" || path.isAbsolute(configuredPath)) return null
+  const resolvedPath = path.resolve(pluginRoot, configuredPath)
+  const relativePath = path.relative(pluginRoot, resolvedPath)
+  if (
+    relativePath === ".." ||
+    relativePath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativePath)
+  ) {
+    return null
+  }
+  return resolvedPath
 }
 
 const SKILL_APPENDIX = `## Review-depth guide
@@ -88,7 +167,7 @@ Use this skill when the user asks for a review of staged or current code changes
 1. Read the requested diff from the working tree. Use \`git diff --cached\` for staged-only changes or \`git diff HEAD\` for the full working-tree change set.
 2. Call \`lyrashield_check_diff\` with its required \`diff\` field. Add \`files\` only when full-file snapshots are available and fit the tool's current limits.
 3. Describe results as advisory heuristics. Preserve the returned coverage state; an incomplete advisory check is not a recorded scan and does not establish that the code is secure.
-4. Start a recorded Quick scan with \`lyrashield_run_pr_scan\` only when the user explicitly requests one, and only after resolving the authorized workspace and target. Do not start one because an advisory finding appeared.
+4. Start a recorded Quick scan with \`lyrashield_run_pr_scan\` only when the user explicitly requests one, and only after resolving the authorized workspace and target. Create and retain one unique \`idempotencyKey\` for this intended scan and reuse it for identical retries. Do not start one because an advisory finding appeared.
 
 If no diff is available, report that and ask for the intended files or range. Never invent diff content.`,
   },
@@ -102,8 +181,8 @@ Start a recorded scan only when the user asks for one.
 1. Resolve the selected \`workspaceId\` and an authorized \`targetId\` using \`lyrashield_list_workspaces\` and \`lyrashield_list_targets\` when needed.
 2. Call \`lyrashield_get_scan_eligibility\` as a read-only advisory preflight. A pass does not guarantee that scan creation will be admitted; the server checks again.
 3. Use the least intensive requested profile: QUICK for an ordinary pre-PR check, STANDARD for a general review, and DEEP only when the user explicitly requests it and the selected target/profile permits it. Set the intended goal and mode explicitly.
-4. Call \`lyrashield_scan_target\` or the PR-specific \`lyrashield_run_pr_scan\` using only fields in the current tool schema. Keep retries for the same intended action on the same idempotency key when that field is available.
-5. Save the returned \`scanId\` or \`operationId\`. Poll \`lyrashield_get_scan_status\` with exactly one identifier, back off between checks, stop at a terminal state, and return the resumable identifier if the session ends first.
+4. Call \`lyrashield_scan_target\` or the PR-specific \`lyrashield_run_pr_scan\` using only fields in the current tool schema. Create and retain one unique \`idempotencyKey\` for this intended action and reuse it for identical retries. Use a new key only for a separately requested scan.
+5. Save the returned \`scanId\` or \`operationId\`. Poll \`lyrashield_get_scan_status\` with exactly one identifier, starting after 2 seconds and doubling the delay up to 30 seconds. Stop at a terminal state or after 20 checks. If the session or polling limit ends first, return the resumable identifier and resume it later instead of starting a replacement scan.
 
 Never scan a guessed, third-party, or unapproved target. Report failed, cancelled, inconclusive, and insufficient-evidence outcomes explicitly.`,
   },
@@ -114,9 +193,9 @@ Never scan a guessed, third-party, or unapproved target. Report failed, cancelle
 
 1. Retrieve findings with \`lyrashield_get_findings\` in the selected workspace. Follow every \`nextCursor\` with \`cursor\` before claiming the result set is complete.
 2. Use \`lyrashield_explain_finding\` and \`lyrashield_generate_fix_plan\` with the selected workspace and finding ID. Keep detection, confidence, and verification states distinct.
-3. Treat a generated plan as a proposal. Persist one with \`lyrashield_record_fix_proposal\` only when the user asks to record it; never treat a proposal as a verified fix.
-4. After the user confirms that a fix was applied, call \`lyrashield_verify_fix\` with \`workspaceId\` and \`findingId\`. Reuse the same idempotency key for an identical retry when exposed by the tool.
-5. Poll the returned retest scan with \`lyrashield_get_scan_status\` to a terminal state. Preserve \`FIXED_PENDING_RETEST\`, \`DETECTED\`, \`INCONCLUSIVE\`, and \`INSUFFICIENT_EVIDENCE\` exactly as reported. Claim validation only when the trusted retest evidence establishes it.
+3. Treat a generated plan as a proposal. Persist one with \`lyrashield_record_fix_proposal\` only when the user asks to record it; never treat a proposal as a verified fix. Create and retain one unique \`idempotencyKey\` for recording the proposal and reuse it for identical retries.
+4. After the user confirms that a fix was applied, call \`lyrashield_verify_fix\` with \`workspaceId\` and \`findingId\`. Create and retain a separate unique \`idempotencyKey\` for this retest and reuse it for identical retries.
+5. Retain the returned retest scan identifier. Poll \`lyrashield_get_scan_status\`, starting after 2 seconds and doubling the delay up to 30 seconds, for at most 20 checks or until terminal. Return the identifier if polling or the session ends first and resume that retest later. Preserve \`FIXED_PENDING_RETEST\`, \`DETECTED\`, \`INCONCLUSIVE\`, and \`INSUFFICIENT_EVIDENCE\` exactly as reported. Claim validation only when the trusted retest evidence establishes it.
 
 Do not create a pull request, merge, or deploy unless the user separately requests that action and the server-authorized workflow supports it.`,
   },
@@ -140,8 +219,10 @@ function renderWorkflowSkill(skill: (typeof WORKFLOW_SKILLS)[number]): string {
   return `---\nname: ${skill.name}\ndescription: ${JSON.stringify(skill.description)}\n---\n\n${skill.instructions.trim()}\n`
 }
 
-export async function buildPlugin(): Promise<void> {
-  const pluginRoot = getPluginDir()
+export async function buildPlugin({
+  pluginRoot = getPluginDir(),
+  logoAssetPath,
+}: BuildPluginOptions = {}): Promise<void> {
   const skillDir = path.join(pluginRoot, "skills", "lyrashield")
   await mkdir(skillDir, { recursive: true })
 
@@ -163,6 +244,19 @@ ${SKILL_APPENDIX}
   }
 
   const manifest = JSON.parse(await readFile(path.join(pluginRoot, "plugin.json"), "utf-8"))
+  await prepareOpenAiAssets(pluginRoot, manifest as PluginManifest, logoAssetPath)
+
+  const vendorManifest = () => {
+    const result = { ...manifest }
+    if (result.extensions && typeof result.extensions === "object") {
+      const otherExtensions = Object.fromEntries(
+        Object.entries(result.extensions).filter(([extension]) => extension !== "com.openai")
+      )
+      if (Object.keys(otherExtensions).length > 0) result.extensions = otherExtensions
+      else delete result.extensions
+    }
+    return result
+  }
 
   // Agent Plugins 1.0 uses `streamable-http`; vendor shims below keep each
   // client's own transport spelling.
@@ -216,9 +310,8 @@ ${SKILL_APPENDIX}
     )
   )
 
-  // Codex must install from its own marketplace root. If the portable root is
-  // installed, Codex discovers Agent Plugins' `mcp.json` first and rejects its
-  // `type: "http"`; Codex names that transport `streamable-http`.
+  // Codex installs from its own compatibility root. Its manifest points to the
+  // Codex-format `.mcp.json` there, separate from the portable root MCP envelope.
   const codexRoot = path.join(pluginRoot, "codex-plugin")
   await mkdir(path.join(codexRoot, ".codex-plugin"), { recursive: true })
   await mkdir(path.join(codexRoot, "skills", "lyrashield"), { recursive: true })
@@ -253,7 +346,7 @@ ${SKILL_APPENDIX}
     const clientManifest =
       client === "claude"
         ? {
-            ...manifest,
+            ...vendorManifest(),
             $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
             mcpServers: "./.mcp.json",
           }
@@ -261,19 +354,28 @@ ${SKILL_APPENDIX}
           ? (() => {
               const openAiManifest = { ...manifest }
               delete openAiManifest.$schema
-              const { name, version, description, ...metadata } = openAiManifest
+              const { name, version, description, extensions, ...metadata } = openAiManifest
+              const openAi = extensions?.["com.openai"] ?? {}
+              const { interface: openAiInterface, ...openAiReviewAndPublication } = openAi
+              const codexExtensions = { ...extensions }
+              delete codexExtensions["com.openai"]
+              if (Object.keys(openAiReviewAndPublication).length > 0) {
+                codexExtensions["com.openai"] = openAiReviewAndPublication
+              }
               return {
                 name,
                 version,
                 description,
+                ...(openAiInterface ? { interface: openAiInterface } : {}),
                 skills: "./skills/",
                 mcpServers: "./.mcp.codex.json",
                 ...metadata,
+                ...(Object.keys(codexExtensions).length > 0 ? { extensions: codexExtensions } : {}),
               }
             })()
           : client === "cursor"
             ? (() => {
-                const cursorManifest = { ...manifest }
+                const cursorManifest = vendorManifest()
                 delete cursorManifest.$schema
                 return {
                   ...cursorManifest,
@@ -286,7 +388,7 @@ ${SKILL_APPENDIX}
                 }
               })()
             : (() => {
-                const kiroManifest = { ...manifest }
+                const kiroManifest = vendorManifest()
                 delete kiroManifest.$schema
                 return {
                   ...kiroManifest,

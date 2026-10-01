@@ -1,9 +1,9 @@
 description = "Start an explicitly requested LyraShield PR scan on a selected registered target."
 
 prompt = """
-The user explicitly invoked `/lyrashield:scan-project`. This command may start a recorded scan, so only continue when the caller has explicitly selected an authorized `workspaceId`, registered `targetId`, and scan depth (`QUICK`, `STANDARD`, or `DEEP`). Caller input: {{args}}
+The user explicitly invoked `/lyrashield:scan-project`, which requests a recorded scan. Continue only after the caller has selected an authorized `workspaceId` and registered `targetId`. Caller input: {{args}}
 
-If an ID is missing or ambiguous, use `lyrashield_list_workspaces` and `lyrashield_list_targets` as read-only discovery, then ask the user to choose. Never infer a workspace or target from the current folder or credentials. Never choose DEEP unless the user explicitly requested it. QUICK is the default only when the user explicitly selected the workspace and target but omitted depth.
+If an ID is missing or ambiguous, use `lyrashield_list_workspaces` and `lyrashield_list_targets` as read-only discovery, then ask the user to choose. Never infer a workspace or target from the current folder or credentials. Use QUICK for ordinary pre-PR checks and STANDARD for general reviews. Never choose DEEP unless the user explicitly requested it. If the intent does not make the requested depth clear, ask before starting.
 
 Before starting, state the selected workspace, target, and depth. Explain that this is a recorded PR scan that may consume plan allowance or agent minutes, and that read-only eligibility is only an advisory preflight. Because the slash command is the explicit scan request, proceed after the required scope is unambiguous; do not launch any scan during unrelated conversation or from another command.
 

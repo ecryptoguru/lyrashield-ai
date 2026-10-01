@@ -39,6 +39,8 @@ export interface AgentEntry {
   id: string
   aliases?: string[]
   displayName: string
+  /** Shared product heading for separately configured client surfaces. */
+  productFamily?: { id: string; name: string }
   surface?: ClientSurface
   versionConstraints?: { minimum?: string; maximum?: string; note?: string }
   /** Documented component types the client surface can discover; not a claim that LyraShield ships each type. */

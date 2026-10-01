@@ -25,22 +25,24 @@ The public Lite Check is a bounded public-surface review. It is not the authenti
 
 LyraShield ships three ways to run checks without leaving your editor or CI pipeline:
 
-**CLI** — install and configure any supported agent in one command:
+**CLI** — preview client setup and run local or CI checks:
 
 ```bash
-npx lyrashield login --oauth      # select one workspace in the browser (recommended)
-npx lyrashield init                # detect installed agents and configure them
-npx lyrashield gate                # CI-friendly diff-aware security gate
+npx -y lyrashield@0.2.13 login --oauth  # select one workspace in the browser
+npx -y lyrashield@0.2.13 init --dry-run # preview the published client's setup
+npx -y lyrashield@0.2.13 gate          # CI-friendly diff-aware security gate
 ```
 
 `lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`, now deprecated). It installs through the paths defined in `packages/agent-registry`:
 
+This source prepares CLI `0.2.14`; the published CLI is `0.2.13`. Use manual config merges until the new file-preservation fixes are published. New client contracts and native skill installation are also pending that release; each setup guide distinguishes published commands from prepared support.
+
 - **Agent Plugin** — for supported plugin-capable clients, `npx lyrashield init` and `npx lyrashield install <agent>` prefer a portable plugin install from `@lyrashield/agent-plugin`. Plugin files land in the client-specific plugin directory and never inline a raw API key.
-- **Config-file** — for clients whose settings can be safely written, the CLI merges into the existing file, never overwrites and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
+- **Config-file** — the candidate CLI merges entries while preserving unrelated settings, refuses symlinked destinations and malformed roots, and preserves existing file permissions. It refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Guided manual** — for clients whose tooling has no writable config file, the CLI prints exact copy-paste command/argument/env values.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
 
-Run `npx lyrashield doctor` any time to check what's configured and what's missing.
+Run `npx -y lyrashield@0.2.13 doctor` to inspect local configuration and credentials. Client activation and authenticated acceptance remain separate checks.
 
 **MCP server** — for editors that speak Model Context Protocol directly:
 
@@ -49,14 +51,14 @@ Run `npx lyrashield doctor` any time to check what's configured and what's missi
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
-      "env": { "LYRASHIELD_API_KEY": "lsk_your_key" }
+      "args": ["-y", "@lyrashield/mcp@0.2.11"],
+      "env": { "LYRASHIELD_API_URL": "https://app.lyrashieldai.com" }
     }
   }
 }
 ```
 
-`@lyrashield/mcp` is published on npm with 21 tools (read-only inspection plus scoped scan, attachment, fix and retest actions), both stdio and remote Streamable-HTTP transports and a [tool catalog](packages/mcp/README.md). A connected OAuth client runs its authorized operations automatically within its connection grant. A caller without a connected client — an API key or a legacy OAuth bearer — receives one structured `connect_required` response pointing at OAuth connect; nothing is queued and nothing executes. The current source registry resolves 48 install entries into 44 preferred client surfaces; the coordinated release updates per-agent setup at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The latest published `@lyrashield/agent-plugin` is v0.1.30 with Cursor Streamable HTTP support.
+`@lyrashield/mcp` is published on npm with 21 tools (read-only inspection plus scoped scan, attachment, fix and retest actions), both stdio and remote Streamable-HTTP transports and a [tool catalog](packages/mcp/README.md). A connected OAuth client runs its authorized operations automatically within its connection grant. Hosted mutations without a valid delegation — including API-key and legacy-token calls — receive one structured `connect_required` response pointing at OAuth connect; nothing is queued and no mutation executes. Authorized API keys can use read-only tools. The current source registry resolves 51 install entries into 47 preferred client surfaces; the coordinated release updates per-agent setup at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations). The latest published `@lyrashield/agent-plugin` is v0.1.30 with Cursor Streamable HTTP support.
 
 **GitHub Action** — a diff-aware CI gate that needs no LyraShield account, using `action.yml` at the repository root:
 
@@ -76,7 +78,7 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `apps/marketing-motion` — deterministic Three.js assurance-world motion workspace; the Astro site consumes rendered posters and clips.
 - `apps/desktop` — Tauri v2 BYOK desktop app (LyraShield Local/Desktop). Rust core + React frontend, ed25519 license verification, OS keychain BYOK credentials, and optional cloud sync.
 - `packages/cli` — the published `lyrashield` command-line tool. (`@lyrashield/cli` is deprecated and will be removed in the next major release; use `lyrashield` instead.)
-- `packages/agent-registry` — the single source of truth for 48 install entries resolving to 44 preferred client surfaces. The CLI installers and docs site are generated against it.
+- `packages/agent-registry` — the single source of truth for 51 install entries resolving to 47 preferred client surfaces. The CLI installers and docs site are generated against it.
 - `packages/agent-plugin` — the portable Agent Plugins v1.0.0 package. Published v0.1.30 provides Cursor Streamable HTTP support; this source prepares unpublished v0.1.31 with six skills, including the backward-compatible `lyrashield` skill, for five preferred Agent Plugin clients (Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro). GitHub Copilot remains experimental until a retained client-runtime receipt exists.
 - `packages/agent-rules` — renders LyraShield's security policy into each agent's native rules/instructions format (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others).
 - `packages/mcp` — the published `@lyrashield/mcp` server.

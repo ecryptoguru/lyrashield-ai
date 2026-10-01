@@ -1,5 +1,6 @@
 ---
 import DocsLayout from "@layouts/DocsLayout.astro"
+import CliConfigPreview from "@components/integrations/CliConfigPreview.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -67,14 +68,7 @@ const jsonLd: unknown[] = [
     <code>.vscode/mcp.json</code> in your project root.
   </p>
 
-  <h2>Install with the CLI (fastest)</h2>
-  <p>
-    Run <code>npx lyrashield install vscode</code> from your project root. It detects VS Code,
-    writes the correct config automatically and never inlines your API key into a file you might
-    commit. Add <code>--dry-run</code> first to preview the change with no write or run{" "}
-    <code>npx lyrashield doctor</code> afterward to inspect local configuration, then make a read-only call in the client.
-  </p>
-  <pre><code>npx lyrashield install vscode</code></pre>
+  <CliConfigPreview agentId="vscode" />
   <p>
     VS Code is a config-guided MCP client. For a user-profile server, use <em>MCP: Open User
     Configuration</em> or <em>MCP: Add Server</em>; VS Code owns the profile-specific{" "}
@@ -83,7 +77,8 @@ const jsonLd: unknown[] = [
 
   <h2>Credentials</h2>
   <div class="callout">
-    <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>,
+    <strong>No credential in committed files:</strong> After{" "}
+    <code>npx --yes lyrashield@0.2.13 login --oauth</code>,
     the local MCP server reads the selected workspace credential from{" "}
     <code>~/.lyrashield/credentials.json</code>. No key needs to be inlined in{" "}
     <code>.vscode/mcp.json</code> or any other file you might commit.

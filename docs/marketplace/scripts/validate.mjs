@@ -24,6 +24,112 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+function splitSkillDocument(text) {
+  const frontmatter = text.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/)?.[0]
+  if (!frontmatter) return undefined
+  return { frontmatter, body: text.slice(frontmatter.length) }
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff
+  for (const byte of bytes) {
+    crc ^= byte
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0)
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function readStoredSkillZip(archive, expectedName) {
+  const eocdSignature = 0x06054b50
+  let eocdOffset = -1
+  const earliestEocdOffset = Math.max(0, archive.length - 22 - 0xffff)
+  for (let offset = archive.length - 22; offset >= earliestEocdOffset; offset -= 1) {
+    if (archive.readUInt32LE(offset) === eocdSignature) {
+      eocdOffset = offset
+      break
+    }
+  }
+  assert(eocdOffset >= 0, `${expectedName}.zip has no ZIP end record`)
+  assert(
+    eocdOffset + 22 + archive.readUInt16LE(eocdOffset + 20) === archive.length,
+    `${expectedName}.zip has trailing or truncated data`
+  )
+  assert(
+    archive.readUInt16LE(eocdOffset + 4) === 0 && archive.readUInt16LE(eocdOffset + 6) === 0,
+    `${expectedName}.zip must use one disk`
+  )
+  assert(
+    archive.readUInt16LE(eocdOffset + 8) === 1 && archive.readUInt16LE(eocdOffset + 10) === 1,
+    `${expectedName}.zip must contain exactly one file`
+  )
+
+  const centralSize = archive.readUInt32LE(eocdOffset + 12)
+  const centralOffset = archive.readUInt32LE(eocdOffset + 16)
+  assert(centralOffset + centralSize === eocdOffset, `${expectedName}.zip has an invalid directory`)
+  assert(
+    archive.readUInt32LE(centralOffset) === 0x02014b50,
+    `${expectedName}.zip has an invalid central directory entry`
+  )
+  const compression = archive.readUInt16LE(centralOffset + 10)
+  assert(compression === 0, `${expectedName}.zip must use ZIP_STORED`)
+  const expectedNameBytes = Buffer.from("SKILL.md", "utf8")
+  const nameLength = archive.readUInt16LE(centralOffset + 28)
+  const extraLength = archive.readUInt16LE(centralOffset + 30)
+  const commentLength = archive.readUInt16LE(centralOffset + 32)
+  assert(
+    nameLength === expectedNameBytes.length && extraLength === 0 && commentLength === 0,
+    `${expectedName}.zip has an unexpected archive entry`
+  )
+  const nameOffset = centralOffset + 46
+  assert(
+    archive.subarray(nameOffset, nameOffset + nameLength).equals(expectedNameBytes),
+    `${expectedName}.zip must contain root SKILL.md only`
+  )
+  assert(
+    centralOffset + 46 + nameLength === eocdOffset,
+    `${expectedName}.zip contains additional central-directory records`
+  )
+
+  const checksum = archive.readUInt32LE(centralOffset + 16)
+  const compressedSize = archive.readUInt32LE(centralOffset + 20)
+  const uncompressedSize = archive.readUInt32LE(centralOffset + 24)
+  const localOffset = archive.readUInt32LE(centralOffset + 42)
+  assert(compressedSize === uncompressedSize, `${expectedName}.zip has inconsistent stored sizes`)
+  assert(
+    archive.readUInt32LE(localOffset) === 0x04034b50,
+    `${expectedName}.zip has an invalid local file header`
+  )
+  assert(
+    archive.readUInt16LE(localOffset + 8) === 0,
+    `${expectedName}.zip local entry must use ZIP_STORED`
+  )
+  assert(
+    archive.readUInt32LE(localOffset + 14) === checksum &&
+      archive.readUInt32LE(localOffset + 18) === compressedSize &&
+      archive.readUInt32LE(localOffset + 22) === uncompressedSize,
+    `${expectedName}.zip local and central entry metadata differ`
+  )
+  const localNameLength = archive.readUInt16LE(localOffset + 26)
+  const localExtraLength = archive.readUInt16LE(localOffset + 28)
+  const localNameOffset = localOffset + 30
+  assert(
+    localNameLength === expectedNameBytes.length &&
+      localExtraLength === 0 &&
+      archive
+        .subarray(localNameOffset, localNameOffset + localNameLength)
+        .equals(expectedNameBytes),
+    `${expectedName}.zip local entry must be root SKILL.md only`
+  )
+  const dataOffset = localNameOffset + localNameLength
+  const dataEnd = dataOffset + uncompressedSize
+  assert(dataEnd === centralOffset, `${expectedName}.zip has unexpected payload or padding`)
+  const contents = archive.subarray(dataOffset, dataEnd)
+  assert(crc32(contents) === checksum, `${expectedName}.zip entry checksum differs`)
+  return contents
+}
+
 const manifest = await readJson("manifest.json")
 assert(manifest.manifestSchemaVersion === "marketplace-export/2", "unsupported manifest schema")
 assert(
@@ -579,11 +685,11 @@ for (const file of [
   if (file.endsWith(".rs")) {
     assert(
       text.includes('const PACKAGE_VERSION: &str = "0.2.12";'),
-      "Zed must pin the published MCP version"
+      "Zed must pin the expected MCP package version"
     )
     assert(!text.includes("npm_package_latest_version"), "Zed must not install a floating release")
   } else {
-    assert(text.includes(expectedPackage), `${file} must pin the published MCP version`)
+    assert(text.includes(expectedPackage), `${file} must pin the expected MCP package version`)
   }
 }
 assert(
@@ -788,12 +894,40 @@ const workflowSkillRoots = [
 for (const skillRoot of workflowSkillRoots) {
   for (const skill of workflowSkills) {
     const canonical = await readFile(path.join(root, "skills", skill, "SKILL.md"), "utf8")
-    const clientSkill = await readFile(
-      path.join(root, skillRoot, skill, "SKILL.md"),
-      "utf8"
+    const clientSkill = await readFile(path.join(root, skillRoot, skill, "SKILL.md"), "utf8")
+    const canonicalDocument = splitSkillDocument(canonical)
+    const clientDocument = splitSkillDocument(clientSkill)
+    assert(canonicalDocument && clientDocument, `${skillRoot}/${skill} must have YAML frontmatter`)
+    assert(
+      clientDocument.body === canonicalDocument.body,
+      `${skillRoot}/${skill} must match the canonical workflow body`
     )
-    assert(clientSkill === canonical, `${skillRoot}/${skill} must match the canonical workflow`)
+    assert(
+      clientDocument.frontmatter.includes(`name: ${skill}`),
+      `${skillRoot}/${skill} frontmatter name must match its directory`
+    )
   }
+}
+
+for (const skill of workflowSkills) {
+  const lovableSkill = await readFile(path.join(root, "lovable", "skills", skill, "SKILL.md"))
+  const archive = await readFile(path.join(root, "lovable", "imports", `${skill}.zip`))
+  assert(
+    readStoredSkillZip(archive, skill).equals(lovableSkill),
+    `lovable/imports/${skill}.zip must contain the complete Lovable SKILL.md source`
+  )
+}
+
+for (const skill of workflowSkills) {
+  const mistralSkill = await readFile(
+    path.join(root, "mistral-vibe", "skills", skill, "SKILL.md"),
+    "utf8"
+  )
+  const document = splitSkillDocument(mistralSkill)
+  assert(
+    document?.frontmatter.includes("user-invocable: true"),
+    `mistral-vibe/${skill} must remain available as a user-invocable skill`
+  )
 }
 
 console.log(

@@ -1,6 +1,5 @@
 ---
 import DocsLayout from "@layouts/DocsLayout.astro"
-import ProductShot from "@components/ProductShot.astro"
 import { listPreferredAgents } from "@lyrashield/agent-registry"
 import type { AgentEntry } from "@lyrashield/agent-registry"
 
@@ -10,7 +9,7 @@ const title = "Connect LyraShield to AI Coding Tools"
 const description =
   "Connect LyraShield AI to Claude Code, Cursor, VS Code, GitHub Actions and more. Step-by-step MCP setup, REST API keys and agent rules for every AI coding tool."
 
-const updatedDate = "2026-09-09"
+const updatedDate = "2026-10-01"
 
 const agents = listPreferredAgents()
 
@@ -50,15 +49,15 @@ const faqItems = [
   },
   {
     q: "How does CLI login work without pasting a secret?",
-    a: "Run lyrashield login --oauth. The CLI opens the LyraShield device-authorization page, lets you choose one workspace and stores the short-lived bearer locally. API-key login remains available for CI and non-interactive environments.",
+    a: "Run npx --yes lyrashield@0.2.13 login --oauth. The CLI opens the LyraShield device-authorization page, lets you choose one workspace and stores the short-lived bearer locally. API-key login remains available for CI and non-interactive environments.",
   },
   {
     q: "Is there a CLI or do I have to hand-edit config files?",
-    a: "The lyrashield CLI is on npm. For local stdio, sign in with npx lyrashield login --oauth, then run npx lyrashield init to prepare detected clients. Hosted OAuth happens in the client; marketplace and standalone paths have separate activation steps. npx lyrashield doctor checks local state, while an actual client read call verifies the connection.",
+    a: "The published lyrashield@0.2.13 CLI can preview known setup paths with npx --yes lyrashield@0.2.13 init --dry-run. Config-file writes are held pending the safe-writer fix; use each client guide to merge only the LyraShield entry and preserve existing settings, comments where supported, and symlinks. A preview or doctor result does not confirm client discovery or authentication; verify with a read-only client call.",
   },
   {
     q: "What is the Agent Plugin?",
-    a: "The Agent Plugin is a portable package with LyraShield's MCP descriptor and security skill. npx lyrashield init uses direct local copies only for clients that document them and prints the required marketplace or MCP settings step for the others. See the Agent Plugins guide at /docs/integrations/agent-plugins.",
+    a: "The Agent Plugin is a portable package with LyraShield's MCP descriptor and security skill. npx --yes lyrashield@0.2.13 init --dry-run previews supported setup paths without writing files. Native plugin clients follow their own activation path; config-file clients use the manual merge in their guide while CLI writes are on hold. See /docs/integrations/agent-plugins.",
   },
 ]
 
@@ -115,33 +114,29 @@ const jsonLd: unknown[] = [
     Choose the setup that matches your editor or workflow.
   </p>
 
-  <h2>Fastest path: the CLI</h2>
+  <h2>Preview setup with the published CLI</h2>
   <p>
-    Run <code>npx lyrashield init</code> from your project root. It detects installed agents, writes
-    supported config files and prints an exact recovery step when the client must complete a
-    marketplace, UI or settings flow. <code>npx lyrashield doctor</code> reports local state.
+    The current published CLI, <code>lyrashield@0.2.13</code>, can preview setup paths for clients
+    included in that release. Keep <code>--dry-run</code>: config-file writes are withheld while the
+    safe-writer fix is pending. Use each linked guide to manually merge only the LyraShield server
+    entry into the existing file, preserving unrelated settings, comments where supported and
+    symlinks. A preview or <code>doctor</code> report does not prove the client loaded or authenticated
+    the integration.
   </p>
-  <pre><code>npx lyrashield login --oauth
-npx lyrashield init</code></pre>
+  <pre><code>npx --yes lyrashield@0.2.13 login --oauth
+npx --yes lyrashield@0.2.13 init --dry-run</code></pre>
   <p>
-    <code>lyrashield</code> is published on npm (also as the scoped alias <code>@lyrashield/cli</code
-    >). It writes files directly for {agents.filter((a) => a.installStrategy === "config-file").length} of the {agents.filter((a) => a.installStrategy !== "agent-plugin").length} agents below, shells out to the vendor's own CLI for
-    {agents.filter((a) => a.installStrategy === "vendor-cli").length} and prints exact copy-paste values for the remaining {agents.filter((a) => a.installStrategy === "guided-manual").length} whose tooling has no config file to
-    safely write. Every per-agent guide below still documents the manual path — useful to see exactly
-    what gets written or if you'd rather not use Node.js.
+    New client guides can describe native or manual setup before a matching CLI installer is
+    published. Follow the client-specific instructions below for activation and authentication.
+    For a config-file client, edit the existing destination in place; do not replace a file or
+    symlink. Then restart the client and make a read-only authenticated call.
   </p>
 
-  <ProductShot
-    src="/product/console-coding-agents.webp"
-    alt="The Connections page in the LyraShield console. An install catalog of cards for Devin, VS Code, Cline, OpenCode, Kilo Code, Zed, Gemini CLI, JetBrains and Amp. Each card states whether it auto-installs a config file or shows values to paste, names the config and rules files it uses and offers a copyable install command."
-    width={1400}
-    height={883}
-    chrome="app.lyrashieldai.com/connections"
-  >
-    <b>The same information, in the app.</b> Signed in, the Connections page names the config file
-    your client reads, the rules file to keep in sync and the exact install command to copy — so you
-    do not have to work out which of the paths below applies to you. Account details are blurred.
-  </ProductShot>
+  <div class="callout">
+    The full client catalog, evidence labels and per-client setup guides are on the{" "}
+    <a href="/agents">coding agents page</a>. Marketplace availability and runtime verification
+    are tracked separately.
+  </div>
 
   <h2>Agent Plugin (Agent Plugins v1.0.0)</h2>
   <p>
@@ -150,13 +145,16 @@ npx lyrashield init</code></pre>
     through its documented local, marketplace or MCP settings path.
   </p>
   <p>
-    <code>npx lyrashield init</code> can copy the package for detected Cursor installations. Codex
-    registers through its marketplace manager; Claude Code and GitHub Copilot require marketplace steps and Kiro requires the documented MCP merge
-    for Kiro. Other clients use their config-file, vendor-CLI or guided-manual path. Full detail is in the{" "}
+    The published CLI's <code>init --dry-run</code> previews its known plugin paths without writing
+    files. Cursor, Codex, Claude Code and GitHub Copilot have client-specific activation steps;
+    follow their guides and marketplace managers. Kiro's native Power distribution is in
+    preparation; use its current MCP setup meanwhile. Other clients use the documented manual MCP
+    path. Full detail is in the{" "}
     <a href="/docs/integrations/agent-plugins">Agent Plugins guide</a>.
   </p>
   <div class="callout">
-    <strong>No credential in committed files:</strong> For local stdio, after <code>npx lyrashield login --oauth</code>,
+    <strong>No credential in committed files:</strong> For local stdio, after{" "}
+    <code>npx --yes lyrashield@0.2.13 login --oauth</code>,
     the MCP server reads the selected workspace credential from{" "}
     <code>~/.lyrashield/credentials.json</code>. Hosted OAuth does not need that local file. API keys remain a CI and non-OAuth-client fallback;
     do not commit either credential.
@@ -172,7 +170,7 @@ npx lyrashield init</code></pre>
     </a>
     <a href="/docs/integrations/vscode" class="nav-card">
       <span class="nav-card__label">VS Code</span>
-      <span class="nav-card__sub">Verified MCP config</span>
+      <span class="nav-card__sub">MCP config guide</span>
     </a>
     <a href="/docs/integrations/devin" class="nav-card">
       <span class="nav-card__label">Devin</span>
@@ -188,7 +186,7 @@ npx lyrashield init</code></pre>
     </a>
     <a href="/docs/integrations/kiro" class="nav-card">
       <span class="nav-card__label">Kiro</span>
-      <span class="nav-card__sub">Agent Plugin install</span>
+      <span class="nav-card__sub">Power in preparation · MCP setup available</span>
     </a>
   </div>
 

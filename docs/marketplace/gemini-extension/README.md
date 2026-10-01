@@ -3,9 +3,9 @@
 PREPARATION ONLY: this artifact targets unpublished MCP `0.2.12` and CLI `0.2.14` candidates.
 Do not submit or install it from a public listing until both package releases are published.
 
-This tagged extension uses the published `@lyrashield/mcp` stdio package and the shared
-credential store. Add the `gemini-cli-extension` topic to the public repository before
-publishing a release tag, as required by the Gemini CLI gallery.
+After the coordinated release, this extension will use the published `@lyrashield/mcp` stdio
+package and the shared credential store. Add the `gemini-cli-extension` topic to the public
+repository before publishing a release tag, as required by the Gemini CLI gallery.
 
 Use Node.js 24 and run `npx -y lyrashield@0.2.14 login --oauth` first. Leave the extension API-key setting empty to use
 that local credential store. The launcher removes inherited credential overrides while preserving

@@ -1,10 +1,24 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, onTestFinished } from "vitest"
 import { buildPlugin } from "../build.js"
 import { getPluginDir } from "../index.js"
 import { validatePlugin } from "../validate.js"
-import { access, readFile, readdir } from "node:fs/promises"
+import { access, cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import path from "node:path"
 import { MCP_TOOL_ANNOTATIONS } from "@lyrashield/mcp"
+
+async function createIsolatedPluginRoot(): Promise<string> {
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "lyrashield-plugin-test-"))
+  const pluginRoot = path.join(temporaryRoot, "plugin")
+  onTestFinished(async () => {
+    await rm(temporaryRoot, { recursive: true, force: true })
+  })
+  await cp(getPluginDir(), pluginRoot, {
+    recursive: true,
+    filter: (source) => !source.endsWith(".tmp"),
+  })
+  return pluginRoot
+}
 
 describe("buildPlugin", () => {
   it("publishes without unpublished workspace dependencies", async () => {
@@ -19,8 +33,20 @@ describe("buildPlugin", () => {
   })
 
   it("generates SKILL.md and client shims", async () => {
-    await buildPlugin()
-    const pluginRoot = getPluginDir()
+    const sourcePluginRoot = getPluginDir()
+    const sourceManifestBefore = await readFile(path.join(sourcePluginRoot, "plugin.json"))
+    const sourceIconBefore = await readFile(
+      path.join(sourcePluginRoot, "assets", "lyrashield-400.png")
+    )
+
+    const pluginRoot = await createIsolatedPluginRoot()
+    await buildPlugin({
+      pluginRoot,
+      logoAssetPath: path.resolve(
+        getPluginDir(),
+        "../../../docs/marketplace/assets/lyrashield-400.png"
+      ),
+    })
 
     const skill = path.join(pluginRoot, "skills", "lyrashield", "SKILL.md")
     await access(skill)
@@ -72,6 +98,16 @@ describe("buildPlugin", () => {
         readFile(path.join(pluginRoot, "codex-plugin", "skills", skillName, "SKILL.md"), "utf-8")
       ).resolves.toBe(content)
       expect(content).not.toMatch(/\blsk_[A-Za-z0-9]{24,}\b/)
+      if (["review-changes", "scan-project", "fix-and-retest"].includes(skillName)) {
+        expect(content).toContain("idempotencyKey")
+        expect(content).toContain("identical retries")
+        expect(content).not.toMatch(/when (that field is available|exposed by the tool)/)
+      }
+      if (["scan-project", "fix-and-retest"].includes(skillName)) {
+        expect(content).toContain("20 checks")
+        expect(content).toContain("30 seconds")
+        expect(content).toMatch(/resume (it|that retest) later/)
+      }
     }
 
     const portableMcp = JSON.parse(await readFile(path.join(pluginRoot, "mcp.json"), "utf-8")) as {
@@ -83,6 +119,57 @@ describe("buildPlugin", () => {
       type: "streamable-http",
       url: "https://app.lyrashieldai.com/api/mcp",
     })
+
+    const pluginManifest = JSON.parse(await readFile(path.join(pluginRoot, "plugin.json"), "utf-8"))
+    const openAi = pluginManifest.extensions?.["com.openai"]
+    expect(pluginManifest.$schema).toBe(
+      "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+    )
+    expect(openAi.interface).toMatchObject({
+      displayName: "LyraShield AI",
+      shortDescription: "Code review and readiness",
+      developerName: "LyraShield AI",
+      websiteURL: "https://lyrashieldai.com",
+      supportURL: "https://lyrashieldai.com/support",
+      privacyPolicyURL: "https://lyrashieldai.com/privacy",
+      termsOfServiceURL: "https://lyrashieldai.com/terms",
+      logo: "./assets/lyrashield-400.png",
+      composerIcon: "./assets/lyrashield-400.png",
+      defaultPrompt: [
+        "Review this diff without starting a recorded scan.",
+        "Check readiness evidence for my authorized project.",
+      ],
+    })
+    expect(openAi.interface.category).toBeUndefined()
+    expect(openAi.interface.screenshots).toBeUndefined()
+    expect(openAi.onboardingSkill).toBe("./skills/get-started/SKILL.md")
+    expect(openAi.review.demo_recording_url).toBeUndefined()
+    expect(openAi.review.test_cases.positive).toHaveLength(5)
+    expect(openAi.review.test_cases.negative).toHaveLength(3)
+    for (const testCase of openAi.review.test_cases.positive) {
+      expect(testCase.prompt).toBeTruthy()
+      expect(testCase.expected_behavior).toBeTruthy()
+      for (const toolName of testCase.tools_triggered
+        .split(",")
+        .map((name: string) => name.trim())) {
+        expect(declaredTools.has(toolName), `OpenAI reviewer case references ${toolName}`).toBe(
+          true
+        )
+      }
+    }
+    for (const testCase of openAi.review.test_cases.negative) {
+      expect(testCase.prompt).toBeTruthy()
+      expect(testCase.description).toMatch(/Expected:/)
+    }
+    expect(openAi.publication.release_notes).toContain("0.1.31")
+    await expect(access(path.join(pluginRoot, openAi.onboardingSkill))).resolves.toBeUndefined()
+    const iconPath = path.resolve(pluginRoot, openAi.interface.logo)
+    const relativeIconPath = path.relative(pluginRoot, iconPath)
+    expect(relativeIconPath).toBe(path.join("assets", "lyrashield-400.png"))
+    const iconBytes = await readFile(iconPath)
+    expect(iconBytes.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    expect(iconBytes.readUInt32BE(16)).toBe(400)
+    expect(iconBytes.readUInt32BE(20)).toBe(400)
     await expect(validatePlugin(pluginRoot)).resolves.toEqual({ ok: true, errors: [] })
 
     // The appendix must not duplicate sections already emitted by LYRASHIELD_POLICY.
@@ -99,12 +186,16 @@ describe("buildPlugin", () => {
       expect(JSON.parse(content).name).toBe("lyrashield")
       expect(content.endsWith("\n")).toBe(true)
       if (client === "codex") expect(JSON.parse(content).skills).toBe("./skills/")
+      else expect(JSON.parse(content).extensions?.["com.openai"]).toBeUndefined()
     }
 
     const codexManifest = JSON.parse(
       await readFile(path.join(pluginRoot, ".codex-plugin", "plugin.json"), "utf-8")
     )
     expect(codexManifest.mcpServers).toBe("./.mcp.codex.json")
+    expect(codexManifest.interface).toEqual(openAi.interface)
+    expect(codexManifest.extensions["com.openai"].interface).toBeUndefined()
+    expect(codexManifest.extensions["com.openai"].onboardingSkill).toBe(openAi.onboardingSkill)
     expect(JSON.parse(await readFile(path.join(pluginRoot, ".mcp.codex.json"), "utf-8"))).toEqual({
       lyrashield: { url: "https://app.lyrashieldai.com/api/mcp" },
     })
@@ -139,19 +230,30 @@ describe("buildPlugin", () => {
     expect(marketplace.plugins[0].name).toBe("lyrashield")
     expect(marketplace.plugins[0].source).toBe("./")
     // Catalog version must track the plugin manifest so installs aren't pinned to a stale build.
-    const pluginManifest = JSON.parse(await readFile(path.join(pluginRoot, "plugin.json"), "utf-8"))
     expect(marketplace.version).toBe(pluginManifest.version)
     expect(marketplace.plugins[0].version).toBe(pluginManifest.version)
+    await expect(readFile(path.join(sourcePluginRoot, "plugin.json"))).resolves.toEqual(
+      sourceManifestBefore
+    )
+    await expect(
+      readFile(path.join(sourcePluginRoot, "assets", "lyrashield-400.png"))
+    ).resolves.toEqual(sourceIconBefore)
   })
 
   it("leaves every generated manifest valid during concurrent builds", async () => {
-    await Promise.all(Array.from({ length: 4 }, () => buildPlugin()))
-    const pluginRoot = getPluginDir()
+    const pluginRoot = await createIsolatedPluginRoot()
+    const logoAssetPath = path.resolve(
+      getPluginDir(),
+      "../../../docs/marketplace/assets/lyrashield-400.png"
+    )
+    await Promise.all(Array.from({ length: 4 }, () => buildPlugin({ pluginRoot, logoAssetPath })))
 
     for (const client of ["claude", "cursor", "codex", "kiro"]) {
       const shim = path.join(pluginRoot, `.${client}-plugin`, "plugin.json")
       const content = await readFile(shim, "utf-8")
       expect(() => JSON.parse(content)).not.toThrow()
     }
+    const generatedFiles = await readdir(pluginRoot, { recursive: true })
+    expect(generatedFiles.filter((entry) => entry.endsWith(".tmp"))).toEqual([])
   })
 })

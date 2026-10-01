@@ -2,4 +2,4 @@
 description: Start a LyraShield scan after the user explicitly requests one.
 ---
 
-Follow the `scan-project` skill. Resolve the authorized workspace and target. If the user has not specified the target or scan depth, ask before starting. Use Quick for ordinary pre-PR checks, Standard for general reviews, and Deep only when explicitly requested and allowed. Preserve the returned scan or operation ID and terminal evidence state.
+Follow the `scan-project` skill. Resolve the authorized workspace and target; ask if either is missing or ambiguous. Use Quick for ordinary pre-PR checks, Standard for general reviews, and Deep only when explicitly requested and allowed. Keep one idempotency key for the intended action and reuse it only for an identical retry. Preserve the returned scan or operation ID, poll with bounded backoff, and report the terminal evidence state.

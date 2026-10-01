@@ -53,6 +53,10 @@ export function formatForRulesFile(rulesFile: string): RuleFormat | undefined {
   // These clients load plain Markdown rule files from dedicated directories.
   if (lower.startsWith(".junie/rules/") && lower.endsWith(".md")) return "agents-md"
   if (lower.startsWith(".continue/rules/") && lower.endsWith(".md")) return "agents-md"
+  // Augment project rules are plain Markdown files in `.augment/rules/`.
+  if (lower.startsWith(".augment/rules/") && lower.endsWith(".md")) return "agents-md"
+  // Augment also recognizes a root `.augment-guidelines` context file.
+  if (lower === ".augment-guidelines") return "agents-md"
   // Roo Code rules live under .roo/rules/*.md as plain markdown.
   if (lower.includes(".roo") && lower.includes("lyrashield.md")) return "agents-md"
   if (lower === ".cursorrules") return "cursor"
