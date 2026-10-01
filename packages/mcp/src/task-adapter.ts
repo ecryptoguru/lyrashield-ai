@@ -231,17 +231,19 @@ export function resolveTaskView(params: {
   if (operation.status === "FAILED" || operation.status === "CONFLICT") {
     return {
       status: "failed",
-      statusMessage: "The recorded operation failed before a result could be retained.",
+      statusMessage:
+        operation.error === "OPERATION_OUTCOME_UNKNOWN"
+          ? "The recorded operation outcome is unknown. Inspect its durable status before starting another request."
+          : "The recorded operation failed. Inspect its durable status before starting another request.",
       lastUpdatedAt,
     }
   }
-  // COMPLETED: the recorded tool result decides. An isError result means the
-  // delegated call ran but produced no durable work.
+  // A returned error does not prove whether durable work was submitted.
   const stored = toolResultEnvelopeSchema.safeParse(operation.result)
   if (stored.success && stored.data.isError === true) {
     return {
       status: "failed",
-      statusMessage: "The recorded call did not produce a scan.",
+      statusMessage: "The recorded call returned an error; its submission outcome is unknown.",
       lastUpdatedAt,
     }
   }

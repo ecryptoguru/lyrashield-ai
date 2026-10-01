@@ -955,6 +955,54 @@ describe("MCP tasks over the hosted endpoint", () => {
     expect(verifyOAuthBearer).toHaveBeenCalledTimes(3)
   })
 
+  it.each(["FAILED", "COMPLETED"])(
+    "polls a %s error operation without reporting a bound scan as success",
+    async (status) => {
+      const backend = makeHostedMcpTaskBackend({
+        oauth: {
+          userId: "user-1",
+          workspaceId: "ws-1",
+          scopes: ["lyrashield.read"],
+          connectionId: "conn-1",
+          authorizationVersion: 7,
+          allowedOperations: ["scan.create"],
+        },
+        connection: {
+          id: "conn-1",
+          workspaceId: "ws-1",
+          status: "ACTIVE",
+          authorizationVersion: 7,
+          allowedOperations: ["scan.create"],
+          allowedTargetIds: [],
+          allTargets: true,
+          allowedProfiles: ["STANDARD"],
+          expiresAt: null,
+        },
+      })
+      getAgentOperationMock.mockResolvedValue(
+        makeOperation({
+          status,
+          error: "OPERATION_OUTCOME_UNKNOWN",
+          result: {
+            content: [{ type: "text", text: '{"error":"submission outcome unknown"}' }],
+            isError: true,
+            structuredContent: { error: "submission outcome unknown", operationId: "op-1" },
+          },
+        })
+      )
+      scanFindFirstMock.mockResolvedValue(makeScan())
+      expect(await backend.getTask("lst_op-1")).toMatchObject({ status: "failed" })
+      expect(await backend.getTaskResult("lst_op-1")).toMatchObject({
+        isError: true,
+        structuredContent: { error: "submission outcome unknown", operationId: "op-1" },
+      })
+      expect(claimOrGetAgentOperationMock).not.toHaveBeenCalled()
+      expect(completeAgentOperationMock).not.toHaveBeenCalled()
+      expect(failAgentOperationMock).not.toHaveBeenCalled()
+      expect(cancelScanMock).not.toHaveBeenCalled()
+    }
+  )
+
   it("rechecks the verified bearer user before every task accessor queries operations", async () => {
     const oauth = {
       userId: "user-1",

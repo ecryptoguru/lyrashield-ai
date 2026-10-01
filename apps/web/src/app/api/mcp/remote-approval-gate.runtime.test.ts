@@ -23,6 +23,7 @@ import {
   CANONICAL_OPERATIONS,
   claimOrGetAgentOperation,
   createAgentConnection,
+  completeAgentOperation,
   getSystemPrisma,
   getAgentConnection,
   hashOperationInput,
@@ -30,6 +31,7 @@ import {
 } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { makeRemoteApprovalGate } from "./remote-approval-gate"
+import { GET as getOperationStatusRoute } from "../agent-operations/[id]/route"
 
 const databaseUrl = process.env.DATABASE_URL
 const runtimeUrl = process.env.RLS_RUNTIME_DATABASE_URL
@@ -115,6 +117,102 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
       await owner.user.deleteMany({ where: { id: userId } })
       await owner.$disconnect()
       await runtime.$disconnect()
+    })
+
+    it("retains a failed outer outcome after a durable inner result and exposes read-only failed status", async () => {
+      const connection = await getAgentConnection(connectionId, workspaceId)
+      if (!connection || connection.status !== "ACTIVE") throw new Error("Missing connection")
+      let executionRequests = 0
+      const key = `lost-response-${suffix}`
+      const input = { workspaceId, targetId, mode: "STANDARD", goal: "TEST_APP" }
+      const gate = makeRemoteApprovalGate({
+        apiKeyInfo: { workspaceId, scopes: ["write"], createdById: userId, keyId: `key-${suffix}` },
+        connection: { ...connection, status: "ACTIVE" },
+        oauthContext: {
+          userId,
+          workspaceId,
+          scopes: ["lyrashield.read", "lyrashield.write"],
+          connectionId,
+          authorizationVersion: 4,
+          allowedOperations: connection.allowedOperations,
+          allowedTargetIds: connection.allowedTargetIds,
+          allTargets: connection.allTargets,
+          allowedProfiles: connection.allowedProfiles,
+          expiresAt: connection.expiresAt,
+        },
+        toolContext: {
+          apiBaseUrl: "http://localhost:3001",
+          apiKey: "runtime-test",
+          fetchFn: async (_url, init) => {
+            executionRequests++
+            const innerKey = new Headers(init?.headers).get("Idempotency-Key")
+            if (!innerKey) throw new Error("Missing internal key")
+            const inner = await claimOrGetAgentOperation({
+              connectionId,
+              workspaceId,
+              operationName: CANONICAL_OPERATIONS.SCAN_CREATE,
+              idempotencyKey: innerKey,
+              authorizationVersion: 4,
+              input: JSON.parse(String(init?.body)),
+            })
+            if (inner.status === "NEW")
+              await completeAgentOperation(inner.operation.id, workspaceId, {
+                result: { id: "scan-persisted", status: "QUEUED" },
+                resultReference: "scan-persisted",
+              })
+            throw new Error("Response lost after durable persistence")
+          },
+        },
+      })
+      const decision = await gate("lyrashield_scan_target", { ...input, idempotencyKey: key })
+      expect(decision).toMatchObject({ approved: true, result: { isError: true } })
+      const outer = await owner.agentOperation.findFirstOrThrow({
+        where: { workspaceId, idempotencyKey: key },
+      })
+      expect(outer).toMatchObject({
+        status: "FAILED",
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        result: { isError: true, structuredContent: { operationId: outer.id } },
+      })
+      const inner = await owner.agentOperation.findFirstOrThrow({
+        where: { workspaceId, id: { not: outer.id }, idempotencyKey: { startsWith: "mcp:" } },
+      })
+      expect(inner).toMatchObject({ status: "COMPLETED", resultReference: "scan-persisted" })
+      const requestCount = executionRequests
+      expect(await gate("lyrashield_scan_target", { ...input, idempotencyKey: key })).toMatchObject(
+        { approved: false }
+      )
+      expect(executionRequests).toBe(requestCount)
+      requirePermissionMock.mockResolvedValue({
+        session: { userId, oauth: { connectionId, authorizationVersion: 4 } },
+      })
+      const response = await getOperationStatusRoute(
+        new Request(`http://localhost/api/agent-operations/${outer.id}?workspaceId=${workspaceId}`),
+        { params: Promise.resolve({ id: outer.id }) }
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        data: { operationId: outer.id, status: "FAILED", recovery: "wait" },
+      })
+      expect(await owner.agentOperation.findUniqueOrThrow({ where: { id: outer.id } })).toEqual(
+        outer
+      )
+
+      // Legacy errors remain honest at the actual route without rewriting historical rows.
+      await owner.agentOperation.update({
+        where: { id: outer.id },
+        data: { status: "COMPLETED", error: null },
+      })
+      const legacyResponse = await getOperationStatusRoute(
+        new Request(`http://localhost/api/agent-operations/${outer.id}?workspaceId=${workspaceId}`),
+        { params: Promise.resolve({ id: outer.id }) }
+      )
+      expect(await legacyResponse.json()).toMatchObject({
+        data: { status: "FAILED", reasonCode: "OPERATION_FAILED", recovery: "wait" },
+      })
+      expect(
+        (await owner.agentOperation.findUniqueOrThrow({ where: { id: outer.id } })).status
+      ).toBe("COMPLETED")
     })
 
     it("denies a changed input under the same idempotency key without altering the ledger", async () => {
