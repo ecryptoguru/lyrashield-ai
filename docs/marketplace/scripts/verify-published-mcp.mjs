@@ -22,7 +22,7 @@ export const LIMITS = Object.freeze({
   stderrBytes: 16 * 1024,
 })
 
-// marketplace-stdio/1: supported discovery, review and scan-start inputs.
+// marketplace-stdio/1: supported discovery, review, scan-start and fix/retest inputs.
 // Additional tools and optional properties remain compatible.
 export const REQUIRED_TOOLS = Object.freeze({
   lyrashield_list_workspaces: { required: [], properties: {} },
@@ -30,9 +30,13 @@ export const REQUIRED_TOOLS = Object.freeze({
     required: ["workspaceId"],
     properties: { workspaceId: "string", cursor: "string", limit: "integer" },
   },
+  lyrashield_get_scan_eligibility: {
+    required: ["workspaceId", "targetId"],
+    properties: { workspaceId: "string", targetId: "string" },
+  },
   lyrashield_get_scan_status: {
     required: ["workspaceId"],
-    properties: { workspaceId: "string", scanId: "string" },
+    properties: { workspaceId: "string", scanId: "string", operationId: "string" },
   },
   lyrashield_get_scan_quality: {
     required: ["workspaceId", "scanId"],
@@ -58,6 +62,29 @@ export const REQUIRED_TOOLS = Object.freeze({
   lyrashield_create_pr_security_recap: {
     required: ["workspaceId", "targetId"],
     properties: { workspaceId: "string", targetId: "string" },
+  },
+  lyrashield_run_pr_scan: {
+    required: ["workspaceId"],
+    properties: {
+      workspaceId: "string",
+      targetId: "string",
+      repo: "string",
+      auto: "boolean",
+      idempotencyKey: "string",
+    },
+  },
+  lyrashield_record_fix_proposal: {
+    required: ["workspaceId", "findingId", "summary"],
+    properties: {
+      workspaceId: "string",
+      findingId: "string",
+      summary: "string",
+      idempotencyKey: "string",
+    },
+  },
+  lyrashield_verify_fix: {
+    required: ["workspaceId", "findingId"],
+    properties: { workspaceId: "string", findingId: "string", idempotencyKey: "string" },
   },
   lyrashield_scan_target: {
     required: ["workspaceId"],
