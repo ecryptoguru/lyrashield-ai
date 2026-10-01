@@ -5,6 +5,14 @@ release candidates and have not been published. This marketplace export must not
 from a released listing until the coordinated npm and marketplace release is reviewed.
 Channel-specific listing versions and review states may lag this source.
 
+## Source and publication readback — 2026-10-02
+
+The clean product source is `4822306e24f375800981bf282fd992a9c15dcde8`. Public marketplace `main` is commit `8cb880dbaee73f2c6e71d096e4b75db87f29c32a`, regenerated from that product revision; a fresh clean export matched its tracked artifact bytes. This branch readback is not an immutable marketplace release.
+
+Current npm latest versions are CLI `0.2.13`, MCP `0.2.11`, and Agent Plugin `0.1.30`. Product-source candidates CLI `0.2.14`, MCP `0.2.12`, and Agent Plugin `0.1.31` each return npm `E404`. The latest immutable marketplace GitHub Release is `v0.1.29` (2026-09-25); its Kiro MCP shim pins `@lyrashield/mcp@0.2.9`. Tags/releases `v0.1.30` and `v0.1.31` do not exist. The current branch release workflow creates an immutable tag/release and verifies the generated MCP pin against npm, so the current `.2.12` candidate pin is not publishable until its coordinated packages have been released and read back.
+
+The prepared official MCP Registry package has no public listing: an official registry search returned zero LyraShield entries on 2026-10-02, and release-ready ownership validation remains blocked on the unpublished MCP package. Package/export validation and public branch synchronization do not establish npm publication, immutable marketplace availability, authenticated client use, or client-runtime acceptance.
+
 ## Current customer setup
 
 This mutable preparation branch is not a supported customer install source. Do not register it
