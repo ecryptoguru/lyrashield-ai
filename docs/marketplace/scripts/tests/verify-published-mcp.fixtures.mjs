@@ -28,6 +28,23 @@ async function temporary() {
   directories.push(directory)
   return directory
 }
+function propertySchema(contract) {
+  if (typeof contract === "string") return { type: contract }
+  return {
+    ...contract,
+    ...(contract.items ? { items: propertySchema(contract.items) } : {}),
+    ...(contract.properties
+      ? {
+          properties: Object.fromEntries(
+            Object.entries(contract.properties).map(([name, value]) => [
+              name,
+              propertySchema(value),
+            ])
+          ),
+        }
+      : {}),
+  }
+}
 const tools = () =>
   Object.entries(REQUIRED_TOOLS).map(([name, contract]) => ({
     name,
@@ -35,7 +52,7 @@ const tools = () =>
       type: "object",
       required: contract.required,
       properties: Object.fromEntries(
-        Object.entries(contract.properties).map(([key, type]) => [key, { type }])
+        Object.entries(contract.properties).map(([key, value]) => [key, propertySchema(value)])
       ),
     },
   }))
@@ -284,6 +301,102 @@ for (const [name, property] of retryFields) {
     assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
   })
 }
+
+const authoredFields = [
+  ["lyrashield_get_scan_eligibility", "goal"],
+  ["lyrashield_get_scan_eligibility", "mode"],
+  ["lyrashield_get_scan_eligibility", "workflow"],
+  ["lyrashield_scan_target", "goal"],
+  ["lyrashield_scan_target", "mode"],
+  ["lyrashield_scan_target", "workflow"],
+  ["lyrashield_run_pr_scan", "mode"],
+  ["lyrashield_run_pr_scan", "workflow"],
+  ["lyrashield_get_launch_readiness", "commit"],
+  ["lyrashield_get_launch_readiness", "artifactDigest"],
+  ["lyrashield_check_diff", "files"],
+]
+for (const [name, property] of authoredFields) {
+  test(`published catalog requires optional authored input ${name}.${property}`, () => {
+    const catalog = tools()
+    const schema = catalog.find((tool) => tool.name === name).inputSchema
+    const original = schema.properties[property]
+    delete schema.properties[property]
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+    schema.properties[property] = original
+    schema.required = [...schema.required, property]
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+  })
+}
+
+const eligibilityEnums = {
+  goal: [
+    "CHECK_PR",
+    "TEST_APP",
+    "LAUNCH_REVIEW",
+    "WEEKLY_MONITOR",
+    "FULL_PENTEST",
+    "COMPLIANCE_REVIEW",
+  ],
+  mode: ["SAFE", "QUICK", "STANDARD", "DEEP", "CUSTOM"],
+}
+test("published eligibility accepts full, broader, and unconstrained source enum inputs", () => {
+  for (const [property, values] of Object.entries(eligibilityEnums)) {
+    const catalog = tools()
+    const properties = catalog.find((tool) => tool.name === "lyrashield_get_scan_eligibility")
+      .inputSchema.properties
+    properties[property] = { type: "string", enum: [...values] }
+    validateCatalog(catalog)
+    properties[property].enum.push("FUTURE_VALUE")
+    validateCatalog(catalog)
+    delete properties[property].enum
+    validateCatalog(catalog)
+  }
+})
+
+for (const [property, values] of Object.entries(eligibilityEnums)) {
+  test(`published eligibility ${property} must retain every accepted value`, () => {
+    for (const missing of values) {
+      const catalog = tools()
+      catalog.find(
+        (tool) => tool.name === "lyrashield_get_scan_eligibility"
+      ).inputSchema.properties[property] = {
+        type: "string",
+        enum: values.filter((value) => value !== missing),
+      }
+      assert.throws(() => validateCatalog(catalog), /schema is incompatible/, missing)
+    }
+  })
+}
+for (const [name, property] of authoredFields.filter(([, property]) =>
+  ["goal", "mode", "workflow"].includes(property)
+)) {
+  test(`published ${name}.${property} rejects restrictive enums`, () => {
+    const catalog = tools()
+    catalog.find((tool) => tool.name === name).inputSchema.properties[property] = {
+      type: "string",
+      enum: ["QUICK"],
+    }
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+  })
+}
+
+test("advisory file snapshots require path and content schemas", () => {
+  for (const property of ["path", "content"]) {
+    const catalog = tools()
+    catalog.find((tool) => tool.name === "lyrashield_check_diff").inputSchema.properties.files = {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { path: { type: "string" }, content: { type: "string" } },
+        required: ["path", "content"],
+      },
+    }
+    const item = catalog.find((tool) => tool.name === "lyrashield_check_diff").inputSchema
+      .properties.files.items
+    item.properties[property] = { type: "number" }
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+  }
+})
 
 test("required schema assertions cannot narrow supported inputs", () => {
   for (const [name, property, narrowing] of [
