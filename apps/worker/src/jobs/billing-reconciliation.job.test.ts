@@ -5,6 +5,12 @@ const getRazorpayClientMock = vi.hoisted(() => vi.fn(() => null as unknown))
 const rawQueryMock = vi.hoisted(() => vi.fn())
 const rawExecuteMock = vi.hoisted(() => vi.fn())
 const lookupResults: Array<Array<{ id: string; processed?: boolean }>> = []
+const duplicateGroupsResults: Array<
+  Array<{ provider: string; objectId: string; receipts: number }>
+> = []
+const orphanedRefundResults: Array<
+  Array<{ id: string; externalId: string; objectId: string }>
+> = []
 const loggerMock = vi.hoisted(() => ({
   info: vi.fn(),
   debug: vi.fn(),
@@ -73,8 +79,17 @@ describe("billing-reconciliation.job", () => {
       .mockReset()
       .mockResolvedValue({ id: "pack_row_1" } as never)
     lookupResults.length = 0
+    duplicateGroupsResults.length = 0
+    orphanedRefundResults.length = 0
     rawQueryMock.mockImplementation((strings: TemplateStringsArray) => {
-      if (strings.join("").includes('FROM "WebhookEvent"')) {
+      const sql = strings.join("")
+      if (sql.includes("HAVING")) {
+        return Promise.resolve(duplicateGroupsResults.shift() ?? [])
+      }
+      if (sql.includes("NOT EXISTS")) {
+        return Promise.resolve(orphanedRefundResults.shift() ?? [])
+      }
+      if (sql.includes('FROM "WebhookEvent"')) {
         return Promise.resolve(lookupResults.shift() ?? [])
       }
       return Promise.resolve([
@@ -161,7 +176,7 @@ describe("billing-reconciliation.job", () => {
 
     expect(list).toHaveBeenCalledWith({ limit: 100, sorting: ["-created_at"] })
     const lookups = rawQueryMock.mock.calls.filter(([strings]) =>
-      (strings as TemplateStringsArray).join("").includes('FROM "WebhookEvent"')
+      (strings as TemplateStringsArray).join("").includes('SELECT id, processed FROM "WebhookEvent"')
     )
     expect(lookups).toHaveLength(2)
     expect(lookups.map(([, objectId]) => objectId)).toEqual(["ord_1", "ord_late_paid"])
@@ -196,7 +211,7 @@ describe("billing-reconciliation.job", () => {
 
     expect(all).toHaveBeenCalledWith({ count: 50, skip: 0, from: sinceSeconds, to: nowSeconds })
     const lookups = rawQueryMock.mock.calls.filter(([strings]) =>
-      (strings as TemplateStringsArray).join("").includes('FROM "WebhookEvent"')
+      (strings as TemplateStringsArray).join("").includes('SELECT id, processed FROM "WebhookEvent"')
     )
     expect(lookups).toHaveLength(2)
     expect(lookups.map(([, objectId]) => objectId)).toEqual(["pay_1", "pay_late_captured"])
@@ -325,7 +340,7 @@ describe("billing-reconciliation.job", () => {
     )
     expect(
       rawQueryMock.mock.calls.filter(([strings]) =>
-        (strings as TemplateStringsArray).join("").includes('FROM "WebhookEvent"')
+        (strings as TemplateStringsArray).join("").includes('SELECT id, processed FROM "WebhookEvent"')
       )
     ).toHaveLength(1)
     expect(prisma.webhookEvent.findMany).toHaveBeenCalledTimes(1)
@@ -716,5 +731,101 @@ describe("billing-reconciliation.job", () => {
     expect(getSystemPrisma().minutePack.findFirst).not.toHaveBeenCalled()
     expect(result.packCreditsVerified).toBe(0)
     expect(result.driftAlerts).toBe(0)
+  })
+
+  it("reports duplicate settlement deliveries as a receipt-health signal, not per-row drift", async () => {
+    // A provider redelivery mints a fresh delivery id, so one settlement can
+    // legitimately hold several receipts. Duplication is reported once per
+    // settlement object — the money rails stay idempotent by key, so this is
+    // an audit signal rather than per-row drift.
+    duplicateGroupsResults.push([
+      { provider: "polar", objectId: "ord_dup", receipts: 2 },
+      { provider: "razorpay", objectId: "pay_dup", receipts: 3 },
+    ])
+
+    const result = await runBillingReconciliation()
+
+    expect(result.duplicates).toEqual({ settlementDeliveries: 2 })
+    expect(result.driftAlerts).toBe(0)
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "operator_alert",
+      expect.objectContaining({
+        code: "reconciliation_duplicates",
+        severity: "warning",
+        settlementDeliveries: 2,
+      })
+    )
+    expect(result.completed).toBe(true)
+    expect(result.replayed).toBe(0)
+  })
+
+  it("scopes the duplicate scan to billing settlement receipts in the coverage window", async () => {
+    await runBillingReconciliation()
+
+    const dupQuery = rawQueryMock.mock.calls.find(([strings]) =>
+      (strings as TemplateStringsArray).join("").includes("HAVING")
+    )
+    expect(dupQuery).toBeDefined()
+    const sql = (dupQuery?.[0] as TemplateStringsArray).join("")
+    expect(sql).toContain("provider = 'polar' AND \"eventType\" = 'order.paid'")
+    expect(sql).toContain("provider = 'razorpay' AND \"eventType\" = 'payment.captured'")
+    // Window bounds are parameterized — the same coverage window the rest of
+    // the run uses.
+    expect(dupQuery).toEqual(expect.arrayContaining([expect.any(Date), expect.any(Date)]))
+    expect(sql).toContain('"createdAt" >=')
+  })
+
+  it.each(["polar", "razorpay"] as const)(
+    "alerts on a processed %s refund whose settlement was never received",
+    async (provider) => {
+      // Refund applied to a settlement object with no captured/paid receipt:
+      // the refund arrived before (or without) its settlement — out-of-order
+      // drift an operator must see. Report-only; never replayed.
+      orphanedRefundResults.push(
+        provider === "polar"
+          ? [{ id: "evt_ref_polar", externalId: "delivery_1", objectId: "ord_late" }]
+          : [],
+        provider === "razorpay"
+          ? [{ id: "evt_ref_rzp", externalId: "delivery_2", objectId: "pay_late" }]
+          : []
+      )
+
+      const result = await runBillingReconciliation()
+
+      const objectId = provider === "polar" ? "ord_late" : "pay_late"
+      expect(result.driftAlerts).toBe(1)
+      expect(result.alerts).toEqual([
+        expect.objectContaining({
+          provider,
+          externalId: objectId,
+          type: "refund_without_settlement",
+        }),
+      ])
+      expect(loggerMock.warn).toHaveBeenCalledWith(
+        "operator_alert",
+        expect.objectContaining({
+          code: "reconciliation_drift",
+          alertSamples: [
+            expect.objectContaining({ provider, type: "refund_without_settlement" }),
+          ],
+        })
+      )
+      expect(result.completed).toBe(true)
+    }
+  )
+
+  it("raises no integrity signals for a clean settlement log", async () => {
+    const result = await runBillingReconciliation()
+
+    expect(result.duplicates).toEqual({ settlementDeliveries: 0 })
+    expect(result.driftAlerts).toBe(0)
+    expect(loggerMock.warn).not.toHaveBeenCalledWith(
+      "operator_alert",
+      expect.objectContaining({ code: "reconciliation_duplicates" })
+    )
+    expect(loggerMock.warn).not.toHaveBeenCalledWith(
+      "operator_alert",
+      expect.objectContaining({ code: "reconciliation_drift" })
+    )
   })
 })

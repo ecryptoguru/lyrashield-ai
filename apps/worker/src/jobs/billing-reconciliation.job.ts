@@ -58,6 +58,19 @@ export interface ReconciliationResult {
     /** Dead-lettered webhook tracks awaiting operator receipt review. */
     deadLetterTracks: number
   }
+  /**
+   * Receipt-integrity signal: settlement objects holding more than one
+   * webhook receipt inside the coverage window. Provider redeliveries mint a
+   * fresh delivery id per attempt, so duplication is expected — the money
+   * rails stay idempotent on the provider object key. This is an audit
+   * signal, not per-row drift.
+   */
+  duplicates: {
+    /** Settlement objects with more than one in-window settlement receipt. */
+    settlementDeliveries: number
+  }
+  /** Bounded identifier-only sample behind `duplicates`, for the alert log. */
+  duplicateSamples: Array<{ provider: string; objectId: string; receipts: number }>
   /** Details of drift alerts. */
   alerts: ReconciliationAlert[]
 }
@@ -96,6 +109,8 @@ const BILLING_PROVIDERS = ["polar", "razorpay"] as const
  */
 const MAX_PROVIDER_PAGES = 200
 const UNPROCESSED_SAMPLE_LIMIT = 100
+/** Bounded sample for receipt-integrity probes (duplicates, orphan refunds). */
+const RECEIPT_INTEGRITY_SAMPLE_LIMIT = 50
 
 class ReconciliationLeaseLostError extends Error {
   constructor() {
@@ -273,6 +288,8 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
     completed: false,
     skipped: false,
     backlog: { unprocessedBeforeCoverage: 0, deadLetterTracks: 0 },
+    duplicates: { settlementDeliveries: 0 },
+    duplicateSamples: [],
     alerts: [],
   }
 
@@ -314,6 +331,7 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
 
     await renewReconciliationLease(lease.token)
     await checkBillingEventBacklog(result, { since, until })
+    await checkSettlementReceiptIntegrity(result, { since, until })
 
     if (polarComplete && razorpayComplete) {
       await renewReconciliationLease(lease.token)
@@ -357,6 +375,20 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
     })
   }
 
+  // Duplicate settlement receipts are reported once per settlement object as
+  // a receipt-health signal — provider redeliveries mint a fresh delivery id
+  // per attempt, so duplication is expected; what matters for audit is that
+  // the money rails stay idempotent on the provider object key.
+  if (result.duplicates.settlementDeliveries > 0) {
+    logger.warn("operator_alert", {
+      code: "reconciliation_duplicates",
+      severity: "warning",
+      settlementDeliveries: result.duplicates.settlementDeliveries,
+      samples: result.duplicateSamples,
+      truncated: result.duplicates.settlementDeliveries >= RECEIPT_INTEGRITY_SAMPLE_LIMIT,
+    })
+  }
+
   logger.info("Billing reconciliation complete", {
     polarChecked: result.polarChecked,
     razorpayChecked: result.razorpayChecked,
@@ -365,6 +397,7 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
     driftAlerts: result.driftAlerts,
     completed: result.completed,
     backlog: result.backlog,
+    duplicates: result.duplicates,
     initialBaseline: lease.lastCompletedAt === null,
     coverageFrom: since.toISOString(),
     checkedThrough: until.toISOString(),
@@ -598,5 +631,115 @@ async function checkBillingEventBacklog(
       type: event.eventType,
       message: `Unprocessed ${event.provider} webhook event: ${event.eventType}`,
     })
+  }
+}
+
+/**
+ * Receipt-integrity probes for the settlement log — report-only.
+ *
+ * Two anomalies the per-provider sweep and the unprocessed sweep cannot see:
+ *
+ * 1. Duplicate deliveries: provider redeliveries mint a fresh delivery id
+ *    (Polar `webhook-id`; Razorpay `X-Razorpay-Event-ID`), so one settlement
+ *    object can accumulate several settlement receipts. The credit/refund
+ *    rails stay idempotent on the provider object id, so duplication is a
+ *    once-per-object audit signal (`result.duplicates`), not per-row drift.
+ * 2. Out-of-order settlement lifecycle: a PROCESSED refund receipt whose
+ *    settlement object has no captured/paid receipt at all means a reversal
+ *    was applied for money whose settlement we never recorded — real drift
+ *    (`refund_without_settlement`), one alert per orphaned refund.
+ *
+ * Both probes are bounded raw SQL on the system client (WebhookEvent is
+ * FORCE RLS strict) inside the run's coverage window. They never replay,
+ * reprocess, or mutate billing state.
+ */
+async function checkSettlementReceiptIntegrity(
+  result: ReconciliationResult,
+  coverage: { since: Date; until: Date }
+): Promise<void> {
+  const systemPrisma = getSystemPrisma()
+
+  const duplicateGroups = await systemPrisma.$queryRaw<
+    Array<{ provider: string; objectId: string; receipts: number }>
+  >`
+    SELECT provider, object_id AS "objectId", COUNT(*)::int AS receipts
+    FROM (
+      SELECT 'polar'::text AS provider, payload #>> '{data,id}' AS object_id, "createdAt"
+      FROM "WebhookEvent"
+      WHERE provider = 'polar' AND "eventType" = 'order.paid'
+      UNION ALL
+      SELECT 'razorpay'::text, payload #>> '{payload,payment,entity,id}', "createdAt"
+      FROM "WebhookEvent"
+      WHERE provider = 'razorpay' AND "eventType" = 'payment.captured'
+    ) deliveries
+    WHERE object_id IS NOT NULL
+      AND "createdAt" >= ${coverage.since} AND "createdAt" < ${coverage.until}
+    GROUP BY provider, object_id
+    HAVING COUNT(*) > 1
+    ORDER BY receipts DESC
+    LIMIT ${RECEIPT_INTEGRITY_SAMPLE_LIMIT}
+  `
+  result.duplicates.settlementDeliveries = duplicateGroups.length
+  result.duplicateSamples = duplicateGroups
+
+  // Razorpay refund receipts carry the settlement payment id on either the
+  // payment entity or the refund entity; Polar order.refunded carries the
+  // order itself at data.id.
+  const [polarOrphans, razorpayOrphans] = await Promise.all([
+    systemPrisma.$queryRaw<Array<{ id: string; externalId: string; objectId: string }>>`
+      SELECT r.id, r."externalId", r.payload #>> '{data,id}' AS "objectId"
+      FROM "WebhookEvent" r
+      WHERE r.provider = 'polar' AND r."eventType" = 'order.refunded' AND r.processed
+        AND r."createdAt" >= ${coverage.since} AND r."createdAt" < ${coverage.until}
+        AND r.payload #>> '{data,id}' IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "WebhookEvent" s
+          WHERE s.provider = 'polar' AND s."eventType" = 'order.paid'
+            AND (s.payload #> '{data,id}') = (r.payload #> '{data,id}')
+        )
+      ORDER BY r."createdAt" ASC
+      LIMIT ${RECEIPT_INTEGRITY_SAMPLE_LIMIT}
+    `,
+    systemPrisma.$queryRaw<Array<{ id: string; externalId: string; objectId: string }>>`
+      SELECT r.id, r."externalId",
+        COALESCE(
+          r.payload #>> '{payload,payment,entity,id}',
+          r.payload #>> '{payload,refund,entity,payment_id}'
+        ) AS "objectId"
+      FROM "WebhookEvent" r
+      WHERE r.provider = 'razorpay' AND r."eventType" = 'refund.created' AND r.processed
+        AND r."createdAt" >= ${coverage.since} AND r."createdAt" < ${coverage.until}
+        AND COALESCE(
+          r.payload #>> '{payload,payment,entity,id}',
+          r.payload #>> '{payload,refund,entity,payment_id}'
+        ) IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "WebhookEvent" s
+          WHERE s.provider = 'razorpay' AND s."eventType" = 'payment.captured'
+            AND (s.payload #> '{payload,payment,entity,id}') = to_jsonb(
+              COALESCE(
+                r.payload #>> '{payload,payment,entity,id}',
+                r.payload #>> '{payload,refund,entity,payment_id}'
+              )::text
+            )
+        )
+      ORDER BY r."createdAt" ASC
+      LIMIT ${RECEIPT_INTEGRITY_SAMPLE_LIMIT}
+    `,
+  ])
+
+  for (const [provider, orphans] of [
+    ["polar", polarOrphans],
+    ["razorpay", razorpayOrphans],
+  ] as const) {
+    for (const orphan of orphans) {
+      result.driftAlerts++
+      result.alerts.push({
+        provider,
+        externalId: orphan.objectId,
+        type: "refund_without_settlement",
+        message: `${provider} refund was processed for a settlement with no captured/paid receipt — out-of-order or missing settlement event`,
+      })
+    }
   }
 }
