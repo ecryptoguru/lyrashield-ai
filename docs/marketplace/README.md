@@ -1,7 +1,9 @@
 # LyraShield AI marketplace release source
 
-Agent Plugin `0.1.30` is published on npm. This marketplace export awaits its matching
-release; channel-specific listing versions and review states may lag this source.
+PREPARATION ONLY: Agent Plugin `0.1.31`, MCP `0.2.12`, and CLI `0.2.14` are local
+release candidates and have not been published. This marketplace export must not be installed
+from a released listing until the coordinated npm and marketplace release is reviewed.
+Channel-specific listing versions and review states may lag this source.
 
 ## Install from this repository
 
@@ -37,16 +39,24 @@ decision instead, add this to `.claude/settings.json` or `.github/copilot/settin
 }
 ```
 
-Neither marketplace path inlines a credential. Their remote MCP connection completes hosted OAuth
-inside the client. The Kiro stdio adapter is the path that reads
-`~/.lyrashield/credentials.json` after `npx -y lyrashield@0.2.13 login --oauth`.
+These Claude Code, Copilot CLI and VS Code plugin paths inline no credential; their remote MCP
+connection uses hosted OAuth in clients that support it. GitHub Copilot Cloud Agent is a separate
+surface: its repository MCP configuration is shared with Copilot code review, and GitHub currently
+does not support remote MCP OAuth there. Follow the [Copilot Cloud Agent guide](./github-copilot-cloud-agent/README.md)
+for the documented read-only API-key setup. Plugin/skill installation and service authentication
+are separate; the portable plugin's OAuth MCP descriptor does not authenticate Cloud Agent.
+
+The Kiro stdio adapter is the path that reads `~/.lyrashield/credentials.json` after
+`npx -y lyrashield@0.2.14 login --oauth`.
 
 For local stdio clients (Kiro, Gemini CLI, Zed and Codebuff), use Node.js 24 and run the pinned
 CLI login command above before starting the client. Select one workspace in the browser. First
 call `lyrashield_list_workspaces`, then `lyrashield_list_targets` for an authorized target. If
 authorization expires or is revoked, repeat the CLI login and restart the client. Hosted HTTP
-clients complete OAuth inside their connection UI. Keep API keys in user-level settings, never a
-committed project file or agent prompt.
+clients that document remote OAuth complete it inside their connection UI. GitHub Copilot Cloud
+Agent uses the read-only API-key configuration described above; it cannot use remote OAuth or
+authorize hosted mutations. Keep API keys in a private secret store, never a committed project
+file or agent prompt.
 
 LyraShield is not yet listed in a published VS Code plugin marketplace, so there is no one-click
 marketplace install for VS Code today. Install-from-source and the marketplace-by-URL paths above
@@ -61,7 +71,10 @@ The release job must export only these files to the dedicated public `lyrashield
 repository:
 
 - root `plugin.json`, `mcp.json`, `skills/`, client shims and client adapters
-- Zed extension and Codebuff agent sources
+- native bundles for Gemini CLI, Kiro, Cline, Kilo, OpenClaw, Zed, Codebuff, Amp, OpenCode,
+  Antigravity, Augment, Factory, Qoder, Qwen, Devin, JetBrains, Goose, Hermes, Pi Core and other
+  documented client surfaces
+- official MCP Registry `server.json` and its vendored schema/provenance
 - marketplace icons, screenshots, changelog, support/privacy/terms links and test fixtures
 
 The export must not contain `.env` files, credentials, database schema, customer data, hosted
@@ -70,9 +83,15 @@ service source or generated build caches. Run
 deterministic release boundary. `manifest.json` records the source package, version, generated
 files and forbidden hosted-service paths; the export test fails if an artifact disappears.
 
-The export also contains the native/review artifacts used by the first submission wave:
-Gemini CLI, Kiro Power, Cline, Kilo, OpenClaw, Zed, Codebuff, a 400×400 icon and the sanitized
-reviewer pack. The Gemini repository must additionally carry the `gemini-cli-extension` topic.
+Before releasing this candidate, publish and verify MCP `0.2.12`, update every stdio runtime pin
+from the currently published `0.2.11`, then regenerate, pack and verify the exact plugin and CLI
+artifacts. The new recorded-scan and retest skills require the explicit `idempotencyKey` fields
+in the new MCP tool schemas; do not release those workflows against an older stdio server.
+
+The export includes native artifacts from each supported client wave. Listing applications remain
+separate; the [channel ledger](./channels.md) records the verified intake route, package identity,
+public state and remaining evidence for each one. The Gemini repository must additionally carry
+the `gemini-cli-extension` topic.
 
 ## Submission order
 
@@ -92,18 +111,7 @@ marketplace program.
 
 ## Submission tracking
 
-Public-link states were last checked on 2026-08-12 unless an entry names a later release. Private
-dashboard-only states are historical observations from 2026-08-12, not confirmed-current status.
-
-- GitHub Copilot: direct Agent Plugin install is supported. The [Awesome Copilot submission #2592](https://github.com/github/awesome-copilot/issues/2592) was rejected as a product-marketing submission; do not resubmit it.
-- Cline: [issue #2213](https://github.com/cline/mcp-marketplace/issues/2213) is open with no maintainer decision.
-- Kilo: [PR #217](https://github.com/Kilo-Org/kilo-marketplace/pull/217) is open and awaiting maintainer review.
-- Zed: [PR #7149](https://github.com/zed-industries/extensions/pull/7149) is open; package, Danger and CLA checks pass after the capability fix and it awaits maintainer re-review. The extension now uses only Zed's `npm:install` capability after the `process:exec` capability was removed as unnecessary.
-- Gemini CLI: the public repository has the `gemini-cli-extension` topic; the immutable marketplace export is `v0.1.18`.
-- OpenClaw: [ClawHub listing](https://clawhub.ai/ecryptoguru/skills/lyrashield) is published as a community listing; it is not an official OpenClaw channel.
-- Kiro: submitted; its 2026-08-12 reviewer state was not publicly exposed.
-- Claude: the private plugin dashboard showed two LyraShield AI submissions pending review on 2026-08-12; current status is unverified.
-- Codebuff: the [LyraShield AI publisher](https://codebuff.com/publishers/lyrashield) has a public,
-  unverified `0.1.1` listing with the MCP declaration live.
-- Cursor: the private publisher dashboard showed the application awaiting review on 2026-08-12. The generated Cursor shim is OAuth-first (no raw API-key variable in the plugin manifest).
-- OpenAI/Codex: LyraShield AI `0.1.10` was in review on 2026-08-12; current dashboard status is unverified.
+Public channel states were last checked on 2026-10-01. Private publisher dashboards remain
+`UNKNOWN` unless there is a current authenticated readback. See the [distribution channel ledger](./channels.md)
+for the current public links, versions, evidence, and next step for each channel. Directory status
+does not establish client compatibility.

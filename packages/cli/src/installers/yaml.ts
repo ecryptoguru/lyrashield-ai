@@ -15,6 +15,7 @@ export interface YamlMergeOptions {
   serverName: string
   value: unknown
   dryRun?: boolean
+  mode?: number
 }
 
 export interface YamlMergeResult {
@@ -23,7 +24,7 @@ export interface YamlMergeResult {
 }
 
 export async function mergeYaml(opts: YamlMergeOptions): Promise<YamlMergeResult> {
-  const { filePath, rootKey, serverName, value, dryRun } = opts
+  const { filePath, rootKey, serverName, value, dryRun, mode } = opts
   let content = ""
   let exists = false
   try {
@@ -37,8 +38,20 @@ export async function mergeYaml(opts: YamlMergeOptions): Promise<YamlMergeResult
   }
 
   const doc = content ? YAML.parseDocument(content) : new YAML.Document({})
-  if (!doc.contents || doc.contents instanceof YAML.Scalar) {
+  if (doc.errors.length > 0) {
+    throw new Error(
+      `${filePath} is not valid YAML. Fix or remove the file, then re-run the install.`
+    )
+  }
+  if (doc.contents === null) {
     doc.contents = doc.createNode({})
+  } else if (!(doc.contents instanceof YAML.YAMLMap)) {
+    throw new Error(
+      `${filePath} is not a YAML object. Fix or remove the file, then re-run the install.`
+    )
+  }
+  if (doc.has(rootKey) && !(doc.get(rootKey) instanceof YAML.YAMLMap)) {
+    throw new Error(`Cannot merge into the existing non-object value at ${rootKey}`)
   }
   const rootMap = doc.get(rootKey) as YAML.YAMLMap | undefined
   if (!rootMap) {
@@ -57,11 +70,11 @@ export async function mergeYaml(opts: YamlMergeOptions): Promise<YamlMergeResult
     return { changed: true }
   }
 
-  const backupPath = await backupFile(filePath)
+  const backupPath = await backupFile(filePath, { mode })
   // parent is the directory of the resolved installer target path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
-  await atomicWrite(filePath, newContent)
+  await atomicWrite(filePath, newContent, { expectedContent: exists ? content : null, mode })
 
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -93,11 +106,30 @@ export async function removeYaml(opts: YamlRemoveOptions): Promise<boolean> {
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const content = await readFile(filePath, "utf-8")
   const doc = YAML.parseDocument(content)
+  if (doc.errors.length > 0) {
+    throw new Error(
+      `${filePath} is not valid YAML. Fix or remove the file, then re-run the uninstall.`
+    )
+  }
+  if (doc.contents === null) return false
+  if (!(doc.contents instanceof YAML.YAMLMap)) {
+    throw new Error(
+      `${filePath} is not a YAML object. Fix or remove the file, then re-run the uninstall.`
+    )
+  }
+  if (doc.has(rootKey) && !(doc.get(rootKey) instanceof YAML.YAMLMap)) {
+    throw new Error(`Cannot remove from the existing non-object value at ${rootKey}`)
+  }
   const root = doc.get(rootKey) as YAML.YAMLMap | undefined
   if (!root || !root.has(serverName)) return false
   root.delete(serverName)
   if (root.items.length === 0) doc.delete(rootKey)
+  const newContent = doc.toString()
+  const candidate = YAML.parseDocument(newContent)
+  if (candidate.errors.length > 0) {
+    throw new Error(`Cannot safely remove ${rootKey}.${serverName} from this YAML file`)
+  }
   await backupFile(filePath)
-  await atomicWrite(filePath, doc.toString())
+  await atomicWrite(filePath, newContent, { expectedContent: content })
   return true
 }

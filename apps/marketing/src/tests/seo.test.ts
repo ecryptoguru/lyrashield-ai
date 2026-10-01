@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { parseJsonc } from "../lib/jsonc"
 import { tools } from "../lib/tools"
-import { allRoutes } from "../../scripts/redirects-lib.mjs"
+import { allRoutes, LEGACY_REDIRECTS } from "../../scripts/redirects-lib.mjs"
 
 function source(path: string): string {
   return readFileSync(new URL(path, import.meta.url), "utf8")
@@ -204,9 +204,9 @@ describe("marketing SEO metadata", () => {
     expect(wranglerConfig).toContain('"html_handling": "drop-trailing-slash"')
     expect(wranglerConfig).not.toContain("run_worker_first")
     // THE invariant, not spot-checks: every enumerated route carries a
-    // correct trailing-slash rule and no orphan rules exist. The route
-    // enumeration is the same scripts/redirects-lib.mjs the CI
-    // validate-redirects step and the --write regenerator use.
+    // correct trailing-slash rule and no orphan rules exist outside the
+    // explicit permanent aliases in redirects-lib.mjs. The route enumeration
+    // is the same source the CI validator and --write regenerator use.
     const redirectsRules = parseRedirectRules(redirects)
     const ruleBySource = new Map(redirectsRules.map((rule) => [rule.source, rule]))
     for (const route of allRoutes()) {
@@ -216,10 +216,11 @@ describe("marketing SEO metadata", () => {
       expect(rule?.code, `wrong status for ${route}/`).toBe("301")
     }
     const routeSlashForms = new Set(allRoutes().map((route) => `${route}/`))
+    const legacyRedirectSources = new Set(LEGACY_REDIRECTS.map((redirect) => redirect.source))
     for (const rule of redirectsRules) {
       if (rule.source.endsWith("/") && !rule.source.includes("index.html")) {
         expect(
-          routeSlashForms.has(rule.source),
+          routeSlashForms.has(rule.source) || legacyRedirectSources.has(rule.source),
           `orphan trailing-slash rule (no such route): ${rule.source}`
         ).toBe(true)
       }

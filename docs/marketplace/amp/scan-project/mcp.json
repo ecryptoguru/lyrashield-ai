@@ -1,0 +1,13 @@
+{
+  "lyrashield": {
+    "url": "https://app.lyrashieldai.com/api/mcp",
+    "includeTools": [
+      "lyrashield_list_workspaces",
+      "lyrashield_list_targets",
+      "lyrashield_get_scan_eligibility",
+      "lyrashield_scan_target",
+      "lyrashield_run_pr_scan",
+      "lyrashield_get_scan_status"
+    ]
+  }
+}

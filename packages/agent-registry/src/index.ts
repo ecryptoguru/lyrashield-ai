@@ -21,10 +21,12 @@ import type { AgentEntry, InstallStrategy } from "./types"
 //      agent. The same was true of `kiro`.
 //
 // Deliberately absent: `vscode`. It has a documented config-file path
-// (.vscode/mcp.json, root key `servers`), no generated VS Code shim exists, and
+// (.vscode/mcp.json, root key `servers`), no generated VS Code-specific shim exists, and
 // its plugin discovery path lacks client-runtime proof — mapping it here would reroute a
-// documented install onto an unverified one. Revisit only once a VS Code shim is
-// generated and the discovery path is confirmed.
+// documented install onto an unverified one. Its experimental Agent Plugin is
+// exposed as a separate GitHub Copilot in VS Code surface; the `vscode` install
+// name continues to select the documented config-file fallback until runtime
+// validation supports changing that default.
 const PREFERRED_PLUGIN_ID_BY_AGENT_ID: Readonly<Record<string, string>> = {
   "claude-code": "claude-code-agent-plugin",
   cursor: "cursor-agent-plugin",
@@ -34,7 +36,7 @@ const PREFERRED_PLUGIN_ID_BY_AGENT_ID: Readonly<Record<string, string>> = {
 }
 
 export function getAgent(id: string): AgentEntry | undefined {
-  return AGENTS.find((a) => a.id === id)
+  return AGENTS.find((a) => a.id === id || a.aliases?.includes(id))
 }
 
 /** Resolve the one recommended install path without hiding an explicit legacy id. */

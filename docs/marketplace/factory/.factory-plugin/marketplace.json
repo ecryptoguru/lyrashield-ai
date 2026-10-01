@@ -1,0 +1,17 @@
+{
+  "name": "lyrashield-marketplace",
+  "description": "Preparation marketplace for LyraShield AI Droid plugins.",
+  "owner": {
+    "name": "LyraShield AI",
+    "url": "https://lyrashieldai.com"
+  },
+  "plugins": [
+    {
+      "name": "lyrashield",
+      "description": "Evidence-aware security workflows for Factory Droid.",
+      "source": "./plugins/lyrashield",
+      "category": "security",
+      "tags": ["security", "mcp", "skills", "release-readiness"]
+    }
+  ]
+}

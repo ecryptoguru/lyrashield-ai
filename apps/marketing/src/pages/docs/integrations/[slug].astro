@@ -1,0 +1,172 @@
+---
+import AgentSnippet from "@components/AgentSnippet.astro"
+import DocsLayout from "@layouts/DocsLayout.astro"
+import {
+  CLI_CONFIG_WRITES_AVAILABLE,
+  CLI_PACKAGE_SPEC,
+  CLI_SKILLS_AVAILABLE,
+  getPublishedCliInstallCommand,
+} from "@lyrashield/agent-registry"
+import { buildDocsJsonLd } from "../../../lib/docs-metadata"
+import { buildIntegrationPageTitle } from "../../../lib/integration-page-title"
+import { listGeneratedIntegrationDocs } from "../../../lib/integration-doc-routes"
+
+export function getStaticPaths() {
+  return listGeneratedIntegrationDocs().map((agent) => ({
+    params: { slug: agent.docsSlug },
+    props: { agent },
+  }))
+}
+
+const { agent } = Astro.props
+const origin = Astro.site?.origin || "http://localhost:4321"
+const path = `/docs/integrations/${agent.docsSlug}`
+const title = buildIntegrationPageTitle(agent.displayName)
+const description = `Connect LyraShield to ${agent.displayName} using the documented ${agent.installStrategy.replaceAll("-", " ")} workflow.`
+const updatedDate = agent.verification.checkedOn
+const publishedCliInstallCommand = getPublishedCliInstallCommand(agent)
+const publishedCliPreviewCommand = publishedCliInstallCommand
+  ? `${publishedCliInstallCommand} --dry-run`
+  : null
+const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
+  origin,
+  path,
+  title,
+  description,
+  updatedDate,
+  breadcrumbLabel: agent.displayName,
+})
+const jsonLd: unknown[] = [techArticle, breadcrumbList]
+const strategyLabels = {
+  "agent-plugin": "Agent Plugin",
+  "config-file": "Client configuration file",
+  "vendor-cli": "Client's own CLI",
+  "guided-manual": "Guided manual setup",
+} as const
+const sourceUrl = agent.source?.url ?? agent.verification.reference
+const capabilities = agent.nativeCapabilities ?? []
+---
+
+<DocsLayout
+  title={title}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath={path}
+>
+  <h1>{agent.displayName}</h1>
+  <p>
+    This guide uses LyraShield's integration registry for the {agent.surface ?? "documented"} surface.
+    It shows the current setup strategy and client source; actual client loading and authenticated
+    runtime acceptance are tracked separately below.
+  </p>
+
+  <h2>Connection setup</h2>
+  <p>
+    The registry's setup path for this client is <strong>{strategyLabels[agent.installStrategy]}</strong>
+    {agent.preferredTransport ? <> over <strong>{agent.preferredTransport === "remote-http" ? "remote HTTP" : "local stdio"}</strong></> : null}.
+  </p>
+  {publishedCliPreviewCommand ? (
+    <>
+      <p>Preview the exact instructions available in the published CLI with <code>{publishedCliPreviewCommand}</code>.</p>
+      <pre><code>{publishedCliPreviewCommand}</code></pre>
+    </>
+  ) : (
+    <div class="callout callout--warn">
+      {agent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE ? (
+        <>
+          <strong>Manual setup for now:</strong> published CLI config writes are withheld while the safe
+          writer fix is pending release. Use the manual configuration below; CLI write support will
+          return after a fixed version is published.
+        </>
+      ) : (
+        <>
+          <strong>CLI installer support is pending:</strong> the published CLI package ({CLI_PACKAGE_SPEC})
+          predates this client's current setup contract. Follow the manual or client-native instructions
+          below; installer support will be documented after a compatible CLI version is published.
+        </>
+      )}
+    </div>
+  )}
+  {agent.installStrategy !== "agent-plugin" && (
+    <AgentSnippet agentId={agent.id} transport={agent.preferredTransport ?? undefined} />
+  )}
+  {agent.installStrategy === "agent-plugin" && (
+    <p>
+      Use the client's documented plugin or marketplace flow. See the shared{" "}
+      <a href="/docs/integrations/agent-plugins">Agent Plugins guide</a> for the portable package;
+      this page does not claim the package is listed or runtime-verified in this client.
+    </p>
+  )}
+
+  {agent.transports.includes("remote-http") && (
+    <div class="callout">
+      <strong>Hosted access:</strong> use OAuth when the client supports it. Hosted mutations require
+      a browser-confirmed delegation and are checked against its workspace, scope and expiry. An
+      API key alone does not authorize hosted mutations. See the{" "}
+      <a href="/docs/integrations/remote-mcp">Remote MCP guide</a>.
+    </div>
+  )}
+  {agent.transports.includes("stdio") && (
+    <div class="callout">
+      <strong>Local access:</strong> run <code>npx -y {CLI_PACKAGE_SPEC} login --oauth</code> to select a
+      workspace for local stdio, or use a scoped workspace API key in an appropriate private
+      environment. Never commit credentials.
+    </div>
+  )}
+
+  {agent.locations.length > 0 && (
+    <>
+      <h2>Configuration locations</h2>
+      <ul>
+        {agent.locations.map((location) => (
+          <li>
+            {location.scope}: <code>{location.path}</code>
+            {location.sharedByConvention ? " (shared by convention)" : ""}
+          </li>
+        ))}
+      </ul>
+    </>
+  )}
+
+  <h2>Native components and distribution</h2>
+  {capabilities.length > 0 ? (
+    <p>
+      Documented client capabilities: {capabilities.join(", ")}. These describe what the client can
+      load; they do not mean every component is included in the current LyraShield package.
+    </p>
+  ) : (
+    <p>No native plugin, skill, command, rule or hook capability is recorded for this surface.</p>
+  )}
+  {!CLI_SKILLS_AVAILABLE && capabilities.includes("skills") && (
+    <p>
+      The published CLI package ({CLI_PACKAGE_SPEC}) does not include a LyraShield <code>skills</code>
+      installer yet. Use the documented client-native skill or plugin route; any manual MCP setup on
+      this page remains available while CLI installer support is pending.
+    </p>
+  )}
+  {agent.distribution ? (
+    <p>
+      Distribution route: {agent.distribution.channel}; registry state{" "}
+      <code>{agent.distribution.state}</code>.{" "}
+      <a href={agent.distribution.url} target="_blank" rel="noreferrer">Client distribution documentation</a>.
+    </p>
+  ) : (
+    <p>No separate marketplace or distribution channel is recorded for this surface.</p>
+  )}
+
+  <h2>Support evidence</h2>
+  <p>
+    Registry tier: <code>{agent.supportTier}</code>. Evidence: <code>{agent.verification.evidence}</code>,
+    checked {updatedDate}. Client version: {agent.verification.clientVersion ?? "not recorded"};
+    tested platforms: {agent.verification.platforms.length > 0 ? agent.verification.platforms.join(", ") : "not recorded"}.
+    {agent.verification.receipt ? " A runtime receipt is recorded." : " No client runtime receipt is recorded."}
+    Marketplace state and runtime compatibility are separate claims.
+  </p>
+  {sourceUrl && (
+    <p>
+      Source: <a href={sourceUrl} target="_blank" rel="noreferrer">{agent.displayName} official documentation</a>.
+    </p>
+  )}
+</DocsLayout>

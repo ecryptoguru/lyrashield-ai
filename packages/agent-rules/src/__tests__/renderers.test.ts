@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { listRuleFormats, renderRule } from "../index.js"
+import { formatForRulesFile, listRuleFormats, renderRule, renderRuleForAgent } from "../index.js"
+import { getAgent } from "@lyrashield/agent-registry"
 
 describe("rule renderers", () => {
   const formats = listRuleFormats()
@@ -93,5 +94,21 @@ describe("rule renderers", () => {
     expect(rule.inner).toContain("terminal state")
     expect(rule.inner).toContain("retest outcome and scan reference")
     expect(rule.inner).toContain("separate independent-verification receipt")
+  })
+
+  it("renders Augment project rules as plain Markdown in the rules directory", () => {
+    const file = ".augment/rules/lyrashield.md"
+    const agent = getAgent("augment-vscode")
+
+    expect(formatForRulesFile(file)).toBe("agents-md")
+    expect(agent).toBeDefined()
+    const rule = renderRuleForAgent(agent!, file)
+    expect(rule.format).toBe("agents-md")
+    expect(rule.file).toBe(file)
+    expect(rule.content).toContain("lyrashield:begin")
+  })
+
+  it("renders Augment's root guidelines file as plain Markdown", () => {
+    expect(formatForRulesFile(".augment-guidelines")).toBe("agents-md")
   })
 })

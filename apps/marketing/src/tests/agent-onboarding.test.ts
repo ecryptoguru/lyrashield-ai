@@ -1,19 +1,39 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
+import { listPreferredAgents } from "@lyrashield/agent-registry"
 import { agentOnboarding, renderAgentOnboardingMarkdown } from "../lib/agent-onboarding"
 
 describe("agent onboarding contract", () => {
   it("labels supported workflows and delegated authorization accurately", () => {
     expect(agentOnboarding.commands).toEqual([
-      "npx lyrashield login --oauth",
-      "npx lyrashield init",
+      "npx --yes lyrashield@0.2.13 login --oauth",
+      "npx --yes lyrashield@0.2.13 init --dry-run",
     ])
+    expect(agentOnboarding.setupHeading).toBe("Preview local stdio setup")
+    expect(agentOnboarding.setupDescription).toContain(
+      "The second previews setup paths only; it does not write client configuration."
+    )
     expect(agentOnboarding.safety.join(" ")).toContain("Read-only")
     expect(agentOnboarding.safety.join(" ")).toContain("browser-confirmed connection grant")
-    expect(agentOnboarding.clients).toHaveLength(26)
+    expect(agentOnboarding.safety.join(" ")).toContain(
+      "config-file clients while the safe-writer fix is pending"
+    )
+    expect(
+      agentOnboarding.clients.find((client) => client.strategy === "config-file")?.strategyLabel
+    ).toBe("Manual config merge")
+    expect(agentOnboarding.clients).toHaveLength(listPreferredAgents().length)
+    expect(agentOnboarding.clients.map((client) => client.href)).toContain(
+      "/docs/integrations/claude-web"
+    )
+    expect(agentOnboarding.clients.map((client) => client.href)).toContain(
+      "/docs/integrations/replit-agent"
+    )
+    expect(agentOnboarding.clientGroups.map((group) => group.strategy)).toEqual(
+      expect.arrayContaining(["agent-plugin", "config-file", "guided-manual", "vendor-cli"])
+    )
     expect(
       agentOnboarding.clients.filter((client) => client.integrationKind === "standalone-cli")
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(
       agentOnboarding.clients.every(
         (client) =>
@@ -31,6 +51,9 @@ describe("agent onboarding contract", () => {
 
     expect(agentPage).toContain("agentOnboarding")
     expect(agentPage).toContain('data-cta-id="agents-start-setup"')
+    expect(agentPage).toContain("pending the safe-writer fix")
+    expect(agentPage).toContain("npx --yes lyrashield@0.2.13 init --dry-run")
+    expect(agentPage).not.toContain("npx lyrashield init")
     expect(markdownRoute).toContain('"Content-Type": "text/markdown; charset=utf-8"')
     expect(markdownRoute).toContain("renderAgentOnboardingMarkdown(origin)")
   })
@@ -49,6 +72,12 @@ describe("agent onboarding contract", () => {
     const body = await response.text()
     expect(body).toContain("# Release assurance for coding agents")
     expect(body).toContain("https://lyrashieldai.com/docs/integrations/agent-plugins")
+    expect(body).toContain("npx --yes lyrashield@0.2.13 init --dry-run")
+    expect(body).toContain("## Preview local stdio setup")
+    expect(body).toContain(
+      "The second previews setup paths only; it does not write client configuration."
+    )
+    expect(body).toContain("config-file clients while the safe-writer fix is pending")
     expect(body).not.toContain("${origin}")
   })
 
@@ -66,6 +95,11 @@ describe("agent onboarding contract", () => {
     const body = await response.text()
     expect(body).toContain("https://lyrashieldai.com/agents")
     expect(body).toContain("https://lyrashieldai.com/agents.md")
+    for (const slug of new Set(listPreferredAgents().map((agent) => agent.docsSlug))) {
+      expect(body, `llms.txt must include the ${slug} integration guide`).toContain(
+        `https://lyrashieldai.com/docs/integrations/${slug}`
+      )
+    }
     expect(body).not.toContain("${origin}")
   })
 

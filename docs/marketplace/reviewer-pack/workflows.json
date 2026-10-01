@@ -1,17 +1,98 @@
 {
-  "demoPolicy": "Use a sanitized reviewer workspace with no production data, secrets, customer content or live write targets.",
-  "positiveWorkflows": [
-    "Connect through OAuth, select exactly one workspace and complete a read-only MCP review.",
-    "List recent scans and open evidence without exposing credentials to the agent.",
-    "Request a browser-confirmed write-capable connection grant for synthetic targets and workflows.",
-    "Execute an authorized synthetic action, retry with the same idempotency key and poll its terminal result.",
-    "Try a conflicting retry and an out-of-grant action; confirm both fail closed.",
-    "Disconnect/revoke the connection and confirm subsequent MCP requests receive an OAuth challenge."
+  "preparation": "PREPARATION_NOT_RUN",
+  "candidate": {
+    "package": "@lyrashield/agent-plugin",
+    "version": "0.1.31",
+    "publishedPackageVersion": "0.1.30",
+    "portableSchema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+    "mcpSchema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+    "mcpServer": "lyrashield",
+    "transport": "streamable-http",
+    "endpoint": "https://app.lyrashieldai.com/api/mcp",
+    "onboardingSkill": "./skills/get-started/SKILL.md",
+    "workflowSkills": [
+      "get-started",
+      "review-changes",
+      "scan-project",
+      "fix-and-retest",
+      "launch-readiness"
+    ]
+  },
+  "sourceManifest": "../../../packages/agent-plugin/plugin/plugin.json -> extensions.com.openai.review.test_cases",
+  "demoPolicy": "Use a disposable reviewer account containing synthetic targets and findings only. Keep production credentials and data out of test access, package, screenshots, video and logs.",
+  "review": {
+    "test_cases": {
+      "positive": [
+        {
+          "description": "Connect to one workspace and enumerate its authorized targets",
+          "prompt": "Connect to LyraShield, let me choose one workspace, then show the targets I can access there.",
+          "tools_triggered": "lyrashield_list_workspaces, lyrashield_list_targets",
+          "expected_behavior": "List available workspaces, ask me to choose exactly one if needed, query targets only for that workspace, follow every nextCursor page, and report that the workflow is read-only. Do not reveal credential values."
+        },
+        {
+          "description": "Review a supplied code diff with the advisory-only workflow",
+          "prompt": "Review this supplied diff as an advisory check only; do not start a recorded scan:\n```diff\n+const token = \"example-secret\";\n+eval(input);\n```",
+          "tools_triggered": "lyrashield_check_diff",
+          "expected_behavior": "Check only the supplied diff, explain advisory findings and coverage limits, do not call a recorded scan tool, and do not claim that the code is secure."
+        },
+        {
+          "description": "Start an explicitly requested Quick PR scan on the synthetic demo target",
+          "prompt": "In the selected workspace, start a Quick PR scan on the existing synthetic demo repository target against its approved base and head refs. Return the scan or operation ID and final status.",
+          "tools_triggered": "lyrashield_get_scan_eligibility, lyrashield_run_pr_scan, lyrashield_get_scan_status",
+          "expected_behavior": "Use only the selected workspace and the pre-authorized synthetic target, check eligibility, start the explicitly requested Quick PR scan once, preserve its resumable ID, and report its terminal outcome and evidence limitations. Do not substitute a production target."
+        },
+        {
+          "description": "Explain a sample finding and retest only after the reviewer confirms the synthetic fix",
+          "prompt": "In the synthetic reviewer workspace, retrieve the sample finding, explain it, prepare a fix plan, and after I confirm the test fix was applied, queue the trusted retest and report its final evidence state.",
+          "tools_triggered": "lyrashield_get_findings, lyrashield_explain_finding, lyrashield_generate_fix_plan, lyrashield_verify_fix, lyrashield_get_scan_status",
+          "expected_behavior": "Read the synthetic finding and prepare a plan without claiming it was applied. Queue a retest only after my confirmation, retain the retest ID, and report the trusted terminal evidence state without upgrading incomplete evidence to a validated fix."
+        },
+        {
+          "description": "Read release readiness for an authorized synthetic target",
+          "prompt": "For the authorized synthetic target in my selected workspace, check release readiness and explain each blocked, stale, or missing gate.",
+          "tools_triggered": "lyrashield_get_launch_readiness",
+          "expected_behavior": "Read the target's readiness evidence, distinguish missing and stale gates from passed evidence, and avoid claiming certification, guaranteed security, or readiness for a different commit or artifact."
+        }
+      ],
+      "negative": [
+        {
+          "description": "Expected: treat an unrelated weather question as outside LyraShield's scope and answer without invoking LyraShield tools.",
+          "prompt": "What will the weather be tomorrow?"
+        },
+        {
+          "description": "Expected: explain that authorization is required and refuse or ask the user to connect an authorized target; do not enumerate, create, or scan a third-party repository target.",
+          "prompt": "Scan a private third-party repository that I do not own or have permission to test."
+        },
+        {
+          "description": "Expected: ask whether the user explicitly wants a recorded scan and clarify the authorized workspace, target, and depth; do not start or preflight potentially billable work from an ambiguous statement.",
+          "prompt": "These changes might need a security scan. Decide whether to run one."
+        }
+      ]
+    }
+  },
+  "supplementalSafetyChecks": [
+    {
+      "id": "conflicting-idempotency-retry",
+      "kind": "negative",
+      "status": "NOT_RUN",
+      "prompt": "Repeat the same authorized synthetic write with the original idempotency key but change the action payload.",
+      "expectedReceipt": "The server rejects the conflicting retry; the original action remains bound to its initial payload and no second action is created. Retain the sanitized operation IDs and denial reason."
+    },
+    {
+      "id": "revoked-connection",
+      "kind": "negative",
+      "status": "NOT_RUN",
+      "prompt": "Revoke the synthetic workspace connection, then attempt one hosted read and one hosted write.",
+      "expectedReceipt": "Both requests fail closed with reconnect guidance and no data or mutation; retain the sanitized authorization outcome without token values."
+    }
   ],
-  "safeFailures": [
-    "Deny the write scope and verify read-only calls still work while writes fail closed.",
-    "Choose a second workspace and verify the first workspace's evidence is not visible.",
-    "Use an expired or revoked token and verify reconnect guidance without logging the token.",
-    "Remove workspace permission, pause and revoke the connection, then confirm writes fail closed."
+  "submissionBlockers": [
+    "Private dashboard and existing plugin identity have not been inspected.",
+    "No dedicated reviewer account or synthetic workspace has been provisioned.",
+    "The explicit scan and retest cases have not been run; authorize only staging execution after confirming it is non-billable.",
+    "No accessible video walkthrough URL is prepared; this is required for an MCP directory review.",
+    "No OpenAI domain challenge or current production MCP tool scan has been completed.",
+    "Category selection is not prepared; choose a valid category in the publisher dashboard.",
+    "Screenshots are optional and are not declared; capture actual client discovery only after a named-version runtime test."
   ]
 }

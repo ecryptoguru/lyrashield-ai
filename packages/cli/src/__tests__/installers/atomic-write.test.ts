@@ -1,5 +1,16 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile, readFile } from "node:fs/promises"
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir as osTmpdir } from "node:os"
 import path from "node:path"
 
@@ -7,6 +18,10 @@ import path from "node:path"
 // (/var -> /private/var), which would otherwise trip the ancestor-chain guard
 // these tests exercise and make every case fail for the wrong reason.
 const tmpdir = async () => realpath(osTmpdir())
+const fsMockState = vi.hoisted(() => ({
+  beforeRename: undefined as ((from: string, to: string) => Promise<void>) | undefined,
+  failPrivateChmod: false,
+}))
 
 vi.mock("node:crypto", () => ({
   randomUUID: vi.fn(),
@@ -17,12 +32,33 @@ vi.mock("node:fs/promises", async () => {
   return {
     ...actual,
     lstat: vi.fn(),
+    open: vi.fn(async (...args: Parameters<typeof actual.open>) => {
+      const handle = await actual.open(...args)
+      if (!fsMockState.failPrivateChmod) return handle
+      return new Proxy(handle, {
+        get(target, property) {
+          if (property === "chmod") {
+            return async (mode: number) => {
+              if ((mode & 0o777) === 0o600) throw new Error("private mode denied")
+              return target.chmod(mode)
+            }
+          }
+          const value = Reflect.get(target, property, target) as unknown
+          return typeof value === "function" ? value.bind(target) : value
+        },
+      })
+    }),
+    rename: vi.fn(async (from: string, to: string) => {
+      await fsMockState.beforeRename?.(from, to)
+      return actual.rename(from, to)
+    }),
   }
 })
 
 import { randomUUID } from "node:crypto"
 import { lstat } from "node:fs/promises"
 import { atomicWrite } from "../../installers/atomic-write.js"
+import { mergeFile } from "../../installers/merge.js"
 
 const mockedRandomUUID = vi.mocked(randomUUID)
 const mockedLstat = vi.mocked(lstat)
@@ -40,6 +76,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(cwd, { recursive: true, force: true })
+  fsMockState.beforeRename = undefined
+  fsMockState.failPrivateChmod = false
   vi.clearAllMocks()
 })
 
@@ -79,6 +117,201 @@ describe("atomicWrite", () => {
     await atomicWrite(target, "new")
 
     expect(await readFile(target, "utf-8")).toBe("new")
+  })
+
+  it("preserves the mode of an existing config file", async () => {
+    const target = path.join(cwd, "private.json")
+    await writeFile(target, "old", { encoding: "utf-8", mode: 0o600 })
+    mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000009")
+
+    await atomicWrite(target, "new")
+
+    expect((await stat(target)).mode & 0o777).toBe(0o600)
+    expect(await readFile(target, "utf-8")).toBe("new")
+  })
+
+  it("applies an explicit mode before rename, overriding an existing mode", async () => {
+    const target = path.join(cwd, "inline-secret.json")
+    await writeFile(target, '{"old":true}\n', { encoding: "utf-8", mode: 0o644 })
+    mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000014")
+    let tempModeAtRename: number | undefined
+    fsMockState.beforeRename = async (from, to) => {
+      if (to === target) tempModeAtRename = (await stat(from)).mode & 0o777
+    }
+
+    const result = await mergeFile({
+      filePath: target,
+      format: "json",
+      rootKey: "mcpServers",
+      serverName: "lyrashield",
+      value: { env: { LYRASHIELD_API_KEY: "lsk_private_test" } },
+      chmod0600: true,
+    })
+
+    expect(result.changed).toBe(true)
+    expect(tempModeAtRename).toBe(0o600)
+    expect((await stat(target)).mode & 0o777).toBe(0o600)
+    expect((await stat(result.backupPath!)).mode & 0o777).toBe(0o600)
+  })
+
+  it.each([
+    { format: "json", rootKey: "mcpServers", extension: "json" },
+    { format: "jsonc", rootKey: "mcp", extension: "jsonc" },
+    { format: "toml", rootKey: "mcp_servers", extension: "toml" },
+    { format: "yaml", rootKey: "mcp_servers", extension: "yaml" },
+  ] as const)(
+    "applies a private mode before rename for a new inline-secret $format config",
+    async ({ format, rootKey, extension }) => {
+      const target = path.join(cwd, `new-inline-secret.${extension}`)
+      mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000015")
+      let tempModeAtRename: number | undefined
+      fsMockState.beforeRename = async (from, to) => {
+        if (to === target) tempModeAtRename = (await stat(from)).mode & 0o777
+      }
+
+      const result = await mergeFile({
+        filePath: target,
+        format,
+        rootKey,
+        serverName: "lyrashield",
+        value: { env: { LYRASHIELD_API_KEY: "lsk_private_test" } },
+        chmod0600: true,
+      })
+
+      expect(result.changed).toBe(true)
+      expect(tempModeAtRename).toBe(0o600)
+      expect((await stat(target)).mode & 0o777).toBe(0o600)
+    }
+  )
+
+  it("tightens an unchanged inline-secret config without reporting a content change", async () => {
+    const target = path.join(cwd, "legacy-inline-secret.json")
+    const value = { env: { LYRASHIELD_API_KEY: "lsk_private_test" } }
+    const current = JSON.stringify({ mcpServers: { lyrashield: value } }) + "\n"
+    await writeFile(target, current, { encoding: "utf-8", mode: 0o644 })
+    mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000017")
+    let tempModeAtRename: number | undefined
+    fsMockState.beforeRename = async (from, to) => {
+      if (to === target) tempModeAtRename = (await stat(from)).mode & 0o777
+    }
+
+    const result = await mergeFile({
+      filePath: target,
+      format: "json",
+      rootKey: "mcpServers",
+      serverName: "lyrashield",
+      value,
+      chmod0600: true,
+    })
+
+    expect(result.changed).toBe(false)
+    expect(tempModeAtRename).toBe(0o600)
+    expect((await stat(target)).mode & 0o777).toBe(0o600)
+    expect(await readFile(target, "utf-8")).toBe(current)
+  })
+
+  it("fails closed when a private mode cannot be applied", async () => {
+    const target = path.join(cwd, "inline-secret.json")
+    mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000016")
+    fsMockState.failPrivateChmod = true
+
+    await expect(
+      mergeFile({
+        filePath: target,
+        format: "json",
+        rootKey: "mcpServers",
+        serverName: "lyrashield",
+        value: { env: { LYRASHIELD_API_KEY: "lsk_private_test" } },
+        chmod0600: true,
+      })
+    ).rejects.toThrow(/private mode denied/)
+
+    await expect(readFile(target, "utf-8")).rejects.toThrow()
+    expect(await readdir(cwd)).toEqual([])
+    expect(fsMockState.beforeRename).toBeUndefined()
+  })
+
+  it("refuses a symlink destination without changing the link or its target", async () => {
+    const target = path.join(cwd, "shared.json")
+    const linkPath = path.join(cwd, "config.json")
+    await writeFile(target, "shared config", "utf-8")
+    await symlink(target, linkPath)
+    mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000010")
+
+    await expect(atomicWrite(linkPath, "replacement")).rejects.toThrow(/symlink/i)
+
+    expect((await lstat(linkPath)).isSymbolicLink()).toBe(true)
+    expect(await readlink(linkPath)).toBe(target)
+    expect(await readFile(target, "utf-8")).toBe("shared config")
+  })
+
+  it("removes the temporary file when the destination changes before rename", async () => {
+    const target = path.join(cwd, "config.json")
+    const fixedUuid = "00000000-0000-0000-0000-000000000011"
+    const expectedTmp = `${target}.${fixedUuid}.lyrashield-tmp`
+    await writeFile(target, "original", "utf-8")
+    mockedRandomUUID.mockReturnValue(fixedUuid)
+    let destinationChecks = 0
+
+    mockedLstat.mockImplementation(async (p) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      const result = await actual.lstat(p as string)
+      if (p === target && ++destinationChecks === 2) {
+        return {
+          dev: result.dev,
+          ino: result.ino + 1,
+          isFile: () => true,
+          isSymbolicLink: () => false,
+        } as unknown as Awaited<ReturnType<typeof lstat>>
+      }
+      return result
+    })
+
+    await expect(atomicWrite(target, "replacement")).rejects.toThrow(/destination changed/i)
+
+    expect(await readFile(target, "utf-8")).toBe("original")
+    await expect(readFile(expectedTmp, "utf-8")).rejects.toThrow()
+  })
+
+  it("preserves a same-inode edit made after the write began", async () => {
+    const target = path.join(cwd, "config.json")
+    await writeFile(target, "original", "utf-8")
+    mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000012")
+    let destinationChecks = 0
+
+    mockedLstat.mockImplementation(async (p) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      if (p === target && ++destinationChecks === 2) {
+        await writeFile(target, "concurrent edit", "utf-8")
+      }
+      return actual.lstat(p as string)
+    })
+
+    await expect(
+      atomicWrite(target, "replacement", { expectedContent: "original" })
+    ).rejects.toThrow(/contents changed/i)
+
+    expect(await readFile(target, "utf-8")).toBe("concurrent edit")
+  })
+
+  it("requires an expected-absent destination to remain absent", async () => {
+    const target = path.join(cwd, "new-config.json")
+    mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000013")
+    let destinationChecks = 0
+
+    mockedLstat.mockImplementation(async (p) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      if (p === target && ++destinationChecks === 2) {
+        await writeFile(target, "concurrent creation", "utf-8")
+      }
+      return actual.lstat(p as string)
+    })
+
+    await expect(atomicWrite(target, "replacement", { expectedContent: null })).rejects.toThrow(
+      /destination changed/i
+    )
+
+    expect(await readFile(target, "utf-8")).toBe("concurrent creation")
   })
 
   it("fails when an attacker pre-created the temp path as a file", async () => {
@@ -168,10 +401,19 @@ describe("atomicWrite", () => {
   it("rejects the final path when it is not a regular file after rename", async () => {
     const target = path.join(cwd, "config.json")
     mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000005")
+    let destinationChecks = 0
 
     mockedLstat.mockImplementation(async (p) => {
       if (p === target) {
-        return { isFile: () => false } as unknown as ReturnType<typeof lstat>
+        const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+        if (++destinationChecks >= 3) {
+          return {
+            isFile: () => false,
+            isSymbolicLink: () => false,
+          } as unknown as Awaited<ReturnType<typeof lstat>>
+        }
+        const result = await actual.lstat(p as string)
+        return result
       }
       const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
       return actual.lstat(p as string)

@@ -1,0 +1,7 @@
+# Use these GitHub subdirectory URLs after the product-source change is merged to public main.
+# They are preparation references and will not resolve to these files until then.
+https://github.com/ecryptoguru/lyrashield-ai/tree/main/docs/marketplace/lovable/skills/get-started
+https://github.com/ecryptoguru/lyrashield-ai/tree/main/docs/marketplace/lovable/skills/review-changes
+https://github.com/ecryptoguru/lyrashield-ai/tree/main/docs/marketplace/lovable/skills/scan-project
+https://github.com/ecryptoguru/lyrashield-ai/tree/main/docs/marketplace/lovable/skills/fix-and-retest
+https://github.com/ecryptoguru/lyrashield-ai/tree/main/docs/marketplace/lovable/skills/launch-readiness

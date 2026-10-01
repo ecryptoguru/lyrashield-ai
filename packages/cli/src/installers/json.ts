@@ -20,7 +20,11 @@ function setIn(
   for (let i = 0; i < path.length - 1; i++) {
     const key = path[i]!
     let next = current[key] as Record<string, unknown> | undefined
-    if (!next || typeof next !== "object" || Array.isArray(next)) {
+    if (Object.prototype.hasOwnProperty.call(current, key)) {
+      if (!isJsonObject(next)) {
+        throw new Error(`Cannot merge into the existing non-object value at ${key}`)
+      }
+    } else {
       next = {}
       current[key] = next
     }
@@ -54,6 +58,7 @@ export interface JsonMergeOptions {
   serverName: string
   value: unknown
   dryRun?: boolean
+  mode?: number
 }
 
 export interface JsonMergeResult {
@@ -62,7 +67,7 @@ export interface JsonMergeResult {
 }
 
 export async function mergeJson(opts: JsonMergeOptions): Promise<JsonMergeResult> {
-  const { filePath, rootKey, serverName, value, dryRun } = opts
+  const { filePath, rootKey, serverName, value, dryRun, mode } = opts
   let original = "{}"
   let exists = false
   try {
@@ -92,11 +97,11 @@ export async function mergeJson(opts: JsonMergeOptions): Promise<JsonMergeResult
     return { changed: true }
   }
 
-  const backupPath = await backupFile(filePath)
+  const backupPath = await backupFile(filePath, { mode })
   // parent is the directory of the resolved installer target path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
-  await atomicWrite(filePath, newContent)
+  await atomicWrite(filePath, newContent, { expectedContent: exists ? original : null, mode })
 
   // re-read and verify
   // filePath is the resolved installer target path for this workspace.
@@ -128,6 +133,9 @@ export async function removeJson(opts: JsonRemoveOptions): Promise<boolean> {
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const original = await readFile(filePath, "utf-8")
   const parsed = parseJsonObject(original, filePath)
+  if (Object.prototype.hasOwnProperty.call(parsed, rootKey) && !isJsonObject(parsed[rootKey])) {
+    throw new Error(`Cannot remove from the existing non-object value at ${rootKey}`)
+  }
   const root = isJsonObject(parsed[rootKey]) ? parsed[rootKey] : undefined
   if (!root || !(serverName in root)) return false
   delete root[serverName]
@@ -135,6 +143,8 @@ export async function removeJson(opts: JsonRemoveOptions): Promise<boolean> {
   const indent = detectIndent(original)
   const trailing = original.match(/\n\s*$/) ? "\n" : ""
   await backupFile(filePath)
-  await atomicWrite(filePath, JSON.stringify(parsed, null, indent) + trailing)
+  await atomicWrite(filePath, JSON.stringify(parsed, null, indent) + trailing, {
+    expectedContent: original,
+  })
   return true
 }

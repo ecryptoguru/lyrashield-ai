@@ -1,0 +1,5 @@
+{
+  "serverName": "LyraShield AI",
+  "serverUrl": "https://app.lyrashieldai.com/api/mcp",
+  "authentication": "OAuth 2.0"
+}

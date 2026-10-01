@@ -15,3 +15,7 @@ apps/marketing/worker-configuration.d.ts
 apps/web/next-env.d.ts
 # Plugin templates are installed as-is into user environments; do not reformat.
 packages/agent-plugin/plugin
+# Keep the official MCP Registry schema byte-for-byte so its provenance hash is verifiable.
+docs/marketplace/mcp-registry/schema/server.schema.json
+# Marketplace copies of the legacy skill preserve the canonical template bytes.
+docs/marketplace/**/skills/lyrashield/SKILL.md

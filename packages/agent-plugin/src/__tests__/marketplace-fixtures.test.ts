@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises"
+import { createHash } from "node:crypto"
+import { spawnSync } from "node:child_process"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { createAllTools } from "@lyrashield/mcp"
@@ -7,6 +9,25 @@ const repoRoot = path.resolve(new URL("../../../../", import.meta.url).pathname)
 const marketplaceRoot = path.join(repoRoot, "docs", "marketplace")
 
 describe("marketplace fixtures", () => {
+  it("validates MCP Registry preparation against the raw vendored schema offline", async () => {
+    const schemaPath = path.join(marketplaceRoot, "mcp-registry", "schema", "server.schema.json")
+    const schema = await readFile(schemaPath)
+    const schemaHash = createHash("sha256").update(schema).digest("hex")
+    const provenance = await readFile(
+      path.join(marketplaceRoot, "mcp-registry", "schema", "PROVENANCE.md"),
+      "utf8"
+    )
+    expect(provenance).toContain(schemaHash)
+
+    const validation = spawnSync(
+      process.execPath,
+      [path.join(marketplaceRoot, "mcp-registry", "validate.mjs")],
+      { cwd: repoRoot, encoding: "utf8" }
+    )
+    expect(validation.status, validation.stderr || validation.stdout).toBe(0)
+    expect(validation.stdout).toContain("PREPARATION ONLY")
+  })
+
   it("keeps Codebuff's curated MCP allowlist read-only", async () => {
     const { default: agent } =
       await import("../../../../docs/marketplace/codebuff/lyrashield-review")
@@ -44,7 +65,7 @@ describe("marketplace fixtures", () => {
     const cline = JSON.parse(
       await readFile(path.join(marketplaceRoot, "cline", "submission.json"), "utf8")
     ) as Record<string, unknown>
-    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.30" })
+    expect(gemini).toMatchObject({ name: "lyrashield-ai", version: "0.1.31" })
     expect(gemini.mcpServers).toBeTruthy()
     expect(cline).toMatchObject({
       license: "Apache-2.0",
@@ -57,18 +78,65 @@ describe("marketplace fixtures", () => {
     const workflows = JSON.parse(
       await readFile(path.join(marketplaceRoot, "reviewer-pack", "workflows.json"), "utf8")
     ) as {
-      positiveWorkflows: string[]
-      safeFailures: string[]
+      review: {
+        test_cases: {
+          positive: Array<{ description: string; prompt: string; expected_behavior: string }>
+          negative: Array<{ description: string; prompt: string }>
+        }
+      }
+      supplementalSafetyChecks: Array<{
+        id: string
+        kind: string
+        status: string
+        expectedReceipt: string
+      }>
+    }
+    const pluginManifest = JSON.parse(
+      await readFile(
+        path.join(repoRoot, "packages", "agent-plugin", "plugin", "plugin.json"),
+        "utf8"
+      )
+    ) as {
+      extensions: {
+        "com.openai": {
+          review: { test_cases: typeof workflows.review.test_cases }
+        }
+      }
     }
     const openclaw = await readFile(path.join(marketplaceRoot, "openclaw", "SKILL.md"), "utf8")
     const reviewerGuide = await readFile(
       path.join(marketplaceRoot, "reviewer-pack", "README.md"),
       "utf8"
     )
-    expect(workflows.positiveWorkflows.join(" ")).toContain("idempotency key")
-    expect(workflows.safeFailures.join(" ")).toContain("revoke")
-    expect(reviewerGuide).toContain(`${workflows.positiveWorkflows.length} positive workflows`)
-    expect(reviewerGuide).toContain(`${workflows.safeFailures.length} safe failures`)
+    const testCases = workflows.review.test_cases
+    expect(testCases).toEqual(pluginManifest.extensions["com.openai"].review.test_cases)
+    expect(testCases.positive).toHaveLength(5)
+    expect(testCases.negative).toHaveLength(3)
+    expect(
+      testCases.positive.every((testCase) => testCase.prompt && testCase.expected_behavior)
+    ).toBe(true)
+    expect(testCases.negative.every((testCase) => testCase.prompt && testCase.description)).toBe(
+      true
+    )
+    expect(workflows.supplementalSafetyChecks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "conflicting-idempotency-retry",
+          kind: "negative",
+          status: "NOT_RUN",
+          expectedReceipt: expect.stringContaining("rejects the conflicting retry"),
+        }),
+        expect.objectContaining({
+          id: "revoked-connection",
+          kind: "negative",
+          status: "NOT_RUN",
+          expectedReceipt: expect.stringContaining("fail closed"),
+        }),
+      ])
+    )
+    expect(reviewerGuide).toContain("five positive and three negative cases")
+    expect(reviewerGuide).toContain("They are separate from OpenAI's required three negative cases")
+    expect(reviewerGuide).toMatch(/marked\s+`NOT_RUN`/)
     expect(openclaw).toContain("not an official OpenClaw channel")
   })
 })

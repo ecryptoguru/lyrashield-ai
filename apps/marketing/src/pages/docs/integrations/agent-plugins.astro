@@ -5,8 +5,8 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield Agent Plugin — Coding Agent Setup"
 const description =
-  "Install the LyraShield Agent Plugin through each coding client's documented local, marketplace or MCP activation path."
-const updatedDate = "2026-09-09"
+  "Install LyraShield in supported coding clients with the published CLI, or follow the client-specific setup guide."
+const updatedDate = "2026-10-01"
 
 // Kept in the same order as the launch-client table below.
 const launchClients = [
@@ -37,8 +37,8 @@ const launchClients = [
   {
     name: "Kiro",
     slug: "kiro",
-    path: ".kiro/settings/mcp.json",
-    cliDefault: "Guided MCP merge",
+    path: "Kiro Power in preparation; local MCP fallback available now",
+    cliDefault: "MCP configuration fallback",
   },
 ]
 
@@ -48,12 +48,12 @@ const faqItems = [
     a: "It is a portable package that carries the LyraShield MCP descriptor and security guidance. Each client still controls activation through its own documented local, marketplace or MCP settings path.",
   },
   {
-    q: "Which clients can install the Agent Plugin?",
-    a: "The package has descriptors for Claude Code, Cursor, OpenAI Codex, GitHub Copilot and Kiro. Cursor accepts a local copy; Claude, Codex and Copilot use marketplace registration; Kiro uses its MCP settings file. Other agents follow their own guide.",
+    q: "Which clients have a native package path?",
+    a: "The portable package has descriptors for Claude Code, Cursor, OpenAI Codex and GitHub Copilot. Kiro's native Power is the intended path on supported surfaces, but LyraShield's Power distribution is still in preparation and is not publicly installable; use the MCP settings fallback meanwhile. Other clients follow the client-specific setup in their guide.",
   },
   {
     q: "Do I need to log in before installing the plugin?",
-    a: "Kiro's local stdio path needs npx lyrashield login --oauth first. Remote plugin paths complete hosted OAuth inside the client when the connection starts.",
+    a: "Kiro's local stdio MCP fallback needs npx --yes lyrashield@0.2.13 login --oauth first. The Power package is not yet publicly available. Remote plugin paths complete hosted OAuth inside the client when the connection starts.",
   },
   {
     q: "Does the plugin let the agent change my code on its own?",
@@ -61,7 +61,7 @@ const faqItems = [
   },
   {
     q: "Why does VS Code use an MCP config file instead of the plugin?",
-    a: "No generated VS Code Agent Plugin shim exists. Its documented config path is the .vscode/mcp.json file that npx lyrashield install vscode writes. The VS Code guide documents the servers root key and per-entry stdio type. Runtime verification remains client-specific.",
+    a: "No generated VS Code Agent Plugin shim exists. Its documented config path is .vscode/mcp.json. The published CLI can preview that installer with npx --yes lyrashield@0.2.13 install vscode --dry-run, but writes are on hold pending the safe-writer fix. The VS Code guide documents the servers root key and per-entry stdio type. Runtime verification remains client-specific.",
   },
 ]
 
@@ -109,14 +109,27 @@ const jsonLd: unknown[] = [
 
   <h2>Start with the LyraShield CLI</h2>
   <p>
-    Run the installer for the client you use. It copies the package only where the client documents
-    a local discovery path; otherwise it prints the exact marketplace or MCP settings step.
+    The currently published npm CLI is{" "}
+    <a href="https://www.npmjs.com/package/lyrashield/v/0.2.13" target="_blank" rel="noreferrer">
+      version 0.2.13
+    </a>
+    . Its installer registry covers the clients listed below; newer integration guides can appear
+    before their installers ship in the CLI. For other clients, use the linked guide's documented
+    setup path and do not assume that a generic CLI command is available.
   </p>
-  <pre><code>npx lyrashield install &lt;agent&gt;
-npx lyrashield install &lt;agent&gt; --dry-run</code></pre>
+  <pre><code>{`npx --yes lyrashield@0.2.13 install claude-code --dry-run
+npx --yes lyrashield@0.2.13 install cursor --dry-run
+npx --yes lyrashield@0.2.13 install openai-codex --dry-run
+npx --yes lyrashield@0.2.13 install github-copilot --dry-run
+npx --yes lyrashield@0.2.13 install kiro --dry-run`}</code></pre>
   <p>
-    <code>npx lyrashield init</code> detects installed clients and follows the same rules. A dry run
-    executes no vendor command and writes no file.
+    These commands preview the published release's installer behavior without writing files. Keep
+    <code>--dry-run</code>: config-writing installers in version <code>0.2.13</code> are on hold
+    pending a safe-writer fix. Use each linked guide's manual steps or wait for a published CLI
+    release that clears this gate. The published CLI's <code>init</code> command is likewise limited
+    to the clients included in version <code>0.2.13</code>; preview it with{" "}
+    <code>npx --yes lyrashield@0.2.13 init --dry-run</code>. A preview does not prove the client
+    discovered or authenticated the integration.
   </p>
 
   <div class="callout">
@@ -125,17 +138,20 @@ npx lyrashield install &lt;agent&gt; --dry-run</code></pre>
     explicit CI fallback; do not commit it.
   </div>
 
-  <h2>The five launch clients</h2>
+  <h2>Install paths in the published CLI</h2>
   <p>
-    The package contains client artifacts for these five clients. Every other agent LyraShield
-    supports uses the config-file, vendor-CLI or guided-manual path in its own guide.
+    The portable source package contains client artifacts for the four plugin clients below. Kiro's
+    native Power distribution is in preparation and is not publicly installable yet; its currently
+    published CLI installer prints the MCP settings fallback. Other clients use the configuration,
+    vendor CLI or guided-manual path documented in their own guide until an installer is included in
+    a published CLI release.
   </p>
   <table>
     <thead>
       <tr>
         <th>Client</th>
         <th>Activation</th>
-        <th>CLI behavior</th>
+        <th>Published CLI 0.2.13</th>
       </tr>
     </thead>
     <tbody>
@@ -151,8 +167,10 @@ npx lyrashield install &lt;agent&gt; --dry-run</code></pre>
 
   <div class="callout">
     <strong>VS Code uses MCP configuration:</strong> no generated Agent Plugin shim exists for VS
-    Code. Use <code>npx lyrashield install vscode</code> or follow the{" "}
-    <a href="/docs/integrations/vscode">VS Code guide</a>.
+    Code. The published CLI can preview its config-file path, but do not apply config writes from
+    version <code>0.2.13</code> while its safe-writer fix is pending. Preview the installer with{" "}
+    <code>npx --yes lyrashield@0.2.13 install vscode --dry-run</code>; see the{" "}
+    <a href="/docs/integrations/vscode">VS Code guide</a> for the current settings and manual path.
   </div>
 
   <h2>What the skill adds</h2>
@@ -177,10 +195,10 @@ npx lyrashield install &lt;agent&gt; --dry-run</code></pre>
 
   <h2>Uninstall</h2>
   <p>
-    The CLI removes only files or configuration it manages. Marketplace and UI installations must
-    be removed through that client's own plugin manager.
+    Marketplace and UI installations must be removed through that client's own plugin manager.
+    Preview CLI-managed removal only until the safe-writer fix is published.
   </p>
-  <pre><code>npx lyrashield uninstall &lt;agent&gt;</code></pre>
+  <pre><code>npx --yes lyrashield@0.2.13 uninstall cursor --dry-run</code></pre>
 
   <h2>Frequently asked questions</h2>
   {faqItems.map((item) => (

@@ -8,6 +8,7 @@ import {
   uploadScanAttachment,
 } from "@lyrashield/sdk"
 import {
+  IDEMPOTENCY_KEY_PROPERTY,
   getClient,
   makeErrorResult,
   makeToolResult,
@@ -68,6 +69,7 @@ export function createUploadScanAttachmentTool(context: ToolHandlerContext): Mcp
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         filename: {
           type: "string",
@@ -134,6 +136,7 @@ export function createDeleteScanAttachmentTool(context: ToolHandlerContext): Mcp
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         attachmentId: { type: "string", description: "Attachment ID to delete" },
       },
@@ -164,6 +167,7 @@ export function createRequestFixPrTool(context: ToolHandlerContext): McpTool {
       type: "object",
       additionalProperties: false,
       properties: {
+        ...IDEMPOTENCY_KEY_PROPERTY,
         workspaceId: { type: "string", description: "Workspace ID" },
         proposalId: {
           type: "string",

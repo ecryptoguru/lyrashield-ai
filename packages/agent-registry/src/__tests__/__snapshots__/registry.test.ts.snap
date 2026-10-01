@@ -35,6 +35,42 @@ exports[`renderConfig snapshot — every agent × every transport > antigravity 
 }"
 `;
 
+exports[`renderConfig snapshot — every agent × every transport > auggie × remote-http 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_test_lyrashield_api_key"
+      },
+      "type": "http"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > auggie × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp@0.2.11"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > augment-jetbrains × stdio 1`] = `[Error: Agent "augment-jetbrains" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > augment-vscode × stdio 1`] = `[Error: Agent "augment-vscode" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > claude-code × remote-http 1`] = `
 "{
   "mcpServers": {
@@ -68,6 +104,10 @@ exports[`renderConfig snapshot — every agent × every transport > claude-code 
 `;
 
 exports[`renderConfig snapshot — every agent × every transport > claude-code-agent-plugin × remote-http 1`] = `[Error: Agent "claude-code-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > claude-desktop × remote-http 1`] = `[Error: Agent "claude-desktop" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > claude-web × remote-http 1`] = `[Error: Agent "claude-web" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > cline × remote-http 1`] = `
 "{
@@ -132,6 +172,8 @@ exports[`renderConfig snapshot — every agent × every transport > codebuff × 
   }
 }"
 `;
+
+exports[`renderConfig snapshot — every agent × every transport > continue × stdio 1`] = `[Error: Agent "continue" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > copilot-cli × remote-http 1`] = `
 "{
@@ -233,6 +275,23 @@ exports[`renderConfig snapshot — every agent × every transport > devin-cli ×
 }"
 `;
 
+exports[`renderConfig snapshot — every agent × every transport > devin-desktop × remote-http 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "serverUrl": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_test_lyrashield_api_key"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > factory-droid × remote-http 1`] = `[Error: Agent "factory-droid" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > factory-droid × stdio 1`] = `[Error: Agent "factory-droid" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > gemini-cli × remote-http 1`] = `
 "{
   "mcpServers": {
@@ -266,6 +325,8 @@ exports[`renderConfig snapshot — every agent × every transport > gemini-cli �
 
 exports[`renderConfig snapshot — every agent × every transport > github-copilot-agent-plugin × remote-http 1`] = `[Error: Agent "github-copilot-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
 
+exports[`renderConfig snapshot — every agent × every transport > github-copilot-cloud-agent × remote-http 1`] = `[Error: Agent "github-copilot-cloud-agent" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > goose × remote-http 1`] = `[Error: Agent "goose" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > goose × stdio 1`] = `[Error: Agent "goose" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
@@ -291,7 +352,57 @@ exports[`renderConfig snapshot — every agent × every transport > hermes × st
       LYRASHIELD_API_KEY: "\${env:LYRASHIELD_API_KEY}""
 `;
 
+exports[`renderConfig snapshot — every agent × every transport > jetbrains × remote-http 1`] = `[Error: Agent "jetbrains" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > jetbrains × stdio 1`] = `[Error: Agent "jetbrains" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > jetbrains-claude-agent × stdio 1`] = `[Error: Agent "jetbrains-claude-agent" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > jetbrains-codex-agent × stdio 1`] = `[Error: Agent "jetbrains-codex-agent" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > junie × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp@0.2.11"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > junie-cli × remote-http 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > junie-cli × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp@0.2.11"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}"
+`;
 
 exports[`renderConfig snapshot — every agent × every transport > kilo-code × remote-http 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
@@ -301,9 +412,15 @@ exports[`renderConfig snapshot — every agent × every transport > kiro-agent-p
 
 exports[`renderConfig snapshot — every agent × every transport > kiro-agent-plugin × stdio 1`] = `[Error: Agent "kiro-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
 
+exports[`renderConfig snapshot — every agent × every transport > lovable × remote-http 1`] = `[Error: Agent "lovable" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > mimo-code × remote-http 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > mimo-code × stdio 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > mistral-vibe × remote-http 1`] = `[Error: Agent "mistral-vibe" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > mistral-vibe × stdio 1`] = `[Error: Agent "mistral-vibe" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > oh-my-pi × remote-http 1`] = `
 "{
@@ -395,6 +512,98 @@ exports[`renderConfig snapshot — every agent × every transport > opencode × 
 }"
 `;
 
+exports[`renderConfig snapshot — every agent × every transport > opencode-v2 × remote-http 1`] = `[Error: Agent "opencode-v2" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > opencode-v2 × stdio 1`] = `[Error: Agent "opencode-v2" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > picode × remote-http 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > picode × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp@0.2.11"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > qoder × remote-http 1`] = `[Error: Agent "qoder" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > qoder × stdio 1`] = `[Error: Agent "qoder" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > qoder-cli × remote-http 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "type": "http"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > qoder-cli × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp@0.2.11"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > qwen-code × remote-http 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "httpUrl": "https://app.lyrashieldai.com/api/mcp"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > qwen-code × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp@0.2.11"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > replit-agent × remote-http 1`] = `[Error: Agent "replit-agent" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > roo-code × remote-http 1`] = `
 "{
   "mcpServers": {
@@ -426,6 +635,8 @@ exports[`renderConfig snapshot — every agent × every transport > roo-code × 
   }
 }"
 `;
+
+exports[`renderConfig snapshot — every agent × every transport > v0 × remote-http 1`] = `[Error: Agent "v0" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > vscode × remote-http 1`] = `
 "{

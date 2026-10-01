@@ -1,0 +1,34 @@
+---
+interface Props {
+  agentId: string
+  scope?: "global" | "project"
+}
+
+const { agentId, scope } = Astro.props
+const command = [
+  "npx",
+  "--yes",
+  "lyrashield@0.2.13",
+  "install",
+  agentId,
+  scope ? `--${scope}` : null,
+  "--dry-run",
+]
+  .filter(Boolean)
+  .join(" ")
+---
+
+<h2>Preview the config entry with the published CLI</h2>
+<p>
+  <code>lyrashield@0.2.13</code> can preview the LyraShield server entry for this client. Keep{" "}
+  <code>--dry-run</code>: config-writing installers are withheld while the safe-writer fix is pending
+  release. The preview command changes no files.
+</p>
+<pre><code>{command}</code></pre>
+<p>
+  Manually merge only the LyraShield server entry into the documented configuration file below.
+  Preserve existing servers and unrelated settings, retain comments where the format supports them,
+  and edit the existing file through its current path without replacing a symlink or overwriting the
+  whole file. Restart or reload the client and complete a read-only authenticated call; a config
+  entry or CLI doctor result alone does not prove the client loaded the integration.
+</p>

@@ -4,6 +4,10 @@ export type Transport = "stdio" | "remote-http"
 export type SupportTier = "NATIVE" | "VERIFIED" | "COMPATIBLE" | "EXPERIMENTAL" | "DEPRECATED"
 export type VerificationEvidence = "DOCUMENTATION" | "PACKAGE_CONFORMANCE" | "CLIENT_RUNTIME"
 export type VerificationPlatform = "darwin" | "linux" | "win32"
+export type ClientSurface = "cli" | "ide" | "desktop" | "web" | "cloud"
+export type NativeCapability = "plugin" | "skills" | "commands" | "rules" | "hooks"
+export type DistributionState =
+  "DIRECT" | "PREPARATION" | "SUBMITTED" | "APPROVED" | "PUBLISHED" | "REJECTED" | "UNKNOWN"
 
 export interface IntegrationVerification {
   evidence: VerificationEvidence
@@ -33,7 +37,16 @@ export interface ConfigLocation {
 
 export interface AgentEntry {
   id: string
+  aliases?: string[]
   displayName: string
+  /** Shared product heading for separately configured client surfaces. */
+  productFamily?: { id: string; name: string }
+  surface?: ClientSurface
+  versionConstraints?: { minimum?: string; maximum?: string; note?: string }
+  /** Documented component types the client surface can discover; not a claim that LyraShield ships each type. */
+  nativeCapabilities?: NativeCapability[]
+  skillLocations?: ConfigLocation[]
+  distribution?: { channel: string; url: string; state: DistributionState }
   docsSlug: string
   installStrategy: InstallStrategy
   format: ConfigFormat | null

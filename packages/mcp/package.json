@@ -1,6 +1,7 @@
 {
   "name": "@lyrashield/mcp",
-  "version": "0.2.11",
+  "version": "0.2.12",
+  "mcpName": "io.github.ecryptoguru/lyrashield-ai",
   "description": "LyraShield AI MCP server \u2014 run bounded security scans, review recorded evidence states, and drive the fix/verify loop from your AI coding tool.",
   "license": "Apache-2.0",
   "type": "module",

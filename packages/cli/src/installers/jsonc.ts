@@ -2,6 +2,7 @@ import { access, readFile } from "node:fs/promises"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { modify, applyEdits, parse as parseJsonc } from "jsonc-parser"
+import { isJsonObject } from "@lyrashield/types"
 import { backupFile } from "./backup.js"
 import { atomicWrite } from "./atomic-write.js"
 
@@ -15,6 +16,7 @@ export interface JsoncMergeOptions {
   serverName: string
   value: unknown
   dryRun?: boolean
+  mode?: number
 }
 
 export interface JsoncMergeResult {
@@ -23,18 +25,29 @@ export interface JsoncMergeResult {
 }
 
 export async function mergeJsonc(opts: JsoncMergeOptions): Promise<JsoncMergeResult> {
-  const { filePath, rootKey, serverName, value, dryRun } = opts
+  const { filePath, rootKey, serverName, value, dryRun, mode } = opts
   let original = "{}"
+  let exists = false
   try {
     await access(filePath)
     // filePath is the resolved installer target path for this workspace.
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     original = await readFile(filePath, "utf-8")
+    exists = true
   } catch {
     // new file
   }
 
-  const before = parseJsonc(original) ?? {}
+  const parseErrors: Parameters<typeof parseJsonc>[1] = []
+  const before = parseJsonc(original, parseErrors)
+  if (parseErrors.length > 0 || !isJsonObject(before)) {
+    throw new Error(
+      `${filePath} is not a valid JSONC object. Fix or remove the file, then re-run the install.`
+    )
+  }
+  if (Object.prototype.hasOwnProperty.call(before, rootKey) && !isJsonObject(before[rootKey])) {
+    throw new Error(`Cannot merge into the existing non-object value at ${rootKey}`)
+  }
   const edits = modify(original, [rootKey, serverName], value, {
     formattingOptions: {
       insertSpaces: true,
@@ -50,14 +63,7 @@ export async function mergeJsonc(opts: JsoncMergeOptions): Promise<JsoncMergeRes
   const newContent = applyEdits(original, edits)
   const after = parseJsonc(newContent) ?? {}
 
-  if (
-    before &&
-    after &&
-    equals(
-      (before as Record<string, unknown>)[rootKey],
-      (after as Record<string, unknown>)[rootKey]
-    )
-  ) {
+  if (isJsonObject(after) && equals(before[rootKey], after[rootKey])) {
     // No meaningful change at this root key.
     return { changed: false }
   }
@@ -66,11 +72,11 @@ export async function mergeJsonc(opts: JsoncMergeOptions): Promise<JsoncMergeRes
     return { changed: true }
   }
 
-  const backupPath = await backupFile(filePath)
+  const backupPath = await backupFile(filePath, { mode })
   // parent is the directory of the resolved installer target path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
-  await atomicWrite(filePath, newContent)
+  await atomicWrite(filePath, newContent, { expectedContent: exists ? original : null, mode })
 
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -101,8 +107,18 @@ export async function removeJsonc(opts: JsoncRemoveOptions): Promise<boolean> {
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const original = await readFile(filePath, "utf-8")
-  const before = (parseJsonc(original) ?? {}) as Record<string, unknown>
-  const root = before[rootKey] as Record<string, unknown> | undefined
+  const parseErrors: Parameters<typeof parseJsonc>[1] = []
+  const parsed = parseJsonc(original, parseErrors)
+  if (parseErrors.length > 0 || (parsed !== undefined && !isJsonObject(parsed))) {
+    throw new Error(
+      `${filePath} is not a valid JSONC object. Fix or remove the file, then re-run the uninstall.`
+    )
+  }
+  const before = parsed ?? {}
+  if (Object.prototype.hasOwnProperty.call(before, rootKey) && !isJsonObject(before[rootKey])) {
+    throw new Error(`Cannot remove from the existing non-object value at ${rootKey}`)
+  }
+  const root = isJsonObject(before[rootKey]) ? before[rootKey] : undefined
   if (!root || !(serverName in root)) return false
 
   const edits = modify(original, [rootKey, serverName], undefined, {
@@ -111,7 +127,12 @@ export async function removeJsonc(opts: JsoncRemoveOptions): Promise<boolean> {
   if (!edits.length) return false
 
   const newContent = applyEdits(original, edits)
+  const candidateErrors: Parameters<typeof parseJsonc>[1] = []
+  const candidate = parseJsonc(newContent, candidateErrors)
+  if (candidateErrors.length > 0 || !isJsonObject(candidate)) {
+    throw new Error(`Cannot safely remove ${rootKey}.${serverName} from this JSONC file`)
+  }
   await backupFile(filePath)
-  await atomicWrite(filePath, newContent)
+  await atomicWrite(filePath, newContent, { expectedContent: original })
   return true
 }

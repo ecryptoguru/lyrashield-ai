@@ -1,6 +1,7 @@
 ---
 import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
+import CliConfigPreview from "@components/integrations/CliConfigPreview.astro"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -34,12 +35,7 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
     {" "}under the <code>mcp_servers:</code> key.
   </p>
 
-  <h2>Install with the CLI</h2>
-  <p>
-    Run <code>npx lyrashield install hermes</code> to merge the LyraShield entry into the documented
-    user configuration file. Use <code>--dry-run</code> first if you want to inspect the change.
-  </p>
-  <pre><code>npx lyrashield install hermes</code></pre>
+  <CliConfigPreview agentId="hermes" />
 
   <h2>Remote OAuth setup (recommended)</h2>
   <p>

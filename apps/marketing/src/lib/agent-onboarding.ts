@@ -7,7 +7,7 @@ import type { AgentEntry } from "@lyrashield/agent-registry"
  */
 const STRATEGY_LABEL: Record<AgentEntry["installStrategy"], string> = {
   "agent-plugin": "Agent Plugin",
-  "config-file": "Writes a config file",
+  "config-file": "Manual config merge",
   "vendor-cli": "Uses the agent's own CLI",
   "guided-manual": "Shows values to paste",
 }
@@ -87,12 +87,20 @@ export const agentOnboarding = {
   title: "Release assurance for coding agents",
   description:
     "Give your coding agent evidence-backed checks, reviewable fix proposals and a fresh retest before you ship.",
-  commands: ["npx lyrashield login --oauth", "npx lyrashield init"],
+  setupHeading: "Preview local stdio setup",
+  setupDescription:
+    "The first command starts local workspace OAuth. The second previews setup paths only; it does not write client configuration. Hosted OAuth starts inside supported clients, including Pi; Aider uses the standalone CLI or CI path. Follow each client guide for activation and verification.",
+  commands: [
+    "npx --yes lyrashield@0.2.13 login --oauth",
+    "npx --yes lyrashield@0.2.13 init --dry-run",
+  ],
   workflow: ["Target", "Review", "Evidence", "Fix proposal", "Retest", "Report"],
   safety: [
     "Read-only tools are available after workspace authentication.",
     "Fixes are proposals for review, not automatic code changes or merges.",
     "Hosted writes require a browser-confirmed connection grant and execution-time scope checks. Nondelegated callers receive connect_required; local stdio clients use local approval.",
+    "Published CLI 0.2.13 setup is preview-only for config-file clients while the safe-writer fix is pending. Use each client guide to merge only the LyraShield entry, preserving existing settings, comments where supported, and symlinks.",
+    "A CLI preview, config entry, or doctor result does not prove client discovery or authentication; restart the client and complete a read-only authenticated call.",
   ],
   clients,
   clientGroups: buildClientGroups(clients),
@@ -142,10 +150,12 @@ export function renderAgentOnboardingMarkdown(origin: string): string {
     "",
     agentOnboarding.description,
     "",
-    "## Setup",
+    `## ${agentOnboarding.setupHeading}`,
     "~~~sh",
     ...agentOnboarding.commands,
     "~~~",
+    "",
+    agentOnboarding.setupDescription,
     "",
     "## Safety boundaries",
     ...agentOnboarding.safety.map((item) => `- ${item}`),

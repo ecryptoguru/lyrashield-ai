@@ -3,8 +3,9 @@
  *
  * Single source of truth for both the `_redirects` trailing-slash rules and the
  * tests that assert them: every function returns plain data derived from the
- * same filesystem/content sources Astro builds from, using only Node builtins
- * so it runs in a bare clone (the validate-*.mjs convention) and in vitest.
+ * same filesystem/content sources Astro builds from, including the preferred
+ * registry used by generated integration guides, and runs in validation
+ * scripts and vitest.
  *
  * The enumeration deliberately mirrors the sources `astro.config.mjs`'s
  * `contentLastmod()` walks and the shapes the Workers asset layer serves:
@@ -15,9 +16,27 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { register } from "tsx/esm/api"
+
+register()
+const { listGeneratedIntegrationDocs } = await import("../src/lib/integration-doc-routes.ts")
 
 const here = dirname(fileURLToPath(import.meta.url))
 const marketingRoot = join(here, "..")
+
+/** Permanent aliases retained after canonical route changes. */
+export const LEGACY_REDIRECTS = [
+  {
+    source: "/docs/integrations/picode",
+    target: "/docs/integrations/pi",
+    code: "301",
+  },
+  {
+    source: "/docs/integrations/picode/",
+    target: "/docs/integrations/pi",
+    code: "301",
+  },
+]
 
 /** Pages excluded from trailing-slash rules. */
 const EXCLUDED_PAGES = new Set(["index", "404"])
@@ -127,6 +146,7 @@ function docsPages() {
     for (const entry of listDir(dir)) {
       const full = `${dir}/${entry}`
       if (entry.endsWith(".astro")) {
+        if (entry.startsWith("[") && entry.endsWith("].astro")) continue
         let route = `${prefix}/${entry.replace(/\.astro$/, "")}`
         if (route.endsWith("/index")) route = route.slice(0, -"/index".length)
         routes.push(route)
@@ -136,6 +156,9 @@ function docsPages() {
     }
   }
   walk("src/pages/docs", "/docs")
+  routes.push(
+    ...listGeneratedIntegrationDocs().map((agent) => `/docs/integrations/${agent.docsSlug}`)
+  )
   return routes.sort()
 }
 

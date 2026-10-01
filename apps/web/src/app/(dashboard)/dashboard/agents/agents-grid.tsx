@@ -1,171 +1,317 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Select } from "@lyrashield/ui"
-import { Check, Copy, ExternalLink, Terminal, CircleDashed } from "lucide-react"
+import { Check, Copy, ExternalLink, CircleDashed } from "lucide-react"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 
+type InstallStrategy = "config-file" | "vendor-cli" | "guided-manual" | "agent-plugin"
+type Scope = "project" | "global"
+
+type AgentLocation = { scope: Scope; path: string; sharedByConvention: boolean }
+
+export interface AgentCardData {
+  id: string
+  aliases?: string[]
+  displayName: string
+  productFamily?: { id: string; name: string }
+  docsSlug: string
+  surface?: "ide" | "cli" | "cloud" | "desktop" | "web"
+  installStrategy: InstallStrategy
+  locations: AgentLocation[]
+  pluginLocations?: AgentLocation[]
+  skillLocations?: AgentLocation[]
+  nativeCapabilities?: string[]
+  rulesFiles: string[]
+  manualInstructions?: string
+  installCommand: string | null
+}
+
+type AgentFamily = { id: string; name: string; agents: AgentCardData[] }
+
 type StrategyLabel =
-  | "Auto-installs a config file"
+  | "MCP config setup"
   | "Uses your agent's own installer"
   | "Shows values to paste"
   | "Installs a portable Agent Plugin"
 
-export interface AgentCardData {
-  id: string
-  displayName: string
-  docsSlug: string
-  installStrategy: "config-file" | "vendor-cli" | "guided-manual" | "agent-plugin"
-  locations: { scope: "project" | "global"; path: string; sharedByConvention: boolean }[]
-  pluginLocations?: { scope: "project" | "global"; path: string; sharedByConvention: boolean }[]
-  rulesFiles: string[]
-}
-
-function strategyLabel(s: AgentCardData["installStrategy"]): StrategyLabel {
-  if (s === "config-file") return "Auto-installs a config file"
-  if (s === "vendor-cli") return "Uses your agent's own installer"
-  if (s === "agent-plugin") return "Installs a portable Agent Plugin"
+function strategyLabel(strategy: InstallStrategy): StrategyLabel {
+  if (strategy === "config-file") return "MCP config setup"
+  if (strategy === "vendor-cli") return "Uses your agent's own installer"
+  if (strategy === "agent-plugin") return "Installs a portable Agent Plugin"
   return "Shows values to paste"
 }
 
-function StrategyBadge({ strategy }: { strategy: AgentCardData["installStrategy"] }) {
-  const label = strategyLabel(strategy)
+function StrategyBadge({ strategy }: { strategy: InstallStrategy }) {
   const variant =
     strategy === "config-file"
       ? ("success" as const)
-      : strategy === "vendor-cli"
+      : strategy === "vendor-cli" || strategy === "agent-plugin"
         ? ("info" as const)
-        : strategy === "agent-plugin"
-          ? ("info" as const)
-          : ("muted" as const)
+        : ("muted" as const)
   return (
     <Badge variant={variant} className="shrink-0 text-xs">
-      {label}
+      {strategyLabel(strategy)}
     </Badge>
   )
 }
 
-function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: string }) {
+function familyFor(agent: AgentCardData) {
+  return agent.productFamily ?? { id: agent.id, name: agent.displayName }
+}
+
+function groupFamilies(agents: AgentCardData[]): AgentFamily[] {
+  const groups = new Map<string, AgentFamily>()
+  for (const agent of agents) {
+    const family = familyFor(agent)
+    const group = groups.get(family.id) ?? { ...family, agents: [] }
+    group.agents.push(agent)
+    groups.set(family.id, group)
+  }
+  return [...groups.values()]
+}
+
+function surfaceMatches(agent: AgentCardData, query: string): boolean {
+  const normalized = query.trim().toLocaleLowerCase()
+  if (!normalized) return true
+  return [agent.id, agent.displayName, ...(agent.aliases ?? [])].some((value) =>
+    value.toLocaleLowerCase().includes(normalized)
+  )
+}
+
+function locationText(locations: AgentLocation[]) {
+  return locations.map((location) => `${location.scope}: ${location.path}`)
+}
+
+function AgentCard({
+  family,
+  visibleAgents,
+  selectedId,
+  onSelect,
+  docsBaseUrl,
+  publishedCliVersion,
+}: {
+  family: AgentFamily
+  visibleAgents: AgentCardData[]
+  selectedId: string
+  onSelect: (agentId: string) => void
+  docsBaseUrl: string
+  publishedCliVersion: string
+}) {
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
-  const installCmd = `npx lyrashield install ${agent.id}`
-  const locations = agent.pluginLocations?.length ? agent.pluginLocations : agent.locations
-  const primaryLocation = locations[0]?.path ?? null
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const copyGeneration = useRef(0)
+  const selected = visibleAgents.find((agent) => agent.id === selectedId) ?? visibleAgents[0]!
+  const pluginLocations = selected.pluginLocations?.length ? selected.pluginLocations : []
+  const configLocations = pluginLocations.length ? pluginLocations : selected.locations
+  const pluginProvidesSkills = selected.installStrategy === "agent-plugin"
+  const ruleFiles = pluginProvidesSkills ? [] : selected.rulesFiles
+
+  useEffect(
+    () => () => {
+      copyGeneration.current += 1
+      if (copyTimer.current) clearTimeout(copyTimer.current)
+    },
+    []
+  )
 
   async function handleCopy() {
+    if (!selected.installCommand) return
+    const generation = ++copyGeneration.current
     setCopyError(null)
+    setCopied(false)
+    if (copyTimer.current) clearTimeout(copyTimer.current)
     try {
-      await writeClipboard(installCmd)
+      await writeClipboard(selected.installCommand)
+      if (copyGeneration.current !== generation) return
       setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
+      copyTimer.current = setTimeout(() => setCopied(false), 2000)
     } catch {
+      if (copyGeneration.current !== generation) return
       setCopyError("Copy failed — select the command manually.")
     }
   }
 
+  function handleSelect(agentId: string) {
+    copyGeneration.current += 1
+    setCopied(false)
+    setCopyError(null)
+    if (copyTimer.current) clearTimeout(copyTimer.current)
+    onSelect(agentId)
+  }
+
+  const familyTitleId = `agent-family-${family.id}`
+
   return (
-    <Card className="flex min-h-full flex-col">
+    <Card role="group" aria-labelledby={familyTitleId} className="flex min-w-0 flex-col">
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle as="h2" className="min-w-0 flex-1 text-base leading-tight tracking-tight">
-            {agent.displayName}
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <CardTitle
+            id={familyTitleId}
+            as="h2"
+            className="min-w-0 flex-1 text-base leading-tight tracking-tight"
+          >
+            {family.name}
           </CardTitle>
-          <StrategyBadge strategy={agent.installStrategy} />
+          <StrategyBadge strategy={selected.installStrategy} />
         </div>
-        <div className="mt-1.5 flex items-center gap-1.5">
+        {visibleAgents.length > 1 ? (
+          <label className="mt-3 block space-y-1.5">
+            <span className="text-muted-foreground text-xs font-medium">Client surface</span>
+            <Select
+              aria-label={`Choose ${family.name} client surface`}
+              value={selected.id}
+              onChange={(event) => handleSelect(event.target.value)}
+              className="h-10 w-full"
+            >
+              {visibleAgents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.displayName}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : (
+          <p className="text-muted-foreground mt-3 text-xs leading-5">
+            Surface: {selected.displayName}
+          </p>
+        )}
+        <div className="mt-2 flex min-w-0 items-center gap-1.5">
           <CircleDashed className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />
-          <span className="text-muted-foreground text-xs leading-5 font-medium">
-            Verify local setup with lyrashield doctor
+          <span className="text-muted-foreground min-w-0 text-xs leading-5 font-medium">
+            {selected.surface === "cloud" || selected.surface === "web"
+              ? "After activation, confirm the hosted connection and available LyraShield tools."
+              : "Verify after activation with LyraShield doctor."}
           </span>
         </div>
-        {primaryLocation ? (
-          <p className="text-muted-foreground mt-2 line-clamp-2 font-mono text-xs leading-5 break-all">
-            {locations.map((l) => l.path).join(" · ")}
-          </p>
+        {configLocations.length > 0 ? (
+          <div className="text-muted-foreground mt-2 space-y-0.5 font-mono text-xs leading-5 break-all">
+            {locationText(configLocations).map((location) => (
+              <p key={location}>{location}</p>
+            ))}
+          </div>
         ) : (
           <p className="text-muted-foreground mt-2 text-xs leading-5">
             Managed inside the agent UI
           </p>
         )}
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-4 pt-0">
-        {agent.rulesFiles.length > 0 ? (
-          <div className="space-y-1.5">
-            <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-              Rules / skills
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {agent.rulesFiles.map((file) => (
-                <code
-                  key={file}
-                  className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-xs leading-5"
+      <CardContent className="flex min-w-0 flex-1 flex-col gap-4 pt-0">
+        <div className="space-y-3">
+          {pluginProvidesSkills ? (
+            <div className="space-y-1">
+              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Skills
+              </p>
+              <p className="text-muted-foreground text-xs leading-5">
+                Workflow skills ship with the Agent Plugin; no separate skills install is needed.
+              </p>
+            </div>
+          ) : selected.skillLocations?.length ? (
+            <div className="space-y-1">
+              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Skills
+              </p>
+              {locationText(selected.skillLocations).map((location) => (
+                <p
+                  key={location}
+                  className="text-muted-foreground font-mono text-xs leading-5 break-all"
                 >
-                  {file}
-                </code>
+                  {location}
+                </p>
               ))}
             </div>
-            <p className="text-muted-foreground text-xs leading-4">
-              Keep in sync with{" "}
-              <code className="bg-muted rounded px-1 py-0 font-mono text-xs">
-                lyrashield rules add
-              </code>
-            </p>
-          </div>
-        ) : (
-          <div className="min-h-8" />
-        )}
-
-        <div className="mt-auto flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <code className="bg-muted min-w-0 flex-1 truncate rounded-md px-2.5 py-2 font-mono text-xs">
-              {installCmd}
-            </code>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void handleCopy()}
-              aria-label={`Copy install command for ${agent.displayName}`}
-              className="min-h-11 min-w-11 shrink-0"
-            >
-              {copied ? (
-                <Check className="size-4" aria-hidden="true" />
-              ) : (
-                <Copy className="size-4" aria-hidden="true" />
-              )}
-              <span className="sr-only sm:not-sr-only sm:ml-1">{copied ? "Copied" : "Copy"}</span>
-            </Button>
-          </div>
-          {copyError ? (
-            <p role="alert" className="text-destructive text-xs">
-              {copyError}
-            </p>
           ) : null}
 
-          <div className="grid grid-cols-2 gap-2">
-            <Link
-              href={`/dashboard/agents/${agent.id}`}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold whitespace-nowrap transition-colors sm:min-h-9"
-            >
-              Set up
-            </Link>
-            <a
-              href={`${docsBaseUrl}/${agent.docsSlug}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-card hover:bg-accent inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-medium whitespace-nowrap transition-colors sm:min-h-9"
-            >
-              <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
-              Docs
-            </a>
-            <div
-              className="bg-muted/60 text-muted-foreground col-span-2 inline-flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-md border px-2 font-mono text-xs sm:min-h-9"
-              title={installCmd}
-            >
-              <Terminal className="size-3 shrink-0" aria-hidden="true" />
-              <span className="truncate">{agent.id}</span>
+          {ruleFiles.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Rules
+              </p>
+              {ruleFiles.map((file) => (
+                <p
+                  key={file}
+                  className="text-muted-foreground font-mono text-xs leading-5 break-all"
+                >
+                  {file}
+                </p>
+              ))}
             </div>
+          ) : null}
+        </div>
+
+        {selected.installCommand ? (
+          <div className="mt-auto space-y-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <code
+                className="bg-muted min-w-0 flex-1 truncate rounded-md px-2.5 py-2 font-mono text-xs"
+                aria-label="Published install command"
+                title={selected.installCommand}
+              >
+                {selected.installCommand}
+              </code>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleCopy()}
+                aria-label={
+                  copied
+                    ? `Install command for ${selected.displayName}: copied`
+                    : `Copy install command for ${selected.displayName}`
+                }
+                className="min-h-11 min-w-11 shrink-0"
+              >
+                {copied ? (
+                  <Check className="size-4" aria-hidden="true" />
+                ) : (
+                  <Copy className="size-4" aria-hidden="true" />
+                )}
+                <span className="sr-only sm:not-sr-only sm:ml-1">{copied ? "Copied" : "Copy"}</span>
+              </Button>
+            </div>
+            <p role="status" aria-live="polite" className="sr-only">
+              {copied ? "Copied to clipboard." : ""}
+            </p>
+            {copyError ? (
+              <p role="alert" className="text-destructive text-xs">
+                {copyError}
+              </p>
+            ) : null}
           </div>
+        ) : (
+          <p role="status" className="text-muted-foreground mt-auto text-xs leading-5">
+            No installer for this surface in the published LyraShield CLI {publishedCliVersion}. Use
+            its setup guide below.
+          </p>
+        )}
+
+        {selected.manualInstructions ? (
+          <details className="bg-muted/40 rounded-md border px-3 py-2 text-xs leading-5">
+            <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2">
+              Manual setup notes
+            </summary>
+            <p className="text-muted-foreground mt-2 break-words">{selected.manualInstructions}</p>
+          </details>
+        ) : null}
+
+        <div className="mt-auto grid grid-cols-2 gap-2">
+          <Link
+            href={`/dashboard/agents/${selected.id}`}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold whitespace-nowrap transition-colors sm:min-h-9"
+          >
+            Set up
+          </Link>
+          <a
+            href={`${docsBaseUrl}/${selected.docsSlug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-card hover:bg-accent inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-md border px-2 text-xs font-medium whitespace-nowrap transition-colors sm:min-h-9"
+          >
+            <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
+            Docs
+          </a>
         </div>
       </CardContent>
     </Card>
@@ -175,24 +321,29 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
 export function AgentsGrid({
   agents,
   docsBaseUrl,
+  publishedCliVersion,
 }: {
   agents: AgentCardData[]
   docsBaseUrl: string
+  publishedCliVersion: string
 }) {
-  // Client-side filtering over the existing registry data only: a search
-  // across display name and ID, plus a strategy select. No remote search and
-  // no second registry abstraction.
   const [search, setSearch] = useState("")
-  const [strategy, setStrategy] = useState<"all" | AgentCardData["installStrategy"]>("all")
+  const [strategy, setStrategy] = useState<"all" | InstallStrategy>("all")
+  const [selectedByFamily, setSelectedByFamily] = useState<Record<string, string>>({})
+  const query = search.trim().toLocaleLowerCase()
 
-  const filtered = agents.filter((agent) => {
-    const matchesSearch =
-      search.trim() === "" ||
-      agent.displayName.toLowerCase().includes(search.trim().toLowerCase()) ||
-      agent.id.toLowerCase().includes(search.trim().toLowerCase())
-    const matchesStrategy = strategy === "all" || agent.installStrategy === strategy
-    return matchesSearch && matchesStrategy
-  })
+  const visibleFamilies = groupFamilies(agents)
+    .map((family) => {
+      const strategyAgents = family.agents.filter(
+        (agent) => strategy === "all" || agent.installStrategy === strategy
+      )
+      const familyMatches = family.name.toLocaleLowerCase().includes(query)
+      const visibleAgents = strategyAgents.filter(
+        (agent) => !query || familyMatches || surfaceMatches(agent, query)
+      )
+      return { family, visibleAgents }
+    })
+    .filter(({ visibleAgents }) => visibleAgents.length > 0)
 
   return (
     <div className="space-y-4">
@@ -203,16 +354,16 @@ export function AgentsGrid({
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search coding agents…"
           aria-label="Search coding agents"
-          className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none sm:max-w-xs"
+          className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-base focus-visible:ring-2 focus-visible:outline-none sm:h-9 sm:max-w-xs sm:text-sm"
         />
         <Select
           aria-label="Filter by setup strategy"
           value={strategy}
           onChange={(event) => setStrategy(event.target.value as typeof strategy)}
-          className="h-9 w-full sm:w-48"
+          className="h-10 w-full sm:h-9 sm:w-48"
         >
           <option value="all">All strategies</option>
-          <option value="config-file">Auto-installs</option>
+          <option value="config-file">MCP config setup</option>
           <option value="vendor-cli">Vendor installer</option>
           <option value="guided-manual">Guided manual</option>
           <option value="agent-plugin">Agent Plugin</option>
@@ -221,14 +372,22 @@ export function AgentsGrid({
 
       {agents.length === 0 ? (
         <p className="text-muted-foreground text-sm">No agents registered.</p>
-      ) : filtered.length === 0 ? (
+      ) : visibleFamilies.length === 0 ? (
         <p className="text-muted-foreground text-sm" role="status">
           No coding agents match this search or strategy.
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((agent) => (
-            <AgentCard key={agent.id} agent={agent} docsBaseUrl={docsBaseUrl} />
+          {visibleFamilies.map(({ family, visibleAgents }) => (
+            <AgentCard
+              key={family.id}
+              family={family}
+              visibleAgents={visibleAgents}
+              selectedId={selectedByFamily[family.id] ?? visibleAgents[0]!.id}
+              onSelect={(id) => setSelectedByFamily((current) => ({ ...current, [family.id]: id }))}
+              docsBaseUrl={docsBaseUrl}
+              publishedCliVersion={publishedCliVersion}
+            />
           ))}
         </div>
       )}

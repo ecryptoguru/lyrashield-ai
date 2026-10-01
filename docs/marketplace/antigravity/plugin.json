@@ -1,0 +1,5 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "lyrashield",
+  "description": "Evidence-backed release-assurance workflows and authorized LyraShield MCP tools."
+}

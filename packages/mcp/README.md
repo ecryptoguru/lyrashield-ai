@@ -1,5 +1,8 @@
 # @lyrashield/mcp
 
+The source checkout prepares `0.2.12` as an unpublished release candidate. The latest public npm
+version remains `0.2.11` until the coordinated release is published.
+
 The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an AI coding tool run bounded security scans, read findings with their recorded evidence states and drive the fix → verify loop against your LyraShield workspace — without leaving the editor.
 
 Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0). The server is also distributed as a portable Agent Plugin via [`@lyrashield/agent-plugin`](../agent-plugin/README.md) (Agent Plugins v1.0.0).
@@ -119,7 +122,7 @@ Per-client config for OpenCode, Kilo Code, Cline, Zed and the cloud platforms li
 
 ### Supported-client boundary
 
-The integration registry contains 30 install entries resolving to 26 preferred client surfaces.
+The integration registry contains 48 install entries resolving to 44 preferred client surfaces.
 Entries are `COMPATIBLE`, `EXPERIMENTAL` or `DEPRECATED` and record either documentation,
 package-conformance or retained runtime evidence. Presence in the registry means LyraShield can
 render or guide that client's current config shape; it does not claim that every client release
@@ -132,7 +135,7 @@ completed an authenticated runtime matrix.
   `.vscode/mcp.json` path.
 - Config or guided setup: VS Code, Zed, Gemini CLI, OpenCode, Kilo Code, Cline, JetBrains,
   Amp, Roo Code, MiMo Code, Codebuff, Oh-My-Pi, Copilot CLI, Goose, Aider, Devin CLI, Antigravity,
-  PiCode, OpenClaw, Hermes and Devin, subject to each registry entry's support tier.
+  Pi (legacy registry ID `picode`), OpenClaw, Hermes and Devin, subject to each registry entry's support tier.
 
 Run `lyrashield init` for detected clients or `lyrashield install <agent>` for one explicit target.
 Do not reuse a nearby client's JSON/TOML shape: root keys, transport names, credential interpolation
@@ -189,7 +192,7 @@ The remote endpoint runs the same guard and tools as stdio. Hosted responses are
 
 - **New delegated OAuth connection:** Connect is the authorization. Matching hosted mutations require `idempotencyKey`; reuse it only for identical retries.
 - **Connection outside its grant:** the call fails closed. Reconnect to authorize the required access.
-- **API key or legacy token on the hosted endpoint:** one structured `connect_required` response naming the OAuth connect path. Nothing is queued and nothing executes — connect a client first.
+- **Hosted mutations using an API key or legacy token without a valid delegation:** one structured `connect_required` response naming the OAuth connect path. Nothing is queued and no mutation executes — connect an OAuth-capable client first. Read-only tools remain available to an authorized read-scoped API key.
 - **Local stdio with an API key:** the REST API enforces the credential's scope, current role, target authorization and budget without a second LyraShield prompt.
 - **Read-only credential:** mutations are denied.
 
@@ -197,7 +200,7 @@ Coding-agent hosts may impose their own tool permission dialogs. LyraShield cann
 
 ## Compatibility receipts
 
-- Package: `@lyrashield/mcp` 0.2.11; runtime: Node.js 24 or newer.
+- Candidate package: `@lyrashield/mcp` 0.2.12 (unpublished); runtime: Node.js 24 or newer.
 - SDK lock: `@modelcontextprotocol/sdk` 1.30.1; stable protocol `2025-11-25`, with the older
   negotiated versions listed above.
 - `pnpm --filter @lyrashield/mcp test` covers protocol negotiation for every SDK-supported

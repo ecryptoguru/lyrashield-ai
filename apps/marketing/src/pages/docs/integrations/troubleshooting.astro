@@ -7,7 +7,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP Troubleshooting & Gotchas"
 const description =
   "Fix common LyraShield MCP problems: VS Code uses 'servers' not 'mcpServers', Gemini CLI uses httpUrl, Zed uses context_servers, OpenCode uses {env:VAR}."
-const updatedDate = "2026-07-31"
+const updatedDate = "2026-10-01"
 
 const agents = listAgents()
 
@@ -84,13 +84,15 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout">
-    <strong>Faster than reading this page:</strong> every gotcha below is exactly what <code
-      >npx lyrashield install &lt;agent&gt;</code
-    > writes correctly for you automatically — that's the same reason it exists. If you've hand-edited
-    a config and something's wrong, run <code>npx lyrashield doctor</code> first; it checks whether
-    your file has the LyraShield entry at the <em>correct root key</em> for your agent and tells you
-    exactly which file and key are wrong, rather than making you compare your file against this table
-    by eye.
+    <strong>Start with a CLI preview:</strong> the published <code>lyrashield@0.2.13</code> can show
+    setup instructions for clients in its registry with{" "}
+    <code>npx --yes lyrashield@0.2.13 install &lt;agent&gt; --dry-run</code>. Keep{" "}
+    <code>--dry-run</code>: config-file writes are withheld while the safe-writer fix is pending.
+    Use the client's current guide to manually merge only LyraShield's entry, preserving existing
+    settings, comments where supported, and symlinks. For a client the CLI does not recognize, use
+    its guide directly. A pinned <code>npx --yes lyrashield@0.2.13 doctor</code> checks known local
+    config locations and root-key mismatches; neither command proves client discovery or
+    authentication. Complete a read-only authenticated call in the client.
   </div>
 
   <h2>Quick reference — per-agent gotchas</h2>
@@ -136,9 +138,9 @@ const jsonLd: unknown[] = [
   <h2>General debugging steps</h2>
   <ol>
     <li>
-      Run <code>npx lyrashield doctor</code>. It reports your API key source, whether the API is
-      reachable and for every detected agent whether LyraShield is configured at the correct root
-      key — this covers most of the gotchas on this page in one command.
+      Run <code>npx --yes lyrashield@0.2.13 doctor</code> to report the configured credential source
+      and API reachability, then check known local config locations for detected agents. Use the
+      client guide to verify marketplace activation, OAuth and authenticated tool discovery.
     </li>
     <li>
       Confirm the <code>LYRASHIELD_API_KEY</code> environment variable is set <em>inside the server

@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { allRoutes } from "./redirects-lib.mjs"
+import { allRoutes, LEGACY_REDIRECTS } from "./redirects-lib.mjs"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const redirectsPath = join(here, "../public/_redirects")
@@ -82,16 +82,37 @@ function main() {
       continue
     }
     if (rule.target !== route || rule.code !== "301") {
-      errors.push(`wrong rule for ${slashForm}: got "${rule.source} ${rule.target} ${rule.code}", expected "${slashForm} ${route} 301"`)
+      errors.push(
+        `wrong rule for ${slashForm}: got "${rule.source} ${rule.target} ${rule.code}", expected "${slashForm} ${route} 301"`
+      )
+    }
+  }
+
+  for (const expected of LEGACY_REDIRECTS) {
+    const rule = bySource.get(expected.source)
+    if (!rule) {
+      errors.push(
+        `missing legacy redirect: ${expected.source} -> ${expected.target} ${expected.code}`
+      )
+    } else if (rule.target !== expected.target || rule.code !== expected.code) {
+      errors.push(
+        `wrong legacy redirect for ${expected.source}: got "${rule.source} ${rule.target} ${rule.code}", expected "${expected.source} ${expected.target} ${expected.code}"`
+      )
     }
   }
 
   const routeSet = new Set(routes.map((route) => `${route}/`))
+  const legacySources = new Set(LEGACY_REDIRECTS.map((redirect) => redirect.source))
   const indexSet = new Set(
     routes.filter((route) => route.split("/").length <= 2).map((route) => `${route}/index.html`)
   )
   for (const rule of rules) {
-    if (rule.source.endsWith("/") && !rule.source.includes("index.html") && !routeSet.has(rule.source)) {
+    if (
+      rule.source.endsWith("/") &&
+      !rule.source.includes("index.html") &&
+      !routeSet.has(rule.source) &&
+      !legacySources.has(rule.source)
+    ) {
       errors.push(`orphan trailing-slash rule (no such route): ${rule.source}`)
     }
     if (rule.source.endsWith("/index.html") && !indexSet.has(rule.source)) {
@@ -110,7 +131,9 @@ function main() {
     const next = `${legacy}\n\n${tsBlock}\n\n${indexBlock}\n`
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Repository-owned config file.
     writeFileSync(redirectsPath, next)
-    console.log(`Wrote ${routes.length} trailing-slash rules + index.html rules to public/_redirects`)
+    console.log(
+      `Wrote ${routes.length} trailing-slash rules + index.html rules to public/_redirects`
+    )
     if (errors.length > 0) {
       console.error(`Fixed ${errors.length} gap(s) by regeneration:`)
       for (const error of errors) console.error(`- ${error}`)

@@ -5,6 +5,15 @@ if (new URLSearchParams(location.search).has("forms")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: FormsHarness } = await import("./forms-harness")
   root.render(<FormsHarness />)
+} else if (new URLSearchParams(location.search).has("agents")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { AgentsHarness } = await import("./agents-harness")
+  root.render(<AgentsHarness />)
+} else if (new URLSearchParams(location.search).has("agent-wizard")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { AgentWizardHarness } = await import("./agents-harness")
+  const agentId = new URLSearchParams(location.search).get("agent-wizard") ?? ""
+  root.render(<AgentWizardHarness agentId={agentId} />)
 } else if (new URLSearchParams(location.search).get("myra") === "marketing") {
   const { createMyraClient } = await import("../../packages/myra/src/client")
   const { renderMyraProposalActions } =

@@ -32,7 +32,38 @@ const configLocationSchema = z.object({
 export const agentEntrySchema = z
   .object({
     id: z.string().regex(/^[a-z0-9-]+$/),
+    aliases: z.array(z.string().regex(/^[a-z0-9-]+$/)).optional(),
     displayName: z.string().min(1),
+    productFamily: z
+      .object({ id: z.string().regex(/^[a-z0-9-]+$/), name: z.string().min(1) })
+      .optional(),
+    surface: z.enum(["cli", "ide", "desktop", "web", "cloud"]).optional(),
+    versionConstraints: z
+      .object({
+        minimum: z.string().min(1).optional(),
+        maximum: z.string().min(1).optional(),
+        note: z.string().min(1).optional(),
+      })
+      .optional(),
+    nativeCapabilities: z
+      .array(z.enum(["plugin", "skills", "commands", "rules", "hooks"]))
+      .optional(),
+    skillLocations: z.array(configLocationSchema).optional(),
+    distribution: z
+      .object({
+        channel: z.string().min(1),
+        url: z.url(),
+        state: z.enum([
+          "DIRECT",
+          "PREPARATION",
+          "SUBMITTED",
+          "APPROVED",
+          "PUBLISHED",
+          "REJECTED",
+          "UNKNOWN",
+        ]),
+      })
+      .optional(),
     docsSlug: z.string().regex(/^[a-z0-9-]+$/),
     installStrategy: installStrategySchema,
     format: configFormatSchema.nullable(),

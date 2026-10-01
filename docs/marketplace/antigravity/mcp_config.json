@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "lyrashield": {
+      "serverUrl": "https://app.lyrashieldai.com/api/mcp"
+    }
+  }
+}
