@@ -1468,7 +1468,7 @@ describe("processScanJob", () => {
       expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
     }
   )
-  it.each(["content_filter_stopped", "engine_stopped"])(
+  it.each(["content_filter_stopped", "engine_stopped"] as const)(
     "meters a %s PARTIAL result with affirmative scan-bound usage",
     async (reason) => {
       vi.mocked(runEngine).mockResolvedValueOnce({
@@ -1501,6 +1501,19 @@ describe("processScanJob", () => {
       )
       const manifest = vi.mocked(persistResultManifest).mock.calls.at(-1)?.[0]
       expect(manifest?.engineExecution?.model).toBeUndefined()
+      // A truncated engine run must carry a bounded coverage receipt — a
+      // PARTIAL result without it would present the engine's scope as
+      // complete. Same contract as the runtime_deadline receipt.
+      expect(manifest?.terminalOutcome).toMatchObject({ status: "PARTIAL" })
+      expect(manifest?.coverageIssues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            scanner: "engine",
+            status: "bounded",
+            subject: reason === "engine_stopped" ? "engine-stopped" : "content-filter-stopped",
+          }),
+        ])
+      )
     }
   )
 

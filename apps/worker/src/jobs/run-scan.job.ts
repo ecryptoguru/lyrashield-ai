@@ -53,7 +53,7 @@ import {
 } from "./run-scan/lifecycle-utils"
 import {
   engineRoutingCoverageIssue,
-  engineRuntimeDeadlineCoverageIssue,
+  engineTruncationCoverageIssue,
   persistEngineUsageCheckpoint,
   shouldRecordAgentMinutes,
 } from "./run-scan/usage"
@@ -286,7 +286,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const runRecord = engineResult.output.runRecord
       const routingCoverageIssue =
         engineBacked && engineProfile ? engineRoutingCoverageIssue(engineProfile, runRecord) : null
-      const runtimeDeadlineCoverageIssue = engineRuntimeDeadlineCoverageIssue(
+      const truncationCoverageIssue = engineTruncationCoverageIssue(
         runRecord,
         (engineResult.output.vulnerabilities?.length ?? 0) > 0
       )
@@ -561,7 +561,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         orchestratorResult,
         coverageMatchedControlRanks: coverage.matchedControlRanks,
         routingCoverageIssue,
-        runtimeDeadlineCoverageIssue,
+        truncationCoverageIssue,
         deterministicCheckout,
         engineBacked,
         budgetExceeded,

@@ -28,23 +28,44 @@ export function extractActualCostUsd(usage: Record<string, unknown> | undefined)
 }
 
 /**
- * Bounded engine coverage receipt for a scan the engine truncated at its
- * runtime deadline. The engine's findings are real but its scope was cut
- * short, so the scan carries an explicit coverage gap rather than implying a
- * complete pass.
+ * Bounded engine coverage receipt for a scan the engine truncated without a
+ * completed pass — runtime deadline, content-filter stop, or model-error
+ * stop. The engine's findings are real but its scope was cut short, so the
+ * scan carries an explicit coverage gap rather than implying a complete
+ * pass. Every PARTIAL/FAILED outcome these reasons produce must carry this
+ * receipt: PARTIAL without it would present a truncated engine scope as
+ * whole.
  */
-export function engineRuntimeDeadlineCoverageIssue(
+export function engineTruncationCoverageIssue(
   runRecord: EngineRunRecord | null,
   hasEngineFindings: boolean
 ): ScannerCoverageIssue | null {
-  if (runRecord?.terminal_reason !== "runtime_deadline") return null
-  return {
-    scanner: "engine",
-    status: "bounded",
-    subject: "runtime-deadline",
-    reason: hasEngineFindings
-      ? "Engine reached its runtime limit; partial findings preserved"
-      : "Engine reached its runtime limit before filing any findings",
+  switch (runRecord?.terminal_reason) {
+    case "runtime_deadline":
+      return {
+        scanner: "engine",
+        status: "bounded",
+        subject: "runtime-deadline",
+        reason: hasEngineFindings
+          ? "Engine reached its runtime limit; partial findings preserved"
+          : "Engine reached its runtime limit before filing any findings",
+      }
+    case "content_filter_stopped":
+      return {
+        scanner: "engine",
+        status: "bounded",
+        subject: "content-filter-stopped",
+        reason: "Engine stopped after content filter blocked the model; partial findings preserved",
+      }
+    case "engine_stopped":
+      return {
+        scanner: "engine",
+        status: "bounded",
+        subject: "engine-stopped",
+        reason: "Engine stopped after a model error; partial findings preserved",
+      }
+    default:
+      return null
   }
 }
 
