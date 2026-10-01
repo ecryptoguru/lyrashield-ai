@@ -108,6 +108,14 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   if (!agent) return null
   const publishedInstallCommand = getPublishedCliInstallCommand(agent)
   const manualPlugin = agent.installStrategy === "agent-plugin" && !!agent.manualInstructions
+  const pendingPluginFallbackId: Record<string, string> = {
+    "claude-code-agent-plugin": "claude-code",
+    "openai-codex-agent-plugin": "openai-codex",
+    "github-copilot-agent-plugin": "copilot-cli",
+  }
+  const pendingPluginFallback = manualPlugin
+    ? getAgent(pendingPluginFallbackId[agent.id] ?? "")
+    : undefined
   const localSetup = agent.surface !== "cloud" && agent.surface !== "web"
   const augmentWorkflowInPreparation =
     agent.productFamily?.id === "augment" &&
@@ -151,8 +159,12 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     }
   }
   const configPath = primaryConfigPath(agent)
-  const usesRemoteOAuth = agent.preferredTransport === "remote-http" && agent.remoteAuth === "oauth"
-  const usesRemoteApiKey = agent.preferredTransport === "remote-http" && !usesRemoteOAuth
+  const usesRemoteOAuth =
+    !pendingPluginFallback &&
+    agent.preferredTransport === "remote-http" &&
+    agent.remoteAuth === "oauth"
+  const usesRemoteApiKey =
+    !pendingPluginFallback && agent.preferredTransport === "remote-http" && !usesRemoteOAuth
   const remoteOAuthCommand =
     usesRemoteOAuth && agent.id === "picode" ? "pi mcp login lyrashield" : undefined
 
@@ -180,7 +192,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
             ? "Install"
             : "Prepare manual setup",
       summary: manualPlugin
-        ? "The CLI returns MANUAL_REQUIRED: it prints instructions and does not install or register the plugin. Follow the client activation steps below; discovery, authentication and a read-only call must each be confirmed."
+        ? "The source installer returns MANUAL_REQUIRED: it prints instructions and does not install or register the plugin. Published CLI behavior may differ until release. Follow the client activation steps below; discovery, authentication and a read-only call must each be confirmed."
         : agent.id === "picode"
           ? `${agent.manualInstructions} The published CLI 0.2.13 preview predates Pi's native MCP setup. Use these current instructions; updated CLI recipes remain pending release.`
           : augmentWorkflowInPreparation
@@ -289,6 +301,22 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     }
   }
 
+  if (pendingPluginFallback) {
+    steps.push({
+      id: "config-mcp-fallback",
+      kind: "config",
+      title: "Current direct MCP fallback",
+      summary:
+        "Merge this published pinned stdio connection, preserving existing client settings. Plugin installation and skills remain pending a reviewed immutable release.",
+      snippet: buildConfigSnippet(pendingPluginFallback, apiUrl),
+      snippetPath:
+        pendingPluginFallback.locations.find((location) => location.scope === "global")?.path ??
+        primaryConfigPath(pendingPluginFallback),
+      copyLabel: "Copy current MCP fallback",
+      note: "Authenticate with the local CLI separately, restart the client, confirm server and tool discovery, then call lyrashield_list_workspaces to verify authorized access.",
+    })
+  }
+
   if (agent.id === "vscode-agent-plugin") {
     const fallback = getAgent("vscode")!
     steps.push({
@@ -316,7 +344,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
         ? `Run the Pi OAuth login, select one workspace and approve the requested access once.`
         : usesRemoteOAuth
           ? `Complete OAuth in ${agent.displayName}, select one workspace and approve the requested access once.`
-          : "Sign in with the OAuth device flow so the CLI and local MCP server can use your selected workspace.",
+          : "Sign in through CLI OAuth in the same OS account so the local MCP server can use your selected workspace.",
     command: usesRemoteApiKey
       ? undefined
       : usesRemoteOAuth

@@ -10,7 +10,12 @@ export.
 The plugin and marketplace `0.1.0` values are preparation metadata, not released identities. Bind
 the exact reviewed artifact version and source commit during release preparation.
 
-## Qoder CLI local marketplace
+## Maintainer staging review only
+
+The following local package commands are for maintainer review of unpublished preparation
+artifacts only. They are not current customer install recommendations. Do not use the mutable
+marketplace default branch as an install source. Customer plugin instructions require a reviewed
+matching immutable release; use the current client-specific direct MCP guide meanwhile.
 
 Qoder CLI documents adding a local marketplace source. From the product repository:
 

@@ -16,12 +16,24 @@ describe("agent wizard connection snippets", () => {
     expect(remote).not.toContain("Authorization")
   })
 
-  it("does not ask Agent Plugin users to configure an MCP server a second time", () => {
-    const wizard = buildAgentWizard("openai-codex-agent-plugin", "https://app.lyrashieldai.com")
-
-    expect(wizard?.steps.some((step) => step.id === "config")).toBe(false)
-    expect(wizard?.steps.find((step) => step.id === "api-key")?.command).toBeUndefined()
-    expect(wizard?.steps.find((step) => step.id === "api-key")?.summary).toContain("OAuth in")
+  it.each([
+    ["openai-codex-agent-plugin", "~/.codex/config.toml"],
+    ["github-copilot-agent-plugin", "~/.copilot/mcp-config.json"],
+  ])("keeps %s pending and points to the current direct MCP fallback", (id, configPath) => {
+    const wizard = buildAgentWizard(id, "https://app.lyrashieldai.com")
+    expect(wizard?.steps.find((step) => step.id === "install")?.command).toBeUndefined()
+    const activation = wizard?.steps.find((step) => step.id === "config")
+    expect(activation?.summary).toContain("reviewed matching immutable package release")
+    expect(activation?.summary).toContain(configPath)
+    expect(activation?.summary).toContain(MCP_PACKAGE_SPEC)
+    expect(activation?.summary).toContain(CLI_PACKAGE_SPEC)
+    expect(activation?.summary).not.toContain("marketplace add")
+    expect(wizard?.steps.find((step) => step.id === "api-key")?.command).toBe(
+      `npx -y ${CLI_PACKAGE_SPEC} login --oauth`
+    )
+    expect(wizard?.steps.find((step) => step.id === "config-mcp-fallback")?.snippetPath).toBe(
+      configPath
+    )
     expect(wizard?.steps.some((step) => step.kind === "rules")).toBe(false)
   })
 

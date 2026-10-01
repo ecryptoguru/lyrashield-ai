@@ -10,7 +10,12 @@ public marketplace export.
 The plugin has a `0.1.0` preparation version only; it is not a published release identity. Bind the
 exact reviewed artifact and source commit when preparing a release.
 
-## Local review and install
+## Maintainer staging review only
+
+The following local package commands are for maintainer review of unpublished preparation
+artifacts only. They are not current customer install recommendations. Do not use the mutable
+marketplace default branch as an install source. Customer plugin instructions require a reviewed
+matching immutable release; use the current client-specific direct MCP guide meanwhile.
 
 Factory documents local marketplaces for testing. From the product repository:
 

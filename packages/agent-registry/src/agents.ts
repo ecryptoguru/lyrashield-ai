@@ -1,6 +1,6 @@
 import type { AgentEntry, RegistryAgentEntry } from "./types"
 import { API_URL_PLACEHOLDER } from "./render"
-import { MCP_PACKAGE_SPEC } from "./versions"
+import { CLI_PACKAGE_SPEC, MCP_PACKAGE_SPEC } from "./versions"
 
 const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-09-09"
 
@@ -1932,15 +1932,15 @@ const openaiCodexPlugin: AgentEntry = {
   ],
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
+  manualInstructions: `OpenAI Codex Agent Plugin setup is pending a reviewed matching immutable package release. Do not install from the mutable marketplace preparation branch or substitute an older release without portable-schema validation. Use the current direct-MCP fallback: merge the [mcp_servers.lyrashield] stdio table into ~/.codex/config.toml with command npx and args ["-y", "${MCP_PACKAGE_SPEC}"], preserving existing entries. Authenticate separately with npx -y ${CLI_PACKAGE_SPEC} login --oauth in the same OS account, restart Codex, confirm server/tool discovery, then call lyrashield_list_workspaces. See /docs/integrations/openai-codex. Published CLI config writes remain withheld.`,
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
     url: "https://developers.openai.com/codex/plugins/build",
   },
   gotchas: [
-    "Copying a plugin directory does not register it. The installer adds `ecryptoguru/lyrashield-marketplace`, then installs `lyrashield@lyrashield-ai` through `codex plugin`.",
-    "Restart the ChatGPT desktop app after installation so the desktop host reloads marketplace plugins.",
-    "Authenticate through the client-hosted OAuth flow when connecting the remote MCP server.",
+    "The marketplace preparation branch is not a released install artifact. Use the pinned stdio MCP fallback until a reviewed immutable plugin release exists.",
+    "Local CLI OAuth authentication, Codex server discovery and a successful authenticated read are separate checks.",
   ],
 }
 
@@ -1962,8 +1962,7 @@ const githubCopilotPlugin: AgentEntry = {
   ],
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
-  manualInstructions:
-    "Install through Copilot CLI's marketplace flow: `copilot plugin marketplace add ecryptoguru/lyrashield-marketplace`, then `copilot plugin install lyrashield@lyrashield-ai`.",
+  manualInstructions: `GitHub Copilot Agent Plugin setup is pending a reviewed matching immutable package release. Do not install from the mutable marketplace preparation branch. Use the current direct-MCP fallback: merge mcpServers.lyrashield into ~/.copilot/mcp-config.json with type "local", command npx and args ["-y", "${MCP_PACKAGE_SPEC}"], preserving other servers. Authenticate separately with npx -y ${CLI_PACKAGE_SPEC} login --oauth in the same OS account, restart Copilot CLI, use /mcp show lyrashield to confirm discovery, then call lyrashield_list_workspaces. See /docs/integrations/github-copilot. Published CLI config writes remain withheld.`,
   rulesFiles: [".github/copilot-instructions.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -1971,7 +1970,7 @@ const githubCopilotPlugin: AgentEntry = {
   },
   gotchas: [
     "GitHub Copilot CLI scans each plugin directory for a `plugin.json` manifest at the root.",
-    "Authenticate through the client-hosted OAuth flow when connecting the remote MCP server.",
+    "For the current stdio fallback, local CLI OAuth, client discovery and an authenticated read are separate checks.",
   ],
 }
 

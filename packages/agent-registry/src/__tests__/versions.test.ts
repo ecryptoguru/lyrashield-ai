@@ -41,7 +41,7 @@ describe("published package versions", () => {
   })
 
   it("keeps commands manual when the public CLI targets a different preferred entry", () => {
-    for (const id of ["cursor", "openai-codex"]) {
+    for (const id of ["cursor"]) {
       const legacyEntry = getAgent(id)
       const preferredEntry = getPreferredAgent(id)
 
@@ -55,10 +55,18 @@ describe("published package versions", () => {
     }
   })
 
-  it("withholds Claude's mutable marketplace path until a reviewed immutable release exists", () => {
-    expect(getPublishedCliInstallCommand(getAgent("claude-code")!)).toBeNull()
-    expect(getPublishedCliInstallCommand(getPreferredAgent("claude-code")!)).toBeNull()
-  })
+  it.each(["claude-code", "openai-codex", "github-copilot"])(
+    "withholds %s plugin commands until a reviewed immutable release exists",
+    (id) => {
+      const legacy = getAgent(id)
+      if (legacy) expect(getPublishedCliInstallCommand(legacy)).toBeNull()
+      const preferred = getPreferredAgent(id)!
+      expect(getPublishedCliInstallCommand(preferred)).toBeNull()
+      expect(preferred.manualInstructions).toContain("reviewed matching immutable package release")
+      expect(preferred.manualInstructions).not.toContain("marketplace add")
+      expect(preferred.gotchas.join(" ")).not.toContain("ecryptoguru/lyrashield-marketplace")
+    }
+  )
 
   it("gates new and changed contracts, including Pi's formerly standalone setup", () => {
     for (const id of [

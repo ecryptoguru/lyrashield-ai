@@ -67,3 +67,36 @@ test("Claude and Pi guides use current MCP setup while package releases remain p
   await expect(page.locator("main")).toContainText("pi mcp login lyrashield")
   await expect(page.locator("main")).toContainText("pending release")
 })
+
+test("Copilot and Codex guides keep pending plugins out of current setup and HowTo metadata", async ({
+  page,
+}) => {
+  for (const [slug, configPath] of [
+    ["github-copilot", "~/.copilot/mcp-config.json"],
+    ["openai-codex", "~/.codex/config.toml"],
+  ]) {
+    await page.goto(`/docs/integrations/${slug}`)
+    await expect(page.getByRole("heading", { name: "Agent Plugin release pending" })).toBeVisible()
+    await expect(page.locator("main")).toContainText(configPath)
+    await expect(page.locator("main")).toContainText("@lyrashield/mcp@0.2.11")
+    await expect(page.locator("main")).toContainText("lyrashield@0.2.13 login --oauth")
+    await expect(page.locator("main")).toContainText("lyrashield_list_workspaces")
+    await expect(page.locator("main")).not.toContainText("plugin marketplace add")
+    await expect(page.locator("main")).not.toContainText("lyrashield install")
+    const metadata = await page.locator('script[type="application/ld+json"]').allTextContents()
+    const howTo = metadata
+      .flatMap((value) => JSON.parse(value))
+      .find((item) => item["@type"] === "HowTo")
+    expect(howTo).toBeDefined()
+    expect(howTo.step).toHaveLength(4)
+    expect(JSON.stringify(howTo)).toContain("@lyrashield/mcp@0.2.11")
+    expect(JSON.stringify(howTo)).toContain("lyrashield@0.2.13 login --oauth")
+    expect(JSON.stringify(howTo)).toContain("lyrashield_list_workspaces")
+    expect(JSON.stringify(howTo)).not.toContain("marketplace")
+  }
+  await page.goto("/docs/integrations/agent-plugins")
+  await expect(page.locator("main")).toContainText("Agent Plugin release pending")
+  await expect(page.locator("main")).not.toContainText("install openai-codex")
+  await expect(page.locator("main")).not.toContainText("install github-copilot")
+  await expect(page.locator("main")).not.toContainText("install claude-code")
+})

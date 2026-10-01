@@ -13,62 +13,41 @@ Current npm latest versions are CLI `0.2.13`, MCP `0.2.11`, and Agent Plugin `0.
 
 The prepared official MCP Registry package has no public listing: an official registry search returned zero LyraShield entries on 2026-10-02, and release-ready ownership validation remains blocked on the unpublished MCP package. Package/export validation and public branch synchronization do not establish npm publication, immutable marketplace availability, authenticated client use, or client-runtime acceptance.
 
-## Install from this repository
+## Current customer setup
 
-This repository is an addressable plugin marketplace: `.claude-plugin/marketplace.json` catalogs the
-root plugin with `source: "./"`, so the marketplace root and the plugin root are the same directory.
+This mutable preparation branch is not a supported customer install source. Do not register it
+with a plugin marketplace, import it into VS Code, enable it in shared settings, or use an older
+plugin release without matching portable-schema validation. Plugin installation recommendations
+for Claude Code, Copilot CLI, Codex and VS Code await a reviewed matching immutable release.
 
-Claude Code marketplace commands:
+Use the currently published pinned direct MCP server `@lyrashield/mcp@0.2.11` meanwhile. Local
+stdio requires Node.js 24 or newer. Authenticate separately in the same OS account with
+`npx -y lyrashield@0.2.13 login --oauth`, then merge the client-specific config while preserving
+existing entries. Published CLI config writes and skill installation remain withheld until the
+coordinated safe-writer release.
 
-```shell
-claude plugin marketplace add ecryptoguru/lyrashield-marketplace
-claude plugin install lyrashield@lyrashield-ai
-```
+| Client       | Current direct MCP guide                                                   | Config contract                                             |
+| ------------ | -------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Claude Code  | [Claude guide](https://lyrashieldai.com/docs/integrations/claude-code)     | `.mcp.json`, `mcpServers`, stdio                            |
+| Copilot CLI  | [Copilot guide](https://lyrashieldai.com/docs/integrations/github-copilot) | `~/.copilot/mcp-config.json`, `mcpServers`, `type: "local"` |
+| OpenAI Codex | [Codex guide](https://lyrashieldai.com/docs/integrations/openai-codex)     | `~/.codex/config.toml`, `[mcp_servers.lyrashield]`          |
+| VS Code      | [VS Code guide](https://lyrashieldai.com/docs/integrations/vscode)         | `.vscode/mcp.json`, `servers`, `type: "stdio"`              |
 
-GitHub Copilot CLI uses the same marketplace identity through its own commands:
+Restart the client, confirm server/tool discovery, then call `lyrashield_list_workspaces` and an
+authorized target read. Discovery, OAuth authentication and successful service calls are distinct
+checks. If consent expires, repeat CLI login and restart the client.
 
-```shell
-copilot plugin marketplace add ecryptoguru/lyrashield-marketplace
-copilot plugin install lyrashield@lyrashield-ai
-```
+GitHub Copilot Cloud Agent is a separate read-only surface. Follow its
+[prepared configuration guide](./github-copilot-cloud-agent/README.md) for the three reviewed
+read-only skills and explicit MCP tool allowlist. Its API key belongs in the private Agents
+secret store; the portable plugin's OAuth descriptor cannot authenticate it.
 
-VS Code: run **Chat: Install Plugin From Source** from the Command Palette and paste
-`https://github.com/ecryptoguru/lyrashield-marketplace`. To make adoption a repo-committed team
-decision instead, add this to `.claude/settings.json` or `.github/copilot/settings.json`:
+## Maintainer preparation only
 
-```json
-{
-  "extraKnownMarketplaces": {
-    "lyrashield-ai": {
-      "source": { "source": "github", "repo": "ecryptoguru/lyrashield-marketplace" }
-    }
-  },
-  "enabledPlugins": { "lyrashield@lyrashield-ai": true }
-}
-```
-
-These Claude Code, Copilot CLI and VS Code plugin paths inline no credential; their remote MCP
-connection uses hosted OAuth in clients that support it. GitHub Copilot Cloud Agent is a separate
-surface: its repository MCP configuration is shared with Copilot code review, and GitHub currently
-does not support remote MCP OAuth there. Follow the [Copilot Cloud Agent guide](./github-copilot-cloud-agent/README.md)
-for the documented read-only API-key setup. Plugin/skill installation and service authentication
-are separate; the portable plugin's OAuth MCP descriptor does not authenticate Cloud Agent.
-
-The Kiro stdio adapter is the path that reads `~/.lyrashield/credentials.json` after
-`npx -y lyrashield@0.2.14 login --oauth`.
-
-For local stdio clients (Kiro, Gemini CLI, Zed and Codebuff), use Node.js 24 and run the pinned
-CLI login command above before starting the client. Select one workspace in the browser. First
-call `lyrashield_list_workspaces`, then `lyrashield_list_targets` for an authorized target. If
-authorization expires or is revoked, repeat the CLI login and restart the client. Hosted HTTP
-clients that document remote OAuth complete it inside their connection UI. GitHub Copilot Cloud
-Agent uses the read-only API-key configuration described above; it cannot use remote OAuth or
-authorize hosted mutations. Keep API keys in a private secret store, never a committed project
-file or agent prompt.
-
-LyraShield is not yet listed in a published VS Code plugin marketplace, so there is no one-click
-marketplace install for VS Code today. Install-from-source and the marketplace-by-URL paths above
-install the same plugin.
+The staged `.claude-plugin/marketplace.json` catalogs the root candidate with `source: "./"`.
+This packaging layout is for offline export and review. It is not an invitation to register the
+mutable repository or a statement that any candidate is published. Bind a future install recipe
+to the exact reviewed immutable artifact and matching npm release before adding customer steps.
 
 ## Release boundary
 
@@ -110,8 +89,8 @@ the `gemini-cli-extension` topic.
    out-of-grant denial, legacy approval, pause, forced expiry, permission loss, refresh/reconnect,
    disconnect/revocation, CLI API-key fallback, Zed, Codebuff and the generated marketplace fixtures.
 5. Submit the shared listing to OpenAI/Codex, Claude, Cursor, Kiro, Cline, Kilo, Zed, Codebuff,
-   Gemini CLI and ClawHub according to each channel's current intake. Verify GitHub Copilot through
-   its plugin marketplace path; Awesome Copilot is not a product-listing channel.
+   Gemini CLI and ClawHub according to each channel's current intake. Verify GitHub Copilot only
+   after a matching immutable plugin release; Awesome Copilot is not a product-listing channel.
 
 Marketplace availability is claimed only for channels with a visible public listing, never merely a
 submitted application. Direct adapter guides remain available for clients without a verified
