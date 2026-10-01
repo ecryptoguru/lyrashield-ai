@@ -3,7 +3,8 @@
  *
  * Daily worker job that:
  * 1. Pulls paid Polar orders and captured Razorpay payments since its durable checkpoint
- * 2. Compares them against persisted WebhookEvent rows
+ * 2. Compares them against persisted WebhookEvent rows — and, for processed
+ *    pack settlements, verifies the internal MinutePack credit exists
  * 3. Reports unprocessed events and provider/webhook drift to operators
  *
  * This is report-only. It never synthesizes webhook payloads, retries tracks,
@@ -13,13 +14,24 @@
 import { randomUUID } from "node:crypto"
 import { getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { getPolarClient, getRazorpayClient } from "@lyrashield/billing"
+import {
+  getPolarClient,
+  getRazorpayClient,
+  isMinutePackOrderPayload,
+} from "@lyrashield/billing"
 
 export interface ReconciliationResult {
   /** Number of Polar events checked. */
   polarChecked: number
   /** Number of Razorpay events checked. */
   razorpayChecked: number
+  /**
+   * Pack settlements whose internal MinutePack credit was verified. Only
+   * settlements with a fully processed receipt are probed — a pending receipt
+   * is already reported by the unprocessed sweep, and double-counting it here
+   * would inflate the drift signal.
+   */
+  packCreditsVerified: number
   /** Legacy metric retained for compatibility; provider-only rows are never synthesized. */
   replayed: number
   /** Number of drift alerts raised. */
@@ -92,26 +104,82 @@ class ReconciliationLeaseLostError extends Error {
   }
 }
 
-async function hasProviderWebhookEvent(provider: "polar" | "razorpay", objectId: string) {
+interface ProviderWebhookReceipt {
+  id: string
+  processed: boolean
+}
+
+async function findProviderWebhookReceipt(
+  provider: "polar" | "razorpay",
+  objectId: string
+): Promise<ProviderWebhookReceipt | null> {
   // Keep the cross-workspace check on the system client. These exact JSONB
   // expressions are backed by the provider-specific partial indexes in
   // 20260928140000_webhook_provider_object_lookup.
+  // Provider redeliveries mint a fresh delivery id per attempt, so one
+  // settlement can have several receipts — prefer a processed sibling: the
+  // settlement counts as received when some delivery of it fully applied.
   const rows =
     provider === "polar"
-      ? await getSystemPrisma().$queryRaw<Array<{ id: string }>>`
-          SELECT id FROM "WebhookEvent"
+      ? await getSystemPrisma().$queryRaw<ProviderWebhookReceipt[]>`
+          SELECT id, processed FROM "WebhookEvent"
           WHERE provider = 'polar' AND "eventType" = 'order.paid'
             AND (payload #> '{data,id}') = to_jsonb(${objectId}::text)
+          ORDER BY processed DESC, "createdAt" DESC
           LIMIT 1
         `
-      : await getSystemPrisma().$queryRaw<Array<{ id: string }>>`
-          SELECT id FROM "WebhookEvent"
+      : await getSystemPrisma().$queryRaw<ProviderWebhookReceipt[]>`
+          SELECT id, processed FROM "WebhookEvent"
           WHERE provider = 'razorpay' AND "eventType" = 'payment.captured'
             AND (payload #> '{payload,payment,entity,id}') = to_jsonb(${objectId}::text)
+          ORDER BY processed DESC, "createdAt" DESC
           LIMIT 1
         `
 
-  return rows.length > 0
+  return rows[0] ?? null
+}
+
+/** Narrow a provider entity to a plain record for the pack predicate. */
+function entityRecord(entity: unknown): Record<string, unknown> {
+  return typeof entity === "object" && entity !== null && !Array.isArray(entity)
+    ? (entity as Record<string, unknown>)
+    : {}
+}
+
+/**
+ * Report-only credit verification for a settled pack purchase.
+ *
+ * The billing track keys its MinutePack credit on (provider, externalId) —
+ * the provider settlement object id — and that key survives workspace
+ * attribution loss (the pack stays account-owned with workspaceId NULL). A
+ * processed settlement receipt without that row means money moved and the
+ * credit was still never applied: report it, never replay it.
+ *
+ * Cross-workspace sweep over MinutePack (workspace-scoped, account-owned) —
+ * system client, same justification as the WebhookEvent lookups above.
+ */
+async function verifyPackSettlementCredit(
+  provider: "polar" | "razorpay",
+  objectId: string,
+  entity: Record<string, unknown>,
+  result: ReconciliationResult
+): Promise<void> {
+  if (!isMinutePackOrderPayload(entity)) return
+  const credit = await getSystemPrisma().minutePack.findFirst({
+    where: { provider, externalId: objectId, deletedAt: null },
+    select: { id: true },
+  })
+  if (credit) {
+    result.packCreditsVerified++
+    return
+  }
+  result.driftAlerts++
+  result.alerts.push({
+    provider,
+    externalId: objectId,
+    type: "settlement_credit_missing",
+    message: `${provider} settlement was processed but its minute-pack credit does not exist`,
+  })
 }
 
 async function acquireReconciliationLease(): Promise<ReconciliationLease | null> {
@@ -199,6 +267,7 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
   const result: ReconciliationResult = {
     polarChecked: 0,
     razorpayChecked: 0,
+    packCreditsVerified: 0,
     replayed: 0,
     driftAlerts: 0,
     completed: false,
@@ -291,6 +360,7 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
   logger.info("Billing reconciliation complete", {
     polarChecked: result.polarChecked,
     razorpayChecked: result.razorpayChecked,
+    packCreditsVerified: result.packCreditsVerified,
     replayed: result.replayed,
     driftAlerts: result.driftAlerts,
     completed: result.completed,
@@ -349,9 +419,9 @@ async function reconcilePolar(
         // GitHub webhook route) — the plain client returns empty rows under
         // the NOBYPASSRLS runtime role and every order false-flags as
         // "webhook may have been missed".
-        const existing = await hasProviderWebhookEvent("polar", order.id)
+        const receipt = await findProviderWebhookReceipt("polar", order.id)
 
-        if (!existing) {
+        if (!receipt) {
           result.driftAlerts++
           result.alerts.push({
             provider: "polar",
@@ -359,6 +429,11 @@ async function reconcilePolar(
             type: "order.paid",
             message: "Polar order not found in WebhookEvent table — webhook may have been missed",
           })
+        } else if (receipt.processed) {
+          // The receipt applied — now prove the money produced its internal
+          // record. Unprocessed receipts are already reported by the
+          // unprocessed sweep; probing them here would double-count drift.
+          await verifyPackSettlementCredit("polar", order.id, entityRecord(order), result)
         }
       }
       if (page.result.items.some((order) => order.createdAt < since)) break
@@ -432,9 +507,9 @@ async function reconcileRazorpay(
 
         // Cross-workspace provider reconciliation — system client (see the
         // Polar note above: WebhookEvent is FORCE RLS strict).
-        const existing = await hasProviderWebhookEvent("razorpay", payment.id)
+        const receipt = await findProviderWebhookReceipt("razorpay", payment.id)
 
-        if (!existing) {
+        if (!receipt) {
           result.driftAlerts++
           result.alerts.push({
             provider: "razorpay",
@@ -443,6 +518,13 @@ async function reconcileRazorpay(
             message:
               "Razorpay payment not found in WebhookEvent table — webhook may have been missed",
           })
+        } else if (receipt.processed) {
+          await verifyPackSettlementCredit(
+            "razorpay",
+            payment.id,
+            entityRecord(payment),
+            result
+          )
         }
       }
 
