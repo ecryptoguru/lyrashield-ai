@@ -48,12 +48,35 @@ function buildCspHeader(nonce: string, upgradeInsecureRequests: boolean): string
     `connect-src 'self' https://api.razorpay.com https://us.i.posthog.com https://us-assets.i.posthog.com${isDev ? " ws:" : ""}`,
     "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com",
     "object-src 'none'",
+    // Pin the directives default-src would otherwise inherit so a future
+    // default-src change cannot silently widen worker/media/manifest loads.
+    "worker-src 'self'",
+    "media-src 'self'",
+    "manifest-src 'self'",
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
     ...(upgradeInsecureRequests ? ["upgrade-insecure-requests"] : []),
   ]
   return directives.join("; ")
+}
+
+const HSTS_HEADER = "max-age=63072000; includeSubDomains; preload"
+
+/**
+ * Every response the proxy produces — page pass-throughs, rewrites,
+ * redirects, and early-return errors — carries the same CSP/HSTS posture.
+ * Centralizing it keeps a new response path from ever shipping bare.
+ */
+function applySecurityHeaders(
+  response: NextResponse,
+  csp: string,
+  isLocalPreview: boolean
+): void {
+  response.headers.set("Content-Security-Policy", csp)
+  if (!isLocalPreview) {
+    response.headers.set("Strict-Transport-Security", HSTS_HEADER)
+  }
 }
 
 export function getClientIP(request: NextRequest): string {
@@ -113,7 +136,9 @@ async function handleAffiliateAttribution(
   if (host === "affiliates.lyrashieldai.com" && !pathname.startsWith("/affiliates")) {
     const url = request.nextUrl.clone()
     url.pathname = `/affiliates${pathname === "/" ? "" : pathname}`
-    return NextResponse.rewrite(url)
+    const response = NextResponse.rewrite(url)
+    applySecurityHeaders(response, csp, isLocalPreview)
+    return response
   }
 
   // Check for ref= param or /r/:code path
@@ -131,7 +156,7 @@ async function handleAffiliateAttribution(
   if (!trackingAllowed) {
     if (!isShortLink) return null
     const response = NextResponse.redirect(new URL("/", request.url))
-    response.headers.set("Content-Security-Policy", csp)
+    applySecurityHeaders(response, csp, isLocalPreview)
     return response
   }
 
@@ -164,7 +189,7 @@ async function handleAffiliateAttribution(
     if (result.setCookie) {
       response.headers.set("Set-Cookie", result.setCookie)
     }
-    response.headers.set("Content-Security-Policy", csp)
+    applySecurityHeaders(response, csp, isLocalPreview)
     return response
   }
 
@@ -174,13 +199,7 @@ async function handleAffiliateAttribution(
       request: { headers: requestHeaders },
     })
     response.headers.set("Set-Cookie", result.setCookie)
-    response.headers.set("Content-Security-Policy", csp)
-    if (!isLocalPreview) {
-      response.headers.set(
-        "Strict-Transport-Security",
-        "max-age=63072000; includeSubDomains; preload"
-      )
-    }
+    applySecurityHeaders(response, csp, isLocalPreview)
     if (
       pathname.startsWith("/score/") ||
       pathname.startsWith("/lite-check/") ||
@@ -220,7 +239,7 @@ export async function proxy(request: NextRequest) {
   if (isDirectAppOrigin(request) && originTrust !== "probe") {
     const response = new NextResponse(null, { status: 404 })
     response.headers.set("Cache-Control", "private, no-store")
-    response.headers.set("Content-Security-Policy", csp)
+    applySecurityHeaders(response, csp, isLocalPreview)
     return response
   }
 
@@ -228,7 +247,7 @@ export async function proxy(request: NextRequest) {
     if (originTrust === "untrusted") {
       const response = new NextResponse(null, { status: 404 })
       response.headers.set("Cache-Control", "private, no-store")
-      response.headers.set("Content-Security-Policy", csp)
+      applySecurityHeaders(response, csp, isLocalPreview)
       return response
     }
     const country = originTrust === "cloudflare" ? trustedAppCountry(request) : null
@@ -255,24 +274,12 @@ export async function proxy(request: NextRequest) {
           },
         }
       )
-      response.headers.set("Content-Security-Policy", csp)
-      if (!isLocalPreview) {
-        response.headers.set(
-          "Strict-Transport-Security",
-          "max-age=63072000; includeSubDomains; preload"
-        )
-      }
+      applySecurityHeaders(response, csp, isLocalPreview)
       return response
     }
     const response = NextResponse.next({ request: { headers: requestHeaders } })
-    response.headers.set("Content-Security-Policy", csp)
+    applySecurityHeaders(response, csp, isLocalPreview)
     response.headers.set("X-RateLimit-Remaining", String(result.remaining))
-    if (!isLocalPreview) {
-      response.headers.set(
-        "Strict-Transport-Security",
-        "max-age=63072000; includeSubDomains; preload"
-      )
-    }
     return response
   }
 
@@ -293,13 +300,7 @@ export async function proxy(request: NextRequest) {
     const response = NextResponse.next({
       request: { headers: requestHeaders },
     })
-    response.headers.set("Content-Security-Policy", csp)
-    if (!isLocalPreview) {
-      response.headers.set(
-        "Strict-Transport-Security",
-        "max-age=63072000; includeSubDomains; preload"
-      )
-    }
+    applySecurityHeaders(response, csp, isLocalPreview)
     if (
       pathname.startsWith("/score/") ||
       pathname.startsWith("/lite-check/") ||
@@ -325,11 +326,11 @@ export async function proxy(request: NextRequest) {
         },
         { status: 429, headers: { "Retry-After": String(result.retryAfter) } }
       )
-      response.headers.set("Content-Security-Policy", csp)
+      applySecurityHeaders(response, csp, isLocalPreview)
       return response
     }
     const response = NextResponse.next({ request: { headers: requestHeaders } })
-    response.headers.set("Content-Security-Policy", csp)
+    applySecurityHeaders(response, csp, isLocalPreview)
     response.headers.set("X-RateLimit-Remaining", String(result.remaining))
     return response
   }
@@ -360,13 +361,13 @@ export async function proxy(request: NextRequest) {
           },
         }
       )
-      response.headers.set("Content-Security-Policy", csp)
+      applySecurityHeaders(response, csp, isLocalPreview)
       return response
     }
     const response = NextResponse.next({
       request: { headers: requestHeaders },
     })
-    response.headers.set("Content-Security-Policy", csp)
+    applySecurityHeaders(response, csp, isLocalPreview)
     response.headers.set("X-RateLimit-Remaining", String(result.remaining))
     return response
   }
@@ -397,14 +398,14 @@ export async function proxy(request: NextRequest) {
         },
       }
     )
-    response.headers.set("Content-Security-Policy", csp)
+    applySecurityHeaders(response, csp, isLocalPreview)
     return response
   }
 
   const response = NextResponse.next({
     request: { headers: requestHeaders },
   })
-  response.headers.set("Content-Security-Policy", csp)
+  applySecurityHeaders(response, csp, isLocalPreview)
   response.headers.set("X-RateLimit-Remaining", String(result.remaining))
   return response
 }
