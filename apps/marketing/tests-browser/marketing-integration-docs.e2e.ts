@@ -59,6 +59,7 @@ const paths = [
   "/docs/integrations/github-copilot-cloud-agent",
   "/docs/integrations/augment-vscode",
   "/docs/integrations/augment-jetbrains",
+  "/docs/integrations/vscode-agent-plugin",
 ]
 
 for (const route of paths) {
