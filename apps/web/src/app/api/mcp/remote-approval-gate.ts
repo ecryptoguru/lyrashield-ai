@@ -15,6 +15,7 @@ import {
 } from "@lyrashield/db"
 import {
   McpServer,
+  MCP_DELEGATED_EXECUTION_STALE_MS,
   McpToolResultSchema,
   extractScanIdFromToolResult,
   type McpToolResult,
@@ -320,6 +321,7 @@ export function makeRemoteApprovalGate(
           idempotencyKey,
           authorizationVersion: options.connection.authorizationVersion,
           input: toolArgs,
+          staleExecutingBefore: new Date(Date.now() - MCP_DELEGATED_EXECUTION_STALE_MS),
         })
 
         if (claim.status === "REPLAY") {
@@ -352,6 +354,28 @@ export function makeRemoteApprovalGate(
         }
 
         if (claim.status === "FAILED") {
+          if (claim.operation.error === "OPERATION_OUTCOME_UNKNOWN") {
+            const stored = McpToolResultSchema.safeParse(claim.operation.result)
+            const payload = {
+              status: "FAILED",
+              code: "OPERATION_OUTCOME_UNKNOWN",
+              error:
+                "The recorded operation outcome is unknown. Inspect its durable status before starting another request.",
+            }
+            return {
+              approved: true,
+              result: withOperationId(
+                stored.success && stored.data.isError
+                  ? stored.data
+                  : {
+                      content: [{ type: "text", text: JSON.stringify(payload) }],
+                      structuredContent: payload,
+                      isError: true,
+                    },
+                claim.operation.id
+              ),
+            }
+          }
           return denied(
             "This operation previously failed and will not be retried under the same idempotencyKey."
           )
@@ -394,20 +418,45 @@ export function makeRemoteApprovalGate(
 
         const stampedResult = withOperationId(toolResult, claim.operation.id)
         const recordedResult = toJsonObject(stampedResult)
+        let finalizedOperation: Awaited<ReturnType<typeof completeAgentOperation>>
         if (stampedResult.isError === true) {
           // Generic errors can follow a committed side effect. They do not
           // prove no submission and never authorize replay or a fresh-key retry.
-          await failAgentOperation(claim.operation.id, workspaceId, {
+          finalizedOperation = await failAgentOperation(claim.operation.id, workspaceId, {
             error: "OPERATION_OUTCOME_UNKNOWN",
             resultReference: extractScanIdFromToolResult(toolResult) ?? undefined,
             result: recordedResult,
+            expectedUpdatedAt: claim.operation.updatedAt,
           })
         } else {
-          await completeAgentOperation(claim.operation.id, workspaceId, {
+          finalizedOperation = await completeAgentOperation(claim.operation.id, workspaceId, {
             // Task polling reads this durable reference; it never reruns a tool.
             resultReference: extractScanIdFromToolResult(toolResult) ?? undefined,
             result: recordedResult,
+            expectedUpdatedAt: claim.operation.updatedAt,
           })
+        }
+        if (finalizedOperation.status !== (stampedResult.isError ? "FAILED" : "COMPLETED")) {
+          const retained = McpToolResultSchema.safeParse(finalizedOperation.result)
+          const payload = {
+            status: finalizedOperation.status,
+            code: "OPERATION_OUTCOME_UNKNOWN",
+            error: "The original execution is no longer active; inspect its durable status.",
+          }
+          return {
+            approved: true,
+            result: withOperationId(
+              retained.success &&
+                (finalizedOperation.status === "COMPLETED" || retained.data.isError)
+                ? retained.data
+                : {
+                    content: [{ type: "text", text: JSON.stringify(payload) }],
+                    structuredContent: payload,
+                    isError: true,
+                  },
+              claim.operation.id
+            ),
+          }
         }
 
         return { approved: true, result: stampedResult }

@@ -180,7 +180,7 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
       expect(inner).toMatchObject({ status: "COMPLETED", resultReference: "scan-persisted" })
       const requestCount = executionRequests
       expect(await gate("lyrashield_scan_target", { ...input, idempotencyKey: key })).toMatchObject(
-        { approved: false }
+        { approved: true, result: { isError: true } }
       )
       expect(executionRequests).toBe(requestCount)
       requirePermissionMock.mockResolvedValue({
@@ -213,6 +213,79 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
       expect(
         (await owner.agentOperation.findUniqueOrThrow({ where: { id: outer.id } })).status
       ).toBe("COMPLETED")
+    })
+
+    it("expires a stale outer execution under RLS without replaying live or stale handlers", async () => {
+      const connection = await getAgentConnection(connectionId, workspaceId)
+      if (!connection || connection.status !== "ACTIVE") throw new Error("Missing connection")
+      const input = { targetId, mode: "STANDARD" }
+      const key = `stale-outer-${suffix}`
+      const claim = await claimOrGetAgentOperation({
+        connectionId,
+        workspaceId,
+        operationName: CANONICAL_OPERATIONS.SCAN_CREATE,
+        idempotencyKey: key,
+        authorizationVersion: 4,
+        input,
+      })
+      if (claim.status !== "NEW") throw new Error("Missing new operation")
+      const fetchFn = vi.fn<typeof fetch>().mockRejectedValue(new Error("Must not execute"))
+      const gate = makeRemoteApprovalGate({
+        apiKeyInfo: { workspaceId, scopes: ["write"], createdById: userId, keyId: `key-${suffix}` },
+        connection: { ...connection, status: "ACTIVE" },
+        oauthContext: {
+          userId,
+          workspaceId,
+          scopes: ["lyrashield.read", "lyrashield.write"],
+          connectionId,
+          authorizationVersion: 4,
+          allowedOperations: connection.allowedOperations,
+          allowedTargetIds: connection.allowedTargetIds,
+          allTargets: connection.allTargets,
+          allowedProfiles: connection.allowedProfiles,
+          expiresAt: connection.expiresAt,
+        },
+        toolContext: { apiBaseUrl: "http://localhost:3001", apiKey: "runtime-test", fetchFn },
+      })
+      expect(await gate("lyrashield_scan_target", { ...input, idempotencyKey: key })).toMatchObject(
+        {
+          approved: true,
+          result: { structuredContent: { status: "EXECUTING", operationId: claim.operation.id } },
+        }
+      )
+      expect(
+        await owner.agentOperation.findUniqueOrThrow({ where: { id: claim.operation.id } })
+      ).toEqual(claim.operation)
+      const staleAt = new Date(Date.now() - 61 * 60_000)
+      await owner.agentOperation.update({
+        where: { id: claim.operation.id },
+        data: { updatedAt: staleAt },
+      })
+      expect(await gate("lyrashield_scan_target", { ...input, idempotencyKey: key })).toMatchObject(
+        {
+          approved: true,
+          result: {
+            isError: true,
+            structuredContent: {
+              status: "FAILED",
+              code: "OPERATION_OUTCOME_UNKNOWN",
+              operationId: claim.operation.id,
+            },
+          },
+        }
+      )
+      const expired = await owner.agentOperation.findUniqueOrThrow({
+        where: { id: claim.operation.id },
+      })
+      expect(expired).toMatchObject({ status: "FAILED", error: "OPERATION_OUTCOME_UNKNOWN" })
+      await completeAgentOperation(claim.operation.id, workspaceId, {
+        result: { id: "late-result" },
+        expectedUpdatedAt: claim.operation.updatedAt,
+      })
+      expect(
+        await owner.agentOperation.findUniqueOrThrow({ where: { id: claim.operation.id } })
+      ).toEqual(expired)
+      expect(fetchFn).not.toHaveBeenCalled()
     })
 
     it("denies a changed input under the same idempotency key without altering the ledger", async () => {

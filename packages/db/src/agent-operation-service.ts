@@ -40,6 +40,8 @@ export interface ClaimAgentOperationParams {
   idempotencyKey: string
   input: Record<string, unknown>
   authorizationVersion?: number
+  /** Opt-in for an authorized outer MCP claim only; REST handlers have no expiry. */
+  staleExecutingBefore?: Date
   /** OAuth connection principal. Mutually exclusive with apiKeyId/userId. */
   connectionId?: string
   /**
@@ -116,6 +118,54 @@ export type ClaimOperationResult =
 // importing the Prisma-backed service surface.
 export { hashOperationInput }
 
+/** Expire an abandoned outer claim, never reclaim execution or replay a mutation. */
+async function expireOuterExecution(
+  operation: AgentOperation,
+  params: ClaimAgentOperationParams,
+  principal: PrincipalIdentity
+): Promise<AgentOperation> {
+  const cutoff = params.staleExecutingBefore
+  if (
+    !cutoff ||
+    !Number.isFinite(cutoff.getTime()) ||
+    operation.status !== "EXECUTING" ||
+    operation.updatedAt >= cutoff ||
+    !params.connectionId ||
+    params.authorizationVersion === undefined ||
+    operation.connectionId !== params.connectionId ||
+    operation.principalType !== principal.principalType ||
+    operation.principalId !== principal.principalId ||
+    operation.authorizationVersion !== params.authorizationVersion
+  )
+    return operation
+
+  return withWorkspaceRLS(params.workspaceId, async (tx) => {
+    const identity = {
+      id: operation.id,
+      workspaceId: params.workspaceId,
+      connectionId: params.connectionId,
+      principalType: principal.principalType,
+      principalId: principal.principalId,
+      operationName: params.operationName,
+      idempotencyKey: params.idempotencyKey,
+      inputHash: operation.inputHash,
+      authorizationVersion: params.authorizationVersion,
+    }
+    await tx.agentOperation.updateMany({
+      where: {
+        ...identity,
+        status: "EXECUTING",
+        updatedAt: { equals: operation.updatedAt, lt: cutoff },
+      },
+      data: { status: "FAILED", error: "OPERATION_OUTCOME_UNKNOWN" },
+    })
+    // A finalizer or later activity can win the compare-and-set. Use its state.
+    const current = await tx.agentOperation.findFirst({ where: identity })
+    if (!current) throw new Error("Agent operation not found")
+    return current
+  })
+}
+
 export async function claimOrGetAgentOperation(
   params: ClaimAgentOperationParams
 ): Promise<ClaimOperationResult> {
@@ -124,7 +174,7 @@ export async function claimOrGetAgentOperation(
 
   // Check if an operation with the same principal-bound identity exists.
   // The principal unique index covers connectionless principals too.
-  const existing = await withWorkspaceRLS(params.workspaceId, (tx) =>
+  let existing = await withWorkspaceRLS(params.workspaceId, (tx) =>
     tx.agentOperation.findUnique({
       where: {
         workspaceId_principalType_principalId_operationName_idempotencyKey: {
@@ -140,6 +190,7 @@ export async function claimOrGetAgentOperation(
 
   if (existing) {
     if (existing.inputHash === inputHash) {
+      existing = await expireOuterExecution(existing, params, principal)
       if (existing.status === "PENDING" || existing.status === "EXECUTING") {
         return { status: "IN_PROGRESS", operation: existing }
       }
@@ -191,7 +242,7 @@ export async function claimOrGetAgentOperation(
     // Handle concurrent create race (unique constraint violation P2002)
     const prismaErr = err as { code?: string }
     if (prismaErr.code === "P2002") {
-      const raced = await withWorkspaceRLS(params.workspaceId, (tx) =>
+      let raced = await withWorkspaceRLS(params.workspaceId, (tx) =>
         tx.agentOperation.findUnique({
           where: {
             workspaceId_principalType_principalId_operationName_idempotencyKey: {
@@ -205,6 +256,7 @@ export async function claimOrGetAgentOperation(
         })
       )
       if (raced && raced.inputHash === inputHash) {
+        raced = await expireOuterExecution(raced, params, principal)
         if (raced.status === "COMPLETED") return { status: "REPLAY", operation: raced }
         if (raced.status === "FAILED" || raced.status === "CONFLICT") {
           return { status: "FAILED", operation: raced }
@@ -226,18 +278,31 @@ export async function completeAgentOperation(
   params: {
     resultReference?: string
     result?: Prisma.InputJsonObject
+    expectedUpdatedAt?: Date
   }
 ): Promise<AgentOperation> {
-  return withWorkspaceRLS(workspaceId, (tx) =>
-    tx.agentOperation.update({
-      where: { id: operationId },
-      data: {
-        status: "COMPLETED",
-        resultReference: params.resultReference,
-        result: params.result,
-      },
-    })
-  )
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const data = {
+      status: "COMPLETED",
+      resultReference: params.resultReference,
+      result: params.result,
+    } as const
+    if (params.expectedUpdatedAt) {
+      await tx.agentOperation.updateMany({
+        where: {
+          id: operationId,
+          workspaceId,
+          status: "EXECUTING",
+          updatedAt: params.expectedUpdatedAt,
+        },
+        data,
+      })
+      const current = await tx.agentOperation.findFirst({ where: { id: operationId, workspaceId } })
+      if (!current) throw new Error("Agent operation not found")
+      return current
+    }
+    return tx.agentOperation.update({ where: { id: operationId }, data })
+  })
 }
 
 export async function failAgentOperation(
