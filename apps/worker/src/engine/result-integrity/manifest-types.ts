@@ -1,4 +1,4 @@
-import type { UrlExecutionSummary } from "@lyrashield/types"
+import { RESULT_MANIFEST_VERSION, type UrlExecutionSummary } from "@lyrashield/types"
 import type { ParsedEngineCoverage } from "../output-parser"
 import type { ScannerCoverageIssue, ScannerDiscovery } from "../scanner-coverage"
 import type {
@@ -106,7 +106,9 @@ export type ResultManifestInput = {
   /** Bounded explicit issues recorded while ingesting engine evidence. */
   ingestionWarnings?: string[]
 }
-export const MANIFEST_VERSION = 7
+// The stamped manifest version is owned by @lyrashield/types so producer and
+// consumers cannot drift; keep the local name for the writer's call sites.
+export const MANIFEST_VERSION = RESULT_MANIFEST_VERSION
 export const SCANNER_CONTRACT_VERSION = "2026-09-13a"
 
 type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED" | "PARTIAL"
