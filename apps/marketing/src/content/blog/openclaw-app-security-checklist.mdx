@@ -2,7 +2,7 @@
 title: OpenClaw App Security Checklist
 description: "Secure OpenClaw gateway: MCP registry, toolFilter, channel inputs, TLS and CI evidence for AI-built app releases."
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -66,7 +66,7 @@ The reference you verified live shows canonical shape:
 }
 ```
 
-Run `npx lyrashield init --agent openclaw` to print the guided setup. Apply it through OpenClaw's `mcp add` commands or Control UI; LyraShield does not edit the client-owned registry automatically.
+Follow the current [openclaw integration guide](/docs/integrations/openclaw) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 LyraShield integration using the same primitives, docs at [openclaw integration guide](/docs/integrations/openclaw):
 

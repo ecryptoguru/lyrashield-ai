@@ -2,7 +2,7 @@
 title: JetBrains MCP Security Workflow for AI IDEs
 description: Integrate LyraShield MCP into JetBrains AI Assistant to scan AI built code for OWASP flaws secrets and supply chain risk
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -18,7 +18,7 @@ faq:
     a: JetBrains AI Assistant adds MCP servers through Settings, Tools, AI Assistant, MCP. Use Add As JSON for the local LyraShield entry.
 ---
 
-Fastest path: run `npx lyrashield login --oauth`, then add the local server through Settings → Tools → AI Assistant → MCP → Add As JSON. The local package reads the user-only LyraShield credential store, so the JSON contains only the pinned command and arguments. Reopen the MCP settings and confirm the server connects before treating any inline result as evidence.
+Follow the current [jetbrains integration guide](/docs/integrations/jetbrains) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 JetBrains IDEs with AI Assistant can run LyraShield by adding the local MCP package through Settings to AI Assistant to MCP to Add As JSON, then verifying the connection and scanning inline for OWASP risks. The documented JSON needs no embedded key.
 
@@ -26,7 +26,7 @@ JetBrains with AI Assistant changes many files, propagating [OWASP Top 10](https
 
 ## 1. Prerequisites and api key setup
 
-Run `npx lyrashield login --oauth` and keep credentials in the user-only LyraShield credential store. Never commit a key to source control or chat logs. The runner-local GitHub Action does not require that hosted credential.
+Run `npx -y lyrashield@0.2.13 login --oauth` and keep credentials in the user-only LyraShield credential store. Never commit a key to source control or chat logs. The runner-local GitHub Action does not require that hosted credential.
 
 You need Node 24 or newer for the LyraShield package, a current JetBrains build with MCP support and a testable target such as a repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp@0.2.11 and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
 

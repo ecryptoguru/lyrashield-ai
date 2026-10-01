@@ -12,7 +12,7 @@ const buildDate = buildDateFor("src/pages/agents.astro", "src/lib/agent-onboardi
 // Explicit freshness floor: the last content change to this page. The
 // git-derived buildDate wins when it resolves; the floor keeps dateModified
 // honest when the page ships without .git.
-const updatedDate = "2026-10-01"
+const updatedDate = "2026-10-02"
 const dateModified = buildDate ?? `${updatedDate}T00:00:00.000Z`
 
 const answerFirst =
@@ -161,7 +161,7 @@ const jsonLd = [
       <div
         class="mt-6 overflow-hidden rounded-xl border border-border bg-bg-raised"
         data-reveal
-        aria-label="Preview-only setup commands"
+        aria-label="Local OAuth setup command"
       >
         <pre class="p-5 font-mono text-sm leading-relaxed text-text"><code
           >{agentOnboarding.commands.join("\n")}</code
@@ -211,12 +211,11 @@ const jsonLd = [
         Documented client workflows ({agentOnboarding.clients.length})
       </h2>
       <p class="mt-4 max-w-2xl leading-7 text-text-muted" data-reveal>
-        <code class="rounded bg-bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-text"
-          >npx --yes lyrashield@0.2.13 init --dry-run</code
-        > previews setup paths included in the published release. Config-file writes are on hold
-        pending the safe-writer fix. Follow each guide to merge only LyraShield's entry while
-        preserving existing settings, comments where supported, and symlinks; preview output does
-        not establish client discovery or authentication.
+        Manually merge the published <code>@lyrashield/mcp@0.2.11</code> server entry through
+        each client guide. Config-file writes remain withheld pending the safe-writer fix. Preserve
+        existing settings, comments where supported and symlinks; restart the client, confirm tool
+        discovery and complete an authenticated read-only call. Older published previews can print
+        obsolete plugin guidance and do not establish client acceptance.
       </p>
       {
         agentOnboarding.clientGroups.map((group) => (

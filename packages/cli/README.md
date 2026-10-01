@@ -36,7 +36,7 @@ lyrashield <command> [args] [--json]
 
 - `agents` — list the complete registry with detection state, evidence-backed support tier, and verification metadata
 - `init` — detect and configure all installed agents using that client's documented transport and install path. When a client requires its own marketplace, UI, or config merge, `init` prints the exact next step instead of copying files into an unrecognized directory.
-- `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent. Cursor accepts a local Agent Plugin copy; Claude Code, Codex and GitHub Copilot return manual direct-MCP guidance while their reviewed immutable plugin releases are pending; Kiro uses its documented MCP settings file. `--dry-run` previews every path without executing vendor CLIs or writing files.
+- `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent. Cursor, Claude Code, Codex and GitHub Copilot return manual direct-MCP guidance while their reviewed immutable plugin releases are pending; Kiro uses its documented MCP settings file. `--dry-run` previews every path without executing vendor CLIs or writing files.
 - `uninstall <agent>` — remove a CLI-managed LyraShield config or plugin. Marketplace and UI installs return client-specific removal guidance.
 - `rules add <agent>|remove <agent>|check` — add, remove, or validate an agent rules file (`AGENTS.md`, `CLAUDE.md`, etc.)
 

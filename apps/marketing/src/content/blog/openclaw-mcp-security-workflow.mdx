@@ -2,7 +2,7 @@
 title: OpenClaw MCP security workflow
 description: Integrate LyraShield AI with OpenClaw via MCP and GitHub Action to verify builds, upload SARIF and enforce diff aware checks.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -15,10 +15,10 @@ faq:
   - q: "Does OpenClaw support bearer auth for remote MCP?"
     a: "Yes. Prefer auth oauth with openclaw mcp login so a token is not stored in the config."
   - q: "How do I verify the LyraShield connection works in OpenClaw?"
-    a: "Restart OpenClaw, then use the MCP panel to list servers and tools. Expect the lyrashield entry with lyrashield_scan_target, lyrashield_get_findings and lyrashield_list_targets exposed. Run npx lyrashield doctor to confirm the config is valid, the server entry is present and your credentials resolve before you run a scan."
+    a: Confirm server and tool discovery inside the client, then call lyrashield_list_workspaces. CLI 0.2.13 doctor checks a separate local surface; it is not client authentication or scan evidence.
 ---
 
-Run `npx lyrashield init --agent openclaw` to print the current guided setup, then use OpenClaw's own `mcp add` commands below. LyraShield does not edit OpenClaw's client-owned registry automatically. This preserves OpenClaw's validation, OAuth storage and server lifecycle behavior and gives you a clear command to review before it changes the registry.
+Follow the current [openclaw integration guide](/docs/integrations/openclaw) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 You can connect OpenClaw to LyraShield AI over MCP to get target aware scans, findings with explicit evidence states and reviewable fix proposals inside your normal agent loop. In this guide you will configure local stdio using pinned npx -y @lyrashield/mcp@0.2.11 plus remote at https://app.lyrashieldai.com/api/mcp inside ~/.openclaw/openclaw.json, verify tool discovery, run a scoped inline check and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
 

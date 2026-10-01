@@ -14,6 +14,20 @@ or public marketplace acceptance.
 - [Cursor plugin reference](https://prod.cursor.com/docs/reference/plugins) documents HTTP MCP URLs. Its [first-party install payload](https://cursor.com/install-mcp?config=eyJ0eXBlIjoiaHR0cCIsInVybCI6Imh0dHBzOi8vbWNwLmF0bGFzc2lhbi5jb20vdjEvbWNwIn0%3D&name=atlassian) uses `type: http`.
 - [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins) documents a direct server map or a wrapped `mcp_servers` map for the bundled MCP manifest. The Codex shim points to `.mcp.codex.json`, which uses the direct-map form and leaves authentication to hosted OAuth.
 
+Published artifact recheck on 2026-10-02: the exact npm plugin `0.1.30` tarball again hashes to
+`7eaa7335bf7c963a6af0d465b5d3a532cded9ac41b8767efd95e66a857fb98b1`; CLI `0.2.13` hashes to
+`2fbf951abfd59e29ba6dbbe5488c8e55a4679568334e41203ee137b2a5fe779a`. Fetching the official
+Agent Plugins MCP 1.0.0 schema produced SHA-256
+`6539175bfcdf43085855183e86da40ea94b166547a72b47ae9a0a390516d3acb`, matching the vendored
+provenance. AJV 2020 rejects the published portable `mcp.json` at
+`/mcpServers/lyrashield/type`: it contains `http`, while the portable remote schema requires
+`streamable-http` (or the separate legacy SSE shape). The published CLI identifies the portable
+root manifest and copies the entire package to `~/.cursor/plugins/local/lyrashield`; this does
+not establish a schema-valid customer install path. The native Cursor shim is a distinct format
+and does not prove the invalid advertised portable path works. Current customer guidance uses
+pinned direct MCP `0.2.11` and CLI OAuth `0.2.13` until a reviewed matching immutable plugin
+release exists. Historical package/install receipts below do not override this schema failure.
+
 ## Local native-client receipts — 2026-10-01
 
 These checks used the fresh, unpublished Agent Plugin `0.1.31` export at
@@ -44,7 +58,7 @@ The 2026-09-26 `pnpm pack` and `scripts/verify-agent-distribution.mjs --smoke` r
 | -------------------------- | -------------- | ----------------- | ---------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------- | ---------- |
 | `lyrashield`               | 0.2.13         | 0.2.13            | cli                                      | Installer/driver for every registry tier                                     | packed, published, clean-installed | 2026-09-28 |
 | `@lyrashield/mcp`          | 0.2.11         | 0.2.11            | stdio (hosted remote-http is app-served) | COMPATIBLE stdio/config clients; EXPERIMENTAL clients pending client-runtime | packed, published, stdio-checked   | 2026-09-28 |
-| `@lyrashield/agent-plugin` | 0.1.30         | 0.1.30            | remote-http `mcp.json` + client shims    | Preferred for plugin-capable COMPATIBLE clients; Copilot stays EXPERIMENTAL  | packed, published, clean-installed | 2026-09-28 |
+| `@lyrashield/agent-plugin` | 0.1.30         | 0.1.30            | remote-http `mcp.json` + client shims    | Historical publication only; portable MCP schema fails current validation    | packed, published, clean-installed | 2026-09-28 |
 
 Prior coordinated package release source: main `c6aee9ade4b4760c4280f3d6b3295fe50481d7f5` with [green CI](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36245760763). Verified tarball SHA-256: plugin `7e8c042174d63384b581b3f6fd90d2a51417179a63da5f57bc988e75cec7157e`, CLI `f44f0929a20483fa62eddba3533d523bab039860c497f7dafaec75a0ed9641f1`, MCP `385715ba589600edb1b27e8ba782047c06247e5c14e2a331bc76f48deb415b57`. Registry SHA-512 integrity matched each exact tarball. A clean npm install ran CLI `--version`/`--help` and imported the plugin; the published MCP passed integrity, entrypoint and stdio tool checks. The clean, release-candidate marketplace export validated 31 generated artifacts. Authenticated client-runtime acceptance remains separate. The newer MCP 0.2.11 receipt is recorded above.
 
@@ -82,3 +96,18 @@ Per package (dir `packages/<dir>` / name `<name>`: `agent-plugin`/`@lyrashield/a
    ```sh
    node scripts/verify-published-mcp.mjs   # @lyrashield/mcp registry + stdio receipt
    ```
+
+### Codebuff direct MCP and the candidate reviewer are separate contracts
+
+On 2026-10-02, the [official Codebuff MCP guide](https://www.codebuff.com/docs/tips/mcp-servers)
+explicitly documented project `.agents/mcp.json`, parent `.agents/mcp.json`, then global
+`~/.agents/mcp.json` (later locations override earlier), under `mcpServers`, with local stdio
+and HTTP/SSE entries plus `$VAR_NAME` shell interpolation. The registry config-file path matches
+that current documented direct-MCP contract. Use published MCP `0.2.11` and separate CLI `0.2.13`
+OAuth for the local fallback; published config writes remain withheld. Static remote headers are
+not evidence of hosted OAuth or authorization for mutations.
+
+The separate `codebuff/lyrashield-review.ts` preparation artifact uses per-agent `mcpServers`,
+a read-only tool allowlist and unpublished MCP `0.2.12` / CLI `0.2.14`. It is not a customer
+install source until the matching immutable release is reviewed. This source review establishes
+the documented configuration distinction, not authenticated Codebuff runtime acceptance.

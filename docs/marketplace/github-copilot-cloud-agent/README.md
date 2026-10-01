@@ -5,16 +5,23 @@ secrets. It is documentation-only: LyraShield has no authenticated Copilot Cloud
 Code Review runtime receipt, and no public plugin listing is claimed.
 
 GitHub Copilot Cloud Agent and Copilot Code Review share repository-level MCP settings. GitHub
-currently does not support remote MCP OAuth for either surface. The portable LyraShield plugin can
-provide skills, but its hosted OAuth MCP descriptor does not authenticate Cloud Agent. For this
-read-only surface, install only the `get-started`, `review-changes`, and `launch-readiness` skills.
-Copy those skill directories from the marketplace package's `skills/` into the repository's
-`.github/skills/` directory. Do not install `scan-project`, `fix-and-retest`, or the backward-
-compatible `lyrashield` skill here: their recorded scans, fixes, and retests need an OAuth-capable
-client. The `review-changes` skill is limited to its read-only diff advisory on this surface; its
-optional recorded scan action is not allowlisted. Do not enable the full marketplace plugin through repository plugin settings: that would load the
-excluded workflows and an OAuth MCP descriptor this surface cannot authenticate. Discovering a skill does
-not prove that MCP authentication works.
+currently does not support remote MCP OAuth for either surface. Use the read-only API-key/MCP
+configuration below independently of any plugin or skill package.
+
+## Workflow skills withheld pending immutable release
+
+Skill installation is withheld until a reviewed matching immutable release exists. Do not copy
+skill directories from the mutable marketplace preparation branch into `.github/skills/` and do
+not enable its full plugin in repository settings. No current skill-copy install recipe is
+provided by this guide. The portable plugin's hosted OAuth descriptor cannot authenticate Cloud
+Agent.
+
+The planned read-only set is `get-started`, `review-changes`, and `launch-readiness`. Recorded-scan,
+fix and retest workflows require an OAuth-capable client, so `scan-project`, `fix-and-retest` and
+the backward-compatible `lyrashield` skill remain excluded here. The optional recorded-scan action
+in `review-changes` is also outside the allowlist. After an immutable bundle is reviewed and
+released, skill installation and discovery still need separate acceptance; neither proves MCP
+authentication.
 
 ## Configure read-only MCP access
 

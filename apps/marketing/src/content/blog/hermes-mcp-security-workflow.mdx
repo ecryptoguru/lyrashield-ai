@@ -2,7 +2,7 @@
 title: Hermes MCP workflow for security scans
 description: Integrate LyraShield AI with Hermes AI via YAML config to run bounded scans per target, preserve evidence states and enforce diff aware PR gating.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -18,7 +18,7 @@ faq:
     a: "Hermes reads MCP servers from its settings file under mcpServers with local stdio and remote entries. Use the pinned npx -y @lyrashield/mcp@0.2.11 command for local and the remote endpoint with a Bearer lsk_ key for shared team or CI use. Keep the key in an env reference, never as a literal in the committed config."
 ---
 
-Fastest path: run `npx lyrashield init` to auto-detect Hermes and write the config or `npx lyrashield install hermes` for the CLI-managed path, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference.
+Follow the current [hermes integration guide](/docs/integrations/hermes) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 You can pair Hermes AI with LyraShield AI over MCP to get target aware scans, recorded evidence states and fix proposals without leaving your agent workflow. In this guide you will add the local server using pinned npx -y @lyrashield/mcp@0.2.11 plus the remote endpoint at https://app.lyrashieldai.com/api/mcp inside ~/.hermes/config.yaml, verify tool discovery, run a scoped inline check and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
 

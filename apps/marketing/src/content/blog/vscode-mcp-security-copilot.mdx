@@ -2,7 +2,7 @@
 title: VS Code MCP Security Workflow with Copilot
 description: Add LyraShield MCP to VS Code for Copilot aware security checks findings with evidence states and diff aware GitHub Action gates
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -18,7 +18,7 @@ faq:
     a: VS Code reads workspace MCP servers from .vscode/mcp.json under the top-level servers key. Open the user MCP configuration from the command palette for profile-local servers.
 ---
 
-Fastest path: run `npx lyrashield init`, which detects VS Code and writes the config to .vscode/mcp.json, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference. Agent Plugin marketplace registration is in progress, so the CLI is the current path.
+Follow the current [vscode integration guide](/docs/integrations/vscode) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 To add LyraShield security to VS Code, configure .vscode/mcp.json using servers key and inputs promptString for your lsk\_ key, add stdio npx -y @lyrashield/mcp@0.2.11 and remote entries, verify in Copilot chat, then scan for OWASP risks inline and enforce a diff aware gate.
 

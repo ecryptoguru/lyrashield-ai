@@ -2,7 +2,7 @@
 title: OpenCode App Security Checklist for AI Built Apps
 description: Secure OpenCode workflows with current opencode.json MCP controls and verified SCA plus secrets scanning.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -32,7 +32,7 @@ OpenCode uses `opencode.json` with named servers directly under the root `mcp` o
 
 Secure it in four practical steps.
 
-Fastest path: run `npx lyrashield init`, which detects OpenCode and writes the MCP config for you. Verify with `npx lyrashield doctor`, then run `npx lyrashield login` to store credentials in ~/.lyrashield/credentials.json with nothing committed to your repo. The manual config below is what the CLI writes, kept for reference.
+Follow the current [opencode integration guide](/docs/integrations/opencode) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 First, never inline secrets in JSON. Use `{env:VAR}` interpolation and load values from env or your secret manager, with a .env file gitignored and keys rotated monthly.
 

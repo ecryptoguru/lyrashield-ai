@@ -2,7 +2,7 @@
 title: Using LyraShield alongside Aider for AI coding
 description: "How to run LyraShield security checks alongside Aider today using the CLI and GitHub Action diff gate. Native MCP is a roadmap item Aider has not yet shipped."
 pubDate: "2026-08-07"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -11,24 +11,24 @@ faq:
   - q: Does Aider support MCP servers today?
     a: No. Aider does not ship native MCP support. Open feature requests exist on GitHub (issues 2525 and 4506) and community pull requests (3672 and 3937) were closed without merging. Use the LyraShield CLI and GitHub Action until Aider ships native MCP.
   - q: How do I run a LyraShield scan alongside Aider without MCP?
-    a: Run npx lyrashield scan from your terminal after Aider edits. The CLI works standalone with no MCP integration needed. Run it before you commit to catch exposed secrets, dependency advisories and code risks that Aider generated.
+    a: Run npx -y lyrashield@0.2.13 scan from your terminal after Aider edits. The CLI works standalone with no MCP integration needed. Run it before you commit to catch exposed secrets, dependency advisories and code risks that Aider generated.
   - q: What does the CLI doctor command verify?
     a: It verifies that the server is reachable, your credentials resolve and the local config is valid, so you can confirm setup without a manual guess before you run a scan.
   - q: Does Aider have a rules file for agent instructions?
     a: No. Aider has no dedicated rules file. You convey conventions through the chat prompt at the start of each session and you can paste a short security snippet each time.
 ---
 
-You can use LyraShield AI alongside Aider today without waiting for native MCP support. Aider does not ship MCP integration yet, so this workflow uses the LyraShield CLI to scan your changes and a GitHub Action diff gate to enforce the same checks in CI. Native MCP is a roadmap item for Aider and this post shows what that path will look like when it ships.
+You can use LyraShield AI alongside Aider today without waiting for native MCP support. Aider does not ship MCP integration yet, so this workflow uses the LyraShield CLI to scan your changes and a GitHub Action diff gate to enforce the same checks in CI. Use the current [Aider integration guide](/docs/integrations/aider); native MCP is not a supported install path.
 
 Aider edits files directly from the chat prompt, which is fast but means a risky edit lands in your tree before any review pane catches it. The [vibe coding security guide](/blog/vibe-coding-security-guide) frames this as unverified generation at scale. LyraShield AI is agent native AppSec for AI built software that follows a loop of Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. Because Aider lacks native MCP today, the working integration is the CLI plus the CI gate, both of which need no Aider config change. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
 
 ## 1. Install prerequisites and authenticate
 
-Install Node so the `npx` commands resolve, then run `npx lyrashield login` to store your credentials in a local file under your home directory. Nothing is committed to the repository, because credentials live in a per user file and the CLI never writes them into source. This matters for shared repos where a committed token would leak to every collaborator and to the git history. Confirm with `npx lyrashield doctor` that the server is reachable and the credentials resolve before you scan, because a failed login surfaces here instead of mid session. The [Node.js downloads page](https://nodejs.org/en/download) is the canonical source for the runtime. Run login and doctor from the project root so any project scoped config is detected correctly and re-run doctor whenever you suspect the connection has drifted. If you share a machine with teammates, note that the credentials file is per user, so each person runs login once rather than sharing a single credential file.
+Install Node so the `npx` commands resolve, then run `npx -y lyrashield@0.2.13 login --oauth` to store your credentials in a local file under your home directory. Nothing is committed to the repository, because credentials live in a per user file and the CLI never writes them into source. This matters for shared repos where a committed token would leak to every collaborator and to the git history. Confirm with `npx -y lyrashield@0.2.13 doctor` that the server is reachable and the credentials resolve before you scan, because a failed login surfaces here instead of mid session. The [Node.js downloads page](https://nodejs.org/en/download) is the canonical source for the runtime. Run login and doctor from the project root so any project scoped config is detected correctly and re-run doctor whenever you suspect the connection has drifted. If you share a machine with teammates, note that the credentials file is per user, so each person runs login once rather than sharing a single credential file.
 
 ## 2. Run a CLI scan alongside Aider
 
-The working integration today is the CLI. After Aider edits your files, run a scan from the terminal before you commit. This catches exposed secrets, vulnerable dependencies and code risks that Aider generated, without needing any MCP wiring inside Aider itself. Run `npx lyrashield scan` from the project root, targeting the files Aider changed. The CLI returns findings you can triage before the edit reaches version control, which is the moment a risky change is cheapest to fix.
+The working integration today is the CLI. After Aider edits your files, run a scan from the terminal before you commit. This catches exposed secrets, vulnerable dependencies and code risks that Aider generated, without needing any MCP wiring inside Aider itself. Run `npx -y lyrashield@0.2.13 scan` from the project root, targeting the files Aider changed. The CLI returns findings you can triage before the edit reaches version control, which is the moment a risky change is cheapest to fix.
 
 Keep the loop simple: Aider edits, you scan, you triage, you commit or fix. Because Aider has no review pane like an IDE, the CLI scan is your review step between generation and commit. Cross reference code findings against [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) and dependency findings against [OSV](https://osv.dev/) advisories so triage uses a shared vocabulary. If a finding flags a hardcoded secret, rotate it before commit rather than after, because a secret in git history is expensive to purge. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how servers expose tools, which is relevant once Aider ships native MCP, but you do not need it for the CLI path today.
 
@@ -59,7 +59,7 @@ This gate works whether or not Aider ever ships MCP, because it runs in CI on th
 
 Aider does not have native MCP support today and being honest about that matters. Two GitHub feature requests are open: issue 2525 asks for MCP client support and issue 4506 asks for native MCP server and Agent Mode in the CLI. Two community pull requests attempted to add it: PR 3672 added a rough stdio client via a custom YAML config and PR 3937 used LiteLLM's MCP bridge with the standard JSON server schema. Both were closed without merging, so neither is in shipped Aider. The [Aider configuration docs](https://aider.chat/docs/config/aider_conf.html) cover the `.aider.conf.yml` file but do not document an `mcp-servers` key, because that key exists only in the unmerged PRs and third party guides, not in the released tool.
 
-When Aider ships native MCP, the LyraShield integration path will be to register the server in Aider's config using the pinned command `npx -y @lyrashield/mcp@0.2.11` for local stdio or the remote endpoint `https://app.lyrashieldai.com/api/mcp` with a Bearer token prefixed `lsk_`. The server exposes scan, lyrashield_list_targets and lyrashield_get_findings tools that the Aider agent can call inline, the same tools other editors use today. Until then, the CLI and GitHub Action in this post are the supported ways to run LyraShield alongside Aider. Track the Aider GitHub issues if you want to adopt native MCP the day it merges.
+No native LyraShield MCP recipe is offered for Aider until that client documents a released contract and its setup is reviewed. Do not infer a YAML key, install a bridge or copy candidate skills from another client’s instructions. The current supported surface is the standalone `lyrashield@0.2.13` CLI and CI gate. Authenticate the CLI separately, keep credentials outside the repository and retain the check’s exact revision and coverage. A future native client would need separate discovery, authentication and read-only runtime evidence; existing local CLI receipts cannot prove that future integration.
 
 ## 5. Add an agent rules snippet
 
@@ -71,11 +71,11 @@ Before finishing a feature, run a LyraShield security check and attach the findi
 
 Because Aider has no persistent rules file, paste this snippet at the start of each session or save it in a local note you copy from. The snippet keeps the security loop explicit: Aider edits, you scan via CLI, you triage, you commit with evidence. Treat the snippet as the contract your session follows, even without a rules file to enforce it.
 
-| Integration path | How it works today                | Needs Aider MCP | Status               |
-| ---------------- | --------------------------------- | --------------- | -------------------- |
-| CLI scan         | npx lyrashield scan from terminal | No              | Working now          |
-| GitHub Action    | Diff aware gate on pull requests  | No              | Working now          |
-| Native MCP       | Server registered in Aider config | Yes             | Roadmap, not shipped |
+| Integration path | How it works today                          | Needs Aider MCP | Status               |
+| ---------------- | ------------------------------------------- | --------------- | -------------------- |
+| CLI scan         | npx -y lyrashield@0.2.13 scan from terminal | No              | Working now          |
+| GitHub Action    | Diff aware gate on pull requests            | No              | Working now          |
+| Native MCP       | Server registered in Aider config           | Yes             | Roadmap, not shipped |
 
 ## Why pair Aider with LyraShield AI
 

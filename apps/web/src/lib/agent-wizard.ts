@@ -110,6 +110,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   const manualPlugin = agent.installStrategy === "agent-plugin" && !!agent.manualInstructions
   const pendingPluginFallbackId: Record<string, string> = {
     "claude-code-agent-plugin": "claude-code",
+    "cursor-agent-plugin": "cursor",
     "openai-codex-agent-plugin": "openai-codex",
     "github-copilot-agent-plugin": "copilot-cli",
   }

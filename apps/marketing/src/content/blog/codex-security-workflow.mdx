@@ -2,7 +2,7 @@
 title: Codex app security workflow for trusted releases
 description: Lock down Codex config and MCP servers, gate dependencies and secrets and capture SARIF evidence for every AI assisted release.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -34,7 +34,7 @@ If you also ship with Lovable or Bolt, review our [Lovable app security checklis
 
 Codex CLI reads .codex/ config.toml from your home directory. MCP servers are defined under mcp_servers tables. This file is the control plane for external tools, so harden it like production config.
 
-Fastest path: run `npx lyrashield install openai-codex`, which copies the generated plugin into Codex's documented local plugin directory. The plugin contains the hosted MCP URL and completes OAuth inside Codex; it does not require a local API key. The TOML examples below remain available for a manual stdio or remote setup.
+Follow the current [openai-codex integration guide](/docs/integrations/openai-codex) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 Secure example without inline secrets:
 

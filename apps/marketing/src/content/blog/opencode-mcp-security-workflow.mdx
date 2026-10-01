@@ -2,7 +2,7 @@
 title: OpenCode MCP security workflow
 description: Connect OpenCode to LyraShield MCP for evidence-state findings and a diff-aware GitHub gate using opencode.json and a pinned local package.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -18,7 +18,7 @@ faq:
     a: "OpenCode reads named servers directly under the root mcp object in opencode.json. Local entries use type local, a command array and environment; remote entries use type remote, url and headers. Use OpenCode's {env:NAME} substitution for secrets."
 ---
 
-Fastest path: run `npx lyrashield init` to auto-detect OpenCode and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials in ~/.lyrashield/credentials.json. The manual config below is what the CLI writes, kept for reference.
+Follow the current [opencode integration guide](/docs/integrations/opencode) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 Connect OpenCode to LyraShield AI through MCP to scan AI generated code for findings with evidence states, propose Fix Proposals that are designed to be minimal and enforce the same checks in CI with a diff aware gate. The server entry lives in `opencode.json` directly under the root `mcp` object and supports local stdio via `npx -y @lyrashield/mcp@0.2.11` plus remote HTTP with a bearer token.
 
@@ -140,7 +140,7 @@ The agent rules snippet matters because OpenCode loads rules from your rules dir
 | Config key   | Purpose              | Example                                          |
 | ------------ | -------------------- | ------------------------------------------------ |
 | type         | Transport mode       | local or remote                                  |
-| command      | Launch local MCP     | [npx, -y, @lyrashield/mcp@0.2.11]                 |
+| command      | Launch local MCP     | [npx, -y, @lyrashield/mcp@0.2.11]                |
 | environment  | Inject local secrets | LYRASHIELD_API_KEY via `{env:}`                  |
 | enabled      | Toggle server        | true to enable                                   |
 | url, headers | Remote endpoint auth | https://app.lyrashieldai.com/api/mcp with Bearer |
