@@ -51,9 +51,9 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "@astrojs/check": "^0.9.10",
-    "@cloudflare/workers-types": "^5.20260823.1",
+    "@cloudflare/workers-types": "^5.20260928.1",
     "@tailwindcss/typography": "^0.5.20",
     "@types/node": "catalog:",
     "tsx": "catalog:",
