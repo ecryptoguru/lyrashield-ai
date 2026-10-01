@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { isDeepStrictEqual } from "node:util"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => {
@@ -16,7 +17,7 @@ vi.mock("@lyrashield/db", () => {
   return {
     prisma: mockPrisma,
     getWorkspaceContext: vi.fn().mockReturnValue("ws-1"),
-    verifyStoredManifestChecksum: vi.fn().mockReturnValue("UNAVAILABLE"),
+    verifyStoredManifestChecksum: vi.fn(),
     withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
       fn(mockPrisma)
     ),
@@ -50,10 +51,12 @@ function manifestRow(scanId: string, targetId: string, targetType: string, overr
       ...(overrides as { engineExecution?: object }).engineExecution,
     }
   }
+  const checksumInput = JSON.stringify(merged)
   return {
     id: `manifest-${scanId}`,
     scanId,
-    checksum: `checksum-${scanId}`,
+    checksum: createHash("sha256").update(checksumInput).digest("hex"),
+    checksumInput,
     manifest: merged,
   }
 }
@@ -148,7 +151,19 @@ function mockRepoRetestState(
 describe("result integrity", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(verifyStoredManifestChecksum).mockReturnValue("UNAVAILABLE")
+    vi.mocked(verifyStoredManifestChecksum).mockImplementation((stored) => {
+      if (!stored || stored.checksumInput == null) return "UNAVAILABLE"
+      if (!/^[0-9a-f]{64}$/.test(stored.checksum)) return "MISMATCH"
+      if (createHash("sha256").update(stored.checksumInput).digest("hex") !== stored.checksum)
+        return "MISMATCH"
+      try {
+        return isDeepStrictEqual(JSON.parse(stored.checksumInput), stored.manifest)
+          ? "MATCH"
+          : "MISMATCH"
+      } catch {
+        return "MISMATCH"
+      }
+    })
     vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback(prisma))
   })
 
@@ -729,12 +744,28 @@ describe("result integrity", () => {
               scannerSource: "secrets",
               baseline: expect.objectContaining({
                 scanId: "scan-1",
-                manifestChecksum: "checksum-scan-1",
+                manifestChecksum: createHash("sha256")
+                  .update(
+                    JSON.stringify(
+                      manifestRow("scan-1", "target-1", "REPO", {
+                        engineExecution: { sourceRevision: REV_A },
+                      }).manifest
+                    )
+                  )
+                  .digest("hex"),
                 sourceRevision: REV_A,
               }),
               retest: expect.objectContaining({
                 scanId: "scan-2",
-                manifestChecksum: "checksum-scan-2",
+                manifestChecksum: createHash("sha256")
+                  .update(
+                    JSON.stringify(
+                      manifestRow("scan-2", "target-1", "REPO", {
+                        engineExecution: { sourceRevision: REV_A },
+                      }).manifest
+                    )
+                  )
+                  .digest("hex"),
                 sourceRevision: REV_A,
               }),
               coverageReceiptIds: ["baseline-secrets", "retest-secrets"],
@@ -745,7 +776,98 @@ describe("result integrity", () => {
       expect(prisma.retest.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ status: "passed" }) })
       )
+      expect(verifyStoredManifestChecksum).toHaveBeenCalledWith(
+        expect.objectContaining({ scanId: "scan-1", checksumInput: expect.any(String) })
+      )
+      expect(verifyStoredManifestChecksum).toHaveBeenCalledWith(
+        expect.objectContaining({ scanId: "scan-2", checksumInput: expect.any(String) })
+      )
     })
+
+    it.each(["baseline", "retest"] as const)(
+      "leaves a %s manifest with changed JSON and a stale checksum inconclusive",
+      async (whichManifest) => {
+        const original = manifestRow(
+          whichManifest === "baseline" ? "scan-1" : "scan-2",
+          "target-1",
+          "REPO"
+        )
+        const corrupted = {
+          ...original,
+          manifest: { ...original.manifest, unboundField: "changed after checksum" },
+        }
+        mockRepoRetestState(
+          whichManifest === "baseline"
+            ? { baselineManifest: corrupted }
+            : { retestManifest: corrupted }
+        )
+
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+
+        expect(prisma.finding.update).not.toHaveBeenCalled()
+        expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({
+              status: "INCONCLUSIVE",
+              reason: expect.stringContaining(`${whichManifest} result manifest checksum`),
+            }),
+          })
+        )
+        expect(prisma.retest.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ status: "inconclusive" }) })
+        )
+      }
+    )
+
+    it.each(["baseline", "retest"] as const)(
+      "leaves a %s manifest with a malformed checksum inconclusive",
+      async (whichManifest) => {
+        const invalid = {
+          ...manifestRow(whichManifest === "baseline" ? "scan-1" : "scan-2", "target-1", "REPO"),
+          checksum: "not-a-sha256-digest",
+        }
+        mockRepoRetestState(
+          whichManifest === "baseline" ? { baselineManifest: invalid } : { retestManifest: invalid }
+        )
+
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+
+        expect(prisma.finding.update).not.toHaveBeenCalled()
+        expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({
+              status: "INCONCLUSIVE",
+              reason: expect.stringContaining(`${whichManifest} result manifest checksum`),
+            }),
+          })
+        )
+      }
+    )
+
+    it.each(["baseline", "retest"] as const)(
+      "leaves a %s legacy manifest without checksum input inconclusive",
+      async (whichManifest) => {
+        const legacy = {
+          ...manifestRow(whichManifest === "baseline" ? "scan-1" : "scan-2", "target-1", "REPO"),
+          checksumInput: null,
+        }
+        mockRepoRetestState(
+          whichManifest === "baseline" ? { baselineManifest: legacy } : { retestManifest: legacy }
+        )
+
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+
+        expect(prisma.finding.update).not.toHaveBeenCalled()
+        expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({
+              status: "INCONCLUSIVE",
+              reason: expect.stringContaining(`${whichManifest} result manifest checksum`),
+            }),
+          })
+        )
+      }
+    )
 
     it("loads manifests and coverage for all scans with one query per table", async () => {
       mockRepoRetestState()
