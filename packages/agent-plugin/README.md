@@ -93,7 +93,7 @@ against the remote endpoint receive `connect_required` instead.
 - Standard schema: Agent Plugins 1.0.0.
 - `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
   OAuth-first manifests, mutation exclusions, artifact versions and the public export boundary.
-- `pnpm --filter @lyrashield/agent-plugin export:marketplace -- <directory>` creates the
+- `pnpm --filter @lyrashield/agent-plugin export:marketplace <directory>` creates the
   reviewable marketplace payload and provenance manifest.
 
 An exported or validated artifact is not proof that a vendor marketplace accepted, published
