@@ -326,4 +326,21 @@ describe("GET /api/reports/[id] — authenticated private detail", () => {
     )
     expect(getShareableReport).not.toHaveBeenCalled()
   })
+
+  it("returns an ETag on 200 and a bodyless 304 for a matching If-None-Match (W2.4)", async () => {
+    getShareableReport.mockResolvedValue({ id: "report-1", type: "developer" })
+
+    const first = await GET(getRequest(), { params: Promise.resolve({ id: "report-1" }) })
+    expect(first.status).toBe(200)
+    const etag = first.headers.get("ETag")
+    expect(etag).toMatch(/^"[0-9a-f]{64}"$/)
+
+    const conditional = new Request("http://localhost/api/reports/report-1?workspaceId=ws-1", {
+      headers: { "If-None-Match": etag! },
+    })
+    const second = await GET(conditional, { params: Promise.resolve({ id: "report-1" }) })
+    expect(second.status).toBe(304)
+    expect(second.headers.get("ETag")).toBe(etag)
+    expect(await second.text()).toBe("")
+  })
 })

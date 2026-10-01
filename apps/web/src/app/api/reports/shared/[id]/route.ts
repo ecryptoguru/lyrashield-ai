@@ -1,6 +1,7 @@
 import { getReportByShareToken, getShareableReport } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { apiError, apiSuccess } from "../../../../../lib/api-response"
+import { apiError } from "../../../../../lib/api-response"
+import { jsonWithEtag } from "../../../../../lib/http-etag"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -23,7 +24,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("REPORT_NOT_FOUND", "Report not found", 404)
     }
 
-    return apiSuccess(shareable)
+    // W2.4: shared-token reads are cacheable representations too — ETag on
+    // 200 and a bodyless 304 for a matching conditional GET.
+    return jsonWithEtag(request, shareable)
   } catch (error) {
     logger.error("Failed to get shared report", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to get report", 500)

@@ -11,6 +11,7 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
+import { jsonWithEtag } from "../../../../lib/http-etag"
 import { z } from "zod"
 
 const ReportActionSchema = z.object({
@@ -42,7 +43,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const launchReport =
       report.type === "launch_readiness" ? await getLaunchReportDetail(id, workspaceId) : null
 
-    return apiSuccess(launchReport ? { ...report, launchReport } : report)
+    // W2.4: ETag bound to the serialized representation — a matching
+    // If-None-Match answers 304 with no body.
+    return jsonWithEtag(request, launchReport ? { ...report, launchReport } : report)
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

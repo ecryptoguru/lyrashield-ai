@@ -110,4 +110,24 @@ describe("/api/scans/[id]/quality", () => {
     expect([401, 403, 500]).toContain(res.status)
     expect(getScanQualitySurface).not.toHaveBeenCalled()
   })
+
+  it("returns an ETag on 200 and a bodyless 304 for a matching If-None-Match (W2.4)", async () => {
+    vi.mocked(getScanQualitySurface).mockResolvedValue({
+      version: "lyrashield-scan-quality/1.0.0",
+      surfaceChecksum: "deadbeef",
+    } as never)
+
+    const first = await GET(request("ws-1"), routeParams)
+    expect(first.status).toBe(200)
+    const etag = first.headers.get("ETag")
+    expect(etag).toMatch(/^"[0-9a-f]{64}"$/)
+
+    const conditional = new Request("http://localhost/api/scans/scan-1/quality?workspaceId=ws-1", {
+      headers: { "If-None-Match": etag! },
+    })
+    const second = await GET(conditional, routeParams)
+    expect(second.status).toBe(304)
+    expect(second.headers.get("ETag")).toBe(etag)
+    expect(await second.text()).toBe("")
+  })
 })

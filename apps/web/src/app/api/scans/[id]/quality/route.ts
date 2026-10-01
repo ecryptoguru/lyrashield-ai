@@ -3,7 +3,8 @@ import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
-import { apiError, apiSuccess } from "../../../../../lib/api-response"
+import { apiError } from "../../../../../lib/api-response"
+import { jsonWithEtag } from "../../../../../lib/http-etag"
 import { z } from "zod"
 import { ScanIdSchema } from "@lyrashield/types"
 
@@ -34,7 +35,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!surface) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
-    return apiSuccess(surface)
+    // W2.4: the quality surface is a report representation — ETag on 200 and
+    // a bodyless 304 for a matching conditional GET.
+    return jsonWithEtag(request, surface)
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
