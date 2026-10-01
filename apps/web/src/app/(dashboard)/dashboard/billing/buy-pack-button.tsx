@@ -47,11 +47,12 @@ export function BuyPackButton({ workspaceId, packId = "pack_100" }: BuyPackButto
         </p>
       )}
       <button
+        type="button"
         onClick={handleBuy}
         disabled={loading}
         className={`${buttonVariants({ variant: "outline" })} w-full`}
       >
-        {loading ? "Loading..." : "Buy Minute Pack"}
+        {loading ? "Opening secure checkout…" : "Buy Minute Pack"}
       </button>
     </div>
   )
