@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { afterEach, describe, expect, it } from "vitest"
+import { parse } from "yaml"
 import { createAllTools, McpServer } from "@lyrashield/mcp"
 import { buildPlugin } from "../build.js"
 import { exportMarketplace } from "../export.js"
@@ -451,13 +452,18 @@ describe("exportMarketplace", () => {
     const icon = await readFile(path.join(output, "assets", "lyrashield-400.png"))
     expect(icon.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a")
 
-    // Gemini exposes only the two explicit scan tools; every other mutator
-    // remains excluded in both extension manifests.
+    // Gemini exposes the explicitly invoked scan and fix/retest workflows;
+    // unrelated mutators remain excluded in both extension manifests.
     const mutating = createAllTools({ apiBaseUrl: "", apiKey: "" })
       .filter((tool) => tool.mutating)
       .map((tool) => tool.name)
     expect(manifest.mutatingTools).toEqual(mutating)
-    const allowed = ["lyrashield_scan_target", "lyrashield_run_pr_scan"]
+    const allowed = [
+      "lyrashield_scan_target",
+      "lyrashield_run_pr_scan",
+      "lyrashield_record_fix_proposal",
+      "lyrashield_verify_fix",
+    ]
     const excluded = mutating.filter((name) => !allowed.includes(name))
     expect(manifest.geminiAllowedMutatingTools).toEqual(allowed)
     expect(manifest.geminiExcludedTools).toEqual(excluded)
@@ -472,9 +478,20 @@ describe("exportMarketplace", () => {
     for (const location of ["gemini-extension.json", "gemini-extension/gemini-extension.json"]) {
       const gemini = JSON.parse(await readFile(path.join(output, location), "utf8")) as {
         excludeTools?: string[]
+        mcpServers: { lyrashield: { excludeTools?: string[] } }
         version?: string
       }
       expect(gemini.excludeTools).toEqual(excluded)
+      expect(gemini.mcpServers.lyrashield.excludeTools).toEqual(excluded)
+      for (const skill of ["scan-project", "review-changes", "fix-and-retest"]) {
+        const workflow = await readFile(
+          path.join(output, "gemini-extension/skills", skill, "SKILL.md"),
+          "utf8"
+        )
+        for (const name of workflow.match(/lyrashield_[a-z_]+/g) ?? []) {
+          expect(excluded, `${skill} references excluded tool ${name}`).not.toContain(name)
+        }
+      }
       expect(gemini.version).toBe(manifest.artifactVersions?.gemini)
     }
 
@@ -489,6 +506,83 @@ describe("exportMarketplace", () => {
 })
 
 describe("exported validator", () => {
+  it("rejects a Gemini authored workflow that calls an excluded mutation", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+    const relative = "gemini-extension/commands/lyrashield/review-changes.toml"
+    const text = await readFile(path.join(output, relative), "utf8")
+    await writeFile(
+      path.join(output, relative),
+      text.replace("lyrashield_check_diff", "lyrashield_cancel_scan")
+    )
+    await updateManifestHash(output, relative)
+    await expect(runValidator(output)).rejects.toThrow(
+      /references excluded tool lyrashield_cancel_scan/
+    )
+  })
+
+  it("keeps offline candidates passable and fails release-ready validation on pinned MCP E404", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+    const preloadDir = await mkdtemp(path.join(tmpdir(), "lyrashield-registry-fixture-"))
+    outputs.push(preloadDir)
+    const preload = path.join(preloadDir, "registry.mjs")
+    await writeFile(
+      preload,
+      `globalThis.fetch = async url => {
+      if (url !== "https://registry.npmjs.org/@lyrashield%2fmcp/0.2.12") throw new Error("unexpected registry URL");
+      return new Response('{"error":"E404"}', { status: 404 });
+    };`
+    )
+    await expect(
+      execFileAsync(process.execPath, ["--import", preload, "scripts/validate.mjs"], {
+        cwd: output,
+      })
+    ).resolves.toMatchObject({ stdout: expect.stringContaining("Marketplace validation passed") })
+    await expect(
+      execFileAsync(
+        process.execPath,
+        ["--import", preload, "scripts/validate.mjs", "--release-ready"],
+        {
+          cwd: output,
+        }
+      )
+    ).rejects.toThrow(/pinned MCP package is unavailable: HTTP 404/)
+    const workflow = parse(
+      await readFile(path.join(output, ".github/workflows/validate.yml"), "utf8")
+    ) as {
+      jobs: { validate: { steps: Array<{ run?: string }> } }
+    }
+    const validateCommand = workflow.jobs.validate.steps.find((step) =>
+      step.run?.startsWith("node scripts/validate.mjs")
+    )?.run
+    expect(validateCommand).toBeTruthy()
+    await expect(
+      execFileAsync(
+        process.execPath,
+        ["--import", preload, ...validateCommand!.split(/\s+/).slice(1)],
+        {
+          cwd: output,
+        }
+      )
+    ).rejects.toThrow(/pinned MCP package is unavailable: HTTP 404/)
+    const manifestPath = path.join(output, "manifest.json")
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"))
+    manifest.publication = {
+      ...manifest.publication,
+      status: "release-candidate",
+      sourceClean: true,
+    }
+    await writeFile(manifestPath, JSON.stringify(manifest))
+    await expect(
+      execFileAsync(process.execPath, ["--import", preload, "scripts/validate.mjs", "--release"], {
+        cwd: output,
+      })
+    ).rejects.toThrow(/pinned MCP package is unavailable: HTTP 404/)
+  })
+
   it("exports runnable verifier fixtures and the required client schema contract", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)

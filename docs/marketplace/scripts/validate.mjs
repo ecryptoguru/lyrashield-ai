@@ -534,8 +534,8 @@ assert(
   "Zed Cargo version must match plugin.json"
 )
 
-// Explicit user-invoked scan workflows may call the two scan tools. All other
-// mutating MCP operations stay excluded from the Gemini extension.
+// Explicit user-invoked scan and fix/retest workflows may call their tools.
+// Other mutating MCP operations stay excluded from the Gemini extension.
 const allMutating = manifest.mutatingTools
 const allowed = manifest.geminiAllowedMutatingTools
 const excluded = manifest.geminiExcludedTools
@@ -550,8 +550,14 @@ for (const name of allMutating) {
   )
 }
 assert(
-  JSON.stringify(allowed) === JSON.stringify(["lyrashield_scan_target", "lyrashield_run_pr_scan"]),
-  "manifest.geminiAllowedMutatingTools must contain only the supported scan operations"
+  JSON.stringify(allowed) ===
+    JSON.stringify([
+      "lyrashield_scan_target",
+      "lyrashield_run_pr_scan",
+      "lyrashield_record_fix_proposal",
+      "lyrashield_verify_fix",
+    ]),
+  "manifest.geminiAllowedMutatingTools must contain only the supported scan and fix/retest operations"
 )
 assert(Array.isArray(excluded), "manifest.geminiExcludedTools must be an array")
 assert(
@@ -569,6 +575,16 @@ assert(
   JSON.stringify(rootGemini.excludeTools) === JSON.stringify(excluded),
   "root gemini-extension.json excludeTools must equal the manifest-recorded excluded tool set"
 )
+
+for (const [label, entrypoint] of [
+  ["root", rootGemini],
+  ["nested", geminiManifest],
+]) {
+  assert(
+    JSON.stringify(entrypoint.mcpServers?.lyrashield?.excludeTools) === JSON.stringify(excluded),
+    `${label} Gemini MCP server must exclude unrelated mutating tools during discovery`
+  )
+}
 
 const expectedPackage = "@lyrashield/mcp@0.2.12"
 const publishedMcpVerifier = await readFile(
@@ -898,6 +914,11 @@ for (const skillRoot of workflowSkillRoots) {
     const canonicalDocument = splitSkillDocument(canonical)
     const clientDocument = splitSkillDocument(clientSkill)
     assert(canonicalDocument && clientDocument, `${skillRoot}/${skill} must have YAML frontmatter`)
+    if (skillRoot === "gemini-extension/skills") {
+      for (const name of clientDocument.body.match(/lyrashield_[a-z_]+/g) ?? []) {
+        assert(!excluded.includes(name), `${skillRoot}/${skill} references excluded tool ${name}`)
+      }
+    }
     assert(
       clientDocument.body === canonicalDocument.body,
       `${skillRoot}/${skill} must match the canonical workflow body`
@@ -928,6 +949,26 @@ for (const skill of workflowSkills) {
     document?.frontmatter.includes("user-invocable: true"),
     `mistral-vibe/${skill} must remain available as a user-invocable skill`
   )
+}
+
+for (const relative of [
+  "GEMINI.md",
+  "gemini-extension/GEMINI.md",
+  "gemini-extension/commands/lyrashield/review-changes.toml",
+  "gemini-extension/commands/lyrashield/scan-project.toml",
+]) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixed authored artifact paths under the owned export root.
+  const text = await readFile(path.join(root, relative), "utf8")
+  for (const name of text.match(/lyrashield_[a-z_]+/g) ?? []) {
+    assert(!excluded.includes(name), `${relative} references excluded tool ${name}`)
+  }
+}
+
+// Local candidate exports stay fully offline. PR/main and releases must also
+// prove the pinned published package's integrity, executable entrypoint and schemas.
+if (process.argv.includes("--release-ready") || process.argv.includes("--release")) {
+  const { verifyPublishedMcp } = await import("./verify-published-mcp.mjs")
+  await verifyPublishedMcp({ root })
 }
 
 console.log(

@@ -132,11 +132,18 @@ interface BuiltMarketplaceContext {
   publish: boolean
 }
 
-/** Explicit scan tools remain available to invoked Gemini workflows; every other mutation stays excluded. */
-const GEMINI_EXPLICIT_SCAN_TOOLS = ["lyrashield_scan_target", "lyrashield_run_pr_scan"] as const
+/** Explicit scan and fix/retest tools remain available to invoked Gemini workflows; other mutations stay excluded. */
+const GEMINI_EXPLICIT_WORKFLOW_TOOLS = [
+  "lyrashield_scan_target",
+  "lyrashield_run_pr_scan",
+  "lyrashield_record_fix_proposal",
+  "lyrashield_verify_fix",
+] as const
 const GEMINI_EXCLUDED_TOOLS: readonly string[] = MUTATING_TOOL_NAMES.filter(
   (name) =>
-    !GEMINI_EXPLICIT_SCAN_TOOLS.includes(name as (typeof GEMINI_EXPLICIT_SCAN_TOOLS)[number])
+    !GEMINI_EXPLICIT_WORKFLOW_TOOLS.includes(
+      name as (typeof GEMINI_EXPLICIT_WORKFLOW_TOOLS)[number]
+    )
 )
 
 function firstMatch(text: string, pattern: RegExp, label: string): string {
@@ -170,6 +177,9 @@ async function writeGeminiManifest(
   const templatePath = path.join(marketplaceDocs, "gemini-extension", "gemini-extension.json")
   const template = JSON.parse(await readFile(templatePath, "utf8")) as Record<string, unknown>
   delete template.excludeTools
+  const servers = template.mcpServers as Record<string, Record<string, unknown>>
+  // MCP discovery filters original tool names before Gemini adds its namespace.
+  servers.lyrashield!.excludeTools = [...GEMINI_EXCLUDED_TOOLS]
   // Keep key order stable: everything from the template, then excludeTools last.
   const generated = JSON.stringify(
     { ...template, excludeTools: [...GEMINI_EXCLUDED_TOOLS] },
@@ -455,7 +465,7 @@ async function exportBuiltMarketplace(
         generatedFiles: GENERATED_FILES,
         artifactVersions,
         mutatingTools: [...MUTATING_TOOL_NAMES],
-        geminiAllowedMutatingTools: [...GEMINI_EXPLICIT_SCAN_TOOLS],
+        geminiAllowedMutatingTools: [...GEMINI_EXPLICIT_WORKFLOW_TOOLS],
         geminiExcludedTools: [...GEMINI_EXCLUDED_TOOLS],
         forbidden: [
           "apps/web",
