@@ -146,6 +146,15 @@ describe("coding agent product cards", () => {
     expect(markup).not.toContain("~/.lyrashield/plugins/lyrashield")
   })
 
+  it("does not offer Claude's obsolete published plugin install command", () => {
+    const agent = getAgent("claude-code-agent-plugin")!
+    const markup = render([{ ...agent, installCommand: getPublishedCliInstallCommand(agent) }])
+    expect(markup).toContain("Manual Agent Plugin setup")
+    expect(markup).not.toContain('aria-label="Published install command"')
+    expect(markup).not.toContain("npx -y lyrashield@0.2.13 install claude-code-agent-plugin")
+    expect(markup).toContain(".mcp.json")
+  })
+
   it("retains the empty registry state", () => {
     expect(render([])).toContain("No agents registered.")
   })

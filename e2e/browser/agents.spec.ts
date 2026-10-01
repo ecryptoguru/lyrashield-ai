@@ -42,9 +42,9 @@ test("agent cards group client surfaces and update setup material with selection
   const claudeSurface = claude.getByRole("combobox", { name: "Choose Claude client surface" })
   await claudeSurface.selectOption("claude-code-agent-plugin")
   await expect(claude).toContainText("Manual Agent Plugin setup")
-  await expect(claude.getByLabel("Published install command")).toContainText(
-    "claude-code-agent-plugin"
-  )
+  await expect(claude.getByLabel("Published install command")).toHaveCount(0)
+  await claude.getByText("Manual setup notes", { exact: true }).click()
+  await expect(claude).toContainText("reviewed matching immutable package release")
   await expect(claude.getByRole("link", { name: "Set up" })).toHaveAttribute(
     "href",
     "/dashboard/agents/claude-code-agent-plugin"
@@ -240,9 +240,7 @@ test("Claude Code optional hooks stay collapsed until requested and announce cop
   await expect(
     optionalHooks.getByRole("button", { name: "Copy hook install command" })
   ).toHaveCount(0)
-  await page
-    .getByRole("button", { name: "Copy install command for Claude Code (Agent Plugin)" })
-    .click()
+  await page.getByRole("button", { name: "Copy doctor command" }).click()
   await expect(page.getByRole("alert")).toContainText("Copy failed")
 })
 

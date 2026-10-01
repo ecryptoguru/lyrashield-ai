@@ -41,7 +41,7 @@ describe("published package versions", () => {
   })
 
   it("keeps commands manual when the public CLI targets a different preferred entry", () => {
-    for (const id of ["claude-code", "cursor", "openai-codex"]) {
+    for (const id of ["cursor", "openai-codex"]) {
       const legacyEntry = getAgent(id)
       const preferredEntry = getPreferredAgent(id)
 
@@ -53,6 +53,11 @@ describe("published package versions", () => {
         `npx -y lyrashield@0.2.13 install ${preferredEntry?.id}`
       )
     }
+  })
+
+  it("withholds Claude's mutable marketplace path until a reviewed immutable release exists", () => {
+    expect(getPublishedCliInstallCommand(getAgent("claude-code")!)).toBeNull()
+    expect(getPublishedCliInstallCommand(getPreferredAgent("claude-code")!)).toBeNull()
   })
 
   it("gates new and changed contracts, including Pi's formerly standalone setup", () => {
