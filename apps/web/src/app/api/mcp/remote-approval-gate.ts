@@ -36,6 +36,19 @@ const operationPermissions: Partial<Record<string, Permission>> = {
   "scan_attachment.delete": PERMISSIONS.attachment.delete,
 }
 
+// These REST boundaries retain principal-bound results. Do not extend this
+// list without verifying the endpoint's durable idempotency contract.
+const recordedRestOperations = new Set([
+  "scan.create",
+  "scan.cancel",
+  "report.create",
+  "fix_proposal.create",
+  "retest.create",
+  "fix_pr.create",
+  "scan_attachment.upload",
+  "scan_attachment.delete",
+])
+
 const approvalIdSchema = z.string().min(1).max(128).optional()
 const idempotencyKeySchema = z.string().min(1).max(128)
 
@@ -353,7 +366,14 @@ export function makeRemoteApprovalGate(
         const executionServer = new McpServer({ toolContext, allowMutations: true })
         let toolResult: McpToolResult
         try {
-          toolResult = await executionServer.callTool(toolName, toolArgs)
+          toolResult = await executionServer.callTool(toolName, {
+            ...toolArgs,
+            // The outer caller key stays out of the canonical tool input.
+            // The tool hashes this durable identity into a distinct REST key.
+            ...(recordedRestOperations.has(authCheck.canonicalOperation)
+              ? { idempotencyKey: claim.operation.id }
+              : {}),
+          })
         } catch (error) {
           logger.error("Delegated MCP tool execution threw", {
             operationId: claim.operation.id,
@@ -362,24 +382,32 @@ export function makeRemoteApprovalGate(
             toolName,
             error: error instanceof Error ? error.message : String(error),
           })
-          await failAgentOperation(claim.operation.id, workspaceId, {
-            error: error instanceof Error ? error.message : String(error),
-          })
-          return denied("Delegated tool execution failed")
+          const payload = {
+            error: "Delegated tool execution failed; its outcome is unknown.",
+          }
+          toolResult = {
+            content: [{ type: "text", text: JSON.stringify(payload) }],
+            structuredContent: payload,
+            isError: true,
+          }
         }
 
         const stampedResult = withOperationId(toolResult, claim.operation.id)
-        await completeAgentOperation(claim.operation.id, workspaceId, {
-          // Point the ledger row at the durable scan when the tool produced
-          // one — task recovery resolves the scan via this reference without
-          // ever re-executing the tool.
-          resultReference: extractScanIdFromToolResult(toolResult) ?? undefined,
-          result: toJsonObject({
-            content: stampedResult.content,
-            isError: stampedResult.isError,
-            structuredContent: stampedResult.structuredContent,
-          }),
-        })
+        const recordedResult = toJsonObject(stampedResult)
+        if (stampedResult.isError === true) {
+          // Generic errors can follow a committed side effect. They do not
+          // prove no submission and never authorize replay or a fresh-key retry.
+          await failAgentOperation(claim.operation.id, workspaceId, {
+            error: "OPERATION_OUTCOME_UNKNOWN",
+            result: recordedResult,
+          })
+        } else {
+          await completeAgentOperation(claim.operation.id, workspaceId, {
+            // Task polling reads this durable reference; it never reruns a tool.
+            resultReference: extractScanIdFromToolResult(toolResult) ?? undefined,
+            result: recordedResult,
+          })
+        }
 
         return { approved: true, result: stampedResult }
       }

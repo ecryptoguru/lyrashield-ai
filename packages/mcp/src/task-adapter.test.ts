@@ -142,6 +142,14 @@ describe("resolveTaskView", () => {
     expect(view.statusMessage).toBeTruthy()
   })
 
+  it("does not infer no submission from a generic handler failure", () => {
+    const view = resolveTaskView({
+      operation: makeOperation({ status: "FAILED", error: "OPERATION_OUTCOME_UNKNOWN" }),
+      scan: null,
+    })
+    expect(view.statusMessage).toContain("outcome is unknown")
+  })
+
   it("uses the scan status once the operation completed", () => {
     const running = resolveTaskView({
       operation: makeOperation(),

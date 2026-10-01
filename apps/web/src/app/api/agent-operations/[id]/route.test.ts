@@ -47,6 +47,20 @@ describe("operation status contract (W3-08)", () => {
     expect(JSON.stringify(failed)).not.toContain("raw provider")
   })
 
+  it("reports legacy completed MCP errors as failed and forbids a new-key retry", () => {
+    const view = toOperationStatusView(
+      operation({
+        status: "COMPLETED",
+        result: { content: [], isError: true, structuredContent: { error: "response lost" } },
+      })
+    )
+    expect(view).toMatchObject({
+      status: "FAILED",
+      reasonCode: "OPERATION_FAILED",
+      recovery: "wait",
+    })
+  })
+
   it("keeps the stable operation identity across reconnect retries", () => {
     const view = toOperationStatusView(operation({ id: "op-stable" }))
     expect(view.operationId).toBe("op-stable")

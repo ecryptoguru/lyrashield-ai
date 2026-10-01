@@ -243,13 +243,19 @@ export async function completeAgentOperation(
 export async function failAgentOperation(
   operationId: string,
   workspaceId: string,
-  params: { error: string; resultReference?: string; expectedUpdatedAt?: Date }
+  params: {
+    error: string
+    resultReference?: string
+    result?: Prisma.InputJsonObject
+    expectedUpdatedAt?: Date
+  }
 ): Promise<AgentOperation> {
   return withWorkspaceRLS(workspaceId, async (tx) => {
     const data = {
       status: "FAILED",
       error: params.error,
       resultReference: params.resultReference,
+      result: params.result,
     } as const
     if (params.expectedUpdatedAt) {
       await tx.agentOperation.updateMany({
@@ -455,18 +461,27 @@ export async function getOperationStatus(
 
 /** Pure state→recovery mapping, unit-testable without a database. */
 export function toOperationStatusView(operation: AgentOperation): OperationStatusView {
+  // Historical MCP rows may have completed with a returned tool error.
+  // Readback stays conservative without rewriting the persisted history.
+  const result = operation.result
+  const failedResult =
+    result !== null &&
+    typeof result === "object" &&
+    !Array.isArray(result) &&
+    result.isError === true
+  const status = operation.status === "COMPLETED" && failedResult ? "FAILED" : operation.status
   const recovery: OperationStatusView["recovery"] =
-    operation.status === "COMPLETED"
+    status === "COMPLETED"
       ? "none"
-      : operation.status === "EXECUTING" || operation.status === "PENDING"
+      : status === "EXECUTING" || status === "PENDING"
         ? "poll"
-        : operation.status === "FAILED" && operation.error === "OPERATION_NOT_SUBMITTED"
+        : status === "FAILED" && operation.error === "OPERATION_NOT_SUBMITTED"
           ? "retry_new_key"
           : "wait"
   return {
     operationId: operation.id,
-    status: operation.status,
-    reasonCode: operation.error ? "OPERATION_FAILED" : null,
+    status,
+    reasonCode: operation.error || failedResult ? "OPERATION_FAILED" : null,
     resultLocation: operation.resultReference,
     recovery,
     createdAt: operation.createdAt.toISOString(),
