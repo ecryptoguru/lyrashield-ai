@@ -1,19 +1,49 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
-import { ChevronDown, ChevronRight, Shield, ShieldCheck, ArrowRight } from "lucide-react"
-import { Badge, Card, EmptyState, buttonVariants } from "@lyrashield/ui"
-import { getVerificationStatusLabel } from "@/lib/enum-labels"
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  ArrowRight,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  Radar,
+} from "lucide-react"
+import { Badge, Button, Card, EmptyState, buttonVariants } from "@lyrashield/ui"
+import {
+  getScanGoalLabel,
+  getScanModeLabel,
+  getScanTriggerLabel,
+  getTargetTypeLabel,
+  getVerificationStatusLabel,
+} from "@/lib/enum-labels"
+import { formatDateTime, formatDuration, formatTime } from "@/lib/date-format"
+import type { getScanPresentation } from "@/lib/scan-presentation"
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { reportsHref } from "@/lib/finding-list-params"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
+import { ScanEvidenceSections } from "./scan-evidence-sections"
+import { AiSecurityScoreCard } from "./ai-score-card"
 import {
+  EVENT_LEVEL_COLOR,
   SCANNER_LABELS,
   SEVERITY_COLOR,
   SEVERITY_ICON,
   SEVERITY_ORDER,
+  type ScanDetailView,
+  type ScanNextAction,
 } from "./scan-detail-presentation"
+import type { CompletionNotice } from "./scan-detail-utils"
 import type { CleanResultScorecard, FindingItem, ScanData } from "./scan-detail-types"
+
+type ScanPresentationResult = ReturnType<typeof getScanPresentation>
 
 type CoverageReceipt = ScanData["integrity"]["coverage"][number]
 
@@ -392,5 +422,413 @@ export function ScanFindingsSection({
         </div>
       )}
     </>
+  )
+}
+
+export function ScanDetailHeader({
+  scan,
+  presentation,
+  isActive,
+  refreshError,
+}: {
+  scan: ScanData
+  presentation: ScanPresentationResult
+  isActive: boolean
+  refreshError: boolean
+}) {
+  return (
+    <div className="mb-6">
+      <Link
+        href="/dashboard/scans"
+        className="text-muted-foreground hover:text-foreground mb-3 inline-flex min-h-11 items-center gap-1.5 px-1 text-sm"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        Back to scans
+      </Link>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-3 text-2xl font-bold tracking-tight">
+            <Radar className="h-6 w-6" aria-hidden="true" />
+            {presentation.headline}
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {scan.target ? `${scan.target.name} · ` : ""}
+            {getScanGoalLabel(scan.goal)} · {getScanModeLabel(scan.mode)} ·{" "}
+            {getScanTriggerLabel(scan.triggerType)}
+            {scan.endedAt ? ` · completed ${formatDateTime(scan.endedAt)}` : ""}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {isActive && !refreshError && (
+            <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-teal-500" />
+              </span>
+              Live
+            </span>
+          )}
+          <Badge variant={presentation.badgeVariant} className="text-sm">
+            {presentation.label}
+          </Badge>
+          {/* Tamper-evident state stays visible without making the checksum
+              primary content; the full checksum lives in technical disclosure. */}
+          <Badge
+            variant={scan.integrity.manifestChecksum ? "success" : "muted"}
+            title="The scan result is sealed into a verifiable manifest"
+          >
+            {scan.integrity.manifestChecksum ? "Sealed" : isActive ? "Sealing…" : "Not sealed"}
+          </Badge>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function ScanEvidenceSummary({
+  scan,
+  isActive,
+  nextAction,
+  displayedCoverageState,
+  coverageSummary,
+  coverageWarningCount,
+  refreshing,
+  onRefresh,
+}: {
+  scan: ScanData
+  isActive: boolean
+  nextAction: ScanNextAction
+  displayedCoverageState: string
+  coverageSummary: string
+  coverageWarningCount: number
+  refreshing: boolean
+  onRefresh: () => void
+}) {
+  return (
+    <section
+      id="scan-evidence-summary"
+      className="border-primary/30 bg-primary/[0.04] mb-6 rounded-xl border p-5 sm:p-6"
+      aria-labelledby="scan-next-action"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+            {isActive ? "In progress" : "Evidence summary"}
+          </p>
+          <h2 id="scan-next-action" className="mt-1 text-lg font-semibold">
+            {nextAction.kind === "refresh" ? "Scan in progress" : nextAction.label}
+          </h2>
+          <p className="text-muted-foreground mt-1 text-sm">{nextAction.description}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+            <span>
+              <span className="text-muted-foreground">Target: </span>
+              <span className="font-medium">
+                {scan.target?.name ?? "Target details unavailable"}
+              </span>
+              {scan.target && (
+                <span className="text-muted-foreground">
+                  {" · "}
+                  {getTargetTypeLabel(scan.target.type)}
+                </span>
+              )}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              {displayedCoverageState === "Complete" ? (
+                <ShieldCheck className="text-primary size-4" aria-hidden="true" />
+              ) : (
+                <ShieldAlert className="text-amber-600 size-4" aria-hidden="true" />
+              )}
+              <span className="font-medium">Coverage: {displayedCoverageState}</span>
+            </span>
+          </div>
+          <p className="text-muted-foreground mt-2 text-sm">{coverageSummary}</p>
+          {scan.executionPlan && (
+            <p className="text-muted-foreground mt-1 text-xs">
+              Recorded scope:{" "}
+              {scan.executionPlan.scope === "DIFF" ? "exact diff" : "target snapshot"}
+              {scan.executionPlan.sourceRevision
+                ? ` · revision ${scan.executionPlan.sourceRevision.slice(0, 7)}`
+                : ""}
+              {scan.executionPlan.baseRevision
+                ? ` from ${scan.executionPlan.baseRevision.slice(0, 7)}`
+                : ""}
+            </p>
+          )}
+          {coverageWarningCount > 0 && (
+            <p className="mt-2 text-sm font-medium text-amber-700 dark:text-amber-300">
+              {coverageWarningCount} coverage limitation
+              {coverageWarningCount === 1 ? "" : "s"} are listed below.
+            </p>
+          )}
+        </div>
+        {nextAction.kind === "refresh" ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 shrink-0"
+            onClick={onRefresh}
+            disabled={refreshing}
+          >
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              aria-hidden="true"
+            />
+            Refresh status
+          </Button>
+        ) : (
+          <Link
+            href={nextAction.href}
+            className={`${buttonVariants({ className: "shrink-0" })} min-h-11`}
+          >
+            {nextAction.label}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        )}
+      </div>
+    </section>
+  )
+}
+
+export function ScanRefreshPausedBanner({
+  refreshing,
+  onRetry,
+}: {
+  refreshing: boolean
+  onRetry: () => void
+}) {
+  return (
+    <div
+      role="status"
+      className="border-amber-500/50 bg-amber-500/10 mb-6 flex flex-col gap-3 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+    >
+      <span>Updates are paused. The displayed scan status may be stale.</span>
+      <Button type="button" size="sm" variant="outline" onClick={onRetry} disabled={refreshing}>
+        Try again
+      </Button>
+    </div>
+  )
+}
+
+export function ScanCompletionNotice({
+  notice,
+  onDismiss,
+}: {
+  notice: CompletionNotice
+  onDismiss: () => void
+}) {
+  // Presentational only — the always-mounted sr-only live region in the client
+  // owns the announcement, so no role="status" here (that would make screen
+  // readers read the completion twice).
+  return (
+    <div
+      className={`mb-6 flex items-center gap-2 rounded-md border p-3 text-sm ${
+        notice.status === "COMPLETED"
+          ? "border-primary/30 bg-primary/5"
+          : ["FAILED", "TIMED_OUT"].includes(notice.status)
+            ? "border-destructive/50 bg-destructive/10"
+            : "border-amber-500/50 bg-amber-500/10"
+      }`}
+    >
+      {notice.status === "COMPLETED" ? (
+        <CheckCircle2 className="text-primary h-4 w-4 shrink-0" aria-hidden="true" />
+      ) : ["FAILED", "TIMED_OUT"].includes(notice.status) ? (
+        <XCircle className="text-destructive h-4 w-4 shrink-0" aria-hidden="true" />
+      ) : (
+        <ShieldAlert className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+      )}
+      <span className="min-w-0 flex-1 font-medium">{notice.message}</span>
+      <Button size="sm" variant="ghost" className="shrink-0" onClick={onDismiss}>
+        Dismiss
+      </Button>
+    </div>
+  )
+}
+
+export function ScanStatGrid({
+  scan,
+  findingsCount,
+  verifiedCount,
+  runCoverageState,
+}: {
+  scan: ScanData
+  findingsCount: number
+  verifiedCount: number
+  runCoverageState: string
+}) {
+  return (
+    <div
+      id={scan.status === "COMPLETED" ? "scan-results-ready" : undefined}
+      className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-4"
+    >
+      <Card className="border-0 p-4 shadow-none">
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <Clock className="h-4 w-4" aria-hidden="true" />
+          Duration
+        </div>
+        <p className="mt-1 text-lg font-semibold">{formatDuration(scan.startedAt, scan.endedAt)}</p>
+      </Card>
+      <Card className="border-0 p-4 shadow-none">
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+          Findings from this scan
+        </div>
+        <p className="mt-1 text-lg font-semibold">{findingsCount}</p>
+        <p className="text-muted-foreground mt-0.5 text-xs">
+          Retained after scanner layers and deduplication.
+        </p>
+      </Card>
+      <Card className="border-0 p-4 shadow-none">
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+          Independently verified
+        </div>
+        <p className="mt-1 text-lg font-semibold">{verifiedCount}</p>
+        <p className="text-muted-foreground mt-0.5 text-xs">
+          Backed by an independent verification receipt.
+        </p>
+      </Card>
+      <Card className="border-0 p-4 shadow-none">
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+          Coverage state
+        </div>
+        <p className="mt-1 text-lg font-semibold">{runCoverageState}</p>
+        <p className="text-muted-foreground mt-0.5 text-xs">
+          What applicable scanners were able to inspect.
+        </p>
+      </Card>
+    </div>
+  )
+}
+
+/**
+ * The whole terminal (non-active) layout: completion notice, stat grid,
+ * evidence sections, coverage detail and findings. Rendered only once the
+ * scan is no longer active.
+ */
+export function ScanTerminalView({
+  scan,
+  presentation,
+  view,
+  scorecard,
+  completionNotice,
+  onDismissNotice,
+  expandedFindings,
+  onToggleFinding,
+}: {
+  scan: ScanData
+  presentation: ScanPresentationResult
+  view: ScanDetailView
+  scorecard: CleanResultScorecard | null
+  completionNotice: CompletionNotice | null
+  onDismissNotice: () => void
+  expandedFindings: Set<string>
+  onToggleFinding: (id: string) => void
+}) {
+  return (
+    <>
+      {completionNotice && (
+        <ScanCompletionNotice notice={completionNotice} onDismiss={onDismissNotice} />
+      )}
+      <ScanStatGrid
+        scan={scan}
+        findingsCount={view.currentFindings.length}
+        verifiedCount={view.currentFindings.filter((f) => f.verified).length}
+        runCoverageState={view.runCoverageState}
+      />
+
+      <ScanEvidenceSections
+        scan={scan}
+        presentation={presentation}
+        coverageWarnings={view.coverageWarnings}
+        controlCoverage={view.controlCoverage}
+        controlOutcomeCounts={view.controlOutcomeCounts}
+      />
+
+      {scan.aiSecurity && (
+        <div className="mb-6">
+          <AiSecurityScoreCard data={scan.aiSecurity} />
+        </div>
+      )}
+
+      <ScanCoverageDetail
+        scan={scan}
+        familyCoverage={view.familyCoverage}
+        controlCoverage={view.controlCoverage}
+        incompleteCoverageCount={view.incompleteCoverage.length}
+        controlOutcomeCounts={view.controlOutcomeCounts}
+      />
+
+      <ScanFindingsSection
+        currentFindings={view.currentFindings}
+        sortedFindings={view.sortedFindings}
+        scan={scan}
+        scorecard={scorecard}
+        hasLimitedCoverage={view.hasLimitedCoverage}
+        assuranceAvailable={presentation.assuranceAvailable}
+        isActive={false}
+        expandedFindings={expandedFindings}
+        onToggleFinding={onToggleFinding}
+      />
+    </>
+  )
+}
+
+export function ScanTechnicalDetails({ displayEvents }: { displayEvents: ScanData["events"] }) {
+  const [expandedEvents, setExpandedEvents] = useState(false)
+  const visibleEvents = expandedEvents ? displayEvents : displayEvents.slice(-10)
+  return (
+    <details id="technical-details" className="group">
+      <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 border-y py-3 text-sm font-semibold marker:hidden">
+        <span>Technical details</span>
+        <span className="text-muted-foreground text-xs font-normal">
+          {displayEvents.length} event{displayEvents.length === 1 ? "" : "s"}
+        </span>
+      </summary>
+      <div className="pt-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Scan events</h2>
+          {displayEvents.length > 10 && (
+            <Button variant="ghost" size="sm" onClick={() => setExpandedEvents(!expandedEvents)}>
+              {expandedEvents ? "Show last 10" : `Show all ${displayEvents.length}`}
+            </Button>
+          )}
+        </div>
+        {displayEvents.length === 0 ? (
+          <EmptyState
+            headingLevel="h3"
+            icon={Clock}
+            title="No events"
+            description="No scan events have been recorded yet."
+            action={null}
+          />
+        ) : (
+          <Card className="p-4">
+            <div className="divide-border space-y-0 divide-y">
+              {visibleEvents.map((event, idx) => (
+                <div key={event.id} className="flex items-start gap-3 py-2 text-sm">
+                  <span className="text-muted-foreground shrink-0 text-xs">
+                    {formatTime(event.createdAt)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span
+                      className={`font-mono text-xs ${EVENT_LEVEL_COLOR[event.level] ?? "text-muted-foreground"}`}
+                    >
+                      [{event.stage}]
+                    </span>
+                    <span className="ml-2 wrap-break-word">{event.message}</span>
+                  </div>
+                  {idx === 0 && !expandedEvents && displayEvents.length > 10 && (
+                    <span className="text-muted-foreground shrink-0 text-xs">
+                      +{displayEvents.length - 10} earlier
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+      </div>
+    </details>
   )
 }

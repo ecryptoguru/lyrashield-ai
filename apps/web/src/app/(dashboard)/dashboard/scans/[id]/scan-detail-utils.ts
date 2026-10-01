@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react"
-import type { ScanEvent } from "./scan-detail-types"
+import { useEffect, useRef, useState } from "react"
+import type { ScanData, ScanEvent } from "./scan-detail-types"
 import { formatDuration } from "@/lib/date-format"
+import { track } from "@/lib/analytics"
+import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 
 const ELAPSED_TIME_INTERVAL_MS = 1_000
 export const COMPLETION_NOTICE_DISMISS_MS = 6_000
@@ -22,6 +24,57 @@ export function useElapsedTime(startedAt: string | null): string {
 }
 
 export { formatDuration } from "@/lib/date-format"
+
+export interface CompletionNotice {
+  status: string
+  message: string
+}
+
+/**
+ * The scan-completion banner: announces the active→terminal transition once,
+ * then auto-dismisses. The sr-only live region stays mounted in the view; this
+ * hook only owns when the notice exists and for how long.
+ */
+export function useCompletionNotice(
+  initialStatus: string,
+  scan: ScanData
+): [CompletionNotice | null, () => void] {
+  const [completionNotice, setCompletionNotice] = useState<CompletionNotice | null>(null)
+  const prevStatusRef = useRef(initialStatus)
+
+  // Announce the active→terminal transition. Polling swaps the in-progress view
+  // for the stat grid silently otherwise, so users who looked away (or use a
+  // screen reader) never learn the scan finished.
+  useEffect(() => {
+    const prevStatus = prevStatusRef.current
+    prevStatusRef.current = scan.status
+    if (!isActiveScan(prevStatus) || isActiveScan(scan.status)) return
+    track("review_completed", { status: scan.status })
+    setCompletionNotice({
+      status: scan.status,
+      message:
+        scan.status === "COMPLETED"
+          ? // Deliberately no count: the terminal fetch is capped at one page, so
+            // a scan with more findings than that would be announced with the
+            // page size as if it were the total.
+            "Scan completed — findings are ready to review"
+          : getScanPresentation(scan.status, {
+              errorCategory: scan.errorCategory,
+              errorMessage: scan.errorMessage,
+            }).headline,
+    })
+  }, [scan.errorCategory, scan.errorMessage, scan.status])
+
+  // Auto-dismiss the completion banner after 6s; the outcome stays visible in
+  // the status badge and stat grid.
+  useEffect(() => {
+    if (!completionNotice) return
+    const id = window.setTimeout(() => setCompletionNotice(null), COMPLETION_NOTICE_DISMISS_MS)
+    return () => window.clearTimeout(id)
+  }, [completionNotice])
+
+  return [completionNotice, () => setCompletionNotice(null)]
+}
 
 export function asIsoString(value: string | Date | null): string | null {
   if (value === null) return null
