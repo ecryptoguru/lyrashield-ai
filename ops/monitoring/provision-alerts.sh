@@ -231,6 +231,8 @@ az_run monitor scheduled-query create \
 worker_log_alert scan-queue-depth-high scan_queue_depth_high 2
 worker_log_alert scan-queue-oldest-wait-high scan_queue_oldest_wait_high 2
 worker_log_alert reconciliation-drift reconciliation_drift 1
+worker_log_alert reconciliation-backlog reconciliation_backlog 1
+worker_log_alert reconciliation-duplicates reconciliation_duplicates 2
 worker_log_alert webhook-dead-letter webhook_dead_letter 1
 worker_log_alert evidence-persistence-failure evidence_persistence_failure 1
 worker_log_alert terminal-cost-unreconciled terminal_cost_unreconciled 1
@@ -314,6 +316,8 @@ for rule in \
   scan-queue-depth-high \
   scan-queue-oldest-wait-high \
   reconciliation-drift \
+  reconciliation-backlog \
+  reconciliation-duplicates \
   webhook-dead-letter \
   evidence-persistence-failure \
   terminal-cost-unreconciled
