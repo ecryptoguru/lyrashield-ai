@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto"
 import type { Stats } from "node:fs"
 import { assertSafeDestination, atomicWrite } from "./atomic-write.js"
 
-export async function backupFile(filePath: string): Promise<string | undefined> {
+export async function backupFile(
+  filePath: string,
+  options: { mode?: number } = {}
+): Promise<string | undefined> {
   await assertSafeDestination(filePath)
 
   let sourceStat: Stats
@@ -33,7 +36,7 @@ export async function backupFile(filePath: string): Promise<string | undefined> 
     const content = await source.readFile("utf-8")
     const stamp = new Date().toISOString().replace(/[:.]/g, "-")
     const backupPath = `${filePath}.lyrashield-backup-${stamp}-${randomUUID()}`
-    await atomicWrite(backupPath, content, { mode: sourceStat.mode & 0o777 })
+    await atomicWrite(backupPath, content, { mode: options.mode ?? sourceStat.mode & 0o777 })
     return backupPath
   } finally {
     await source.close()

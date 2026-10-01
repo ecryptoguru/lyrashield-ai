@@ -15,6 +15,7 @@ export interface YamlMergeOptions {
   serverName: string
   value: unknown
   dryRun?: boolean
+  mode?: number
 }
 
 export interface YamlMergeResult {
@@ -23,7 +24,7 @@ export interface YamlMergeResult {
 }
 
 export async function mergeYaml(opts: YamlMergeOptions): Promise<YamlMergeResult> {
-  const { filePath, rootKey, serverName, value, dryRun } = opts
+  const { filePath, rootKey, serverName, value, dryRun, mode } = opts
   let content = ""
   let exists = false
   try {
@@ -69,11 +70,11 @@ export async function mergeYaml(opts: YamlMergeOptions): Promise<YamlMergeResult
     return { changed: true }
   }
 
-  const backupPath = await backupFile(filePath)
+  const backupPath = await backupFile(filePath, { mode })
   // parent is the directory of the resolved installer target path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
-  await atomicWrite(filePath, newContent, { expectedContent: exists ? content : null })
+  await atomicWrite(filePath, newContent, { expectedContent: exists ? content : null, mode })
 
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename

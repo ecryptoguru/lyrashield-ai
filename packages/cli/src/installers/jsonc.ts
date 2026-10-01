@@ -16,6 +16,7 @@ export interface JsoncMergeOptions {
   serverName: string
   value: unknown
   dryRun?: boolean
+  mode?: number
 }
 
 export interface JsoncMergeResult {
@@ -24,7 +25,7 @@ export interface JsoncMergeResult {
 }
 
 export async function mergeJsonc(opts: JsoncMergeOptions): Promise<JsoncMergeResult> {
-  const { filePath, rootKey, serverName, value, dryRun } = opts
+  const { filePath, rootKey, serverName, value, dryRun, mode } = opts
   let original = "{}"
   let exists = false
   try {
@@ -71,11 +72,11 @@ export async function mergeJsonc(opts: JsoncMergeOptions): Promise<JsoncMergeRes
     return { changed: true }
   }
 
-  const backupPath = await backupFile(filePath)
+  const backupPath = await backupFile(filePath, { mode })
   // parent is the directory of the resolved installer target path.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
-  await atomicWrite(filePath, newContent, { expectedContent: exists ? original : null })
+  await atomicWrite(filePath, newContent, { expectedContent: exists ? original : null, mode })
 
   // filePath is the resolved installer target path for this workspace.
   // eslint-disable-next-line security/detect-non-literal-fs-filename

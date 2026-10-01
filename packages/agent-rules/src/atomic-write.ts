@@ -69,7 +69,10 @@ export async function atomicWrite(
 
   const destinationStat = await getRegularDestinationStat(absolutePath)
   const existingMode = destinationStat ? destinationStat.mode & 0o777 : undefined
-  const mode = existingMode ?? (options.mode === undefined ? undefined : options.mode & 0o777)
+  // An explicit mode is a caller's security requirement (for example, an
+  // inline API key), so it must override a more permissive mode on the old
+  // destination. With no explicit mode, keep preserving the destination mode.
+  const mode = options.mode === undefined ? existingMode : options.mode & 0o777
 
   const tmp = `${absolutePath}.${randomUUID()}.lyrashield-tmp`
 
