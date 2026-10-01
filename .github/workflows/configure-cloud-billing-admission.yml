@@ -45,10 +45,22 @@ jobs:
       id-token: write
     environment: azure-production
     steps:
+      # Admission tooling must come from reviewed main, not from the input
+      # SHA: the script verifies the target commit itself, and a script read
+      # from an unverified commit could skip that verification.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_sha }}
+          ref: main
           persist-credentials: false
+      - name: Restrict the deploy target to the reviewed main head
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || [ "$SOURCE_SHA" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::Cloud admission may only target the current reviewed main SHA."
+            exit 1
+          fi
       - uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
