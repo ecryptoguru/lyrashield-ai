@@ -1,5 +1,5 @@
 import { execFile, execFileSync, spawn } from "node:child_process"
-import { mkdtemp, readdir, rm } from "node:fs/promises"
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -27,8 +27,16 @@ const PACKAGE_ROOT = fileURLToPath(new URL("..", import.meta.url))
 let extractDir: string
 let pkgDir: string
 
+async function readSharedToolPolicyArtifact(): Promise<Buffer | undefined> {
+  try {
+    return await readFile(path.join(PACKAGE_ROOT, "dist", "tool-policy.js"))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
+    throw error
+  }
+}
+
 beforeAll(async () => {
-  execFileSync("pnpm", ["exec", "tsup"], { cwd: PACKAGE_ROOT, stdio: "inherit" })
   // Sweep leftovers from killed runs so they can never be packed or committed.
   for (const entry of await readdir(PACKAGE_ROOT)) {
     if (entry.startsWith(".packed-stdio-")) {
@@ -36,7 +44,29 @@ beforeAll(async () => {
     }
   }
   extractDir = await mkdtemp(path.join(PACKAGE_ROOT, ".packed-stdio-"))
-  await runFile("pnpm", ["pack", "--pack-destination", extractDir], { cwd: PACKAGE_ROOT })
+  const sharedToolPolicyBefore = await readSharedToolPolicyArtifact()
+  const stagingDir = path.join(extractDir, "staging")
+  await mkdir(stagingDir)
+  await symlink(
+    path.join(PACKAGE_ROOT, "node_modules"),
+    path.join(stagingDir, "node_modules"),
+    "dir"
+  )
+  await cp(path.join(PACKAGE_ROOT, "package.json"), path.join(stagingDir, "package.json"), {
+    recursive: true,
+  })
+  for (const entry of ["README.md", "bin", "docs"]) {
+    await cp(path.join(PACKAGE_ROOT, entry), path.join(stagingDir, entry), { recursive: true })
+  }
+
+  const stagedDistDir = path.join(stagingDir, "dist")
+  execFileSync("pnpm", ["exec", "tsup", "--out-dir", stagedDistDir], {
+    cwd: PACKAGE_ROOT,
+    stdio: "inherit",
+  })
+  expect(await readSharedToolPolicyArtifact()).toEqual(sharedToolPolicyBefore)
+
+  await runFile("pnpm", ["pack", "--pack-destination", extractDir], { cwd: stagingDir })
   const tarball = (await readdir(extractDir)).find((f) => f.endsWith(".tgz"))
   if (!tarball) throw new Error("pnpm pack produced no tarball")
   await runFile("tar", ["-xzf", path.join(extractDir, tarball), "-C", extractDir])
