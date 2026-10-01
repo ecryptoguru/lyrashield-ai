@@ -406,12 +406,31 @@ describe("preferred agent integrations", () => {
     expect(getPreferredAgent("kiro")?.id).toBe("kiro-agent-plugin")
   })
 
-  // VS Code keeps its verified .vscode/mcp.json path: no generated VS Code
-  // plugin shim exists, so preferring the plugin would reroute a working
-  // install onto an unverified one.
-  it("keeps VS Code on its verified config-file install path", () => {
+  // VS Code keeps its .vscode/mcp.json setup as the primary GitHub Copilot IDE
+  // option; the Agent Plugin remains an explicitly separate, experimental path.
+  it("groups the VS Code MCP config under GitHub Copilot without changing its setup contract", () => {
+    const vscode = getPreferredAgent("vscode")!
+    expect(vscode).toMatchObject({
+      id: "vscode",
+      displayName: "GitHub Copilot in VS Code (MCP config)",
+      productFamily: { id: "github-copilot", name: "GitHub Copilot" },
+      surface: "ide",
+      docsSlug: "vscode",
+      installStrategy: "config-file",
+      format: "json",
+      rootKey: "servers",
+      supportTier: "COMPATIBLE",
+      verification: {
+        evidence: "DOCUMENTATION",
+        clientVersion: null,
+        receipt: null,
+      },
+    })
+    expect(vscode.locations).toContainEqual(
+      expect.objectContaining({ path: ".vscode/mcp.json", scope: "project" })
+    )
+    expect(vscode.source?.url).toBe("https://code.visualstudio.com/docs/agent-customization/mcp-servers")
     expect(getPreferredAgent("vscode")?.id).toBe("vscode")
-    expect(getPreferredAgent("vscode")?.installStrategy).toBe("config-file")
   })
 
   it("shows VS Code's Copilot Agent Plugin as a separate experimental surface", () => {

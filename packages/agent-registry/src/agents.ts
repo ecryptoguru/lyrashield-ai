@@ -154,7 +154,9 @@ const devinDesktop: AgentEntry = {
 
 const vscode: AgentEntry = {
   id: "vscode",
-  displayName: "VS Code",
+  displayName: "GitHub Copilot in VS Code (MCP config)",
+  productFamily: { id: "github-copilot", name: "GitHub Copilot" },
+  surface: "ide",
   docsSlug: "vscode",
   installStrategy: "config-file",
   format: "json",

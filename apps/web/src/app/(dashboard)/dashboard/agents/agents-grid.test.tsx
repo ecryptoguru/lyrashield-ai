@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
-import { CLI_PACKAGE_VERSION } from "@lyrashield/agent-registry"
+import {
+  CLI_PACKAGE_VERSION,
+  getPublishedCliInstallCommand,
+  listPreferredAgents,
+} from "@lyrashield/agent-registry"
 import { AgentsGrid, type AgentCardData } from "./agents-grid"
 
 function surface(
@@ -67,6 +71,48 @@ describe("coding agent product cards", () => {
     expect(markup).not.toContain("CLAUDE.md")
     expect(markup).not.toContain("Rules / skills")
     expect(markup).not.toContain('aria-label="Choose Claude client surface"')
+  })
+
+  it("groups VS Code MCP and Agent Plugin setup with Copilot CLI and cloud surfaces", () => {
+    const copilotAgents = listPreferredAgents().filter(
+      (agent) => agent.productFamily?.id === "github-copilot"
+    )
+    const cards = copilotAgents.map((agent) =>
+      surface({
+        id: agent.id,
+        displayName: agent.displayName,
+        aliases: agent.aliases,
+        productFamily: agent.productFamily,
+        surface: agent.surface,
+        docsSlug: agent.docsSlug,
+        installStrategy: agent.installStrategy,
+        locations: agent.locations,
+        pluginLocations: agent.pluginLocations,
+        skillLocations: agent.skillLocations,
+        nativeCapabilities: agent.nativeCapabilities,
+        rulesFiles: agent.rulesFiles,
+        manualInstructions: agent.manualInstructions,
+        installCommand: getPublishedCliInstallCommand(agent),
+      })
+    )
+    const markup = render(cards)
+
+    expect(copilotAgents.map((agent) => agent.id)).toEqual(
+      expect.arrayContaining([
+        "vscode",
+        "vscode-agent-plugin",
+        "github-copilot-cloud-agent",
+        "copilot-cli",
+        "github-copilot-agent-plugin",
+      ])
+    )
+    expect(markup.match(/aria-labelledby="agent-family-github-copilot"/g)).toHaveLength(1)
+    expect(markup).toContain('aria-label="Choose GitHub Copilot client surface"')
+    expect(markup).toContain("GitHub Copilot in VS Code (MCP config)")
+    expect(markup).toContain("GitHub Copilot in VS Code (Agent Plugin)")
+    expect(markup).toContain("GitHub Copilot Cloud Agent")
+    expect(markup).toContain("GitHub Copilot CLI")
+    expect(markup).not.toContain('aria-labelledby="agent-family-vscode"')
   })
 
   it("shows a setup fallback when a surface has no published install command", () => {
