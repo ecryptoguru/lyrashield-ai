@@ -9,6 +9,10 @@ describe("agent onboarding contract", () => {
       "npx --yes lyrashield@0.2.13 login --oauth",
       "npx --yes lyrashield@0.2.13 init --dry-run",
     ])
+    expect(agentOnboarding.setupHeading).toBe("Preview local stdio setup")
+    expect(agentOnboarding.setupDescription).toContain(
+      "The second previews setup paths only; it does not write client configuration."
+    )
     expect(agentOnboarding.safety.join(" ")).toContain("Read-only")
     expect(agentOnboarding.safety.join(" ")).toContain("browser-confirmed connection grant")
     expect(agentOnboarding.safety.join(" ")).toContain(
@@ -69,6 +73,10 @@ describe("agent onboarding contract", () => {
     expect(body).toContain("# Release assurance for coding agents")
     expect(body).toContain("https://lyrashieldai.com/docs/integrations/agent-plugins")
     expect(body).toContain("npx --yes lyrashield@0.2.13 init --dry-run")
+    expect(body).toContain("## Preview local stdio setup")
+    expect(body).toContain(
+      "The second previews setup paths only; it does not write client configuration."
+    )
     expect(body).toContain("config-file clients while the safe-writer fix is pending")
     expect(body).not.toContain("${origin}")
   })
