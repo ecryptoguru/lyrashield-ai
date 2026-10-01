@@ -24,6 +24,11 @@ const jsonLd = [techArticle, breadcrumbList]
     Agent Skills. This guide uses the hosted OAuth endpoint. It documents setup, not a recorded
     LyraShield-authenticated Pi runtime acceptance.
   </p>
+  <div class="callout">
+    <strong>Published CLI preview is older:</strong> the <code>lyrashield@0.2.13</code> Pi preview
+    predates native MCP support. Use this guide's native Pi commands. Updated source-owned CLI
+    recipes and the skills installer remain pending release; no new published behavior is claimed.
+  </div>
   <h2>Connect Pi to hosted MCP</h2>
   <p>
     Add the personal connection at user scope, then sign in. Pi stores OAuth credentials in its own
@@ -53,9 +58,9 @@ pi mcp login lyrashield</code></pre>
     remains in preparation; this guide does not imply a public Pi listing.
   </p>
   <h2>Use local CLI and CI when preferred</h2>
-  <pre><code>npx lyrashield login --oauth
-npx lyrashield check-diff
-npx lyrashield gate --verdict --commit "$(git rev-parse HEAD)"</code></pre>
+  <pre><code>npx -y lyrashield@0.2.13 login --oauth
+npx -y lyrashield@0.2.13 check-diff
+npx -y lyrashield@0.2.13 gate --verdict --commit "$(git rev-parse HEAD)"</code></pre>
   <p>
     This standalone path remains available whether or not Pi MCP is configured. Oh My Pi is a
     separate client with its own configuration paths; do not reuse Pi paths for it.

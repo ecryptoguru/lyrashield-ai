@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import type { AgentEntry } from "@lyrashield/agent-registry"
+import { getAgent, type AgentEntry } from "@lyrashield/agent-registry"
 
 // Hoist the mock so vi.mock can reference it. Most tests need the real plugin
 // dir; the copy-failure test overrides it to a non-existent path so `cp`
@@ -133,6 +133,23 @@ describe("installAgentPlugin", () => {
       outcome: "MANUAL_REQUIRED",
       message: "Install through the client marketplace.",
     })
+  })
+
+  it("keeps the selected VS Code plugin action manual without writing an install directory", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-vscode-plugin-"))
+    try {
+      const agent = getAgent("vscode-agent-plugin")!
+      for (const dryRun of [false, true]) {
+        const result = await installAgentPlugin({ agent, cwd: tempDir, dryRun, yes: true })
+        expect(result.outcome).toBe("MANUAL_REQUIRED")
+        expect(result.path).toBeUndefined()
+        expect(result.message).toContain("does not install or register")
+        expect(result.message).toContain(".vscode/mcp.json")
+      }
+      await expect(access(path.join(tempDir, ".vscode"))).rejects.toThrow()
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
   })
 
   it("copies the canonical plugin directory to the destination with --yes", async () => {

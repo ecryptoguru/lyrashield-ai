@@ -35,15 +35,23 @@ type StrategyLabel =
   | "Uses your agent's own installer"
   | "Shows values to paste"
   | "Installs a portable Agent Plugin"
+  | "Manual Agent Plugin setup"
 
-function strategyLabel(strategy: InstallStrategy): StrategyLabel {
+function strategyLabel(strategy: InstallStrategy, manualPlugin = false): StrategyLabel {
+  if (manualPlugin) return "Manual Agent Plugin setup"
   if (strategy === "config-file") return "MCP config setup"
   if (strategy === "vendor-cli") return "Uses your agent's own installer"
   if (strategy === "agent-plugin") return "Installs a portable Agent Plugin"
   return "Shows values to paste"
 }
 
-function StrategyBadge({ strategy }: { strategy: InstallStrategy }) {
+function StrategyBadge({
+  strategy,
+  manualPlugin,
+}: {
+  strategy: InstallStrategy
+  manualPlugin: boolean
+}) {
   const variant =
     strategy === "config-file"
       ? ("success" as const)
@@ -52,7 +60,7 @@ function StrategyBadge({ strategy }: { strategy: InstallStrategy }) {
         : ("muted" as const)
   return (
     <Badge variant={variant} className="shrink-0 text-xs">
-      {strategyLabel(strategy)}
+      {strategyLabel(strategy, manualPlugin)}
     </Badge>
   )
 }
@@ -104,7 +112,9 @@ function AgentCard({
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copyGeneration = useRef(0)
   const selected = visibleAgents.find((agent) => agent.id === selectedId) ?? visibleAgents[0]!
-  const pluginLocations = selected.pluginLocations?.length ? selected.pluginLocations : []
+  const manualPlugin = selected.installStrategy === "agent-plugin" && !!selected.manualInstructions
+  const pluginLocations =
+    !manualPlugin && selected.pluginLocations?.length ? selected.pluginLocations : []
   const configLocations = pluginLocations.length ? pluginLocations : selected.locations
   const pluginProvidesSkills = selected.installStrategy === "agent-plugin"
   const ruleFiles = pluginProvidesSkills ? [] : selected.rulesFiles
@@ -155,7 +165,7 @@ function AgentCard({
           >
             {family.name}
           </CardTitle>
-          <StrategyBadge strategy={selected.installStrategy} />
+          <StrategyBadge strategy={selected.installStrategy} manualPlugin={manualPlugin} />
         </div>
         {visibleAgents.length > 1 ? (
           <label className="mt-3 block space-y-1.5">
@@ -181,7 +191,7 @@ function AgentCard({
         <div className="mt-2 flex min-w-0 items-center gap-1.5">
           <CircleDashed className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />
           <span className="text-muted-foreground min-w-0 text-xs leading-5 font-medium">
-            {selected.surface === "cloud" || selected.surface === "web"
+            {manualPlugin || selected.surface === "cloud" || selected.surface === "web"
               ? "After activation, confirm the hosted connection and available LyraShield tools."
               : "Verify after activation with LyraShield doctor."}
           </span>
@@ -206,7 +216,9 @@ function AgentCard({
                 Skills
               </p>
               <p className="text-muted-foreground text-xs leading-5">
-                Workflow skills ship with the Agent Plugin; no separate skills install is needed.
+                {manualPlugin
+                  ? "After manual installation, confirm the client discovered the plugin skills separately from MCP authentication."
+                  : "Workflow skills ship with the Agent Plugin; no separate skills install is needed."}
               </p>
             </div>
           ) : selected.skillLocations?.length ? (

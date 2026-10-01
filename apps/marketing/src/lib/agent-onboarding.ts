@@ -63,7 +63,9 @@ function buildClients(): AgentOnboardingClient[] {
     strategyLabel:
       agent.integrationKind === "standalone-cli"
         ? "Standalone CLI and CI"
-        : STRATEGY_LABEL[agent.installStrategy],
+        : agent.installStrategy === "agent-plugin" && agent.manualInstructions
+          ? "Manual Agent Plugin setup"
+          : STRATEGY_LABEL[agent.installStrategy],
     integrationKind: agent.integrationKind ?? "mcp",
     supportTier: agent.supportTier ?? "COMPATIBLE",
     evidence: agent.verification?.evidence ?? "DOCUMENTATION",
@@ -96,6 +98,7 @@ export const agentOnboarding = {
   ],
   workflow: ["Target", "Review", "Evidence", "Fix proposal", "Retest", "Report"],
   safety: [
+    "The published CLI 0.2.13 preview predates Pi's native MCP setup. Follow the current Pi guide at /docs/integrations/pi; updated CLI recipes remain pending release.",
     "Read-only tools are available after workspace authentication.",
     "Fixes are proposals for review, not automatic code changes or merges.",
     "Hosted writes require a browser-confirmed connection grant and execution-time scope checks. Nondelegated callers receive connect_required; local stdio clients use local approval.",

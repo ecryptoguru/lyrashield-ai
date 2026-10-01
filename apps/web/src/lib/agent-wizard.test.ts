@@ -25,6 +25,40 @@ describe("agent wizard connection snippets", () => {
     expect(wizard?.steps.some((step) => step.kind === "rules")).toBe(false)
   })
 
+  it("keeps VS Code plugin setup manual and offers the independent MCP fallback", () => {
+    const wizard = buildAgentWizard("vscode-agent-plugin", "https://app.lyrashieldai.com")
+    const install = wizard?.steps.find((step) => step.id === "install")
+    expect(install?.title).toBe("Manual Agent Plugin setup")
+    expect(install?.summary).toContain("MANUAL_REQUIRED")
+    expect(install?.command).toBeUndefined()
+    const fallback = wizard?.steps.find((step) => step.id === "config-mcp-fallback")
+    expect(fallback?.optional).toBe(true)
+    expect(fallback?.snippetPath).toBe(".vscode/mcp.json")
+    expect(JSON.parse(fallback?.snippet ?? "null")).toEqual({
+      servers: {
+        lyrashield: {
+          type: "stdio",
+          command: "npx",
+          args: ["-y", MCP_PACKAGE_SPEC],
+          env: { LYRASHIELD_API_URL: "https://app.lyrashieldai.com" },
+        },
+      },
+    })
+    expect(wizard?.steps.find((step) => step.id === "api-key")?.summary).toContain("OAuth in")
+    expect(wizard?.steps.find((step) => step.id === "verify")?.note).toContain("read-only")
+  })
+
+  it("does not present the published CLI's obsolete Pi preview as native MCP setup", () => {
+    const install = buildAgentWizard("pi", "https://app.lyrashieldai.com")?.steps.find(
+      (step) => step.id === "install"
+    )
+    expect(install?.command).toBeUndefined()
+    expect(install?.summary).toContain("pi mcp add")
+    expect(install?.summary).toContain("published CLI 0.2.13")
+    expect(install?.summary).toContain("predates Pi's native MCP")
+    expect(install?.summary).toContain("Skills installer remains pending release")
+  })
+
   it("keeps the standalone CLI workflow for Aider", () => {
     const wizard = buildAgentWizard("aider", "https://app.lyrashieldai.com")
     expect(wizard?.steps.some((step) => step.title.includes("MCP"))).toBe(false)

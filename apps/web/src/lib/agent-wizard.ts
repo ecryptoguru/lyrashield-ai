@@ -107,6 +107,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   const agent = getAgent(agentId)
   if (!agent) return null
   const publishedInstallCommand = getPublishedCliInstallCommand(agent)
+  const manualPlugin = agent.installStrategy === "agent-plugin" && !!agent.manualInstructions
   const localSetup = agent.surface !== "cloud" && agent.surface !== "web"
   const augmentWorkflowInPreparation =
     agent.productFamily?.id === "augment" &&
@@ -171,20 +172,26 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     steps.push({
       id: "install",
       kind: "install",
-      title: augmentWorkflowInPreparation
-        ? "Connect current MCP tools"
-        : publishedInstallCommand
-          ? "Install"
-          : "Prepare manual setup",
-      summary: augmentWorkflowInPreparation
-        ? `The published direct-MCP baseline uses ${CLI_PACKAGE_SPEC} and ${MCP_PACKAGE_SPEC}; it provides MCP tools only. Native workflow skills, commands and rules require the coordinated candidate release.`
-        : !publishedInstallCommand
-          ? agent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE
-            ? "Automatic config writes are withheld until the preservation fixes ship in the next CLI release. Merge the connection values below into your existing client config."
-            : "CLI installation for this setup is prepared for the next release. Use the manual connection steps below."
-          : agent.manualInstructions
-            ? `Follow the documented activation steps for ${agent.displayName}.`
-            : `Prepare the LyraShield integration for ${agent.displayName}.`,
+      title: manualPlugin
+        ? "Manual Agent Plugin setup"
+        : augmentWorkflowInPreparation
+          ? "Connect current MCP tools"
+          : publishedInstallCommand
+            ? "Install"
+            : "Prepare manual setup",
+      summary: manualPlugin
+        ? "The CLI returns MANUAL_REQUIRED: it prints instructions and does not install or register the plugin. Follow the client activation steps below; discovery, authentication and a read-only call must each be confirmed."
+        : agent.id === "picode"
+          ? `${agent.manualInstructions} The published CLI 0.2.13 preview predates Pi's native MCP setup. Use these current instructions; updated CLI recipes remain pending release.`
+          : augmentWorkflowInPreparation
+            ? `The published direct-MCP baseline uses ${CLI_PACKAGE_SPEC} and ${MCP_PACKAGE_SPEC}; it provides MCP tools only. Native workflow skills, commands and rules require the coordinated candidate release.`
+            : !publishedInstallCommand
+              ? agent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE
+                ? "Automatic config writes are withheld until the preservation fixes ship in the next CLI release. Merge the connection values below into your existing client config."
+                : "CLI installation for this setup is prepared for the next release. Use the manual connection steps below."
+              : agent.manualInstructions
+                ? `Follow the documented activation steps for ${agent.displayName}.`
+                : `Prepare the LyraShield integration for ${agent.displayName}.`,
       command: publishedInstallCommand ?? undefined,
       copyLabel: `Copy install command for ${agent.displayName}`,
       note:
@@ -280,6 +287,22 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
         optional: true,
       })
     }
+  }
+
+  if (agent.id === "vscode-agent-plugin") {
+    const fallback = getAgent("vscode")!
+    steps.push({
+      id: "config-mcp-fallback",
+      kind: "config",
+      title: "VS Code MCP fallback",
+      summary:
+        "Use this current direct-MCP path while a reviewed immutable plugin release is pending. Merge only this server entry, preserving existing servers, comments and settings. Plugin skills are separate.",
+      snippet: buildConfigSnippet(fallback, apiUrl),
+      snippetPath: ".vscode/mcp.json",
+      copyLabel: "Copy VS Code MCP fallback",
+      note: `For this local stdio fallback, run npx -y ${CLI_PACKAGE_SPEC} login --oauth separately. Plugin OAuth authenticates only its remote connection. Reload VS Code and confirm a read-only call; doctor does not establish client acceptance.`,
+      optional: true,
+    })
   }
 
   // 3) Authentication
