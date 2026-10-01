@@ -299,4 +299,56 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
     const body = await res.json()
     expect(body.error.code).toBe(-32603)
   })
+
+  it("rejects an oversized declared body before reading it", async () => {
+    verifyApiKey.mockResolvedValue({ keyId: "k", workspaceId: "ws-1", scopes: ["read"] })
+    const res = await POST(
+      new Request("https://app.example.com/api/mcp", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer lsk_good",
+          "content-length": String(2 * 1024 * 1024),
+          "content-type": "application/json",
+        },
+        body: "{}",
+      })
+    )
+    expect(res.status).toBe(413)
+    expect(await res.json()).toMatchObject({ jsonrpc: "2.0" })
+    expect(handleRemoteMcpRequest).not.toHaveBeenCalled()
+  })
+
+  it("rejects an oversized streamed body even without a declared length", async () => {
+    verifyApiKey.mockResolvedValue({ keyId: "k", workspaceId: "ws-1", scopes: ["read"] })
+    const oversized = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(1024 * 1024))
+        controller.enqueue(new Uint8Array(64))
+        controller.close()
+      },
+    })
+    const res = await POST(
+      new Request("https://app.example.com/api/mcp", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer lsk_good",
+          "content-type": "application/json",
+        },
+        body: oversized,
+        // @ts-expect-error — Node requires duplex for streamed bodies
+        duplex: "half",
+      })
+    )
+    expect(res.status).toBe(413)
+    expect(handleRemoteMcpRequest).not.toHaveBeenCalled()
+  })
+
+  it("still forwards a within-cap streamed body to the engine", async () => {
+    verifyApiKey.mockResolvedValue({ keyId: "k", workspaceId: "ws-1", scopes: ["read"] })
+    handleRemoteMcpRequest.mockResolvedValue(new Response("{}", { status: 200 }))
+    const res = await POST(req("Bearer lsk_good"))
+    expect(res.status).toBe(200)
+    const forwarded = handleRemoteMcpRequest.mock.calls[0]?.[0] as Request
+    expect(JSON.parse(await forwarded.text())).toMatchObject({ method: "tools/list" })
+  })
 })

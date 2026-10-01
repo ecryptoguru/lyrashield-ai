@@ -27,6 +27,43 @@ import { verifyOAuthBearer, type OAuthAuthContext } from "@lyrashield/auth/serve
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+/**
+ * JSON-RPC bodies carry tool arguments only; a megabyte is already generous.
+ * Content-Length is optional and untrusted, so the cap is enforced on counted
+ * bytes — same contract as the billing webhook ingress.
+ */
+const MAX_MCP_BODY_BYTES = 1024 * 1024
+
+function jsonRpcError(status: number, code: number, message: string): Response {
+  return new Response(JSON.stringify({ jsonrpc: "2.0", error: { code, message }, id: null }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  })
+}
+
+/** Read a POST body with a hard byte cap; null when the cap is exceeded. */
+async function readBoundedBody(request: Request): Promise<string | null> {
+  const reader = request.body?.getReader()
+  if (!reader) return ""
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > MAX_MCP_BODY_BYTES) {
+        await reader.cancel()
+        return null
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  return Buffer.concat(chunks).toString("utf8")
+}
+
 function unauthorized(): Response {
   // WWW-Authenticate advertises Bearer so MCP clients know how to authenticate.
   return new Response(
@@ -146,7 +183,14 @@ async function handle(request: Request): Promise<Response> {
     let mcpRequest = request
     let bodyText = ""
     if (request.method === "POST") {
-      bodyText = await request.text()
+      if (Number(request.headers.get("content-length")) > MAX_MCP_BODY_BYTES) {
+        return jsonRpcError(413, -32600, "Request body too large")
+      }
+      const bounded = await readBoundedBody(request)
+      if (bounded === null) {
+        return jsonRpcError(413, -32600, "Request body too large")
+      }
+      bodyText = bounded
       mcpRequest = new Request(request.url, {
         method: request.method,
         headers: request.headers,
@@ -201,14 +245,7 @@ async function handle(request: Request): Promise<Response> {
     logger.error("Remote MCP request failed", {
       error: err instanceof Error ? err.message : String(err),
     })
-    return new Response(
-      JSON.stringify({
-        jsonrpc: "2.0",
-        error: { code: -32603, message: "Internal error" },
-        id: null,
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    )
+    return jsonRpcError(500, -32603, "Internal error")
   }
 }
 
