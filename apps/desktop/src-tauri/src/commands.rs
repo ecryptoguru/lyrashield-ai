@@ -99,8 +99,20 @@ pub fn logout_chatgpt() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn save_azure_config(api_key: String, endpoint: String) -> Result<(), String> {
-    byok::save_azure_credentials(&api_key, &endpoint)
+pub fn save_azure_config(
+    api_key: String,
+    endpoint: String,
+    deployment: String,
+) -> Result<(), String> {
+    byok::save_azure_credentials(&api_key, &endpoint, &deployment)
+}
+
+/// Explicit provider selection — the recorded choice the scan resolver honors.
+/// Selecting an unconfigured provider fails closed.
+#[tauri::command]
+pub fn select_byok_provider(provider: String) -> Result<byok::ByokStatus, String> {
+    byok::set_selected_provider(&provider)?;
+    byok::get_byok_status()
 }
 
 #[tauri::command]
