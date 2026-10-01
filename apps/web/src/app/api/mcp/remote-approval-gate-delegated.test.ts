@@ -16,6 +16,8 @@ const claimOrGetAgentOperationMock = vi.fn()
 const completeAgentOperationMock = vi.fn()
 const failAgentOperationMock = vi.fn()
 const callToolMock = vi.fn()
+const getAgentConnectionMock = vi.fn()
+const retainUnknownAgentOperationResultMock = vi.fn()
 
 vi.mock("@lyrashield/db", () => ({
   TOOL_OPERATION_MAP: {
@@ -37,6 +39,9 @@ vi.mock("@lyrashield/db", () => ({
   claimOrGetAgentOperation: (...args: unknown[]) => claimOrGetAgentOperationMock(...args),
   completeAgentOperation: (...args: unknown[]) => completeAgentOperationMock(...args),
   failAgentOperation: (...args: unknown[]) => failAgentOperationMock(...args),
+  getAgentConnection: (...args: unknown[]) => getAgentConnectionMock(...args),
+  retainUnknownAgentOperationResult: (...args: unknown[]) =>
+    retainUnknownAgentOperationResultMock(...args),
   toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   hashOperationInput: vi.fn().mockReturnValue("op-hash"),
   checkDelegatedOperationAuthorization: vi
@@ -168,6 +173,12 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    requireOAuthPermissionMock.mockReset().mockImplementation((...args: unknown[]) => {
+      const [oauth, permission] = args as [{ workspaceId: string }, string]
+      return requirePermissionMock(oauth.workspaceId, permission)
+    })
+    getAgentConnectionMock.mockReset()
+    retainUnknownAgentOperationResultMock.mockReset()
     completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
     failAgentOperationMock.mockResolvedValue({ status: "FAILED" })
     claimOrGetAgentOperationMock.mockReset()
@@ -829,6 +840,12 @@ describe("makeRemoteApprovalGate - attachment + fix-PR tools (D2)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    requireOAuthPermissionMock.mockReset().mockImplementation((...args: unknown[]) => {
+      const [oauth, permission] = args as [{ workspaceId: string }, string]
+      return requirePermissionMock(oauth.workspaceId, permission)
+    })
+    getAgentConnectionMock.mockReset()
+    retainUnknownAgentOperationResultMock.mockReset()
     completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
     failAgentOperationMock.mockResolvedValue({ status: "FAILED" })
   })
@@ -925,50 +942,109 @@ describe("makeRemoteApprovalGate - attachment + fix-PR tools (D2)", () => {
     }
   )
 
-  it("does not return late handler success after expiry won the finalization race", async () => {
-    const original = new Date("2026-10-02T09:00:00Z")
-    claimOrGetAgentOperationMock.mockResolvedValueOnce({
-      status: "NEW",
-      operation: { id: "expired-outer", updatedAt: original },
-    })
-    callToolMock.mockResolvedValueOnce({
-      content: [],
-      structuredContent: { scan: { id: "scan-existing" } },
-    })
-    completeAgentOperationMock.mockResolvedValueOnce({
-      status: "FAILED",
-      error: "OPERATION_OUTCOME_UNKNOWN",
-      result: { content: [], structuredContent: { scan: { id: "scan-existing" } } },
-    })
-    const gate = makeRemoteApprovalGate({
-      apiKeyInfo,
-      toolContext,
-      connection: connectionWith(["scan.create"]),
-    })
-    expect(
-      await gate("lyrashield_scan_target", {
-        targetId: "target-1",
-        mode: "STANDARD",
-        idempotencyKey: "same-key",
-      })
-    ).toMatchObject({
-      approved: true,
-      result: {
-        isError: true,
-        structuredContent: {
-          status: "FAILED",
-          code: "OPERATION_OUTCOME_UNKNOWN",
-          operationId: "expired-outer",
+  it.each([
+    "authorized",
+    "revoked",
+    "lost-permission",
+    "scope-changed",
+    "version-changed",
+    "read-only",
+    "foreign-user",
+  ])(
+    "retains late scan results after expiry only under current authorization (%s)",
+    async (kind) => {
+      const original = new Date("2026-10-02T09:00:00Z")
+      claimOrGetAgentOperationMock.mockResolvedValueOnce({
+        status: "NEW",
+        operation: {
+          id: "expired-outer",
+          workspaceId: "ws-1",
+          connectionId: "conn-1",
+          principalType: "OAUTH_CONNECTION",
+          principalId: "conn-1",
+          operationName: "scan.create",
+          idempotencyKey: "same-key",
+          inputHash: "hash-1",
+          status: "EXECUTING",
+          authorizationVersion: 1,
+          updatedAt: original,
         },
-      },
-    })
-    expect(completeAgentOperationMock).toHaveBeenCalledWith(
-      "expired-outer",
-      "ws-1",
-      expect.objectContaining({ expectedUpdatedAt: original })
-    )
-    expect(failAgentOperationMock).not.toHaveBeenCalled()
-  })
+      })
+      callToolMock.mockResolvedValueOnce({
+        content: [],
+        structuredContent: { scan: { id: "scan-existing" } },
+      })
+      const expiredAt = new Date("2026-10-02T11:00:00Z")
+      completeAgentOperationMock.mockResolvedValueOnce({
+        status: "FAILED",
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        updatedAt: expiredAt,
+        result: null,
+      })
+      getAgentConnectionMock.mockResolvedValueOnce({
+        ...connectionWith(["scan.create"]),
+        userId: kind === "foreign-user" ? "user-other" : "user-1",
+        scopes: kind === "read-only" ? ["read"] : ["write"],
+        status: kind === "revoked" ? "REVOKED" : "ACTIVE",
+        authorizationVersion: kind === "version-changed" ? 2 : 1,
+        allowedOperations: kind === "scope-changed" ? [] : ["scan.create"],
+      })
+      if (kind === "lost-permission")
+        requireOAuthPermissionMock
+          .mockImplementationOnce(async () => ({}))
+          .mockRejectedValueOnce(new Error("FORBIDDEN"))
+      retainUnknownAgentOperationResultMock.mockResolvedValueOnce({
+        status: "FAILED",
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        resultReference: "scan-existing",
+        result: { content: [], structuredContent: { scan: { id: "scan-existing" } } },
+      })
+      const gate = makeRemoteApprovalGate({
+        apiKeyInfo,
+        toolContext,
+        connection: connectionWith(["scan.create"]),
+      })
+      expect(
+        await gate("lyrashield_scan_target", {
+          targetId: "target-1",
+          mode: "STANDARD",
+          idempotencyKey: "same-key",
+        })
+      ).toMatchObject({
+        approved: true,
+        result: {
+          isError: true,
+          structuredContent: {
+            status: "FAILED",
+            code: "OPERATION_OUTCOME_UNKNOWN",
+            operationId: "expired-outer",
+          },
+        },
+      })
+      expect(completeAgentOperationMock).toHaveBeenCalledWith(
+        "expired-outer",
+        "ws-1",
+        expect.objectContaining({ expectedUpdatedAt: original })
+      )
+      expect(failAgentOperationMock).not.toHaveBeenCalled()
+      expect(callToolMock).toHaveBeenCalledOnce()
+      if (kind === "authorized") {
+        expect(retainUnknownAgentOperationResultMock).toHaveBeenCalledWith(
+          expect.objectContaining({ id: "expired-outer", authorizationVersion: 1 }),
+          "ws-1",
+          expect.objectContaining({
+            terminalUpdatedAt: expiredAt,
+            resultReference: "scan-existing",
+            result: expect.objectContaining({
+              structuredContent: expect.objectContaining({ scan: { id: "scan-existing" } }),
+            }),
+            currentAuthorizationVersion: 1,
+            userId: "user-1",
+          })
+        )
+      } else expect(retainUnknownAgentOperationResultMock).not.toHaveBeenCalled()
+    }
+  )
 
   it("executes an attachment upload claim under an explicit scan_attachment.upload grant", async () => {
     claimOrGetAgentOperationMock.mockResolvedValueOnce({

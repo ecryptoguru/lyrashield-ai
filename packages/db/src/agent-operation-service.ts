@@ -1,4 +1,4 @@
-import type { AgentOperation, Prisma } from "./generated/prisma"
+import { Prisma, type AgentOperation } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import { hashOperationInput } from "./agent-operation-hash"
 import { withWorkspaceRLS } from "./rls"
@@ -132,10 +132,11 @@ async function expireOuterExecution(
     operation.updatedAt >= cutoff ||
     !params.connectionId ||
     params.authorizationVersion === undefined ||
+    operation.workspaceId !== params.workspaceId ||
     operation.connectionId !== params.connectionId ||
     operation.principalType !== principal.principalType ||
     operation.principalId !== principal.principalId ||
-    operation.authorizationVersion !== params.authorizationVersion
+    operation.authorizationVersion > params.authorizationVersion
   )
     return operation
 
@@ -149,7 +150,8 @@ async function expireOuterExecution(
       operationName: params.operationName,
       idempotencyKey: params.idempotencyKey,
       inputHash: operation.inputHash,
-      authorizationVersion: params.authorizationVersion,
+      // The fresh retry may hold a newer grant. Expire the observed row only.
+      authorizationVersion: operation.authorizationVersion,
     }
     await tx.agentOperation.updateMany({
       where: {
@@ -302,6 +304,64 @@ export async function completeAgentOperation(
       return current
     }
     return tx.agentOperation.update({ where: { id: operationId }, data })
+  })
+}
+
+/**
+ * Attach a proven late result without reviving an expired outer execution.
+ * Caller must recheck live membership, permission and delegated resource scope.
+ */
+export async function retainUnknownAgentOperationResult(
+  original: AgentOperation,
+  workspaceId: string,
+  params: {
+    terminalUpdatedAt: Date
+    resultReference: string
+    result: Prisma.InputJsonObject
+    currentAuthorizationVersion: number
+    userId: string
+  }
+): Promise<AgentOperation | null> {
+  if (
+    original.status !== "EXECUTING" ||
+    original.workspaceId !== workspaceId ||
+    !original.connectionId ||
+    original.principalType !== "OAUTH_CONNECTION" ||
+    original.principalId !== original.connectionId
+  )
+    return null
+
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const identity = {
+      id: original.id,
+      workspaceId,
+      connectionId: original.connectionId,
+      principalType: original.principalType,
+      principalId: original.principalId,
+      operationName: original.operationName,
+      idempotencyKey: original.idempotencyKey,
+      inputHash: original.inputHash,
+      authorizationVersion: original.authorizationVersion,
+    }
+    await tx.agentOperation.updateMany({
+      where: {
+        ...identity,
+        status: "FAILED",
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        updatedAt: params.terminalUpdatedAt,
+        resultReference: null,
+        result: { equals: Prisma.DbNull },
+        // Bind the freshly checked grant too, so a concurrent grant change wins.
+        connection: {
+          status: "ACTIVE",
+          userId: params.userId,
+          scopes: { hasSome: ["write", "lyrashield.write"] },
+          authorizationVersion: params.currentAuthorizationVersion,
+        },
+      },
+      data: { resultReference: params.resultReference, result: params.result },
+    })
+    return tx.agentOperation.findFirst({ where: identity })
   })
 }
 

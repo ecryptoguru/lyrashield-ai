@@ -31,6 +31,7 @@ import {
 } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { makeRemoteApprovalGate } from "./remote-approval-gate"
+import { makeHostedMcpTaskBackend } from "../../../lib/mcp-tasks"
 import { GET as getOperationStatusRoute } from "../agent-operations/[id]/route"
 
 const databaseUrl = process.env.DATABASE_URL
@@ -109,6 +110,7 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
     afterAll(async () => {
       await owner.agentOperation.deleteMany({ where: { workspaceId } })
       await owner.agentConnection.deleteMany({ where: { workspaceId } })
+      await owner.scan.deleteMany({ where: { workspaceId } })
       await owner.target.deleteMany({ where: { workspaceId } })
       await owner.workspace.updateMany({
         where: { id: workspaceId },
@@ -215,7 +217,7 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
       ).toBe("COMPLETED")
     })
 
-    it("expires a stale outer execution under RLS without replaying live or stale handlers", async () => {
+    it("expires a stale outer execution from an older grant under RLS without replaying live or stale handlers", async () => {
       const connection = await getAgentConnection(connectionId, workspaceId)
       if (!connection || connection.status !== "ACTIVE") throw new Error("Missing connection")
       const input = { targetId, mode: "STANDARD" }
@@ -225,7 +227,7 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
         workspaceId,
         operationName: CANONICAL_OPERATIONS.SCAN_CREATE,
         idempotencyKey: key,
-        authorizationVersion: 4,
+        authorizationVersion: 3,
         input,
       })
       if (claim.status !== "NEW") throw new Error("Missing new operation")
@@ -277,7 +279,11 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
       const expired = await owner.agentOperation.findUniqueOrThrow({
         where: { id: claim.operation.id },
       })
-      expect(expired).toMatchObject({ status: "FAILED", error: "OPERATION_OUTCOME_UNKNOWN" })
+      expect(expired).toMatchObject({
+        status: "FAILED",
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        authorizationVersion: 3,
+      })
       await completeAgentOperation(claim.operation.id, workspaceId, {
         result: { id: "late-result" },
         expectedUpdatedAt: claim.operation.updatedAt,
@@ -286,6 +292,104 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
         await owner.agentOperation.findUniqueOrThrow({ where: { id: claim.operation.id } })
       ).toEqual(expired)
       expect(fetchFn).not.toHaveBeenCalled()
+    })
+
+    it("retains the original handler's durable late scan after expiry without reviving or replaying it", async () => {
+      const connection = await getAgentConnection(connectionId, workspaceId)
+      if (!connection || connection.status !== "ACTIVE") throw new Error("Missing connection")
+      const oauth = {
+        userId,
+        workspaceId,
+        scopes: ["lyrashield.read", "lyrashield.write"],
+        connectionId,
+        authorizationVersion: 4,
+        allowedOperations: connection.allowedOperations,
+        allowedTargetIds: connection.allowedTargetIds,
+        allTargets: connection.allTargets,
+        allowedProfiles: connection.allowedProfiles,
+        expiresAt: connection.expiresAt,
+      }
+      const key = `late-scan-${suffix}`
+      const args = { workspaceId, targetId, mode: "STANDARD", idempotencyKey: key }
+      let scanId = ""
+      let gate: ReturnType<typeof makeRemoteApprovalGate>
+      const fetchFn = vi.fn<typeof fetch>(async () => {
+        const scan = await owner.scan.create({
+          data: {
+            workspaceId,
+            targetId,
+            goal: "TEST_APP",
+            mode: "STANDARD",
+            status: "QUEUED",
+            createdById: userId,
+          },
+        })
+        scanId = scan.id
+        const outer = await owner.agentOperation.findFirstOrThrow({
+          where: { workspaceId, idempotencyKey: key },
+        })
+        await owner.agentOperation.update({
+          where: { id: outer.id },
+          data: { updatedAt: new Date(Date.now() - 61 * 60_000) },
+        })
+        expect(await gate("lyrashield_scan_target", args)).toMatchObject({
+          approved: true,
+          result: { isError: true, structuredContent: { code: "OPERATION_OUTCOME_UNKNOWN" } },
+        })
+        return new Response(
+          JSON.stringify({ success: true, data: { id: scanId, status: "QUEUED" } }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        )
+      })
+      gate = makeRemoteApprovalGate({
+        apiKeyInfo: { workspaceId, scopes: ["write"], createdById: userId, keyId: `key-${suffix}` },
+        connection: { ...connection, status: "ACTIVE" },
+        oauthContext: oauth,
+        toolContext: { apiBaseUrl: "http://localhost:3001", apiKey: "runtime-test", fetchFn },
+      })
+      expect(await gate("lyrashield_scan_target", args)).toMatchObject({
+        approved: true,
+        result: { isError: true, structuredContent: { code: "OPERATION_OUTCOME_UNKNOWN" } },
+      })
+      const retained = await owner.agentOperation.findFirstOrThrow({
+        where: { workspaceId, idempotencyKey: key },
+      })
+      expect(retained).toMatchObject({
+        status: "FAILED",
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        resultReference: scanId,
+        result: { structuredContent: { scan: { id: scanId }, operationId: retained.id } },
+      })
+      expect(await gate("lyrashield_scan_target", args)).toMatchObject({
+        approved: true,
+        result: { isError: true },
+      })
+      const backend = makeHostedMcpTaskBackend({
+        oauth,
+        connection: { ...connection, status: "ACTIVE" },
+      })
+      expect(await backend.getTask(`lst_${retained.id}`)).toMatchObject({ status: "failed" })
+      expect(await backend.getTaskResult(`lst_${retained.id}`)).toMatchObject({ isError: true })
+      requirePermissionMock.mockResolvedValue({
+        session: { userId, oauth: { connectionId, authorizationVersion: 4 } },
+      })
+      const response = await getOperationStatusRoute(
+        new Request(
+          `http://localhost/api/agent-operations/${retained.id}?workspaceId=${workspaceId}`
+        ),
+        { params: Promise.resolve({ id: retained.id }) }
+      )
+      expect(await response.json()).toMatchObject({
+        data: { status: "FAILED", resultLocation: scanId },
+      })
+      expect(await owner.agentOperation.findUniqueOrThrow({ where: { id: retained.id } })).toEqual(
+        retained
+      )
+      expect(fetchFn).toHaveBeenCalledOnce()
+      expect(await owner.scan.count({ where: { workspaceId } })).toBe(1)
     })
 
     it("denies a changed input under the same idempotency key without altering the ledger", async () => {
