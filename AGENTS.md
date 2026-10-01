@@ -32,7 +32,7 @@ Current release and runtime evidence lives in [PRD §8](./PRD.md#8-current-produ
 
 ## Immediate execution queue
 
-1. Merge and deploy the scorecard canonical-origin fix, then repeat live canonical and OG readback on the exact SHA.
+1. On deployed product `4822306e24f375800981bf282fd992a9c15dcde8` (which includes merged PR #454), complete a successful canonical/OG URL and PNG readback from an owner-authorized active scorecard. The historical fixture is revoked and returns 404; do not enumerate or create a production scorecard without authorization.
 2. Retain longer-window Redis command/capacity evidence and complete RazorpayX/Payoneer payout plus tax-form operations before paid scale.
 3. Triage the 25 findings retained by current Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted. Keep all unverified results `DETECTED` or `INCONCLUSIVE`.
 4. After founder authorization, run separate controlled Deep/Sol acceptance with exact image, routing, cost, receipts, and terminal proof.

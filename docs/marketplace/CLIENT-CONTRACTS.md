@@ -1,8 +1,22 @@
 # Client configuration receipts
 
-Updated 2026-10-01. Historical package readbacks remain dated at the time they were collected;
+Updated 2026-10-02. Historical package readbacks remain dated at the time they were collected;
 current local native-client receipts are recorded below. They do not establish authenticated access
 or public marketplace acceptance.
+
+## Clean source distribution readback — 2026-10-02
+
+From exact product source `4822306e24f375800981bf282fd992a9c15dcde8`, CLI `0.2.14`, MCP `0.2.12`, and Agent Plugin `0.1.31` built and packed into a fresh temporary directory. The offline `scripts/verify-agent-distribution.mjs --smoke --no-install --repo <exact-source>` check passed for all three packages:
+
+| Package                           | Entries |     Bytes | SHA-256                                                            | Result                                                    |
+| --------------------------------- | ------: | --------: | ------------------------------------------------------------------ | --------------------------------------------------------- |
+| `lyrashield@0.2.14`               |       6 | 1,280,490 | `1be4e4340db572b403dcbbb23ec72e91196a62e0b4b539bf173b277566e0e1db` | Offline dependency link, `--version`, and `--help` passed |
+| `@lyrashield/mcp@0.2.12`          |      13 |   729,642 | `3e0ebcd9950317b37cc0604d0b5c4c84ddadcdd7a6ca4029621f98626e68581f` | MCP initialize and `tools/list` returned 21 tools         |
+| `@lyrashield/agent-plugin@0.1.31` |      35 |   105,681 | `32c9f40b15f53ab4996cc55c86812afc06326871f4d21737bf9ff7c5ebbf0374` | Offline dependency link and package import passed         |
+
+The source build passed 5/5 tasks; the focused suite passed 15 files / 392 tests. A clean candidate marketplace export passed release validation for 55 generated artifacts and 306 manifest file records. The public marketplace branch at `8cb880dbaee73f2c6e71d096e4b75db87f29c32a` matches that clean export byte-for-byte, but its latest immutable release remains `v0.1.29` and its released Kiro shim pins MCP `0.2.9`.
+
+As of this readback, npm latest is CLI `0.2.13`, MCP `0.2.11`, and Agent Plugin `0.1.30`; lookups for `.14`, `.12`, and `.31` each returned `E404`. The official MCP Registry search returned zero LyraShield entries. These are source candidate pack/export receipts, not npm publication or authenticated client-runtime acceptance. No OAuth login, authenticated workspace call, scan, client discovery, tag, or publication was performed.
 
 - On 2026-09-28, npm published `@lyrashield/agent-plugin@0.1.30` and `lyrashield@0.2.13` from reviewed tarballs with SHA-256 `7eaa7335bf7c963a6af0d465b5d3a532cded9ac41b8767efd95e66a857fb98b1` and `2fbf951abfd59e29ba6dbbe5488c8e55a4679568334e41203ee137b2a5fe779a`. Registry SHA-1 checksums `c7c3ab6f2411c9737b1855bb558079dd971a4de0` and `6b19ef22cf1bb5e7903a6544b799ffd1580dc660` match those exact tarballs. A clean npm install imported the plugin and ran CLI `--version`/`--help` with lifecycle scripts disabled. This does not establish authenticated client activation or a marketplace release.
 - On 2026-09-27, `npm view @lyrashield/mcp version dist-tags --json` reported `0.2.10` as latest; `npm view @lyrashield/mcp@0.2.10 dist.tarball dist.integrity --json` returned the [registry metadata](https://registry.npmjs.org/%40lyrashield%2fmcp/0.2.10). `npm pack --ignore-scripts` matched its SHA-512 integrity (`sha512-JbxgknLw96e+i1XtHmcrokLt3fidioZH9W9oElicLObLpelhwcXDPSgrWYCX6+K7NT1uyD1w6WPXR2ETegcppw==`) and included the stdio entrypoint. The [published package README](https://www.npmjs.com/package/@lyrashield/mcp/v/0.2.10?activeTab=readme) lists 21 tools; a stdio probe using a synthetic credential and local-only API URL returned MCP initialization and the same 21 `tools/list` names: `lyrashield_list_workspaces`, `lyrashield_list_targets`, `lyrashield_get_scan_status`, `lyrashield_get_scan_quality`, `lyrashield_get_scan_eligibility`, `lyrashield_scan_target`, `lyrashield_cancel_scan`, `lyrashield_get_findings`, `lyrashield_get_launch_readiness`, `lyrashield_create_report`, `lyrashield_check_diff`, `lyrashield_run_pr_scan`, `lyrashield_explain_finding`, `lyrashield_generate_fix_plan`, `lyrashield_record_fix_proposal`, `lyrashield_verify_fix`, `lyrashield_create_pr_security_recap`, `lyrashield_list_scan_attachments`, `lyrashield_upload_scan_attachment`, `lyrashield_delete_scan_attachment`, and `lyrashield_request_fix_pr`. `node scripts/verify-published-mcp.mjs` repeats identity, integrity, entrypoint, initialization and tool-list checks with npm lifecycle scripts disabled. Plugin version `0.1.30` remained unpublished at that time; npm returned `E404` for that version and remote tag `v0.1.30` was absent. Deliberate release updates must update generator, registry, templates, validator and snapshots together.
@@ -50,7 +64,7 @@ Prior coordinated package release source: main `c6aee9ade4b4760c4280f3d6b3295fe5
 
 ## npm release procedure (maintainer-authorized)
 
-There is **no** dedicated npm-publish GitHub workflow (verified `.github/workflows` 2026-09-26: `ci.yml`, `deploy-azure.yml`, `release-production.yml`, `release-tauri.yml`, etc. — none publish npm). Publication is a manual maintainer step; never store npm tokens in the repository.
+As checked on 2026-10-02, there is **no** dedicated npm-publish GitHub workflow; the product workflows do not publish npm. Publication is a manual maintainer step; never store npm tokens in the repository.
 
 For this candidate, release **`@lyrashield/mcp` → `@lyrashield/agent-plugin` → `lyrashield`**. Verify MCP `0.2.12` is published first, update the current `0.2.11` stdio pins, then regenerate and re-pack the plugin and CLI before reviewing their exact bytes. The new recorded-scan and retest skills require the new explicit idempotency fields. The CLI's packed manifest depends on the plugin through a resolved `^x.y.z` range (pnpm rewrites `workspace:^` at pack/publish time), so the plugin version must exist on npm before `npm install lyrashield` can resolve. MCP depends on neither package; releasing it first avoids an interval where the new skills use the older stdio schema.
 
