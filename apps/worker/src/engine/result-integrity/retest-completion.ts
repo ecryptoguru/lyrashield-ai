@@ -1,5 +1,5 @@
 import { checksum } from "./checksum"
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { prisma, verifyStoredManifestChecksum, withWorkspaceRLS } from "@lyrashield/db"
 
 export async function markRetestsRunning(scanId: string): Promise<void> {
   await prisma.retest.updateMany({
@@ -28,17 +28,19 @@ type StoredManifestIdentity = {
   targetUrlChecksum: string | null
 }
 
-function baselineManifestTargetId(
-  manifest: { manifest: unknown } | null | undefined
-): string | null {
+type StoredManifest = {
+  checksum: string
+  checksumInput: string | null
+  manifest: unknown
+}
+
+function baselineManifestTargetId(manifest: StoredManifest | null | undefined): string | null {
   if (!manifest) return null
   const raw = manifest.manifest as { target?: { id?: unknown } | null }
   return typeof raw.target?.id === "string" ? raw.target.id : null
 }
 
-function baselineManifestTargetType(
-  manifest: { manifest: unknown } | null | undefined
-): string | null {
+function baselineManifestTargetType(manifest: StoredManifest | null | undefined): string | null {
   if (!manifest) return null
   const raw = manifest.manifest as { target?: { type?: unknown } | null }
   return typeof raw.target?.type === "string" ? raw.target.type : null
@@ -46,7 +48,7 @@ function baselineManifestTargetType(
 
 function storedManifestIdentity(
   scanId: string,
-  manifest: { checksum: string; manifest: unknown } | null | undefined
+  manifest: StoredManifest | null | undefined
 ): StoredManifestIdentity | null {
   if (!manifest) return null
   const raw = manifest.manifest as {
@@ -105,8 +107,8 @@ function evaluateRetestOutcome(params: {
   retestId: string
   baselineScan: { id: string; targetId: string | null }
   retestScan: { id: string; targetId: string | null }
-  baselineManifest: { checksum: string; manifest: unknown } | null
-  retestManifest: { checksum: string; manifest: unknown } | null
+  baselineManifest: StoredManifest | null
+  retestManifest: StoredManifest | null
   baselineCoverage: { id: string; controlId: string; status: string }[]
   retestCoverage: { id: string; controlId: string; status: string }[]
   sources: string[]
@@ -121,8 +123,12 @@ function evaluateRetestOutcome(params: {
     retestCoverage,
     sources,
   } = params
-  const baselineIdentity = storedManifestIdentity(baselineScan.id, baselineManifest)
-  const retestIdentity = storedManifestIdentity(retestScan.id, retestManifest)
+  const baselineChecksumValid = verifyStoredManifestChecksum(baselineManifest) === "MATCH"
+  const retestChecksumValid = verifyStoredManifestChecksum(retestManifest) === "MATCH"
+  const trustedBaselineManifest = baselineChecksumValid ? baselineManifest : null
+  const trustedRetestManifest = retestChecksumValid ? retestManifest : null
+  const baselineIdentity = storedManifestIdentity(baselineScan.id, trustedBaselineManifest)
+  const retestIdentity = storedManifestIdentity(retestScan.id, trustedRetestManifest)
   const deterministicSources = sources.filter((source) => DETERMINISTIC_RETEST_SCANNERS.has(source))
   const hasEngineOrUnknownSource = sources.some(
     (source) => !DETERMINISTIC_RETEST_SCANNERS.has(source)
@@ -130,16 +136,18 @@ function evaluateRetestOutcome(params: {
   const scannerSource = deterministicSources.join("+")
 
   const baselineTargetMatches =
+    baselineChecksumValid &&
     baselineIdentity?.scanId === baselineScan.id &&
-    baselineScan.targetId === baselineManifestTargetId(baselineManifest)
+    baselineScan.targetId === baselineManifestTargetId(trustedBaselineManifest)
   const retestTargetMatches =
+    retestChecksumValid &&
     retestIdentity?.scanId === retestScan.id &&
-    retestScan.targetId === baselineManifestTargetId(retestManifest)
+    retestScan.targetId === baselineManifestTargetId(trustedRetestManifest)
 
   // Repository scans prove identity by exact source revision: both
   // revisions must be present and well-formed, and may legitimately differ
   // after a fix. URL/API scans prove identity by a matching URL checksum.
-  const baselineType = baselineManifestTargetType(baselineManifest)
+  const baselineType = baselineManifestTargetType(trustedBaselineManifest)
   const isRepositoryTarget = baselineType === "REPO"
   const revisionIdentityValid =
     !isRepositoryTarget ||
@@ -170,10 +178,12 @@ function evaluateRetestOutcome(params: {
     baselineIdentity?.manifestChecksum !== undefined &&
     retestIdentity?.manifestChecksum !== undefined
 
-  const terminalReceiptsComplete = [baselineManifest, retestManifest].every((stored) => {
-    const receipt = stored?.manifest as { terminalOutcome?: { status?: string } } | undefined
-    return receipt?.terminalOutcome?.status === "COMPLETED"
-  })
+  const terminalReceiptsComplete = [trustedBaselineManifest, trustedRetestManifest].every(
+    (stored) => {
+      const receipt = stored?.manifest as { terminalOutcome?: { status?: string } } | undefined
+      return receipt?.terminalOutcome?.status === "COMPLETED"
+    }
+  )
   const canValidate =
     identityValid &&
     coverageComplete &&
@@ -206,6 +216,8 @@ function evaluateRetestOutcome(params: {
   }
 
   const missingParts: string[] = []
+  if (!baselineChecksumValid) missingParts.push("baseline result manifest checksum")
+  if (!retestChecksumValid) missingParts.push("retest result manifest checksum")
   if (sources.length === 0 || hasEngineOrUnknownSource)
     missingParts.push("originating scanner is not deterministic")
   if (!baselineIdentity || !retestIdentity) missingParts.push("stored result manifest identity")
@@ -290,7 +302,7 @@ export async function completeRetestsForScan(params: {
     const manifestRowsByScanId = new Map(
       manifestRows.map((manifest) => [manifest.scanId, manifest])
     )
-    const manifests = new Map<string, { checksum: string; manifest: unknown } | null>()
+    const manifests = new Map<string, StoredManifest | null>()
     const coverageByScan = new Map<string, { id: string; controlId: string; status: string }[]>()
     for (const scanId of evidenceScanIds) {
       manifests.set(scanId, manifestRowsByScanId.get(scanId) ?? null)
