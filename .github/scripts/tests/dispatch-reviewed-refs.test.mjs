@@ -75,6 +75,15 @@ test("desktop release jobs cannot sign or publish unmerged tag commits", () => {
   assert.match(workflow, /needs: \[macos, windows\]/)
 })
 
+test("release routing reads artifacts without inheriting package write", () => {
+  const workflow = read("release-production.yml")
+  const routing = jobSection(workflow, "routing")
+  // The routing job only downloads the CI artifact and reads the main ref;
+  // packages: write is reserved for the reusable deploy job.
+  assert.match(routing, /^    permissions:\n      actions: read\n      contents: read$/m)
+  assert.doesNotMatch(routing, /packages: write/)
+})
+
 test("scan and readiness workflows carry no unreviewed-code execution surface", () => {
   // No checkout and no secrets: a dispatched ref can only run the in-file
   // probe, and contents:read is the whole token scope.
