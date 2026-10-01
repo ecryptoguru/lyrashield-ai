@@ -78,7 +78,7 @@ test("Copilot and Codex guides keep pending plugins out of current setup and How
     ["github-copilot", "~/.copilot/mcp-config.json"],
     ["openai-codex", "~/.codex/config.toml"],
     ["cursor", "~/.cursor/mcp.json"],
-  ]) {
+  ] as const) {
     await page.goto(`/docs/integrations/${slug}`)
     await expect(page.getByRole("heading", { name: "Agent Plugin release pending" })).toBeVisible()
     await expect(page.locator("main")).toContainText(configPath)
@@ -158,7 +158,7 @@ test("integration directory and public setup articles link to current pinned MCP
     ["vscode-ai-app-security-checklist", "vscode"],
     ["vscode-mcp-security-copilot", "vscode"],
     ["windsurf-security-workflow", "devin"],
-  ]) {
+  ] as const) {
     await page.goto(`/blog/${slug}`)
     const article = page.locator("article")
     await expect(article).toContainText("lyrashield@0.2.13 login --oauth")
