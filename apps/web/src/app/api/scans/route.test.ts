@@ -309,6 +309,80 @@ describe("POST /api/scans", () => {
     expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ policyId: "default-policy" }))
   })
 
+  it("persists the delegated grant identity on the scan row for OAuth sessions (W0.4)", async () => {
+    // The sync/async boundary: the connection identity verified by
+    // assertOAuthDelegatedScope is bound into the durable scan record so the
+    // worker re-verifies the exact grant at execution instead of inheriting
+    // the request-time allow.
+    vi.mocked(requirePermission).mockResolvedValue({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          workspaceId: "ws-1",
+          scopes: ["lyrashield.write"],
+          allowedOperations: ["scan.create"],
+          allowedTargetIds: ["t1"],
+          allTargets: false,
+          authorizationVersion: 3,
+        },
+      },
+      workspace: { id: "ws-1" },
+    } as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(createScan).mockResolvedValue({
+      id: "scan-delegated",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      targetId: "t1",
+      createdAt: new Date(),
+    } as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
+
+    expect(res.status).toBe(201)
+    expect(createScan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        delegatedConnection: { connectionId: "conn-1", authorizationVersion: 3 },
+      })
+    )
+  })
+
+  it("records no delegated grant for cookie sessions", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(createScan).mockResolvedValue({
+      id: "scan-cookie",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      targetId: "t1",
+      createdAt: new Date(),
+    } as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
+
+    expect(res.status).toBe(201)
+    const call = vi.mocked(createScan).mock.calls[0]![0]
+    expect(call).not.toHaveProperty("delegatedConnection")
+  })
+
   it("persists the canonical URL profile instead of its Quick compatibility alias", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "web-1",

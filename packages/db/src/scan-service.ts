@@ -50,6 +50,14 @@ export interface CreateScanParams {
   }
   attachmentIds?: string[]
   authorizationRef?: string
+  /**
+   * The delegated OAuth connection grant that authorized this scan, when the
+   * caller authenticated through a hosted MCP/agent credential. Persisted on
+   * the scan row so the async execution boundary (verifyScanAdmission) can
+   * re-verify the exact grant — the synchronous request-time allow is never
+   * inherited blindly by the queued job.
+   */
+  delegatedConnection?: { connectionId: string; authorizationVersion: number }
 }
 
 export class WorkspaceScanConcurrencyLimitError extends Error {
@@ -192,6 +200,8 @@ export async function createScan(
         determinismMode,
         createdById: params.createdById,
         sponsorAccountId: workspace.agencySponsorAccountId ?? params.createdById,
+        delegatedConnectionId: params.delegatedConnection?.connectionId ?? null,
+        delegatedAuthorizationVersion: params.delegatedConnection?.authorizationVersion ?? null,
         executionPlan: executionPlan as Prisma.InputJsonValue,
         executionPlanHash,
       },

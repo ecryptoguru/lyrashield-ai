@@ -148,6 +148,16 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
             createdById: session.userId,
             triggerType: "retest",
             determinismMode: retestProfile.determinismMode,
+            // W0.4 — bind the delegated grant verified synchronously above into
+            // the durable scan record so execution-time admission re-checks it.
+            ...(session.oauth?.connectionId && session.oauth.authorizationVersion
+              ? {
+                  delegatedConnection: {
+                    connectionId: session.oauth.connectionId,
+                    authorizationVersion: session.oauth.authorizationVersion,
+                  },
+                }
+              : {}),
           })
         } catch (error) {
           if (error instanceof WorkspaceScanConcurrencyLimitError) {

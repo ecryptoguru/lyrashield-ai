@@ -490,6 +490,17 @@ async function post(request: Request) {
       mode: canonicalMode,
       policyId,
       createdById: session.userId,
+      // W0.4 — bind the delegated grant that just passed assertOAuthDelegatedScope
+      // into the durable scan record, so the async execution boundary re-verifies
+      // the exact connection/version instead of inheriting the request-time allow.
+      ...(session.oauth?.connectionId && session.oauth.authorizationVersion
+        ? {
+            delegatedConnection: {
+              connectionId: session.oauth.connectionId,
+              authorizationVersion: session.oauth.authorizationVersion,
+            },
+          }
+        : {}),
       workflow: data.workflow,
       ...(planSource ? { source: planSource } : {}),
       // Verified above for AUTHENTICATED_ASSESSMENT; the schema rejects it on

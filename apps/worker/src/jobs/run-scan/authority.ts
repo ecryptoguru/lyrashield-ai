@@ -23,6 +23,15 @@ export interface StoredScanAuthority {
   sponsorAccountId: string | null
   triggerType: string | null
   /**
+   * The delegated OAuth grant that authorized this scan, when created through
+   * an MCP/agent connection credential. Persisted at the synchronous admission
+   * boundary; verifyScanAdmission re-checks it at execution time so a revoked,
+   * expired, re-scoped, or narrowed grant between queue and run fails closed.
+   * NULL for cookie/API-key/schedule producers.
+   */
+  delegatedConnectionId: string | null
+  delegatedAuthorizationVersion: number | null
+  /**
    * Immutable server-owned execution plan snapshot + canonical-JSON sha256,
    * written once at scan creation. NULL on legacy rows — the bounded drain
    * path treats them as pre-plan scans; provenance is never fabricated.
@@ -122,6 +131,8 @@ export async function verifyScanJobAuthority(
         createdById: true,
         sponsorAccountId: true,
         triggerType: true,
+        delegatedConnectionId: true,
+        delegatedAuthorizationVersion: true,
         executionPlan: true,
         executionPlanHash: true,
       },

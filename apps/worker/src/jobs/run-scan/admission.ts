@@ -1,6 +1,7 @@
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth/permissions"
 import { evaluateScanEntitlement } from "@lyrashield/billing"
 import {
+  CANONICAL_OPERATIONS,
   LiveAiSafetyError,
   prisma,
   resolveAuthenticatedAssessmentAuthorization,
@@ -151,6 +152,50 @@ export async function verifyScanAdmission(params: {
                 : "The recorded assessment authorization could not be verified.",
           }
         }
+      }
+    }
+  }
+
+  // W0.4 — synchronous/async authorization boundary: a scan created through a
+  // delegated OAuth connection carries that grant's identity on the durable
+  // scan row. Re-verify the grant here so a connection revoked, expired,
+  // paused, re-scoped (authorizationVersion bumped on any grant mutation), or
+  // narrowed past this target between queueing and execution fails closed
+  // instead of inheriting the stale request-time allow. The recorded version
+  // must match exactly: any grant edit denies, even a widening — the queued
+  // work was authorized under the old grant, not the new one.
+  if (!admissionError && scanRecord.delegatedConnectionId) {
+    const connection = await prisma.agentConnection.findFirst({
+      where: { id: scanRecord.delegatedConnectionId, workspaceId },
+      select: {
+        userId: true,
+        status: true,
+        authorizationVersion: true,
+        expiresAt: true,
+        allowedOperations: true,
+        allowedTargetIds: true,
+        allTargets: true,
+      },
+    })
+    const requiredOperation =
+      scanRecord.triggerType === "retest"
+        ? CANONICAL_OPERATIONS.RETEST_CREATE
+        : CANONICAL_OPERATIONS.SCAN_CREATE
+    const scopeCoversTarget =
+      connection?.allTargets === true ||
+      (targetId != null && (connection?.allowedTargetIds ?? []).includes(targetId))
+    if (
+      !connection ||
+      connection.status !== "ACTIVE" ||
+      connection.userId !== scanRecord.createdById ||
+      connection.authorizationVersion !== scanRecord.delegatedAuthorizationVersion ||
+      (connection.expiresAt && connection.expiresAt.getTime() <= Date.now()) ||
+      !connection.allowedOperations.includes(requiredOperation) ||
+      !scopeCoversTarget
+    ) {
+      admissionError = {
+        errorCategory: "SCAN_AUTHORIZATION_REVOKED",
+        errorMessage: "The delegated grant that authorized this scan is no longer valid.",
       }
     }
   }

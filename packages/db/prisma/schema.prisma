@@ -844,6 +844,16 @@ model Scan {
   createdById           String
   // Immutable billing identity for this scan; NULL on legacy scans means createdById.
   sponsorAccountId      String?
+  // The delegated OAuth connection grant that authorized this scan, when it was
+  // created through a hosted MCP/agent credential instead of a browser session
+  // or workspace API key. Persisted at the synchronous admission boundary so
+  // the async execution path re-verifies the exact grant — a revoked, expired,
+  // re-scoped (authorizationVersion bumped), or target-narrowed connection
+  // between queueing and execution denies the run instead of inheriting the
+  // stale request-time allow. NULL for cookie/API-key/schedule/loop-closure
+  // producers, which never carry a delegated grant.
+  delegatedConnectionId         String?
+  delegatedAuthorizationVersion Int?
   deletedAt             DateTime?
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
