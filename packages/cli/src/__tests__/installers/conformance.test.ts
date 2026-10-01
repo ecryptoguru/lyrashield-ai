@@ -573,4 +573,27 @@ mcp_servers:
       expect(await readdir(cwd)).toEqual([`wrong-root.${format}`])
     }
   )
+
+  it("does not treat a TOML comment as an installed section during removal", async () => {
+    const filePath = path.join(cwd, "commented-section.toml")
+    const content = `# User note
+# [mcp_servers.lyrashield]
+unrelated = "keep this value"
+
+[mcp_servers.acme]
+command = "acme-mcp"
+`
+    await writeFile(filePath, content, "utf-8")
+
+    const removed = await removeFile({
+      filePath,
+      format: "toml",
+      rootKey: "mcp_servers",
+      serverName: "lyrashield",
+    })
+
+    expect(removed).toBe(false)
+    expect(await readFile(filePath, "utf-8")).toBe(content)
+    expect(await readdir(cwd)).toEqual(["commented-section.toml"])
+  })
 })

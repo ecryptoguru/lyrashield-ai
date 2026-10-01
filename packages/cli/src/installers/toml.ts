@@ -43,7 +43,20 @@ function findSectionRange(
   serverName: string
 ): { start: number; end: number } | undefined {
   const header = `[${rootKey}.${serverName}]`
-  const start = text.indexOf(header)
+  let start = -1
+  let lineOffset = 0
+  for (const line of text.split("\n")) {
+    const leadingWhitespace = line.match(/^[\t ]*/)?.[0] ?? ""
+    const candidate = line.slice(leadingWhitespace.length)
+    if (candidate.startsWith(header)) {
+      const suffix = candidate.slice(header.length).trimStart()
+      if (suffix.length === 0 || suffix.startsWith("#")) {
+        start = lineOffset
+        break
+      }
+    }
+    lineOffset += line.length + 1
+  }
   if (start === -1) return undefined
 
   const lines = text.slice(start).split("\n")
