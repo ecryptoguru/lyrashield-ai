@@ -26,8 +26,26 @@ export interface ReconciliationResult {
   driftAlerts: number
   /** True only when every provider and database check completed and the cursor advanced. */
   completed: boolean
-  /** True when another worker currently owns the reconciliation lease. */
+  /** True when the run did not sweep — see skipReason. */
   skipped: boolean
+  /**
+   * "lease_held": another worker currently owns the reconciliation lease.
+   * "daily_complete": the durable cursor already completed a run inside the
+   * current daily window, so replicas/restarts do not re-list providers.
+   */
+  skipReason?: "lease_held" | "daily_complete"
+  /**
+   * Window-independent billing backlog signal. The moving coverage window
+   * must never make a pre-existing revenue exception disappear, so older
+   * unresolved rows are preserved here even when they fall outside the
+   * per-event drift scan.
+   */
+  backlog: {
+    /** Unprocessed Polar/Razorpay webhook events older than this run's coverage window. */
+    unprocessedBeforeCoverage: number
+    /** Dead-lettered webhook tracks awaiting operator receipt review. */
+    deadLetterTracks: number
+  }
   /** Details of drift alerts. */
   alerts: ReconciliationAlert[]
 }
@@ -51,6 +69,21 @@ interface ReconciliationLease {
 // payments for up to 5 days. Three extra days cover scheduler delay.
 const RECONCILIATION_OVERLAP_MS = 24 * 24 * 60 * 60 * 1000
 const RECONCILIATION_LEASE_ID = "singleton"
+/** Reconciliation runs at most once per day; the durable cursor enforces it. */
+const RECONCILIATION_DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000
+/**
+ * Billing drift only ever involves money rails. WebhookEvent is shared with
+ * non-billing providers (e.g. GitHub deliveries); those rows must never be
+ * counted or sampled as billing drift.
+ */
+const BILLING_PROVIDERS = ["polar", "razorpay"] as const
+/**
+ * Bound provider listing so a pathological response stream cannot turn the
+ * daily report into an unbounded API crawl. Hitting the bound means coverage
+ * is incomplete — the run fails and the cursor does not advance.
+ */
+const MAX_PROVIDER_PAGES = 200
+const UNPROCESSED_SAMPLE_LIMIT = 100
 
 class ReconciliationLeaseLostError extends Error {
   constructor() {
@@ -170,13 +203,34 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
     driftAlerts: 0,
     completed: false,
     skipped: false,
+    backlog: { unprocessedBeforeCoverage: 0, deadLetterTracks: 0 },
     alerts: [],
   }
 
   const lease = await acquireReconciliationLease()
   if (!lease) {
     result.skipped = true
+    result.skipReason = "lease_held"
     logger.info("Billing reconciliation skipped; another worker holds the lease")
+    return result
+  }
+
+  // The daily schedule is durable, not just a timer: once a run has completed
+  // inside the current day the cursor itself suppresses provider listing, so
+  // replica startups and worker restarts never repeat the sweep early.
+  // setInterval timers can only fire late, never early, so the scheduled tick
+  // at or after 24h is unaffected.
+  if (
+    lease.lastCompletedAt &&
+    lease.runStartedAt.getTime() - lease.lastCompletedAt.getTime() <
+      RECONCILIATION_DAILY_INTERVAL_MS
+  ) {
+    await releaseReconciliationLease(lease.token)
+    result.skipped = true
+    result.skipReason = "daily_complete"
+    logger.info("Billing reconciliation skipped; daily coverage already complete", {
+      lastCompletedAt: lease.lastCompletedAt.toISOString(),
+    })
     return result
   }
 
@@ -190,7 +244,7 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
     const razorpayComplete = await reconcileRazorpay(since, until, result, lease.token)
 
     await renewReconciliationLease(lease.token)
-    await checkUnprocessedEvents(result)
+    await checkBillingEventBacklog(result, { since, until })
 
     if (polarComplete && razorpayComplete) {
       await renewReconciliationLease(lease.token)
@@ -218,12 +272,29 @@ export async function runBillingReconciliation(): Promise<ReconciliationResult> 
     })
   }
 
+  // Separate backlog/health signal: unresolved billing exceptions that predate
+  // (or are invisible to) this run's coverage window stay operator-visible
+  // forever — a later, narrower window can never make them disappear.
+  if (
+    result.backlog.unprocessedBeforeCoverage > 0 ||
+    result.backlog.deadLetterTracks > 0
+  ) {
+    logger.warn("operator_alert", {
+      code: "reconciliation_backlog",
+      severity: "warning",
+      unprocessedBeforeCoverage: result.backlog.unprocessedBeforeCoverage,
+      deadLetterTracks: result.backlog.deadLetterTracks,
+      coverageFrom: since.toISOString(),
+    })
+  }
+
   logger.info("Billing reconciliation complete", {
     polarChecked: result.polarChecked,
     razorpayChecked: result.razorpayChecked,
     replayed: result.replayed,
     driftAlerts: result.driftAlerts,
     completed: result.completed,
+    backlog: result.backlog,
     initialBaseline: lease.lastCompletedAt === null,
     coverageFrom: since.toISOString(),
     checkedThrough: until.toISOString(),
@@ -250,11 +321,21 @@ async function reconcilePolar(
 
   try {
     // The API has no modified-at filter. Descending creation order lets this
-    // stop once orders are older than the transition lookback.
+    // stop once orders are older than the transition lookback. The page count
+    // is still bounded: a provider that never yields an out-of-window order
+    // would otherwise keep the sweep listing forever.
+    let polarPage = 0
     for await (const page of await client.orders.list({
       limit: 100,
       sorting: ["-created_at"],
     })) {
+      if (++polarPage > MAX_PROVIDER_PAGES) {
+        logger.error("Polar reconciliation exceeded the bounded page limit", {
+          pages: MAX_PROVIDER_PAGES,
+        })
+        recordProviderCheckFailure(result, "polar")
+        return false
+      }
       await renewReconciliationLease(leaseToken)
       for (const order of page.result.items) {
         if (order.createdAt < since) break
@@ -316,6 +397,13 @@ async function reconcileRazorpay(
     const razorpayPageSize = 50
     let razorpayHasMore = true
     while (razorpayHasMore) {
+      if (razorpayPage > MAX_PROVIDER_PAGES) {
+        logger.error("Razorpay reconciliation exceeded the bounded page limit", {
+          pages: MAX_PROVIDER_PAGES,
+        })
+        recordProviderCheckFailure(result, "razorpay")
+        return false
+      }
       await renewReconciliationLease(leaseToken)
       const payments = await client.payments.all({
         count: razorpayPageSize,
@@ -373,25 +461,53 @@ async function reconcileRazorpay(
 }
 
 /**
- * Check for unprocessed WebhookEvent rows in the database.
+ * Report unprocessed billing webhook rows with explicit coverage semantics.
+ *
+ * Two scopes, both bounded to the money rails (polar/razorpay) — non-billing
+ * providers share the WebhookEvent table but are never revenue drift:
+ * 1. Coverage window: unprocessed events created inside [since, until) become
+ *    per-event drift alerts (bounded sample of UNPROCESSED_SAMPLE_LIMIT).
+ * 2. Backlog: unprocessed events older than `since` plus dead-lettered track
+ *    rows are counted into the separate `result.backlog` health signal so a
+ *    new, narrower time window can never make them disappear.
  */
-async function checkUnprocessedEvents(result: ReconciliationResult): Promise<void> {
-  // Cross-workspace sweep over every provider's events — system client
+async function checkBillingEventBacklog(
+  result: ReconciliationResult,
+  coverage: { since: Date; until: Date }
+): Promise<void> {
+  // Cross-workspace sweep over billing-provider events — system client
   // (WebhookEvent is FORCE RLS strict; the plain client sees nothing under
   // the runtime role).
-  const webhookEvent = getSystemPrisma().webhookEvent
-  const where = { processed: false }
-  const [unprocessedCount, unprocessed] = await Promise.all([
-    webhookEvent.count({ where }),
-    webhookEvent.findMany({
-      where,
+  const systemPrisma = getSystemPrisma()
+  const billingScope = { provider: { in: [...BILLING_PROVIDERS] } }
+  const inWindowWhere = {
+    processed: false,
+    ...billingScope,
+    createdAt: { gte: coverage.since, lt: coverage.until },
+  }
+  const [unprocessedCount, unprocessed, olderCount, deadLetterTracks] = await Promise.all([
+    systemPrisma.webhookEvent.count({ where: inWindowWhere }),
+    systemPrisma.webhookEvent.findMany({
+      where: inWindowWhere,
       select: { id: true, provider: true, externalId: true, eventType: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take: 100,
+      take: UNPROCESSED_SAMPLE_LIMIT,
     }),
+    systemPrisma.webhookEvent.count({
+      where: {
+        processed: false,
+        ...billingScope,
+        createdAt: { lt: coverage.since },
+      },
+    }),
+    // WebhookEventTrack rows only exist for billing-provider events, so the
+    // dead-letter count is already provider-scoped by construction.
+    systemPrisma.webhookEventTrack.count({ where: { status: "dead_letter" } }),
   ])
 
   result.driftAlerts += unprocessedCount
+  result.backlog.unprocessedBeforeCoverage = olderCount
+  result.backlog.deadLetterTracks = deadLetterTracks
 
   for (const event of unprocessed) {
     result.alerts.push({

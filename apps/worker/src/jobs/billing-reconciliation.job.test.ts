@@ -27,7 +27,15 @@ vi.mock("@lyrashield/db", () => {
     findMany: vi.fn(() => Promise.resolve([])),
     count: vi.fn(() => Promise.resolve(0)),
   }
-  const systemPrisma = { webhookEvent, $queryRaw: rawQueryMock, $executeRaw: rawExecuteMock }
+  const webhookEventTrack = {
+    count: vi.fn(() => Promise.resolve(0)),
+  }
+  const systemPrisma = {
+    webhookEvent,
+    webhookEventTrack,
+    $queryRaw: rawQueryMock,
+    $executeRaw: rawExecuteMock,
+  }
   return {
     prisma: { webhookEvent },
     getSystemPrisma: () => systemPrisma,
@@ -48,6 +56,8 @@ describe("billing-reconciliation.job", () => {
     vi.mocked(prisma.webhookEvent.findFirst).mockReset().mockResolvedValue(null)
     vi.mocked(prisma.webhookEvent.findMany).mockReset().mockResolvedValue([])
     vi.mocked(prisma.webhookEvent.count).mockReset().mockResolvedValue(0)
+    const { getSystemPrisma } = await import("@lyrashield/db")
+    vi.mocked(getSystemPrisma().webhookEventTrack.count).mockReset().mockResolvedValue(0)
     lookupResults.length = 0
     rawQueryMock.mockImplementation((strings: TemplateStringsArray) => {
       if (strings.join("").includes('SELECT id FROM "WebhookEvent"')) {
@@ -357,9 +367,19 @@ describe("billing-reconciliation.job", () => {
 
     const result = await runBillingReconciliation()
 
-    expect(prisma.webhookEvent.count).toHaveBeenCalledWith({ where: { processed: false } })
+    expect(prisma.webhookEvent.count).toHaveBeenCalledWith({
+      where: {
+        processed: false,
+        provider: { in: ["polar", "razorpay"] },
+        createdAt: { gte: expect.any(Date), lt: expect.any(Date) },
+      },
+    })
     expect(prisma.webhookEvent.findMany).toHaveBeenCalledWith({
-      where: { processed: false },
+      where: {
+        processed: false,
+        provider: { in: ["polar", "razorpay"] },
+        createdAt: { gte: expect.any(Date), lt: expect.any(Date) },
+      },
       select: { id: true, provider: true, externalId: true, eventType: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: 100,
@@ -427,5 +447,97 @@ describe("billing-reconciliation.job", () => {
       "operator_alert",
       expect.objectContaining({ code: "reconciliation_drift", alertCount: 1 })
     )
+  })
+
+  it("scopes the unprocessed sweep to billing providers — GitHub rows are never billing drift", async () => {
+    const { prisma } = await import("@lyrashield/db")
+
+    const result = await runBillingReconciliation()
+
+    // Every unprocessed-event query must carry the billing-provider scope; a
+    // pending GitHub delivery sharing the WebhookEvent table is not revenue
+    // drift and must not inflate alert counts or the backlog signal.
+    for (const call of vi.mocked(prisma.webhookEvent.count).mock.calls) {
+      expect(call[0]).toMatchObject({
+        where: { processed: false, provider: { in: ["polar", "razorpay"] } },
+      })
+    }
+    for (const call of vi.mocked(prisma.webhookEvent.findMany).mock.calls) {
+      expect(call[0]).toMatchObject({
+        where: { processed: false, provider: { in: ["polar", "razorpay"] } },
+      })
+    }
+    expect(result.driftAlerts).toBe(0)
+    expect(result.backlog).toEqual({ unprocessedBeforeCoverage: 0, deadLetterTracks: 0 })
+  })
+
+  it("keeps older unresolved Polar rows visible through the backlog signal", async () => {
+    const { prisma, getSystemPrisma } = await import("@lyrashield/db")
+    // First count is the coverage-windowed sweep (0 in-window rows); the second
+    // is the pre-window backlog count — a 30-day-old unprocessed Polar row the
+    // 24-day baseline can no longer reach.
+    vi.mocked(prisma.webhookEvent.count)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(3)
+    vi.mocked(getSystemPrisma().webhookEventTrack.count).mockResolvedValue(2)
+
+    const result = await runBillingReconciliation()
+
+    expect(result.backlog).toEqual({ unprocessedBeforeCoverage: 3, deadLetterTracks: 2 })
+    expect(vi.mocked(prisma.webhookEvent.count).mock.calls[1]?.[0]).toMatchObject({
+      where: {
+        processed: false,
+        provider: { in: ["polar", "razorpay"] },
+        createdAt: { lt: expect.any(Date) },
+      },
+    })
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "operator_alert",
+      expect.objectContaining({
+        code: "reconciliation_backlog",
+        unprocessedBeforeCoverage: 3,
+        deadLetterTracks: 2,
+      })
+    )
+    // Backlog is a health signal only — it is not replayed or per-row drift.
+    expect(result.driftAlerts).toBe(0)
+    expect(result.completed).toBe(true)
+  })
+
+  it("skips provider listing when the durable cursor already completed today's run", async () => {
+    rawQueryMock.mockResolvedValueOnce([
+      {
+        checked_through: new Date(),
+        coverage_from: new Date(Date.now() - 24 * 24 * 60 * 60 * 1000),
+        last_completed_at: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      },
+    ])
+
+    const result = await runBillingReconciliation()
+
+    expect(result.skipped).toBe(true)
+    expect(result.skipReason).toBe("daily_complete")
+    expect(result.completed).toBe(false)
+    expect(getPolarClientMock).not.toHaveBeenCalled()
+    expect(getRazorpayClientMock).not.toHaveBeenCalled()
+    const { prisma } = await import("@lyrashield/db")
+    expect(prisma.webhookEvent.findMany).not.toHaveBeenCalled()
+  })
+
+  it("runs again once the last completed run is outside the daily window", async () => {
+    rawQueryMock.mockResolvedValueOnce([
+      {
+        checked_through: new Date(),
+        coverage_from: new Date(Date.now() - 24 * 24 * 60 * 60 * 1000),
+        last_completed_at: new Date(Date.now() - 25 * 60 * 60 * 1000),
+      },
+    ])
+
+    const result = await runBillingReconciliation()
+
+    expect(result.skipped).toBe(false)
+    expect(getPolarClientMock).toHaveBeenCalled()
+    expect(getRazorpayClientMock).toHaveBeenCalled()
+    expect(result.completed).toBe(true)
   })
 })
