@@ -53,7 +53,7 @@ function StepBody({
 }) {
   return (
     <div className="space-y-3">
-      <p className="text-muted-foreground text-sm leading-6">{step.summary}</p>
+      <p className="text-muted-foreground break-words text-sm leading-6">{step.summary}</p>
 
       {step.snippet ? (
         <div className="space-y-1.5">
