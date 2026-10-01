@@ -34,6 +34,10 @@ env:
 jobs:
   backup:
     name: Encrypted backup
+    # Dispatches run only on reviewed main (same convention as the other
+    # production maintenance workflows); scheduled runs always land on the
+    # default branch already.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Verify production backup configuration
@@ -180,7 +184,10 @@ jobs:
   restore:
     name: Weekly isolated restore drill
     needs: backup
-    if: ${{ inputs.restore || github.event.schedule == '0 2 * * 0' }}
+    # The restore drill checks out the repository and runs install/app code
+    # while holding backup credentials, so a manual dispatch may only ever
+    # execute the reviewed main ref.
+    if: ${{ github.ref == 'refs/heads/main' && (inputs.restore || github.event.schedule == '0 2 * * 0') }}
     runs-on: ubuntu-latest
     steps:
       - name: Configure git default branch

@@ -26,6 +26,11 @@ concurrency:
 jobs:
   provision:
     name: ${{ inputs.mode == 'apply' && 'Apply exact admin set' || 'Validate admin accounts' }}
+    # The job checks out the repository and runs dependency install plus the
+    # provisioning command against production database credentials, so it may
+    # only ever execute code reviewed and merged to main — never an
+    # unreviewed dispatch ref.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: azure-production
