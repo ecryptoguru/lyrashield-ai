@@ -7,7 +7,7 @@ BullMQ scan worker that runs repository and URL scans by orchestrating the LyraS
 - Consumes scan jobs from the Redis-backed `scans` BullMQ queue.
 - Performs preflight checks, builds the engine command, runs the sibling `lyrashield-engine` in a Docker sandbox, and parses the engine output.
 - Persists findings, evidence, coverage receipts, manifests, and usage telemetry to the database and S3-compatible evidence storage.
-- Preserves findings from truncated engine runs. Content-filter, engine-error, or runtime-deadline stops with findings finish as `PARTIAL`; the same stops without findings finish as `FAILED`. A protected run-limit stop finishes as `STOPPED_BUDGET`.
+- Preserves findings from truncated engine runs. Content-filter, engine-stop (model error) or runtime-deadline truncations finish as `PARTIAL` when findings were filed and `FAILED` otherwise; each records a bounded coverage receipt so a truncated engine scope never reads as a complete pass, and deterministic scanners still run afterward. A protected run-limit stop finishes as `STOPPED_BUDGET`.
 - Registers Redis heartbeats so `apps/web` can fail closed when no worker is live.
 - Reconciles queue/database drift at startup, then checks every five minutes. When no nonterminal scans exist, it skips BullMQ inspection until the hourly backstop; a failed database preflight runs reconciliation fail-safe.
 - Reaps only old, stopped `strix-run-id` containers and owned checkout/run directories after confirming they are not attached to an active database scan.

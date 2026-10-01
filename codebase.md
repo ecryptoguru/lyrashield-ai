@@ -212,7 +212,7 @@ Lifecycle:
 QUEUED → PREFLIGHT → RUNNING → VERIFYING → COMPLETED
 ```
 
-Alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved), `CANCELLED`, `TIMED_OUT`, `STOPPED_BUDGET`, `REQUIRES_APPROVAL`. After any terminal state the worker refreshes the target's gate verdict (`evaluateGateForTarget`, best-effort). A failed engine run persists a bounded, redacted stdout/stderr tail to encrypted evidence storage (`engine-stream-tail`) referenced from an `engine_exit_tail` scan event — raw stream content never enters operational logs.
+Alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved), `CANCELLED`, `TIMED_OUT`, `STOPPED_BUDGET`, `REQUIRES_APPROVAL`. Every truncated engine stop — runtime deadline, content-filter stop or engine stop — records a bounded coverage receipt with the outcome so a cut-short engine scope is never presented as a complete pass; deterministic scanners still run afterward. After any terminal state the worker refreshes the target's gate verdict (`evaluateGateForTarget`, best-effort). A failed engine run persists a bounded, redacted stdout/stderr tail to encrypted evidence storage (`engine-stream-tail`) referenced from an `engine_exit_tail` scan event — raw stream content never enters operational logs.
 
 ### Engine boundary
 
