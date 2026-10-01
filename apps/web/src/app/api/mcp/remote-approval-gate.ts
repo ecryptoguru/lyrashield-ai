@@ -399,6 +399,7 @@ export function makeRemoteApprovalGate(
           // prove no submission and never authorize replay or a fresh-key retry.
           await failAgentOperation(claim.operation.id, workspaceId, {
             error: "OPERATION_OUTCOME_UNKNOWN",
+            resultReference: extractScanIdFromToolResult(toolResult) ?? undefined,
             result: recordedResult,
           })
         } else {

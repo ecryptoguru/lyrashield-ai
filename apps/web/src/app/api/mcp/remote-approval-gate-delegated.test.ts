@@ -126,6 +126,7 @@ vi.mock("../../../lib/rate-limit", () => ({
   checkApprovalCreateRateLimit: vi.fn().mockResolvedValue({ limited: false, retryAfter: 0 }),
 }))
 
+import { McpToolResultSchema } from "@lyrashield/mcp"
 import { makeRemoteApprovalGate as createRemoteApprovalGate } from "./remote-approval-gate"
 // The real canonical-input hasher — a pure module, so it can be imported
 // directly without the mocked @lyrashield/db surface or a Prisma client. A
@@ -826,6 +827,49 @@ describe("makeRemoteApprovalGate - attachment + fix-PR tools (D2)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it("retains a scan reference returned with a tool error without completing the operation", async () => {
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "NEW",
+      operation: { id: "op-error-reference" },
+    })
+    callToolMock.mockResolvedValueOnce(
+      McpToolResultSchema.parse({
+        content: [
+          { type: "text", text: '{"error":"response incomplete","scan":{"id":"scan-existing"}}' },
+        ],
+        isError: true,
+        structuredContent: { error: "response incomplete", scan: { id: "scan-existing" } },
+      })
+    )
+    const gate = makeRemoteApprovalGate({
+      apiKeyInfo,
+      toolContext,
+      connection: connectionWith(["scan.create"]),
+    })
+    const decision = await gate("lyrashield_scan_target", {
+      targetId: "target-1",
+      mode: "STANDARD",
+      idempotencyKey: "error-with-scan",
+    })
+    expect(decision).toMatchObject({
+      approved: true,
+      result: {
+        isError: true,
+        structuredContent: { scan: { id: "scan-existing" }, operationId: "op-error-reference" },
+      },
+    })
+    expect(failAgentOperationMock).toHaveBeenCalledWith(
+      "op-error-reference",
+      "ws-1",
+      expect.objectContaining({
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        resultReference: "scan-existing",
+        result: expect.objectContaining({ isError: true }),
+      })
+    )
+    expect(completeAgentOperationMock).not.toHaveBeenCalled()
   })
 
   it("executes an attachment upload claim under an explicit scan_attachment.upload grant", async () => {
