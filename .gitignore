@@ -55,6 +55,7 @@ __pycache__/
 *.pyc
 lyrashield_runs/
 .lyrashield-worker-tmp/
+.lyrashield/plugin-backups/
 packages/mcp/.packed-stdio-*/
 
 # Prisma generated (tracked via migrations)

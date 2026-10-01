@@ -85,6 +85,19 @@ function resolvePluginLocation(
   return path.join(opts?.cwd ?? process.cwd(), expanded)
 }
 
+async function createPluginBackupPath(
+  loc: ConfigLocation,
+  opts?: { scope?: string; cwd?: string }
+): Promise<string> {
+  const scopeRoot = loc.scope === "global" ? homedir() : (opts?.cwd ?? process.cwd())
+  const rawBackupRoot = path.join(scopeRoot, ".lyrashield", "plugin-backups")
+  const backupRoot = await assertContainedPluginDest(rawBackupRoot, loc, opts)
+  await mkdir(backupRoot, { recursive: true, mode: 0o700 })
+  await assertContainedPluginDest(backupRoot, loc, opts)
+  const backupPath = path.join(backupRoot, `plugin-${randomUUID()}`)
+  return assertContainedPluginDest(backupPath, loc, opts)
+}
+
 /**
  * Independent containment for registry-driven plugin destinations. Registry
  * paths are statically fixed today, but a future attacker-influenced entry
@@ -263,7 +276,7 @@ export async function installAgentPlugin(
   let backupPath: string | undefined
   try {
     if (destExists) {
-      backupPath = `${dest}.lyrashield-backup-${randomUUID()}`
+      backupPath = await createPluginBackupPath(loc, opts)
       await rename(dest, backupPath)
     }
   } catch (error) {
@@ -418,7 +431,7 @@ export async function uninstallAgentPlugin(
     }
   try {
     await assertContainedPluginDest(dest, loc, opts)
-    const backupPath = `${dest}.lyrashield-backup-${randomUUID()}`
+    const backupPath = await createPluginBackupPath(loc, opts)
     await rename(dest, backupPath)
     return {
       agent: agent.id,

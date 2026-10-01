@@ -241,7 +241,8 @@ describe("installAgentPlugin", () => {
 
   it("retains a backup with user customizations on replacement", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "plugins", "lyrashield")
+    const pluginStore = path.join(tempDir, ".cursor", "plugins", "local")
+    const dest = path.join(pluginStore, "lyrashield")
     const agent = makeAgent(dest)
 
     // Simulate an existing install with user customizations
@@ -260,7 +261,8 @@ describe("installAgentPlugin", () => {
     // The old user customization should be gone (overwritten)
     await expect(access(path.join(dest, "user-custom.txt"))).rejects.toThrow()
 
-    expect(result.backupPath).toContain("lyrashield-backup")
+    expect(result.backupPath).toContain(path.join(tempDir, ".lyrashield", "plugin-backups"))
+    expect(path.relative(pluginStore, result.backupPath!)).toMatch(/^\.\./)
     expect(await readFile(path.join(result.backupPath!, "user-custom.txt"), "utf-8")).toBe(
       "user data"
     )
@@ -332,9 +334,10 @@ describe("uninstallAgentPlugin", () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it("moves customized plugin files to a unique sibling backup on uninstall", async () => {
+  it("preserves customized plugin files outside the client plugin directory on uninstall", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "plugins", "lyrashield")
+    const pluginStore = path.join(tempDir, ".cursor", "plugins", "local")
+    const dest = path.join(pluginStore, "lyrashield")
     const agent = makeAgent(dest)
     await mkdir(dest, { recursive: true })
     await writeFile(path.join(dest, "plugin.json"), '{"name":"lyrashield"}\n', "utf-8")
@@ -343,7 +346,8 @@ describe("uninstallAgentPlugin", () => {
     const result = await uninstallAgentPlugin({ agent, cwd: tempDir })
 
     expect(result.outcome).toBe("CONFIGURED")
-    expect(result.backupPath).toContain(`${dest}.lyrashield-backup-`)
+    expect(result.backupPath).toContain(path.join(tempDir, ".lyrashield", "plugin-backups"))
+    expect(path.relative(pluginStore, result.backupPath!)).toMatch(/^\.\./)
     expect(result.message).toContain(result.backupPath)
     await expect(access(dest)).rejects.toThrow()
     expect(await readFile(path.join(result.backupPath!, "custom-skill.md"), "utf-8")).toBe(
