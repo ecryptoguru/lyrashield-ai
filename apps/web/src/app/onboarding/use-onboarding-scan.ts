@@ -63,6 +63,10 @@ interface ScanFlowContext {
   setCheckingScanOperation: (checking: boolean) => void
   setScanRecoveryError: (message: string | null) => void
   setScanRecoveryUnavailable: (unavailable: boolean) => void
+  // W2.3: the wizard computes whether the persisted targetId still describes
+  // the visible source; the flow reuses it only when this is true.
+  persistedTargetReusable: boolean
+  onTargetBound: (needsRepo: boolean) => void
 }
 
 /**
@@ -184,7 +188,8 @@ function existingTargetIdFromError(cause: unknown): string | null {
 async function ensureTargetId(
   ctx: ScanFlowContext,
   workspaceId: string,
-  needsRepo: boolean
+  needsRepo: boolean,
+  reusePersisted: boolean
 ): Promise<string> {
   const targetIdentity = JSON.stringify([
     workspaceId,
@@ -204,7 +209,9 @@ async function ensureTargetId(
     ctx.targetRecovery.current?.identity === targetIdentity
       ? ctx.targetRecovery.current.targetId
       : null
-  return ensureOnboardingTargetId(ctx.data.targetId ?? recoveredTargetId, async () => {
+  return ensureOnboardingTargetId(
+    (reusePersisted ? ctx.data.targetId : null) ?? recoveredTargetId,
+    async () => {
     let targetId: string
     try {
       if (needsRepo && ctx.selectedRepo) {
@@ -373,10 +380,15 @@ async function runCreateTargetAndStart(
   }
   const workspaceId = ctx.data.workspaceId
   // A retry after scan admission fails reuses the target persisted by the
-  // first attempt. New flows create it here so Back -> Continue cannot orphan
-  // a duplicate before the final action.
-  const hasExistingTarget = Boolean(ctx.data.targetId)
-  const needsRepo = pathNeedsRepo(ctx.path)
+  // first attempt — but only while it still describes the source the wizard
+  // shows. New flows create it here so Back -> Continue cannot orphan
+  // a duplicate before the final action, and an edited URL / different repo
+  // / different path must never silently scan the previously stored target.
+  const hasExistingTarget = ctx.persistedTargetReusable
+  // A selected repo can only come from the repo-select step — treat it as
+  // GitHub evidence even when the chooser path was lost across the OAuth
+  // install redirect (OnboardingState persists the step, not the path).
+  const needsRepo = pathNeedsRepo(ctx.path) || Boolean(ctx.selectedRepo)
   if (!hasExistingTarget && needsRepo && !ctx.selectedRepo) {
     ctx.setError("Workspace and repository are required.")
     return
@@ -413,7 +425,8 @@ async function runCreateTargetAndStart(
     ctx.setScanRecoveryError(null)
     if (startNewScan) ctx.startNewScanAfterPreflight.current = true
     try {
-      const targetId = await ensureTargetId(ctx, workspaceId, needsRepo)
+      const targetId = await ensureTargetId(ctx, workspaceId, needsRepo, hasExistingTarget)
+      ctx.onTargetBound(needsRepo)
       if (ctx.data.targetId !== targetId || ctx.data.selectedGoal !== selectedReview.goal) {
         await ctx.persist({
           targetId,
@@ -523,6 +536,8 @@ export function useOnboardingScan({
   setLoading,
   setError,
   setFailure,
+  persistedTargetReusable,
+  onTargetBound,
 }: {
   principalId: string
   data: OnboardingData
@@ -538,6 +553,10 @@ export function useOnboardingScan({
   setLoading: (loading: boolean) => void
   setError: (message: string | null) => void
   setFailure: (failure: OnboardingFailureState) => void
+  // W2.3: the wizard computes whether the persisted targetId still describes
+  // the visible source; the flow reuses it only when this is true.
+  persistedTargetReusable: boolean
+  onTargetBound: (needsRepo: boolean) => void
 }) {
   const router = useRouter()
   const scanSubmissionLock = useRef(false)
@@ -583,6 +602,8 @@ export function useOnboardingScan({
     setCheckingScanOperation,
     setScanRecoveryError,
     setScanRecoveryUnavailable,
+    persistedTargetReusable,
+    onTargetBound,
   }
 
   useEffect(() => {

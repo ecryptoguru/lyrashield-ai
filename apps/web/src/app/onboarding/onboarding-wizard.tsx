@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { ACQUISITION_COOKIE, track } from "@/lib/analytics"
 import { rememberPlanIntent } from "@/lib/plan-intent"
@@ -68,6 +68,14 @@ export function OnboardingWizard({
   const [path, setPath] = useState<OnboardingPath>(initialSelection.path)
   const [urlForm, setUrlForm] = useState({ url: "", ownershipAttested: false })
   const [buildTool, setBuildTool] = useState<string | null>(initialState.buildTool ?? null)
+  // W2.3: a persisted targetId may only be reused while it still describes the
+  // source the wizard shows. Editing the URL / picking a different repo marks
+  // the binding stale, and switching the chooser path invalidates it via the
+  // target-type check below. `boundTargetType` keeps the created target's type
+  // within the session — the onboarding PATCH response drops targetType, so
+  // without the ref a mid-session path switch could reuse a wrong-type target.
+  const [targetSourceEdited, setTargetSourceEdited] = useState(false)
+  const boundTargetType = useRef(initialState.targetType ?? null)
 
   const { data, persist, ensureWorkspace } = useOnboardingPersistence({
     initialState,
@@ -96,6 +104,15 @@ export function OnboardingWizard({
   const reviewOptions = getOnboardingReviewOptions(path)
   const selectedReview =
     reviewOptions.find((option) => option.goal === selectedGoal) ?? reviewOptions[0]
+  const expectedTargetType =
+    path === "github" ? "REPO" : path === "url" ? "WEB_APP" : path === "api" ? "API" : null
+  const persistedTargetReusable =
+    Boolean(data.targetId) &&
+    !targetSourceEdited &&
+    (expectedTargetType === null ||
+      boundTargetType.current === null ||
+      boundTargetType.current === expectedTargetType)
+
   const {
     pendingScanSubmission,
     pendingScanMatchesCurrent,
@@ -125,9 +142,15 @@ export function OnboardingWizard({
     setLoading,
     setError,
     setFailure,
+    persistedTargetReusable,
+    onTargetBound: (needsRepo: boolean) => {
+      // The bound target now provably matches the visible source.
+      boundTargetType.current = expectedTargetType ?? (needsRepo ? "REPO" : "WEB_APP")
+      setTargetSourceEdited(false)
+    },
   })
 
-  const retryingExistingTarget = Boolean(data.targetId)
+  const retryingExistingTarget = persistedTargetReusable
 
   async function choosePath(next: Exclude<OnboardingPath, null>) {
     setError(null)
@@ -210,6 +233,13 @@ export function OnboardingWizard({
       setError("Select a repository to continue.")
       return
     }
+    // W2.3: the repo-select step is only reachable through the GitHub path,
+    // but OnboardingState persists only currentStep — after the OAuth install
+    // redirect the wizard restores with path null and step 2. Re-binding the
+    // path here keeps review options (REPO) and target creation (repository
+    // payload) from falling into the URL/API branch and blocking the first
+    // scan with "Add a valid target".
+    if (!path) setPath("github")
     track("repos_selected", { selected_count: 1 })
     setProductName(selectedRepo.name)
     setStep(3)
@@ -279,6 +309,9 @@ export function OnboardingWizard({
         onProductNameChange={setProductName}
         onUrlChange={(url) => {
           setUrlForm({ ...urlForm, url })
+          // Editing the URL after a target exists must not scan the stale
+          // target — the changed source gets its own target row (W2.3).
+          if (data.targetId) setTargetSourceEdited(true)
           // W2-02: selection and naming are one step — the name prefills
           // from the parsed host and stays editable.
           if (!productName || productName === "Staging Site" || productName === "Production API") {
@@ -292,7 +325,15 @@ export function OnboardingWizard({
         repos={repos}
         reposLoaded={reposLoaded}
         selectedRepoId={selectedRepo?.id ?? null}
-        onSelectRepo={setSelectedRepo}
+        onSelectRepo={(repo) => {
+          // A different repo after a target exists makes the persisted
+          // targetId stale — create the matching target, never scan the
+          // old one (W2.3).
+          if (data.targetId && repo && repo.id !== selectedRepo?.id) {
+            setTargetSourceEdited(true)
+          }
+          setSelectedRepo(repo)
+        }}
         reposLoadFailed={Boolean(error)}
         onLoadRepos={loadRepos}
         onReconnect={connectGitHub}

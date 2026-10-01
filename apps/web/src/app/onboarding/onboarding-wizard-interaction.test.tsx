@@ -94,7 +94,7 @@ function elements(node: ReactNode): Element[] {
   return [element, ...elements(inner)]
 }
 function render(
-  targetType: string,
+  targetType: string | null,
   overrides: {
     currentStep?: number
     workspaceId?: string | null
