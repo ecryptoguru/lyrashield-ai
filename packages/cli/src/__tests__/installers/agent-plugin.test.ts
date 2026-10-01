@@ -1,5 +1,15 @@
 import { describe, expect, it, afterEach, beforeEach, vi } from "vitest"
-import { mkdtemp, rm, access, readFile, writeFile, mkdir, symlink } from "node:fs/promises"
+import {
+  chmod,
+  mkdtemp,
+  rm,
+  access,
+  readFile,
+  writeFile,
+  mkdir,
+  symlink,
+  lstat,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import type { AgentEntry } from "@lyrashield/agent-registry"
@@ -338,7 +348,10 @@ describe("uninstallAgentPlugin", () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
     const pluginStore = path.join(tempDir, ".cursor", "plugins", "local")
     const dest = path.join(pluginStore, "lyrashield")
+    const backupRoot = path.join(tempDir, ".lyrashield", "plugin-backups")
     const agent = makeAgent(dest)
+    await mkdir(backupRoot, { recursive: true, mode: 0o700 })
+    await chmod(backupRoot, 0o777)
     await mkdir(dest, { recursive: true })
     await writeFile(path.join(dest, "plugin.json"), '{"name":"lyrashield"}\n', "utf-8")
     await writeFile(path.join(dest, "custom-skill.md"), "User customization\n", "utf-8")
@@ -349,6 +362,7 @@ describe("uninstallAgentPlugin", () => {
     expect(result.backupPath).toContain(path.join(tempDir, ".lyrashield", "plugin-backups"))
     expect(path.relative(pluginStore, result.backupPath!)).toMatch(/^\.\./)
     expect(result.message).toContain(result.backupPath)
+    expect((await lstat(backupRoot)).mode & 0o777).toBe(0o700)
     await expect(access(dest)).rejects.toThrow()
     expect(await readFile(path.join(result.backupPath!, "custom-skill.md"), "utf-8")).toBe(
       "User customization\n"
@@ -359,6 +373,33 @@ describe("uninstallAgentPlugin", () => {
 
     await rm(tempDir, { recursive: true, force: true })
   })
+
+  it.each(["symlink", "file"] as const)(
+    "keeps customized files in place when the plugin backup root is a %s",
+    async (backupRootKind) => {
+      const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
+      const dest = path.join(tempDir, ".cursor", "plugins", "local", "lyrashield")
+      const backupRoot = path.join(tempDir, ".lyrashield", "plugin-backups")
+      await mkdir(path.dirname(backupRoot), { recursive: true })
+      if (backupRootKind === "symlink") {
+        const outside = path.join(tempDir, "outside")
+        await mkdir(outside)
+        await symlink(outside, backupRoot)
+      } else {
+        await writeFile(backupRoot, "not a directory", "utf-8")
+      }
+      await mkdir(dest, { recursive: true })
+      await writeFile(path.join(dest, "custom-skill.md"), "User customization\n", "utf-8")
+
+      const result = await uninstallAgentPlugin({ agent: makeAgent(dest), cwd: tempDir })
+
+      expect(result.outcome).toBe("FAILED")
+      expect(await readFile(path.join(dest, "custom-skill.md"), "utf-8")).toBe(
+        "User customization\n"
+      )
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  )
 
   it("reports already-configured when plugin is not present", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
