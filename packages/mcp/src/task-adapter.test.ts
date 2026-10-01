@@ -125,7 +125,11 @@ describe("mapScanStatusToTaskStatus", () => {
 
 describe("resolveTaskView", () => {
   it("maps an in-flight operation to working", () => {
-    const view = resolveTaskView({ operation: makeOperation({ status: "EXECUTING" }), scan: null })
+    const view = resolveTaskView({
+      operation: makeOperation({ status: "EXECUTING" }),
+      scan: null,
+      now: new Date("2026-01-01T00:06:00Z"),
+    })
     expect(view.status).toBe("working")
     const pending = resolveTaskView({ operation: makeOperation({ status: "PENDING" }), scan: null })
     expect(pending.status).toBe("working")
@@ -149,6 +153,22 @@ describe("resolveTaskView", () => {
     })
     expect(view.statusMessage).toContain("outcome is unknown")
   })
+
+  it.each([59, 61])(
+    "derives the outer execution state after %i minutes without changing durable state",
+    (ageMinutes) => {
+      const now = new Date("2026-10-02T12:00:00Z")
+      const operation = makeOperation({
+        status: "EXECUTING",
+        updatedAt: new Date(now.getTime() - ageMinutes * 60_000),
+        resultReference: null,
+      })
+      const view = resolveTaskView({ operation, scan: null, now })
+      expect(view.status).toBe(ageMinutes === 59 ? "working" : "failed")
+      if (ageMinutes === 61) expect(view.statusMessage).toContain("outcome is unknown")
+      expect(operation.status).toBe("EXECUTING")
+    }
+  )
 
   it("uses the scan status once the operation completed", () => {
     const running = resolveTaskView({

@@ -52,6 +52,7 @@ export {
   MCP_TASK_ID_PREFIX,
   MCP_TASK_TTL_MS,
   MCP_TASK_POLL_INTERVAL_MS,
+  MCP_DELEGATED_EXECUTION_STALE_MS,
   TASK_CAPABLE_TOOLS,
   assertTaskCapableTool,
   serializeTaskId,

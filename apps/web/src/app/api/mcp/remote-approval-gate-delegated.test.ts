@@ -168,6 +168,8 @@ describe("makeRemoteApprovalGate - Delegated vs Reviewed Parity", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
+    failAgentOperationMock.mockResolvedValue({ status: "FAILED" })
     claimOrGetAgentOperationMock.mockReset()
   })
 
@@ -827,6 +829,8 @@ describe("makeRemoteApprovalGate - attachment + fix-PR tools (D2)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
+    failAgentOperationMock.mockResolvedValue({ status: "FAILED" })
   })
 
   it("retains a scan reference returned with a tool error without completing the operation", async () => {
@@ -870,6 +874,100 @@ describe("makeRemoteApprovalGate - attachment + fix-PR tools (D2)", () => {
       })
     )
     expect(completeAgentOperationMock).not.toHaveBeenCalled()
+  })
+
+  it.each(["IN_PROGRESS", "FAILED"])(
+    "recovers a %s execution claim without invoking the handler",
+    async (status) => {
+      claimOrGetAgentOperationMock.mockResolvedValueOnce({
+        status,
+        operation: {
+          id: "outer-op",
+          status: status === "FAILED" ? "FAILED" : "EXECUTING",
+          error: status === "FAILED" ? "OPERATION_OUTCOME_UNKNOWN" : null,
+          result: null,
+        },
+      })
+      const gate = makeRemoteApprovalGate({
+        apiKeyInfo,
+        toolContext,
+        connection: connectionWith(["scan.create"]),
+      })
+      const before = Date.now()
+      const decision = await gate("lyrashield_scan_target", {
+        targetId: "target-1",
+        mode: "STANDARD",
+        idempotencyKey: "same-key",
+      })
+      expect(claimOrGetAgentOperationMock).toHaveBeenCalledWith(
+        expect.objectContaining({ staleExecutingBefore: expect.any(Date) })
+      )
+      const cutoff = claimOrGetAgentOperationMock.mock.calls[0]![0].staleExecutingBefore as Date
+      expect(cutoff.getTime()).toBeGreaterThanOrEqual(before - 60 * 60_000)
+      expect(cutoff.getTime()).toBeLessThanOrEqual(Date.now() - 60 * 60_000)
+      expect(decision).toMatchObject({
+        approved: true,
+        result: { structuredContent: { operationId: "outer-op" } },
+      })
+      if (status === "FAILED")
+        expect(decision).toMatchObject({
+          result: {
+            isError: true,
+            structuredContent: {
+              status: "FAILED",
+              code: "OPERATION_OUTCOME_UNKNOWN",
+            },
+          },
+        })
+      expect(callToolMock).not.toHaveBeenCalled()
+      expect(completeAgentOperationMock).not.toHaveBeenCalled()
+      expect(failAgentOperationMock).not.toHaveBeenCalled()
+    }
+  )
+
+  it("does not return late handler success after expiry won the finalization race", async () => {
+    const original = new Date("2026-10-02T09:00:00Z")
+    claimOrGetAgentOperationMock.mockResolvedValueOnce({
+      status: "NEW",
+      operation: { id: "expired-outer", updatedAt: original },
+    })
+    callToolMock.mockResolvedValueOnce({
+      content: [],
+      structuredContent: { scan: { id: "scan-existing" } },
+    })
+    completeAgentOperationMock.mockResolvedValueOnce({
+      status: "FAILED",
+      error: "OPERATION_OUTCOME_UNKNOWN",
+      result: { content: [], structuredContent: { scan: { id: "scan-existing" } } },
+    })
+    const gate = makeRemoteApprovalGate({
+      apiKeyInfo,
+      toolContext,
+      connection: connectionWith(["scan.create"]),
+    })
+    expect(
+      await gate("lyrashield_scan_target", {
+        targetId: "target-1",
+        mode: "STANDARD",
+        idempotencyKey: "same-key",
+      })
+    ).toMatchObject({
+      approved: true,
+      result: {
+        isError: true,
+        structuredContent: {
+          status: "FAILED",
+          code: "OPERATION_OUTCOME_UNKNOWN",
+          operationId: "expired-outer",
+        },
+      },
+    })
+    expect(completeAgentOperationMock).toHaveBeenCalledWith(
+      "expired-outer",
+      "ws-1",
+      expect.objectContaining({ expectedUpdatedAt: original })
+    )
+    expect(failAgentOperationMock).not.toHaveBeenCalled()
   })
 
   it("executes an attachment upload claim under an explicit scan_attachment.upload grant", async () => {

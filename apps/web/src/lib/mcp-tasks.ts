@@ -257,7 +257,7 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
           // fall through to the bounded generic result
         }
       }
-      const payload = { error: "The recorded task result is unavailable." }
+      const payload = { error: view.statusMessage ?? "The recorded task result is unavailable." }
       const unavailableResult: CallToolResult = {
         content: [{ type: "text", text: JSON.stringify(payload) }],
         isError: true,
