@@ -7,7 +7,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for Claude Code — Setup Guide"
 const description =
   "Add the LyraShield MCP server to Claude Code in under two minutes. Configure .mcp.json or use claude mcp add to run checks inline while you build."
-const updatedDate = "2026-09-08"
+const updatedDate = "2026-10-02"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
@@ -40,7 +40,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 3,
         name: "Log in locally",
-        text: "Run npx lyrashield login --oauth so the local MCP server can read the selected workspace credential.",
+        text: "Run npx -y lyrashield@0.2.13 login --oauth so the local MCP server can read the selected workspace credential.",
       },
       {
         "@type": "HowToStep",
@@ -68,16 +68,13 @@ const jsonLd: unknown[] = [
     can register a server with the <code>claude mcp add</code> CLI command.
   </p>
 
-  <h2>Install with the CLI (fastest)</h2>
+  <h2>Current guided setup</h2>
   <p>
-    Run <code>npx lyrashield install claude-code</code> from your project root. It prints Claude
-    Code's marketplace commands; Claude Code owns the actual install. Add <code>--dry-run</code> to
-    preview the same instructions without executing or writing anything.
-  </p>
-  <pre><code>npx lyrashield install claude-code</code></pre>
-  <p>
-    Prefer a project-scoped MCP entry? Configure Option A by hand or use Claude Code's command in
-    Option B. The CLI does not place a plugin in an undocumented discovery directory.
+    Use the pinned direct-MCP configuration below. The published LyraShield CLI's Claude install
+    command prints plugin marketplace instructions; it does not provide a reviewed matching immutable
+    plugin release. The current marketplace preparation branch is mutable, and older releases must
+    not be substituted without validating their portable schema. Automatic config writes remain
+    withheld until the safe writer is released.
   </p>
 
   <h2>Option A — .mcp.json (recommended for teams)</h2>
@@ -89,7 +86,7 @@ const jsonLd: unknown[] = [
   <AgentSnippet agentId="claude-code" transport="stdio" />
 
   <div class="callout">
-    <strong>OAuth first:</strong> Run <code>npx lyrashield login --oauth</code> to select one
+    <strong>OAuth first:</strong> Run <code>npx -y lyrashield@0.2.13 login --oauth</code> to select one
     workspace. API keys are the CI or non-OAuth-client fallback. A browser-confirmed remote OAuth
     delegation can run matching actions without repeated LyraShield approval.
   </div>
@@ -103,25 +100,13 @@ const jsonLd: unknown[] = [
   <pre><code>{`claude mcp add --scope project --transport stdio lyrashield \\
   -- npx -y @lyrashield/mcp@0.2.11`}</code></pre>
 
-  <h2>Option C — Agent Plugin (recommended)</h2>
+  <h2>Agent Plugin release pending</h2>
   <p>
-    Claude Code supports the open Agent Plugins v1.0.0 standard (agent-plugins.org) and LyraShield
-    ships a portable plugin that bundles the MCP server and a security skill into a single
-    installable package. The skill teaches Claude when to run LyraShield checks, so you get both the
-    tools and the guidance in one step.
+    The plugin bundle is in preparation. Use direct MCP until a reviewed matching immutable package
+    release passes schema, package and client-discovery checks. Do not install from the marketplace's
+    mutable preparation branch or assume an older release has a valid portable manifest. Publication,
+    plugin discovery, OAuth authentication and an authenticated read-only call are separate gates.
   </p>
-  <p>
-    Add the LyraShield marketplace, then ask Claude Code to install the named package. These are
-    Claude Code's documented distribution commands.
-  </p>
-  <pre><code>claude plugin marketplace add ecryptoguru/lyrashield-marketplace
-claude plugin install lyrashield@lyrashield-ai</code></pre>
-  <div class="callout">
-    <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>, the
-    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the{" "}
-    <code>LYRASHIELD_API_KEY</code> environment variable). No key needs to be inlined in{" "}
-    <code>.mcp.json</code> or any other file you might commit.
-  </div>
 
   <h2>Verify the connection</h2>
   <p>

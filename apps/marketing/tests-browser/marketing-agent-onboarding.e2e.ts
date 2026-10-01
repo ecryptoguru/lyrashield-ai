@@ -35,3 +35,35 @@ test("mobile navigation reaches agent onboarding", async ({ page }) => {
 // `wrangler dev --local` — the assets layer normalizes `/agents.md` to
 // `/agents.md/` and Astro's trailingSlash:"never" then 301s it back, looping.
 // Production serves them correctly; the quirk is local-dev only.
+
+test("manual plugin guides keep install, discovery and authentication separate", async ({
+  page,
+}) => {
+  await page.goto("/docs/integrations/vscode-agent-plugin")
+  await expect(page.getByRole("heading", { name: "Manual plugin instructions" })).toBeVisible()
+  await expect(page.locator("main")).toContainText("MANUAL_REQUIRED")
+  await expect(page.getByRole("link", { name: "manually configure VS Code MCP" })).toHaveAttribute(
+    "href",
+    "/docs/integrations/vscode"
+  )
+  await page.goto("/docs/integrations/github-copilot-cloud-agent")
+  await expect(page.locator("main")).toContainText("copy only the reviewed, versioned")
+  await expect(page.locator("main")).toContainText(".github/skills/")
+  await expect(page.locator("main")).not.toContainText("enabledPlugins")
+  await expect(page.locator("main")).not.toContainText("extraKnownMarketplaces")
+  await expect(page.locator("main")).toContainText("connect_required")
+})
+
+test("Claude and Pi guides use current MCP setup while package releases remain pending", async ({
+  page,
+}) => {
+  await page.goto("/docs/integrations/claude-code")
+  await expect(page.getByRole("heading", { name: "Current guided setup" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Agent Plugin release pending" })).toBeVisible()
+  await expect(page.locator("main")).not.toContainText("claude plugin marketplace add")
+  await expect(page.locator("main")).toContainText("@lyrashield/mcp@0.2.11")
+  await page.goto("/docs/integrations/pi")
+  await expect(page.locator("main")).toContainText("predates native MCP support")
+  await expect(page.locator("main")).toContainText("pi mcp login lyrashield")
+  await expect(page.locator("main")).toContainText("pending release")
+})

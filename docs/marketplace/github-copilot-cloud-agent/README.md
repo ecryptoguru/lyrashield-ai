@@ -12,7 +12,8 @@ Copy those skill directories from the marketplace package's `skills/` into the r
 `.github/skills/` directory. Do not install `scan-project`, `fix-and-retest`, or the backward-
 compatible `lyrashield` skill here: their recorded scans, fixes, and retests need an OAuth-capable
 client. The `review-changes` skill is limited to its read-only diff advisory on this surface; its
-optional recorded scan action is not allowlisted. Installing a plugin or discovering a skill does
+optional recorded scan action is not allowlisted. Do not enable the full marketplace plugin through repository plugin settings: that would load the
+excluded workflows and an OAuth MCP descriptor this surface cannot authenticate. Discovering a skill does
 not prove that MCP authentication works.
 
 ## Configure read-only MCP access

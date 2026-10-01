@@ -45,6 +45,17 @@ describe("agent onboarding contract", () => {
     )
   })
 
+  it("publishes manual VS Code plugin setup and flags the stale published Pi preview", () => {
+    const client = agentOnboarding.clients.find(
+      (entry) => entry.href === "/docs/integrations/vscode-agent-plugin"
+    )
+    expect(client?.strategyLabel).toBe("Manual Agent Plugin setup")
+    const body = renderAgentOnboardingMarkdown("https://lyrashieldai.com")
+    expect(body).toContain("Manual Agent Plugin setup")
+    expect(body).toContain("published CLI 0.2.13 preview predates Pi's native MCP")
+    expect(body).toContain("/docs/integrations/pi")
+  })
+
   it("publishes matching visual and Markdown onboarding surfaces", () => {
     const agentPage = readFileSync(new URL("../pages/agents.astro", import.meta.url), "utf8")
     const markdownRoute = readFileSync(new URL("../pages/agents.md.ts", import.meta.url), "utf8")

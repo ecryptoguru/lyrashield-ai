@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 import {
   CLI_PACKAGE_VERSION,
+  getAgent,
   getPublishedCliInstallCommand,
   listPreferredAgents,
 } from "@lyrashield/agent-registry"
@@ -132,6 +133,17 @@ describe("coding agent product cards", () => {
     expect(markup).toContain('href="/dashboard/agents/junie-cli"')
     expect(markup).toContain('href="https://lyrashieldai.com/docs/integrations/junie-cli"')
     expect(markup).not.toContain("npx -y lyrashield@0.2.13 install junie-cli")
+  })
+
+  it("labels VS Code's manual plugin action without claiming an installation or discovery", () => {
+    const agent = getAgent("vscode-agent-plugin")!
+    const markup = render([{ ...agent, installCommand: getPublishedCliInstallCommand(agent) }])
+    expect(markup).toContain("Manual Agent Plugin setup")
+    expect(markup).toContain("MANUAL_REQUIRED")
+    expect(markup).toContain(".vscode/mcp.json")
+    expect(markup).not.toContain("Installs a portable Agent Plugin")
+    expect(markup).not.toContain("Workflow skills ship with the Agent Plugin")
+    expect(markup).not.toContain("~/.lyrashield/plugins/lyrashield")
   })
 
   it("retains the empty registry state", () => {
