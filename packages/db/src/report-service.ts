@@ -405,6 +405,68 @@ export async function getShareableReport(
 }
 
 /**
+ * Resolve the persisted target a report is bound to, for delegated-scope
+ * authorization (W0.3). Returns:
+ * - `null` when the report does not exist in the workspace (callers 404),
+ * - `{ targetId }` when the persisted binding resolves to one target,
+ * - `{ targetId: null }` when no single persisted target can be proven —
+ *   workspace-wide scans, deleted scan/target rows, legacy launch reports
+ *   without parseable provenance, and provenance contradicted by the stored
+ *   verdict all land here. Callers MUST treat that as "requires an
+ *   all-targets grant", never as "no check": assertOAuthDelegatedScope
+ *   already denies unbound targets for narrowed connections.
+ *
+ * The request body is never consulted — attribution comes only from stored
+ * rows (the linked scan's target, or the launch report's provenance-verified
+ * gate verdict), so a caller cannot steer the check toward a covered target.
+ */
+export async function resolveReportDelegationTarget(
+  reportId: string,
+  workspaceId: string
+): Promise<{ targetId: string | null } | null> {
+  // Same isolation boundary as getShareableReport: Report/Scan/GateVerdict are
+  // under FORCE ROW LEVEL SECURITY, so the transaction-local workspace context
+  // is the real boundary and the explicit predicates are defence-in-depth.
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const report = await tx.report.findFirst({
+      where: { id: reportId, workspaceId, deletedAt: null },
+      select: { id: true, scanId: true, type: true, provenanceJson: true },
+    })
+    if (!report) return null
+
+    if (report.scanId) {
+      const scan = await tx.scan.findFirst({
+        where: { id: report.scanId, workspaceId, deletedAt: null },
+        select: { targetId: true },
+      })
+      // Deleted scan, or a workspace-wide scan with no persisted target:
+      // unattributable → all-targets only.
+      return { targetId: scan?.targetId ?? null }
+    }
+
+    if (report.type === "launch_readiness") {
+      // Launch reports bind a target only through issue-time provenance, and
+      // only when the stored verdict still carries the recorded checksum — a
+      // contradiction means the binding cannot be proven.
+      const provenance = parseLaunchReportProvenance(report.provenanceJson)
+      if (!provenance) return { targetId: null }
+      const verdict = await tx.gateVerdict.findFirst({
+        where: { id: provenance.gateVerdictId, workspaceId },
+        select: { targetId: true, verdictChecksum: true },
+      })
+      if (!verdict || verdict.verdictChecksum !== provenance.verdictChecksum) {
+        return { targetId: null }
+      }
+      return { targetId: verdict.targetId }
+    }
+
+    // No scan link and not a launch report: provenance on other report types
+    // is not a delegation binding.
+    return { targetId: null }
+  })
+}
+
+/**
  * List-view projection for a report row. `contentJson` holds the entire
  * generated report body (assurance data, score trends, finding summaries) and
  * `storageUri` is only needed on download — neither is rendered in the list, so

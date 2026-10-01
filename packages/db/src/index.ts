@@ -245,6 +245,7 @@ export {
   revokeShareToken,
   getReportByShareToken,
   getShareableReport,
+  resolveReportDelegationTarget,
   listReports,
   type CreateReportParams,
   type ShareableReport,

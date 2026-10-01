@@ -41,6 +41,7 @@ const ROUTE_PERMISSION_MANIFEST = [
   { route: "/api/reports/[id]", method: "GET", permission: "report:download" },
   { route: "/api/reports/[id]", method: "POST", permission: "report:create" },
   { route: "/api/reports/[id]/download", method: "GET", permission: "report:download" },
+  { route: "/api/reports/launch-readiness", method: "POST", permission: "report:create" },
   { route: "/api/scans/[id]", method: "GET", permission: "scan:view" },
   { route: "/api/scans/[id]", method: "POST", permission: "scan:cancel" },
   { route: "/api/scans/[id]", method: "DELETE", permission: "scan:remove" },

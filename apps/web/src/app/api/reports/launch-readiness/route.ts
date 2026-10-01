@@ -1,6 +1,6 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
 import { z } from "zod"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { generateLaunchReport, generateShareToken } from "@lyrashield/db"
 import { resolveLaunchReportSigningPrivateKey } from "@lyrashield/billing"
@@ -47,6 +47,11 @@ async function post(request: Request) {
     const { workspaceId, targetId, appDisplayName, share } = parsed.data
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.report.create)
+
+    // Delegated-scope gate (W0.3): generation mints a report — and optionally a
+    // public share token — for exactly the requested target, so a narrowed
+    // OAuth connection is denied here, before key resolution or any mutation.
+    assertOAuthDelegatedScope(session, targetId)
 
     // Resolve the signing key server-side (env in dev, Key Vault in prod). Null
     // means unsigned — the report still issues, marked as such.

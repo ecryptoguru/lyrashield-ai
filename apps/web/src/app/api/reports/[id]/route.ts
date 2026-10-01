@@ -4,8 +4,9 @@ import {
   generateShareToken,
   revokeShareToken,
   getLaunchReportDetail,
+  resolveReportDelegationTarget,
 } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
@@ -63,12 +64,19 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
 
     const { workspaceId, action } = parsed.data
 
-    await requirePermission(workspaceId, PERMISSIONS.report.create)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.report.create)
 
-    const report = await getShareableReport(id, workspaceId)
-    if (!report) {
+    // Delegated-scope gate (W0.3): share/revoke mutate a report bound to one
+    // persisted target, so a narrowed OAuth connection may act only within its
+    // grant. The PERSISTED binding is authoritative — a request-body targetId
+    // can never steer the check — and an unresolvable binding (workspace-wide
+    // scan, deleted scan, legacy/contradictory provenance) fails closed into
+    // "requires an all-targets grant" rather than "no check".
+    const delegation = await resolveReportDelegationTarget(id, workspaceId)
+    if (!delegation) {
       return apiError("REPORT_NOT_FOUND", "Report not found", 404)
     }
+    assertOAuthDelegatedScope(session, delegation.targetId)
 
     switch (action) {
       case "share": {
