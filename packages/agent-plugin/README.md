@@ -37,7 +37,7 @@ published install path or authenticated client acceptance.
 ## Current customer setup
 
 Do not install from the mutable marketplace preparation branch or substitute public plugin
-`0.1.30` without matching portable-schema validation. Claude Code, Codex, Copilot and VS Code
+`0.1.30` without matching portable-schema validation. Claude Code, Cursor, Codex, Copilot and VS Code
 plugin instructions remain pending a reviewed matching immutable package release.
 
 Use published `@lyrashield/mcp@0.2.11` for the direct MCP fallback and
@@ -46,14 +46,14 @@ Node.js 24 or newer is required. Merge configuration manually while CLI config w
 installation remain withheld pending release. Preserve existing servers and keep credentials out
 of shared configuration.
 
-| Client             | Current guided fallback                                                    | Client config                                      |
-| ------------------ | -------------------------------------------------------------------------- | -------------------------------------------------- |
-| Claude Code        | [Direct MCP](https://lyrashieldai.com/docs/integrations/claude-code)       | `.mcp.json`, `mcpServers`                          |
-| OpenAI Codex       | [Direct MCP](https://lyrashieldai.com/docs/integrations/openai-codex)      | `~/.codex/config.toml`, `[mcp_servers.lyrashield]` |
-| GitHub Copilot CLI | [Direct MCP](https://lyrashieldai.com/docs/integrations/github-copilot)    | `~/.copilot/mcp-config.json`, `type: "local"`      |
-| VS Code            | [Direct MCP](https://lyrashieldai.com/docs/integrations/vscode)            | `.vscode/mcp.json`, `servers`, `type: "stdio"`     |
-| Kiro               | [MCP settings](https://lyrashieldai.com/docs/integrations/kiro)            | `.kiro/settings/mcp.json`, `mcpServers`            |
-| Cursor             | [Client-specific guide](https://lyrashieldai.com/docs/integrations/cursor) | Follow its current published setup contract        |
+| Client             | Current guided fallback                                                 | Client config                                      |
+| ------------------ | ----------------------------------------------------------------------- | -------------------------------------------------- |
+| Claude Code        | [Direct MCP](https://lyrashieldai.com/docs/integrations/claude-code)    | `.mcp.json`, `mcpServers`                          |
+| OpenAI Codex       | [Direct MCP](https://lyrashieldai.com/docs/integrations/openai-codex)   | `~/.codex/config.toml`, `[mcp_servers.lyrashield]` |
+| GitHub Copilot CLI | [Direct MCP](https://lyrashieldai.com/docs/integrations/github-copilot) | `~/.copilot/mcp-config.json`, `type: "local"`      |
+| VS Code            | [Direct MCP](https://lyrashieldai.com/docs/integrations/vscode)         | `.vscode/mcp.json`, `servers`, `type: "stdio"`     |
+| Kiro               | [MCP settings](https://lyrashieldai.com/docs/integrations/kiro)         | `.kiro/settings/mcp.json`, `mcpServers`            |
+| Cursor             | [Direct MCP](https://lyrashieldai.com/docs/integrations/cursor)         | `.cursor/mcp.json`, `mcpServers`                   |
 
 Package conformance checks describe source artifacts only. Restart the client, confirm server
 and tool discovery, then make an authenticated read-only workspace call. Those checks and vendor

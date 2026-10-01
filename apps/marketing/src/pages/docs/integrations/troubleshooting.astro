@@ -84,15 +84,13 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout">
-    <strong>Start with a CLI preview:</strong> the published <code>lyrashield@0.2.13</code> can show
-    setup instructions for clients in its registry with{" "}
-    <code>npx --yes lyrashield@0.2.13 install &lt;agent&gt; --dry-run</code>. Keep{" "}
-    <code>--dry-run</code>: config-file writes are withheld while the safe-writer fix is pending.
-    Use the client's current guide to manually merge only LyraShield's entry, preserving existing
-    settings, comments where supported, and symlinks. For a client the CLI does not recognize, use
-    its guide directly. A pinned <code>npx --yes lyrashield@0.2.13 doctor</code> checks known local
-    config locations and root-key mismatches; neither command proves client discovery or
-    authentication. Complete a read-only authenticated call in the client.
+    <strong>Start with the current client guide:</strong> published CLI previews can print obsolete
+    plugin guidance. Manually merge the documented <code>@lyrashield/mcp@0.2.11</code> server entry,
+    preserving existing settings, comments where supported and symlinks. Config writes and candidate
+    skills remain withheld. Authenticate local stdio separately with
+    <code>npx -y lyrashield@0.2.13 login --oauth</code>; supported hosted clients sign in through their
+    own flow. Restart the client, inspect tool discovery and complete a read-only authenticated call.
+    A CLI <code>doctor</code> result does not establish client discovery, authentication or scan acceptance.
   </div>
 
   <h2>Quick reference — per-agent gotchas</h2>

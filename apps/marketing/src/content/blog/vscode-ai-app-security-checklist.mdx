@@ -2,7 +2,7 @@
 title: VS Code AI app security checklist for MCP builds
 description: Secure VS Code with GitHub Copilot and MCP, covering mcp dot json hardening, agent permissions, secret gating and SARIF evidence.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -32,7 +32,7 @@ Frame findings with standard references. OWASP Top Ten at [OWASP Top Ten](https:
 
 VS Code uses .vscode/mcp.json with top level servers key for workspace servers. Secrets should be referenced via inputs array with password true, not hardcoded in env.
 
-Fastest path: run `npx lyrashield init`, which detects VS Code and writes its supported config-file integration. Verify with `npx lyrashield doctor`, then use `npx lyrashield login --oauth` so credentials remain outside the repository. VS Code's Agent Plugin entry is experimental until a retained runtime receipt exists; use the config-file path today. The manual config below is what the CLI writes.
+Follow the current [vscode integration guide](/docs/integrations/vscode) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 Secure example with no raw secrets committed:
 

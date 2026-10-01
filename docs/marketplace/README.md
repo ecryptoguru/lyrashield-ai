@@ -18,7 +18,7 @@ The prepared official MCP Registry package has no public listing: an official re
 This mutable preparation branch is not a supported customer install source. Do not register it
 with a plugin marketplace, import it into VS Code, enable it in shared settings, or use an older
 plugin release without matching portable-schema validation. Plugin installation recommendations
-for Claude Code, Copilot CLI, Codex and VS Code await a reviewed matching immutable release.
+for Claude Code, Cursor, Copilot CLI, Codex and VS Code await a reviewed matching immutable release.
 
 Use the currently published pinned direct MCP server `@lyrashield/mcp@0.2.11` meanwhile. Local
 stdio requires Node.js 24 or newer. Authenticate separately in the same OS account with
@@ -28,6 +28,7 @@ coordinated safe-writer release.
 
 | Client       | Current direct MCP guide                                                   | Config contract                                             |
 | ------------ | -------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Cursor       | [Cursor guide](https://lyrashieldai.com/docs/integrations/cursor)          | `.cursor/mcp.json`, `mcpServers`, stdio                     |
 | Claude Code  | [Claude guide](https://lyrashieldai.com/docs/integrations/claude-code)     | `.mcp.json`, `mcpServers`, stdio                            |
 | Copilot CLI  | [Copilot guide](https://lyrashieldai.com/docs/integrations/github-copilot) | `~/.copilot/mcp-config.json`, `mcpServers`, `type: "local"` |
 | OpenAI Codex | [Codex guide](https://lyrashieldai.com/docs/integrations/openai-codex)     | `~/.codex/config.toml`, `[mcp_servers.lyrashield]`          |
@@ -38,8 +39,9 @@ authorized target read. Discovery, OAuth authentication and successful service c
 checks. If consent expires, repeat CLI login and restart the client.
 
 GitHub Copilot Cloud Agent is a separate read-only surface. Follow its
-[prepared configuration guide](./github-copilot-cloud-agent/README.md) for the three reviewed
-read-only skills and explicit MCP tool allowlist. Its API key belongs in the private Agents
+[prepared configuration guide](./github-copilot-cloud-agent/README.md) for the current
+read-only API-key/MCP configuration and explicit tool allowlist. Skill-copy steps are withheld
+until a matching reviewed immutable release exists; do not copy candidate skills from this branch. Its API key belongs in the private Agents
 secret store; the portable plugin's OAuth descriptor cannot authenticate it.
 
 ## Maintainer preparation only

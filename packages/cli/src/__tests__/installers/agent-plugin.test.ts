@@ -98,7 +98,7 @@ function makeCodexAgent(): AgentEntry {
 }
 
 describe("installAgentPlugin", () => {
-  it.each(["openai-codex-agent-plugin", "github-copilot-agent-plugin"])(
+  it.each(["openai-codex-agent-plugin", "github-copilot-agent-plugin", "cursor-agent-plugin"])(
     "keeps the current %s entry manual without running marketplace commands",
     async (id) => {
       const agent = getAgent(id)!

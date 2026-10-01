@@ -2,7 +2,7 @@
 title: Claude Code security workflow for AI built apps
 description: Secure Claude Code workflows with MCP scope checks, permission hardening, dependency gating and SARIF evidence for trustworthy releases.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -15,7 +15,7 @@ faq:
   - q: What evidence should I keep for Claude Code releases?
     a: Keep SARIF from secret and dependency scans plus a log of MCP servers used and the pull request with permission settings. That supports later verification and audit.
   - q: How should I scope the LyraShield MCP server for a team?
-    a: Claude Code stores MCP servers in .mcp.json at the project root for team scope or the user config for local scope. Use project scope for the LyraShield server so CI and local checks share one entry and keep the lsk_ key in an env reference rather than a literal in the file.
+    a: Claude Code stores MCP servers in .mcp.json at the project root for team scope or the user config for local scope. Use project scope for the LyraShield server so CI and local checks share one entry and keep credentials in the user-only store or the client’s OAuth flow rather than in that shared file.
 ---
 
 Claude Code reads your repo, edits many files, runs commands and calls MCP tools in one session, so you need scoped permissions and locked down config. This workflow shows how to harden .mcp.json across local, project and user scopes, limit tool permissions, gate secrets and dependencies and collect SARIF for every pull request. Pair it with LyraShield as release assurance for AI built apps. See our [vibe coding security guide](/blog/vibe-coding-security-guide) for baseline controls before applying Claude Code specific checks.
@@ -32,7 +32,7 @@ OWASP Top Ten lists injection and misconfiguration as persistent app risks, see 
 
 Claude Code supports three scopes for MCP config. Local scope applies to just this session. Project scope lives in .mcp.json at repo root and is shared with the team via git. User scope lives in personal config like dot Claude dot json or .mcp.json in home and is for personal helpers. Prefer project scope for team servers that every developer needs and user scope for personal tools that should not be in git.
 
-Fastest path: run `npx lyrashield init`, which detects Claude Code and writes the config for you. Verify with `npx lyrashield doctor`. Log in with `npx lyrashield login` so credentials land in ~/.lyrashield/credentials.json and nothing gets committed. For a one-step install, use the [Agent Plugin](https://agent-plugins.org) (Agent Plugins v1.0.0), the preferred route for launch clients like Claude Code. The manual config below is what the CLI writes, kept for reference.
+Follow the current [claude-code integration guide](/docs/integrations/claude-code) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 Secure example for project .mcp.json:
 
@@ -41,10 +41,7 @@ Secure example for project .mcp.json:
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.11"],
-      "env": {
-        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
-      }
+      "args": ["-y", "@lyrashield/mcp@0.2.11"]
     },
     "filesystem": {
       "command": "npx",
@@ -67,7 +64,7 @@ Hardening details that matter for review:
 - Never store raw keys in .mcp.json. Use env var references and load from a secret manager at runtime. Check CI for literal sk or lsk patterns.
 - For project scope, require pull request review for any MCP addition. Treat new servers like new production dependencies with an owner and review date.
 - Limit filesystem server args to the smallest directory needed for the task. Over broad file access widens exfiltration risk.
-- For remote MCP at https://app.lyrashieldai.com/api/mcp use Bearer lsk key from env and restrict egress if possible. Protocol and transport options are described at [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18).
+- For hosted MCP, complete OAuth in Claude Code; a private read-only API key is a separate read-only option and cannot authorize hosted mutations. Local stdio reads the user-only credential store after CLI OAuth. Protocol and transport options are described at [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18).
 - Verify scope behavior with vendor docs at [Claude Code MCP](https://docs.claude.com/en/docs/claude-code/mcp) and overview at [Claude Code overview](https://docs.claude.com/en/docs/claude-code/overview).
 
 Log which servers were active for a feature in the pull request description. That one line helps reproduce permission issues later and keeps audits simple.

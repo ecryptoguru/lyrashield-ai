@@ -185,6 +185,9 @@ describe("agent registry", () => {
     expect(copilotCloud.manualInstructions).not.toContain("enabledPlugins")
     expect(copilotCloud.manualInstructions).not.toContain("lyrashield@lyrashield-ai")
     expect(copilotCloud.manualInstructions).toContain(".github/skills/")
+    expect(copilotCloud.manualInstructions).toContain("Skill installation is withheld")
+    expect(copilotCloud.manualInstructions).toContain("matching immutable release")
+    expect(copilotCloud.manualInstructions).not.toContain("copy only")
     expect(copilotCloud.manualInstructions).toContain("lyrashield_check_diff")
     expect(copilotCloud.manualInstructions).toContain(
       "get-started`, `review-changes`, and `launch-readiness"
@@ -585,10 +588,24 @@ describe("renderEntry returns correct structural patch", () => {
     expect(remoteEntry.value).not.toHaveProperty("url")
   })
 
-  it("codebuff — writes its documented project MCP entry", () => {
+  it("codebuff — renders its documented direct MCP entry separately from the candidate reviewer", () => {
     const agent = getAgent("codebuff")!
     expect(agent.installStrategy).toBe("config-file")
-    expect(agent.locations[0]?.path).toBe(".agents/mcp.json")
+    expect(agent.source?.url).toBe("https://www.codebuff.com/docs/tips/mcp-servers")
+    expect(agent.locations.map((location) => location.path)).toEqual([
+      ".agents/mcp.json",
+      "~/.agents/mcp.json",
+    ])
+    expect(agent.gotchas.join(" ")).toContain("later locations override earlier ones")
+    expect(agent.transports).toEqual(["stdio", "remote-http"])
+    expect(renderEntry(agent, testOptions(agent, "remote-http"))).toMatchObject({
+      rootKey: "mcpServers",
+      value: {
+        type: "http",
+        url: TEST_MCP_URL,
+        headers: { Authorization: "Bearer $LYRASHIELD_API_KEY" },
+      },
+    })
     expect(renderEntry(agent, testOptions(agent, "stdio"))).toMatchObject({
       rootKey: "mcpServers",
       value: {

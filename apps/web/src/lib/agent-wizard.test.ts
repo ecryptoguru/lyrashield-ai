@@ -18,6 +18,7 @@ describe("agent wizard connection snippets", () => {
 
   it.each([
     ["openai-codex-agent-plugin", "~/.codex/config.toml"],
+    ["cursor-agent-plugin", "~/.cursor/mcp.json"],
     ["github-copilot-agent-plugin", "~/.copilot/mcp-config.json"],
   ])("keeps %s pending and points to the current direct MCP fallback", (id, configPath) => {
     const wizard = buildAgentWizard(id, "https://app.lyrashieldai.com")

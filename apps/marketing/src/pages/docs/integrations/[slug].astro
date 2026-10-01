@@ -155,8 +155,13 @@ const capabilities = agent.nativeCapabilities ?? []
   {!CLI_SKILLS_AVAILABLE && capabilities.includes("skills") && (
     <p>
       The published CLI package ({CLI_PACKAGE_SPEC}) does not include a LyraShield <code>skills</code>
-      installer yet. Use the documented client-native skill or plugin route; any manual MCP setup on
-      this page remains available while CLI installer support is pending.
+      installer yet. {agent.distribution?.state === "PREPARATION" ? (
+        <>Skill installation is withheld until a reviewed matching immutable release exists. Do not
+        copy skills from a mutable preparation branch. Use the direct MCP setup on this page.</>
+      ) : (
+        <>Follow the current client guide for native skill or plugin setup; manual MCP setup remains
+        available while CLI installer support is pending.</>
+      )}
     </p>
   )}
   {agent.distribution ? (

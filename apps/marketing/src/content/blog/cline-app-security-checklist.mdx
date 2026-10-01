@@ -2,7 +2,7 @@
 title: Cline app security checklist
 description: Secure Cline workflows with current MCP configuration, autoApprove controls and verified gates before merge.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -32,7 +32,7 @@ Cline CLI uses `~/.cline/data/settings/cline_mcp_settings.json`. IDE extensions 
 
 Secure it in four practical steps.
 
-Fastest path: run `npx lyrashield init`, which detects Cline and writes the MCP config for you. Verify with `npx lyrashield doctor`, then run `npx lyrashield login` to store credentials in ~/.lyrashield/credentials.json with nothing committed to your repo. The manual config below is what the CLI writes, kept for reference.
+Follow the current [cline integration guide](/docs/integrations/cline) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 First, never put a credential in a repository file. The local LyraShield MCP package can read the credential created by `lyrashield login --oauth`, so its Cline entry needs no secret field. When using a remote server, add the header through Cline's private settings UI and do not copy that settings file into the repository.
 

@@ -2,7 +2,7 @@
 title: JetBrains AI app security checklist
 description: Secure JetBrains AI Assistant workflows with MCP hardening plus secrets scanning and verified review before every merge.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -32,7 +32,7 @@ JetBrains AI Assistant supports MCP as JSON Level Project and Global. In Setting
 
 Secure it in four practical steps.
 
-Run `npx lyrashield init --agent jetbrains` to print the JSON, then add it through Settings → Tools → AI Assistant → MCP → Add As JSON. LyraShield leaves this IDE-owned setting to the JetBrains UI.
+Follow the current [jetbrains integration guide](/docs/integrations/jetbrains) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 First, never inline secrets in JSON. Use `${VAR}` references and load values from env or your secret manager, with a .env file gitignored and keys rotated monthly.
 

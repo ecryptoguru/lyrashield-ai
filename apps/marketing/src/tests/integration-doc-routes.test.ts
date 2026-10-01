@@ -116,14 +116,30 @@ describe("integration guide routes", () => {
     )
 
     expect(pluginsPage).toContain("https://www.npmjs.com/package/lyrashield/v/0.2.13")
-    for (const client of ["claude-code", "cursor", "openai-codex", "github-copilot", "kiro"]) {
-      expect(pluginsPage).toContain(`npx --yes lyrashield@0.2.13 install ${client} --dry-run`)
+    for (const client of ["claude-code", "cursor", "openai-codex", "github-copilot"]) {
+      expect(pluginsPage).not.toContain(`npx --yes lyrashield@0.2.13 install ${client} --dry-run`)
     }
+    expect(pluginsPage).toContain("npx --yes lyrashield@0.2.13 install kiro --dry-run")
     expect(pluginsPage).toContain("npx --yes lyrashield@0.2.13 install vscode --dry-run")
     expect(pluginsPage).toContain("newer integration guides can appear")
     expect(pluginsPage).toMatch(/until an installer is included in\s+a published CLI release/)
     expect(pluginsPage).not.toMatch(/npx\s+lyrashield\s+(?:install|init|uninstall|login)/)
     expect(pluginsPage).not.toMatch(/npx\s+lyrashield@latest/)
+  })
+
+  it("distinguishes Codebuff direct MCP from the unpublished read-only reviewer", () => {
+    const guide = readFileSync(
+      new URL("../pages/docs/integrations/codebuff.astro", import.meta.url),
+      "utf8"
+    )
+    expect(guide).toContain(".agents/mcp.json")
+    expect(guide).toContain("@lyrashield/mcp@0.2.11")
+    expect(guide).toContain("static HTTP headers")
+    expect(guide).not.toContain("Remote OAuth needs no local key")
+    const manual = readFileSync(new URL("../../../../docs/user-guide.md", import.meta.url), "utf8")
+    expect(manual).toContain("separate native reviewer adapter is read-only")
+    expect(manual).toContain("supports project `.agents/mcp.json`")
+    expect(manual).not.toContain("does not use the previously claimed `.agents/mcp.json`")
   })
 
   it("holds config-file client writes and documents an in-place manual merge", () => {
@@ -151,14 +167,14 @@ describe("integration guide routes", () => {
     }
   })
 
-  it("keeps integration index setup preview-only while config writers are held", () => {
+  it("keeps integration index on direct MCP while obsolete previews and config writers are held", () => {
     const page = readFileSync(
       new URL("../pages/docs/integrations/index.astro", import.meta.url),
       "utf8"
     )
-    expect(page).toContain("npx --yes lyrashield@0.2.13 init --dry-run")
-    expect(page).toContain("config-file writes are withheld")
-    expect(page).toContain("manually merge only the LyraShield server")
+    expect(page).not.toContain("init --dry-run")
+    expect(page).toContain("Published config writes")
+    expect(page).toContain("manually merge the LyraShield server")
     expect(page).not.toMatch(/npx\s+lyrashield\s+init(?!\s+--dry-run)/)
     expect(page).not.toMatch(/writes files directly for/)
     expect(page).not.toContain("console-coding-agents.webp")
