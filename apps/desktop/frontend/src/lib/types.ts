@@ -47,15 +47,22 @@ export interface RuntimeStatus {
 export type ChatGptAuthStatus =
   { status: "signed_in" } | { status: "signed_out" } | { status: "error"; message: string }
 
+/// The provider recorded as the selected BYOK route in Setup. The scan-time
+/// resolver honors exactly this — credential presence alone never picks one.
+export type ByokProvider = "chatgpt" | "azure"
+
 export interface AzureMetadata {
   configured: boolean
   endpoint: string | null
+  /// The admitted Azure deployment identity (`gpt-6-sol`/`gpt-6-luna`).
+  deployment: string | null
   keyMasked: string | null
 }
 
 export interface ByokStatus {
   chatgpt: ChatGptAuthStatus
   azure: AzureMetadata
+  selected: ByokProvider | null
 }
 
 export interface SequencedEvent {
