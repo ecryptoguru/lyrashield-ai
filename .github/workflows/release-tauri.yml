@@ -74,6 +74,24 @@ jobs:
           }
           python3 .github/scripts/test_desktop_release.py
 
+      # A pushed tag is the reviewed release ref: dispatch (or a tag push) on a
+      # commit that never merged to main must not reach the signing
+      # environments. compare/main...<tag> reports the tag as "behind" or
+      # "identical" only when every tagged commit already landed on main.
+      - name: Require the release tag to wrap code merged to main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/main...${RELEASE_TAG}" --jq .status)"
+          case "$status" in
+            behind|identical) ;;
+            *)
+              echo "::error::Release tag $RELEASE_TAG contains commits not merged to main (compare status: $status)."
+              exit 1
+              ;;
+          esac
+
   macos:
     name: macOS ${{ matrix.arch }} signed package
     needs: preflight
