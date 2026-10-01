@@ -1880,8 +1880,10 @@ const cursorPlugin: AgentEntry = {
 
 const vscodePlugin: AgentEntry = {
   id: "vscode-agent-plugin",
-  displayName: "VS Code (Agent Plugin)",
-  docsSlug: "vscode",
+  displayName: "GitHub Copilot in VS Code (Agent Plugin)",
+  productFamily: { id: "github-copilot", name: "GitHub Copilot" },
+  surface: "ide",
+  docsSlug: "vscode-agent-plugin",
   installStrategy: "agent-plugin",
   format: null,
   rootKey: null,
@@ -1895,6 +1897,7 @@ const vscodePlugin: AgentEntry = {
   ],
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
+  nativeCapabilities: ["plugin", "skills", "commands", "rules", "hooks"],
   manualInstructions:
     "VS Code Agent Plugins must be installed from Customize, Install from Source or an approved team marketplace. Use `lyrashield install vscode` for the supported `.vscode/mcp.json` path.",
   rulesFiles: [".github/copilot-instructions.md"],

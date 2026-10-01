@@ -243,6 +243,7 @@ describe("agent registry", () => {
       ["copilot-cli", { id: "github-copilot", name: "GitHub Copilot" }],
       ["github-copilot-agent-plugin", { id: "github-copilot", name: "GitHub Copilot" }],
       ["github-copilot-cloud-agent", { id: "github-copilot", name: "GitHub Copilot" }],
+      ["vscode-agent-plugin", { id: "github-copilot", name: "GitHub Copilot" }],
       ["augment-vscode", { id: "augment", name: "Augment" }],
       ["augment-jetbrains", { id: "augment", name: "Augment" }],
     ] as const) {
@@ -342,7 +343,7 @@ describe("agent registry", () => {
 
   it("marks standalone workflows without an MCP transport or config", () => {
     const preferred = listPreferredAgents()
-    expect(preferred).toHaveLength(47)
+    expect(preferred).toHaveLength(48)
     expect(
       preferred
         .filter((agent) => agent.integrationKind === "standalone-cli")
@@ -411,6 +412,19 @@ describe("preferred agent integrations", () => {
   it("keeps VS Code on its verified config-file install path", () => {
     expect(getPreferredAgent("vscode")?.id).toBe("vscode")
     expect(getPreferredAgent("vscode")?.installStrategy).toBe("config-file")
+  })
+
+  it("shows VS Code's Copilot Agent Plugin as a separate experimental surface", () => {
+    const plugin = listPreferredAgents().find((agent) => agent.id === "vscode-agent-plugin")
+    expect(plugin).toMatchObject({
+      displayName: "GitHub Copilot in VS Code (Agent Plugin)",
+      docsSlug: "vscode-agent-plugin",
+      productFamily: { id: "github-copilot", name: "GitHub Copilot" },
+      surface: "ide",
+      installStrategy: "agent-plugin",
+      supportTier: "EXPERIMENTAL",
+    })
+    expect(getPreferredAgent("vscode")?.id).toBe("vscode")
   })
 
   it("shows one dashboard choice for each documented integration", () => {
