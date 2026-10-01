@@ -1840,7 +1840,7 @@ const claudeCodePlugin: AgentEntry = {
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
   manualInstructions:
-    "Install through Claude Code's marketplace flow: `claude plugin marketplace add ecryptoguru/lyrashield-marketplace`, then `claude plugin install lyrashield@lyrashield-ai`. Use `claude --plugin-dir <path>` only for a temporary local test.",
+    "Claude Code Agent Plugin setup is pending a reviewed matching immutable package release. Do not install from the mutable marketplace preparation branch or substitute an older release without portable-schema validation. Use the current guided direct-MCP fallback in `.mcp.json` at /docs/integrations/claude-code; complete local CLI OAuth separately for stdio, then confirm client discovery and an authenticated read-only call. Published CLI config writes remain withheld.",
   rulesFiles: ["CLAUDE.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,

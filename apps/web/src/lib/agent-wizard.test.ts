@@ -25,6 +25,15 @@ describe("agent wizard connection snippets", () => {
     expect(wizard?.steps.some((step) => step.kind === "rules")).toBe(false)
   })
 
+  it("keeps Claude's unpublished plugin path non-actionable and points to current MCP guidance", () => {
+    const wizard = buildAgentWizard("claude-code-agent-plugin", "https://app.lyrashieldai.com")
+    expect(wizard?.steps.find((step) => step.id === "install")?.command).toBeUndefined()
+    const activation = wizard?.steps.find((step) => step.id === "config")
+    expect(activation?.summary).toContain("reviewed matching immutable package release")
+    expect(activation?.summary).toContain(".mcp.json")
+    expect(activation?.summary).not.toContain("claude plugin marketplace add")
+  })
+
   it("keeps VS Code plugin setup manual and offers the independent MCP fallback", () => {
     const wizard = buildAgentWizard("vscode-agent-plugin", "https://app.lyrashieldai.com")
     const install = wizard?.steps.find((step) => step.id === "install")
