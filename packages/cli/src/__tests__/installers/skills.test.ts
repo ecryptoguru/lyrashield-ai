@@ -122,6 +122,10 @@ describe("agent skill installer", () => {
     expect(denied.outcome).toBe("FAILED")
     expect(denied.message).toContain("withheld for GitHub Copilot Cloud Agent until a reviewed")
     await expect(readFile(skillFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readdir(path.join(project, ".github"))).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(
+      readFile(ownershipManifestPath(path.join(project, ".github", "skills")), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" })
 
     await testInstall({ agent: permittedAgent, scope: "project", cwd: project })
     const removed = await testRemove({ agent: withheldAgent, scope: "project", cwd: project })
