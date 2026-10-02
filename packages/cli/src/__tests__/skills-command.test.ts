@@ -30,7 +30,12 @@ import { handleSkills } from "../commands/skills.js"
 describe("skills command", () => {
   let temp: string
   let project: string
-  const captured = { lines: [] as string[], notices: [] as string[], errors: [] as string[] }
+  const captured = {
+    lines: [] as string[],
+    notices: [] as string[],
+    errors: [] as string[],
+    exitCodes: [] as number[],
+  }
 
   beforeEach(async () => {
     temp = await mkdtemp(path.join(tmpdir(), "lyrashield-cli-skills-command-"))
@@ -45,6 +50,7 @@ describe("skills command", () => {
     captured.lines = []
     captured.notices = []
     captured.errors = []
+    captured.exitCodes = []
   })
 
   afterEach(async () => {
@@ -58,9 +64,11 @@ describe("skills command", () => {
       log: (...args) => captured.lines.push(args.map(String).join(" ")),
       notice: (...args) => captured.notices.push(args.map(String).join(" ")),
       warn: (...args) => captured.notices.push(args.map(String).join(" ")),
-      error: (message) => {
-        if (json) captured.lines.push(JSON.stringify({ ok: false, error: String(message) }))
-        else captured.errors.push(String(message))
+      error: (message, exitCode = 2) => {
+        if (json) {
+          captured.exitCodes.push(exitCode)
+          captured.lines.push(JSON.stringify({ ok: false, error: String(message) }))
+        } else captured.errors.push(String(message))
       },
       result: (value) => captured.lines.push(JSON.stringify(value)),
       fail: (message): never => {
@@ -142,6 +150,7 @@ describe("skills command", () => {
     )
 
     expect(code).toBe(1)
+    expect(captured.exitCodes).toEqual([1])
     expect(JSON.parse(captured.lines[0] ?? "{}")).toMatchObject({
       ok: false,
       error: expect.stringContaining("withheld for GitHub Copilot Cloud Agent"),
