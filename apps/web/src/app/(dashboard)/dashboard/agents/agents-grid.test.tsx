@@ -126,7 +126,9 @@ describe("coding agent product cards", () => {
       }),
     ])
 
-    expect(markup).toContain("No installer for this surface in the published LyraShield CLI 0.2.13")
+    expect(markup).toContain(
+      `No installer for this surface in the published LyraShield CLI ${CLI_PACKAGE_VERSION}`
+    )
     expect(markup).toContain("MCP config setup")
     expect(markup).not.toContain("Auto-installs")
     expect(markup).toContain("Use the client MCP setup flow.")
