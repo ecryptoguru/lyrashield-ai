@@ -18,7 +18,7 @@ faq:
     a: No. Cloud Agent uses a separate read-only API-key MCP configuration in repository settings and private Agents secrets. Cloud Agent skill-copy remains withheld until a dedicated read-only bundle passes tool-allowlist and client-runtime review; this gate is separate from npm publication.
 ---
 
-This workflow connects GitHub Copilot CLI to LyraShield through the pinned MCP adapter. Authenticate separately with CLI OAuth, merge the client configuration, confirm discovery and make a read-only workspace call before using the tools. The Agent Plugin package 0.1.31 is published, while its public listing and authenticated Copilot CLI runtime acceptance remain pending. Copilot CLI has no documented LyraShield skills installation path, so use its supported direct-MCP setup. The [Copilot integration guide](/docs/integrations/github-copilot) owns current setup; the [vibe coding security guide](/blog/vibe-coding-security-guide) provides broader review context.
+Connect GitHub Copilot CLI to LyraShield through the pinned MCP adapter. Authenticate with CLI OAuth, merge the configuration, confirm discovery and make a read-only workspace call. Agent Plugin 0.1.31 is published; its public listing and authenticated Copilot CLI acceptance remain pending. Copilot CLI has no documented LyraShield skills installation path, so use direct MCP. Follow the [Copilot integration guide](/docs/integrations/github-copilot) for setup and the [vibe coding security guide](/blog/vibe-coding-security-guide) for review context.
 
 ## 1. Authenticate local stdio
 
