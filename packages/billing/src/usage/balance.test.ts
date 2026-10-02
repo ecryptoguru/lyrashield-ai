@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 const withAccountRLSMock = vi.hoisted(() => vi.fn())
 const db = vi.hoisted(() => ({
@@ -16,7 +16,7 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-import { getUsageBalance } from "./balance"
+import { getUsageBalance, resolveBalanceCycleStart } from "./balance"
 
 function billingRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -59,6 +59,10 @@ beforeEach(() => {
   ])
 })
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 it("uses aggregated quantities and the trial boundary when the billing period is absent", async () => {
   expect(await getUsageBalance("acct_1")).toMatchObject({
     poolMinutes: 100,
@@ -78,6 +82,8 @@ it("uses aggregated quantities and the trial boundary when the billing period is
 })
 
 it("preserves a billing cycle and treats empty sums as zero", async () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-09-10T12:00:00.000Z"))
   db.billingAccount.findMany.mockResolvedValue([
     billingRow({ currentPeriodStart: new Date("2026-09-02") }),
   ])
@@ -92,4 +98,24 @@ it("preserves a billing cycle and treats empty sums as zero", async () => {
       where: expect.objectContaining({ accountId: "acct_1" }),
     })
   )
+})
+
+it.each([
+  ["before the period starts", "2026-09-01", "2026-09-02"],
+  ["at the period start", "2026-09-02", "2026-09-02"],
+  ["before the next monthly anniversary", "2026-10-01", "2026-09-02"],
+  ["at the next monthly anniversary", "2026-10-02", "2026-10-02"],
+  ["after the next monthly anniversary", "2026-10-03", "2026-10-02"],
+])("resolves the cycle correctly %s", (_label, at, expectedCycleStart) => {
+  expect(
+    resolveBalanceCycleStart({
+      billing: {
+        interval: "monthly",
+        currentPeriodStart: new Date("2026-09-02"),
+        currentPeriodEnd: null,
+      },
+      trialStartedAt: null,
+      at: new Date(`${at}T00:00:00.000Z`),
+    })
+  ).toEqual(new Date(`${expectedCycleStart}T00:00:00.000Z`))
 })

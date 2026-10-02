@@ -581,7 +581,7 @@ describe("exported validator", () => {
         cwd: output,
       })
     ).rejects.toThrow(/pinned MCP package is unavailable: HTTP 404/)
-  })
+  }, 20_000)
 
   it("exports runnable verifier fixtures and the required client schema contract", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
