@@ -522,7 +522,7 @@ describe("exported validator", () => {
     )
   })
 
-  it("keeps pull request validation offline and requires published MCP for releases", async () => {
+  it("keeps offline validation separate from published MCP gates in CI and releases", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
     await exportMarketplace(output)
@@ -564,7 +564,7 @@ describe("exported validator", () => {
     const validateCommand = workflow.jobs.validate.steps.find((step) =>
       step.run?.startsWith("node scripts/validate.mjs")
     )?.run
-    expect(validateCommand).toBeTruthy()
+    expect(validateCommand).toBe("node scripts/validate.mjs --release-ready")
     await expect(
       execFileAsync(
         process.execPath,
@@ -573,7 +573,7 @@ describe("exported validator", () => {
           cwd: output,
         }
       )
-    ).resolves.toMatchObject({ stdout: expect.stringContaining("Marketplace validation passed") })
+    ).rejects.toThrow(/pinned MCP package is unavailable: HTTP 404/)
     const manifestPath = path.join(output, "manifest.json")
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"))
     manifest.publication = {
