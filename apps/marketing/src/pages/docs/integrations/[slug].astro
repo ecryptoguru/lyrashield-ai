@@ -43,6 +43,7 @@ const strategyLabels = {
   "vendor-cli": "Client's own CLI",
   "guided-manual": "Guided manual setup",
 } as const
+const manualPlugin = agent.installStrategy === "agent-plugin" && !!agent.manualInstructions
 const sourceUrl = agent.source?.url ?? agent.verification.reference
 const capabilities = agent.nativeCapabilities ?? []
 ---
@@ -64,7 +65,7 @@ const capabilities = agent.nativeCapabilities ?? []
 
   <h2>Connection setup</h2>
   <p>
-    The registry's setup path for this client is <strong>{strategyLabels[agent.installStrategy]}</strong>
+    The registry's setup path for this client is <strong>{manualPlugin ? "Manual Agent Plugin setup" : strategyLabels[agent.installStrategy]}</strong>
     {agent.preferredTransport ? <> over <strong>{agent.preferredTransport === "remote-http" ? "remote HTTP" : "local stdio"}</strong></> : null}.
   </p>
   {publishedCliPreviewCommand ? (
@@ -88,6 +89,18 @@ const capabilities = agent.nativeCapabilities ?? []
         </>
       )}
     </div>
+  )}
+  {agent.manualInstructions && (
+    <>
+      <h2>{manualPlugin ? "Manual plugin instructions" : "Client activation instructions"}</h2>
+      <p>{agent.manualInstructions}</p>
+    </>
+  )}
+  {agent.id === "vscode-agent-plugin" && (
+    <p>
+      Current fallback: <a href="/docs/integrations/vscode">manually configure VS Code MCP</a>.
+      Keep installation, client discovery, authentication and a read-only call as separate checks.
+    </p>
   )}
   {agent.installStrategy !== "agent-plugin" && (
     <AgentSnippet agentId={agent.id} transport={agent.preferredTransport ?? undefined} />
@@ -142,8 +155,13 @@ const capabilities = agent.nativeCapabilities ?? []
   {!CLI_SKILLS_AVAILABLE && capabilities.includes("skills") && (
     <p>
       The published CLI package ({CLI_PACKAGE_SPEC}) does not include a LyraShield <code>skills</code>
-      installer yet. Use the documented client-native skill or plugin route; any manual MCP setup on
-      this page remains available while CLI installer support is pending.
+      installer yet. {agent.distribution?.state === "PREPARATION" ? (
+        <>Skill installation is withheld until a reviewed matching immutable release exists. Do not
+        copy skills from a mutable preparation branch. Use the direct MCP setup on this page.</>
+      ) : (
+        <>Follow the current client guide for native skill or plugin setup; manual MCP setup remains
+        available while CLI installer support is pending.</>
+      )}
     </p>
   )}
   {agent.distribution ? (

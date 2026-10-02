@@ -10,7 +10,12 @@ from the public marketplace export.
 The manifests' `0.1.0` values are local preparation metadata, not released plugin versions. Bind the
 exact reviewed artifact version and source commit when preparing a release.
 
-## Local package review
+## Maintainer staging review only
+
+The following local package commands are for maintainer review of unpublished preparation
+artifacts only. They are not current customer install recommendations. Do not use the mutable
+marketplace default branch as an install source. Customer plugin instructions require a reviewed
+matching immutable release; use the current client-specific direct MCP guide meanwhile.
 
 Use Auggie's documented local plugin development flag from the product repository:
 
@@ -18,10 +23,8 @@ Use Auggie's documented local plugin development flag from the product repositor
 auggie --plugin-dir ./docs/marketplace/augment/plugins/lyrashield
 ```
 
-After the package is included in a released public marketplace repository, users can add that
-repository with `auggie plugin marketplace add <owner>/<repository>` and install the plugin using
-`auggie plugin install lyrashield@<marketplace-name>`. Read the registered marketplace name from
-`auggie plugin marketplace list`; pinned sources can affect the name.
+A future customer marketplace recipe must bind an exact reviewed immutable artifact and matching
+package release. No such install source is supplied by this preparation guide.
 
 ## Authentication boundary
 

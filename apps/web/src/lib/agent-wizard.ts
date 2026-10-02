@@ -107,6 +107,17 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   const agent = getAgent(agentId)
   if (!agent) return null
   const publishedInstallCommand = getPublishedCliInstallCommand(agent)
+  const manualPlugin = agent.installStrategy === "agent-plugin" && !!agent.manualInstructions
+  const pendingPluginFallbackId: Record<string, string> = {
+    "claude-code-agent-plugin": "claude-code",
+    "cursor-agent-plugin": "cursor",
+    "openai-codex-agent-plugin": "openai-codex",
+    "github-copilot-agent-plugin": "copilot-cli",
+    "vscode-agent-plugin": "vscode",
+  }
+  const pendingPluginFallback = manualPlugin
+    ? getAgent(pendingPluginFallbackId[agent.id] ?? "")
+    : undefined
   const localSetup = agent.surface !== "cloud" && agent.surface !== "web"
   const augmentWorkflowInPreparation =
     agent.productFamily?.id === "augment" &&
@@ -150,8 +161,12 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     }
   }
   const configPath = primaryConfigPath(agent)
-  const usesRemoteOAuth = agent.preferredTransport === "remote-http" && agent.remoteAuth === "oauth"
-  const usesRemoteApiKey = agent.preferredTransport === "remote-http" && !usesRemoteOAuth
+  const usesRemoteOAuth =
+    !pendingPluginFallback &&
+    agent.preferredTransport === "remote-http" &&
+    agent.remoteAuth === "oauth"
+  const usesRemoteApiKey =
+    !pendingPluginFallback && agent.preferredTransport === "remote-http" && !usesRemoteOAuth
   const remoteOAuthCommand =
     usesRemoteOAuth && agent.id === "picode" ? "pi mcp login lyrashield" : undefined
 
@@ -171,20 +186,26 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     steps.push({
       id: "install",
       kind: "install",
-      title: augmentWorkflowInPreparation
-        ? "Connect current MCP tools"
-        : publishedInstallCommand
-          ? "Install"
-          : "Prepare manual setup",
-      summary: augmentWorkflowInPreparation
-        ? `The published direct-MCP baseline uses ${CLI_PACKAGE_SPEC} and ${MCP_PACKAGE_SPEC}; it provides MCP tools only. Native workflow skills, commands and rules require the coordinated candidate release.`
-        : !publishedInstallCommand
-          ? agent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE
-            ? "Automatic config writes are withheld until the preservation fixes ship in the next CLI release. Merge the connection values below into your existing client config."
-            : "CLI installation for this setup is prepared for the next release. Use the manual connection steps below."
-          : agent.manualInstructions
-            ? `Follow the documented activation steps for ${agent.displayName}.`
-            : `Prepare the LyraShield integration for ${agent.displayName}.`,
+      title: manualPlugin
+        ? "Manual Agent Plugin setup"
+        : augmentWorkflowInPreparation
+          ? "Connect current MCP tools"
+          : publishedInstallCommand
+            ? "Install"
+            : "Prepare manual setup",
+      summary: manualPlugin
+        ? "The source installer returns MANUAL_REQUIRED: it prints instructions and does not install or register the plugin. Published CLI behavior may differ until release. Follow the client activation steps below; discovery, authentication and a read-only call must each be confirmed."
+        : agent.id === "picode"
+          ? `${agent.manualInstructions} The published CLI 0.2.13 preview predates Pi's native MCP setup. Use these current instructions; updated CLI recipes remain pending release.`
+          : augmentWorkflowInPreparation
+            ? `The published direct-MCP baseline uses ${CLI_PACKAGE_SPEC} and ${MCP_PACKAGE_SPEC}; it provides MCP tools only. Native workflow skills, commands and rules require the coordinated candidate release.`
+            : !publishedInstallCommand
+              ? agent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE
+                ? "Automatic config writes are withheld until the preservation fixes ship in the next CLI release. Merge the connection values below into your existing client config."
+                : "CLI installation for this setup is prepared for the next release. Use the manual connection steps below."
+              : agent.manualInstructions
+                ? `Follow the documented activation steps for ${agent.displayName}.`
+                : `Prepare the LyraShield integration for ${agent.displayName}.`,
       command: publishedInstallCommand ?? undefined,
       copyLabel: `Copy install command for ${agent.displayName}`,
       note:
@@ -282,6 +303,22 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     }
   }
 
+  if (pendingPluginFallback) {
+    steps.push({
+      id: "config-mcp-fallback",
+      kind: "config",
+      title: "Current direct MCP fallback",
+      summary:
+        "Merge this published pinned stdio connection, preserving existing client settings. Plugin installation and skills remain pending a reviewed immutable release.",
+      snippet: buildConfigSnippet(pendingPluginFallback, apiUrl),
+      snippetPath:
+        pendingPluginFallback.locations.find((location) => location.scope === "global")?.path ??
+        primaryConfigPath(pendingPluginFallback),
+      copyLabel: "Copy current MCP fallback",
+      note: "Authenticate with the local CLI separately, restart the client, confirm server and tool discovery, then call lyrashield_list_workspaces to verify authorized access.",
+    })
+  }
+
   // 3) Authentication
   steps.push({
     id: "api-key",
@@ -293,7 +330,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
         ? `Run the Pi OAuth login, select one workspace and approve the requested access once.`
         : usesRemoteOAuth
           ? `Complete OAuth in ${agent.displayName}, select one workspace and approve the requested access once.`
-          : "Sign in with the OAuth device flow so the CLI and local MCP server can use your selected workspace.",
+          : "Sign in through CLI OAuth in the same OS account so the local MCP server can use your selected workspace.",
     command: usesRemoteApiKey
       ? undefined
       : usesRemoteOAuth

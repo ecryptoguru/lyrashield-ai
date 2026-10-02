@@ -2,12 +2,22 @@
 
 Founder- and operator-run procedures consolidated from standalone runbooks. Each section is founder-controlled; nothing here runs unattended.
 
+## Current production readback — 2026-10-01
+
+Product `4822306e24f375800981bf282fd992a9c15dcde8` passed [main CI](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36905268255), [production release](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36908006265), and [scan-readiness workflow](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36912801887). Azure readback found the app, scanner, and egress proxy at 100% traffic on that revision, and the worker promotion check passed for its immutable image. A fresh public `GET https://app.lyrashieldai.com/api/ready/scans` at `2026-10-01T20:15:18Z` returned HTTP 200 with `{"status":"ready","checks":{"worker":true}}` and `Cache-Control: no-store`.
+
+This establishes scan-admission readiness for that deployment. It does not establish billing reconciliation, settlement, a paid scan on this revision, authenticated client use, or commercial readiness. The Cloud billing flags were read back as `public` and Local flags as `off`; this is configuration, not permission or payment proof. See [PRD §8](../PRD.md#8-current-production-evidence) for exact revisions and image digests.
+
+The latest report-only reconciliation failed Polar with HTTP 403 `insufficient_scope` on `2026-10-01T19:08:19Z`. Its receipt has `completed=false`, `polarChecked=0`, `razorpayChecked=0`, `packCreditsVerified=0`, and a coverage start of `2026-09-04T08:03:51Z`. The worker calls the providers sequentially, but does not retain response row counts. Do not call this complete reconciliation or reset the baseline. The app-to-worker release sync copies the app Polar credential into worker Key Vault, so a worker-only replacement will be overwritten on the next release. Correct the source-of-truth grant or approve a distinct worker binding, then use the guarded refresh/promotion path and rerun report-only reconciliation. No credentials were read or changed for this documentation update.
+
+The 2026-10-01 production rule readback found a live `reconciliation_drift` rule but no separate runtime rules for emitted `reconciliation_backlog` and `reconciliation_duplicates`; alert receiver delivery is unverified. F4 source candidate `70a60aa7fd685aeaa42095703045a51b0fbbbb50` adds declarations for both alert rules, but it was not included in deployed product `4822306e24f375800981bf282fd992a9c15dcde8` and has not been deployed. Treat runtime rule readback as authoritative. The latest recorded isolated restore predates the migrations in the 2026-10-01 release, so a post-release backup and restore drill remains pending.
+
 ## Live checkout verification
 
 > **Founder-controlled.** This runbook turns on real money. Stop conditions are
 > explicit — nothing here runs unattended.
 
-### Current state (read back 2026-09-14)
+### Historical configuration readback (2026-09-14)
 
 - Azure app revision `lyrashield-app--0000358` (release `34842662910`, product
   `9cde77d2`, 100% traffic) has
@@ -52,6 +62,16 @@ this code is considered operational. The first-attempt baseline is the
 forward-monitoring start: the job does not backfill provider payments older
 than that point. Complete any separate historical payment review before
 enabling production credentials.
+
+The 2026-10-01 receipt was incomplete because Polar returned `insufficient_scope`; see the current production readback above. Razorpay is invoked sequentially even when Polar fails, but the stored receipt does not retain provider response counts. Treat the recorded zero counters as insufficient to prove full provider coverage.
+
+### Pending read-only evidence audits
+
+These audits have not been run. They are evidence collection only and must not write historical records, alter receipts, reset checkpoints, replay billing events, or change scan/finding states.
+
+**Task 1 — verify both manifests for authorized retest receipts.** First obtain the exact authorized `workspaceId`, original source `scanId`, and retest `scanId` from the workspace owner/operator and confirm the retest relationship through the existing workspace-scoped read path. Under `withWorkspaceRLS(workspaceId, ...)`, read only each stored row's `checksum`, `checksumInput`, and parsed `manifest`, then call the existing [`verifyStoredManifestChecksum`](../packages/db/src/manifest-checksum.ts) helper once for the original manifest and once for the retest manifest. There is no dedicated audit CLI or SQL checksum substitute. Keep the identifier-to-result mapping in the restricted operator record; report only aggregate `MATCH`/`MISMATCH`/`UNAVAILABLE` counts and receipt-state counts. Do not print scan/workspace IDs, manifest contents, evidence, hashes, or storage URIs in the summary. Make no historical writes. The source audit found a deployed finalizer gap, but did not inspect production rows or show an incorrect validation; see [PRD §9](../PRD.md#9-release-status).
+
+**Task 2 — bounded delegated-operation impact sample.** The audit host currently has `/tmp/delegated-operation-impact.sql`; it is a temporary, unversioned template and has not been run. Inspect the exact file before use. It opens a `READ ONLY` transaction, applies a 5-second statement timeout, binds workspace RLS, samples at most 500 rows, emits aggregate counts plus bounded sanitized markers, and rolls back. Before running it, obtain and verify the exact authorized `workspace_id`, `principal_type`, `principal_id`, and `authorization_version` from the current caller/grant; do not guess or broaden those values. Retain only aggregate counts and sanitized markers from the query. A 500-row sample cannot prove absence of older duplicates. Do not run a write query or change authorization/operation records as part of this audit.
 
 ### Step 0 — preflight (safe, read-only)
 

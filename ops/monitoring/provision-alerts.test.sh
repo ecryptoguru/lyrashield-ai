@@ -9,6 +9,17 @@ cat >"$test_dir/az" <<'EOF'
 #!/bin/sh
 set -eu
 printf '%s\n' "$*" >>"${FAKE_AZ_CAPTURE:?}"
+if [ -n "${FAKE_FAILED_RULE:-}" ]; then
+  case "$*" in
+    *"scheduled-query show"*"--name $FAKE_FAILED_RULE "*)
+      case "$*" in
+        *"--query enabled"*) printf '%s\n' "${FAKE_RULE_ENABLED:-true}"; exit 0 ;;
+        *"--query autoMitigate"*) printf '%s\n' "${FAKE_RULE_AUTO_MITIGATE:-true}"; exit 0 ;;
+        *"actions.actionGroups[0]"*) printf '%s\n' "${FAKE_RULE_ACTION_GROUP:-/subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts}"; exit 0 ;;
+      esac
+      ;;
+  esac
+fi
 case "$*" in
   *"vm extension show"*) printf 'Succeeded\n' ;;
   *"data-collection rule association list"*) printf '%s\n' "${FAKE_DCR_COUNT:-1}" ;;
@@ -24,7 +35,7 @@ case "$*" in
       "${FAKE_PRIMARY_OPERATOR_EMAIL:-ecryptoguru@gmail.com}" \
       "${FAKE_FOUNDER_ESCALATION_EMAIL:-ankit@lyrashieldai.com}" | sort
     ;;
-  *"action-group show"*"--query enabled"*) printf 'true\n' ;;
+  *"action-group show"*"--query enabled"*) printf '%s\n' "${FAKE_ACTION_GROUP_ENABLED:-true}" ;;
   *"action-group show"*) printf 'lyrashield-operator-alerts\n' ;;
   *"metrics alert show"*"--query enabled"*) printf 'true\n' ;;
   *"metrics alert show"*"actionGroupId"*) printf '%s\n' "${FAKE_ACTION_GROUP_ID:-/subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts}" ;;
@@ -71,6 +82,8 @@ for code in \
   scan_queue_depth_high \
   scan_queue_oldest_wait_high \
   reconciliation_drift \
+  reconciliation_backlog \
+  reconciliation_duplicates \
   webhook_dead_letter \
   evidence_persistence_failure \
   terminal_cost_unreconciled
@@ -84,7 +97,7 @@ if grep -q "ContainerAppConsoleLogs_CL.*_ResourceId" "$capture"; then
   exit 1
 fi
 
-test "$(grep -c 'monitor scheduled-query create' "$capture")" = 7
+test "$(grep -c 'monitor scheduled-query create' "$capture")" = 9
 test "$(grep -c 'monitor metrics alert create' "$capture")" = 6
 
 worker_readback_line=$(grep -n 'log-analytics query.*LyraShield worker starting' "$capture" | cut -d: -f1)
@@ -154,9 +167,9 @@ export FAKE_APP_LOG_COUNT=1
 sh ops/monitoring/provision-alerts.sh >/dev/null
 test "$(grep -c 'metrics alert show.*--query enabled' "$capture")" = 6
 test "$(grep -c 'metrics alert show.*actionGroupId' "$capture")" = 6
-test "$(grep -c 'scheduled-query show.*--query enabled' "$capture")" = 7
-test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 7
-test "$(grep -c 'scheduled-query show.*actionGroups\[0\]' "$capture")" = 7
+test "$(grep -c 'scheduled-query show.*--query enabled' "$capture")" = 9
+test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 9
+test "$(grep -c 'scheduled-query show.*actionGroups\[0\]' "$capture")" = 9
 test "$(grep -c 'action-group show' "$capture")" = 5
 for rule in \
   worker-vm-unavailable worker-cpu-high app-no-active-replica \
@@ -166,19 +179,21 @@ do
 done
 for rule in \
   scan-readiness-unavailable scan-queue-depth-high scan-queue-oldest-wait-high \
-  reconciliation-drift webhook-dead-letter evidence-persistence-failure \
+  reconciliation-drift reconciliation-backlog reconciliation-duplicates \
+  webhook-dead-letter evidence-persistence-failure \
   terminal-cost-unreconciled
 do
   grep -q "scheduled-query show.*--name $rule" "$capture"
 done
 
 # ── Inventory: every application alert code maps exactly once ───────────────
-# Mirrors the OperationalAlertCode union in apps/worker/src/operational-health.ts:
+# Covers OperationalAlertCode in apps/worker/src/operational-health.ts and the
+# billing reconciliation signals in apps/worker/src/jobs/billing-reconciliation.job.ts:
 # each code maps to exactly one scheduled query or metric rule; the single
 # documented exception (scan_worker_lease_expired, no durable counter yet) is
 # never provisioned. The metric set also includes infrastructure-only rules
 # (VM availability, scanner replicas) that have no application code.
-expected_scheduled="evidence-persistence-failure reconciliation-drift scan-queue-depth-high scan-queue-oldest-wait-high scan-readiness-unavailable terminal-cost-unreconciled webhook-dead-letter"
+expected_scheduled="evidence-persistence-failure reconciliation-backlog reconciliation-drift reconciliation-duplicates scan-queue-depth-high scan-queue-oldest-wait-high scan-readiness-unavailable terminal-cost-unreconciled webhook-dead-letter"
 created_scheduled=$(grep 'scheduled-query create' "$capture" | sed -E 's/.*--name ([^ ]+) .*/\1/' | sort | tr '\n' ' ' | sed 's/ $//')
 test "$created_scheduled" = "$expected_scheduled"
 expected_metric="app-no-active-replica app-replica-restart scanner-no-active-replica scanner-replica-restart worker-cpu-high worker-vm-unavailable"
@@ -190,13 +205,27 @@ if grep -q 'scan_worker_lease_expired' "$capture"; then
 fi
 grep -q 'scan_worker_lease_expired' ops/monitoring/provision-alerts.sh
 
+# Both billing signals reuse the bounded worker helper with the exact routing.
+for code in reconciliation_backlog reconciliation_duplicates; do
+  rule=$(printf '%s' "$code" | tr '_' '-')
+  severity=1
+  [ "$code" != "reconciliation_duplicates" ] || severity=2
+  creation=$(grep "scheduled-query create.*--name $rule " "$capture")
+  printf '%s\n' "$creation" | grep -Fq "Signal=Syslog | where TimeGenerated > ago(10m) | where SyslogMessage has '\"code\":\"$code\"'"
+  printf '%s\n' "$creation" | grep -Fq -- "--scopes $LOG_ANALYTICS_WORKSPACE_ID"
+  printf '%s\n' "$creation" | grep -Fq -- "--evaluation-frequency 5m --window-size 10m --severity $severity"
+  printf '%s\n' "$creation" | grep -Fq -- "--action-groups /subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts --auto-mitigate true"
+done
+cp "$capture" "$test_dir/first-success.calls"
+
 # ── Idempotent rerun ────────────────────────────────────────────────────────
 : >"$capture"
 sh ops/monitoring/provision-alerts.sh >/dev/null
-test "$(grep -c 'monitor scheduled-query create' "$capture")" = 7
+cmp "$test_dir/first-success.calls" "$capture"
+test "$(grep -c 'monitor scheduled-query create' "$capture")" = 9
 test "$(grep -c 'monitor metrics alert create' "$capture")" = 6
 test "$(grep -c 'metrics alert show.*--query enabled' "$capture")" = 6
-test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 7
+test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 9
 if grep -q 'delete' "$capture"; then
   echo "provisioning rerun must not delete or recreate rules" >&2
   exit 1
@@ -246,6 +275,39 @@ if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
   exit 1
 fi
 unset FAKE_COMMON_SCHEMA_COUNT
+
+# The operator group and each new rule must fail closed on invalid readback.
+: >"$capture"
+export FAKE_ACTION_GROUP_ENABLED=false
+if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
+  echo "provisioning must fail when the operator action group is disabled" >&2
+  exit 1
+fi
+test "$(grep -c 'monitor scheduled-query create' "$capture" || true)" = 0
+unset FAKE_ACTION_GROUP_ENABLED
+
+for rule in reconciliation-backlog reconciliation-duplicates; do
+  export FAKE_FAILED_RULE="$rule"
+  for failure in enabled auto-mitigate action-group; do
+    : >"$capture"
+    case "$failure" in
+      enabled) export FAKE_RULE_ENABLED=false ;;
+      auto-mitigate) export FAKE_RULE_AUTO_MITIGATE=false ;;
+      action-group) export FAKE_RULE_ACTION_GROUP=/unexpected/action-group ;;
+    esac
+    if sh ops/monitoring/provision-alerts.sh >"$test_dir/readback.out" 2>&1; then
+      echo "provisioning must fail when $rule has invalid $failure readback" >&2
+      exit 1
+    fi
+    grep -q "Scheduled query $rule" "$test_dir/readback.out"
+    if grep -q 'monitoring alerts provisioned' "$test_dir/readback.out"; then
+      echo "failed readback must never report successful provisioning" >&2
+      exit 1
+    fi
+    unset FAKE_RULE_ENABLED FAKE_RULE_AUTO_MITIGATE FAKE_RULE_ACTION_GROUP
+  done
+done
+unset FAKE_FAILED_RULE
 
 # ── Query content stays code-only and bounded ───────────────────────────────
 # Application log queries match structured operator_alert codes only. They

@@ -41,10 +41,10 @@ test("agent cards group client surfaces and update setup material with selection
   const claude = page.getByRole("group", { name: "Claude" })
   const claudeSurface = claude.getByRole("combobox", { name: "Choose Claude client surface" })
   await claudeSurface.selectOption("claude-code-agent-plugin")
-  await expect(claude).toContainText("global: ~/.claude/plugins/lyrashield")
-  await expect(claude.getByLabel("Published install command")).toContainText(
-    "claude-code-agent-plugin"
-  )
+  await expect(claude).toContainText("Manual Agent Plugin setup")
+  await expect(claude.getByLabel("Published install command")).toHaveCount(0)
+  await claude.getByText("Manual setup notes", { exact: true }).click()
+  await expect(claude).toContainText("reviewed matching immutable package release")
   await expect(claude.getByRole("link", { name: "Set up" })).toHaveAttribute(
     "href",
     "/dashboard/agents/claude-code-agent-plugin"
@@ -240,9 +240,7 @@ test("Claude Code optional hooks stay collapsed until requested and announce cop
   await expect(
     optionalHooks.getByRole("button", { name: "Copy hook install command" })
   ).toHaveCount(0)
-  await page
-    .getByRole("button", { name: "Copy install command for Claude Code (Agent Plugin)" })
-    .click()
+  await page.getByRole("button", { name: "Copy doctor command" }).click()
   await expect(page.getByRole("alert")).toContainText("Copy failed")
 })
 
@@ -292,3 +290,39 @@ test("Copilot Cloud Agent uses a private read-only secret and no local commands"
 
   expect(consoleErrors).toEqual([])
 })
+
+for (const width of [375, 1280]) {
+  test(`VS Code manual plugin setup and MCP fallback stay honest at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 812 })
+    await openAgents(page)
+    const card = page.getByRole("group", { name: "GitHub Copilot", exact: true })
+    await card
+      .getByRole("combobox", { name: "Choose GitHub Copilot client surface" })
+      .selectOption("vscode-agent-plugin")
+    await expect(card).toContainText("Manual Agent Plugin setup")
+    await expect(card.getByLabel("Published install command")).toHaveCount(0)
+    await card.getByText("Manual setup notes", { exact: true }).click()
+    await expect(card).toContainText("MANUAL_REQUIRED")
+    await expect(card).toContainText(".vscode/mcp.json")
+    await expect(card).not.toContainText("global: ~/.lyrashield/plugins/lyrashield")
+    await page.goto("?agent-wizard=vscode-agent-plugin")
+    await expect(page.getByRole("heading", { name: "Manual Agent Plugin setup" })).toBeVisible()
+    const fallback = page.locator("ol li").filter({ hasText: "Current direct MCP fallback" })
+    await expect(fallback).toHaveCount(1)
+    await expect(fallback).toContainText(".vscode/mcp.json")
+    await expect(fallback).toContainText("@lyrashield/mcp@0.2.11")
+    await expect(
+      page.locator("ol li").filter({ has: page.getByRole("heading", { name: "Authenticate" }) })
+    ).toContainText("lyrashield@0.2.13 login --oauth")
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
+    )
+    expect(overflow).toBe(false)
+    await page.screenshot({
+      path: testInfo.outputPath(`vscode-manual-wizard-${width}px.png`),
+      fullPage: true,
+    })
+  })
+}

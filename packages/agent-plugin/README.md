@@ -3,7 +3,7 @@
 The source checkout prepares `0.1.31` as an unpublished release candidate. The latest public npm
 version remains `0.1.30` until the coordinated release is published.
 
-Portable **Agent Plugins 1.0.0** package for LyraShield AI. It bundles LyraShield's MCP
+Candidate **Agent Plugins 1.0.0** package for LyraShield AI. It bundles LyraShield's MCP
 connection and skills into one portable plugin. Conforming clients can load the canonical
 manifest; generated client shims cover the launch clients listed below.
 
@@ -30,27 +30,34 @@ create a discovery path; each client still controls activation:
 - `.codex-plugin/` — Codex
 - `.kiro-plugin/` — Kiro
 
-Codex installs from the dedicated `codex-plugin/` marketplace root, whose `.mcp.json` uses the
-native `streamable-http` transport. Claude and GitHub Copilot use marketplace installation. Kiro
-consumes the generated stdio entry through its workspace or user MCP settings file.
+The staged Codex marketplace root uses the native `streamable-http` transport. Claude and
+Copilot marketplace descriptors are preparation artifacts. Their presence does not establish a
+published install path or authenticated client acceptance.
 
-## Compatibility status
+## Current customer setup
 
-| Client         | Package artifact       | Current evidence                                 | Recommended setup                        |
-| -------------- | ---------------------- | ------------------------------------------------ | ---------------------------------------- |
-| Claude Code    | `.claude-plugin/`      | Package-conformance tests                        | Claude marketplace commands              |
-| Cursor         | `.cursor-plugin/`      | Package-conformance tests                        | Agent Plugin                             |
-| OpenAI Codex   | `.codex-plugin/`       | Package-conformance tests                        | Agent Plugin                             |
-| Kiro           | `.mcp.kiro.json`       | Package-conformance tests                        | Merge into Kiro MCP settings after login |
-| VS Code        | Portable root manifest | Experimental; no retained client-runtime receipt | `lyrashield install vscode`              |
-| GitHub Copilot | Portable root manifest | Experimental; no retained client-runtime receipt | Copilot marketplace commands             |
+Do not install from the mutable marketplace preparation branch or substitute public plugin
+`0.1.30` without matching portable-schema validation. Claude Code, Cursor, Codex, Copilot and VS Code
+plugin instructions remain pending a reviewed matching immutable package release.
 
-Package-conformance means the generated manifest, schema, transport, version and export
-boundary passed repository tests. It does not mean every client version has completed an
-authenticated runtime matrix. The wider registry contains 51 install entries resolving to 48
-preferred client surfaces; use `lyrashield init` or `lyrashield install <agent>` to receive the
-correct direct install or client-owned next step. GitHub Copilot remains `EXPERIMENTAL` until a
-retained client-runtime receipt exists.
+Use published `@lyrashield/mcp@0.2.11` for the direct MCP fallback and
+`npx -y lyrashield@0.2.13 login --oauth` for local stdio authentication in the same OS account.
+Node.js 24 or newer is required. Merge configuration manually while CLI config writes and skill
+installation remain withheld pending release. Preserve existing servers and keep credentials out
+of shared configuration.
+
+| Client             | Current guided fallback                                                 | Client config                                      |
+| ------------------ | ----------------------------------------------------------------------- | -------------------------------------------------- |
+| Claude Code        | [Direct MCP](https://lyrashieldai.com/docs/integrations/claude-code)    | `.mcp.json`, `mcpServers`                          |
+| OpenAI Codex       | [Direct MCP](https://lyrashieldai.com/docs/integrations/openai-codex)   | `~/.codex/config.toml`, `[mcp_servers.lyrashield]` |
+| GitHub Copilot CLI | [Direct MCP](https://lyrashieldai.com/docs/integrations/github-copilot) | `~/.copilot/mcp-config.json`, `type: "local"`      |
+| VS Code            | [Direct MCP](https://lyrashieldai.com/docs/integrations/vscode)         | `.vscode/mcp.json`, `servers`, `type: "stdio"`     |
+| Kiro               | [MCP settings](https://lyrashieldai.com/docs/integrations/kiro)         | `.kiro/settings/mcp.json`, `mcpServers`            |
+| Cursor             | [Direct MCP](https://lyrashieldai.com/docs/integrations/cursor)         | `.cursor/mcp.json`, `mcpServers`                   |
+
+Package conformance checks describe source artifacts only. Restart the client, confirm server
+and tool discovery, then make an authenticated read-only workspace call. Those checks and vendor
+marketplace publication require separate receipts; a staging export cannot establish them.
 
 ## API
 
@@ -77,7 +84,9 @@ workflows for selected targets and scan profiles so matching calls need no addit
 review; mutating calls from API-key callers receive a `connect_required` response pointing at OAuth
 connect and the legacy exact-input approval path remains only for nondelegated hosted credentials.
 
-Kiro uses the local `npx -y @lyrashield/mcp@0.2.12` stdio adapter. Run `lyrashield login --oauth`
+The staged Kiro artifact targets unpublished `@lyrashield/mcp@0.2.12`; do not install that
+candidate before coordinated release. For the current direct fallback, use
+`npx -y @lyrashield/mcp@0.2.11` and run `npx -y lyrashield@0.2.13 login --oauth`
 first; the server then reads the user-only `~/.lyrashield/credentials.json` file. Environment
 variables remain an explicit CI/headless fallback, with `LYRASHIELD_API_KEY` taking precedence.
 Headless writes without an approval channel fail closed on the local stdio server; API-key writes

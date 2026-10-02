@@ -2,7 +2,7 @@
 title: OpenAI Codex MCP security workflow for PR reviews
 description: Connect OpenAI Codex to LyraShield MCP for bounded scans, evidence-state findings, reviewed fix proposals, retests and a diff-aware SARIF gate.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -18,7 +18,7 @@ faq:
     a: "Codex stores MCP servers in ~/.codex/config.toml under [mcp_servers.*] sections. Each section defines command, args and bearer_token_env_var for remote auth. Keep the token in an env var referenced by the config, never as a literal in the TOML file."
 ---
 
-Fastest path: run `npx lyrashield init`, which detects Codex and writes the config. For a one-step install, use the Agent Plugin (agent-plugins.org v1.0.0), the preferred route for launch clients. The manual config below is what the CLI writes, kept for reference.
+Current setup: follow the [Codex integration guide](/docs/integrations/openai-codex) with published `@lyrashield/mcp@0.2.11` and authenticate local stdio separately using `npx -y lyrashield@0.2.13 login --oauth`. Plugin installation awaits a reviewed matching immutable release. Published CLI config writes and skill installation remain withheld; merge the documented client config manually, preserving existing settings. Confirm client discovery, then make an authenticated read-only workspace call.
 
 You can review AI generated pull requests in Codex with evidence-state AppSec findings by connecting LyraShield AI through MCP, running a targeted scan from your Codex session and enforcing the same policy in CI with a diff aware gate. The config lives in `~/.codex/config.toml` and supports both local stdio and remote HTTP with a bearer token.
 
@@ -26,7 +26,7 @@ OpenAI Codex excels at large refactors, but refactors can introduce auth bypasse
 
 ## 1. Prerequisites and setup
 
-Use a current Codex release, Node 24 or newer for the LyraShield package, a LyraShield key starting with `lsk_` and a repo where you can add GitHub workflows. Codex loads MCP from `~/.codex/config.toml`, as described in the [official Codex MCP guide](https://developers.openai.com/codex/mcp). Keep your key in env, not in files. Register the configured server, then use `codex mcp list` to confirm tool discovery. Review baseline risks through [OWASP Top 10](https://owasp.org/www-project-top-ten/) and weak config guidance from [CISA secure by design](https://www.cisa.gov/securebydesign). For dependency risk, browse [OSV](https://osv.dev/) to see how advisories map to versions. The [Model Context Protocol spec](https://modelcontextprotocol.io/docs/getting-started/intro) explains how tools like `scan` and `list_findings` are exposed. Every Codex session reads `~/.codex/config.toml` on startup, so one edit registers MCP tools for all projects. Store `LYRASHIELD_API_KEY` in your shell profile or a secret manager, never inside the repo.
+Use a current Codex release, Node 24 or newer, an authorized LyraShield workspace and a repository you may review. Run `npx -y lyrashield@0.2.13 login --oauth` in the same OS account as Codex; the local stdio adapter reads the selected workspace credential store. Codex loads MCP from `~/.codex/config.toml`, as described in the [official Codex MCP guide](https://developers.openai.com/codex/mcp). Keep credentials out of committed configuration. Register the configured server, then use `codex mcp list` to confirm tool discovery. Review baseline risks through [OWASP Top 10](https://owasp.org/www-project-top-ten/) and weak config guidance from [CISA secure by design](https://www.cisa.gov/securebydesign). For dependency risk, browse [OSV](https://osv.dev/) to see how advisories map to versions. The [Model Context Protocol spec](https://modelcontextprotocol.io/docs/getting-started/intro) explains how tools like `scan` and `list_findings` are exposed. Every Codex session reads `~/.codex/config.toml` on startup, so one edit registers MCP tools for all projects. A workspace API key is a separate CI/headless fallback, stored in a private secret manager.
 
 ## 2. Configure Codex MCP servers
 
@@ -42,7 +42,7 @@ startup_timeout_sec = 20
 tool_timeout_sec = 120
 ```
 
-Remote HTTP with Bearer:
+Optional remote read-only API-key alternative:
 
 ```toml
 [mcp_servers.lyrashield_remote]
@@ -52,13 +52,13 @@ startup_timeout_sec = 20
 tool_timeout_sec = 120
 ```
 
-Remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with `Authorization: Bearer lsk_...` derived from the token env var. The config uses the pinned npx form and exposes env expansion through `bearer_token_env_var` which Codex resolves at runtime. If you are comparing editor flows, the related [Codex security workflow](/blog/codex-security-workflow) checklist shows a similar gate pattern and sibling editors are covered in guides like the [Cline AI app security checklist](/blog/cline-app-security-checklist) for team wide rollout.
+An API key grants read calls only on this hosted connection; scans and retests require a browser-confirmed OAuth delegation. Local CLI login authenticates stdio separately. See the [current remote MCP guide](/docs/integrations/remote-mcp) for hosted OAuth. The remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with `Authorization: Bearer lsk_...` derived from the token env var. The config uses the pinned npx form and exposes env expansion through `bearer_token_env_var` which Codex resolves at runtime. If you are comparing editor flows, the related [Codex security workflow](/blog/codex-security-workflow) checklist shows a similar gate pattern and sibling editors are covered in guides like the [Cline AI app security checklist](/blog/cline-app-security-checklist) for team wide rollout.
 
 The local stdio entry is useful when Codex should spawn the npm package as a child process. The remote HTTP entry uses `url` and `bearer_token_env_var`, so Codex reads the token from the launching environment without storing it in TOML. Local and remote entries have different schemas: do not add `command` to the remote entry or use an `env_vars` table for explicit values. Keep `startup_timeout_sec` at 20 so cold starts of `npx` do not trip the watchdog and raise `tool_timeout_sec` to 120 for large repos.
 
 ## 3. Verify the connection in Codex
 
-Start a new Codex session with `codex --verbose` and run `codex mcp list` or ask the agent "list MCP servers". You should see `lyrashield` and `lyrashield_remote` as available. Try a dry tool call: "call lyrashield_get_scan_status". If it fails, check that `LYRASHIELD_API_KEY` is exported and that Node can resolve `npx`. Common failure is launching Codex from a GUI that does not inherit shell env. For auth debugging, the [OpenAI platform docs](https://openai.com/index/openai-api/) discuss bearer handling and [docs.github.com on encrypted secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) covers secret propagation for CI parity. Reopen Codex after package upgrades so `npx` resolves the current package. If `bearer_token_env_var` is set but the env var is empty, Codex connects without auth and the server rejects calls with a 401, which shows as a tool error rather than a crash.
+Start a new Codex session with `codex --verbose` and run `codex mcp list` or ask the agent "list MCP servers". You should see `lyrashield` and `lyrashield_remote` as available. Call `lyrashield_list_workspaces` and confirm the intended workspace. If local stdio fails, check CLI OAuth login, the OS account and the Node path; an optional remote API-key connection needs its own credential. Discovery alone does not establish authentication. Common failure is launching Codex from a GUI that does not inherit shell env. For auth debugging, the [OpenAI platform docs](https://openai.com/index/openai-api/) discuss bearer handling and [docs.github.com on encrypted secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) covers secret propagation for CI parity. Reopen Codex after package upgrades so `npx` resolves the current package. If `bearer_token_env_var` is set but the env var is empty, Codex connects without auth and the server rejects calls with a 401, which shows as a tool error rather than a crash.
 
 ## 4. Run an inline scan from a Codex session
 
@@ -104,7 +104,7 @@ The Action derives a pull-request diff and limits its advisory checks to changed
 
 ## 6. Add agent rules snippet for Codex
 
-Create `.codex/rules/security.md` so every Codex agent run follows the same loop.
+Review or extend the project `AGENTS.md` so every Codex agent run follows the same loop.
 
 ```md
 # Security loop for Codex

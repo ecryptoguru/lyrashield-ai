@@ -2,7 +2,7 @@
 title: Hermes Agent App Security Checklist
 description: "Harden Hermes agent: config, skill supply chain, MCP tool filtering, mTLS and CI gates for AI-built apps."
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -76,7 +76,7 @@ This maps to OWASP LLM01 Prompt Injection and LLM08 Excessive Agency. A skill th
 
 Hermes MCP filtering is richer than most clients: `include` whitelists server-native tools, `exclude` blacklists, `enabled: false` retains but disables, `timeout` and `connect_timeout` bound calls, `idle_timeout_seconds` and `max_lifetime_seconds` recycle stdio servers, `supports_parallel_tool_calls` gates concurrency and `ssl_verify`/`client_cert`/`client_key` enable private PKI.
 
-Fastest path: run `npx lyrashield init`, which detects Hermes and writes its MCP config for you. Verify with `npx lyrashield doctor`, then `npx lyrashield login` to store credentials in `~/.lyrashield/credentials.json` (nothing committed). The manual config below is what the CLI writes, kept for reference.
+Follow the current [hermes integration guide](/docs/integrations/hermes) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 LyraShield integration, matching [hermes integration guide](/docs/integrations/hermes):
 

@@ -1,4 +1,4 @@
-import type { AgentOperation, Prisma } from "./generated/prisma"
+import { Prisma, type AgentOperation } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import { hashOperationInput } from "./agent-operation-hash"
 import { withWorkspaceRLS } from "./rls"
@@ -40,6 +40,8 @@ export interface ClaimAgentOperationParams {
   idempotencyKey: string
   input: Record<string, unknown>
   authorizationVersion?: number
+  /** Opt-in for an authorized outer MCP claim only; REST handlers have no expiry. */
+  staleExecutingBefore?: Date
   /** OAuth connection principal. Mutually exclusive with apiKeyId/userId. */
   connectionId?: string
   /**
@@ -116,6 +118,56 @@ export type ClaimOperationResult =
 // importing the Prisma-backed service surface.
 export { hashOperationInput }
 
+/** Expire an abandoned outer claim, never reclaim execution or replay a mutation. */
+async function expireOuterExecution(
+  operation: AgentOperation,
+  params: ClaimAgentOperationParams,
+  principal: PrincipalIdentity
+): Promise<AgentOperation> {
+  const cutoff = params.staleExecutingBefore
+  if (
+    !cutoff ||
+    !Number.isFinite(cutoff.getTime()) ||
+    operation.status !== "EXECUTING" ||
+    operation.updatedAt >= cutoff ||
+    !params.connectionId ||
+    params.authorizationVersion === undefined ||
+    operation.workspaceId !== params.workspaceId ||
+    operation.connectionId !== params.connectionId ||
+    operation.principalType !== principal.principalType ||
+    operation.principalId !== principal.principalId ||
+    operation.authorizationVersion > params.authorizationVersion
+  )
+    return operation
+
+  return withWorkspaceRLS(params.workspaceId, async (tx) => {
+    const identity = {
+      id: operation.id,
+      workspaceId: params.workspaceId,
+      connectionId: params.connectionId,
+      principalType: principal.principalType,
+      principalId: principal.principalId,
+      operationName: params.operationName,
+      idempotencyKey: params.idempotencyKey,
+      inputHash: operation.inputHash,
+      // The fresh retry may hold a newer grant. Expire the observed row only.
+      authorizationVersion: operation.authorizationVersion,
+    }
+    await tx.agentOperation.updateMany({
+      where: {
+        ...identity,
+        status: "EXECUTING",
+        updatedAt: { equals: operation.updatedAt, lt: cutoff },
+      },
+      data: { status: "FAILED", error: "OPERATION_OUTCOME_UNKNOWN" },
+    })
+    // A finalizer or later activity can win the compare-and-set. Use its state.
+    const current = await tx.agentOperation.findFirst({ where: identity })
+    if (!current) throw new Error("Agent operation not found")
+    return current
+  })
+}
+
 export async function claimOrGetAgentOperation(
   params: ClaimAgentOperationParams
 ): Promise<ClaimOperationResult> {
@@ -124,7 +176,7 @@ export async function claimOrGetAgentOperation(
 
   // Check if an operation with the same principal-bound identity exists.
   // The principal unique index covers connectionless principals too.
-  const existing = await withWorkspaceRLS(params.workspaceId, (tx) =>
+  let existing = await withWorkspaceRLS(params.workspaceId, (tx) =>
     tx.agentOperation.findUnique({
       where: {
         workspaceId_principalType_principalId_operationName_idempotencyKey: {
@@ -140,6 +192,7 @@ export async function claimOrGetAgentOperation(
 
   if (existing) {
     if (existing.inputHash === inputHash) {
+      existing = await expireOuterExecution(existing, params, principal)
       if (existing.status === "PENDING" || existing.status === "EXECUTING") {
         return { status: "IN_PROGRESS", operation: existing }
       }
@@ -191,7 +244,7 @@ export async function claimOrGetAgentOperation(
     // Handle concurrent create race (unique constraint violation P2002)
     const prismaErr = err as { code?: string }
     if (prismaErr.code === "P2002") {
-      const raced = await withWorkspaceRLS(params.workspaceId, (tx) =>
+      let raced = await withWorkspaceRLS(params.workspaceId, (tx) =>
         tx.agentOperation.findUnique({
           where: {
             workspaceId_principalType_principalId_operationName_idempotencyKey: {
@@ -205,6 +258,7 @@ export async function claimOrGetAgentOperation(
         })
       )
       if (raced && raced.inputHash === inputHash) {
+        raced = await expireOuterExecution(raced, params, principal)
         if (raced.status === "COMPLETED") return { status: "REPLAY", operation: raced }
         if (raced.status === "FAILED" || raced.status === "CONFLICT") {
           return { status: "FAILED", operation: raced }
@@ -226,30 +280,107 @@ export async function completeAgentOperation(
   params: {
     resultReference?: string
     result?: Prisma.InputJsonObject
+    expectedUpdatedAt?: Date
   }
 ): Promise<AgentOperation> {
-  return withWorkspaceRLS(workspaceId, (tx) =>
-    tx.agentOperation.update({
-      where: { id: operationId },
-      data: {
-        status: "COMPLETED",
-        resultReference: params.resultReference,
-        result: params.result,
-      },
-    })
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const data = {
+      status: "COMPLETED",
+      resultReference: params.resultReference,
+      result: params.result,
+    } as const
+    if (params.expectedUpdatedAt) {
+      await tx.agentOperation.updateMany({
+        where: {
+          id: operationId,
+          workspaceId,
+          status: "EXECUTING",
+          updatedAt: params.expectedUpdatedAt,
+        },
+        data,
+      })
+      const current = await tx.agentOperation.findFirst({ where: { id: operationId, workspaceId } })
+      if (!current) throw new Error("Agent operation not found")
+      return current
+    }
+    return tx.agentOperation.update({ where: { id: operationId }, data })
+  })
+}
+
+/**
+ * Attach a proven late result without reviving an expired outer execution.
+ * Caller must recheck live membership, permission and delegated resource scope.
+ */
+export async function retainUnknownAgentOperationResult(
+  original: AgentOperation,
+  workspaceId: string,
+  params: {
+    terminalUpdatedAt: Date
+    resultReference: string
+    result: Prisma.InputJsonObject
+    currentAuthorizationVersion: number
+    userId: string
+  }
+): Promise<AgentOperation | null> {
+  if (
+    original.status !== "EXECUTING" ||
+    original.workspaceId !== workspaceId ||
+    !original.connectionId ||
+    original.principalType !== "OAUTH_CONNECTION" ||
+    original.principalId !== original.connectionId
   )
+    return null
+
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const identity = {
+      id: original.id,
+      workspaceId,
+      connectionId: original.connectionId,
+      principalType: original.principalType,
+      principalId: original.principalId,
+      operationName: original.operationName,
+      idempotencyKey: original.idempotencyKey,
+      inputHash: original.inputHash,
+      authorizationVersion: original.authorizationVersion,
+    }
+    await tx.agentOperation.updateMany({
+      where: {
+        ...identity,
+        status: "FAILED",
+        error: "OPERATION_OUTCOME_UNKNOWN",
+        updatedAt: params.terminalUpdatedAt,
+        resultReference: null,
+        result: { equals: Prisma.DbNull },
+        // Bind the freshly checked grant too, so a concurrent grant change wins.
+        connection: {
+          status: "ACTIVE",
+          userId: params.userId,
+          scopes: { hasSome: ["write", "lyrashield.write"] },
+          authorizationVersion: params.currentAuthorizationVersion,
+        },
+      },
+      data: { resultReference: params.resultReference, result: params.result },
+    })
+    return tx.agentOperation.findFirst({ where: identity })
+  })
 }
 
 export async function failAgentOperation(
   operationId: string,
   workspaceId: string,
-  params: { error: string; resultReference?: string; expectedUpdatedAt?: Date }
+  params: {
+    error: string
+    resultReference?: string
+    result?: Prisma.InputJsonObject
+    expectedUpdatedAt?: Date
+  }
 ): Promise<AgentOperation> {
   return withWorkspaceRLS(workspaceId, async (tx) => {
     const data = {
       status: "FAILED",
       error: params.error,
       resultReference: params.resultReference,
+      result: params.result,
     } as const
     if (params.expectedUpdatedAt) {
       await tx.agentOperation.updateMany({
@@ -455,18 +586,27 @@ export async function getOperationStatus(
 
 /** Pure state→recovery mapping, unit-testable without a database. */
 export function toOperationStatusView(operation: AgentOperation): OperationStatusView {
+  // Historical MCP rows may have completed with a returned tool error.
+  // Readback stays conservative without rewriting the persisted history.
+  const result = operation.result
+  const failedResult =
+    result !== null &&
+    typeof result === "object" &&
+    !Array.isArray(result) &&
+    result.isError === true
+  const status = operation.status === "COMPLETED" && failedResult ? "FAILED" : operation.status
   const recovery: OperationStatusView["recovery"] =
-    operation.status === "COMPLETED"
+    status === "COMPLETED"
       ? "none"
-      : operation.status === "EXECUTING" || operation.status === "PENDING"
+      : status === "EXECUTING" || status === "PENDING"
         ? "poll"
-        : operation.status === "FAILED" && operation.error === "OPERATION_NOT_SUBMITTED"
+        : status === "FAILED" && operation.error === "OPERATION_NOT_SUBMITTED"
           ? "retry_new_key"
           : "wait"
   return {
     operationId: operation.id,
-    status: operation.status,
-    reasonCode: operation.error ? "OPERATION_FAILED" : null,
+    status,
+    reasonCode: operation.error || failedResult ? "OPERATION_FAILED" : null,
     resultLocation: operation.resultReference,
     recovery,
     createdAt: operation.createdAt.toISOString(),

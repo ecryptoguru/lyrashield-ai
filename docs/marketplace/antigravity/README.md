@@ -6,7 +6,12 @@ discovery, and `skills/` contains LyraShield's shared workflows. Keep these file
 the portable Agent Plugins `plugin.json` and `mcp.json` at the marketplace root; Antigravity does
 not consume that MCP format directly.
 
-## Install
+## Maintainer staging review only
+
+The following local package commands are for maintainer review of unpublished preparation
+artifacts only. They are not current customer install recommendations. Do not use the mutable
+marketplace default branch as an install source. Customer plugin instructions require a reviewed
+matching immutable release; use the current client-specific direct MCP guide meanwhile.
 
 The current plugin documentation lists Antigravity 2.0, Antigravity CLI and Antigravity IDE.
 This package has not yet completed authenticated runtime acceptance on those surfaces. The CLI

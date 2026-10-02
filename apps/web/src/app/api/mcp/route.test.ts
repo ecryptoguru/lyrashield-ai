@@ -19,7 +19,7 @@ vi.mock("@lyrashield/db", () => ({
   failApprovalExecution: vi.fn(),
   claimOrGetAgentOperation: (...a: unknown[]) => claimOrGetAgentOperationMock(...a),
   completeAgentOperation: (...a: unknown[]) => completeAgentOperationMock(...a),
-  failAgentOperation: vi.fn().mockResolvedValue({}),
+  failAgentOperation: vi.fn().mockResolvedValue({ status: "FAILED" }),
   toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   checkDelegatedOperationAuthorization: (...a: unknown[]) =>
     checkDelegatedOperationAuthorizationMock(...a),
@@ -214,11 +214,12 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
       authorized: true,
       canonicalOperation: "scan.create",
     })
+    const operationUpdatedAt = new Date()
     claimOrGetAgentOperationMock.mockResolvedValue({
       status: "NEW",
-      operation: { id: "op-1" },
+      operation: { id: "op-1", updatedAt: operationUpdatedAt },
     })
-    completeAgentOperationMock.mockResolvedValue(undefined)
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
     handleRemoteMcpRequest.mockImplementation(realTransport)
     const fetchSpy = vi.fn(async () => ({
       ok: true,
@@ -248,10 +249,15 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
           connectionId: "conn-1",
           workspaceId: "ws-1",
           idempotencyKey: "idem-1",
+          staleExecutingBefore: expect.any(Date),
         })
       )
       expect(fetchSpy).toHaveBeenCalledOnce()
-      expect(completeAgentOperationMock).toHaveBeenCalledWith("op-1", "ws-1", expect.any(Object))
+      expect(completeAgentOperationMock).toHaveBeenCalledWith(
+        "op-1",
+        "ws-1",
+        expect.objectContaining({ expectedUpdatedAt: operationUpdatedAt })
+      )
     } finally {
       vi.unstubAllGlobals()
     }

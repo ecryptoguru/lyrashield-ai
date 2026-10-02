@@ -2,20 +2,20 @@
 title: Windsurf security workflow for AI generated apps
 description: Harden Windsurf MCP config, rules, dependencies and secrets with SARIF evidence for secure AI assisted releases of your app.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-01
 faq:
   - q: Where does Windsurf store MCP config?
-    a: Global in ~/.codeium/windsurf/mcp_config.json and local .codeium/windsurf/mcp_config.json. Use serverUrl for remote servers and env with var references so secrets stay out of git.
+    a: This article retains a legacy Windsurf URL. Use /docs/integrations/devin for the current supported surface and do not apply earlier Windsurf paths or installer recipes to Devin.
   - q: How do Windsurf rules help security?
     a: Rules in .codeium/windsurf/memories and muserules.md state auth requirements, forbidden patterns and review needs so Cascade prefers secure defaults for routes and handlers.
   - q: What SARIF should I keep for Windsurf builds?
     a: Keep SARIF from secret scanning and dependency scanning at minimum. Upload to GitHub code scanning on pull requests and on main for release evidence and trend tracking.
   - q: Where does Windsurf store MCP server config?
-    a: Windsurf stores MCP servers in mcp_config.json under mcpServers at the project or user level. Use project scope for the LyraShield entry so the team shares one definition and keep the lsk_ key in an env reference rather than a literal in the committed file.
+    a: This article retains a legacy Windsurf URL. Use /docs/integrations/devin for the current supported surface and do not apply earlier Windsurf paths or installer recipes to Devin.
 ---
 
 Windsurf with Cascade can edit many files and call external MCP tools quickly, so you must lock down MCP config, tighten project rules, gate dependencies and secrets and keep SARIF for every release. This workflow covers mcp_config.json with serverUrl, Cascade memories hardening and verifiable evidence. Pair it with LyraShield as release assurance for AI built apps. Baseline controls are in our [vibe coding security guide](/blog/vibe-coding-security-guide) with Windsurf specific checks below.
@@ -28,43 +28,15 @@ Typical AI inserted issues include debug endpoints that skip auth, error handler
 
 Map issues to common references. OWASP Top Ten at [OWASP Top Ten](https://owasp.org/www-project-top-ten/) captures injection and misconfiguration seen in AI generated back ends. Hardcoded credential patterns map to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html). MCP transport and auth expectations are defined at [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18) and [MCP authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization). If you also ship with visual builders, our [Bolt app security checklist](/blog/bolt-app-security-checklist) shows similar permission ideas adapted to a different stack.
 
-## Lock down MCP in mcp_config.json with serverUrl
+## Use the current Devin guide for supported setup
 
-Windsurf loads MCP servers from global ~/.codeium/windsurf/mcp_config.json for personal tools and local .codeium/windsurf/mcp_config.json for team shared servers. Both files use a mcpServers object. Remote servers use serverUrl field for HTTPS endpoints.
+This article retains a legacy Windsurf URL for existing readers. The supported registry now resolves that integration to [Devin](/docs/integrations/devin), with desktop, cloud and local surfaces documented separately. Earlier JSON paths and installer identifiers are withdrawn as current setup instructions. Do not copy a legacy Windsurf MCP entry into Devin or assume that an editor configuration establishes a cloud-agent connection. Follow the guide for the exact client and version you use.
 
-Fastest path: run `npx lyrashield init`, which detects Windsurf and writes its supported config-file integration. Verify with `npx lyrashield doctor`, then use `npx lyrashield login --oauth` so credentials remain outside the repository. Windsurf is not an Agent Plugin-preferred client in the current registry. The manual config below is what the CLI writes.
+For [Devin Desktop’s local stdio path](/docs/integrations/devin-desktop), authenticate separately with `npx -y lyrashield@0.2.13 login --oauth` in the same OS account and manually merge the client-specific entry using published `@lyrashield/mcp@0.2.11`. Preserve settings and symlinks. Published config writes and candidate skill installation remain withheld. Restart the client, inspect discovery and call `lyrashield_list_workspaces` to establish authenticated read-only access. A CLI doctor result checks a separate local surface; it does not establish client discovery, sign-in or scan completion.
 
-Secure example with zero raw secrets committed:
+If you retain a legacy Windsurf installation, consult that exact vendor version’s documentation before editing its configuration. Record the version, enabled servers, selected transport and credential source. Review shared configuration as executable policy: commands run with your permissions, and endpoints receive tool arguments. Require review when server entries change, keep secrets out of source and preserve a copy of the approved configuration revision with the release record. Do not silently accept an unfamiliar server because an agent suggested it.
 
-```json
-{
-  "mcpServers": {
-    "lyrashield-local": {
-      "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.11"],
-      "env": {
-        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
-      }
-    },
-    "lyrashield-remote": {
-      "serverUrl": "https://app.lyrashieldai.com/api/mcp",
-      "env": {
-        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
-      }
-    }
-  }
-}
-```
-
-Hardening for review checklists:
-
-- Prefer env var interpolation in env and never raw tokens in committed files. Validate in CI that no literal sk or lsk token appears in mcp_config.json.
-- Keep global file for personal helpers and local file for team shared servers. Require explicit review for either file when a new MCP server appears. Treat new servers like new production dependencies with owner and review date.
-- Limit server count per workspace. Each MCP server adds tool surface that Cascade can call, so only keep servers needed for current milestone.
-- For remote MCP, confirm transport is HTTPS and auth uses Bearer from env. Short startup timeouts reduce hang risk and improve CI stability.
-- For protocol reference, see [MCP spec overview](https://modelcontextprotocol.io). Supply chain context on packages loaded by MCP servers is at [OSV database](https://osv.dev). SARIF integration is at [GitHub SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning).
-
-Log which MCP servers were active for a feature branch in your pull request description. That single line helps reproduce permission problems and supports audit questions about external tools used during generation.
+Local CLI OAuth and hosted client OAuth are separate sign-ins. A private read-only workspace API key does not authorize hosted mutations. Confirm the selected workspace in a read call before requesting an assessment. Keep credentials out of chat exports, transcripts and project JSON. [MCP specification](https://modelcontextprotocol.io), [OSV](https://osv.dev) and [GitHub SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) describe protocol, dependency and CI output contracts; they do not establish client acceptance.
 
 ## Harden rules and workspace memories
 

@@ -266,7 +266,7 @@ describe("MCP tasks over the hosted endpoint", () => {
   it("creates a task through the recorded operation boundary — once", async () => {
     oauthConnection()
     claimOrGetAgentOperationMock.mockResolvedValue({ status: "NEW", operation: { id: "op-1" } })
-    completeAgentOperationMock.mockResolvedValue(undefined)
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
     getAgentOperationMock.mockResolvedValue(
       makeOperation({ status: "COMPLETED", resultReference: "scan-1" })
     )
@@ -550,7 +550,7 @@ describe("MCP tasks over the hosted endpoint", () => {
       status: "NEW",
       operation: { id: "cancel-op-1" },
     })
-    completeAgentOperationMock.mockResolvedValue(undefined)
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
     // Fetch order: SDK pre-check getTask → backend pre-cancel resolve →
     // post-cancel re-resolve sees the CANCELLED durable row.
     scanFindFirstMock
@@ -604,7 +604,7 @@ describe("MCP tasks over the hosted endpoint", () => {
       status: "NEW",
       operation: { id: "cancel-op-1", updatedAt: new Date("2026-09-28T00:00:00Z") },
     })
-    completeAgentOperationMock.mockResolvedValue(undefined)
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
     scanFindFirstMock
       .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
       .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
@@ -691,7 +691,7 @@ describe("MCP tasks over the hosted endpoint", () => {
         operationName: "scan.cancel",
       }),
     })
-    completeAgentOperationMock.mockResolvedValue(undefined)
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
     scanFindFirstMock
       .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
       .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
@@ -740,7 +740,7 @@ describe("MCP tasks over the hosted endpoint", () => {
         operationName: "scan.cancel",
       }),
     })
-    completeAgentOperationMock.mockResolvedValue(undefined)
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
     scanFindFirstMock
       .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
       .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
@@ -785,7 +785,7 @@ describe("MCP tasks over the hosted endpoint", () => {
           operationName: "scan.cancel",
         }),
       })
-      completeAgentOperationMock.mockResolvedValue(undefined)
+      completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
       scanFindFirstMock
         .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
         .mockResolvedValueOnce(makeScan({ status: "RUNNING" }))
@@ -903,7 +903,7 @@ describe("MCP tasks over the hosted endpoint", () => {
   ])("tasks/list hides operations after %s", async (_reason, denial) => {
     oauthConnection() // The OAuth connection remains active after access changes.
     claimOrGetAgentOperationMock.mockResolvedValue({ status: "NEW", operation: { id: "op-1" } })
-    completeAgentOperationMock.mockResolvedValue(undefined)
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
     getAgentOperationMock.mockResolvedValue(makeOperation())
     vi.stubGlobal("fetch", scanFetchStub())
     try {
@@ -953,6 +953,97 @@ describe("MCP tasks over the hosted endpoint", () => {
     )
     expect(listAgentOperationsForTasksMock).not.toHaveBeenCalled()
     expect(verifyOAuthBearer).toHaveBeenCalledTimes(3)
+  })
+
+  it.each(["FAILED", "COMPLETED"])(
+    "polls a %s error operation without reporting a bound scan as success",
+    async (status) => {
+      const backend = makeHostedMcpTaskBackend({
+        oauth: {
+          userId: "user-1",
+          workspaceId: "ws-1",
+          scopes: ["lyrashield.read"],
+          connectionId: "conn-1",
+          authorizationVersion: 7,
+          allowedOperations: ["scan.create"],
+        },
+        connection: {
+          id: "conn-1",
+          workspaceId: "ws-1",
+          status: "ACTIVE",
+          authorizationVersion: 7,
+          allowedOperations: ["scan.create"],
+          allowedTargetIds: [],
+          allTargets: true,
+          allowedProfiles: ["STANDARD"],
+          expiresAt: null,
+        },
+      })
+      getAgentOperationMock.mockResolvedValue(
+        makeOperation({
+          status,
+          error: "OPERATION_OUTCOME_UNKNOWN",
+          result: {
+            content: [{ type: "text", text: '{"error":"submission outcome unknown"}' }],
+            isError: true,
+            structuredContent: { error: "submission outcome unknown", operationId: "op-1" },
+          },
+        })
+      )
+      scanFindFirstMock.mockResolvedValue(makeScan())
+      expect(await backend.getTask("lst_op-1")).toMatchObject({ status: "failed" })
+      expect(await backend.getTaskResult("lst_op-1")).toMatchObject({
+        isError: true,
+        structuredContent: { error: "submission outcome unknown", operationId: "op-1" },
+      })
+      expect(claimOrGetAgentOperationMock).not.toHaveBeenCalled()
+      expect(completeAgentOperationMock).not.toHaveBeenCalled()
+      expect(failAgentOperationMock).not.toHaveBeenCalled()
+      expect(cancelScanMock).not.toHaveBeenCalled()
+    }
+  )
+
+  it("reads a stale outer execution as terminal unknown without changing or replaying it", async () => {
+    const backend = makeHostedMcpTaskBackend({
+      oauth: {
+        userId: "user-1",
+        workspaceId: "ws-1",
+        scopes: ["lyrashield.read"],
+        connectionId: "conn-1",
+        authorizationVersion: 7,
+        allowedOperations: ["scan.create"],
+      },
+      connection: {
+        id: "conn-1",
+        workspaceId: "ws-1",
+        status: "ACTIVE",
+        authorizationVersion: 7,
+        allowedOperations: ["scan.create"],
+        allowedTargetIds: [],
+        allTargets: true,
+        allowedProfiles: ["STANDARD"],
+        expiresAt: null,
+      },
+    })
+    getAgentOperationMock.mockResolvedValue(
+      makeOperation({
+        status: "EXECUTING",
+        resultReference: null,
+        updatedAt: new Date(Date.now() - 61 * 60_000),
+      })
+    )
+    expect(await backend.getTask("lst_op-1")).toMatchObject({
+      status: "failed",
+      statusMessage: expect.stringContaining("outcome is unknown"),
+    })
+    expect(await backend.getTaskResult("lst_op-1")).toMatchObject({
+      isError: true,
+      structuredContent: { error: expect.stringContaining("outcome is unknown") },
+    })
+    expect(claimOrGetAgentOperationMock).not.toHaveBeenCalled()
+    expect(completeAgentOperationMock).not.toHaveBeenCalled()
+    expect(failAgentOperationMock).not.toHaveBeenCalled()
+    expect(cancelScanMock).not.toHaveBeenCalled()
   })
 
   it("rechecks the verified bearer user before every task accessor queries operations", async () => {
@@ -1041,7 +1132,7 @@ describe("MCP tasks over the hosted endpoint", () => {
   it("keeps the immediate result path for a non-augmented call on 2025-11-25", async () => {
     oauthConnection()
     claimOrGetAgentOperationMock.mockResolvedValue({ status: "NEW", operation: { id: "op-1" } })
-    completeAgentOperationMock.mockResolvedValue(undefined)
+    completeAgentOperationMock.mockResolvedValue({ status: "COMPLETED" })
     const fetchSpy = scanFetchStub()
     vi.stubGlobal("fetch", fetchSpy)
     try {

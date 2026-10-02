@@ -1,6 +1,7 @@
 import {
   MCP_TASK_TTL_MS,
   McpError,
+  McpToolResultSchema,
   ErrorCode,
   assertTaskCapableTool,
   buildTask,
@@ -244,15 +245,19 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
 
       // Terminal results are reconstructed only from persisted state —
       // the tool handler never runs on a recovery call.
-      if (scan) return scanRowToCallToolResult({ scan })
+      const stored = McpToolResultSchema.safeParse(operation.result)
+      if (scan && operation.status === "COMPLETED" && !(stored.success && stored.data.isError)) {
+        return scanRowToCallToolResult({ scan })
+      }
       if (operation.result) {
         try {
-          return storedResultToCallToolResult(operation.result)
+          const result = storedResultToCallToolResult(operation.result)
+          if (result.isError) return result
         } catch {
           // fall through to the bounded generic result
         }
       }
-      const payload = { error: "The recorded task result is unavailable." }
+      const payload = { error: view.statusMessage ?? "The recorded task result is unavailable." }
       const unavailableResult: CallToolResult = {
         content: [{ type: "text", text: JSON.stringify(payload) }],
         isError: true,

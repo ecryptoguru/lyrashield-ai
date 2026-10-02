@@ -16,13 +16,72 @@ describe("agent wizard connection snippets", () => {
     expect(remote).not.toContain("Authorization")
   })
 
-  it("does not ask Agent Plugin users to configure an MCP server a second time", () => {
-    const wizard = buildAgentWizard("openai-codex-agent-plugin", "https://app.lyrashieldai.com")
-
-    expect(wizard?.steps.some((step) => step.id === "config")).toBe(false)
-    expect(wizard?.steps.find((step) => step.id === "api-key")?.command).toBeUndefined()
-    expect(wizard?.steps.find((step) => step.id === "api-key")?.summary).toContain("OAuth in")
+  it.each([
+    ["openai-codex-agent-plugin", "~/.codex/config.toml"],
+    ["cursor-agent-plugin", "~/.cursor/mcp.json"],
+    ["github-copilot-agent-plugin", "~/.copilot/mcp-config.json"],
+  ])("keeps %s pending and points to the current direct MCP fallback", (id, configPath) => {
+    const wizard = buildAgentWizard(id, "https://app.lyrashieldai.com")
+    expect(wizard?.steps.find((step) => step.id === "install")?.command).toBeUndefined()
+    const activation = wizard?.steps.find((step) => step.id === "config")
+    expect(activation?.summary).toContain("reviewed matching immutable package release")
+    expect(activation?.summary).toContain(configPath)
+    expect(activation?.summary).toContain(MCP_PACKAGE_SPEC)
+    expect(activation?.summary).toContain(CLI_PACKAGE_SPEC)
+    expect(activation?.summary).not.toContain("marketplace add")
+    expect(wizard?.steps.find((step) => step.id === "api-key")?.command).toBe(
+      `npx -y ${CLI_PACKAGE_SPEC} login --oauth`
+    )
+    expect(wizard?.steps.find((step) => step.id === "config-mcp-fallback")?.snippetPath).toBe(
+      configPath
+    )
     expect(wizard?.steps.some((step) => step.kind === "rules")).toBe(false)
+  })
+
+  it("keeps Claude's unpublished plugin path non-actionable and points to current MCP guidance", () => {
+    const wizard = buildAgentWizard("claude-code-agent-plugin", "https://app.lyrashieldai.com")
+    expect(wizard?.steps.find((step) => step.id === "install")?.command).toBeUndefined()
+    const activation = wizard?.steps.find((step) => step.id === "config")
+    expect(activation?.summary).toContain("reviewed matching immutable package release")
+    expect(activation?.summary).toContain(".mcp.json")
+    expect(activation?.summary).not.toContain("claude plugin marketplace add")
+  })
+
+  it("keeps VS Code plugin setup manual and offers the independent MCP fallback", () => {
+    const wizard = buildAgentWizard("vscode-agent-plugin", "https://app.lyrashieldai.com")
+    const install = wizard?.steps.find((step) => step.id === "install")
+    expect(install?.title).toBe("Manual Agent Plugin setup")
+    expect(install?.summary).toContain("MANUAL_REQUIRED")
+    expect(install?.command).toBeUndefined()
+    const fallback = wizard?.steps.find((step) => step.id === "config-mcp-fallback")
+    expect(fallback?.optional).toBeUndefined()
+    expect(fallback?.snippetPath).toBe(".vscode/mcp.json")
+    expect(JSON.parse(fallback?.snippet ?? "null")).toEqual({
+      servers: {
+        lyrashield: {
+          type: "stdio",
+          command: "npx",
+          args: ["-y", MCP_PACKAGE_SPEC],
+          env: { LYRASHIELD_API_URL: "https://app.lyrashieldai.com" },
+        },
+      },
+    })
+    expect(wizard?.steps.find((step) => step.id === "api-key")?.command).toBe(
+      `npx -y ${CLI_PACKAGE_SPEC} login --oauth`
+    )
+    expect(wizard?.steps.find((step) => step.id === "api-key")?.summary).toContain("CLI OAuth")
+    expect(wizard?.steps.find((step) => step.id === "verify")?.note).toContain("read-only")
+  })
+
+  it("does not present the published CLI's obsolete Pi preview as native MCP setup", () => {
+    const install = buildAgentWizard("pi", "https://app.lyrashieldai.com")?.steps.find(
+      (step) => step.id === "install"
+    )
+    expect(install?.command).toBeUndefined()
+    expect(install?.summary).toContain("pi mcp add")
+    expect(install?.summary).toContain("published CLI 0.2.13")
+    expect(install?.summary).toContain("predates Pi's native MCP")
+    expect(install?.summary).toContain("Skills installer remains pending release")
   })
 
   it("keeps the standalone CLI workflow for Aider", () => {

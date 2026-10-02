@@ -22,7 +22,7 @@ export const LIMITS = Object.freeze({
   stderrBytes: 16 * 1024,
 })
 
-// marketplace-stdio/1: supported discovery, review and scan-start inputs.
+// marketplace-stdio/1: supported discovery, review, scan-start and fix/retest inputs.
 // Additional tools and optional properties remain compatible.
 export const REQUIRED_TOOLS = Object.freeze({
   lyrashield_list_workspaces: { required: [], properties: {} },
@@ -30,9 +30,29 @@ export const REQUIRED_TOOLS = Object.freeze({
     required: ["workspaceId"],
     properties: { workspaceId: "string", cursor: "string", limit: "integer" },
   },
+  lyrashield_get_scan_eligibility: {
+    required: ["workspaceId", "targetId"],
+    properties: {
+      workspaceId: "string",
+      targetId: "string",
+      goal: {
+        type: "string",
+        enum: [
+          "CHECK_PR",
+          "TEST_APP",
+          "LAUNCH_REVIEW",
+          "WEEKLY_MONITOR",
+          "FULL_PENTEST",
+          "COMPLIANCE_REVIEW",
+        ],
+      },
+      mode: { type: "string", enum: ["SAFE", "QUICK", "STANDARD", "DEEP", "CUSTOM"] },
+      workflow: "string",
+    },
+  },
   lyrashield_get_scan_status: {
     required: ["workspaceId"],
-    properties: { workspaceId: "string", scanId: "string" },
+    properties: { workspaceId: "string", scanId: "string", operationId: "string" },
   },
   lyrashield_get_scan_quality: {
     required: ["workspaceId", "scanId"],
@@ -44,9 +64,27 @@ export const REQUIRED_TOOLS = Object.freeze({
   },
   lyrashield_get_launch_readiness: {
     required: ["workspaceId", "targetId"],
-    properties: { workspaceId: "string", targetId: "string" },
+    properties: {
+      workspaceId: "string",
+      targetId: "string",
+      commit: "string",
+      artifactDigest: "string",
+    },
   },
-  lyrashield_check_diff: { required: ["diff"], properties: { diff: "string" } },
+  lyrashield_check_diff: {
+    required: ["diff"],
+    properties: {
+      diff: "string",
+      files: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["path", "content"],
+          properties: { path: "string", content: "string" },
+        },
+      },
+    },
+  },
   lyrashield_explain_finding: {
     required: ["workspaceId", "findingId"],
     properties: { workspaceId: "string", findingId: "string" },
@@ -59,13 +97,41 @@ export const REQUIRED_TOOLS = Object.freeze({
     required: ["workspaceId", "targetId"],
     properties: { workspaceId: "string", targetId: "string" },
   },
-  lyrashield_scan_target: {
+  lyrashield_run_pr_scan: {
     required: ["workspaceId"],
     properties: {
       workspaceId: "string",
       targetId: "string",
       repo: "string",
       auto: "boolean",
+      mode: "string",
+      workflow: "string",
+      idempotencyKey: "string",
+    },
+  },
+  lyrashield_record_fix_proposal: {
+    required: ["workspaceId", "findingId", "summary"],
+    properties: {
+      workspaceId: "string",
+      findingId: "string",
+      summary: "string",
+      idempotencyKey: "string",
+    },
+  },
+  lyrashield_verify_fix: {
+    required: ["workspaceId", "findingId"],
+    properties: { workspaceId: "string", findingId: "string", idempotencyKey: "string" },
+  },
+  lyrashield_scan_target: {
+    required: ["workspaceId"],
+    properties: {
+      goal: "string",
+      workspaceId: "string",
+      targetId: "string",
+      repo: "string",
+      auto: "boolean",
+      mode: "string",
+      workflow: "string",
       idempotencyKey: "string",
     },
   },
@@ -88,17 +154,24 @@ const SCHEMA_ANNOTATIONS = new Set([
 
 // Compatibility is deliberately bounded to marketplace-stdio/1 inputs, not
 // general JSON Schema equivalence. Unmodeled assertions fail closed.
-function compatibleProperty(schema, type, key) {
+function compatibleProperty(schema, contract, key) {
+  const type = typeof contract === "string" ? contract : contract.type
   if (!object(schema) || schema.type !== type) return false
+  if (type === "object") return compatibleObject(schema, contract)
+  if (type === "array" && !compatibleProperty(schema.items, contract.items, "items")) return false
   return Object.entries(schema).every(([facet, value]) => {
     if (facet === "type" || SCHEMA_ANNOTATIONS.has(facet)) return true
+    if (facet === "items") return type === "array"
     if (facet === "enum") {
+      // Source enums may broaden, but every accepted value must remain available.
+      // Source strings without an enum must remain unconstrained by one.
+      const accepted = type === "boolean" ? [true, false] : contract.enum
       return (
-        type === "boolean" &&
+        Array.isArray(accepted) &&
         Array.isArray(value) &&
-        value.length === 2 &&
-        value.includes(true) &&
-        value.includes(false)
+        value.every((item) => typeof item === type) &&
+        new Set(value).size === value.length &&
+        accepted.every((item) => value.includes(item))
       )
     }
     if (facet === "minLength" || facet === "maxLength") {
@@ -119,6 +192,34 @@ function compatibleProperty(schema, type, key) {
     }
     return false
   })
+}
+
+function compatibleObject(schema, contract) {
+  if (
+    !object(schema) ||
+    schema.type !== "object" ||
+    (schema.properties !== undefined && !object(schema.properties))
+  )
+    return false
+  const required = schema.required ?? []
+  return (
+    Array.isArray(required) &&
+    required.every(
+      (key) => typeof key === "string" && Object.hasOwn(schema.properties ?? {}, key)
+    ) &&
+    Object.keys(schema).every(
+      (facet) =>
+        SCHEMA_ANNOTATIONS.has(facet) ||
+        ["type", "properties", "required", "additionalProperties"].includes(facet)
+    ) &&
+    (schema.additionalProperties === undefined ||
+      typeof schema.additionalProperties === "boolean") &&
+    contract.required.every((key) => required.includes(key)) &&
+    required.every((key) => contract.required.includes(key)) &&
+    Object.entries(contract.properties).every(([key, value]) =>
+      compatibleProperty(schema.properties?.[key], value, key)
+    )
+  )
 }
 
 export function validateCatalog(tools) {
@@ -151,21 +252,7 @@ export function validateCatalog(tools) {
   for (const [name, contract] of Object.entries(REQUIRED_TOOLS)) {
     const schema = catalog.get(name)
     if (!schema) throw new Error(`published MCP tool catalog is missing ${name}`)
-    const required = schema.required ?? []
-    if (
-      Object.keys(schema).some(
-        (facet) =>
-          !SCHEMA_ANNOTATIONS.has(facet) &&
-          !["type", "properties", "required", "additionalProperties"].includes(facet)
-      ) ||
-      (schema.additionalProperties !== undefined &&
-        typeof schema.additionalProperties !== "boolean") ||
-      contract.required.some((key) => !required.includes(key)) ||
-      required.some((key) => !contract.required.includes(key)) ||
-      Object.entries(contract.properties).some(
-        ([key, type]) => !compatibleProperty(schema.properties?.[key], type, key)
-      )
-    ) {
+    if (!compatibleObject(schema, contract)) {
       throw new Error(`published MCP tool schema is incompatible: ${name}`)
     }
   }

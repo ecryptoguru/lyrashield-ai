@@ -2,7 +2,7 @@
 title: Cline MCP security workflow for AI built apps
 description: Connect Cline to LyraShield MCP for bounded scans, evidence-state findings, reviewed fix proposals, retests and a diff-aware SARIF gate.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -18,7 +18,7 @@ faq:
     a: "Use autoApprove sparingly. Keep read only tools like lyrashield_list_targets and lyrashield_get_findings allowed, but gate fix and retest tools behind a prompt so the agent cannot run them without your confirmation. Every auto approved tool is an action the agent takes autonomously."
 ---
 
-Fastest path: run `npx lyrashield init` to detect Cline and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store your credentials. The manual config below is what the CLI writes, kept for reference.
+Follow the current [cline integration guide](/docs/integrations/cline) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 You can run secure AI app development in Cline by adding LyraShield AI as an MCP server, getting findings with their recorded evidence states and supporting evidence inside Cline and enforcing the same checks in CI with a diff aware GitHub Action that uploads SARIF.
 
@@ -119,11 +119,11 @@ This codifies consistent security behavior between Cline, GitHub and other edito
 
 Agent rules work because Cline reads `.clinerules` files at the start of every session and treats them as standing instructions. When you commit `.clinerules/security.md` to the repository, every contributor gets the same scan requirement without reading a wiki page. Keep rules short and imperative, five to seven lines maximum, because long rule files dilute attention. Pair the rules with a PR template that asks for the scan ID and SARIF link.
 
-| Mode    | Config file                                                              | Launch style                   | Auth                              |
-| ------- | ------------------------------------------------------------------------ | ------------------------------ | --------------------------------- |
+| Mode    | Config file                                                              | Launch style                    | Auth                              |
+| ------- | ------------------------------------------------------------------------ | ------------------------------- | --------------------------------- |
 | Local   | `~/.cline/data/settings/cline_mcp_settings.json` or IDE-managed settings | `npx -y @lyrashield/mcp@0.2.11` | LyraShield OAuth credential store |
-| Remote  | IDE-managed settings                                                     | `streamableHttp`               | Private Bearer header             |
-| CI gate | .github/workflows/lyrashield.yml                                         | ecryptoguru/lyrashield-ai@v2   | no LyraShield secret required     |
+| Remote  | IDE-managed settings                                                     | `streamableHttp`                | Private Bearer header             |
+| CI gate | .github/workflows/lyrashield.yml                                         | ecryptoguru/lyrashield-ai@v2    | no LyraShield secret required     |
 
 ## 7. Why pair Cline with LyraShield
 

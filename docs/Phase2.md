@@ -14,7 +14,7 @@ This overlay records the current Phase 2 direction as of 2026-09-25 and supersed
 
 ### Launch gates still open before Phase 2 (per `PRD.md` §9)
 
-1. Merge and deploy the scorecard canonical-origin fix, then repeat live canonical/OG readback.
+1. On deployed product `4822306e24f375800981bf282fd992a9c15dcde8` (which includes merged PR #454), obtain a successful canonical/OG URL and PNG readback from an owner-authorized active scorecard. The historical fixture is revoked and returns 404; do not enumerate or create a production scorecard without authorization.
 2. Retain longer-window Redis command/capacity evidence; provision RazorpayX and Payoneer payout API access plus the tax-form workflow.
 3. Triage the 25 findings from the accepted Standard scan and obtain independent verification where warranted.
 4. Select and authorize a controlled Deep/Sol target, then retain separate routing, cost, receipt, image, and terminal-state evidence.

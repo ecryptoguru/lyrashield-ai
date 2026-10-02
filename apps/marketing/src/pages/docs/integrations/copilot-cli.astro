@@ -8,7 +8,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield MCP for GitHub Copilot CLI"
 const description =
   "Connect LyraShield to GitHub Copilot CLI. Configure ~/.copilot/mcp-config.json with the stdio server or use the remote HTTP endpoint in cloud environments."
-const updatedDate = "2026-09-09"
+const updatedDate = "2026-10-02"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
@@ -35,7 +35,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 2,
         name: "Add the lyrashield entry",
-        text: 'Add the mcpServers key with type "local", command "npx" and args ["-y","@lyrashield/mcp@0.2.11"]. Set LYRASHIELD_API_KEY in the env block.',
+        text: 'Add the mcpServers key with type "local", command "npx" and args ["-y","@lyrashield/mcp@0.2.11"]. Run npx -y lyrashield@0.2.13 login --oauth in the same OS account; the stdio server reads the local credential store. Keep credentials out of the config.',
       },
       {
         "@type": "HowToStep",
@@ -65,12 +65,13 @@ const jsonLd: unknown[] = [
   </p>
 
   <CliConfigPreview agentId="copilot-cli" />
-  <p>Prefer to see exactly what gets written or set it up without Node.js? Configure it by hand below.</p>
+  <p>Merge the current configuration by hand below; Node.js 24 or newer is required for local stdio.</p>
 
   <h2>Local stdio setup</h2>
   <p>
-    Add the following to <code>~/.copilot/mcp-config.json</code> or <code>.mcp.json</code>. Create
-    the file if it does not exist.
+    Add the following to <code>~/.copilot/mcp-config.json</code> or <code>.mcp.json</code>. Preserve
+    other entries. Authenticate separately with <code>npx -y lyrashield@0.2.13 login --oauth</code>
+    in the same OS account and select the intended workspace.
   </p>
 
   <AgentSnippet agentId="copilot-cli" transport="stdio" />
@@ -98,8 +99,8 @@ const jsonLd: unknown[] = [
 
   <h2>Verify the connection</h2>
   <p>
-    Run <code>copilot mcp list</code> to confirm the lyrashield server is registered. Ask Copilot:{" "}
-    <em>"What LyraShield tools do you have access to?"</em> to confirm the server is connected.
+    Run <code>copilot mcp list</code> to confirm the lyrashield server is registered. Then ask Copilot to call <code>lyrashield_list_workspaces</code> and confirm the intended workspace.
+    Server discovery and an authenticated read are separate checks.
   </p>
 
   <div class="callout callout--warn">

@@ -9,12 +9,15 @@ import {
   checkDelegatedOperationAuthorization,
   completeAgentOperation,
   failAgentOperation,
+  getAgentConnection,
+  retainUnknownAgentOperationResult,
   toJsonObject,
   withWorkspaceRLS,
   TOOL_OPERATION_MAP,
 } from "@lyrashield/db"
 import {
   McpServer,
+  MCP_DELEGATED_EXECUTION_STALE_MS,
   McpToolResultSchema,
   extractScanIdFromToolResult,
   type McpToolResult,
@@ -35,6 +38,19 @@ const operationPermissions: Partial<Record<string, Permission>> = {
   "scan_attachment.upload": PERMISSIONS.attachment.upload,
   "scan_attachment.delete": PERMISSIONS.attachment.delete,
 }
+
+// These REST boundaries retain principal-bound results. Do not extend this
+// list without verifying the endpoint's durable idempotency contract.
+const recordedRestOperations = new Set([
+  "scan.create",
+  "scan.cancel",
+  "report.create",
+  "fix_proposal.create",
+  "retest.create",
+  "fix_pr.create",
+  "scan_attachment.upload",
+  "scan_attachment.delete",
+])
 
 const approvalIdSchema = z.string().min(1).max(128).optional()
 const idempotencyKeySchema = z.string().min(1).max(128)
@@ -307,6 +323,7 @@ export function makeRemoteApprovalGate(
           idempotencyKey,
           authorizationVersion: options.connection.authorizationVersion,
           input: toolArgs,
+          staleExecutingBefore: new Date(Date.now() - MCP_DELEGATED_EXECUTION_STALE_MS),
         })
 
         if (claim.status === "REPLAY") {
@@ -339,6 +356,28 @@ export function makeRemoteApprovalGate(
         }
 
         if (claim.status === "FAILED") {
+          if (claim.operation.error === "OPERATION_OUTCOME_UNKNOWN") {
+            const stored = McpToolResultSchema.safeParse(claim.operation.result)
+            const payload = {
+              status: "FAILED",
+              code: "OPERATION_OUTCOME_UNKNOWN",
+              error:
+                "The recorded operation outcome is unknown. Inspect its durable status before starting another request.",
+            }
+            return {
+              approved: true,
+              result: withOperationId(
+                stored.success && stored.data.isError
+                  ? stored.data
+                  : {
+                      content: [{ type: "text", text: JSON.stringify(payload) }],
+                      structuredContent: payload,
+                      isError: true,
+                    },
+                claim.operation.id
+              ),
+            }
+          }
           return denied(
             "This operation previously failed and will not be retried under the same idempotencyKey."
           )
@@ -353,7 +392,14 @@ export function makeRemoteApprovalGate(
         const executionServer = new McpServer({ toolContext, allowMutations: true })
         let toolResult: McpToolResult
         try {
-          toolResult = await executionServer.callTool(toolName, toolArgs)
+          toolResult = await executionServer.callTool(toolName, {
+            ...toolArgs,
+            // The outer caller key stays out of the canonical tool input.
+            // The tool hashes this durable identity into a distinct REST key.
+            ...(recordedRestOperations.has(authCheck.canonicalOperation)
+              ? { idempotencyKey: claim.operation.id }
+              : {}),
+          })
         } catch (error) {
           logger.error("Delegated MCP tool execution threw", {
             operationId: claim.operation.id,
@@ -362,24 +408,109 @@ export function makeRemoteApprovalGate(
             toolName,
             error: error instanceof Error ? error.message : String(error),
           })
-          await failAgentOperation(claim.operation.id, workspaceId, {
-            error: error instanceof Error ? error.message : String(error),
-          })
-          return denied("Delegated tool execution failed")
+          const payload = {
+            error: "Delegated tool execution failed; its outcome is unknown.",
+          }
+          toolResult = {
+            content: [{ type: "text", text: JSON.stringify(payload) }],
+            structuredContent: payload,
+            isError: true,
+          }
         }
 
         const stampedResult = withOperationId(toolResult, claim.operation.id)
-        await completeAgentOperation(claim.operation.id, workspaceId, {
-          // Point the ledger row at the durable scan when the tool produced
-          // one — task recovery resolves the scan via this reference without
-          // ever re-executing the tool.
-          resultReference: extractScanIdFromToolResult(toolResult) ?? undefined,
-          result: toJsonObject({
-            content: stampedResult.content,
-            isError: stampedResult.isError,
-            structuredContent: stampedResult.structuredContent,
-          }),
-        })
+        const recordedResult = toJsonObject(stampedResult)
+        let finalizedOperation: Awaited<ReturnType<typeof completeAgentOperation>>
+        if (stampedResult.isError === true) {
+          // Generic errors can follow a committed side effect. They do not
+          // prove no submission and never authorize replay or a fresh-key retry.
+          finalizedOperation = await failAgentOperation(claim.operation.id, workspaceId, {
+            error: "OPERATION_OUTCOME_UNKNOWN",
+            resultReference: extractScanIdFromToolResult(toolResult) ?? undefined,
+            result: recordedResult,
+            expectedUpdatedAt: claim.operation.updatedAt,
+          })
+        } else {
+          finalizedOperation = await completeAgentOperation(claim.operation.id, workspaceId, {
+            // Task polling reads this durable reference; it never reruns a tool.
+            resultReference: extractScanIdFromToolResult(toolResult) ?? undefined,
+            result: recordedResult,
+            expectedUpdatedAt: claim.operation.updatedAt,
+          })
+        }
+        const lateScanId = extractScanIdFromToolResult(toolResult)
+        if (
+          lateScanId &&
+          finalizedOperation.status === "FAILED" &&
+          finalizedOperation.error === "OPERATION_OUTCOME_UNKNOWN" &&
+          finalizedOperation.result == null &&
+          !finalizedOperation.resultReference &&
+          options.oauthContext
+        ) {
+          try {
+            await requireOAuthPermission(options.oauthContext, permission)
+            const currentConnection = await getAgentConnection(options.connection.id, workspaceId)
+            const currentScope = await resolveDelegatedScope(workspaceId, toolName, toolArgs)
+            if (
+              currentConnection?.userId === apiKeyInfo.createdById &&
+              currentConnection.status === "ACTIVE" &&
+              currentConnection.scopes.some(
+                (scope) => scope === "write" || scope === "lyrashield.write"
+              ) &&
+              currentConnection.authorizationVersion ===
+                options.oauthContext.authorizationVersion &&
+              currentScope &&
+              checkDelegatedOperationAuthorization({
+                connection: currentConnection,
+                workspaceId,
+                operationName: toolName,
+                targetId: currentScope.targetId,
+                profile: currentScope.profile,
+              }).authorized
+            ) {
+              const retained = await retainUnknownAgentOperationResult(
+                claim.operation,
+                workspaceId,
+                {
+                  terminalUpdatedAt: finalizedOperation.updatedAt,
+                  resultReference: lateScanId,
+                  result: recordedResult,
+                  currentAuthorizationVersion: currentConnection.authorizationVersion,
+                  userId: apiKeyInfo.createdById,
+                }
+              )
+              if (retained) finalizedOperation = retained
+            }
+          } catch (error) {
+            logger.warn("Could not retain late delegated scan result", {
+              operationId: claim.operation.id,
+              workspaceId,
+              error: error instanceof Error ? error.name : "UnknownError",
+            })
+          }
+        }
+        if (finalizedOperation.status !== (stampedResult.isError ? "FAILED" : "COMPLETED")) {
+          const retained = McpToolResultSchema.safeParse(finalizedOperation.result)
+          const payload = {
+            status: finalizedOperation.status,
+            code: "OPERATION_OUTCOME_UNKNOWN",
+            error: "The original execution is no longer active; inspect its durable status.",
+          }
+          return {
+            approved: true,
+            result: withOperationId(
+              retained.success &&
+                (finalizedOperation.status === "COMPLETED" || retained.data.isError)
+                ? retained.data
+                : {
+                    content: [{ type: "text", text: JSON.stringify(payload) }],
+                    structuredContent: payload,
+                    isError: true,
+                  },
+              claim.operation.id
+            ),
+          }
+        }
 
         return { approved: true, result: stampedResult }
       }

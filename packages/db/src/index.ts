@@ -496,6 +496,7 @@ export {
   claimOrGetAgentOperation,
   completeAgentOperation,
   failAgentOperation,
+  retainUnknownAgentOperationResult,
   retryScanCancellation,
   getAgentOperation,
   getOperationStatus,

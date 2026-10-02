@@ -2,7 +2,7 @@
 title: Cursor app security checklist for AI built code
 description: Harden Cursor built apps before release with MCP config checks, rules hardening, secret scanning, dependency review and verified evidence.
 pubDate: "2026-07-30"
-updatedDate: 2026-09-27
+updatedDate: 2026-10-02
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -42,7 +42,7 @@ Add a final rule: any change that touches auth, payments or file upload must add
 
 Cursor loads MCP servers from .cursor/mcp.json using a mcpServers object. This file is where credential leakage often happens.
 
-Fastest path: run `npx lyrashield init`, which detects Cursor and writes the config for you. Verify with `npx lyrashield doctor`. Log in with `npx lyrashield login` so credentials land in ~/.lyrashield/credentials.json and nothing gets committed. For a one-step install, use the [Agent Plugin](https://agent-plugins.org) (Agent Plugins v1.0.0), the preferred route for launch clients like Cursor. The manual config below is what the CLI writes, kept for reference.
+Current setup: follow the [Cursor integration guide](/docs/integrations/cursor) with published `@lyrashield/mcp@0.2.11` and authenticate local stdio separately using `npx -y lyrashield@0.2.13 login --oauth`. Plugin installation awaits a reviewed matching immutable release. Published CLI config writes and skill installation remain withheld; merge the documented client config manually, preserving existing settings. Confirm client discovery, then make an authenticated read-only workspace call.
 
 Secure pattern:
 

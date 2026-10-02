@@ -28,6 +28,23 @@ async function temporary() {
   directories.push(directory)
   return directory
 }
+function propertySchema(contract) {
+  if (typeof contract === "string") return { type: contract }
+  return {
+    ...contract,
+    ...(contract.items ? { items: propertySchema(contract.items) } : {}),
+    ...(contract.properties
+      ? {
+          properties: Object.fromEntries(
+            Object.entries(contract.properties).map(([name, value]) => [
+              name,
+              propertySchema(value),
+            ])
+          ),
+        }
+      : {}),
+  }
+}
 const tools = () =>
   Object.entries(REQUIRED_TOOLS).map(([name, contract]) => ({
     name,
@@ -35,7 +52,7 @@ const tools = () =>
       type: "object",
       required: contract.required,
       properties: Object.fromEntries(
-        Object.entries(contract.properties).map(([key, type]) => [key, { type }])
+        Object.entries(contract.properties).map(([key, value]) => [key, propertySchema(value)])
       ),
     },
   }))
@@ -206,8 +223,8 @@ test("malformed, invalid RPC, wrong protocol and oversized frames fail", async (
       },
       /initialization failed/,
     ],
-    [{ response: "process.stdout.write('x'.repeat(4096))" }, /frame exceeded/],
-    [{ response: "process.stdout.write('x'.repeat(4096)+'\\n')" }, /frame exceeded/],
+    [{ response: "process.stdout.write('x'.repeat(16384))" }, /frame exceeded/],
+    [{ response: "process.stdout.write('x'.repeat(16384)+'\\n')" }, /frame exceeded/],
     [
       {
         response: `process.stdout.write(${JSON.stringify(JSON.stringify({ jsonrpc: "2.0", id: 2, result: { tools: tools() } }) + "\ntrailing")})`,
@@ -216,7 +233,7 @@ test("malformed, invalid RPC, wrong protocol and oversized frames fail", async (
     ],
     [{ response: "process.stdout.write(Buffer.from([255,10]))" }, /non-JSON-RPC/],
   ])
-    await assert.rejects(probe(fixture(options), { frameBytes: 2048 }), pattern)
+    await assert.rejects(probe(fixture(options), { frameBytes: 8192 }), pattern)
 })
 
 test("missing tool, duplicate names, added required input and incompatible schema fail", async () => {
@@ -230,6 +247,155 @@ test("missing tool, duplicate names, added required input and incompatible schem
   required[1].inputSchema.required = [...required[1].inputSchema.required, "newInput"]
   assert.throws(() => validateCatalog(required), /schema is incompatible/)
   assert.throws(() => validateCatalog([...tools(), tools()[0]]), /duplicate/)
+})
+
+test("published catalog requires eligibility preflight used by scan workflows", () => {
+  const catalog = tools().filter((tool) => tool.name !== "lyrashield_get_scan_eligibility")
+  assert.throws(() => validateCatalog(catalog), /missing lyrashield_get_scan_eligibility/)
+})
+
+const retryFields = [
+  ["lyrashield_run_pr_scan", "idempotencyKey"],
+  ["lyrashield_verify_fix", "idempotencyKey"],
+  ["lyrashield_record_fix_proposal", "idempotencyKey"],
+  ["lyrashield_get_scan_status", "operationId"],
+]
+for (const [name, property] of retryFields) {
+  test(`published catalog requires compatible ${name}.${property}`, () => {
+    const catalog = tools()
+    // Explicit fixture adds the retry contract independently of REQUIRED_TOOLS.
+    const required =
+      name === "lyrashield_run_pr_scan"
+        ? ["workspaceId"]
+        : name === "lyrashield_verify_fix"
+          ? ["workspaceId", "findingId"]
+          : name === "lyrashield_record_fix_proposal"
+            ? ["workspaceId", "findingId", "summary"]
+            : ["workspaceId"]
+    let tool = catalog.find((tool) => tool.name === name)
+    if (!tool) {
+      tool = {
+        name,
+        inputSchema: {
+          type: "object",
+          required,
+          properties: Object.fromEntries(required.map((key) => [key, { type: "string" }])),
+        },
+      }
+      catalog.push(tool)
+    }
+    if (name === "lyrashield_run_pr_scan") {
+      Object.assign(tool.inputSchema.properties, {
+        targetId: { type: "string" },
+        repo: { type: "string" },
+        auto: { type: "boolean" },
+      })
+    }
+    tool.inputSchema.properties[property] = { type: "string" }
+    validateCatalog(catalog)
+    delete tool.inputSchema.properties[property]
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+    tool.inputSchema.properties[property] = { type: "number" }
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+    tool.inputSchema.properties[property] = { type: "string", maxLength: 1 }
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+  })
+}
+
+const authoredFields = [
+  ["lyrashield_get_scan_eligibility", "goal"],
+  ["lyrashield_get_scan_eligibility", "mode"],
+  ["lyrashield_get_scan_eligibility", "workflow"],
+  ["lyrashield_scan_target", "goal"],
+  ["lyrashield_scan_target", "mode"],
+  ["lyrashield_scan_target", "workflow"],
+  ["lyrashield_run_pr_scan", "mode"],
+  ["lyrashield_run_pr_scan", "workflow"],
+  ["lyrashield_get_launch_readiness", "commit"],
+  ["lyrashield_get_launch_readiness", "artifactDigest"],
+  ["lyrashield_check_diff", "files"],
+]
+for (const [name, property] of authoredFields) {
+  test(`published catalog requires optional authored input ${name}.${property}`, () => {
+    const catalog = tools()
+    const schema = catalog.find((tool) => tool.name === name).inputSchema
+    const original = schema.properties[property]
+    delete schema.properties[property]
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+    schema.properties[property] = original
+    schema.required = [...schema.required, property]
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+  })
+}
+
+const eligibilityEnums = {
+  goal: [
+    "CHECK_PR",
+    "TEST_APP",
+    "LAUNCH_REVIEW",
+    "WEEKLY_MONITOR",
+    "FULL_PENTEST",
+    "COMPLIANCE_REVIEW",
+  ],
+  mode: ["SAFE", "QUICK", "STANDARD", "DEEP", "CUSTOM"],
+}
+test("published eligibility accepts full, broader, and unconstrained source enum inputs", () => {
+  for (const [property, values] of Object.entries(eligibilityEnums)) {
+    const catalog = tools()
+    const properties = catalog.find((tool) => tool.name === "lyrashield_get_scan_eligibility")
+      .inputSchema.properties
+    properties[property] = { type: "string", enum: [...values] }
+    validateCatalog(catalog)
+    properties[property].enum.push("FUTURE_VALUE")
+    validateCatalog(catalog)
+    delete properties[property].enum
+    validateCatalog(catalog)
+  }
+})
+
+for (const [property, values] of Object.entries(eligibilityEnums)) {
+  test(`published eligibility ${property} must retain every accepted value`, () => {
+    for (const missing of values) {
+      const catalog = tools()
+      catalog.find(
+        (tool) => tool.name === "lyrashield_get_scan_eligibility"
+      ).inputSchema.properties[property] = {
+        type: "string",
+        enum: values.filter((value) => value !== missing),
+      }
+      assert.throws(() => validateCatalog(catalog), /schema is incompatible/, missing)
+    }
+  })
+}
+for (const [name, property] of authoredFields.filter(([, property]) =>
+  ["goal", "mode", "workflow"].includes(property)
+)) {
+  test(`published ${name}.${property} rejects restrictive enums`, () => {
+    const catalog = tools()
+    catalog.find((tool) => tool.name === name).inputSchema.properties[property] = {
+      type: "string",
+      enum: ["QUICK"],
+    }
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+  })
+}
+
+test("advisory file snapshots require path and content schemas", () => {
+  for (const property of ["path", "content"]) {
+    const catalog = tools()
+    catalog.find((tool) => tool.name === "lyrashield_check_diff").inputSchema.properties.files = {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { path: { type: "string" }, content: { type: "string" } },
+        required: ["path", "content"],
+      },
+    }
+    const item = catalog.find((tool) => tool.name === "lyrashield_check_diff").inputSchema
+      .properties.files.items
+    item.properties[property] = { type: "number" }
+    assert.throws(() => validateCatalog(catalog), /schema is incompatible/)
+  }
 })
 
 test("required schema assertions cannot narrow supported inputs", () => {
@@ -351,11 +517,12 @@ async function acquisitionFixture({
   mode = "healthy",
   integrity = true,
   filename = "packed.tgz",
+  catalog = tools(),
 } = {}) {
   const root = await temporary()
   await writeFile(
     path.join(root, ".mcp.kiro.json"),
-    JSON.stringify({ mcpServers: { lyrashield: { args: ["-y", "@lyrashield/mcp@1.2.3"] } } })
+    JSON.stringify({ mcpServers: { lyrashield: { args: ["-y", "@lyrashield/mcp@0.2.12"] } } })
   )
   const npmCommand = path.join(root, "fixture-npm.mjs")
   const calls = path.join(root, "calls.jsonl")
@@ -364,10 +531,10 @@ async function acquisitionFixture({
     `#!${process.execPath}\nimport fs from 'node:fs';import path from 'node:path';
     const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify({args,env:process.env})+'\\n');
     if(args[0]===${JSON.stringify(mode === "pack-hang" ? "pack" : mode === "install-hang" ? "install" : "none")}) {process.on('SIGTERM',()=>{});setInterval(()=>{},1000)}
-    else if(args[0]==='pack') {fs.copyFileSync(args[1],path.join(process.cwd(),'packed.tgz'));process.stdout.write(JSON.stringify([{name:'@lyrashield/mcp',version:'1.2.3',filename:${JSON.stringify(filename)},files:['package.json','dist/stdio-transport.js','bin/lyrashield-mcp.mjs'].map(path=>({path}))}]))}
+    else if(args[0]==='pack') {fs.copyFileSync(args[1],path.join(process.cwd(),'packed.tgz'));process.stdout.write(JSON.stringify([{name:'@lyrashield/mcp',version:'0.2.12',filename:${JSON.stringify(filename)},files:['package.json','dist/stdio-transport.js','bin/lyrashield-mcp.mjs'].map(path=>({path}))}]))}
     else if(args[0]==='install') {const install=args[args.indexOf('--prefix')+1];const packageRoot=path.join(install,'node_modules/@lyrashield/mcp');fs.mkdirSync(path.join(packageRoot,'bin'),{recursive:true});
-      fs.writeFileSync(path.join(packageRoot,'package.json'),JSON.stringify({name:'@lyrashield/mcp',version:'1.2.3',bin:{'lyrashield-mcp':'bin/lyrashield-mcp.mjs'}}));
-      fs.writeFileSync(path.join(packageRoot,'bin/lyrashield-mcp.mjs'),${JSON.stringify(fixture())});}
+      fs.writeFileSync(path.join(packageRoot,'package.json'),JSON.stringify({name:'@lyrashield/mcp',version:'0.2.12',bin:{'lyrashield-mcp':'bin/lyrashield-mcp.mjs'}}));
+      fs.writeFileSync(path.join(packageRoot,'bin/lyrashield-mcp.mjs'),${JSON.stringify(fixture({ catalog }))});}
     else process.exit(99);`,
     { mode: 0o700 }
   )
@@ -375,9 +542,9 @@ async function acquisitionFixture({
   const hash = `sha512-${createHash("sha512").update(archive).digest("base64")}`
   const metadata = {
     name: "@lyrashield/mcp",
-    version: "1.2.3",
+    version: "0.2.12",
     dist: {
-      tarball: "https://registry.npmjs.org/@lyrashield/mcp/-/mcp-1.2.3.tgz",
+      tarball: "https://registry.npmjs.org/@lyrashield/mcp/-/mcp-0.2.12.tgz",
       integrity: integrity ? hash : `sha512-${"A".repeat(86)}==`,
     },
   }
@@ -398,7 +565,7 @@ async function acquisitionFixture({
 
 test("acquisition installs and executes exactly the integrity-verified archive without npx", async () => {
   const config = await acquisitionFixture()
-  assert.equal(await verifyPublishedMcp(config), "@lyrashield/mcp@1.2.3")
+  assert.equal(await verifyPublishedMcp(config), "@lyrashield/mcp@0.2.12")
   const calls = (await readFile(config.calls, "utf8")).trim().split("\n").map(JSON.parse)
   assert.equal(config.requests.length, 2)
   assert.deepEqual(
@@ -413,6 +580,33 @@ test("acquisition installs and executes exactly the integrity-verified archive w
     assert.ok(call.args.includes("--registry=https://registry.npmjs.org"))
     assert.equal(call.env.npm_config_ignore_scripts, "true")
     assert.equal(call.env.NPM_TOKEN, undefined)
+  }
+})
+
+test("pinned .12 acquisition rejects E404 before executing npm", async () => {
+  const config = await acquisitionFixture()
+  config.fetchImpl = async (url) => {
+    assert.equal(url, "https://registry.npmjs.org/@lyrashield%2fmcp/0.2.12")
+    return new Response('{"error":"E404"}', { status: 404 })
+  }
+  await assert.rejects(verifyPublishedMcp(config), /pinned MCP package is unavailable: HTTP 404/)
+  await assert.rejects(readFile(config.calls), /ENOENT/)
+})
+
+test("pinned .12 executable catalog rejects malformed schemas and missing retry fields", async () => {
+  const invalid = tools()
+  invalid[0].inputSchema = { type: "array" }
+  await assert.rejects(
+    verifyPublishedMcp(await acquisitionFixture({ catalog: invalid })),
+    /schema is invalid/
+  )
+  for (const [name, property] of retryFields) {
+    const catalog = tools()
+    delete catalog.find((tool) => tool.name === name).inputSchema.properties[property]
+    await assert.rejects(
+      verifyPublishedMcp(await acquisitionFixture({ catalog })),
+      /schema is incompatible/
+    )
   }
 })
 
@@ -438,7 +632,7 @@ test("real local npm pack/install suppress lifecycle scripts and preserve archiv
     path.join(packageRoot, "package.json"),
     JSON.stringify({
       name: "@lyrashield/mcp",
-      version: "1.2.3",
+      version: "0.2.12",
       type: "module",
       bin: { "lyrashield-mcp": "bin/lyrashield-mcp.mjs" },
       scripts: { prepare: `touch ${marker}`, install: `touch ${marker}` },
@@ -464,14 +658,14 @@ test("real local npm pack/install suppress lifecycle scripts and preserve archiv
       ++requests === 1
         ? JSON.stringify({
             name: "@lyrashield/mcp",
-            version: "1.2.3",
+            version: "0.2.12",
             dist: {
-              tarball: "https://registry.npmjs.org/@lyrashield/mcp/-/mcp-1.2.3.tgz",
+              tarball: "https://registry.npmjs.org/@lyrashield/mcp/-/mcp-0.2.12.tgz",
               integrity: hash,
             },
           })
         : archive
     )
-  assert.equal(await verifyPublishedMcp(config), "@lyrashield/mcp@1.2.3")
+  assert.equal(await verifyPublishedMcp(config), "@lyrashield/mcp@0.2.12")
   await assert.rejects(readFile(marker), /ENOENT/)
 })

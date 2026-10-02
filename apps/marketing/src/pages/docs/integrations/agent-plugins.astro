@@ -5,34 +5,34 @@ import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "LyraShield Agent Plugin — Coding Agent Setup"
 const description =
-  "Install LyraShield in supported coding clients with the published CLI, or follow the client-specific setup guide."
-const updatedDate = "2026-10-01"
+  "Use published direct MCP with client-specific setup guides while candidate native plugins await a reviewed immutable release."
+const updatedDate = "2026-10-02"
 
 // Kept in the same order as the launch-client table below.
 const launchClients = [
   {
     name: "Claude Code",
     slug: "claude-code",
-    path: "Claude marketplace",
-    cliDefault: "Guided marketplace",
+    path: ".mcp.json (direct MCP)",
+    cliDefault: "Plugin release pending; manual MCP setup",
   },
   {
     name: "Cursor",
     slug: "cursor",
-    path: "~/.cursor/plugins/local/lyrashield",
-    cliDefault: "Direct local copy",
+    path: ".cursor/mcp.json (direct MCP)",
+    cliDefault: "Plugin release pending; manual MCP setup",
   },
   {
     name: "OpenAI Codex",
     slug: "openai-codex",
-    path: "Codex marketplace",
-    cliDefault: "Marketplace registration",
+    path: "~/.codex/config.toml (direct MCP)",
+    cliDefault: "Plugin release pending; manual MCP setup",
   },
   {
     name: "GitHub Copilot",
     slug: "github-copilot",
-    path: "Copilot marketplace",
-    cliDefault: "Guided marketplace",
+    path: "~/.copilot/mcp-config.json (direct MCP)",
+    cliDefault: "Plugin release pending; manual MCP setup",
   },
   {
     name: "Kiro",
@@ -49,11 +49,11 @@ const faqItems = [
   },
   {
     q: "Which clients have a native package path?",
-    a: "The portable package has descriptors for Claude Code, Cursor, OpenAI Codex and GitHub Copilot. Kiro's native Power is the intended path on supported surfaces, but LyraShield's Power distribution is still in preparation and is not publicly installable; use the MCP settings fallback meanwhile. Other clients follow the client-specific setup in their guide.",
+    a: "The source candidate has descriptors for Claude Code, Cursor, OpenAI Codex and GitHub Copilot. Claude, Cursor, Codex and Copilot plugin distribution is pending a reviewed matching immutable release; use their pinned direct MCP guides now. Kiro's native Power is the intended path on supported surfaces, but LyraShield's Power distribution is still in preparation and is not publicly installable; use the MCP settings fallback meanwhile. Other clients follow the client-specific setup in their guide.",
   },
   {
     q: "Do I need to log in before installing the plugin?",
-    a: "Kiro's local stdio MCP fallback needs npx --yes lyrashield@0.2.13 login --oauth first. The Power package is not yet publicly available. Remote plugin paths complete hosted OAuth inside the client when the connection starts.",
+    a: "Kiro's local stdio MCP fallback needs npx --yes lyrashield@0.2.13 login --oauth first. The Power package is not yet publicly available. Claude, Cursor, Codex and Copilot currently use the direct MCP fallback with the same pinned local CLI OAuth login; their plugin release is pending.",
   },
   {
     q: "Does the plugin let the agent change my code on its own?",
@@ -98,7 +98,7 @@ const jsonLd: unknown[] = [
 >
   <h1>Agent Plugins</h1>
   <p>
-    LyraShield ships as a portable plugin following the open{" "}
+    LyraShield prepares a portable plugin following the open{" "}
     <a href="https://agent-plugins.org" target="_blank" rel="noopener noreferrer"
       >Agent Plugins v1.0.0</a
     >{" "}
@@ -107,7 +107,16 @@ const jsonLd: unknown[] = [
     reach for them. Each client still activates the package through its own supported path.
   </p>
 
-  <h2>Start with the LyraShield CLI</h2>
+  <h2>Agent Plugin release pending</h2>
+  <p>
+    Claude Code, Cursor, OpenAI Codex and GitHub Copilot plugin setup awaits a reviewed matching immutable
+    package release. The marketplace default branch is preparation only. The published CLI's
+    older plugin instructions must not be used to install it; follow these clients' direct MCP
+    guides with <code>@lyrashield/mcp@0.2.11</code> and authenticate separately using
+    <code>npx -y lyrashield@0.2.13 login --oauth</code>.
+  </p>
+
+  <h2>Preview available CLI setup</h2>
   <p>
     The currently published npm CLI is{" "}
     <a href="https://www.npmjs.com/package/lyrashield/v/0.2.13" target="_blank" rel="noreferrer">
@@ -117,18 +126,12 @@ const jsonLd: unknown[] = [
     before their installers ship in the CLI. For other clients, use the linked guide's documented
     setup path and do not assume that a generic CLI command is available.
   </p>
-  <pre><code>{`npx --yes lyrashield@0.2.13 install claude-code --dry-run
-npx --yes lyrashield@0.2.13 install cursor --dry-run
-npx --yes lyrashield@0.2.13 install openai-codex --dry-run
-npx --yes lyrashield@0.2.13 install github-copilot --dry-run
-npx --yes lyrashield@0.2.13 install kiro --dry-run`}</code></pre>
+  <pre><code>{`npx --yes lyrashield@0.2.13 install kiro --dry-run`}</code></pre>
   <p>
     These commands preview the published release's installer behavior without writing files. Keep
     <code>--dry-run</code>: config-writing installers in version <code>0.2.13</code> are on hold
     pending a safe-writer fix. Use each linked guide's manual steps or wait for a published CLI
-    release that clears this gate. The published CLI's <code>init</code> command is likewise limited
-    to the clients included in version <code>0.2.13</code>; preview it with{" "}
-    <code>npx --yes lyrashield@0.2.13 init --dry-run</code>. A preview does not prove the client
+    release that clears this gate. Older published <code>init</code> previews may print obsolete plugin guidance; use the current client guides instead. A preview does not prove the client
     discovered or authenticated the integration.
   </p>
 
@@ -138,9 +141,9 @@ npx --yes lyrashield@0.2.13 install kiro --dry-run`}</code></pre>
     explicit CI fallback; do not commit it.
   </div>
 
-  <h2>Install paths in the published CLI</h2>
+  <h2>Current guided setup paths</h2>
   <p>
-    The portable source package contains client artifacts for the four plugin clients below. Kiro's
+    The portable source package contains candidate client artifacts; their presence does not establish a released install path. Kiro's
     native Power distribution is in preparation and is not publicly installable yet; its currently
     published CLI installer prints the MCP settings fallback. Other clients use the configuration,
     vendor CLI or guided-manual path documented in their own guide until an installer is included in
@@ -151,7 +154,7 @@ npx --yes lyrashield@0.2.13 install kiro --dry-run`}</code></pre>
       <tr>
         <th>Client</th>
         <th>Activation</th>
-        <th>Published CLI 0.2.13</th>
+        <th>Current setup</th>
       </tr>
     </thead>
     <tbody>
