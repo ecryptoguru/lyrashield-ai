@@ -178,6 +178,7 @@ describe("agent registry", () => {
     expect(copilotCloud.transports).toEqual(["remote-http"])
     expect(copilotCloud.locations).toEqual([])
     expect(copilotCloud.nativeCapabilities).toEqual(expect.arrayContaining(["plugin", "skills"]))
+    expect(copilotCloud.skillInstallState).toBe("withheld")
     expect(copilotCloud.manualInstructions).toContain("COPILOT_MCP_LYRASHIELD_API_KEY")
     expect(copilotCloud.manualInstructions).toContain("connect_required")
     expect(copilotCloud.manualInstructions).toContain("does not support remote OAuth")

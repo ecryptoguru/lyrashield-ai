@@ -46,6 +46,8 @@ export interface AgentEntry {
   /** Documented component types the client surface can discover; not a claim that LyraShield ships each type. */
   nativeCapabilities?: NativeCapability[]
   skillLocations?: ConfigLocation[]
+  /** Withheld until a reviewed immutable skill release is available for this surface. */
+  skillInstallState?: "withheld"
   distribution?: { channel: string; url: string; state: DistributionState }
   docsSlug: string
   installStrategy: InstallStrategy

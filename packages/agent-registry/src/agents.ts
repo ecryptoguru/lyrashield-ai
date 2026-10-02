@@ -950,6 +950,7 @@ const githubCopilotCloudAgent: AgentEntry = {
   credential: { kind: "ui-fields" },
   nativeCapabilities: ["plugin", "skills"],
   skillLocations: [{ scope: "project", path: ".github/skills", sharedByConvention: true }],
+  skillInstallState: "withheld",
   distribution: {
     channel: "GitHub Copilot read-only MCP; workflow skills pending release",
     url: "https://docs.github.com/en/copilot/concepts/agents/cloud-agent/mcp-and-cloud-agent",

@@ -355,34 +355,49 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
   // 4) Rules / skills
   const pluginProvidesSkills = agent.installStrategy === "agent-plugin"
   if (agent.rulesFiles.length > 0 && !pluginProvidesSkills) {
+    const rulesCommandAvailable = agent.surface !== "cloud" && !!cliInstallCommand
     steps.push({
       id: "rules",
       kind: "rules",
       title: "Install rules",
-      summary: `Keep ${agent.displayName}'s LyraShield rules in sync (${agent.rulesFiles.join(", ")}).`,
-      command: cliInstallCommand ? `npx -y ${CLI_PACKAGE_SPEC} rules add ${agent.id}` : undefined,
+      summary: rulesCommandAvailable
+        ? `Keep ${agent.displayName}'s LyraShield rules in sync (${agent.rulesFiles.join(", ")}).`
+        : `Add LyraShield rules manually to ${agent.rulesFiles.join(", ")} in the connected repository.`,
+      command: rulesCommandAvailable
+        ? `npx -y ${CLI_PACKAGE_SPEC} rules add ${agent.id}`
+        : undefined,
       copyLabel: `Copy rules install command for ${agent.displayName}`,
-      note: cliInstallCommand
+      note: rulesCommandAvailable
         ? `Remove LyraShield-owned rules with \`npx -y ${CLI_PACKAGE_SPEC} rules remove ${agent.id}\`.`
-        : "No matching pinned CLI rules installer is available for this client. Follow the client guide for manual setup.",
+        : agent.surface !== "cloud"
+          ? "No matching pinned CLI rules installer is available for this client. Follow the client guide for manual setup."
+          : undefined,
     })
   }
 
   if (agent.skillLocations?.length && !pluginProvidesSkills) {
+    const skillsWithheld = agent.skillInstallState === "withheld"
+    const skillInstallerAvailable = CLI_SKILLS_AVAILABLE && !skillsWithheld
     steps.push({
       id: "skills",
       kind: "skills",
       title: "Native workflow skills",
-      summary: CLI_SKILLS_AVAILABLE
+      summary: skillInstallerAvailable
         ? "Install the focused LyraShield workflows in this client's documented skill directory. Existing customized skills are preserved."
-        : "This pinned CLI version does not include the skill installer for this workflow. Use the connected MCP tools directly until a compatible package is available.",
-      command: CLI_SKILLS_AVAILABLE
+        : skillsWithheld
+          ? "Skill installation is withheld until a reviewed matching immutable release is available. Use the connected MCP tools directly meanwhile."
+          : !localSetup
+            ? "Add skills through this hosted client's documented workspace import path; do not run the local CLI installer here."
+            : "This pinned CLI version does not include the skill installer for this workflow. Use the connected MCP tools directly until a compatible package is available.",
+      command: skillInstallerAvailable
         ? `npx -y ${CLI_PACKAGE_SPEC} skills install ${agent.id}`
         : undefined,
       copyLabel: `Copy skills install command for ${agent.displayName}`,
-      note: CLI_SKILLS_AVAILABLE
+      note: skillInstallerAvailable
         ? `Remove only LyraShield-owned skills with \`npx -y ${CLI_PACKAGE_SPEC} skills remove ${agent.id}\`.`
-        : "Client skill discovery is documented; package publication and runtime acceptance are separate checks.",
+        : !skillsWithheld && localSetup
+          ? "Client skill discovery is documented; package publication and runtime acceptance are separate checks."
+          : undefined,
     })
   }
 

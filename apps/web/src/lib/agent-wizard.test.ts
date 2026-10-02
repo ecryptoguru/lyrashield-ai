@@ -284,5 +284,15 @@ describe("agent wizard connection snippets", () => {
     expect(auth?.note).toContain("connect_required")
     expect(auth?.note).toContain("Never commit")
     expect(wizard?.steps.some((step) => step.id === "hooks")).toBe(false)
+    const localInstallSteps = wizard?.steps.filter(
+      (step) => step.id === "rules" || step.id === "skills"
+    )
+    expect(localInstallSteps?.every((step) => step.command === undefined)).toBe(true)
+    expect(wizard?.steps.find((step) => step.id === "skills")?.summary).toContain(
+      "Skill installation is withheld"
+    )
+    expect(
+      wizard?.steps.map((step) => `${step.command ?? ""} ${step.note ?? ""}`).join(" ")
+    ).not.toMatch(/\bnpx -y\b/i)
   })
 })
