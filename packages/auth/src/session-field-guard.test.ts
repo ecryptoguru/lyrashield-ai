@@ -1,17 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const scopedConnFind = vi.hoisted(() => vi.fn())
+
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     workspaceMember: { findUnique: vi.fn() },
     agentConnection: { findFirst: vi.fn() },
   },
+  withWorkspaceRLS: vi.fn(async (_workspaceId, fn) =>
+    fn({ agentConnection: { findFirst: scopedConnFind } })
+  ),
 }))
 
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { validateSessionFieldWrite } from "./session-field-guard"
 
 const memberFind = prisma.workspaceMember.findUnique as ReturnType<typeof vi.fn>
-const connFind = prisma.agentConnection.findFirst as ReturnType<typeof vi.fn>
+const connFind = scopedConnFind
 
 describe("validateSessionFieldWrite — VERIFY-A-002 update-session boundary", () => {
   beforeEach(() => {
@@ -47,22 +52,64 @@ describe("validateSessionFieldWrite — VERIFY-A-002 update-session boundary", (
   it("rejects pendingAgentConnectionId the user does not own or is not ACTIVE", async () => {
     connFind.mockResolvedValue(null)
     await expect(
-      validateSessionFieldWrite({ pendingAgentConnectionId: "conn-other" }, "user-1")
+      validateSessionFieldWrite({ pendingAgentConnectionId: "conn-other" }, "user-1", "ws-1")
     ).rejects.toMatchObject({
       status: "FORBIDDEN",
       body: expect.objectContaining({ code: "CONNECTION_BINDING_FORBIDDEN" }),
     })
     expect(connFind).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "conn-other", userId: "user-1", status: "ACTIVE" },
+        where: { id: "conn-other", workspaceId: "ws-1", userId: "user-1", status: "ACTIVE" },
       })
     )
   })
 
   it("allows an owned ACTIVE pendingAgentConnectionId", async () => {
     await expect(
-      validateSessionFieldWrite({ pendingAgentConnectionId: "conn-1" }, "user-1")
+      validateSessionFieldWrite({ pendingAgentConnectionId: "conn-1" }, "user-1", "ws-1")
     ).resolves.toBeUndefined()
+  })
+
+  it("uses the selected workspace transaction for the newly created connection", async () => {
+    connFind.mockImplementation(async ({ where }) =>
+      where.workspaceId === "ws-1" ? { id: "conn-1" } : null
+    )
+    await expect(
+      validateSessionFieldWrite(
+        { activeWorkspaceId: "ws-1", pendingAgentConnectionId: "conn-1" },
+        "user-1",
+        "ws-old"
+      )
+    ).resolves.toBeUndefined()
+    expect(withWorkspaceRLS).toHaveBeenCalledWith("ws-1", expect.any(Function))
+    expect(prisma.agentConnection.findFirst).not.toHaveBeenCalled()
+  })
+
+  it("rejects a connection outside the selected workspace", async () => {
+    connFind.mockImplementation(async ({ where }) =>
+      where.workspaceId === "ws-1" ? { id: "conn-1" } : null
+    )
+    await expect(
+      validateSessionFieldWrite(
+        { activeWorkspaceId: "ws-other", pendingAgentConnectionId: "conn-1" },
+        "user-1"
+      )
+    ).rejects.toMatchObject({ body: { code: "CONNECTION_BINDING_FORBIDDEN" } })
+  })
+
+  it("rejects a pending connection without a workspace context", async () => {
+    await expect(
+      validateSessionFieldWrite({ pendingAgentConnectionId: "conn-1" }, "user-1")
+    ).rejects.toMatchObject({ body: { code: "CONNECTION_BINDING_FORBIDDEN" } })
+    expect(withWorkspaceRLS).not.toHaveBeenCalled()
+  })
+
+  it("requires active membership for the trusted session workspace fallback", async () => {
+    memberFind.mockResolvedValue({ status: "removed" })
+    await expect(
+      validateSessionFieldWrite({ pendingAgentConnectionId: "conn-1" }, "user-1", "ws-1")
+    ).rejects.toMatchObject({ body: { code: "WORKSPACE_SELECTION_FORBIDDEN" } })
+    expect(connFind).not.toHaveBeenCalled()
   })
 
   it("ignores unrelated fields and non-string values", async () => {

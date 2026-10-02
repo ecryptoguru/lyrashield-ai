@@ -373,7 +373,11 @@ export const auth = betterAuth({
       if (context.path === "/update-session") {
         const sess = await getSessionFromCtx(context)
         if (sess?.user.id) {
-          await validateSessionFieldWrite(context.body, sess.user.id)
+          await validateSessionFieldWrite(
+            context.body,
+            sess.user.id,
+            (sess.session as { activeWorkspaceId?: string | null }).activeWorkspaceId
+          )
         }
       }
 

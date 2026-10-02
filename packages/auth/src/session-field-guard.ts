@@ -1,5 +1,5 @@
 import { APIError } from "better-auth/api"
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 
 /**
  * VERIFY-A-002 — better-auth's POST /update-session persists every
@@ -15,16 +15,25 @@ import { prisma } from "@lyrashield/db"
  * in the auth `before` hook; it throws FORBIDDEN on a bad value and returns
  * undefined otherwise (allowing the write to proceed).
  */
-export async function validateSessionFieldWrite(body: unknown, userId: string): Promise<void> {
+export async function validateSessionFieldWrite(
+  body: unknown,
+  userId: string,
+  currentWorkspaceId?: string | null
+): Promise<void> {
   if (!body || typeof body !== "object" || Array.isArray(body)) return
   const record = body as Record<string, unknown>
 
   const candidateWorkspace =
     typeof record.activeWorkspaceId === "string" ? record.activeWorkspaceId : undefined
-  if (candidateWorkspace) {
+  const candidateConnection =
+    typeof record.pendingAgentConnectionId === "string"
+      ? record.pendingAgentConnectionId
+      : undefined
+  const workspaceId = candidateWorkspace ?? (candidateConnection ? currentWorkspaceId : undefined)
+  if (workspaceId) {
     const member = await prisma.workspaceMember.findUnique({
       where: {
-        workspaceId_userId: { workspaceId: candidateWorkspace, userId },
+        workspaceId_userId: { workspaceId, userId },
       },
       select: { status: true },
     })
@@ -36,15 +45,17 @@ export async function validateSessionFieldWrite(body: unknown, userId: string): 
     }
   }
 
-  const candidateConnection =
-    typeof record.pendingAgentConnectionId === "string"
-      ? record.pendingAgentConnectionId
-      : undefined
   if (candidateConnection) {
-    const connection = await prisma.agentConnection.findFirst({
-      where: { id: candidateConnection, userId, status: "ACTIVE" },
-      select: { id: true },
-    })
+    // Bind the lookup to an actively authorized workspace so FORCE RLS can
+    // see the row; connection IDs alone cannot establish workspace access.
+    const connection = workspaceId
+      ? await withWorkspaceRLS(workspaceId, (tx) =>
+          tx.agentConnection.findFirst({
+            where: { id: candidateConnection, workspaceId, userId, status: "ACTIVE" },
+            select: { id: true },
+          })
+        )
+      : null
     if (!connection) {
       throw new APIError("FORBIDDEN", {
         code: "CONNECTION_BINDING_FORBIDDEN",
