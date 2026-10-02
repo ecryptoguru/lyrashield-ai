@@ -31,7 +31,7 @@ LyraShield ships three ways to run checks without leaving your editor or CI pipe
 npx -y lyrashield@0.2.14 login --oauth  # select one workspace in the browser
 npx -y lyrashield@0.2.14 init --dry-run # preview the client's setup
 npx -y lyrashield@0.2.14 gate          # CI-friendly diff-aware security gate
-npx -y lyrashield@0.2.14 skills install openai-codex # install LyraShield workflow skills
+npx -y lyrashield@0.2.14 skills install pi --project # install LyraShield workflow skills for Pi
 ```
 
 `lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`, now deprecated). It installs through the paths defined in `packages/agent-registry`:
