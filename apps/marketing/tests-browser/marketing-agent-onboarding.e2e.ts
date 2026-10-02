@@ -1,17 +1,20 @@
 import { expect, test } from "@playwright/test"
+import { CLI_PACKAGE_SPEC, MCP_PACKAGE_SPEC } from "@lyrashield/agent-registry"
+
+const cliLogin = `npx --yes ${CLI_PACKAGE_SPEC} login --oauth`
+const cliLoginWithoutNpx = `${CLI_PACKAGE_SPEC} login --oauth`
+const cliCheckDiff = `${CLI_PACKAGE_SPEC} check-diff`
 
 test("agent onboarding distinguishes local setup and scoped hosted writes", async ({ page }) => {
   await page.goto("/agents")
   await expect(page).toHaveTitle(/coding agents/i)
   // The commands render in both the setup <pre> block and the numbered-step
   // inline <code> elements — first() avoids the strict-mode multiple match.
-  await expect(page.getByText("npx --yes lyrashield@0.2.13 login --oauth").first()).toBeVisible()
+  await expect(page.getByText(cliLogin).first()).toBeVisible()
   await expect(page.locator("main")).not.toContainText("init --dry-run")
-  await expect(page.getByRole("heading", { name: "Configure published direct MCP" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Set up and authenticate" })).toBeVisible()
   await expect(
-    page.getByText(
-      /Manually merge the published @lyrashield\/mcp@0.2.11 server entry through the client guide/i
-    )
+    page.getByText(/Use the pinned CLI installer when a client guide provides one/i)
   ).toBeVisible()
   await expect(
     page.locator("#setup").getByText(/browser-confirmed grant and execution-time checks/i)
@@ -30,6 +33,16 @@ test("mobile navigation reaches agent onboarding", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: /Release assurance your coding agent can act on/i })
   ).toBeVisible()
+})
+
+test("local preview keeps both Lite Check entry points disabled", async ({ page }) => {
+  await page.goto("/")
+  await expect(page.locator("#home-scan-url")).toBeDisabled()
+  await expect(page.getByRole("button", { name: "Scanner unavailable" })).toBeDisabled()
+
+  await page.goto("/scan")
+  await expect(page.locator("#scan-url")).toBeDisabled()
+  await expect(page.getByRole("button", { name: "Scanner API not connected" })).toBeDisabled()
 })
 
 // /agents.md and /llms.txt handler coverage lives in src/tests/agent-onboarding.test.ts.
@@ -57,18 +70,16 @@ test("manual plugin guides keep install, discovery and authentication separate",
   await expect(page.locator("main")).toContainText("connect_required")
 })
 
-test("Claude and Pi guides use current MCP setup while package releases remain pending", async ({
-  page,
-}) => {
+test("Claude plugin listing stays pending while Pi uses native MCP", async ({ page }) => {
   await page.goto("/docs/integrations/claude-code")
   await expect(page.getByRole("heading", { name: "Current guided setup" })).toBeVisible()
   await expect(page.getByRole("heading", { name: "Agent Plugin release pending" })).toBeVisible()
   await expect(page.locator("main")).not.toContainText("claude plugin marketplace add")
-  await expect(page.locator("main")).toContainText("@lyrashield/mcp@0.2.11")
+  await expect(page.locator("main")).toContainText(MCP_PACKAGE_SPEC)
   await page.goto("/docs/integrations/pi")
-  await expect(page.locator("main")).toContainText("predates native MCP support")
+  await expect(page.locator("main")).toContainText("Pi includes built-in MCP support")
   await expect(page.locator("main")).toContainText("pi mcp login lyrashield")
-  await expect(page.locator("main")).toContainText("pending release")
+  await expect(page.locator("main")).not.toContainText("pending release")
 })
 
 test("Copilot and Codex guides keep pending plugins out of current setup and HowTo metadata", async ({
@@ -80,10 +91,10 @@ test("Copilot and Codex guides keep pending plugins out of current setup and How
     ["cursor", "~/.cursor/mcp.json"],
   ] as const) {
     await page.goto(`/docs/integrations/${slug}`)
-    await expect(page.getByRole("heading", { name: "Agent Plugin release pending" })).toBeVisible()
+    await expect(page.locator("main")).toContainText("pending review and public readback")
     await expect(page.locator("main")).toContainText(configPath)
-    await expect(page.locator("main")).toContainText("@lyrashield/mcp@0.2.11")
-    await expect(page.locator("main")).toContainText("lyrashield@0.2.13 login --oauth")
+    await expect(page.locator("main")).toContainText(MCP_PACKAGE_SPEC)
+    await expect(page.locator("main")).toContainText(cliLoginWithoutNpx)
     await expect(page.locator("main")).toContainText("lyrashield_list_workspaces")
     await expect(page.locator("main")).not.toContainText("plugin marketplace add")
     await expect(page.locator("main")).not.toContainText("lyrashield install")
@@ -93,8 +104,8 @@ test("Copilot and Codex guides keep pending plugins out of current setup and How
       .find((item) => item["@type"] === "HowTo")
     expect(howTo).toBeDefined()
     expect(howTo.step).toHaveLength(4)
-    expect(JSON.stringify(howTo)).toContain("@lyrashield/mcp@0.2.11")
-    expect(JSON.stringify(howTo)).toContain("lyrashield@0.2.13 login --oauth")
+    expect(JSON.stringify(howTo)).toContain(MCP_PACKAGE_SPEC)
+    expect(JSON.stringify(howTo)).toContain(cliLoginWithoutNpx)
     expect(JSON.stringify(howTo)).toContain("lyrashield_list_workspaces")
     expect(JSON.stringify(howTo)).not.toContain("marketplace")
   }
@@ -113,7 +124,7 @@ test("integration directory and public setup articles link to current pinned MCP
   await expect(page.getByRole("heading", { name: "Agent Plugin release pending" })).toBeVisible()
   for (const slug of ["claude-code", "openai-codex", "github-copilot", "cursor"]) {
     const card = page.locator(`.nav-card[href="/docs/integrations/${slug}"]`).first()
-    await expect(card).toContainText("Direct MCP setup")
+    await expect(card).toContainText("Direct MCP fallback")
     await expect(card).not.toContainText("Agent Plugin install")
   }
   const checkedGuides = new Set<string>()
@@ -161,8 +172,8 @@ test("integration directory and public setup articles link to current pinned MCP
   ] as const) {
     await page.goto(`/blog/${slug}`)
     const article = page.locator("article")
-    await expect(article).toContainText("lyrashield@0.2.13 login --oauth")
-    await expect(article).toContainText("@lyrashield/mcp@0.2.11")
+    await expect(article).toContainText(cliLoginWithoutNpx)
+    await expect(article).toContainText(MCP_PACKAGE_SPEC)
     await expect(article).not.toContainText("one step install")
     await expect(article).not.toContainText("one-step install")
     await expect(article).not.toContainText("npx lyrashield")
@@ -176,7 +187,7 @@ test("integration directory and public setup articles link to current pinned MCP
 
 test("Aider article keeps its repository check separate from native MCP", async ({ page }) => {
   await page.goto("/blog/aider-mcp-security-workflow")
-  await expect(page.locator("article")).toContainText("lyrashield@0.2.13 login --oauth")
+  await expect(page.locator("article")).toContainText(cliLoginWithoutNpx)
   await expect(page.locator("article")).not.toContainText("npx lyrashield")
   await expect(
     page.locator("article").locator('a[href="/docs/integrations/aider"]').first()
@@ -184,7 +195,7 @@ test("Aider article keeps its repository check separate from native MCP", async 
   await page.goto("/blog/aider-app-security-checklist")
   const article = page.locator("article")
   await expect(article).toContainText("does not document native MCP client support")
-  await expect(article).toContainText("lyrashield@0.2.13 check-diff")
+  await expect(article).toContainText(cliCheckDiff)
   await expect(article).not.toContainText("npx lyrashield")
   await expect(article.locator('a[href="/docs/integrations/aider"]').first()).toBeVisible()
 })
