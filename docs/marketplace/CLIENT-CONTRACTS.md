@@ -30,6 +30,12 @@ Public registry metadata reports these versions as `latest`; `next` also points 
 
 The published MCP package reports `mcpName: io.github.ecryptoguru/lyrashield-ai`. Vendored official-schema `--release-ready` validation and official `mcp-publisher validate` passed. No LyraShield entry has been published to the official Registry; authenticated publisher login and API readback remain pending.
 
+### Published CLI 0.2.14 source drift
+
+The published `lyrashield@0.2.14` tarball (SHA-256 `430a66a4a61302d1143b6857f729e52a2178ae459f0036fda8ea0dc865ece14f`) is the reviewed artifact from product source `f4765de6d3b55ca7db37cb1ba0e22ec0512c54da`. Product source `c83660d76273c8208e34c33524b5aa77667beb9e` has since updated only user-facing CLI and registry copy: the withheld Copilot Cloud Agent skill message now explains that its workflow bundle is not validated for that surface, and manual setup guidance reflects the published Agent Plugin package and current listing/runtime status for Copilot Cloud Agent, Claude Code, Cursor, VS Code, Codex, and Copilot. The CLI bundles `@lyrashield/agent-registry`, so these newer instructions are not present in the immutable `0.2.14` archive; its public tarball still contains the earlier withheld-skill message.
+
+This source drift does not change support tiers, transports, config paths, version constraints, installer routing, authentication, authorization, or filesystem effects. Skill installation for the withheld Copilot Cloud Agent surface still returns `FAILED` before touching project files; the focused source test verifies that no skill or ownership manifest is written. Existing `0.2.14` installs remain functional and fail closed, but their manual/withheld-install copy is stale. Do not republish or retag `0.2.14`. Track a new CLI patch release from the final merged product source as a remaining task for full CLI-guidance parity; until then, follow the current product integration docs and pinned direct-MCP fallback.
+
 ## Safe native CLI runtime smoke — 2026-10-02
 
 These checks used temporary user/config roots on macOS, the public MCP package `@lyrashield/mcp@0.2.12`, and no LyraShield account credentials. The sentinel credential was synthetic and the API URL pointed to loopback port 9. No LyraShield API request, tool call, scan, report, mutation, model session, or payment was made.

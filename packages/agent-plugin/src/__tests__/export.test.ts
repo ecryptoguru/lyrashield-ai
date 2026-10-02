@@ -5,7 +5,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { parse } from "yaml"
 import { createAllTools, McpServer } from "@lyrashield/mcp"
 import { buildPlugin } from "../build.js"
@@ -862,12 +862,37 @@ describe("exported validator", () => {
   it("produces identical clean exports from one source commit", async () => {
     const first = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     const second = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
-    outputs.push(first, second)
-    await exportMarketplace(first)
-    await exportMarketplace(second)
-    expect(await readFile(path.join(first, "manifest.json"), "utf8")).toBe(
-      await readFile(path.join(second, "manifest.json"), "utf8")
+    const provenance = await mkdtemp(path.join(tmpdir(), "lyrashield-export-provenance-"))
+    outputs.push(first, second, provenance)
+    await execFileAsync("git", ["init", provenance])
+    await execFileAsync(
+      "git",
+      [
+        "-c",
+        "user.name=Export Test",
+        "-c",
+        "user.email=export@example.invalid",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "fixture",
+        "--no-gpg-sign",
+      ],
+      { cwd: provenance }
     )
+    // Other suites write temporary files in the shared checkout. Keep Git
+    // provenance stable while still exercising the real exporter and Git calls.
+    vi.stubEnv("GIT_DIR", path.join(provenance, ".git"))
+    vi.stubEnv("GIT_WORK_TREE", provenance)
+    try {
+      await exportMarketplace(first)
+      await exportMarketplace(second)
+      const manifest = await readFile(path.join(first, "manifest.json"), "utf8")
+      expect(JSON.parse(manifest).publication.sourceClean).toBe(true)
+      expect(manifest).toBe(await readFile(path.join(second, "manifest.json"), "utf8"))
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 
