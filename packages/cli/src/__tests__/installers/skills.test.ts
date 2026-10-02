@@ -120,7 +120,9 @@ describe("agent skill installer", () => {
 
     const denied = await testInstall({ agent: withheldAgent, scope: "project", cwd: project })
     expect(denied.outcome).toBe("FAILED")
-    expect(denied.message).toContain("withheld for GitHub Copilot Cloud Agent until a reviewed")
+    expect(denied.message).toContain(
+      "withheld for GitHub Copilot Cloud Agent until a workflow bundle is validated"
+    )
     await expect(readFile(skillFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" })
     await expect(readdir(path.join(project, ".github"))).rejects.toMatchObject({ code: "ENOENT" })
     await expect(

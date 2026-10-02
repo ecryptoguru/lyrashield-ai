@@ -2,8 +2,8 @@
 
 **State: PREPARATION.** The case set and package metadata are drafted for Agent Plugin
 `0.1.31`. They have not been uploaded, run in a publisher portal, or accepted by a directory.
-The latest published `@lyrashield/agent-plugin` is `0.1.30`; the matching source, package
-and marketplace release remains a separate release decision.
+The published `@lyrashield/agent-plugin` is `0.1.31`; this reviewer pack and matching immutable
+marketplace release remain separate deliverables.
 
 ## OpenAI Codex and ChatGPT plugin directory
 
@@ -96,8 +96,9 @@ or receipt is claimed here.
 The prepared Kiro Power uses the Agent Plugins format. Its README contains current privacy and
 support links, and `plugin.json` includes the package identity, version, keywords and SPDX license.
 Kiro's publisher requirements additionally call for a complete, tested Power, a public GitHub
-repository, and acceptance of publisher terms. The current local candidate is unpublished; the
-private Power dashboard and any existing submission have not been checked. Current client
+repository, and acceptance of publisher terms. The matching immutable Kiro Power export is not yet
+published; the private Power dashboard and any existing submission have not been checked. Current
+client
 discovery and runtime acceptance also remain unverified.
 
 Use the public repository root containing `plugin.json` for a publisher submission after the

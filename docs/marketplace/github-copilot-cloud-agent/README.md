@@ -8,13 +8,13 @@ GitHub Copilot Cloud Agent and Copilot Code Review share repository-level MCP se
 currently does not support remote MCP OAuth for either surface. Use the read-only API-key/MCP
 configuration below independently of any plugin or skill package.
 
-## Workflow skills withheld pending immutable release
+## Workflow skills withheld for this surface
 
-Skill installation is withheld until a reviewed matching immutable release exists. Do not copy
-skill directories from the mutable marketplace preparation branch into `.github/skills/` and do
-not enable its full plugin in repository settings. No current skill-copy install recipe is
-provided by this guide. The portable plugin's hosted OAuth descriptor cannot authenticate Cloud
-Agent.
+Skill installation is withheld until a dedicated read-only workflow bundle passes tool-allowlist
+and client-runtime review. Package publication alone does not satisfy this check. Do not copy skill
+directories from the mutable marketplace preparation branch into `.github/skills/` and do not
+enable its full plugin in repository settings. No current skill-copy install recipe is provided by
+this guide. The portable plugin's hosted OAuth descriptor cannot authenticate Cloud Agent.
 
 The planned read-only set is `get-started`, `review-changes`, and `launch-readiness`. Recorded-scan,
 fix and retest workflows require an OAuth-capable client, so `scan-project`, `fix-and-retest` and

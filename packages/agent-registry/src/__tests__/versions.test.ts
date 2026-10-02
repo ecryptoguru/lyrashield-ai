@@ -41,13 +41,13 @@ describe("release package versions", () => {
   })
 
   it.each(["claude-code", "openai-codex", "github-copilot", "cursor"])(
-    "withholds %s plugin commands until a reviewed immutable release exists",
+    "keeps %s plugin activation guided until public listing and runtime checks pass",
     (id) => {
       const legacy = getAgent(id)
       if (legacy) expect(getPublishedCliInstallCommand(legacy)).toBeNull()
       const preferred = getPreferredAgent(id)!
       expect(getPublishedCliInstallCommand(preferred)).toBeNull()
-      expect(preferred.manualInstructions).toContain("reviewed matching immutable package release")
+      expect(preferred.manualInstructions).toContain("public listing")
       expect(preferred.manualInstructions).not.toContain("marketplace add")
       expect(preferred.gotchas.join(" ")).not.toContain("ecryptoguru/lyrashield-marketplace")
     }

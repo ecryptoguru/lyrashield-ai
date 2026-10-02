@@ -1,10 +1,11 @@
 # LyraShield AI Gemini CLI extension
 
-PREPARATION ONLY: this artifact targets unpublished MCP `0.2.12` and CLI `0.2.14` candidates.
-Do not submit or install it from a public listing until both package releases are published.
+PREPARATION ONLY: npm MCP `0.2.12` and CLI `0.2.14` are published, but this extension does not yet
+have a matching immutable marketplace release. Do not submit or install it from a public listing
+until the exact export is reviewed and released.
 
-After the coordinated release, this extension will use the published `@lyrashield/mcp` stdio
-package and the shared credential store. Add the `gemini-cli-extension` topic to the public
+The released extension uses the published `@lyrashield/mcp` stdio package and the shared credential
+store. Add the `gemini-cli-extension` topic to the public
 repository before publishing a release tag, as required by the Gemini CLI gallery.
 
 Use Node.js 24 and run `npx -y lyrashield@0.2.14 login --oauth` first. Leave the extension API-key setting empty to use

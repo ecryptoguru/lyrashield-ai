@@ -9,16 +9,16 @@ draft: false
 heroImage: agent-security-23
 faq:
   - q: How do I connect LyraShield to GitHub Copilot?
-    a: Follow the canonical Copilot guide with pinned MCP 0.2.12 and CLI OAuth 0.2.14. Plugin installation remains pending a reviewed immutable release.
+    a: Follow the canonical Copilot guide with pinned MCP 0.2.12 and CLI OAuth 0.2.14. The Agent Plugin package 0.1.31 is published; its public listing and authenticated Copilot CLI runtime acceptance remain pending.
   - q: Where does Copilot CLI read MCP configuration?
     a: Use mcpServers in ~/.copilot/mcp-config.json or a trusted project .mcp.json, with type local for stdio. Preserve existing entries and keep credentials out of shared files.
   - q: What does the CLI doctor command verify?
     a: Doctor checks local setup. Confirm client discovery and then an authenticated read-only workspace call separately; doctor does not establish client acceptance.
   - q: Does this setup apply to Copilot Cloud Agent?
-    a: No. Cloud Agent uses a separate read-only API-key MCP configuration in repository settings and private Agents secrets. Skill-copy steps remain withheld pending an immutable release.
+    a: No. Cloud Agent uses a separate read-only API-key MCP configuration in repository settings and private Agents secrets. Cloud Agent skill-copy remains withheld until a dedicated read-only bundle passes tool-allowlist and client-runtime review; this gate is separate from npm publication.
 ---
 
-This workflow connects GitHub Copilot CLI to LyraShield through the pinned MCP adapter. Authenticate separately with CLI OAuth, merge the client configuration, confirm discovery and make a read-only workspace call before using the tools. Plugin installation remains gated on a reviewed matching immutable Agent Plugin release. Copilot CLI has no documented LyraShield skills installation path, so use its supported direct-MCP setup. The [Copilot integration guide](/docs/integrations/github-copilot) owns current setup; the [vibe coding security guide](/blog/vibe-coding-security-guide) provides broader review context.
+This workflow connects GitHub Copilot CLI to LyraShield through the pinned MCP adapter. Authenticate separately with CLI OAuth, merge the client configuration, confirm discovery and make a read-only workspace call before using the tools. The Agent Plugin package 0.1.31 is published, while its public listing and authenticated Copilot CLI runtime acceptance remain pending. Copilot CLI has no documented LyraShield skills installation path, so use its supported direct-MCP setup. The [Copilot integration guide](/docs/integrations/github-copilot) owns current setup; the [vibe coding security guide](/blog/vibe-coding-security-guide) provides broader review context.
 
 ## 1. Authenticate local stdio
 
@@ -28,9 +28,9 @@ The [Node.js downloads page](https://nodejs.org/en/download) describes the runti
 
 ## 2. Plugin release boundary
 
-The marketplace default branch contains preparation artifacts. Do not register that branch or enable its plugin in shared repository settings. Plugin installation needs a reviewed matching immutable package release. The earlier CLI 0.2.13 release printed obsolete marketplace instructions; do not infer a supported plugin route from that older output. The pinned CLI provides a safe config writer for the Copilot CLI contract; preview it with `npx -y lyrashield@0.2.14 install copilot-cli --dry-run` before applying. Do not copy candidate plugin files from the preparation repository; plugin installation remains gated on a reviewed matching release.
+The marketplace default branch contains preparation artifacts. Do not register that branch or enable its plugin in shared repository settings. The Agent Plugin package 0.1.31 is published, but public listing and authenticated client runtime acceptance remain separate gates. The earlier CLI 0.2.13 release printed obsolete marketplace instructions; do not infer a supported plugin route from that older output. The pinned CLI provides a safe config writer for the Copilot CLI contract; preview it with `npx -y lyrashield@0.2.14 install copilot-cli --dry-run` before applying. Do not copy candidate plugin files from the preparation repository; plugin listing and authenticated runtime acceptance remain pending.
 
-Copilot CLI, Copilot in VS Code and Copilot Cloud Agent are distinct surfaces. For VS Code, follow the [VS Code MCP guide](/docs/integrations/vscode), which uses `servers` and a per-entry stdio type. The [Copilot Cloud Agent guide](/docs/integrations/github-copilot-cloud-agent) uses a private read-only Agents secret and a narrow tool allowlist; it cannot authenticate through the portable plugin's OAuth descriptor. Do not share a local credential store with that cloud environment or substitute an Actions secret for an Agents secret. A client capability listed in documentation does not mean an unpublished LyraShield bundle is available.
+Copilot CLI, Copilot in VS Code and Copilot Cloud Agent are distinct surfaces. For VS Code, follow the [VS Code MCP guide](/docs/integrations/vscode), which uses `servers` and a per-entry stdio type. The [Copilot Cloud Agent guide](/docs/integrations/github-copilot-cloud-agent) uses a private read-only Agents secret and a narrow tool allowlist; it cannot authenticate through the portable plugin's OAuth descriptor. Do not share a local credential store with that cloud environment or substitute an Actions secret for an Agents secret. Cloud Agent skills remain withheld until a dedicated read-only bundle passes tool-allowlist and runtime review.
 
 ## 3. Merge the pinned direct MCP configuration
 

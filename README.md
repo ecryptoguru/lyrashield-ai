@@ -38,8 +38,8 @@ npx -y lyrashield@0.2.14 skills install pi --project # install LyraShield workfl
 
 The coordinated CLI release adds the safe atomic config writer and shared skills installer. Config-file commands remain limited to clients whose install contract matches the verified CLI release; the CLI preserves unrelated settings and customized skills.
 
-- **Agent Plugin** — for supported plugin-capable clients, `npx lyrashield init` and `npx lyrashield install <agent>` prefer a portable plugin install from `@lyrashield/agent-plugin`. Plugin files land in the client-specific plugin directory and never inline a raw API key.
-- **Config-file** — the candidate CLI merges entries while preserving unrelated settings, refuses symlinked destinations and malformed roots, and preserves existing file permissions. It refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
+- **Agent Plugin** — the published `@lyrashield/agent-plugin` package provides portable artifacts for supported clients. The CLI gives client-specific setup guidance where a writable local plugin path is not verified; public marketplace listing and authenticated client acceptance are tracked separately. Plugin files never inline a raw API key.
+- **Config-file** — the published CLI merges entries while preserving unrelated settings, refuses symlinked destinations and malformed roots, and preserves existing file permissions. It refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Guided manual** — for clients whose tooling has no writable config file, the CLI prints exact copy-paste command/argument/env values.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
 

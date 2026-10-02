@@ -952,12 +952,12 @@ const githubCopilotCloudAgent: AgentEntry = {
   skillLocations: [{ scope: "project", path: ".github/skills", sharedByConvention: true }],
   skillInstallState: "withheld",
   distribution: {
-    channel: "GitHub Copilot read-only MCP; workflow skills pending release",
+    channel: "GitHub Copilot read-only MCP; surface-safe workflow skills pending validation",
     url: "https://docs.github.com/en/copilot/concepts/agents/cloud-agent/mcp-and-cloud-agent",
     state: "PREPARATION",
   },
   manualInstructions:
-    'Skill installation is withheld until a reviewed matching immutable release exists. Do not copy skills from the mutable preparation branch into `.github/skills/`. The planned read-only set is `get-started`, `review-changes`, and `launch-readiness`; use direct MCP tools meanwhile. Do not enable the full marketplace plugin: it includes workflows and an OAuth MCP descriptor that this surface cannot use. Skill discovery is separate from MCP authentication. Allow only their read-only tools: `lyrashield_check_diff`, `lyrashield_get_launch_readiness`, `lyrashield_list_targets`, and `lyrashield_list_workspaces`. Configure the remote server separately in GitHub repository Settings → Code, planning, and automation → Copilot → MCP servers with `type: "http"`, `url: "https://app.lyrashieldai.com/api/mcp"`, and `headers.Authorization: "Bearer $COPILOT_MCP_LYRASHIELD_API_KEY"`. Create a read-only LyraShield workspace API key and save it as an Agents secret named `COPILOT_MCP_LYRASHIELD_API_KEY` under Settings → Security → Secrets and variables → Agents. Omit `*` because GitHub lets Cloud Agent use configured tools autonomously. Do not install `scan-project`, `fix-and-retest`, or the backward-compatible `lyrashield` skill on this read-only surface; requested recorded scans, fixes, and retests require an OAuth-capable client. The optional recorded scan action in `review-changes` is not allowlisted. Copilot Cloud Agent does not support remote OAuth, and hosted mutations still return `connect_required`. This documentation-only entry has no authenticated Cloud Agent runtime receipt.',
+    'Skill installation is withheld because the published workflow set has not yet been reduced and validated for this read-only surface. Do not copy skills from the mutable preparation branch into `.github/skills/`. The intended read-only set is `get-started`, `review-changes`, and `launch-readiness`; use direct MCP tools meanwhile. Do not enable the full marketplace plugin: it includes workflows and an OAuth MCP descriptor that this surface cannot use. Skill discovery is separate from MCP authentication. Allow only the read-only tools `lyrashield_check_diff`, `lyrashield_get_launch_readiness`, `lyrashield_list_targets`, and `lyrashield_list_workspaces`. Configure the remote server separately in GitHub repository Settings → Code, planning, and automation → Copilot → MCP servers with `type: "http"`, `url: "https://app.lyrashieldai.com/api/mcp", and `headers.Authorization: "Bearer $COPILOT_MCP_LYRASHIELD_API_KEY"`. Create a read-only LyraShield workspace API key and save it as an Agents secret named `COPILOT_MCP_LYRASHIELD_API_KEY` under Settings → Security → Secrets and variables → Agents. Omit `*` because GitHub lets Cloud Agent use configured tools autonomously. Do not install `scan-project`, `fix-and-retest`, or the backward-compatible `lyrashield` skill on this read-only surface; requested recorded scans, fixes, and retests require an OAuth-capable client. The optional recorded scan action in `review-changes` is not allowlisted. Copilot Cloud Agent does not support remote OAuth, and hosted mutations still return `connect_required`. This documentation-only entry has no authenticated Cloud Agent runtime receipt.',
   rulesFiles: [".github/copilot-instructions.md"],
   source: {
     checkedOn: "2026-10-01",
@@ -974,7 +974,7 @@ const githubCopilotCloudAgent: AgentEntry = {
   },
   gotchas: [
     "Cloud Agent and Copilot code review share repository MCP settings; configured MCP tools are used autonomously, so allowlist read-only tools and review the target repository before enabling them.",
-    "The planned read-only skill set, withheld until a reviewed immutable release, is `get-started`, `review-changes`, and `launch-readiness`; the allowlist includes only their read-only calls. Recorded scans, fixes and retests require an OAuth-capable client.",
+    "The planned read-only skill set, withheld until a surface-safe bundle is validated, is `get-started`, `review-changes`, and `launch-readiness`; the tool allowlist includes only read-only calls. Recorded scans, fixes and retests require an OAuth-capable client.",
     "GitHub documents `$COPILOT_MCP_...` substitutions for remote headers and requires those values to come from Agents secrets or variables. The key authenticates read-only calls; it cannot grant hosted mutations, which return `connect_required` without a connected OAuth delegation.",
     "Remote MCP OAuth is not supported by Copilot Cloud Agent. Portable plugin and skills discovery is separate from service authentication; a plugin install or skill discovery is not evidence that the LyraShield MCP server connected.",
   ],
@@ -1841,7 +1841,7 @@ const claudeCodePlugin: AgentEntry = {
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
   manualInstructions:
-    "Claude Code Agent Plugin setup is pending a reviewed matching immutable package release. Do not install from the mutable marketplace preparation branch or substitute an older release without portable-schema validation. Use the current guided direct-MCP fallback in `.mcp.json` at /docs/integrations/claude-code; complete local CLI OAuth separately for stdio, then confirm client discovery and an authenticated read-only call. Published CLI config writes remain withheld.",
+    "The Agent Plugin package is published, but the Claude Code public listing and authenticated runtime acceptance remain pending. Do not install from the mutable marketplace preparation branch. Use the current guided direct-MCP fallback in `.mcp.json` at /docs/integrations/claude-code; complete local CLI OAuth separately for stdio, then confirm client discovery and an authenticated read-only call.",
   rulesFiles: ["CLAUDE.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -1870,7 +1870,7 @@ const cursorPlugin: AgentEntry = {
   ],
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
-  manualInstructions: `Cursor Agent Plugin setup is pending a reviewed matching immutable package release. Published plugin 0.1.30 fails the official portable MCP schema because its transport is http rather than streamable-http. Do not use the published CLI plugin copy as a validated install path. Use the current direct-MCP fallback: merge mcpServers.lyrashield into ~/.cursor/mcp.json or project .cursor/mcp.json with command npx and args ["-y", "${MCP_PACKAGE_SPEC}"], preserving existing entries. Authenticate separately with npx -y ${CLI_PACKAGE_SPEC} login --oauth in the same OS account, reload Cursor, confirm server/tool discovery, then call lyrashield_list_workspaces. See /docs/integrations/cursor. Published CLI config writes remain withheld.`,
+  manualInstructions: `The Agent Plugin package 0.1.31 is published and passes the portable MCP schema. Cursor's public listing and authenticated runtime acceptance remain pending; do not install from the mutable marketplace preparation branch. Use the current direct-MCP fallback: merge mcpServers.lyrashield into ~/.cursor/mcp.json or project .cursor/mcp.json with command npx and args ["-y", "${MCP_PACKAGE_SPEC}"], preserving existing entries. Authenticate separately with npx -y ${CLI_PACKAGE_SPEC} login --oauth in the same OS account, reload Cursor, confirm server/tool discovery, then call lyrashield_list_workspaces. See /docs/integrations/cursor.`,
   rulesFiles: [".cursor/rules/lyrashield.mdc"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -1903,7 +1903,7 @@ const vscodePlugin: AgentEntry = {
   credential: { kind: "ui-fields" },
   nativeCapabilities: ["plugin", "skills", "commands", "rules", "hooks"],
   manualInstructions:
-    "VS Code Agent Plugin setup is manual: the LyraShield CLI returns MANUAL_REQUIRED and does not install or register this plugin. Use Customize, Install from Source or an approved team marketplace only with a reviewed matching immutable package release. Until then, manually merge the VS Code MCP fallback into `.vscode/mcp.json`, preserving existing servers and settings. Published CLI config writes remain withheld. Plugin installation, client discovery, OAuth authentication and a read-only call are separate checks.",
+    "VS Code Agent Plugin setup is manual: the LyraShield CLI returns MANUAL_REQUIRED and does not install or register this plugin. The package is published, but a public listing and authenticated client runtime acceptance remain pending. Do not use the mutable marketplace preparation branch. Until those checks pass, manually merge the VS Code MCP fallback into `.vscode/mcp.json`, preserving existing servers and settings. Plugin installation, client discovery, OAuth authentication and a read-only call are separate checks.",
   rulesFiles: [".github/copilot-instructions.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -1934,7 +1934,7 @@ const openaiCodexPlugin: AgentEntry = {
   ],
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
-  manualInstructions: `OpenAI Codex Agent Plugin setup is pending a reviewed matching immutable package release. Do not install from the mutable marketplace preparation branch or substitute an older release without portable-schema validation. Use the current direct-MCP fallback: merge the [mcp_servers.lyrashield] stdio table into ~/.codex/config.toml with command npx and args ["-y", "${MCP_PACKAGE_SPEC}"], preserving existing entries. Authenticate separately with npx -y ${CLI_PACKAGE_SPEC} login --oauth in the same OS account, restart Codex, confirm server/tool discovery, then call lyrashield_list_workspaces. See /docs/integrations/openai-codex. Published CLI config writes remain withheld.`,
+  manualInstructions: `The Agent Plugin package is published, but the OpenAI Codex public listing and authenticated runtime acceptance remain pending. Do not install from the mutable marketplace preparation branch. Use the current direct-MCP fallback: merge the [mcp_servers.lyrashield] stdio table into ~/.codex/config.toml with command npx and args ["-y", "${MCP_PACKAGE_SPEC}"], preserving existing entries. Authenticate separately with npx -y ${CLI_PACKAGE_SPEC} login --oauth in the same OS account, restart Codex, confirm server/tool discovery, then call lyrashield_list_workspaces. See /docs/integrations/openai-codex.`,
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -1964,7 +1964,7 @@ const githubCopilotPlugin: AgentEntry = {
   ],
   transports: ["remote-http"],
   credential: { kind: "ui-fields" },
-  manualInstructions: `GitHub Copilot Agent Plugin setup is pending a reviewed matching immutable package release. Do not install from the mutable marketplace preparation branch. Use the current direct-MCP fallback: merge mcpServers.lyrashield into ~/.copilot/mcp-config.json with type "local", command npx and args ["-y", "${MCP_PACKAGE_SPEC}"], preserving other servers. Authenticate separately with npx -y ${CLI_PACKAGE_SPEC} login --oauth in the same OS account, restart Copilot CLI, use /mcp show lyrashield to confirm discovery, then call lyrashield_list_workspaces. See /docs/integrations/github-copilot. Published CLI config writes remain withheld.`,
+  manualInstructions: `The Agent Plugin package is published, but the GitHub Copilot public listing and authenticated runtime acceptance remain pending. Do not install from the mutable marketplace preparation branch. Use the current direct-MCP fallback: merge mcpServers.lyrashield into ~/.copilot/mcp-config.json with type "local", command npx and args ["-y", "${MCP_PACKAGE_SPEC}"], preserving other servers. Authenticate separately with npx -y ${CLI_PACKAGE_SPEC} login --oauth in the same OS account, restart Copilot CLI, use /mcp show lyrashield to confirm discovery, then call lyrashield_list_workspaces. See /docs/integrations/github-copilot.`,
   rulesFiles: [".github/copilot-instructions.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,

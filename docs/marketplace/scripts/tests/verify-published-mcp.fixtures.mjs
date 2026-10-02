@@ -559,7 +559,12 @@ async function acquisitionFixture({
     root,
     npmCommand,
     fetchImpl,
-    limits: { ...LIMITS, processMs: 1000, handshakeMs: 1500, terminateMs: 50 },
+    limits: {
+      ...LIMITS,
+      processMs: mode === "pack-hang" || mode === "install-hang" ? 1000 : 5000,
+      handshakeMs: 1500,
+      terminateMs: 50,
+    },
   }
 }
 

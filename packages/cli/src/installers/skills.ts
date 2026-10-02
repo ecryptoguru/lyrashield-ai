@@ -341,7 +341,7 @@ export async function installAgentSkills(
       displayName: agent.displayName,
       outcome: "FAILED",
       actions,
-      message: `Skill installation is withheld for ${agent.displayName} until a reviewed matching immutable release is available.`,
+      message: `Skill installation is withheld for ${agent.displayName} until a workflow bundle is validated for this client surface.`,
     }
   }
   try {

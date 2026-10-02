@@ -63,6 +63,13 @@ test("manual plugin guides keep install, discovery and authentication separate",
   )
   await page.goto("/docs/integrations/github-copilot-cloud-agent")
   await expect(page.locator("main")).toContainText("Skill installation is withheld")
+  await expect(page.locator("main")).toContainText("workflow bundle is validated")
+  await expect(page.getByRole("heading", { name: "Install shared LyraShield skills" })).toHaveCount(
+    0
+  )
+  await expect(page.locator("main")).not.toContainText(
+    `npx -y ${CLI_PACKAGE_SPEC} skills install github-copilot-cloud-agent`
+  )
   await expect(page.locator("main")).not.toContainText("copy only")
   await expect(page.locator("main")).toContainText(".github/skills/")
   await expect(page.locator("main")).not.toContainText("enabledPlugins")
@@ -73,7 +80,9 @@ test("manual plugin guides keep install, discovery and authentication separate",
 test("Claude plugin listing stays pending while Pi uses native MCP", async ({ page }) => {
   await page.goto("/docs/integrations/claude-code")
   await expect(page.getByRole("heading", { name: "Current guided setup" })).toBeVisible()
-  await expect(page.getByRole("heading", { name: "Agent Plugin release pending" })).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Public Agent Plugin listing pending" })
+  ).toBeVisible()
   await expect(page.locator("main")).not.toContainText("claude plugin marketplace add")
   await expect(page.locator("main")).toContainText(MCP_PACKAGE_SPEC)
   await page.goto("/docs/integrations/pi")
@@ -91,7 +100,8 @@ test("Copilot and Codex guides keep pending plugins out of current setup and How
     ["cursor", "~/.cursor/mcp.json"],
   ] as const) {
     await page.goto(`/docs/integrations/${slug}`)
-    await expect(page.locator("main")).toContainText("pending review and public readback")
+    await expect(page.locator("main")).toContainText(/listing.*pending/i)
+    await expect(page.locator("main")).toContainText("authenticated runtime acceptance")
     await expect(page.locator("main")).toContainText(configPath)
     await expect(page.locator("main")).toContainText(MCP_PACKAGE_SPEC)
     await expect(page.locator("main")).toContainText(cliLoginWithoutNpx)
@@ -110,7 +120,7 @@ test("Copilot and Codex guides keep pending plugins out of current setup and How
     expect(JSON.stringify(howTo)).not.toContain("marketplace")
   }
   await page.goto("/docs/integrations/agent-plugins")
-  await expect(page.locator("main")).toContainText("Agent Plugin release pending")
+  await expect(page.locator("main")).toContainText("Public Agent Plugin listings pending")
   await expect(page.locator("main")).not.toContainText("install openai-codex")
   await expect(page.locator("main")).not.toContainText("install github-copilot")
   await expect(page.locator("main")).not.toContainText("install claude-code")
@@ -121,7 +131,9 @@ test("integration directory and public setup articles link to current pinned MCP
 }) => {
   await page.goto("/docs/integrations")
   await expect(page.locator("main")).not.toContainText("init --dry-run")
-  await expect(page.getByRole("heading", { name: "Agent Plugin release pending" })).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Public Agent Plugin listings pending" })
+  ).toBeVisible()
   for (const slug of ["claude-code", "openai-codex", "github-copilot", "cursor"]) {
     const card = page.locator(`.nav-card[href="/docs/integrations/${slug}"]`).first()
     await expect(card).toContainText("Direct MCP fallback")

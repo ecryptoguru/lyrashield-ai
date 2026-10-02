@@ -18,7 +18,7 @@ faq:
     a: Cursor reads MCP servers from .cursor/mcp.json at the project root. The top level key is mcpServers. Use the project file for the LyraShield entry so the team shares one server definition and keep real keys in environment variables referenced by the env block.
 ---
 
-Current setup: follow the [Cursor integration guide](/docs/integrations/cursor) with pinned `@lyrashield/mcp@0.2.12` and authenticate local stdio separately using `npx -y lyrashield@0.2.14 login --oauth`. Plugin installation awaits a reviewed matching immutable release. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Confirm client discovery, then make an authenticated read-only workspace call.
+Current setup: follow the [Cursor integration guide](/docs/integrations/cursor) with pinned `@lyrashield/mcp@0.2.12` and authenticate local stdio separately using `npx -y lyrashield@0.2.14 login --oauth`. The Agent Plugin package 0.1.31 is published; its public listing and authenticated client runtime acceptance remain pending. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Confirm client discovery, then make an authenticated read-only workspace call.
 
 To secure Cursor built apps with LyraShield, add the LyraShield MCP server via stdio using npx -y @lyrashield/mcp@0.2.12 with the local CLI credential store and optionally remote endpoint with Bearer lsk\_ key, verify the connection in Cursor Settings, then run targeted scans for injection, auth flaws, secrets and supply chain issues inline while coding.
 

@@ -49,7 +49,10 @@ const skillInstallScope =
       ? "global"
       : null
 const skillInstallCommand =
-  CLI_SKILLS_AVAILABLE && capabilities.includes("skills") && skillInstallScope
+  agent.skillInstallState !== "withheld" &&
+  CLI_SKILLS_AVAILABLE &&
+  capabilities.includes("skills") &&
+  skillInstallScope
     ? `npx -y ${CLI_PACKAGE_SPEC} skills install ${agent.id} --${skillInstallScope}`
     : null
 ---
@@ -141,12 +144,19 @@ const skillInstallCommand =
     <p>
       The published CLI package ({CLI_PACKAGE_SPEC}) does not include a LyraShield <code>skills</code>
       installer yet. {agent.distribution?.state === "PREPARATION" ? (
-        <>Skill installation is withheld until a reviewed matching immutable release exists. Do not
-        copy skills from a mutable preparation branch. Use the direct MCP setup on this page.</>
+        <>Skill installation is withheld until a workflow bundle is validated for this client
+        surface. Do not copy skills from a mutable preparation branch. Use the direct MCP setup on
+        this page.</>
       ) : (
         <>Follow the current client guide for native skill or plugin setup; manual MCP setup remains
         available while CLI installer support is pending.</>
       )}
+    </p>
+  )}
+  {agent.skillInstallState === "withheld" && capabilities.includes("skills") && (
+    <p>
+      Skill installation is withheld for this client surface while its workflow bundle is validated.
+      Use the documented MCP setup above; do not copy skills from a preparation branch.
     </p>
   )}
   {skillInstallCommand && (

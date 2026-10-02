@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 24
       - run: node --test scripts/tests/verify-published-mcp.fixtures.mjs
-      - run: node scripts/validate.mjs
+      - run: node scripts/validate.mjs --release-ready
       - run: cargo fmt --check
         working-directory: zed-extension
       - run: cargo build --locked --release --target wasm32-wasip2

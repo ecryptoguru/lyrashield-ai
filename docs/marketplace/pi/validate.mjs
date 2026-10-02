@@ -33,7 +33,7 @@ async function main() {
     "pi install git:github.com/ecryptoguru/lyrashield-marketplace@<released-tag>",
     "project trust is granted",
     "does not create or publish a new npm package",
-    "unpublished",
+    "published cli `0.2.14` and mcp `0.2.12`",
     "lyrashield@0.2.14",
     "@lyrashield/mcp@0.2.12",
     "do not pair the new workflow skills with the older published mcp `0.2.11`",

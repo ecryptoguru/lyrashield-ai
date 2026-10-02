@@ -187,7 +187,9 @@ describe("agent registry", () => {
     expect(copilotCloud.manualInstructions).not.toContain("lyrashield@lyrashield-ai")
     expect(copilotCloud.manualInstructions).toContain(".github/skills/")
     expect(copilotCloud.manualInstructions).toContain("Skill installation is withheld")
-    expect(copilotCloud.manualInstructions).toContain("matching immutable release")
+    expect(copilotCloud.manualInstructions).toContain(
+      "reduced and validated for this read-only surface"
+    )
     expect(copilotCloud.manualInstructions).not.toContain("copy only")
     expect(copilotCloud.manualInstructions).toContain("lyrashield_check_diff")
     expect(copilotCloud.manualInstructions).toContain(

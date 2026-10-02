@@ -3,7 +3,7 @@
   "candidate": {
     "package": "@lyrashield/agent-plugin",
     "version": "0.1.31",
-    "publishedPackageVersion": "0.1.30",
+    "publishedPackageVersion": "0.1.31",
     "portableSchema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
     "mcpSchema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
     "mcpServer": "lyrashield",

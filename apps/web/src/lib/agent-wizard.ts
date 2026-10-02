@@ -201,7 +201,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
             ? "Use Augment's MCP settings to add the pinned local stdio server for direct tool access. Its native marketplace plugin remains under preparation."
             : !cliInstallCommand
               ? agent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE
-                ? "Automatic config writes are withheld until the preservation fixes ship in the next CLI release. Merge the connection values below into your existing client config."
+                ? "Automatic config writes are unavailable for this client in the selected CLI package. Merge the connection values below into your existing client config."
                 : "No matching pinned CLI installer is available for this client yet. Use the manual connection steps below."
               : agent.manualInstructions
                 ? `Follow the documented activation steps for ${agent.displayName}.`
@@ -385,7 +385,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       summary: skillInstallerAvailable
         ? "Install the focused LyraShield workflows in this client's documented skill directory. Existing customized skills are preserved."
         : skillsWithheld
-          ? "Skill installation is withheld until a reviewed matching immutable release is available. Use the connected MCP tools directly meanwhile."
+          ? "Skill installation is withheld until a workflow bundle is validated for this client surface. Use the connected MCP tools directly meanwhile."
           : !localSetup
             ? "Add skills through this hosted client's documented workspace import path; do not run the local CLI installer here."
             : "This pinned CLI version does not include the skill installer for this workflow. Use the connected MCP tools directly until a compatible package is available.",

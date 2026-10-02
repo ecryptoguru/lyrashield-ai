@@ -45,7 +45,9 @@ test("agent cards group client surfaces and update setup material with selection
   await expect(claude).toContainText("Manual Agent Plugin setup")
   await expect(claude.getByLabel("Published install command")).toHaveCount(0)
   await claude.getByText("Manual setup notes", { exact: true }).click()
-  await expect(claude).toContainText("reviewed matching immutable package release")
+  await expect(claude).toContainText(
+    "public listing and authenticated runtime acceptance remain pending"
+  )
   await expect(claude.getByRole("link", { name: "Set up" })).toHaveAttribute(
     "href",
     "/dashboard/agents/claude-code-agent-plugin"

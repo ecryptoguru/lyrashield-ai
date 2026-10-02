@@ -105,7 +105,7 @@ describe("installAgentPlugin", () => {
       for (const dryRun of [false, true]) {
         const result = await installAgentPlugin({ agent, dryRun, yes: true })
         expect(result.outcome).toBe("MANUAL_REQUIRED")
-        expect(result.message).toContain("reviewed matching immutable package release")
+        expect(result.message).toContain("public listing")
         expect(result.message).not.toContain("marketplace add")
       }
       expect(execFileMock).not.toHaveBeenCalled()
