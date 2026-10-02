@@ -9,16 +9,16 @@ draft: false
 heroImage: agent-security-29
 faq:
   - q: How do I add the LyraShield MCP server to Goose
-    a: Follow /docs/integrations/goose for manual setup. Published config writes and candidate skill installation remain withheld. Use CLI 0.2.13 and MCP 0.2.11 for local stdio, then verify discovery and a read-only client call.
+    a: Follow /docs/integrations/goose for manual setup. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Use CLI 0.2.14 and MCP 0.2.12 for local stdio, then verify discovery and a read-only client call.
   - q: Does Goose support remote MCP servers
     a: Yes. A remote extension uses type streamable_http with a uri and headers field. A local extension uses type stdio with cmd and args.
   - q: How do I verify the LyraShield connection works
-    a: Confirm server and tool discovery inside the client, then call lyrashield_list_workspaces. CLI 0.2.13 doctor checks a separate local surface; it is not client authentication or scan evidence.
+    a: Confirm server and tool discovery inside the client, then call lyrashield_list_workspaces. CLI 0.2.14 doctor checks a separate local surface; it is not client authentication or scan evidence.
   - q: Can I gate pull requests with LyraShield in CI
     a: Yes. Add the LyraShield GitHub Action to your workflow with the diff aware gate so only changed code is scanned on each pull request. Output is SARIF, which GitHub renders in the security tab.
 ---
 
-Follow the current [goose integration guide](/docs/integrations/goose) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
+Follow the current [goose integration guide](/docs/integrations/goose) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.14 login --oauth` and use `@lyrashield/mcp@0.2.12`. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) separates generated code from the controls that enforce what it may do. Wiring LyraShield into Goose puts release assurance inside the agent session, so a scan runs before a change reaches a pull request rather than only after. The steps below assume you have Node installed and an active LyraShield account.
 
@@ -27,19 +27,19 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates gen
 | Prerequisites | Node 24 plus, git, LyraShield account | Prepare the environment                    |
 | Configure     | Current client guide                  | Manually merge the documented server entry |
 | Manual path   | ~/.config/goose/config.yaml           | Fallback if CLI is unavailable             |
-| Verify        | npx -y lyrashield@0.2.13 doctor       | Check config and credentials               |
-| Inline check  | npx -y lyrashield@0.2.13 scan         | Run a scan from the session                |
+| Verify        | npx -y lyrashield@0.2.14 doctor       | Check config and credentials               |
+| Inline check  | npx -y lyrashield@0.2.14 scan         | Run a scan from the session                |
 | CI gate       | .github/workflows/lyrashield.yml      | Diff aware gate on pull requests           |
 
 ## 1. Meet the prerequisites
 
-Install Node 24 or later, which the [Node.js release guide](https://nodejs.org/en/docs/) covers. Confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) if you do not have one, because the MCP server needs credentials to authenticate. Run npx -y lyrashield@0.2.13 login to store your credentials in ~/.lyrashield/credentials.json, which is not committed to version control.
+Install Node 24 or later, which the [Node.js release guide](https://nodejs.org/en/docs/) covers. Confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) if you do not have one, because the MCP server needs credentials to authenticate. Run npx -y lyrashield@0.2.14 login to store your credentials in ~/.lyrashield/credentials.json, which is not committed to version control.
 
 Goose does not use a rules file. Project specific instructions live in a .goosehints file in the project root, which is the main project level instruction source. Keep your credentials file outside the working tree and never paste a token directly into a config file the agent can read.
 
 ## 2. Add the LyraShield extension
 
-Follow the current [goose integration guide](/docs/integrations/goose) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion. Manually merge the YAML extension in ~/.config/goose/config.yaml, preserving existing extensions. The extensions map is a nested YAML structure, not a mcpServers key. A local extension uses type stdio with cmd and args. A remote extension uses type streamable_http with uri and headers. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines the transport and tool exposure contract.
+Follow the current [goose integration guide](/docs/integrations/goose) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.14 login --oauth` and use `@lyrashield/mcp@0.2.12`. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion. Manually merge the YAML extension in ~/.config/goose/config.yaml, preserving existing extensions. The extensions map is a nested YAML structure, not a mcpServers key. A local extension uses type stdio with cmd and args. A remote extension uses type streamable_http with uri and headers. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines the transport and tool exposure contract.
 
 If the CLI is unavailable, add the entry manually. This is the manual path and it is exactly what the CLI prints. For a remote extension:
 
@@ -59,20 +59,20 @@ extensions:
   lyrashield:
     type: stdio
     cmd: npx
-    args: -y @lyrashield/mcp@0.2.11
+    args: -y @lyrashield/mcp@0.2.12
 ```
 
 Keep any headers or credentials in environment variables referenced by the config, never as literal strings in the YAML.
 
 ## 3. Verify the connection
 
-Restart the client and inspect the server and tools in its own MCP settings. Call `lyrashield_list_workspaces` and retain the authenticated read-only result. CLI `npx -y lyrashield@0.2.13 doctor` can inspect local credentials and setup, but does not prove that this client discovered tools or completed authentication. If discovery fails, check the client-specific path, root key, transport and selected workspace before requesting any recorded assessment. A configuration entry is not a scan receipt, and a successful read call is not evidence that the target application has been tested.
+Restart the client and inspect the server and tools in its own MCP settings. Call `lyrashield_list_workspaces` and retain the authenticated read-only result. CLI `npx -y lyrashield@0.2.14 doctor` can inspect local credentials and setup, but does not prove that this client discovered tools or completed authentication. If discovery fails, check the client-specific path, root key, transport and selected workspace before requesting any recorded assessment. A configuration entry is not a scan receipt, and a successful read call is not evidence that the target application has been tested.
 
 Restart your Goose session after editing the config file so the agent loads the new extension. Confirm the LyraShield tools appear in the session. If the tools are missing, check the type and uri spelling, the token and whether the extension is enabled. Discovery, authentication and assessment are separate checks. Reopen the client settings after changes, repeat a read-only call and preserve unresolved failures. Do not request a paid scan merely to troubleshoot configuration.
 
 ## 4. Run an inline security check
 
-With the connection verified, run npx -y lyrashield@0.2.13 scan from your project root. The scan targets the repository, reviews the code for candidate issues and records evidence in an immutable assurance record. Detected issues stay in a detected state until independent verification confirms the behavior, so a finding is a prompt to investigate, not a verdict. Read each finding in the session, note the file and line and decide whether the candidate reflects a real weakness or a false positive that deserves a recorded dismissal. The assurance record holds both the confirmed issues and the dismissed ones, so a reviewer can see the full set of decisions, not just the open items.
+With the connection verified, run npx -y lyrashield@0.2.14 scan from your project root. The scan targets the repository, reviews the code for candidate issues and records evidence in an immutable assurance record. Detected issues stay in a detected state until independent verification confirms the behavior, so a finding is a prompt to investigate, not a verdict. Read each finding in the session, note the file and line and decide whether the candidate reflects a real weakness or a false positive that deserves a recorded dismissal. The assurance record holds both the confirmed issues and the dismissed ones, so a reviewer can see the full set of decisions, not just the open items.
 
 Review the scan output in the session. If a candidate issue is real, a fix proposal is generated for review. Approval gated fix proposals require a human review before a patch reaches a pull request, so a fix is never automatic. As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action and SARIF output. Run the [free AI app security checklist](/tools/ai-app-security-checklist) to see the full release review.
 

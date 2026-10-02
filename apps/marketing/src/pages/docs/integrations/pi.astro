@@ -24,11 +24,6 @@ const jsonLd = [techArticle, breadcrumbList]
     Agent Skills. This guide uses the hosted OAuth endpoint. It documents setup, not a recorded
     LyraShield-authenticated Pi runtime acceptance.
   </p>
-  <div class="callout">
-    <strong>Published CLI preview is older:</strong> the <code>lyrashield@0.2.13</code> Pi preview
-    predates native MCP support. Use this guide's native Pi commands. Updated source-owned CLI
-    recipes and the skills installer remain pending release; no new published behavior is claimed.
-  </div>
   <h2>Connect Pi to hosted MCP</h2>
   <p>
     Add the personal connection at user scope, then sign in. Pi stores OAuth credentials in its own
@@ -54,13 +49,20 @@ pi mcp login lyrashield</code></pre>
   <p>
     Pi discovers Agent Skills from <code>~/.agents/skills/</code> and
     <code>.agents/skills/</code>. Use reviewed, versioned skill directories and inspect their
-    instructions and scripts before granting project trust. LyraShield's Pi package/catalog route
-    remains in preparation; this guide does not imply a public Pi listing.
+    instructions and scripts before granting project trust. Install LyraShield's shared skills
+    into Pi's native paths with the pinned CLI:
+  </p>
+  <pre><code>npx -y lyrashield@0.2.14 skills install pi --dry-run
+npx -y lyrashield@0.2.14 skills install pi</code></pre>
+  <p>
+    The CLI records files it owns and preserves unowned or customized files. Reload Pi and confirm
+    the skills appear. LyraShield's Pi package/catalog route remains in preparation; this guide
+    does not imply a public Pi listing or authenticated Pi runtime acceptance.
   </p>
   <h2>Use local CLI and CI when preferred</h2>
-  <pre><code>npx -y lyrashield@0.2.13 login --oauth
-npx -y lyrashield@0.2.13 check-diff
-npx -y lyrashield@0.2.13 gate --verdict --commit "$(git rev-parse HEAD)"</code></pre>
+  <pre><code>npx -y lyrashield@0.2.14 login --oauth
+npx -y lyrashield@0.2.14 check-diff
+npx -y lyrashield@0.2.14 gate --verdict --commit "$(git rev-parse HEAD)"</code></pre>
   <p>
     This standalone path remains available whether or not Pi MCP is configured. Oh My Pi is a
     separate client with its own configuration paths; do not reuse Pi paths for it.

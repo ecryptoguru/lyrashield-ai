@@ -5,19 +5,18 @@ import { agentOnboarding, renderAgentOnboardingMarkdown } from "../lib/agent-onb
 
 describe("agent onboarding contract", () => {
   it("labels supported workflows and delegated authorization accurately", () => {
-    expect(agentOnboarding.commands).toEqual(["npx --yes lyrashield@0.2.13 login --oauth"])
-    expect(agentOnboarding.setupHeading).toBe("Configure published direct MCP")
-    expect(agentOnboarding.setupDescription).toContain(
-      "Manually merge the published @lyrashield/mcp@0.2.11 server entry through the client guide."
-    )
+    expect(agentOnboarding.commands).toEqual(["npx --yes lyrashield@0.2.14 login --oauth"])
+    expect(agentOnboarding.setupHeading).toBe("Set up and authenticate")
+    expect(agentOnboarding.setupDescription).toContain("Use the pinned CLI installer")
     expect(agentOnboarding.safety.join(" ")).toContain("Read-only")
     expect(agentOnboarding.safety.join(" ")).toContain("browser-confirmed connection grant")
     expect(agentOnboarding.safety.join(" ")).toContain(
-      "config-file clients while the safe-writer fix is pending"
+      "exact client contracts recorded by the installer"
     )
     expect(
-      agentOnboarding.clients.find((client) => client.strategy === "config-file")?.strategyLabel
-    ).toBe("Manual config merge")
+      agentOnboarding.clients.find((client) => client.href === "/docs/integrations/vscode")
+        ?.strategyLabel
+    ).toBe("CLI config installer")
     expect(agentOnboarding.clients).toHaveLength(listPreferredAgents().length)
     expect(agentOnboarding.clients.map((client) => client.href)).toContain(
       "/docs/integrations/claude-web"
@@ -42,14 +41,14 @@ describe("agent onboarding contract", () => {
     )
   })
 
-  it("publishes manual VS Code plugin setup and flags the stale published Pi preview", () => {
+  it("publishes the manual VS Code plugin fallback and current Pi native setup", () => {
     const client = agentOnboarding.clients.find(
       (entry) => entry.href === "/docs/integrations/vscode-agent-plugin"
     )
     expect(client?.strategyLabel).toBe("Manual Agent Plugin setup")
     const body = renderAgentOnboardingMarkdown("https://lyrashieldai.com")
     expect(body).toContain("Manual Agent Plugin setup")
-    expect(body).toContain("published CLI 0.2.13 preview predates Pi's native MCP")
+    expect(body).toContain("Pi has built-in MCP and OAuth support")
     expect(body).toContain("/docs/integrations/pi")
   })
 
@@ -59,7 +58,7 @@ describe("agent onboarding contract", () => {
 
     expect(agentPage).toContain("agentOnboarding")
     expect(agentPage).toContain('data-cta-id="agents-start-setup"')
-    expect(agentPage).toContain("pending the safe-writer fix")
+    expect(agentPage).toContain("Use the pinned CLI installer")
     expect(agentPage).not.toContain("init --dry-run")
     expect(agentPage).not.toContain("npx lyrashield init")
     expect(markdownRoute).toContain('"Content-Type": "text/markdown; charset=utf-8"')
@@ -81,11 +80,9 @@ describe("agent onboarding contract", () => {
     expect(body).toContain("# Release assurance for coding agents")
     expect(body).toContain("https://lyrashieldai.com/docs/integrations/agent-plugins")
     expect(body).not.toContain("init --dry-run")
-    expect(body).toContain("## Configure published direct MCP")
-    expect(body).toContain(
-      "Manually merge the published @lyrashield/mcp@0.2.11 server entry through the client guide."
-    )
-    expect(body).toContain("config-file clients while the safe-writer fix is pending")
+    expect(body).toContain("## Set up and authenticate")
+    expect(body).toContain("Use the pinned CLI installer")
+    expect(body).toContain("exact client contracts recorded by the installer")
     expect(body).not.toContain("${origin}")
   })
 

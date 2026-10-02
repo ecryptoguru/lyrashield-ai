@@ -22,14 +22,14 @@ This workflow sets up the LyraShield MCP security workflow for GitHub Copilot CL
 
 ## 1. Install prerequisites and authenticate
 
-Install Node so the `npx` commands resolve, then run `npx -y lyrashield@0.2.13 login --oauth` to store your credentials in a local file under your home directory. Nothing is committed to the repository, because credentials live in a per user file and the CLI never writes them into source. This matters for shared repos where a committed token would leak to every collaborator and to the git history. Confirm with `npx -y lyrashield@0.2.13 doctor` that the server is reachable and the credentials resolve before you configure Copilot CLI, because a failed login surfaces here instead of mid install. The [Node.js downloads page](https://nodejs.org/en/download) is the canonical source for the runtime. Run login and doctor from the project root so any project scoped config is detected correctly and re-run doctor whenever you suspect the connection has drifted. If you share a machine with teammates, note that the credentials file is per user, so each person runs login once rather than sharing a single credential file.
+Install Node so the `npx` commands resolve, then run `npx -y lyrashield@0.2.14 login --oauth` to store your credentials in a local file under your home directory. Nothing is committed to the repository, because credentials live in a per user file and the CLI never writes them into source. This matters for shared repos where a committed token would leak to every collaborator and to the git history. Confirm with `npx -y lyrashield@0.2.14 doctor` that the server is reachable and the credentials resolve before you configure Copilot CLI, because a failed login surfaces here instead of mid install. The [Node.js downloads page](https://nodejs.org/en/download) is the canonical source for the runtime. Run login and doctor from the project root so any project scoped config is detected correctly and re-run doctor whenever you suspect the connection has drifted. If you share a machine with teammates, note that the credentials file is per user, so each person runs login once rather than sharing a single credential file.
 
 ## 2. Register the MCP server with Copilot CLI
 
 Use Copilot CLI's documented separator form for local stdio:
 
 ```bash
-copilot mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.11
+copilot mcp add lyrashield -- npx -y @lyrashield/mcp@0.2.12
 ```
 
 For remote HTTP, options precede the server name and URL:
@@ -40,9 +40,9 @@ copilot mcp add --transport http --header "Authorization: Bearer YOUR-TOKEN" lyr
 
 The user file is `~/.copilot/mcp-config.json`; project files are `.mcp.json` or `.github/mcp.json`. Never put a raw header in a committed project file. See the [official Copilot CLI MCP guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers) and [LyraShield guide](/docs/integrations/copilot-cli).
 
-## 3. Set the tools allowlist and the manual path
+## 3. Set the tools allowlist and install the supported configuration
 
-For each server entry set a tools allowlist so the agent can only invoke the tools you explicitly permit, rather than every tool the server exposes. Published CLI 0.2.13 config writes are withheld pending a safe writer release. Use the [current Copilot CLI guide](/docs/integrations/copilot-cli) to merge the pinned `@lyrashield/mcp@0.2.11` entry manually, preserving existing settings. Authenticate local stdio separately with CLI OAuth; plugin installation and workflow skills remain pending a reviewed immutable release. The optional remote connection uses separate private credentials; CLI OAuth authenticates only local stdio. Never commit a remote header and keep any global config that holds a token out of version control entirely, because a committed token leaks to every collaborator. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how servers expose tools and why allowlists matter. Recheck the allowlist after any server update, because a new server version can expose new tools you did not permit and tighten the list whenever a tool is no longer needed.
+For each server entry set a tools allowlist so the agent can only invoke the tools you explicitly permit, rather than every tool the server exposes. The pinned CLI `0.2.14` can install supported MCP configurations while preserving existing settings; use the [current Copilot CLI guide](/docs/integrations/copilot-cli) for the `@lyrashield/mcp@0.2.12` setup. Install workflow skills only from the matching reviewed immutable Agent Plugin release `0.1.31`. Authenticate local stdio separately with CLI OAuth; hosted remote access uses its own authorization flow. Never commit a remote header or token-bearing global config. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how servers expose tools and why allowlists matter. Recheck the allowlist after any server update, because a new server version can expose tools you did not permit, and tighten it whenever a tool is no longer needed.
 
 ## 4. Verify the connection and run an inline check
 
@@ -79,7 +79,7 @@ Before finishing a feature, run a LyraShield security check and attach the findi
 
 | Workflow step   | Command or action                      | Purpose                   |
 | --------------- | -------------------------------------- | ------------------------- |
-| Authenticate    | npx -y lyrashield@0.2.13 login --oauth | Store credentials locally |
+| Authenticate    | npx -y lyrashield@0.2.14 login --oauth | Store credentials locally |
 | Register server | copilot mcp add                        | Add server consistently   |
 | Restrict tools  | tools allowlist field                  | Permit only needed tools  |
 | CI gate         | GitHub Action on diff                  | Block on new findings     |

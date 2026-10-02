@@ -33,7 +33,7 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates gen
 
 ## 1. Meet the prerequisites
 
-Install Node 24 or later for local stdio and confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) if you do not have one. A remote OAuth connection authenticates in Devin's browser flow and needs no local LyraShield CLI credential. For stdio, follow the current [Devin CLI guide](/docs/integrations/devin-cli) and run `npx -y lyrashield@0.2.13 login --oauth` to store local credentials outside the repository.
+Install Node 24 or later for local stdio and confirm git is configured for your repository. Create a LyraShield account at [lyrashieldai.com](https://app.lyrashieldai.com/sign-up) if you do not have one. A remote OAuth connection authenticates in Devin's browser flow and needs no local LyraShield CLI credential. For stdio, follow the current [Devin CLI guide](/docs/integrations/devin-cli) and run `npx -y lyrashield@0.2.14 login --oauth` to store local credentials outside the repository.
 
 Devin CLI manages MCP servers with the devin mcp commands: add to register a server, login to authenticate, enable to turn a server on and disable to turn it off. Connected tools are namespaced as mcp\_\_name, so you can see which server a tool call came from. Keep your credentials file outside the working tree and never paste a token directly into a config file the agent can read.
 
@@ -41,14 +41,14 @@ Devin CLI manages MCP servers with the devin mcp commands: add to register a ser
 
 On Devin CLI v3000.3 or newer, use `.devin/mcp_config.local.json` for a personal entry or `.devin/mcp_config.json` for a shared entry without secrets. The [official Devin CLI MCP documentation](https://docs.devin.ai/cli/extensibility/mcp/configuration) also documents the user scope, remote HTTP, OAuth and automatic migration of older `mcpServers` entries from main config files. Check the version and existing entries before installing to avoid duplicate servers. The [Devin CLI integration guide](/docs/integrations/devin-cli) has the current LyraShield setup.
 
-For the currently published local stdio package, a personal entry can look like this:
+For the coordinated local stdio pin, a personal entry can look like this:
 
 ```
 {
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.11"],
+      "args": ["-y", "@lyrashield/mcp@0.2.12"],
       "env": {}
     }
   }
@@ -59,7 +59,7 @@ For remote OAuth, add `{"url":"https://app.lyrashieldai.com/api/mcp","transport"
 
 ## 3. Verify the connection
 
-Run `devin mcp list`, restart Devin CLI and ask Devin to call `lyrashield_list_targets`. Confirm a response from the intended workspace. `npx -y lyrashield@0.2.13 doctor` can check local LyraShield setup, but it does not prove Devin discovered the server or authenticated through its own OAuth session.
+Run `devin mcp list`, restart Devin CLI and ask Devin to call `lyrashield_list_targets`. Confirm a response from the intended workspace. `npx -y lyrashield@0.2.14 doctor` can check local LyraShield setup, but it does not prove Devin discovered the server or authenticated through its own OAuth session.
 
 Confirm the LyraShield tools appear under the `mcp__lyrashield` namespace. If tools are missing, check the active scope and whether the server is enabled. For remote OAuth, run `devin mcp login lyrashield` if authentication is required; for stdio, check the local credential source and the pinned package. Do not treat a tool list alone as proof of a successful read call.
 
@@ -67,7 +67,7 @@ Record the Devin CLI version, operating system, active configuration scope, tran
 
 ## 4. Run an inline security check
 
-With the client read call verified, ask Devin to use `lyrashield_list_targets`, choose an authorized target and call `lyrashield_scan_target`. Keep the returned scan ID, poll `lyrashield_get_scan_status` to a terminal state and page through `lyrashield_get_findings`. A detected issue is not independently verified without a separate receipt. A runner-local `npx -y lyrashield@0.2.13 scan` is a different workflow and does not prove inline Devin MCP behavior.
+With the client read call verified, ask Devin to use `lyrashield_list_targets`, choose an authorized target and call `lyrashield_scan_target`. Keep the returned scan ID, poll `lyrashield_get_scan_status` to a terminal state and page through `lyrashield_get_findings`. A detected issue is not independently verified without a separate receipt. A runner-local `npx -y lyrashield@0.2.14 scan` is a different workflow and does not prove inline Devin MCP behavior.
 
 Review the scan output in the session. If a candidate issue is real, a fix proposal is generated for review. Approval gated fix proposals require a human review before a patch reaches a pull request, so a fix is never automatic. As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action and SARIF output. Run the [free AI app security checklist](/tools/ai-app-security-checklist) to see the full release review.
 

@@ -175,7 +175,7 @@ if (safeAgent.installStrategy === "config-file") {
 {note && (
   <p class="callout">
     {notePrefix === "config" && (
-      <>Add the following to <code>{notePath}</code>.{" "}</>
+      <>Manual fallback: merge the following into <code>{notePath}</code>.{" "}</>
     )}
     {notePrefix === "remote" && <>Remote Streamable-HTTP setup.{" "}</>}
     {notePrefix === "manual" && (
@@ -189,7 +189,7 @@ if (safeAgent.installStrategy === "config-file") {
 
 {!secondary && publishedCliInstallCommand && (
   <div class="callout">
-    <strong>Published CLI setup:</strong> Run this pinned command for the setup path supported by the published CLI.
+    <strong>CLI installer for this client:</strong> Run this pinned command to add LyraShield's entry. The client-specific writer preserves unrelated configuration where supported.
     <pre><code>{publishedCliInstallCommand}</code></pre>
   </div>
 )}
@@ -198,15 +198,15 @@ if (safeAgent.installStrategy === "config-file") {
   <div class="callout callout--warn">
     {safeAgent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE ? (
       <>
-        <strong>Manual setup for now:</strong> published CLI config writes are withheld while the safe
-        writer fix is pending release. Merge the configuration above using the client's documented
-        settings workflow; CLI write support will return after a fixed version is published.
+        <strong>Manual setup:</strong> no matching CLI installer is recorded for this client's
+        configuration contract. Merge the configuration above using the client's documented
+        settings workflow; preserve unrelated entries and verify the client loads it.
       </>
     ) : (
       <>
-        <strong>Manual setup for now:</strong> the published CLI package ({CLI_PACKAGE_SPEC}) predates
-        this integration's current setup contract. Use the configuration or client instructions
-        above; installer support will be documented when a compatible version is published.
+        <strong>Manual setup:</strong> the pinned CLI package ({CLI_PACKAGE_SPEC}) has no matching
+        installer contract for this integration. Use the configuration or client instructions
+        above and verify the client loads it.
       </>
     )}
   </div>

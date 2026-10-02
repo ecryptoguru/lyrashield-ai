@@ -34,7 +34,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 2,
         name: "Add the lyrashield server entry",
-        text: 'Add the mcpServers key with command "npx" and args ["-y","@lyrashield/mcp@0.2.11"] without inline credentials. Run npx -y lyrashield@0.2.13 login --oauth in the same OS account first.',
+        text: 'Add the mcpServers key with command "npx" and args ["-y","@lyrashield/mcp@0.2.12"] without inline credentials. Run npx -y lyrashield@0.2.14 login --oauth in the same OS account first.',
       },
       {
         "@type": "HowToStep",
@@ -68,18 +68,17 @@ const jsonLd: unknown[] = [
     user-level global setup, place the file at <code>~/.cursor/mcp.json</code>.
   </p>
 
-  <h2>Agent Plugin release pending</h2>
+  <h2>Native plugin listing pending</h2>
   <p>
-    Published Agent Plugin 0.1.30 does not pass the official portable MCP schema. The published
-    CLI 0.2.13 copies that package into Cursor's local plugin directory; a copied directory cannot
-    establish a valid install. Wait for a reviewed matching immutable package release and use
-    the currently published direct MCP fallback below. Config writes and skill installation
-    remain withheld pending release.
+    The Cursor Agent Plugin listing is still pending review and public readback. Use the direct MCP
+    setup below until a matching immutable package is listed. The CLI installer does not provide
+    a direct-MCP writer for this plugin route, so merge the entry manually. This guide does not
+    claim plugin listing or authenticated Cursor runtime acceptance.
   </p>
 
   <h2>Authenticate local stdio</h2>
   <p>
-    With Node.js 24 or newer, run <code>npx -y lyrashield@0.2.13 login --oauth</code> in the same OS
+    With Node.js 24 or newer, run <code>npx -y lyrashield@0.2.14 login --oauth</code> in the same OS
     account that runs Cursor. Select the intended workspace. The local MCP server reads the CLI
     credential store; no key belongs in the project config.
   </p>
@@ -93,7 +92,7 @@ const jsonLd: unknown[] = [
 
   <div class="callout">
     <strong>Project vs. global:</strong> Place <code>.cursor/mcp.json</code> inside your project
-    root to share config with the team (each developer runs <code>npx -y lyrashield@0.2.13 login --oauth</code>
+    root to share config with the team (each developer runs <code>npx -y lyrashield@0.2.14 login --oauth</code>
     {" "}locally). Place it at <code>~/.cursor/mcp.json</code> for
     a personal global setup.
   </div>
@@ -118,6 +117,6 @@ const jsonLd: unknown[] = [
   <div class="callout callout--warn">
     <strong>Requirements:</strong> Node.js 24+ and a LyraShield workspace OAuth login. The{" "}
     <code>@lyrashield/mcp</code> package is published on npm, so{" "}
-    <code>npx -y @lyrashield/mcp@0.2.11</code> resolves directly.
+    <code>npx -y @lyrashield/mcp@0.2.12</code> resolves directly.
   </div>
 </DocsLayout>

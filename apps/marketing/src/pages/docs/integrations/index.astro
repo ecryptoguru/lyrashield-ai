@@ -7,7 +7,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations", origin).toString()
 const title = "Connect LyraShield to AI Coding Tools"
 const description =
-  "Connect LyraShield AI to Claude Code, Cursor, VS Code, GitHub Actions and more. Step-by-step MCP setup, REST API keys and agent rules for every AI coding tool."
+  "Connect LyraShield AI to Claude Code, Cursor, VS Code, GitHub Actions and more. Step-by-step MCP setup, CLI installers, shared skills, REST API keys and agent rules for AI coding tools."
 
 const updatedDate = "2026-10-02"
 
@@ -33,7 +33,7 @@ const faqItems = [
   },
   {
     q: "Do I need an API key to use the MCP server?",
-    a: "Local stdio uses npx -y lyrashield@0.2.13 login --oauth in the same OS account; the server reads the selected workspace credential store. Hosted OAuth-capable clients authenticate inside the client. Copilot Cloud Agent uses a private read-only Agents secret. Never commit credentials.",
+    a: "Local stdio uses npx -y lyrashield@0.2.14 login --oauth in the same OS account; the server reads the selected workspace credential store. Hosted OAuth-capable clients authenticate inside the client. Copilot Cloud Agent uses a private read-only Agents secret. Never commit credentials.",
   },
   {
     q: "Which editors use the remote MCP endpoint instead of the local stdio server?",
@@ -41,7 +41,7 @@ const faqItems = [
   },
   {
     q: "Is the @lyrashield/mcp package available on npm now?",
-    a: "Yes — @lyrashield/mcp is published on npm. Run npx -y @lyrashield/mcp@0.2.11 (Node.js 24+) with your LYRASHIELD_API_KEY set or add it to your editor's MCP config as shown in each guide.",
+    a: "Yes — @lyrashield/mcp is published on npm. Run npx -y @lyrashield/mcp@0.2.12 (Node.js 24+) with your LYRASHIELD_API_KEY set or add it to your editor's MCP config as shown in each guide.",
   },
   {
     q: "Can I use LyraShield in a CI pipeline without an AI editor?",
@@ -49,15 +49,15 @@ const faqItems = [
   },
   {
     q: "How does CLI login work without pasting a secret?",
-    a: "Run npx --yes lyrashield@0.2.13 login --oauth. The CLI opens hosted OAuth consent with PKCE, lets you choose one workspace and stores the short-lived bearer locally. API-key login remains available for CI and non-interactive environments.",
+    a: "Run npx --yes lyrashield@0.2.14 login --oauth. The CLI opens hosted OAuth consent with PKCE, lets you choose one workspace and stores the short-lived bearer locally. API-key login remains available for CI and non-interactive environments.",
   },
   {
     q: "Is there a CLI or do I have to hand-edit config files?",
-    a: "Follow each current client guide and manually merge the published MCP 0.2.11 server entry. Published config writes remain withheld and older CLI previews can print obsolete plugin guidance. Authenticate local stdio with CLI 0.2.13 OAuth, confirm client discovery, then verify a read-only call.",
+    a: "CLI 0.2.14 includes config writers for exact client contracts recorded by the installer and shared-skill installation for documented client skill paths. Each guide shows a preview and install command where supported; otherwise it provides a manual setup. Authenticate local stdio with CLI OAuth, confirm client discovery, then verify a read-only call.",
   },
   {
     q: "What is the Agent Plugin?",
-    a: "The source candidate bundles an MCP descriptor and security guidance. Claude Code, Codex and Copilot plugin installs await a reviewed matching immutable release. Use pinned direct MCP in their current guides while CLI config writes and skill installation remain withheld. Cursor also uses the pinned direct MCP fallback. See /docs/integrations/agent-plugins.",
+    a: "The portable package bundles an MCP descriptor and security guidance. Client marketplace listings are still awaiting review and readback, so follow each client guide for its direct MCP fallback. CLI config installation and shared skills are separate features available only where an exact client contract or skill path is recorded. See /docs/integrations/agent-plugins.",
   },
 ]
 
@@ -114,17 +114,20 @@ const jsonLd: unknown[] = [
     Choose the setup that matches your editor or workflow.
   </p>
 
-  <h2>Configure published direct MCP</h2>
+  <h2>Choose your client setup</h2>
   <p>
-    Follow the client-specific guide below and manually merge the LyraShield server entry with
-    <code>command: "npx"</code> and <code>args: ["-y", "@lyrashield/mcp@0.2.11"]</code> for local stdio.
-    Preserve existing settings and symlinks. Authenticate in the same OS account, restart the client,
-    confirm tool discovery and make a read-only authenticated call. Hosted OAuth uses the client’s own sign-in flow.
+    Follow the client-specific guide. Where CLI 0.2.14 provides a matching installer, preview the
+    planned changes and run its pinned command; otherwise merge the LyraShield entry manually using
+    <code>command: "npx"</code> and <code>args: ["-y", "@lyrashield/mcp@0.2.12"]</code> for local
+    stdio. Preserve existing settings and symlinks. Authenticate in the same OS account, restart the
+    client, confirm tool discovery and make a read-only authenticated call. Hosted OAuth uses the
+    client’s own sign-in flow.
   </p>
-  <pre><code>npx -y lyrashield@0.2.13 login --oauth</code></pre>
+  <pre><code>npx -y lyrashield@0.2.14 login --oauth</code></pre>
   <p>
-    Published config writes and candidate skill installation remain withheld. Older CLI previews
-    can print obsolete plugin guidance; use the current guide for your client’s configuration shape.
+    The CLI also installs shared skills where a client has one documented LyraShield skill path.
+    Each client guide shows whether that command is available. A completed install does not prove
+    client discovery, authentication, marketplace listing or runtime acceptance.
   </p>
 
   <div class="callout">
@@ -137,19 +140,20 @@ const jsonLd: unknown[] = [
   <p>
     Claude Code, Cursor, OpenAI Codex and GitHub Copilot plugin installation awaits a reviewed matching
     immutable package release. The marketplace default branch contains preparation artifacts.
-    Use their current direct MCP guides with <code>@lyrashield/mcp@0.2.11</code>, authenticate
-    local stdio separately with <code>npx -y lyrashield@0.2.13 login --oauth</code>, then confirm
+    Use their current direct MCP guides with <code>@lyrashield/mcp@0.2.12</code>, authenticate
+    local stdio separately with <code>npx -y lyrashield@0.2.14 login --oauth</code>, then confirm
     client discovery and an authenticated read-only workspace call.
   </p>
   <p>
-    Published CLI 0.2.13 previews can still print obsolete plugin instructions. Follow the current
-    guides instead of installing the mutable preparation branch. Cursor also uses the pinned direct MCP fallback; Kiro's Power remains in preparation with a direct MCP fallback.
-    The <a href="/docs/integrations/agent-plugins">Agent Plugins guide</a> describes these release
-    boundaries. CLI config writes and workflow skill installation remain withheld pending release.
+    Do not install from the mutable preparation branch. Cursor also uses the pinned direct MCP
+    fallback; Kiro's Power remains in preparation with a direct MCP fallback. The
+    <a href="/docs/integrations/agent-plugins">Agent Plugins guide</a> describes these distribution
+    boundaries. CLI config writing and shared-skill installation remain separately available where
+    their exact client contracts and skill paths are recorded.
   </p>
   <div class="callout">
     <strong>No credential in committed files:</strong> For local stdio, after{" "}
-    <code>npx --yes lyrashield@0.2.13 login --oauth</code>,
+    <code>npx --yes lyrashield@0.2.14 login --oauth</code>,
     the MCP server reads the selected workspace credential from{" "}
     <code>~/.lyrashield/credentials.json</code>. Hosted OAuth does not need that local file. API keys remain a CI and non-OAuth-client fallback;
     do not commit either credential.
@@ -157,11 +161,11 @@ const jsonLd: unknown[] = [
   <div class="nav-cards">
     <a href="/docs/integrations/claude-code" class="nav-card">
       <span class="nav-card__label">Claude Code</span>
-      <span class="nav-card__sub">Direct MCP setup · plugin release pending</span>
+      <span class="nav-card__sub">Direct MCP fallback · plugin listing pending</span>
     </a>
     <a href="/docs/integrations/cursor" class="nav-card">
       <span class="nav-card__label">Cursor</span>
-      <span class="nav-card__sub">Direct MCP setup · plugin release pending</span>
+      <span class="nav-card__sub">Direct MCP fallback · plugin listing pending</span>
     </a>
     <a href="/docs/integrations/vscode" class="nav-card">
       <span class="nav-card__label">VS Code</span>
@@ -173,11 +177,11 @@ const jsonLd: unknown[] = [
     </a>
     <a href="/docs/integrations/openai-codex" class="nav-card">
       <span class="nav-card__label">OpenAI Codex</span>
-      <span class="nav-card__sub">Direct MCP setup · plugin release pending</span>
+      <span class="nav-card__sub">Direct MCP fallback · plugin listing pending</span>
     </a>
     <a href="/docs/integrations/github-copilot" class="nav-card">
       <span class="nav-card__label">GitHub Copilot</span>
-      <span class="nav-card__sub">Direct MCP setup · plugin release pending</span>
+      <span class="nav-card__sub">Direct MCP fallback · plugin listing pending</span>
     </a>
     <a href="/docs/integrations/kiro" class="nav-card">
       <span class="nav-card__label">Kiro</span>
@@ -188,7 +192,7 @@ const jsonLd: unknown[] = [
   <h2>Local MCP server (stdio)</h2>
   <p>
     For editors that can run local processes, install the LyraShield MCP server via <code
-      >npx -y @lyrashield/mcp@0.2.11</code
+      >npx -y @lyrashield/mcp@0.2.12</code
     >. The server uses stdio transport and exposes LyraShield tools directly inside your AI
     assistant.
   </p>

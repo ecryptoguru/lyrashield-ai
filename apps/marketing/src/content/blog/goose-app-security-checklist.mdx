@@ -15,7 +15,7 @@ faq:
   - q: Where do Goose project hints live
     a: Goose uses a .goosehints file for project specific instructions. It does not use a rules file like some other agents, so hints are the main project level instruction source.
   - q: How do I install the LyraShield MCP server for Goose
-    a: Follow /docs/integrations/goose for manual setup. Published config writes and candidate skill installation remain withheld. Use CLI 0.2.13 and MCP 0.2.11 for local stdio, then verify discovery and a read-only client call.
+    a: Follow /docs/integrations/goose for manual setup. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Use CLI 0.2.14 and MCP 0.2.12 for local stdio, then verify discovery and a read-only client call.
 ---
 
 Before launching a Goose built app, review what data entered the Block agent, protect its extensions config and .goosehints file, verify dependencies the agent added, scan for committed secrets and collect independent launch evidence. Goose is the open source agent from Block and uses a YAML extensions map rather than a mcpServers key. It accelerates implementation but does not verify the runtime security of what it helped create.
@@ -67,6 +67,6 @@ Goose accelerates implementation as the open source agent from Block. LyraShield
 
 LyraShield AI is in open beta with open registration. Its runner-local GitHub Action provides an advisory diff gate and SARIF output; it does not create hosted scan or retest evidence. A recorded scan keeps detected findings separate from independently verified results. Approval-gated fix proposals still require review and missing verification must remain visible in the release decision.
 
-Use the [Goose integration guide](/docs/integrations/goose): authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and manually merge the pinned `@lyrashield/mcp@0.2.11` extension while published config writes remain withheld, then read the [Goose MCP workflow](/blog/goose-mcp-security-workflow). Keep configuration instructions in that maintained guide rather than copying credentials between articles. Record the client version, enabled tools, selected workspace and observed connection result. A successful tool listing demonstrates connectivity, not permission to scan every target or execute every write.
+Use the [Goose integration guide](/docs/integrations/goose): authenticate local stdio separately with `npx -y lyrashield@0.2.14 login --oauth` and manually merge the pinned `@lyrashield/mcp@0.2.12` extension into Goose’s native YAML settings, preserving existing extensions, then read the [Goose MCP workflow](/blog/goose-mcp-security-workflow). Keep configuration instructions in that maintained guide rather than copying credentials between articles. Record the client version, enabled tools, selected workspace and observed connection result. A successful tool listing demonstrates connectivity, not permission to scan every target or execute every write.
 
 [Create an account](https://app.lyrashieldai.com/sign-up) to start a release review or use the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Claude Code security workflow](/blog/claude-code-security-workflow) covers a related terminal agent if your team uses multiple clients.

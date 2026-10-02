@@ -42,7 +42,7 @@ Add a final rule: any change that touches auth, payments or file upload must add
 
 Cursor loads MCP servers from .cursor/mcp.json using a mcpServers object. This file is where credential leakage often happens.
 
-Current setup: follow the [Cursor integration guide](/docs/integrations/cursor) with published `@lyrashield/mcp@0.2.11` and authenticate local stdio separately using `npx -y lyrashield@0.2.13 login --oauth`. Plugin installation awaits a reviewed matching immutable release. Published CLI config writes and skill installation remain withheld; merge the documented client config manually, preserving existing settings. Confirm client discovery, then make an authenticated read-only workspace call.
+Current setup: follow the [Cursor integration guide](/docs/integrations/cursor) with pinned `@lyrashield/mcp@0.2.12` and authenticate local stdio separately using `npx -y lyrashield@0.2.14 login --oauth`. Plugin installation awaits a reviewed matching immutable release. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Confirm client discovery, then make an authenticated read-only workspace call.
 
 Secure pattern:
 
@@ -51,7 +51,7 @@ Secure pattern:
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.11"],
+      "args": ["-y", "@lyrashield/mcp@0.2.12"],
       "env": {
         "LYRASHIELD_API_KEY": "${env:LYRASHIELD_API_KEY}"
       }
@@ -127,7 +127,7 @@ Capture screenshots or logs for manual checks that cannot be automated. A simple
 
 LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.com. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP integration fits Cursor. Local stdio via npx -y @lyrashield/mcp@0.2.11 keeps tokens in env vars and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
+MCP integration fits Cursor. Local stdio via npx -y @lyrashield/mcp@0.2.12 keeps tokens in env vars and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
 
 Status note: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. MCP and the runner-local GitHub Action are available now; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution is not enabled and self-serve checkout is live.
 

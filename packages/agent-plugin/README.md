@@ -1,9 +1,6 @@
 # @lyrashield/agent-plugin
 
-The source checkout prepares `0.1.31` as an unpublished release candidate. The latest public npm
-version remains `0.1.30` until the coordinated release is published.
-
-Candidate **Agent Plugins 1.0.0** package for LyraShield AI. It bundles LyraShield's MCP
+**Agent Plugins 1.0.0** package `@lyrashield/agent-plugin@0.1.31` for LyraShield AI. It bundles LyraShield's MCP
 connection and skills into one portable plugin. Conforming clients can load the canonical
 manifest; generated client shims cover the launch clients listed below.
 
@@ -30,21 +27,23 @@ create a discovery path; each client still controls activation:
 - `.codex-plugin/` — Codex
 - `.kiro-plugin/` — Kiro
 
-The staged Codex marketplace root uses the native `streamable-http` transport. Claude and
-Copilot marketplace descriptors are preparation artifacts. Their presence does not establish a
-published install path or authenticated client acceptance.
+The Codex marketplace export uses the native `streamable-http` transport. Generated descriptors
+are package artifacts; their presence does not establish a public vendor listing, supported install
+path or authenticated client acceptance.
 
 ## Current customer setup
 
-Do not install from the mutable marketplace preparation branch or substitute public plugin
-`0.1.30` without matching portable-schema validation. Claude Code, Cursor, Codex, Copilot and VS Code
-plugin instructions remain pending a reviewed matching immutable package release.
+Use the matching release versions `@lyrashield/agent-plugin@0.1.31`,
+`@lyrashield/mcp@0.2.12` and `lyrashield@0.2.14`. Run
+`npx -y lyrashield@0.2.14 login --oauth` for local stdio authentication in the same OS account.
+Node.js 24 or newer is required. The CLI provides supported config writers and shared-skill
+installation; review `npx -y lyrashield@0.2.14 install <agent> --dry-run` or
+`npx -y lyrashield@0.2.14 skills install <agent> --dry-run` before writing files. Preserve existing
+servers and keep credentials out of shared configuration.
 
-Use published `@lyrashield/mcp@0.2.11` for the direct MCP fallback and
-`npx -y lyrashield@0.2.13 login --oauth` for local stdio authentication in the same OS account.
-Node.js 24 or newer is required. Merge configuration manually while CLI config writes and skill
-installation remain withheld pending release. Preserve existing servers and keep credentials out
-of shared configuration.
+Client-owned marketplace publication and authenticated runtime acceptance remain separate from
+npm package availability. Until a client has a supported, verified plugin install path, use its
+direct-MCP setup below. Do not install from a mutable marketplace preparation branch.
 
 | Client             | Current guided fallback                                                 | Client config                                      |
 | ------------------ | ----------------------------------------------------------------------- | -------------------------------------------------- |
@@ -55,7 +54,7 @@ of shared configuration.
 | Kiro               | [MCP settings](https://lyrashieldai.com/docs/integrations/kiro)         | `.kiro/settings/mcp.json`, `mcpServers`            |
 | Cursor             | [Direct MCP](https://lyrashieldai.com/docs/integrations/cursor)         | `.cursor/mcp.json`, `mcpServers`                   |
 
-Package conformance checks describe source artifacts only. Restart the client, confirm server
+Package conformance checks describe packaged artifacts only. Restart the client, confirm server
 and tool discovery, then make an authenticated read-only workspace call. Those checks and vendor
 marketplace publication require separate receipts; a staging export cannot establish them.
 
@@ -84,11 +83,10 @@ workflows for selected targets and scan profiles so matching calls need no addit
 review; mutating calls from API-key callers receive a `connect_required` response pointing at OAuth
 connect and the legacy exact-input approval path remains only for nondelegated hosted credentials.
 
-The staged Kiro artifact targets unpublished `@lyrashield/mcp@0.2.12`; do not install that
-candidate before coordinated release. For the current direct fallback, use
-`npx -y @lyrashield/mcp@0.2.11` and run `npx -y lyrashield@0.2.13 login --oauth`
-first; the server then reads the user-only `~/.lyrashield/credentials.json` file. Environment
-variables remain an explicit CI/headless fallback, with `LYRASHIELD_API_KEY` taking precedence.
+For local stdio fallback, run `npx -y lyrashield@0.2.14 login --oauth` first, then use
+`npx -y @lyrashield/mcp@0.2.12`; the server reads the user-only
+`~/.lyrashield/credentials.json` file. Environment variables remain an explicit CI/headless
+fallback, with `LYRASHIELD_API_KEY` taking precedence.
 Headless writes without an approval channel fail closed on the local stdio server; API-key writes
 against the remote endpoint receive `connect_required` instead.
 
@@ -98,7 +96,7 @@ against the remote endpoint receive `connect_required` instead.
 
 ## Version and release receipts
 
-- Candidate package: `@lyrashield/agent-plugin` 0.1.31 (unpublished); runtime: Node.js 24 or newer.
+- Package: `@lyrashield/agent-plugin@0.1.31`; runtime: Node.js 24 or newer.
 - Standard schema: Agent Plugins 1.0.0.
 - `pnpm --filter @lyrashield/agent-plugin test` validates generated shims, schemas,
   OAuth-first manifests, mutation exclusions, artifact versions and the public export boundary.

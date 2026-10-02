@@ -1,17 +1,15 @@
-# LyraShield CLI 0.2.14 release candidate (unpublished)
-
-The latest public npm version remains `0.2.13` until the coordinated release is published.
+# LyraShield CLI 0.2.14
 
 The `lyrashield` command-line interface installs, configures, and drives LyraShield scans from a terminal or CI pipeline.
 
 ## Quick start
 
 ```sh
-npx lyrashield login --oauth      # hosted PKCE OAuth login (recommended)
-npx lyrashield use <workspace>
-npx lyrashield project use        # detect the current git repo and set it as the default project
-npx lyrashield scan               # scan the default project (uses default mode)
-npx lyrashield pr-scan --auto     # run a bounded PR check on the current repo
+npx -y lyrashield@0.2.14 login --oauth      # hosted PKCE OAuth login (recommended)
+npx -y lyrashield@0.2.14 use <workspace>
+npx -y lyrashield@0.2.14 project use        # detect the current git repo and set it as the default project
+npx -y lyrashield@0.2.14 scan               # scan the default project (uses default mode)
+npx -y lyrashield@0.2.14 pr-scan --auto     # run a bounded PR check on the current repo
 ```
 
 You can also set `LYRASHIELD_API_KEY` (and optionally `LYRASHIELD_API_URL`) in the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com`.
@@ -36,15 +34,27 @@ lyrashield <command> [args] [--json]
 
 - `agents` — list the complete registry with detection state, evidence-backed support tier, and verification metadata
 - `init` — detect and configure all installed agents using that client's documented transport and install path. When a client requires its own marketplace, UI, or config merge, `init` prints the exact next step instead of copying files into an unrecognized directory.
-- `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent. Cursor, Claude Code, Codex and GitHub Copilot return manual direct-MCP guidance while their reviewed immutable plugin releases are pending; Kiro uses its documented MCP settings file. `--dry-run` previews every path without executing vendor CLIs or writing files.
+- `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent. For clients without a reviewed, supported plugin install path, the CLI provides direct-MCP guidance; Kiro uses its documented MCP settings file. `--dry-run` previews every path without executing vendor CLIs or writing files.
 - `uninstall <agent>` — remove a CLI-managed LyraShield config or plugin. Marketplace and UI installs return client-specific removal guidance.
 - `rules add <agent>|remove <agent>|check` — add, remove, or validate an agent rules file (`AGENTS.md`, `CLAUDE.md`, etc.)
+- `skills install|remove <agent> [--project|--global] [--dry-run] [--project-root <dir>]` — install shared LyraShield skills at a documented client path, or remove only unchanged LyraShield-owned files. Installing files does not confirm client discovery; reload the client and verify its skill list.
 
-These installer descriptions apply to the unpublished source candidate. Published CLI `0.2.13`
-still has older plugin guidance; do not use it to install the mutable marketplace preparation
-branch. Follow the current [client guides](https://lyrashieldai.com/docs/integrations/agent-plugins)
-with pinned `@lyrashield/mcp@0.2.11` and `npx -y lyrashield@0.2.13 login --oauth`. Published CLI
-config writes and skills installation remain withheld pending coordinated release.
+CLI `0.2.14` includes the config writers and shared-skill installer described above. Pin setup to
+this CLI version and the matching MCP package:
+
+```sh
+npx -y lyrashield@0.2.14 login --oauth
+npx -y lyrashield@0.2.14 install <agent> --project --dry-run
+npx -y lyrashield@0.2.14 skills install <agent> --project --dry-run
+```
+
+Remove `--dry-run` only after reviewing the preview. Use `--global` instead of `--project` for a
+user-level install. The direct MCP configuration uses `@lyrashield/mcp@0.2.12`, matching this
+CLI release. Follow the current [client guides](https://lyrashieldai.com/docs/integrations/agent-plugins)
+for client-specific plugin, MCP and skill discovery. Marketplace listing and authenticated client
+runtime acceptance are separate from npm package availability; use direct-MCP guidance when a
+client-owned plugin install path has not been verified. Do not install from a mutable marketplace
+preparation branch.
 
 `install` refuses to write raw secrets into shared-by-convention files unless you pass `--inline-secret` and the file is gitignored. Use `--dry-run` to preview the config change without writing it.
 

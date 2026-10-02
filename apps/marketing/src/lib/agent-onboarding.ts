@@ -1,4 +1,4 @@
-import { listPreferredAgents } from "@lyrashield/agent-registry"
+import { getPublishedCliInstallCommand, listPreferredAgents } from "@lyrashield/agent-registry"
 import type { AgentEntry } from "@lyrashield/agent-registry"
 
 /**
@@ -7,7 +7,7 @@ import type { AgentEntry } from "@lyrashield/agent-registry"
  */
 const STRATEGY_LABEL: Record<AgentEntry["installStrategy"], string> = {
   "agent-plugin": "Agent Plugin",
-  "config-file": "Manual config merge",
+  "config-file": "Config file setup",
   "vendor-cli": "Uses the agent's own CLI",
   "guided-manual": "Shows values to paste",
 }
@@ -65,7 +65,11 @@ function buildClients(): AgentOnboardingClient[] {
         ? "Standalone CLI and CI"
         : agent.installStrategy === "agent-plugin" && agent.manualInstructions
           ? "Manual Agent Plugin setup"
-          : STRATEGY_LABEL[agent.installStrategy],
+          : agent.installStrategy === "config-file" && getPublishedCliInstallCommand(agent)
+            ? "CLI config installer"
+            : agent.installStrategy === "config-file"
+              ? "Manual config merge"
+              : STRATEGY_LABEL[agent.installStrategy],
     integrationKind: agent.integrationKind ?? "mcp",
     supportTier: agent.supportTier ?? "COMPATIBLE",
     evidence: agent.verification?.evidence ?? "DOCUMENTATION",
@@ -89,17 +93,17 @@ export const agentOnboarding = {
   title: "Release assurance for coding agents",
   description:
     "Give your coding agent evidence-backed checks, reviewable fix proposals and a fresh retest before you ship.",
-  setupHeading: "Configure published direct MCP",
+  setupHeading: "Set up and authenticate",
   setupDescription:
-    "This command starts local workspace OAuth. Manually merge the published @lyrashield/mcp@0.2.11 server entry through the client guide. Hosted OAuth starts inside supported clients, including Pi; Aider uses the standalone CLI or CI path. Follow each client guide for activation and verification.",
-  commands: ["npx --yes lyrashield@0.2.13 login --oauth"],
+    "This command starts local workspace OAuth. Use the pinned CLI installer when a client guide provides one; otherwise follow its manual MCP or native setup. The CLI installs shared skills only for clients with a documented skill path. Hosted OAuth starts inside supported clients, including Pi; Aider uses the standalone CLI or CI path. Restart the client and verify discovery with a read-only authenticated call.",
+  commands: ["npx --yes lyrashield@0.2.14 login --oauth"],
   workflow: ["Target", "Review", "Evidence", "Fix proposal", "Retest", "Report"],
   safety: [
-    "The published CLI 0.2.13 preview predates Pi's native MCP setup. Follow the current Pi guide at /docs/integrations/pi; updated CLI recipes remain pending release.",
+    "Pi has built-in MCP and OAuth support. Follow the current Pi guide at /docs/integrations/pi; the CLI installer does not configure Pi's native MCP connection.",
     "Read-only tools are available after workspace authentication.",
     "Fixes are proposals for review, not automatic code changes or merges.",
     "Hosted writes require a browser-confirmed connection grant and execution-time scope checks. Nondelegated callers receive connect_required; local stdio clients use local approval.",
-    "Published CLI 0.2.13 config writes remain withheld for config-file clients while the safe-writer fix is pending. Use each client guide to merge only the LyraShield entry, preserving existing settings, comments where supported, and symlinks.",
+    "CLI config writes are available only for exact client contracts recorded by the installer. When a guide has no pinned install command, use its manual setup and preserve existing settings, comments where supported, and symlinks.",
     "A CLI preview, config entry, or doctor result does not prove client discovery or authentication; restart the client and complete a read-only authenticated call.",
   ],
   clients,

@@ -18,17 +18,17 @@ faq:
     a: Claude Code reads MCP servers from .mcp.json at the project root or the user level config. Project scope is shared with the team, user scope stays local. Use project scope for the LyraShield server so CI and local checks use the same entry.
 ---
 
-Current setup: follow the [Claude Code integration guide](/docs/integrations/claude-code) with published `@lyrashield/mcp@0.2.11` and authenticate local stdio separately using `npx -y lyrashield@0.2.13 login --oauth`. Plugin installation awaits a reviewed matching immutable release. Published CLI config writes and skill installation remain withheld; merge the documented client config manually, preserving existing settings. Confirm client discovery, then make an authenticated read-only workspace call.
+Current setup: follow the [Claude Code integration guide](/docs/integrations/claude-code) with pinned `@lyrashield/mcp@0.2.12` and authenticate local stdio separately using `npx -y lyrashield@0.2.14 login --oauth`. Plugin installation awaits a reviewed matching immutable release. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Confirm client discovery, then make an authenticated read-only workspace call.
 
-Claude Code users can secure AI built apps by adding LyraShield MCP via stdio using npx -y @lyrashield/mcp@0.2.11 or remote endpoint with hosted OAuth, registering it in .mcp.json with project scope, verifying the connection in Claude Code, then running inline security checks and a GitHub diff gate for team review.
+Claude Code users can secure AI built apps by adding LyraShield MCP via stdio using npx -y @lyrashield/mcp@0.2.12 or remote endpoint with hosted OAuth, registering it in .mcp.json with project scope, verifying the connection in Claude Code, then running inline security checks and a GitHub diff gate for team review.
 
 Claude Code generates hundreds of lines per prompt, magnifying [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks like injection and broken access control. Adding LyraShield brings verification, aligned with [vibe coding security guide](/blog/vibe-coding-security-guide). LyraShield is agent native AppSec at [LyraShield site](https://lyrashieldai.com), built as Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. Setup in [Claude Code integration guide](/docs/integrations/claude-code) and checklist [Claude Code security workflow](/blog/claude-code-security-workflow). Transport uses [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions) plus [NIST SSDF](https://csrc.nist.gov/projects/ssdf). Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
 
 ## 1. Authenticate the current local adapter
 
-Use Node.js 24 or newer and a current Claude Code release. Run `npx -y lyrashield@0.2.13 login --oauth` in the same OS account that starts Claude Code, select one accessible workspace and keep the credential store private. This browser login authenticates the local stdio adapter; it does not install a plugin or authenticate a separate hosted connection. Each teammate completes their own login. The shared project file contains connection values only, so a teammate does not inherit another person's token when cloning the repository.
+Use Node.js 24 or newer and a current Claude Code release. Run `npx -y lyrashield@0.2.14 login --oauth` in the same OS account that starts Claude Code, select one accessible workspace and keep the credential store private. This browser login authenticates the local stdio adapter; it does not install a plugin or authenticate a separate hosted connection. Each teammate completes their own login. The shared project file contains connection values only, so a teammate does not inherit another person's token when cloning the repository.
 
-Use the [Claude Code integration guide](/docs/integrations/claude-code) as the source of current installation instructions. Plugin installation awaits a reviewed matching immutable package release, and the marketplace default branch is preparation only. Published CLI 0.2.13 can print older instructions; do not treat them as a released plugin recipe. Automatic config writes and workflow skills remain withheld until a compatible release is reviewed. The direct MCP adapter is currently published as `@lyrashield/mcp@0.2.11`.
+Use the [Claude Code integration guide](/docs/integrations/claude-code) as the source of current installation instructions. Plugin installation awaits a reviewed matching immutable package release, and the marketplace default branch is preparation only. The earlier CLI 0.2.13 release printed legacy install instructions; do not treat them as a released plugin recipe. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. The coordinated direct MCP package pin is `@lyrashield/mcp@0.2.12`.
 
 ## 2. Merge the MCP configuration
 
@@ -39,7 +39,7 @@ Claude Code's project `.mcp.json` uses `mcpServers`. Merge this entry into the e
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.11"]
+      "args": ["-y", "@lyrashield/mcp@0.2.12"]
     }
   }
 }
@@ -48,7 +48,7 @@ Claude Code's project `.mcp.json` uses `mcpServers`. Merge this entry into the e
 Alternatively, Claude's own configuration command can register the pinned local server:
 
 ```bash
-claude mcp add --scope project lyrashield -- npx -y @lyrashield/mcp@0.2.11
+claude mcp add --scope project lyrashield -- npx -y @lyrashield/mcp@0.2.12
 ```
 
 Inspect the resulting project entry and retain all existing client settings. A project configuration can be shared with the team, but consent and workspace access remain individual. For the optional remote HTTP route, follow the same canonical guide and complete hosted OAuth inside Claude Code. CLI OAuth authenticates only the local stdio route; a hosted API key cannot authorize scans, fix proposals or retests. Do not add a literal bearer to a committed file or paste credentials into an agent prompt.
@@ -57,7 +57,7 @@ Inspect the resulting project entry and retain all existing client settings. A p
 
 Restart Claude Code or reconnect the server, then inspect its MCP server view and available LyraShield tools. Discovery proves that the client loaded the connection, but it does not prove workspace access. Ask Claude to call `lyrashield_list_workspaces` and confirm the intended workspace, then list authorized targets. Keep the target selection explicit before requesting a recorded scan. An empty authorized target list should remain empty rather than being replaced with a guessed repository or URL.
 
-If local authentication fails, repeat CLI OAuth login under the same OS account and restart the client. A configured server or successful `npx -y lyrashield@0.2.13 doctor` check is local setup evidence only. Do not start the stdio server as a standalone scanner or expect it to print handshake JSON without an MCP client. Inspect client logs for process or connection errors, distinguish missing Node from denied service access, and retain the actual error when a check cannot complete. Reconnect remote OAuth separately if its consent expires. A successful workspace read establishes that read access at that moment; recorded scans, delegated writes, revocation, restart and upgrades need their own acceptance checks.
+If local authentication fails, repeat CLI OAuth login under the same OS account and restart the client. A configured server or successful `npx -y lyrashield@0.2.14 doctor` check is local setup evidence only. Do not start the stdio server as a standalone scanner or expect it to print handshake JSON without an MCP client. Inspect client logs for process or connection errors, distinguish missing Node from denied service access, and retain the actual error when a check cannot complete. Reconnect remote OAuth separately if its consent expires. A successful workspace read establishes that read access at that moment; recorded scans, delegated writes, revocation, restart and upgrades need their own acceptance checks.
 
 ## 4. Run a security check inline while you code
 

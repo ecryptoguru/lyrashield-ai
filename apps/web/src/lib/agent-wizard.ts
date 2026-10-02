@@ -106,7 +106,7 @@ function buildRemoteSnippet(agent: AgentEntry, apiUrl: string): string | undefin
 export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardData | null {
   const agent = getAgent(agentId)
   if (!agent) return null
-  const publishedInstallCommand = getPublishedCliInstallCommand(agent)
+  const cliInstallCommand = getPublishedCliInstallCommand(agent)
   const manualPlugin = agent.installStrategy === "agent-plugin" && !!agent.manualInstructions
   const pendingPluginFallbackId: Record<string, string> = {
     "claude-code-agent-plugin": "claude-code",
@@ -178,7 +178,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       kind: "install",
       title: "Install",
       summary: `${agent.displayName} manages MCP servers with its own CLI. The LyraShield CLI delegates to it for you.`,
-      command: publishedInstallCommand ?? undefined,
+      command: cliInstallCommand ?? undefined,
       copyLabel: `Copy install command for ${agent.displayName}`,
       note: `Under the hood this runs \`${vendorCmd}\`.`,
     })
@@ -190,27 +190,27 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
         ? "Manual Agent Plugin setup"
         : augmentWorkflowInPreparation
           ? "Connect current MCP tools"
-          : publishedInstallCommand
+          : cliInstallCommand
             ? "Install"
             : "Prepare manual setup",
       summary: manualPlugin
-        ? "The source installer returns MANUAL_REQUIRED: it prints instructions and does not install or register the plugin. Published CLI behavior may differ until release. Follow the client activation steps below; discovery, authentication and a read-only call must each be confirmed."
+        ? "The CLI installer returns MANUAL_REQUIRED: it prints instructions and does not install or register the plugin. Complete client activation after the matching immutable marketplace release is available, then confirm discovery, authentication and a read-only call."
         : agent.id === "picode"
-          ? `${agent.manualInstructions} The published CLI 0.2.13 preview predates Pi's native MCP setup. Use these current instructions; updated CLI recipes remain pending release.`
+          ? `Pi has a built-in MCP client. Add the hosted server at ${apiUrl}/api/mcp, complete Pi's OAuth login, and use ${CLI_PACKAGE_SPEC} for standalone CLI workflows.`
           : augmentWorkflowInPreparation
-            ? `The published direct-MCP baseline uses ${CLI_PACKAGE_SPEC} and ${MCP_PACKAGE_SPEC}; it provides MCP tools only. Native workflow skills, commands and rules require the coordinated candidate release.`
-            : !publishedInstallCommand
+            ? "Use Augment's MCP settings to add the pinned local stdio server for direct tool access. Its native marketplace plugin remains under preparation."
+            : !cliInstallCommand
               ? agent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE
                 ? "Automatic config writes are withheld until the preservation fixes ship in the next CLI release. Merge the connection values below into your existing client config."
-                : "CLI installation for this setup is prepared for the next release. Use the manual connection steps below."
+                : "No matching pinned CLI installer is available for this client yet. Use the manual connection steps below."
               : agent.manualInstructions
                 ? `Follow the documented activation steps for ${agent.displayName}.`
                 : `Prepare the LyraShield integration for ${agent.displayName}.`,
-      command: publishedInstallCommand ?? undefined,
+      command: cliInstallCommand ?? undefined,
       copyLabel: `Copy install command for ${agent.displayName}`,
       note:
         agent.installStrategy === "guided-manual"
-          ? publishedInstallCommand
+          ? cliInstallCommand
             ? `${agent.displayName} has no config file the CLI can write — the command prints exact values to paste.`
             : `${agent.displayName} uses its documented MCP setup UI. Follow the connection steps below.`
           : undefined,
@@ -243,7 +243,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       id: "config",
       kind: "config",
       title: "Add the MCP config",
-      summary: `Merge this server entry into ${configPath ?? "your MCP config"}, preserving existing servers and comments.${publishedInstallCommand ? " The install command above can do this for you." : ""}`,
+      summary: `Merge this server entry into ${configPath ?? "your MCP config"}, preserving existing servers and comments.${cliInstallCommand ? " The install command above can do this for you." : ""}`,
       snippet: primarySnippet,
       snippetPath: configPath,
       copyLabel: `Copy ${agent.displayName} MCP config`,
@@ -277,7 +277,9 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       kind: "config",
       title: "Add LyraShield in the agent",
       summary:
-        agent.manualInstructions ??
+        (augmentWorkflowInPreparation
+          ? "In Augment settings, open MCP → Import from JSON and add this local stdio server. Preserve existing entries, then reload Augment and confirm server and tool discovery. The native marketplace plugin remains under review."
+          : agent.manualInstructions) ??
         `${agent.displayName} uses its own MCP setup UI. Add the connection values below.`,
       snippet:
         agent.preferredTransport === "remote-http"
@@ -309,7 +311,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       kind: "config",
       title: "Current direct MCP fallback",
       summary:
-        "Merge this published pinned stdio connection, preserving existing client settings. Plugin installation and skills remain pending a reviewed immutable release.",
+        "Merge this pinned direct MCP connection while the native plugin remains gated on a reviewed immutable marketplace release. CLI skills can be installed separately where this client supports them.",
       snippet: buildConfigSnippet(pendingPluginFallback, apiUrl),
       snippetPath:
         pendingPluginFallback.locations.find((location) => location.scope === "global")?.path ??
@@ -358,13 +360,11 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       kind: "rules",
       title: "Install rules",
       summary: `Keep ${agent.displayName}'s LyraShield rules in sync (${agent.rulesFiles.join(", ")}).`,
-      command: publishedInstallCommand
-        ? `npx -y ${CLI_PACKAGE_SPEC} rules add ${agent.id}`
-        : undefined,
+      command: cliInstallCommand ? `npx -y ${CLI_PACKAGE_SPEC} rules add ${agent.id}` : undefined,
       copyLabel: `Copy rules install command for ${agent.displayName}`,
-      note: publishedInstallCommand
+      note: cliInstallCommand
         ? `Remove LyraShield-owned rules with \`npx -y ${CLI_PACKAGE_SPEC} rules remove ${agent.id}\`.`
-        : "Rules installation for this client is prepared for the next CLI release. Follow the client guide for manual setup.",
+        : "No matching pinned CLI rules installer is available for this client. Follow the client guide for manual setup.",
     })
   }
 
@@ -373,11 +373,9 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       id: "skills",
       kind: "skills",
       title: "Native workflow skills",
-      summary: augmentWorkflowInPreparation
-        ? "The published MCP baseline provides direct tools only. Native workflow skills are in preparation and will be available after the coordinated candidate release."
-        : CLI_SKILLS_AVAILABLE
-          ? "Install the focused LyraShield workflows in this client's documented skill directory. Existing customized skills are preserved."
-          : "The focused LyraShield skill bundle is prepared for the next release. You can use the connected MCP tools directly in the meantime.",
+      summary: CLI_SKILLS_AVAILABLE
+        ? "Install the focused LyraShield workflows in this client's documented skill directory. Existing customized skills are preserved."
+        : "This pinned CLI version does not include the skill installer for this workflow. Use the connected MCP tools directly until a compatible package is available.",
       command: CLI_SKILLS_AVAILABLE
         ? `npx -y ${CLI_PACKAGE_SPEC} skills install ${agent.id}`
         : undefined,
@@ -394,7 +392,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
     kind: "verify",
     title: "Verify it works",
     summary: augmentWorkflowInPreparation
-      ? "Confirm the current MCP connection with a read-only LyraShield call. Native workflow skills remain a separate, unpublished release. Scans remain explicit."
+      ? "Confirm MCP tools and any installed workflows, then make a read-only LyraShield call. Native marketplace plugin availability is separate. Scans remain explicit."
       : "Confirm the setup and make a read-only LyraShield call. Scans remain explicit.",
     command: localSetup ? `npx -y ${CLI_PACKAGE_SPEC} doctor` : undefined,
     copyLabel: "Copy doctor command",
@@ -409,11 +407,13 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       title: "Optional: advisory pre-commit check",
       summary:
         "Run a local staged-diff check before commits. This is separate from recorded scans and does not start paid work.",
-      note: `Off by default. The safer offline hook installer is prepared for the next release. Until then, run \`npx -y ${CLI_PACKAGE_SPEC} check-diff --staged\` explicitly. Remove only LyraShield-owned commands from an existing hook and preserve every unrelated command. Never delete a user-owned hook.`,
+      command: `npx -y ${CLI_PACKAGE_SPEC} hook install`,
+      copyLabel: "Copy optional hook install command",
+      note: `Off by default. Opt in with \`npx -y ${CLI_PACKAGE_SPEC} hook install\`; remove it with \`npx -y ${CLI_PACKAGE_SPEC} hook remove\`. The hook runs only the staged-diff check and never starts a paid scan. It preserves unrelated hook commands; never delete a user-owned hook.`,
     })
   }
 
-  // The published CLI requires credentials before installing stdio configs.
+  // CLI installation requires credentials before installing stdio configs.
   // Keep the first copyable command usable on a fresh machine.
   if (agent.preferredTransport === "stdio" && agent.installStrategy !== "agent-plugin") {
     const authenticationIndex = steps.findIndex((step) => step.kind === "api-key")

@@ -38,7 +38,7 @@ First, never inline secrets in JSON. For local stdio, keep the credential in Lyr
 
 Second, review Zed's `agent.tool_permissions` settings. Confirm read-only tools before granting access to write tools and keep server-side workspace grants narrow.
 
-Third, pin versions and audit local servers. For stdio, use the published `@lyrashield/mcp@0.2.11` package. For remote, require HTTPS and complete Zed's OAuth flow; use an API key only as a deliberate fallback.
+Third, pin versions and audit local servers. For stdio, use the pinned `@lyrashield/mcp@0.2.12` package. For remote, require HTTPS and complete Zed's OAuth flow; use an API key only as a deliberate fallback.
 
 Fourth, commit project scoped configs and add a CI check that validates JSON schema and rejects new servers that request file write or network access without review. That keeps Zed aligned with your security policy and makes malicious config changes visible in pull requests. The example shows both transport shapes; enable only the connection you intend to use.
 
@@ -47,7 +47,7 @@ Fourth, commit project scoped configs and add a CI check that validates JSON sch
   "context_servers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.11"],
+      "args": ["-y", "@lyrashield/mcp@0.2.12"],
       "env": {}
     },
     "lyrashield-remote": {
@@ -97,7 +97,7 @@ Supply chain hygiene matters because AI generated code often pulls transitive de
 
 LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](https://lyrashieldai.com). Our core loop is target, review, evidence, fix, retest, report, built for teams shipping with Zed and other AI coding tools. We separate detection from proof: findings come with evidence you can verify and every result is an immutable assurance record tied to the exact commit and scan.
 
-The platform is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.11` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution is not enabled; self-serve checkout is live.
+The platform is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. Connect through stdio `npx -y @lyrashield/mcp@0.2.12` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and use the runner-local GitHub Action for an advisory diff gate with SARIF. Production availability remains bounded by retained evidence and release gates; automatic server-generated Fix PR execution is not enabled; self-serve checkout is live.
 
 LyraShield can review findings from your Zed drafts before merge, with evidence states and receipts shown within their recorded scope. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval and retest runs the same scanners on the fix commit to confirm remediation.
 

@@ -13,7 +13,7 @@ faq:
   - q: "How do I filter MCP tools in Hermes?"
     a: "Use tools.include whitelist or tools.exclude blacklist, plus resources: false/prompts: false to disable wrappers."
   - q: "How do I add LyraShield to Hermes?"
-    a: "Add mcp_servers.lyrashield with command npx -y @lyrashield/mcp@0.2.11 for stdio or url https://app.lyrashieldai.com/api/mcp with Bearer header for remote."
+    a: "Add mcp_servers.lyrashield with command npx -y @lyrashield/mcp@0.2.12 for stdio or url https://app.lyrashieldai.com/api/mcp with Bearer header for remote."
   - q: "Do self-improving skills create security risk?"
     a: "Skills that write skills expand attack surface. Review skill diffs, pin versions and require approval for skill creation."
 ---
@@ -76,7 +76,7 @@ This maps to OWASP LLM01 Prompt Injection and LLM08 Excessive Agency. A skill th
 
 Hermes MCP filtering is richer than most clients: `include` whitelists server-native tools, `exclude` blacklists, `enabled: false` retains but disables, `timeout` and `connect_timeout` bound calls, `idle_timeout_seconds` and `max_lifetime_seconds` recycle stdio servers, `supports_parallel_tool_calls` gates concurrency and `ssl_verify`/`client_cert`/`client_key` enable private PKI.
 
-Follow the current [hermes integration guide](/docs/integrations/hermes) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
+Follow the current [hermes integration guide](/docs/integrations/hermes) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.14 login --oauth` and use `@lyrashield/mcp@0.2.12`. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 LyraShield integration, matching [hermes integration guide](/docs/integrations/hermes):
 
@@ -86,7 +86,7 @@ Stdio, minimal, local-first:
 mcp_servers:
   lyrashield:
     command: "npx"
-    args: ["-y", "@lyrashield/mcp@0.2.11"]
+    args: ["-y", "@lyrashield/mcp@0.2.12"]
     env:
       LYRASHIELD_API_KEY: "${env:LYRASHIELD_API_KEY}"
     timeout: 120
@@ -160,7 +160,7 @@ Keep the evidence bounded to the reviewed scope: a successful configuration chec
 
 Hermes maximizes adaptability: skills that write skills, runs-anywhere backends, model-agnostic routing. LyraShield adds the counterpart: release assurance for AI-built apps with minimal new surface. The combination positioning matters, Hermes owns generation and orchestration, LyraShield owns `target, review, evidence, fix, retest, report` with SCA + secrets + agentic pentest feeding SARIF, not another chat loop. LyraShield keeps detected candidates, separate verification receipts and retest outcomes distinct in an assurance record and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-Integration is deliberately small: stdio via `npx -y @lyrashield/mcp@0.2.11` and remote Streamable HTTP at `https://app.lyrashieldai.com/api/mcp` with `lsk_` Bearer per [integrations hub](/docs/integrations). The target-to-report loop is available in the open beta and remains evidence-bounded for teams shipping AI-built code via Hermes alongside [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist) and [openclaw-app-security-checklist](/blog/openclaw-app-security-checklist).
+Integration is deliberately small: stdio via `npx -y @lyrashield/mcp@0.2.12` and remote Streamable HTTP at `https://app.lyrashieldai.com/api/mcp` with `lsk_` Bearer per [integrations hub](/docs/integrations). The target-to-report loop is available in the open beta and remains evidence-bounded for teams shipping AI-built code via Hermes alongside [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist) and [openclaw-app-security-checklist](/blog/openclaw-app-security-checklist).
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets and dependencies one more time.
 

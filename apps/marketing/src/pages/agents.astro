@@ -211,11 +211,11 @@ const jsonLd = [
         Documented client workflows ({agentOnboarding.clients.length})
       </h2>
       <p class="mt-4 max-w-2xl leading-7 text-text-muted" data-reveal>
-        Manually merge the published <code>@lyrashield/mcp@0.2.11</code> server entry through
-        each client guide. Config-file writes remain withheld pending the safe-writer fix. Preserve
-        existing settings, comments where supported and symlinks; restart the client, confirm tool
-        discovery and complete an authenticated read-only call. Older published previews can print
-        obsolete plugin guidance and do not establish client acceptance.
+        Use the pinned CLI installer where a client guide provides an exact supported command;
+        otherwise follow its manual MCP or native setup. The CLI installs shared skills only where
+        the client has one documented skill path. Preserve existing settings, comments where
+        supported and symlinks; restart the client, confirm discovery and complete an authenticated
+        read-only call. Marketplace listing and runtime acceptance remain separate evidence.
       </p>
       {
         agentOnboarding.clientGroups.map((group) => (

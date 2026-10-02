@@ -9,26 +9,26 @@ draft: false
 heroImage: agent-security-22
 faq:
   - q: How do I install LyraShield into Kiro?
-    a: The LyraShield Power remains in preparation. Follow /docs/integrations/kiro for pinned direct MCP 0.2.11, authenticate separately with CLI 0.2.13 OAuth and verify client discovery plus a read-only call.
+    a: The LyraShield Power remains in preparation. Follow /docs/integrations/kiro for pinned direct MCP 0.2.12, authenticate separately with CLI 0.2.14 OAuth and verify client discovery plus a read-only call.
   - q: Where does the Kiro plugin live?
-    a: The LyraShield Power remains in preparation. Follow /docs/integrations/kiro for pinned direct MCP 0.2.11, authenticate separately with CLI 0.2.13 OAuth and verify client discovery plus a read-only call.
+    a: The LyraShield Power remains in preparation. Follow /docs/integrations/kiro for pinned direct MCP 0.2.12, authenticate separately with CLI 0.2.14 OAuth and verify client discovery plus a read-only call.
   - q: What does the CLI doctor command do?
-    a: The LyraShield Power remains in preparation. Follow /docs/integrations/kiro for pinned direct MCP 0.2.11, authenticate separately with CLI 0.2.13 OAuth and verify client discovery plus a read-only call.
+    a: The LyraShield Power remains in preparation. Follow /docs/integrations/kiro for pinned direct MCP 0.2.12, authenticate separately with CLI 0.2.14 OAuth and verify client discovery plus a read-only call.
   - q: Can I configure Kiro manually without the plugin?
-    a: Follow /docs/integrations/kiro for manual setup. Published config writes and candidate skill installation remain withheld. Use CLI 0.2.13 and MCP 0.2.11 for local stdio, then verify discovery and a read-only client call.
+    a: Follow /docs/integrations/kiro for manual setup. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Use CLI 0.2.14 and MCP 0.2.12 for local stdio, then verify discovery and a read-only client call.
 ---
 
 This workflow sets up the LyraShield MCP security workflow for Kiro so the agent can run security checks inside your project. It uses pinned direct MCP while the native Power remains in preparation, then covers local OAuth and manual configuration, verification, an inline check, a GitHub Action diff gate and an agent rules snippet. Pair it with the [vibe coding security guide](/blog/vibe-coding-security-guide) for broader context.
 
 ## 1. Install prerequisites and authenticate
 
-Install Node so the `npx` commands resolve, then run `npx -y lyrashield@0.2.13 login --oauth` to store your credentials in a local file under your home directory. Nothing is committed to the repository, because credentials live in a per user file and the CLI never writes them into source. This matters for shared repos where a committed token would leak to every collaborator and to the git history. Confirm with `npx -y lyrashield@0.2.13 doctor` that the server is reachable and the credentials resolve before you touch Kiro, because a failed login surfaces here instead of mid install. The [Node.js downloads page](https://nodejs.org/en/download) is the canonical source for the runtime. Run login and doctor from the project root so any project scoped config is detected correctly and re-run doctor whenever you suspect the connection has drifted. If you share a machine with teammates, note that the credentials file is per user, so each person runs login once rather than sharing a single credential file.
+Install Node so the `npx` commands resolve, then run `npx -y lyrashield@0.2.14 login --oauth` to store your credentials in a local file under your home directory. Nothing is committed to the repository, because credentials live in a per user file and the CLI never writes them into source. This matters for shared repos where a committed token would leak to every collaborator and to the git history. Confirm with `npx -y lyrashield@0.2.14 doctor` that the server is reachable and the credentials resolve before you touch Kiro, because a failed login surfaces here instead of mid install. The [Node.js downloads page](https://nodejs.org/en/download) is the canonical source for the runtime. Run login and doctor from the project root so any project scoped config is detected correctly and re-run doctor whenever you suspect the connection has drifted. If you share a machine with teammates, note that the credentials file is per user, so each person runs login once rather than sharing a single credential file.
 
 ## 2. Configure Kiro’s direct MCP fallback
 
 The LyraShield Power remains in preparation; do not install a mutable candidate or treat a portable plugin copy as a supported Power import. Follow the current [Kiro integration guide](/docs/integrations/kiro) and Kiro’s supported MCP settings for the selected IDE or CLI version. Native Power availability, skill discovery, MCP configuration and credential authorization are different checks. The [Agent Plugins specification](https://agent-plugins.org/) describes a package format, but it does not establish that a particular package is published or accepted by Kiro. Keep candidate artifacts out of customer onboarding until a matching immutable release is reviewed and read back.
 
-Merge only the LyraShield server entry into project `.kiro/settings/mcp.json` or user `~/.kiro/settings/mcp.json`, preserving existing servers and settings. Use `command: "npx"` and `args: ["-y", "@lyrashield/mcp@0.2.11"]` under `mcpServers.lyrashield`. Authenticate local stdio with `npx -y lyrashield@0.2.13 login --oauth` in the same OS account. Published config writes and candidate skill installation remain withheld. A future installer receipt cannot be substituted for the behavior of today’s published package.
+Merge only the LyraShield server entry into project `.kiro/settings/mcp.json` or user `~/.kiro/settings/mcp.json`, preserving existing servers and settings. Use `command: "npx"` and `args: ["-y", "@lyrashield/mcp@0.2.12"]` under `mcpServers.lyrashield`. Authenticate local stdio with `npx -y lyrashield@0.2.14 login --oauth` in the same OS account. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. A future installer receipt cannot substitute for runtime evidence from the released package.
 
 ## 3. Keep authentication separate from configuration
 
@@ -38,7 +38,7 @@ A hosted setup requires the client’s own documented authentication flow. A pri
 
 ## 4. Verify discovery and a read-only call
 
-Restart Kiro and inspect its MCP settings to confirm the server and tools are discovered. Then call `lyrashield_list_workspaces` and retain the authenticated result. A successful `npx -y lyrashield@0.2.13 doctor` result belongs to the local CLI surface; it does not validate a Power manifest, establish Kiro discovery or prove scan completion. If discovery fails, inspect the path, root key, pinned command and client version. If authentication fails, inspect the user account and selected workspace without copying credentials into the configuration.
+Restart Kiro and inspect its MCP settings to confirm the server and tools are discovered. Then call `lyrashield_list_workspaces` and retain the authenticated result. A successful `npx -y lyrashield@0.2.14 doctor` result belongs to the local CLI surface; it does not validate a Power manifest, establish Kiro discovery or prove scan completion. If discovery fails, inspect the path, root key, pinned command and client version. If authentication fails, inspect the user account and selected workspace without copying credentials into the configuration.
 
 Only request a recorded scan when the target, scope and profile are explicitly authorized. Read the resulting scan identity, revision, coverage and evidence states separately from the connection check. Detected findings remain candidates, incomplete coverage remains visible and a fix requires a fresh retest receipt. A working connection can be useful for read-only launch-readiness review without authorizing new paid work. Repeat discovery and a read call after changing the client or server entry, and repeat the assessment after the application revision changes.
 
@@ -75,7 +75,7 @@ A rule like attach the findings link gives the agent a concrete artifact to prod
 
 | Workflow step | Command or action               | Purpose                              |
 | ------------- | ------------------------------- | ------------------------------------ |
-| Authenticate  | npx -y lyrashield@0.2.13 login  | Store credentials locally            |
+| Authenticate  | npx -y lyrashield@0.2.14 login  | Store credentials locally            |
 | Configure MCP | Current Kiro guide              | Manually merge the pinned server     |
 | Verify        | Kiro MCP settings and read call | Confirm discovery and authentication |
 | CI gate       | GitHub Action on diff           | Block on new findings                |

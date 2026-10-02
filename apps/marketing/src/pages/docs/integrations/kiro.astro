@@ -27,7 +27,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 1,
         name: "Log in to LyraShield",
-        text: "Run npx --yes lyrashield@0.2.13 login --oauth to select a workspace and save the local OAuth credential.",
+        text: "Run npx --yes lyrashield@0.2.14 login --oauth to select a workspace and save the local OAuth credential.",
       },
       {
         "@type": "HowToStep",
@@ -86,12 +86,12 @@ const jsonLd: unknown[] = [
     <code>.kiro/settings/mcp.json</code> or the user file <code>~/.kiro/settings/mcp.json</code>.
     The command uses the currently published MCP package.
   </p>
-  <pre><code>npx --yes lyrashield@0.2.13 login --oauth</code></pre>
+  <pre><code>npx --yes lyrashield@0.2.14 login --oauth</code></pre>
   <pre><code>{`{
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.11"]
+      "args": ["-y", "@lyrashield/mcp@0.2.12"]
     }
   }
 }`}</code></pre>
@@ -102,7 +102,7 @@ const jsonLd: unknown[] = [
 
   <div class="callout">
     <strong>No credential in committed files:</strong> After{" "}
-    <code>npx --yes lyrashield@0.2.13 login --oauth</code>, the
+    <code>npx --yes lyrashield@0.2.14 login --oauth</code>, the
     local MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the{" "}
     <code>LYRASHIELD_API_KEY</code> environment variable). Nothing with a key needs to be committed.
   </div>
