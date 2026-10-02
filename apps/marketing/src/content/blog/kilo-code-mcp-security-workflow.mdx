@@ -15,12 +15,12 @@ faq:
   - q: "Can this gate pull requests?"
     a: "Yes. Wire the LyraShield GitHub Action in diff aware mode to comment on PRs and upload SARIF, then require the check in branch protection."
   - q: "Where does Kilo Code read MCP server config from?"
-    a: Follow /docs/integrations/kilo-code for manual setup. Published config writes and candidate skill installation remain withheld. Use CLI 0.2.13 and MCP 0.2.11 for local stdio, then verify discovery and a read-only client call.
+    a: Follow /docs/integrations/kilo-code for manual setup. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Use CLI 0.2.14 and MCP 0.2.12 for local stdio, then verify discovery and a read-only client call.
 ---
 
-Follow the current [kilo-code integration guide](/docs/integrations/kilo-code) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
+Follow the current [kilo-code integration guide](/docs/integrations/kilo-code) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.14 login --oauth` and use `@lyrashield/mcp@0.2.12`. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
-You can connect Kilo Code to LyraShield AI over MCP to get target aware scans, recorded evidence states and fix proposals inside your normal agent loop. This guide uses the current Kilo contract and the pinned `@lyrashield/mcp@0.2.11` package.
+You can connect Kilo Code to LyraShield AI over MCP to get target aware scans, recorded evidence states and fix proposals inside your normal agent loop. This guide uses the current Kilo contract and the pinned `@lyrashield/mcp@0.2.12` package.
 
 Vibe coding moves fast and security debt can accumulate when large batches of routes, components and queries are generated in one pass. If your team uses Kilo Code to scaffold features, you want verification that matches that speed. A good starting policy is the [vibe coding security guide](/blog/vibe-coding-security-guide) which frames prompt hygiene, review checkpoints and supply chain checks. For context on what to look for, see [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), both of which confirm injection, broken access control and vulnerable dependencies remain top risks in generated web apps.
 
@@ -38,7 +38,7 @@ Quick sanity checks for the MCP package and env wiring:
 node -v
 npm view @lyrashield/mcp version
 export LYRASHIELD_API_KEY=lsk_your_key_here
-npx -y lyrashield@0.2.13 doctor
+npx -y lyrashield@0.2.14 doctor
 ```
 
 For a concrete remediation checklist that mirrors your stack, keep a sibling reference such as [Kilo Code app security checklist](/blog/kilo-code-app-security-checklist) open while you implement. It helps you map a recorded finding to a specific fix pattern without guessing.
@@ -54,7 +54,7 @@ Kilo Code reads MCP servers from `kilo.jsonc` or `.kilo/kilo.jsonc` in a project
   "mcp": {
     "lyrashield": {
       "type": "local",
-      "command": ["npx", "-y", "@lyrashield/mcp@0.2.11"],
+      "command": ["npx", "-y", "@lyrashield/mcp@0.2.12"],
       "environment": {
         "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
       },

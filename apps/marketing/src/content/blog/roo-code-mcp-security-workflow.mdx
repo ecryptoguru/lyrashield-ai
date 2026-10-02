@@ -9,7 +9,7 @@ draft: false
 heroImage: agent-security-32
 faq:
   - q: How do I add LyraShield MCP to Roo Code?
-    a: Follow /docs/integrations/roo-code for manual setup. Published config writes and candidate skill installation remain withheld. Use CLI 0.2.13 and MCP 0.2.11 for local stdio, then verify discovery and a read-only client call.
+    a: Follow /docs/integrations/roo-code for manual setup. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Use CLI 0.2.14 and MCP 0.2.12 for local stdio, then verify discovery and a read-only client call.
   - q: What transport type does Roo Code need for remote MCP?
     a: Roo Code requires streamable-http with a hyphen. Using http or streamableHttp fails to connect. The official Roo docs and the GitHub MCP install guide both confirm this.
   - q: Where is the Roo Code project MCP file?
@@ -22,7 +22,7 @@ Set up LyraShield MCP in Roo Code by authenticating with the CLI, running the ro
 
 ## 1. Install prerequisites and authenticate
 
-Roo Code is a VS Code extension that reads MCP configuration from `.roo/mcp.json` at the project level (overriding the global `mcp_settings.json`) using the `mcpServers` root key. Before wiring LyraShield, install Node so `npx` is available, then authenticate once with `npx -y lyrashield@0.2.13 login --oauth`. The CLI writes credentials to `~/.lyrashield/credentials.json` with restrictive permissions and commits nothing. Confirm the official [Roo Code MCP documentation](https://roocodeinc.github.io/Roo-Code/features/mcp/using-mcp-in-roo/) is the version you target and that VS Code is open to your project workspace.
+Roo Code is a VS Code extension that reads MCP configuration from `.roo/mcp.json` at the project level (overriding the global `mcp_settings.json`) using the `mcpServers` root key. Before wiring LyraShield, install Node so `npx` is available, then authenticate once with `npx -y lyrashield@0.2.14 login --oauth`. The CLI writes credentials to `~/.lyrashield/credentials.json` with restrictive permissions and commits nothing. Confirm the official [Roo Code MCP documentation](https://roocodeinc.github.io/Roo-Code/features/mcp/using-mcp-in-roo/) is the version you target and that VS Code is open to your project workspace.
 
 A clean prerequisite check avoids the most common Roo Code setup failures. The project file overrides the global one, so a stale global entry can shadow your project edit if the names collide; keep server names unique across both. Note now that Roo Code requires the hyphenated `streamable-http` type for remote servers, so a copy pasted `http` value from another tool's docs will silently fail to connect. Keep your auth token in the credentials file only and never paste it into a committed config or a pull request description.
 
@@ -30,7 +30,7 @@ The `.roo/mcp.json` file is the project level source of truth for MCP servers. B
 
 ## 2. Add the LyraShield MCP server with the CLI
 
-Follow the current [roo-code integration guide](/docs/integrations/roo-code) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
+Follow the current [roo-code integration guide](/docs/integrations/roo-code) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.14 login --oauth` and use `@lyrashield/mcp@0.2.12`. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 If you run the installer inside a monorepo, run it from the directory that holds your `.roo/` folder so the entry lands in the right project scope. The installer checks that your Node version supports `npx` streaming fetch, which `streamable-http` depends on.
 
@@ -54,13 +54,13 @@ If you must edit by hand, add an entry under `mcpServers` in `.roo/mcp.json`. Th
 }
 ```
 
-Keep `alwaysAllow` minimal. Never commit a real token; keep the literal in the user level file or environment and commit only a redacted structure. The [CWE-798](https://cwe.mitre.org/data/definitions/798.html) hard coded credentials pattern is the exact risk. If you prefer a local stdio server instead of the remote endpoint, swap the entry for a stdio server with `command: "npx"`, `args: ["-y", "@lyrashield/mcp@0.2.11", "stdio"]` and an `env` map that injects your token, then leave `disabled: false`. Choose the transport in the current client guide; the published installer does not write either form. Local stdio reads the user-only credential store after separate CLI OAuth login. Hosted API keys provide read-only access; authenticated hosted mutations require a valid browser-confirmed delegation. Whichever you choose, reload the client, inspect discovery and confirm an authenticated read-only call, since a `streamable-http` typo is the most common failure and produces no error.
+Keep `alwaysAllow` minimal. Never commit a real token; keep the literal in the user level file or environment and commit only a redacted structure. The [CWE-798](https://cwe.mitre.org/data/definitions/798.html) hard coded credentials pattern is the exact risk. If you prefer a local stdio server instead of the remote endpoint, swap the entry for a stdio server with `command: "npx"`, `args: ["-y", "@lyrashield/mcp@0.2.12", "stdio"]` and an `env` map that injects your token, then leave `disabled: false`. Choose the transport in the current client guide; the published installer does not write either form. Local stdio reads the user-only credential store after separate CLI OAuth login. Hosted API keys provide read-only access; authenticated hosted mutations require a valid browser-confirmed delegation. Whichever you choose, reload the client, inspect discovery and confirm an authenticated read-only call, since a `streamable-http` typo is the most common failure and produces no error.
 
 The `alwaysAllow` array lists tool names the agent may call without an approval prompt. Leaving it empty means every scan invocation asks for confirmation, which is safer for shared workstations. If you add LyraShield scan tools to `alwaysAllow`, name the exact tool, not a wildcard, so a future server update cannot widen what runs unattended.
 
 ## 4. Verify the connection and run an inline check
 
-After config, reload the VS Code window so Roo Code picks up the file, then run `npx -y lyrashield@0.2.13 doctor` to confirm the server reports connected. In the Roo Code pane, ask the agent to run a LyraShield scan against the current target. The agent targets the release scope, reviews the real config and code and returns evidence with detected, verified, retest confirmed and inconclusive outcomes kept distinct. This mirrors the [vibe coding security guide](/blog/vibe-coding-security-guide) evidence loop. Scan the changed scope, not the whole repo, to keep feedback fast.
+After config, reload the VS Code window so Roo Code picks up the file, then run `npx -y lyrashield@0.2.14 doctor` to confirm the server reports connected. In the Roo Code pane, ask the agent to run a LyraShield scan against the current target. The agent targets the release scope, reviews the real config and code and returns evidence with detected, verified, retest confirmed and inconclusive outcomes kept distinct. This mirrors the [vibe coding security guide](/blog/vibe-coding-security-guide) evidence loop. Scan the changed scope, not the whole repo, to keep feedback fast.
 
 If the server shows as loaded but no scan tools appear, the usual cause is a `streamable-http` typo (a bare `http` or camelCase `streamableHttp`), a mixed stdio and url field set or a `disabled: true` flag. The doctor command and the Roo Code MCP pane surface each. When you read scan results, do not collapse detected and verified into one bucket: a detected candidate is a signal worth review and independent verification needs a separate receipt. Keep the output in your release record so a reviewer can trace each finding to its evidence.
 
@@ -109,9 +109,9 @@ The rule works because it fixes agent behavior before any scan runs. Without it,
 
 | Step         | Command or file                          | Purpose                             |
 | ------------ | ---------------------------------------- | ----------------------------------- |
-| Authenticate | `npx -y lyrashield@0.2.13 login --oauth` | Write credentials to ~/.lyrashield  |
+| Authenticate | `npx -y lyrashield@0.2.14 login --oauth` | Write credentials to ~/.lyrashield  |
 | Add server   | Current client guide                     | Manually merge the documented entry |
-| Verify       | `npx -y lyrashield@0.2.13 doctor`        | Confirm the server connects         |
+| Verify       | `npx -y lyrashield@0.2.14 doctor`        | Confirm the server connects         |
 | Diff gate    | GitHub Action workflow                   | Block regressions in pull requests  |
 
 ## Why pair Roo Code with LyraShield

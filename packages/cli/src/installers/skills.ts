@@ -335,6 +335,15 @@ export async function installAgentSkills(
 ): Promise<SkillInstallResult> {
   const { agent } = options
   const actions: SkillAction[] = []
+  if (agent.skillInstallState === "withheld") {
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "FAILED",
+      actions,
+      message: `Skill installation is withheld for ${agent.displayName} until a workflow bundle is validated for this client surface.`,
+    }
+  }
   try {
     const { root, scopeRoot, manifestPath, manifestScopeRoot } = await prepareTarget(options)
     const sourceRoot = path.join(getPluginDir(), "skills")

@@ -692,9 +692,23 @@ jobs:
           pnpm exec playwright install --with-deps chromium
 
       - name: Marketing browser E2E
+        id: marketing_browser
         if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         timeout-minutes: 10
+        env:
+          WRANGLER_LOG_PATH: ${{ github.workspace }}/artifacts/marketing-preview
         run: pnpm --filter @lyrashield/marketing test:browser
+
+      - name: Retain marketing browser failure diagnostics
+        if: failure() && steps.marketing_browser.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: marketing-browser-failure-${{ github.run_attempt }}
+          path: |
+            artifacts/marketing-preview/
+            apps/marketing/test-results/
+          retention-days: 3
+          if-no-files-found: warn
 
       - name: Browser E2E (includes functional mobile shell at 390px)
         if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')

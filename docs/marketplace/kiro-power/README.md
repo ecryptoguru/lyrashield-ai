@@ -1,7 +1,7 @@
 # LyraShield AI for Kiro
 
-PREPARATION ONLY: this Power uses the unpublished CLI `0.2.14` release candidate. Do not submit
-or install it from a public listing until the coordinated release is published.
+PREPARATION ONLY: CLI `0.2.14` and MCP `0.2.12` are published; this Kiro Power has not yet been
+released to a public listing. Submit or install it only from the exact reviewed public export.
 
 This folder is a self-contained Kiro Power in the current Agent Plugins format. It includes
 `plugin.json`, OAuth-backed `mcp.json`, and the shared LyraShield skills. Import this folder as a

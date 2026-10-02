@@ -9,7 +9,7 @@ draft: false
 heroImage: agent-security-30
 faq:
   - q: How do I add LyraShield MCP to MiMo Code?
-    a: Follow /docs/integrations/mimo-code for manual setup. Published config writes and candidate skill installation remain withheld. Use CLI 0.2.13 and MCP 0.2.11 for local stdio, then verify discovery and a read-only client call.
+    a: Follow /docs/integrations/mimo-code for manual setup. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Use CLI 0.2.14 and MCP 0.2.12 for local stdio, then verify discovery and a read-only client call.
   - q: What is the manual MCP config for MiMo Code?
     a: Add an entry under the mcp root key in .mimocode/mimocode.jsonc. Use type remote with the url https://app.lyrashieldai.com/api/mcp and a headers block with an Authorization Bearer token.
   - q: Why does the MCP root key matter in MiMo Code?
@@ -22,13 +22,13 @@ Set up LyraShield MCP in MiMo Code by authenticating with the CLI, manually merg
 
 ## 1. Install prerequisites and authenticate
 
-MiMo Code (Xiaomi) runs as a terminal coding agent configured through `.mimocode/mimocode.jsonc` or `~/.config/mimocode/mimocode.jsonc`, with a published [JSON Schema](https://mimo.xiaomi.com/mimocode/config.json) for validation. Before wiring LyraShield, install Node so `npx` is available, then authenticate once with `npx -y lyrashield@0.2.13 login --oauth`. The CLI writes credentials to `~/.lyrashield/credentials.json` with restrictive permissions and commits nothing, so your token stays out of version control. Confirm the [MiMo Code repository](https://github.com/XiaomiMiMo/mimo-code) is the version you expect and that your editor trusts the schema domain for completion.
+MiMo Code (Xiaomi) runs as a terminal coding agent configured through `.mimocode/mimocode.jsonc` or `~/.config/mimocode/mimocode.jsonc`, with a published [JSON Schema](https://mimo.xiaomi.com/mimocode/config.json) for validation. Before wiring LyraShield, install Node so `npx` is available, then authenticate once with `npx -y lyrashield@0.2.14 login --oauth`. The CLI writes credentials to `~/.lyrashield/credentials.json` with restrictive permissions and commits nothing, so your token stays out of version control. Confirm the [MiMo Code repository](https://github.com/XiaomiMiMo/mimo-code) is the version you expect and that your editor trusts the schema domain for completion.
 
 A clean prerequisite check avoids the most common setup failures. If you run MiMoCode from a release binary rather than the npm package, local MCP servers launched through a shell may need the full path to the executable in the `command` array rather than a bare name resolved from PATH. Note that distinction now so the verification step does not surprise you. Keep your auth token in the credentials file only and never paste it into a committed config or an issue. To confirm the schema, open `.mimocode/mimocode.jsonc` and check for completion on the `mcp` key. If the editor offers `mcpServers`, the URL is wrong or the file is misplaced. The project level file wins when both exist, so place your entry accordingly.
 
 ## 2. Add the LyraShield MCP server with the CLI
 
-Follow the current [mimo-code integration guide](/docs/integrations/mimo-code) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
+Follow the current [mimo-code integration guide](/docs/integrations/mimo-code) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.14 login --oauth` and use `@lyrashield/mcp@0.2.12`. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
 ## 3. Configure the MCP server manually when needed
 
@@ -53,7 +53,7 @@ Never commit a real token. The [CWE-798](https://cwe.mitre.org/data/definitions/
 
 ## 4. Verify the connection and run an inline check
 
-After config, restart MiMo Code and run `npx -y lyrashield@0.2.13 doctor` to confirm the server reports connected. Inside a session, ask the agent to run a LyraShield scan against the current target. The agent targets the release scope, reviews the real config and code and returns evidence with detected, verified, retest confirmed and inconclusive outcomes kept distinct. This mirrors the [vibe coding security guide](/blog/vibe-coding-security-guide) evidence loop. Run the scan on the changed scope, not the whole repo, to keep feedback fast and focused.
+After config, restart MiMo Code and run `npx -y lyrashield@0.2.14 doctor` to confirm the server reports connected. Inside a session, ask the agent to run a LyraShield scan against the current target. The agent targets the release scope, reviews the real config and code and returns evidence with detected, verified, retest confirmed and inconclusive outcomes kept distinct. This mirrors the [vibe coding security guide](/blog/vibe-coding-security-guide) evidence loop. Run the scan on the changed scope, not the whole repo, to keep feedback fast and focused.
 
 If the server shows as loaded but no scan tools appear in the agent session, the usual cause is a root key mismatch (`mcpServers` instead of `mcp`) or an `enabled: false` entry. The doctor command surfaces both. When you read scan results, do not collapse detected and verified into one bucket: a detected candidate is a signal worth review and independent verification needs a separate receipt. Keep the output in your release record so a reviewer can trace each finding to its evidence. A concrete example: a detected outcome might report a possible hard coded secret in a config file, while the verified outcome carries a receipt confirming the string matches a real credential pattern. A retest confirmed outcome means the follow up scan no longer flags it and an inconclusive means the signal was too weak to verify. These four states are distinct categories and collapsing them hides the reasoning reviewers need.
 
@@ -96,9 +96,9 @@ A short rule prevents the agent from treating a clean scan as a release verdict 
 
 | Step         | Command or file                          | Purpose                                    |
 | ------------ | ---------------------------------------- | ------------------------------------------ |
-| Authenticate | `npx -y lyrashield@0.2.13 login --oauth` | Write credentials to ~/.lyrashield         |
+| Authenticate | `npx -y lyrashield@0.2.14 login --oauth` | Write credentials to ~/.lyrashield         |
 | Add server   | Current client guide                     | Manually merge the documented server entry |
-| Verify       | `npx -y lyrashield@0.2.13 doctor`        | Confirm the server connects                |
+| Verify       | `npx -y lyrashield@0.2.14 doctor`        | Confirm the server connects                |
 | Diff gate    | GitHub Action workflow                   | Block regressions in pull requests         |
 
 ## Why pair MiMo Code with LyraShield

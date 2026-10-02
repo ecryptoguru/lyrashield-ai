@@ -18,9 +18,9 @@ faq:
     a: Cursor reads MCP servers from .cursor/mcp.json at the project root. The top level key is mcpServers. Use the project file for the LyraShield entry so the team shares one server definition and keep real keys in environment variables referenced by the env block.
 ---
 
-Current setup: follow the [Cursor integration guide](/docs/integrations/cursor) with published `@lyrashield/mcp@0.2.11` and authenticate local stdio separately using `npx -y lyrashield@0.2.13 login --oauth`. Plugin installation awaits a reviewed matching immutable release. Published CLI config writes and skill installation remain withheld; merge the documented client config manually, preserving existing settings. Confirm client discovery, then make an authenticated read-only workspace call.
+Current setup: follow the [Cursor integration guide](/docs/integrations/cursor) with pinned `@lyrashield/mcp@0.2.12` and authenticate local stdio separately using `npx -y lyrashield@0.2.14 login --oauth`. The Agent Plugin package 0.1.31 is published; its public listing and authenticated client runtime acceptance remain pending. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Confirm client discovery, then make an authenticated read-only workspace call.
 
-To secure Cursor built apps with LyraShield, add the LyraShield MCP server via stdio using npx -y @lyrashield/mcp@0.2.11 with the local CLI credential store and optionally remote endpoint with Bearer lsk\_ key, verify the connection in Cursor Settings, then run targeted scans for injection, auth flaws, secrets and supply chain issues inline while coding.
+To secure Cursor built apps with LyraShield, add the LyraShield MCP server via stdio using npx -y @lyrashield/mcp@0.2.12 with the local CLI credential store and optionally remote endpoint with Bearer lsk\_ key, verify the connection in Cursor Settings, then run targeted scans for injection, auth flaws, secrets and supply chain issues inline while coding.
 
 Vibe coding in Cursor ships features quickly, but speed can recreate classic [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks like injection, broken auth and hardcoded secrets. This workflow applies the [vibe coding security guide](/blog/vibe-coding-security-guide) method to daily Cursor use. LyraShield AI is agent native AppSec at [LyraShield site](https://lyrashieldai.com), designed around Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. You get inline evidence review while agent edits. See [Cursor integration guide](/docs/integrations/cursor) and checklist [Cursor security checklist](/blog/cursor-app-security-checklist). Transport uses [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions) plus [NIST SSDF](https://csrc.nist.gov/projects/ssdf). Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
 
@@ -28,20 +28,20 @@ Vibe coding in Cursor ships features quickly, but speed can recreate classic [OW
 
 Create LyraShield API key starting with lsk\_ and store as LYRASHIELD_API_KEY. Never commit key to source control or chat logs. For local work, export it in shell profile. For teams, keep it in secret manager and add to GitHub repository secrets for CI parity. Naming consistency between shell, IDE config and CI reduces misconfig.
 
-You need Node 24 or newer for the LyraShield package, a current Cursor release and a testable target such as http://localhost:3000 or a repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp@0.2.11 and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
+You need Node 24 or newer for the LyraShield package, a current Cursor release and a testable target such as http://localhost:3000 or a repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp@0.2.12 and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
 
 Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix proposals record intended remediation for human review, not hands off merges, after Sprints 0 to 2 shipped MCP contract. See [Cursor integration guide](/docs/integrations/cursor).
 
 ## 2. Configure MCP server in cursor config file
 
-cursor reads MCP from .cursor/mcp.json. Top level key is mcpServers. Include stdio and remote to switch without code edits. Use pinned npx -y @lyrashield/mcp@0.2.11 for stdio.
+cursor reads MCP from .cursor/mcp.json. Top level key is mcpServers. Include stdio and remote to switch without code edits. Use pinned npx -y @lyrashield/mcp@0.2.12 for stdio.
 
 ```json
 {
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.11"],
+      "args": ["-y", "@lyrashield/mcp@0.2.12"],
       "env": {
         "LYRASHIELD_API_KEY": "${env:LYRASHIELD_API_KEY}"
       }

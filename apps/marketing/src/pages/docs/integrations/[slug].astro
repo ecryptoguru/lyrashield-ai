@@ -2,10 +2,8 @@
 import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
 import {
-  CLI_CONFIG_WRITES_AVAILABLE,
   CLI_PACKAGE_SPEC,
   CLI_SKILLS_AVAILABLE,
-  getPublishedCliInstallCommand,
 } from "@lyrashield/agent-registry"
 import { buildDocsJsonLd } from "../../../lib/docs-metadata"
 import { buildIntegrationPageTitle } from "../../../lib/integration-page-title"
@@ -24,10 +22,6 @@ const path = `/docs/integrations/${agent.docsSlug}`
 const title = buildIntegrationPageTitle(agent.displayName)
 const description = `Connect LyraShield to ${agent.displayName} using the documented ${agent.installStrategy.replaceAll("-", " ")} workflow.`
 const updatedDate = agent.verification.checkedOn
-const publishedCliInstallCommand = getPublishedCliInstallCommand(agent)
-const publishedCliPreviewCommand = publishedCliInstallCommand
-  ? `${publishedCliInstallCommand} --dry-run`
-  : null
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
   path,
@@ -46,6 +40,21 @@ const strategyLabels = {
 const manualPlugin = agent.installStrategy === "agent-plugin" && !!agent.manualInstructions
 const sourceUrl = agent.source?.url ?? agent.verification.reference
 const capabilities = agent.nativeCapabilities ?? []
+const projectSkillLocations = (agent.skillLocations ?? []).filter((location) => location.scope === "project")
+const globalSkillLocations = (agent.skillLocations ?? []).filter((location) => location.scope === "global")
+const skillInstallScope =
+  projectSkillLocations.length === 1
+    ? "project"
+    : projectSkillLocations.length === 0 && globalSkillLocations.length === 1
+      ? "global"
+      : null
+const skillInstallCommand =
+  agent.skillInstallState !== "withheld" &&
+  CLI_SKILLS_AVAILABLE &&
+  capabilities.includes("skills") &&
+  skillInstallScope
+    ? `npx -y ${CLI_PACKAGE_SPEC} skills install ${agent.id} --${skillInstallScope}`
+    : null
 ---
 
 <DocsLayout
@@ -68,28 +77,6 @@ const capabilities = agent.nativeCapabilities ?? []
     The registry's setup path for this client is <strong>{manualPlugin ? "Manual Agent Plugin setup" : strategyLabels[agent.installStrategy]}</strong>
     {agent.preferredTransport ? <> over <strong>{agent.preferredTransport === "remote-http" ? "remote HTTP" : "local stdio"}</strong></> : null}.
   </p>
-  {publishedCliPreviewCommand ? (
-    <>
-      <p>Preview the exact instructions available in the published CLI with <code>{publishedCliPreviewCommand}</code>.</p>
-      <pre><code>{publishedCliPreviewCommand}</code></pre>
-    </>
-  ) : (
-    <div class="callout callout--warn">
-      {agent.installStrategy === "config-file" && !CLI_CONFIG_WRITES_AVAILABLE ? (
-        <>
-          <strong>Manual setup for now:</strong> published CLI config writes are withheld while the safe
-          writer fix is pending release. Use the manual configuration below; CLI write support will
-          return after a fixed version is published.
-        </>
-      ) : (
-        <>
-          <strong>CLI installer support is pending:</strong> the published CLI package ({CLI_PACKAGE_SPEC})
-          predates this client's current setup contract. Follow the manual or client-native instructions
-          below; installer support will be documented after a compatible CLI version is published.
-        </>
-      )}
-    </div>
-  )}
   {agent.manualInstructions && (
     <>
       <h2>{manualPlugin ? "Manual plugin instructions" : "Client activation instructions"}</h2>
@@ -147,7 +134,8 @@ const capabilities = agent.nativeCapabilities ?? []
   {capabilities.length > 0 ? (
     <p>
       Documented client capabilities: {capabilities.join(", ")}. These describe what the client can
-      load; they do not mean every component is included in the current LyraShield package.
+      load; use the installer and distribution details below to see which LyraShield components are
+      available for this surface.
     </p>
   ) : (
     <p>No native plugin, skill, command, rule or hook capability is recorded for this surface.</p>
@@ -156,13 +144,36 @@ const capabilities = agent.nativeCapabilities ?? []
     <p>
       The published CLI package ({CLI_PACKAGE_SPEC}) does not include a LyraShield <code>skills</code>
       installer yet. {agent.distribution?.state === "PREPARATION" ? (
-        <>Skill installation is withheld until a reviewed matching immutable release exists. Do not
-        copy skills from a mutable preparation branch. Use the direct MCP setup on this page.</>
+        <>Skill installation is withheld until a workflow bundle is validated for this client
+        surface. Do not copy skills from a mutable preparation branch. Use the direct MCP setup on
+        this page.</>
       ) : (
         <>Follow the current client guide for native skill or plugin setup; manual MCP setup remains
         available while CLI installer support is pending.</>
       )}
     </p>
+  )}
+  {agent.skillInstallState === "withheld" && capabilities.includes("skills") && (
+    <p>
+      Skill installation is withheld for this client surface while its workflow bundle is validated.
+      Use the documented MCP setup above; do not copy skills from a preparation branch.
+    </p>
+  )}
+  {skillInstallCommand && (
+    <>
+      <h3>Install shared LyraShield skills</h3>
+      <p>
+        The pinned CLI includes a skills installer for this client. Preview its file changes first,
+        then run the install command. Existing files that are not LyraShield-owned, or have been
+        customized, are preserved.
+      </p>
+      <pre><code>{skillInstallCommand} --dry-run</code></pre>
+      <pre><code>{skillInstallCommand}</code></pre>
+      <p>
+        Restart or reload the client and verify its skill list. Local files do not prove discovery,
+        authentication, marketplace listing or runtime acceptance.
+      </p>
+    </>
   )}
   {agent.distribution ? (
     <p>

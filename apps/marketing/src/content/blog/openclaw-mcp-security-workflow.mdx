@@ -15,12 +15,12 @@ faq:
   - q: "Does OpenClaw support bearer auth for remote MCP?"
     a: "Yes. Prefer auth oauth with openclaw mcp login so a token is not stored in the config."
   - q: "How do I verify the LyraShield connection works in OpenClaw?"
-    a: Confirm server and tool discovery inside the client, then call lyrashield_list_workspaces. CLI 0.2.13 doctor checks a separate local surface; it is not client authentication or scan evidence.
+    a: Confirm server and tool discovery inside the client, then call lyrashield_list_workspaces. CLI 0.2.14 doctor checks a separate local surface; it is not client authentication or scan evidence.
 ---
 
-Follow the current [openclaw integration guide](/docs/integrations/openclaw) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.13 login --oauth` and use `@lyrashield/mcp@0.2.11`. Published config writes, candidate plugins and skills remain withheld until a reviewed matching immutable release. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
+Follow the current [openclaw integration guide](/docs/integrations/openclaw) and manually merge the server entry, preserving existing settings. Authenticate local stdio separately with `npx -y lyrashield@0.2.14 login --oauth` and use `@lyrashield/mcp@0.2.12`. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Restart the client, confirm discovery, then call `lyrashield_list_workspaces` for authenticated read-only access. CLI doctor does not establish client authentication or scan completion.
 
-You can connect OpenClaw to LyraShield AI over MCP to get target aware scans, findings with explicit evidence states and reviewable fix proposals inside your normal agent loop. In this guide you will configure local stdio using pinned npx -y @lyrashield/mcp@0.2.11 plus remote at https://app.lyrashieldai.com/api/mcp inside ~/.openclaw/openclaw.json, verify tool discovery, run a scoped inline check and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
+You can connect OpenClaw to LyraShield AI over MCP to get target aware scans, findings with explicit evidence states and reviewable fix proposals inside your normal agent loop. In this guide you will configure local stdio using pinned npx -y @lyrashield/mcp@0.2.12 plus remote at https://app.lyrashieldai.com/api/mcp inside ~/.openclaw/openclaw.json, verify tool discovery, run a scoped inline check and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
 
 OpenClaw is built to run many tools in parallel and to coordinate long lived sessions. That parallelism accelerates vibe coding and also expands attack surface quickly, which is why verification close to generation helps. Keep the [vibe coding security guide](/blog/vibe-coding-security-guide) open as your policy reference, then map findings to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) so triage has a shared vocabulary. Teams that generate large microservice surfaces in one session benefit most from this pairing, because otherwise review struggles to keep up with generation speed.
 
@@ -52,7 +52,7 @@ OpenClaw stores MCP servers under mcp.servers inside ~/.openclaw/openclaw.json. 
 CLI options:
 
 ```bash
-openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp@0.2.11
+openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp@0.2.12
 openclaw mcp add lyrashield-remote --url https://app.lyrashieldai.com/api/mcp --transport streamable-http --auth oauth
 openclaw mcp login lyrashield-remote
 ```
@@ -65,7 +65,7 @@ JSON option with tool filtering:
     "servers": {
       "lyrashield": {
         "command": "npx",
-        "args": ["-y", "@lyrashield/mcp@0.2.11"],
+        "args": ["-y", "@lyrashield/mcp@0.2.12"],
         "toolFilter": {
           "include": [
             "lyrashield_scan_target",
@@ -111,7 +111,7 @@ Show transport type, command or url and filtered tool list.
 Expected:
 
 ```text
-lyrashield (stdio via npx -y @lyrashield/mcp@0.2.11):
+lyrashield (stdio via npx -y @lyrashield/mcp@0.2.12):
 - lyrashield_scan_target(targetId, mode)
 - lyrashield_get_findings(workspaceId)
 - lyrashield_list_targets(workspaceId)

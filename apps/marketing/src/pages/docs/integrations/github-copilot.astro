@@ -28,13 +28,13 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 1,
         name: "Authenticate local stdio",
-        text: "Run npx -y lyrashield@0.2.13 login --oauth in the same OS account and select one workspace.",
+        text: "Run npx -y lyrashield@0.2.14 login --oauth in the same OS account and select one workspace.",
       },
       {
         "@type": "HowToStep",
         position: 2,
         name: "Configure the pinned MCP server",
-        text: 'Merge mcpServers.lyrashield into ~/.copilot/mcp-config.json with type "local", command "npx" and args ["-y", "@lyrashield/mcp@0.2.11"]. Preserve existing servers and keep credentials out of the config.',
+        text: 'Merge mcpServers.lyrashield into ~/.copilot/mcp-config.json with type "local", command "npx" and args ["-y", "@lyrashield/mcp@0.2.12"]. Preserve existing servers and keep credentials out of the config.',
       },
       {
         "@type": "HowToStep",
@@ -70,12 +70,12 @@ const jsonLd: unknown[] = [
     configuration and authentication contracts.
   </p>
 
-  <h2>Agent Plugin release pending</h2>
+  <h2>Public Agent Plugin listing pending</h2>
   <p>
-    The marketplace repository's default branch contains preparation artifacts. Do not install
-    from that branch or enable its plugin in shared settings. A reviewed matching immutable
-    package release is required before plugin installation can be recommended. The published CLI
-    0.2.13 still prints older marketplace instructions; follow the direct MCP steps here instead.
+    The portable Agent Plugin package <code>@lyrashield/agent-plugin@0.1.31</code> is published; the
+    Copilot listing and authenticated runtime acceptance are still pending. Do not install from the
+    marketplace's mutable preparation branch or enable an unreviewed plugin in shared settings.
+    Follow this direct MCP fallback until those checks pass.
   </p>
 
   <h2>Authenticate local stdio</h2>
@@ -83,7 +83,7 @@ const jsonLd: unknown[] = [
     Use Node.js 24 or newer. Run this command in the same OS account that runs Copilot CLI, then
     select the intended LyraShield workspace in the browser:
   </p>
-  <pre><code>npx -y lyrashield@0.2.13 login --oauth</code></pre>
+  <pre><code>npx -y lyrashield@0.2.14 login --oauth</code></pre>
   <p>
     The local MCP server reads the CLI credential store. Keep credentials out of committed files;
     authentication is separate from adding or discovering the server.
@@ -92,8 +92,9 @@ const jsonLd: unknown[] = [
   <h2>Configure the pinned MCP server</h2>
   <p>
     Merge this entry into <code>~/.copilot/mcp-config.json</code>, preserving other servers. Use
-    <code>mcpServers</code> and <code>type: "local"</code> for Copilot CLI. Published CLI config
-    writes remain withheld pending the safe writer release.
+    <code>mcpServers</code> and <code>type: "local"</code> for Copilot CLI. CLI 0.2.14 includes a
+    matching installer; preview the change above, then run the install command after reviewing it.
+    The code block remains a manual fallback.
   </p>
   <AgentSnippet agentId="copilot-cli" transport="stdio" />
 

@@ -367,7 +367,10 @@ const localPreview = process.env.LYRASHIELD_LOCAL_PREVIEW === "1"
 const xUrl = process.env.PUBLIC_X_URL || wranglerVar("PUBLIC_X_URL") || ""
 const buildRevision = process.env.LYRASHIELD_MARKETING_REVISION || process.env.GITHUB_SHA || "local"
 const configuredAppUrl = process.env.PUBLIC_APP_URL || wranglerVar("PUBLIC_APP_URL")
-const configuredScannerUrl = process.env.PUBLIC_SCANNER_URL || wranglerVar("PUBLIC_SCANNER_URL")
+const configuredScannerUrl = process.env.PUBLIC_SCANNER_URL ?? wranglerVar("PUBLIC_SCANNER_URL")
+// Local previews must never submit targets to the production scanner. Keep the
+// prerendered page state, robots metadata, and sitemap on this same build value.
+const scannerUrlForBuild = localPreview ? "" : (configuredScannerUrl ?? "")
 const turnstileSiteKey =
   process.env.PUBLIC_TURNSTILE_SITE_KEY || wranglerVar("PUBLIC_TURNSTILE_SITE_KEY") || ""
 const abuseEmail = process.env.PUBLIC_ABUSE_EMAIL || wranglerVar("PUBLIC_ABUSE_EMAIL") || ""
@@ -454,7 +457,7 @@ export default defineConfig({
           pathname !== "/docs" &&
           // Pagination remains crawlable, but declares noindex and canonical /blog.
           !/^\/blog\/[1-9]\d*\/?$/.test(pathname) &&
-          (Boolean(configuredScannerUrl) || pathname !== "/scan")
+          (Boolean(scannerUrlForBuild) || pathname !== "/scan")
         )
       },
       serialize: (item) => {
@@ -570,6 +573,7 @@ export default defineConfig({
     define: {
       __MARKETING_INDEXABLE__: JSON.stringify(indexable),
       __MARKETING_LOCAL_PREVIEW__: JSON.stringify(localPreview),
+      __MARKETING_SCANNER_URL__: JSON.stringify(scannerUrlForBuild),
       __MARKETING_X_URL__: JSON.stringify(xUrl),
       __MARKETING_MYRA_ENABLED__: JSON.stringify(myraMarketingEnabled),
       __MARKETING_BUILD_REVISION__: JSON.stringify(buildRevision),

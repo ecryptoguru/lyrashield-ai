@@ -126,13 +126,15 @@ describe("coding agent product cards", () => {
       }),
     ])
 
-    expect(markup).toContain("No installer for this surface in the published LyraShield CLI 0.2.13")
+    expect(markup).toContain(
+      `No installer for this surface in the published LyraShield CLI ${CLI_PACKAGE_VERSION}`
+    )
     expect(markup).toContain("MCP config setup")
     expect(markup).not.toContain("Auto-installs")
     expect(markup).toContain("Use the client MCP setup flow.")
     expect(markup).toContain('href="/dashboard/agents/junie-cli"')
     expect(markup).toContain('href="https://lyrashieldai.com/docs/integrations/junie-cli"')
-    expect(markup).not.toContain("npx -y lyrashield@0.2.13 install junie-cli")
+    expect(markup).not.toContain("npx -y lyrashield@0.2.14 install junie-cli")
   })
 
   it("labels VS Code's manual plugin action without claiming an installation or discovery", () => {
@@ -151,7 +153,7 @@ describe("coding agent product cards", () => {
     const markup = render([{ ...agent, installCommand: getPublishedCliInstallCommand(agent) }])
     expect(markup).toContain("Manual Agent Plugin setup")
     expect(markup).not.toContain('aria-label="Published install command"')
-    expect(markup).not.toContain("npx -y lyrashield@0.2.13 install claude-code-agent-plugin")
+    expect(markup).not.toContain("npx -y lyrashield@0.2.14 install claude-code-agent-plugin")
     expect(markup).toContain(".mcp.json")
   })
 

@@ -15,7 +15,7 @@ faq:
   - q: "Does this support PR gating?"
     a: "Yes. Add the LyraShield GitHub Action, upload SARIF and require the security job in branch protection. The runner-local action remains distinct from a recorded hosted assessment."
   - q: "Will LyraShield create Pi MCP configuration?"
-    a: Follow /docs/integrations/pi for manual setup. Published config writes and candidate skill installation remain withheld. Use CLI 0.2.13 and MCP 0.2.11 for local stdio, then verify discovery and a read-only client call.
+    a: Follow /docs/integrations/pi for manual setup. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Use CLI 0.2.14 and MCP 0.2.12 for local stdio, then verify discovery and a read-only client call.
 ---
 
 Pi Coding Agent is fast and deliberately small, with built-in MCP for stdio and Streamable HTTP, OAuth sign-in, and Agent Skills support. The recommended LyraShield connection uses hosted OAuth through Pi's user-level server configuration. A trusted project can also define a server; a project entry replaces a same-named user entry. Some extensions can replace Pi's built-in MCP implementation, so check which configuration source is active if an extension changes the client.
@@ -36,9 +36,9 @@ pi mcp list
 pi mcp login lyrashield
 ```
 
-Pi stores its OAuth tokens in its own user credential store. For a personal setup, Pi writes the server to the user-level configuration. Use the project-level option only for a deliberately shared entry, because Pi reads project configuration only after trust is granted. Use Pi’s native `pi mcp add` and `pi mcp login` commands above. Published LyraShield CLI 0.2.13 prints an obsolete Pi recipe; its config writes remain withheld.
+Pi stores its OAuth tokens in its own user credential store. For a personal setup, Pi writes the server to the user-level configuration. Use the project-level option only for a deliberately shared entry, because Pi reads project configuration only after trust is granted. Use Pi’s native `pi mcp add` and `pi mcp login` commands above. The earlier CLI 0.2.13 release printed an obsolete Pi recipe. The current CLI skill installer targets Pi’s documented skill paths; use Pi’s native MCP commands for hosted OAuth.
 
-Review the dry-run output before writing. For a local stdio or CI workflow, authenticate that separate surface with `npx -y lyrashield@0.2.13 login --oauth` and use `npx -y lyrashield@0.2.13 doctor` to check local credentials.
+Review the dry-run output before writing. For a local stdio or CI workflow, authenticate that separate surface with `npx -y lyrashield@0.2.14 login --oauth` and use `npx -y lyrashield@0.2.14 doctor` to check local credentials.
 
 Do not put a LyraShield token in Pi prompts, package source, skill files, shell transcripts committed to the repository or a project-shared MCP configuration. Pi's hosted OAuth flow requires no static bearer token in that file. If a key may have entered any of those surfaces, rotate it. Check Pi's server status and make a read-only LyraShield call before relying on the connection; setup alone is not an authenticated runtime receipt.
 
@@ -64,7 +64,7 @@ Pi already includes an MCP client. Its user-level server configuration is `~/.pi
 
 Some installed extensions can replace Pi's built-in MCP support. If one is active, review its source and version, then verify which server file and sign-in flow Pi actually uses. Do not credit an extension path to Pi core. A terminal-only LyraShield scan cannot be relabeled as a Pi MCP runtime receipt.
 
-Use Pi’s own `pi mcp add` and `pi mcp login` commands for hosted OAuth. Use `pi mcp list` to inspect discovery, then call `lyrashield_list_workspaces`. A local stdio alternative uses `@lyrashield/mcp@0.2.11` after separate `npx -y lyrashield@0.2.13 login --oauth`; it does not share Pi’s hosted credentials.
+Use Pi’s own `pi mcp add` and `pi mcp login` commands for hosted OAuth. Use `pi mcp list` to inspect discovery, then call `lyrashield_list_workspaces`. A local stdio alternative uses `@lyrashield/mcp@0.2.12` after separate `npx -y lyrashield@0.2.14 login --oauth`; it does not share Pi’s hosted credentials.
 
 Pi also discovers Agent Skills from `~/.agents/skills/` and `.agents/skills/`. Review a skill's `SKILL.md` and any scripts before installing it or trusting a project that supplies it. LyraShield's dedicated Pi package/catalog route remains in preparation, so this documents Pi's discovery contract rather than claiming a public Pi listing.
 

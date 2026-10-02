@@ -2,9 +2,9 @@
 
 **State: PREPARATION.** This is a standalone CLI companion guide, not an Aider plugin or MCP manifest. No authenticated Aider runtime receipt or marketplace listing is claimed.
 
-Aider documents read-only Markdown conventions but not a native MCP installation in the reviewed interface. Use [`CONVENTIONS.md`](./CONVENTIONS.md) with Aider's `/read` command or `--read` option; use LyraShield CLI for checks. The staged CLI pin `lyrashield@0.2.14` is unpublished; wait for the coordinated release.
+Aider documents read-only Markdown conventions but not a native MCP installation in the reviewed interface. Use [`CONVENTIONS.md`](./CONVENTIONS.md) with Aider's `/read` command or `--read` option; use the published LyraShield CLI `0.2.14` for checks. This remains a standalone companion workflow, not an Aider plugin or native MCP integration.
 
-After release, authenticate with `npx -y lyrashield@0.2.14 login --oauth`. When the user asks for an advisory local review, `lyrashield check-diff --staged` checks staged changes without starting a recorded scan.
+Authenticate with `npx -y lyrashield@0.2.14 login --oauth`. When the user asks for an advisory local review, `lyrashield check-diff --staged` checks staged changes without starting a recorded scan.
 
 For recorded work, resolve and confirm the workspace and an authorized target first. `lyrashield use <workspaceId>` sets the workspace, and `lyrashield project list` shows targets in that workspace. Run the read-only preflight with the user's selected target and depth:
 

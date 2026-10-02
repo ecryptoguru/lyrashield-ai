@@ -42,7 +42,7 @@ const faqItems = [
   },
   {
     q: "The npx install fails with a package not found error",
-    a: "The @lyrashield/mcp package is published on npm. If npx -y @lyrashield/mcp@0.2.11 fails to resolve, check that you're on Node.js 24+, that your npm registry is set to the public registry (npm config get registry) and that a corporate proxy or mirror isn't blocking scoped packages.",
+    a: "The @lyrashield/mcp package is published on npm. If npx -y @lyrashield/mcp@0.2.12 fails to resolve, check that you're on Node.js 24+, that your npm registry is set to the public registry (npm config get registry) and that a corporate proxy or mirror isn't blocking scoped packages.",
   },
 ]
 
@@ -84,13 +84,14 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout">
-    <strong>Start with the current client guide:</strong> published CLI previews can print obsolete
-    plugin guidance. Manually merge the documented <code>@lyrashield/mcp@0.2.11</code> server entry,
-    preserving existing settings, comments where supported and symlinks. Config writes and candidate
-    skills remain withheld. Authenticate local stdio separately with
-    <code>npx -y lyrashield@0.2.13 login --oauth</code>; supported hosted clients sign in through their
+    <strong>Start with the current client guide:</strong> CLI 0.2.14 provides config writers only
+    for exact supported client contracts and installs shared skills only for clients with a
+    documented skill path. Use its dry-run first where offered; otherwise follow the manual guide
+    and preserve existing settings, comments where supported and symlinks. Authenticate local stdio separately with
+    <code>npx -y lyrashield@0.2.14 login --oauth</code>; supported hosted clients sign in through their
     own flow. Restart the client, inspect tool discovery and complete a read-only authenticated call.
-    A CLI <code>doctor</code> result does not establish client discovery, authentication or scan acceptance.
+    Plugin marketplace listings and a CLI <code>doctor</code> result do not establish client
+    discovery, authentication or scan acceptance.
   </div>
 
   <h2>Quick reference — per-agent gotchas</h2>
@@ -136,7 +137,7 @@ const jsonLd: unknown[] = [
   <h2>General debugging steps</h2>
   <ol>
     <li>
-      Run <code>npx --yes lyrashield@0.2.13 doctor</code> to report the configured credential source
+      Run <code>npx --yes lyrashield@0.2.14 doctor</code> to report the configured credential source
       and API reachability, then check known local config locations for detected agents. Use the
       client guide to verify marketplace activation, OAuth and authenticated tool discovery.
     </li>
@@ -153,7 +154,7 @@ const jsonLd: unknown[] = [
     </li>
     <li>
       Try running the server manually to see raw output: <code>
-        LYRASHIELD_API_KEY=lsk_... npx -y @lyrashield/mcp@0.2.11
+        LYRASHIELD_API_KEY=lsk_... npx -y @lyrashield/mcp@0.2.12
       </code>.
     </li>
     <li>

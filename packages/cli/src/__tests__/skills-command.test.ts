@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import type { AgentEntry } from "@lyrashield/agent-registry"
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     | {
         id: string
         displayName: string
+        skillInstallState?: "withheld"
         skillLocations?: {
           scope: "project" | "global"
           path: string
@@ -21,7 +22,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock("@lyrashield/agent-plugin", () => ({ getPluginDir: () => mocks.pluginDir }))
 vi.mock("@lyrashield/agent-registry", () => ({
-  getPreferredAgent: (id: string) => (id === "pi" ? mocks.agent : undefined),
+  getPreferredAgent: (id: string) => (id === mocks.agent?.id ? mocks.agent : undefined),
 }))
 
 import { handleSkills } from "../commands/skills.js"
@@ -29,7 +30,12 @@ import { handleSkills } from "../commands/skills.js"
 describe("skills command", () => {
   let temp: string
   let project: string
-  const captured = { lines: [] as string[], notices: [] as string[], errors: [] as string[] }
+  const captured = {
+    lines: [] as string[],
+    notices: [] as string[],
+    errors: [] as string[],
+    exitCodes: [] as number[],
+  }
 
   beforeEach(async () => {
     temp = await mkdtemp(path.join(tmpdir(), "lyrashield-cli-skills-command-"))
@@ -44,6 +50,7 @@ describe("skills command", () => {
     captured.lines = []
     captured.notices = []
     captured.errors = []
+    captured.exitCodes = []
   })
 
   afterEach(async () => {
@@ -57,7 +64,12 @@ describe("skills command", () => {
       log: (...args) => captured.lines.push(args.map(String).join(" ")),
       notice: (...args) => captured.notices.push(args.map(String).join(" ")),
       warn: (...args) => captured.notices.push(args.map(String).join(" ")),
-      error: (message) => captured.errors.push(String(message)),
+      error: (message, exitCode = 2) => {
+        if (json) {
+          captured.exitCodes.push(exitCode)
+          captured.lines.push(JSON.stringify({ ok: false, error: String(message) }))
+        } else captured.errors.push(String(message))
+      },
       result: (value) => captured.lines.push(JSON.stringify(value)),
       fail: (message): never => {
         throw new Error(message)
@@ -122,5 +134,30 @@ describe("skills command", () => {
     await expect(
       readFile(path.join(project, ".agents/skills/get-started/SKILL.md"), "utf8")
     ).rejects.toBeDefined()
+  })
+
+  it("reports withheld installs as JSON errors and writes no project files", async () => {
+    mocks.agent = {
+      id: "github-copilot-cloud-agent",
+      displayName: "GitHub Copilot Cloud Agent",
+      skillInstallState: "withheld",
+      skillLocations: [{ scope: "project", path: ".github/skills", sharedByConvention: true }],
+    }
+
+    const code = await handleSkills(
+      ["install", "github-copilot-cloud-agent", "--project", "--project-root", project],
+      output(true)
+    )
+
+    expect(code).toBe(1)
+    expect(captured.exitCodes).toEqual([1])
+    expect(JSON.parse(captured.lines[0] ?? "{}")).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("withheld for GitHub Copilot Cloud Agent"),
+    })
+    await expect(
+      readFile(path.join(project, ".github", "skills", "get-started", "SKILL.md"), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readdir(path.join(project, ".github"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 })

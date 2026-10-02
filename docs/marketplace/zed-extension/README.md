@@ -2,8 +2,9 @@
 
 Zed extension for the [LyraShield AI](https://lyrashieldai.com) MCP server. Adds bounded security scans, evidence-state review and the fix → verify loop to the Zed agent panel.
 
-PREPARATION ONLY: this artifact pins the unpublished MCP `0.2.12` and CLI `0.2.14` candidates.
-Do not submit or install it from a public listing until both package releases are published.
+PREPARATION ONLY: this artifact pins the published MCP `0.2.12` and CLI `0.2.14`, but its generated
+extension release has not been published to Zed's directory. Do not claim a public listing or
+runtime acceptance from the package pins alone.
 
 ## Setup
 

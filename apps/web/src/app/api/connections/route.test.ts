@@ -12,6 +12,7 @@ vi.mock("@lyrashield/db", () => ({
   },
   createAgentConnection: vi.fn(),
   listAgentConnections: vi.fn(),
+  revokeAgentConnection: vi.fn(),
   resolveOAuthClientDisplayName: vi.fn(
     (client: { name?: string }) => client.name ?? "Connected coding agent"
   ),
@@ -45,7 +46,12 @@ vi.mock("../../../lib/oauth-consent-state", () => ({
   connectionGrantMatchesConsent: (...args: unknown[]) => connectionGrantMatchesConsent(...args),
 }))
 
-import { createAgentConnection, listAgentConnections, prisma } from "@lyrashield/db"
+import {
+  createAgentConnection,
+  listAgentConnections,
+  revokeAgentConnection,
+  prisma,
+} from "@lyrashield/db"
 import { GET, POST } from "./route"
 
 function sessionResult(overrides: Record<string, unknown> = {}) {
@@ -120,6 +126,9 @@ describe("POST /api/connections", () => {
     requireBrowserConnectionManager.mockResolvedValue(sessionResult())
     vi.mocked(prisma.target.count).mockResolvedValue(1)
     vi.mocked(prisma.oauthClient.findUnique).mockResolvedValue({ name: "Cursor IDE" } as never)
+    updateSessionMock.mockReset()
+    vi.mocked(prisma.auditLog.create).mockReset()
+    vi.mocked(revokeAgentConnection).mockReset()
     validConsent()
   })
 
@@ -163,6 +172,7 @@ describe("POST /api/connections", () => {
       })
     )
     expect(res.status).toBe(201)
+    expect(revokeAgentConnection).not.toHaveBeenCalled()
     const body = await res.json()
     expect(body.data.id).toBe("conn-new")
     expect(verifyOAuthConsentState).toHaveBeenCalledWith("signed-state")
@@ -474,5 +484,64 @@ describe("POST /api/connections", () => {
     expect(vi.mocked(createAgentConnection).mock.calls[0]![0].expiresAt).toEqual(
       new Date(expiresAt)
     )
+  })
+
+  function creationRequest() {
+    return new Request("http://localhost/api/connections", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: "ws-1",
+        clientType: "cursor",
+        oauthClientId: "client-cursor",
+        scopes: ["lyrashield.read", "lyrashield.write"],
+        allowedOperations: ["scan.create"],
+        allTargets: true,
+        allowedProfiles: ["QUICK"],
+        consentState: "signed-state",
+      }),
+    })
+  }
+
+  it.each(["audit", "binding"])(
+    "revokes only the newly created grant after %s failure",
+    async (stage) => {
+      vi.mocked(createAgentConnection).mockResolvedValue({ id: "conn-new" } as never)
+      vi.mocked(revokeAgentConnection).mockResolvedValue({ id: "conn-new" } as never)
+      if (stage === "audit")
+        vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(new Error("audit unavailable"))
+      else updateSessionMock.mockRejectedValueOnce(new Error("binding unavailable"))
+
+      const res = await POST(creationRequest())
+
+      expect(res.status).toBe(500)
+      expect(revokeAgentConnection).toHaveBeenCalledExactlyOnceWith("conn-new", "ws-1")
+      expect(prisma.auditLog.create).toHaveBeenLastCalledWith({
+        data: expect.objectContaining({
+          workspaceId: "ws-1",
+          actorUserId: "user-1",
+          action: "agent_connection.revoked",
+          resourceId: "conn-new",
+          metadata: { reason: "consent_completion_failed" },
+        }),
+      })
+    }
+  )
+
+  it("does not revoke a grant when persistence fails", async () => {
+    vi.mocked(createAgentConnection).mockRejectedValueOnce(new Error("database unavailable"))
+    expect((await POST(creationRequest())).status).toBe(500)
+    expect(revokeAgentConnection).not.toHaveBeenCalled()
+  })
+
+  it("preserves the original response when compensating revoke fails", async () => {
+    vi.mocked(createAgentConnection).mockResolvedValue({ id: "conn-new" } as never)
+    updateSessionMock.mockRejectedValueOnce(new Error("binding unavailable"))
+    vi.mocked(revokeAgentConnection).mockRejectedValueOnce(new Error("cleanup unavailable"))
+    const res = await POST(creationRequest())
+    expect(res.status).toBe(500)
+    expect(await res.json()).toMatchObject({
+      error: { message: "Failed to create agent connection" },
+    })
+    expect(revokeAgentConnection).toHaveBeenCalledExactlyOnceWith("conn-new", "ws-1")
   })
 })

@@ -9,32 +9,32 @@ draft: false
 heroImage: agent-security-23
 faq:
   - q: How do I connect LyraShield to GitHub Copilot?
-    a: Follow the canonical Copilot guide with pinned MCP 0.2.11 and CLI OAuth 0.2.13. Plugin installation remains pending a reviewed immutable release.
+    a: Follow the canonical Copilot guide with pinned MCP 0.2.12 and CLI OAuth 0.2.14. The Agent Plugin package 0.1.31 is published; its public listing and authenticated Copilot CLI runtime acceptance remain pending.
   - q: Where does Copilot CLI read MCP configuration?
     a: Use mcpServers in ~/.copilot/mcp-config.json or a trusted project .mcp.json, with type local for stdio. Preserve existing entries and keep credentials out of shared files.
   - q: What does the CLI doctor command verify?
     a: Doctor checks local setup. Confirm client discovery and then an authenticated read-only workspace call separately; doctor does not establish client acceptance.
   - q: Does this setup apply to Copilot Cloud Agent?
-    a: No. Cloud Agent uses a separate read-only API-key MCP configuration in repository settings and private Agents secrets. Skill-copy steps remain withheld pending an immutable release.
+    a: No. Cloud Agent uses a separate read-only API-key MCP configuration in repository settings and private Agents secrets. Cloud Agent skill-copy remains withheld until a dedicated read-only bundle passes tool-allowlist and client-runtime review; this gate is separate from npm publication.
 ---
 
-This workflow connects GitHub Copilot CLI to LyraShield through the currently published pinned MCP adapter. Authenticate separately with CLI OAuth, merge the client configuration, confirm discovery and make a read-only workspace call before using the tools. Plugin installation and workflow skills await a reviewed immutable release. The [Copilot integration guide](/docs/integrations/github-copilot) owns current setup; the [vibe coding security guide](/blog/vibe-coding-security-guide) provides broader review context.
+Connect GitHub Copilot CLI to LyraShield through the pinned MCP adapter. Authenticate with CLI OAuth, merge the configuration, confirm discovery and make a read-only workspace call. Agent Plugin 0.1.31 is published; its public listing and authenticated Copilot CLI acceptance remain pending. Copilot CLI has no documented LyraShield skills installation path, so use direct MCP. Follow the [Copilot integration guide](/docs/integrations/github-copilot) for setup and the [vibe coding security guide](/blog/vibe-coding-security-guide) for review context.
 
 ## 1. Authenticate local stdio
 
-Use Node.js 24 or newer and run `npx -y lyrashield@0.2.13 login --oauth` in the same OS account that starts Copilot CLI. Select one authorized workspace in the browser. The local adapter reads the CLI credential store, so no credential belongs in committed MCP configuration. A teammate must complete their own login and workspace selection; sharing the project entry does not share authentication. Keep the credentials file private, and repeat consent when access expires or is revoked.
+Use Node.js 24 or newer and run `npx -y lyrashield@0.2.14 login --oauth` in the same OS account that starts Copilot CLI. Select one authorized workspace in the browser. The local adapter reads the CLI credential store, so no credential belongs in committed MCP configuration. A teammate must complete their own login and workspace selection; sharing the project entry does not share authentication. Keep the credentials file private, and repeat consent when access expires or is revoked.
 
-The [Node.js downloads page](https://nodejs.org/en/download) describes the runtime. A missing Node executable and a denied workspace read are different failures: first confirm the client can start `npx`, then inspect the authenticated service response. Use `npx -y lyrashield@0.2.13 doctor` to inspect local setup, while keeping client discovery and an authenticated tool call as separate checks. Doctor cannot prove a skill was loaded, a scan was accepted or a hosted write is authorized.
+The [Node.js downloads page](https://nodejs.org/en/download) describes the runtime. A missing Node executable and a denied workspace read are different failures: first confirm the client can start `npx`, then inspect the authenticated service response. Use `npx -y lyrashield@0.2.14 doctor` to inspect local setup, while keeping client discovery and an authenticated tool call as separate checks. Doctor cannot prove a skill was loaded, a scan was accepted or a hosted write is authorized.
 
 ## 2. Plugin release boundary
 
-The marketplace default branch contains preparation artifacts. Do not register that branch or enable its plugin in shared repository settings. Plugin installation needs a reviewed matching immutable package release. Published CLI 0.2.13 can still print obsolete marketplace instructions; its output does not establish a supported current plugin route. Automatic client config writes and skill installation remain withheld pending a compatible release. Use direct MCP tools now instead of copying candidate workflows from the preparation repository.
+The marketplace default branch contains preparation artifacts. Do not register that branch or enable its plugin in shared repository settings. The Agent Plugin package 0.1.31 is published, but public listing and authenticated client runtime acceptance remain separate gates. The earlier CLI 0.2.13 release printed obsolete marketplace instructions; do not infer a supported plugin route from that older output. The pinned CLI provides a safe config writer for the Copilot CLI contract; preview it with `npx -y lyrashield@0.2.14 install copilot-cli --dry-run` before applying. Do not copy candidate plugin files from the preparation repository; plugin listing and authenticated runtime acceptance remain pending.
 
-Copilot CLI, Copilot in VS Code and Copilot Cloud Agent are distinct surfaces. For VS Code, follow the [VS Code MCP guide](/docs/integrations/vscode), which uses `servers` and a per-entry stdio type. The [Copilot Cloud Agent guide](/docs/integrations/github-copilot-cloud-agent) uses a private read-only Agents secret and a narrow tool allowlist; it cannot authenticate through the portable plugin's OAuth descriptor. Do not share a local credential store with that cloud environment or substitute an Actions secret for an Agents secret. A client capability listed in documentation does not mean an unpublished LyraShield bundle is available.
+Copilot CLI, Copilot in VS Code and Copilot Cloud Agent are distinct surfaces. For VS Code, follow the [VS Code MCP guide](/docs/integrations/vscode), which uses `servers` and a per-entry stdio type. The [Copilot Cloud Agent guide](/docs/integrations/github-copilot-cloud-agent) uses a private read-only Agents secret and a narrow tool allowlist; it cannot authenticate through the portable plugin's OAuth descriptor. Do not share a local credential store with that cloud environment or substitute an Actions secret for an Agents secret. Cloud Agent skills remain withheld until a dedicated read-only bundle passes tool-allowlist and runtime review.
 
 ## 3. Merge the pinned direct MCP configuration
 
-The [Copilot CLI configuration guide](/docs/integrations/copilot-cli) documents global `~/.copilot/mcp-config.json` and project `.mcp.json` or `.github/mcp.json` scope. Preserve existing server definitions when adding this entry. For a personal setup, use the global file; project entries also require the client's project trust checks. The stdio connection uses the currently published immutable package version:
+The [Copilot CLI configuration guide](/docs/integrations/copilot-cli) documents global `~/.copilot/mcp-config.json` and project `.mcp.json` or `.github/mcp.json` scope. Preserve existing server definitions when adding this entry. For a personal setup, use the global file; project entries also require the client's project trust checks. The stdio connection uses the coordinated pinned package version:
 
 ```json
 {
@@ -42,7 +42,7 @@ The [Copilot CLI configuration guide](/docs/integrations/copilot-cli) documents 
     "lyrashield": {
       "type": "local",
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp@0.2.11"]
+      "args": ["-y", "@lyrashield/mcp@0.2.12"]
     }
   }
 }
@@ -89,8 +89,8 @@ Before finishing a feature, run a LyraShield security check and attach the findi
 
 | Workflow step | Command or action                        | Purpose                      |
 | ------------- | ---------------------------------------- | ---------------------------- |
-| Authenticate  | `npx -y lyrashield@0.2.13 login --oauth` | Local credential store       |
-| Configure     | Pinned MCP 0.2.11 manual merge           | Preserve existing settings   |
+| Authenticate  | `npx -y lyrashield@0.2.14 login --oauth` | Local credential store       |
+| Configure     | Pinned MCP 0.2.12 manual merge           | Preserve existing settings   |
 | Discover      | `/mcp show lyrashield`                   | Inspect client-loaded tools  |
 | Verify read   | `lyrashield_list_workspaces`             | Confirm authorized workspace |
 | CI gate       | GitHub Action on diff                    | Advisory changed-file check  |

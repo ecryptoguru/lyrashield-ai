@@ -38,7 +38,7 @@ it("keeps OAuth config free of credential provenance overrides", () => {
   })
   expect(JSON.stringify(entry.value)).not.toContain("LYRASHIELD_API_URL")
   expect(JSON.stringify(entry.value)).not.toContain("LYRASHIELD_API_KEY")
-  expect(JSON.stringify(entry.value)).toContain("@lyrashield/mcp@0.2.11")
+  expect(JSON.stringify(entry.value)).toContain(MCP_PACKAGE_SPEC)
 })
 
 function testOptions(agent: AgentEntry, transport: Transport): InstallOptions {
@@ -178,6 +178,7 @@ describe("agent registry", () => {
     expect(copilotCloud.transports).toEqual(["remote-http"])
     expect(copilotCloud.locations).toEqual([])
     expect(copilotCloud.nativeCapabilities).toEqual(expect.arrayContaining(["plugin", "skills"]))
+    expect(copilotCloud.skillInstallState).toBe("withheld")
     expect(copilotCloud.manualInstructions).toContain("COPILOT_MCP_LYRASHIELD_API_KEY")
     expect(copilotCloud.manualInstructions).toContain("connect_required")
     expect(copilotCloud.manualInstructions).toContain("does not support remote OAuth")
@@ -186,7 +187,9 @@ describe("agent registry", () => {
     expect(copilotCloud.manualInstructions).not.toContain("lyrashield@lyrashield-ai")
     expect(copilotCloud.manualInstructions).toContain(".github/skills/")
     expect(copilotCloud.manualInstructions).toContain("Skill installation is withheld")
-    expect(copilotCloud.manualInstructions).toContain("matching immutable release")
+    expect(copilotCloud.manualInstructions).toContain(
+      "reduced and validated for this read-only surface"
+    )
     expect(copilotCloud.manualInstructions).not.toContain("copy only")
     expect(copilotCloud.manualInstructions).toContain("lyrashield_check_diff")
     expect(copilotCloud.manualInstructions).toContain(
@@ -231,15 +234,12 @@ describe("agent registry", () => {
     expect(augmentVsCode.rulesFiles).toContain(".augment/rules/lyrashield.md")
     expect(augmentJetBrains.rulesFiles).toContain(".augment/rules/lyrashield.md")
     for (const augment of [augmentVsCode, augmentJetBrains]) {
-      expect(augment.manualInstructions).toContain("PREPARATION ONLY")
-      expect(augment.manualInstructions).toContain("unpublished CLI 0.2.14 and MCP 0.2.12")
-      expect(augment.manualInstructions).toContain(
-        "published direct-MCP baseline (CLI 0.2.13 and MCP 0.2.11)"
-      )
+      expect(augment.manualInstructions).toContain("no verified LyraShield marketplace listing")
       expect(augment.manualInstructions).toContain("lyrashield@0.2.14")
       expect(augment.manualInstructions).toContain("@lyrashield/mcp@0.2.12")
-      expect(augment.manualInstructions).not.toContain("npx -y lyrashield@0.2.13")
-      expect(augment.manualInstructions).not.toContain("npx -y @lyrashield/mcp@0.2.11")
+      expect(augment.manualInstructions).toContain(`skills install ${augment.id}`)
+      expect(augment.manualInstructions).toContain("Public Beta opt-in")
+      expect(augment.manualInstructions).toContain("read-only workspace call")
     }
   })
 
@@ -508,7 +508,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.value).toMatchObject({
       type: "stdio",
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.11"],
+      args: ["-y", MCP_PACKAGE_SPEC],
       env: {
         LYRASHIELD_API_KEY: TEST_API_KEY,
         LYRASHIELD_API_URL: TEST_BASE_URL,
@@ -523,7 +523,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.rootKey).toBe("context_servers")
     expect(entry.value).toMatchObject({
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.11"],
+      args: ["-y", MCP_PACKAGE_SPEC],
       env: {
         LYRASHIELD_API_KEY: TEST_API_KEY,
         LYRASHIELD_API_URL: TEST_BASE_URL,
@@ -538,7 +538,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.rootKey).toBe("mcp_servers")
     expect(entry.value).toMatchObject({
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.11"],
+      args: ["-y", MCP_PACKAGE_SPEC],
       env: {
         LYRASHIELD_API_KEY: TEST_API_KEY,
         LYRASHIELD_API_URL: TEST_BASE_URL,
@@ -563,7 +563,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.rootKey).toBe("mcp")
     expect(entry.value).toMatchObject({
       type: "local",
-      command: ["npx", "-y", "@lyrashield/mcp@0.2.11"],
+      command: ["npx", "-y", MCP_PACKAGE_SPEC],
       environment: {
         LYRASHIELD_API_KEY: "{env:LYRASHIELD_API_KEY}",
         LYRASHIELD_API_URL: TEST_BASE_URL,
@@ -576,7 +576,7 @@ describe("renderEntry returns correct structural patch", () => {
     const stdioEntry = renderEntry(agent, testOptions(agent, "stdio"))
     expect(stdioEntry.value).toMatchObject({
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.11"],
+      args: ["-y", MCP_PACKAGE_SPEC],
       env: { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY" },
     })
 
@@ -610,7 +610,7 @@ describe("renderEntry returns correct structural patch", () => {
       rootKey: "mcpServers",
       value: {
         command: "npx",
-        args: ["-y", "@lyrashield/mcp@0.2.11"],
+        args: ["-y", MCP_PACKAGE_SPEC],
         env: { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY" },
       },
     })
@@ -692,7 +692,7 @@ describe("renderEntry returns correct structural patch", () => {
     expect(stdioEntry.rootKey).toBe("mcpServers")
     expect(stdioEntry.value).toMatchObject({
       command: "npx",
-      args: ["-y", "@lyrashield/mcp@0.2.11"],
+      args: ["-y", MCP_PACKAGE_SPEC],
       type: "local",
     })
     const remoteEntry = renderEntry(agent, testOptions(agent, "remote-http"))

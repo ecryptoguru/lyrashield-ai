@@ -5,7 +5,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { parse } from "yaml"
 import { createAllTools, McpServer } from "@lyrashield/mcp"
 import { buildPlugin } from "../build.js"
@@ -522,7 +522,7 @@ describe("exported validator", () => {
     )
   })
 
-  it("keeps offline candidates passable and fails release-ready validation on pinned MCP E404", async () => {
+  it("keeps offline validation separate from published MCP gates in CI and releases", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
     await exportMarketplace(output)
@@ -550,6 +550,12 @@ describe("exported validator", () => {
         }
       )
     ).rejects.toThrow(/pinned MCP package is unavailable: HTTP 404/)
+    const releaseWorkflow = await readFile(
+      path.join(output, ".github/workflows/release.yml"),
+      "utf8"
+    )
+    expect(releaseWorkflow).toContain("node scripts/validate.mjs --release")
+    expect(releaseWorkflow).toContain("node scripts/verify-published-mcp.mjs")
     const workflow = parse(
       await readFile(path.join(output, ".github/workflows/validate.yml"), "utf8")
     ) as {
@@ -558,7 +564,7 @@ describe("exported validator", () => {
     const validateCommand = workflow.jobs.validate.steps.find((step) =>
       step.run?.startsWith("node scripts/validate.mjs")
     )?.run
-    expect(validateCommand).toBeTruthy()
+    expect(validateCommand).toBe("node scripts/validate.mjs --release-ready")
     await expect(
       execFileAsync(
         process.execPath,
@@ -581,7 +587,7 @@ describe("exported validator", () => {
         cwd: output,
       })
     ).rejects.toThrow(/pinned MCP package is unavailable: HTTP 404/)
-  })
+  }, 20_000)
 
   it("exports runnable verifier fixtures and the required client schema contract", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
@@ -856,12 +862,37 @@ describe("exported validator", () => {
   it("produces identical clean exports from one source commit", async () => {
     const first = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     const second = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
-    outputs.push(first, second)
-    await exportMarketplace(first)
-    await exportMarketplace(second)
-    expect(await readFile(path.join(first, "manifest.json"), "utf8")).toBe(
-      await readFile(path.join(second, "manifest.json"), "utf8")
+    const provenance = await mkdtemp(path.join(tmpdir(), "lyrashield-export-provenance-"))
+    outputs.push(first, second, provenance)
+    await execFileAsync("git", ["init", provenance])
+    await execFileAsync(
+      "git",
+      [
+        "-c",
+        "user.name=Export Test",
+        "-c",
+        "user.email=export@example.invalid",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "fixture",
+        "--no-gpg-sign",
+      ],
+      { cwd: provenance }
     )
+    // Other suites write temporary files in the shared checkout. Keep Git
+    // provenance stable while still exercising the real exporter and Git calls.
+    vi.stubEnv("GIT_DIR", path.join(provenance, ".git"))
+    vi.stubEnv("GIT_WORK_TREE", provenance)
+    try {
+      await exportMarketplace(first)
+      await exportMarketplace(second)
+      const manifest = await readFile(path.join(first, "manifest.json"), "utf8")
+      expect(JSON.parse(manifest).publication.sourceClean).toBe(true)
+      expect(manifest).toBe(await readFile(path.join(second, "manifest.json"), "utf8"))
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 

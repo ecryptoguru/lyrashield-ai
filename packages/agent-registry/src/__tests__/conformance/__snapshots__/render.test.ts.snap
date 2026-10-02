@@ -33,7 +33,7 @@ exports[`conformance: renderConfig round-trips through the format parser > antig
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -51,7 +51,7 @@ exports[`conformance: renderConfig round-trips through the format parser > antig
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -97,7 +97,7 @@ exports[`conformance: renderConfig round-trips through the format parser > auggi
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -115,7 +115,7 @@ exports[`conformance: renderConfig round-trips through the format parser > auggi
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -161,7 +161,7 @@ exports[`conformance: renderConfig round-trips through the format parser > claud
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -179,7 +179,7 @@ exports[`conformance: renderConfig round-trips through the format parser > claud
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -225,7 +225,7 @@ exports[`conformance: renderConfig round-trips through the format parser > cline
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -243,7 +243,7 @@ exports[`conformance: renderConfig round-trips through the format parser > cline
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -289,7 +289,7 @@ exports[`conformance: renderConfig round-trips through the format parser > codeb
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -307,7 +307,7 @@ exports[`conformance: renderConfig round-trips through the format parser > codeb
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -353,7 +353,7 @@ exports[`conformance: renderConfig round-trips through the format parser > copil
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -372,7 +372,7 @@ exports[`conformance: renderConfig round-trips through the format parser > copil
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -419,7 +419,7 @@ exports[`conformance: renderConfig round-trips through the format parser > curso
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -437,7 +437,7 @@ exports[`conformance: renderConfig round-trips through the format parser > curso
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -481,7 +481,7 @@ exports[`conformance: renderConfig round-trips through the format parser > devin
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -499,7 +499,7 @@ exports[`conformance: renderConfig round-trips through the format parser > devin
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -569,7 +569,7 @@ exports[`conformance: renderConfig round-trips through the format parser > gemin
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -587,7 +587,7 @@ exports[`conformance: renderConfig round-trips through the format parser > gemin
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -622,7 +622,7 @@ exports[`conformance: renderConfig round-trips through the format parser > herme
     command: "npx"
     args:
       - "-y"
-      - "@lyrashield/mcp@0.2.11"
+      - "@lyrashield/mcp@0.2.12"
     env:
       LYRASHIELD_API_URL: "https://app.lyrashieldai.com"
       LYRASHIELD_API_KEY: "lsk_testkey123""
@@ -634,7 +634,7 @@ exports[`conformance: renderConfig round-trips through the format parser > herme
     command: "npx"
     args:
       - "-y"
-      - "@lyrashield/mcp@0.2.11"
+      - "@lyrashield/mcp@0.2.12"
     env:
       LYRASHIELD_API_URL: "https://app.lyrashieldai.com"
       LYRASHIELD_API_KEY: "\${env:LYRASHIELD_API_KEY}""
@@ -647,7 +647,7 @@ exports[`conformance: renderConfig round-trips through the format parser > junie
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
@@ -664,7 +664,7 @@ exports[`conformance: renderConfig round-trips through the format parser > junie
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
@@ -701,7 +701,7 @@ exports[`conformance: renderConfig round-trips through the format parser > junie
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
@@ -718,7 +718,7 @@ exports[`conformance: renderConfig round-trips through the format parser > junie
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
@@ -779,7 +779,7 @@ exports[`conformance: renderConfig round-trips through the format parser > oh-my
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -797,7 +797,7 @@ exports[`conformance: renderConfig round-trips through the format parser > oh-my
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -827,7 +827,7 @@ Authorization = "Bearer <LYRASHIELD_API_KEY>""
 exports[`conformance: renderConfig round-trips through the format parser > openai-codex × stdio — inline secret may contain the literal key > openai-codex × stdio — inline 1`] = `
 "[mcp_servers.lyrashield]
 command = "npx"
-args = ["-y", "@lyrashield/mcp@0.2.11"]
+args = ["-y", "@lyrashield/mcp@0.2.12"]
 
 [mcp_servers.lyrashield.env]
 LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
@@ -837,7 +837,7 @@ LYRASHIELD_API_KEY = "lsk_testkey123""
 exports[`conformance: renderConfig round-trips through the format parser > openai-codex × stdio — interpolated secret is safe > openai-codex × stdio — interpolated 1`] = `
 "[mcp_servers.lyrashield]
 command = "npx"
-args = ["-y", "@lyrashield/mcp@0.2.11"]
+args = ["-y", "@lyrashield/mcp@0.2.12"]
 
 [mcp_servers.lyrashield.env]
 LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
@@ -879,7 +879,7 @@ exports[`conformance: renderConfig round-trips through the format parser > openc
       "command": [
         "npx",
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "environment": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -899,7 +899,7 @@ exports[`conformance: renderConfig round-trips through the format parser > openc
       "command": [
         "npx",
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "environment": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -939,7 +939,7 @@ exports[`conformance: renderConfig round-trips through the format parser > picod
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
@@ -956,7 +956,7 @@ exports[`conformance: renderConfig round-trips through the format parser > picod
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
@@ -995,7 +995,7 @@ exports[`conformance: renderConfig round-trips through the format parser > qoder
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
@@ -1012,7 +1012,7 @@ exports[`conformance: renderConfig round-trips through the format parser > qoder
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
@@ -1049,7 +1049,7 @@ exports[`conformance: renderConfig round-trips through the format parser > qwen-
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
@@ -1066,7 +1066,7 @@ exports[`conformance: renderConfig round-trips through the format parser > qwen-
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
@@ -1111,7 +1111,7 @@ exports[`conformance: renderConfig round-trips through the format parser > roo-c
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -1129,7 +1129,7 @@ exports[`conformance: renderConfig round-trips through the format parser > roo-c
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -1175,7 +1175,7 @@ exports[`conformance: renderConfig round-trips through the format parser > vscod
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -1194,7 +1194,7 @@ exports[`conformance: renderConfig round-trips through the format parser > vscod
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -1239,7 +1239,7 @@ exports[`conformance: renderConfig round-trips through the format parser > zed �
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
@@ -1257,7 +1257,7 @@ exports[`conformance: renderConfig round-trips through the format parser > zed �
       "command": "npx",
       "args": [
         "-y",
-        "@lyrashield/mcp@0.2.11"
+        "@lyrashield/mcp@0.2.12"
       ],
       "env": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",

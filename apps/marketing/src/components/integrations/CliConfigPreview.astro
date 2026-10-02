@@ -1,34 +1,45 @@
 ---
+import { getAgent, getPublishedCliInstallCommand } from "@lyrashield/agent-registry"
+
 interface Props {
   agentId: string
   scope?: "global" | "project"
 }
 
 const { agentId, scope } = Astro.props
-const command = [
-  "npx",
-  "--yes",
-  "lyrashield@0.2.13",
-  "install",
-  agentId,
-  scope ? `--${scope}` : null,
-  "--dry-run",
-]
-  .filter(Boolean)
-  .join(" ")
+const agent = getAgent(agentId)
+const baseCommand = agent ? getPublishedCliInstallCommand(agent) : null
+const installCommand = baseCommand
+  ? [baseCommand, scope ? "--" + scope : null].filter(Boolean).join(" ")
+  : null
+const previewCommand = installCommand ? installCommand + " --dry-run" : null
 ---
 
-<h2>Preview the config entry with the published CLI</h2>
-<p>
-  <code>lyrashield@0.2.13</code> can preview the LyraShield server entry for this client. Keep{" "}
-  <code>--dry-run</code>: config-writing installers are withheld while the safe-writer fix is pending
-  release. The preview command changes no files.
-</p>
-<pre><code>{command}</code></pre>
-<p>
-  Manually merge only the LyraShield server entry into the documented configuration file below.
-  Preserve existing servers and unrelated settings, retain comments where the format supports them,
-  and edit the existing file through its current path without replacing a symlink or overwriting the
-  whole file. Restart or reload the client and complete a read-only authenticated call; a config
-  entry or CLI doctor result alone does not prove the client loaded the integration.
-</p>
+{installCommand ? (
+  <>
+    <h2>Install with the pinned CLI</h2>
+    <p>
+      CLI 0.2.14 has a matching installer for this client. Sign in first with{" "}
+      <code>npx -y lyrashield@0.2.14 login --oauth</code> for local stdio. Review the planned
+      changes before writing:
+    </p>
+    <pre><code>{previewCommand}</code></pre>
+    <p>When the preview is correct, run the installer:</p>
+    <pre><code>{installCommand}</code></pre>
+    <p>
+      The installer updates LyraShield's entry and preserves unrelated configuration. You can also
+      use the manual snippet below. Restart or reload the client and complete a read-only
+      authenticated call; an installed config entry alone does not prove client discovery.
+    </p>
+  </>
+) : (
+  <>
+    <h2>Manual configuration</h2>
+    <p>
+      No matching CLI installer is recorded for this client's configuration contract. Use the
+      manual snippet below and merge only LyraShield's entry, preserving existing servers, comments
+      where supported, and the file's current path and symlinks. Restart or reload the client and
+      complete a read-only authenticated call; an entry alone does not prove client discovery.
+    </p>
+  </>
+)}

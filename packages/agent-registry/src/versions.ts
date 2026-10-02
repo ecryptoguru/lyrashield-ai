@@ -1,22 +1,25 @@
 import type { AgentEntry } from "./types"
 
-/** Published MCP runtime pin. Candidate package and artifact pins remain separate until release. */
-export const MCP_PACKAGE_VERSION = "0.2.11"
+/** Exact MCP runtime pin for the coordinated native-agent release. */
+export const MCP_PACKAGE_VERSION = "0.2.12"
 export const MCP_PACKAGE_SPEC = `@lyrashield/mcp@${MCP_PACKAGE_VERSION}`
 
-/** Latest published CLI package verified for customer-facing install commands. */
-export const CLI_PACKAGE_VERSION = "0.2.13"
+/** Exact CLI pin for the coordinated native-agent release. */
+export const CLI_PACKAGE_VERSION = "0.2.14"
 export const CLI_PACKAGE_SPEC = `lyrashield@${CLI_PACKAGE_VERSION}`
 
-/** The published CLI does not yet include the native skills installer. */
-export const CLI_SKILLS_AVAILABLE = false
+/** The pinned release includes the native skills installer. */
+export const CLI_SKILLS_AVAILABLE = true
 
-/** Published CLI config writes are withheld until the safe atomic writer is released. */
-export const CLI_CONFIG_WRITES_AVAILABLE = false
+/** The pinned release includes the safe atomic configuration writer. */
+export const CLI_CONFIG_WRITES_AVAILABLE = true
 
 /**
  * Install-contract fingerprints extracted from the published `lyrashield@0.2.13`
  * npm tarball (integrity: sha512-M6SvchlRtmYJnQuYmNOFhXIfnjgeUcuhDZTlLlMHR5NFTLfoM0wNUE6J8Sw7fDUZinvJ3KS3ElzFnqAJkjOY5g==).
+ * CLI 0.2.14 uses this baseline as a drift guard for unchanged client contracts;
+ * new or changed contracts remain gated. The safe writer and skills installer
+ * are separate release features, and the exact packed artifact must be verified.
  * Each fingerprint covers the serialized fields that control CLI installation:
  * identity/aliases, strategy, paths and formats, transports, credential shape,
  * vendor command, plugin paths, manual setup text, and rules files. This is a

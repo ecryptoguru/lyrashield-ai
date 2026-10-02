@@ -27,13 +27,13 @@ assert.doesNotMatch(JSON.stringify(mcp), /lsk_|Authorization|clientSecret/i)
 for (const guide of ideGuides) {
   const normalizedGuide = guide.replace(/\s+/g, " ")
   assert.match(normalizedGuide, /PREPARATION ONLY/)
-  assert.match(normalizedGuide, /unpublished CLI `0\.2\.14` and MCP `0\.2\.12`/)
+  assert.match(normalizedGuide, /published CLI `0\.2\.14` and MCP `0\.2\.12`/)
   assert.match(
     normalizedGuide,
-    /Direct MCP tools can be connected now with the published CLI `0\.2\.13` and MCP `0\.2\.11` baseline/
+    /Direct MCP tools can be connected with the published CLI `0\.2\.14` and MCP `0\.2\.12`/
   )
-  assert.match(normalizedGuide, /that baseline does not include these candidate workflow skills/)
-  assert.match(normalizedGuide, /Do not pair the published MCP baseline with candidate skills/)
+  assert.match(normalizedGuide, /does not yet have a matching immutable marketplace release/)
+  assert.match(normalizedGuide, /Do not copy skills from the mutable source branch/)
   assert.match(normalizedGuide, /lyrashield@0\.2\.14/)
   assert.match(normalizedGuide, /@lyrashield\/mcp@0\.2\.12/)
   assert.doesNotMatch(normalizedGuide, /npx[^`]*lyrashield@0\.2\.13/)

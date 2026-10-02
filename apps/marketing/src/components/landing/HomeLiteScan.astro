@@ -1,5 +1,5 @@
 ---
-const appOrigin = (import.meta.env.PUBLIC_SCANNER_URL as string | undefined)?.replace(/\/$/, "") || ""
+const appOrigin = __MARKETING_SCANNER_URL__.replace(/\/$/, "")
 const scannerAvailable = Boolean(appOrigin)
 ---
 

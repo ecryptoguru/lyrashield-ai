@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import { CLI_PACKAGE_SPEC, MCP_PACKAGE_SPEC } from "../../packages/agent-registry/src/versions"
 
 const harnessUrl = "?agents"
 
@@ -44,7 +45,9 @@ test("agent cards group client surfaces and update setup material with selection
   await expect(claude).toContainText("Manual Agent Plugin setup")
   await expect(claude.getByLabel("Published install command")).toHaveCount(0)
   await claude.getByText("Manual setup notes", { exact: true }).click()
-  await expect(claude).toContainText("reviewed matching immutable package release")
+  await expect(claude).toContainText(
+    "public listing and authenticated runtime acceptance remain pending"
+  )
   await expect(claude.getByRole("link", { name: "Set up" })).toHaveAttribute(
     "href",
     "/dashboard/agents/claude-code-agent-plugin"
@@ -234,12 +237,12 @@ test("Claude Code optional hooks stay collapsed until requested and announce cop
   await expect(optionalHooks).not.toHaveJSProperty("open", true)
   await optionalHooks.locator("summary").click()
   await expect(optionalHooks).toHaveJSProperty("open", true)
-  await expect(optionalHooks).toContainText(
-    "safer offline hook installer is prepared for the next release"
-  )
+  await expect(optionalHooks).toContainText("Off by default")
+  await expect(optionalHooks).toContainText("never starts a paid scan")
+  await expect(optionalHooks).toContainText("preserves unrelated hook commands")
   await expect(
-    optionalHooks.getByRole("button", { name: "Copy hook install command" })
-  ).toHaveCount(0)
+    optionalHooks.getByRole("button", { name: "Copy optional hook install command" })
+  ).toHaveCount(1)
   await page.getByRole("button", { name: "Copy doctor command" }).click()
   await expect(page.getByRole("alert")).toContainText("Copy failed")
 })
@@ -312,10 +315,10 @@ for (const width of [375, 1280]) {
     const fallback = page.locator("ol li").filter({ hasText: "Current direct MCP fallback" })
     await expect(fallback).toHaveCount(1)
     await expect(fallback).toContainText(".vscode/mcp.json")
-    await expect(fallback).toContainText("@lyrashield/mcp@0.2.11")
+    await expect(fallback).toContainText(MCP_PACKAGE_SPEC)
     await expect(
       page.locator("ol li").filter({ has: page.getByRole("heading", { name: "Authenticate" }) })
-    ).toContainText("lyrashield@0.2.13 login --oauth")
+    ).toContainText(`${CLI_PACKAGE_SPEC} login --oauth`)
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth
     )

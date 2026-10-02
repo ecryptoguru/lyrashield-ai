@@ -9,22 +9,22 @@ draft: false
 heroImage: agent-security-25
 faq:
   - q: Does Aider support a rules or instructions file like other agents?
-    a: Aider does not document native MCP client support. Use the separate LyraShield CLI 0.2.13 repository check; do not add an mcp-servers key or claim an Aider MCP connection.
+    a: Aider does not document native MCP client support. Use the separate LyraShield CLI 0.2.14 repository check; do not add an mcp-servers key or claim an Aider MCP connection.
   - q: How does Aider store MCP server configuration?
-    a: Aider does not document native MCP client support. Use the separate LyraShield CLI 0.2.13 repository check; do not add an mcp-servers key or claim an Aider MCP connection.
+    a: Aider does not document native MCP client support. Use the separate LyraShield CLI 0.2.14 repository check; do not add an mcp-servers key or claim an Aider MCP connection.
   - q: Can the LyraShield CLI auto write Aider MCP config?
-    a: Aider does not document native MCP client support. Use the separate LyraShield CLI 0.2.13 repository check; do not add an mcp-servers key or claim an Aider MCP connection.
+    a: Aider does not document native MCP client support. Use the separate LyraShield CLI 0.2.14 repository check; do not add an mcp-servers key or claim an Aider MCP connection.
   - q: Does this checklist replace manual review of Aider changes?
     a: No. It structures review around the highest risk areas but human judgment still matters for logic and business rules. Pair it with automated detection.
 ---
 
 Aider edits code directly from the terminal, so a security checklist must review repository and model configuration, secrets, dependency safety and verifiable evidence. This checklist gives concrete Aider specific steps for each area and pairs the review with [LyraShield AI](https://lyrashieldai.com) for detection plus immutable proof. For cross tool context see the [vibe coding security guide](/blog/vibe-coding-security-guide).
 
-Use the current [Aider integration guide](/docs/integrations/aider) for the separate CLI 0.2.13 repository check. Native MCP support is not documented and candidate skills remain withheld.
+Use the current [Aider integration guide](/docs/integrations/aider) for the separate CLI 0.2.14 repository check. Aider does not document native MCP or a native skills path; use the standalone CLI and CI gate.
 
 ## 1. Review repository settings and the separate CLI check
 
-Aider does not document native MCP client support. Do not add an invented `mcp-servers` YAML key, paste MCP credentials into Aider settings or interpret a standalone terminal check as an Aider MCP runtime receipt. Follow the current [Aider integration guide](/docs/integrations/aider). Authenticate the separate repository-check surface with `npx -y lyrashield@0.2.13 login --oauth`, then run `npx -y lyrashield@0.2.13 check-diff` for the authorized diff or `npx -y lyrashield@0.2.13 gate --verdict` when the workflow needs a gate. Review the command’s target, revision, coverage and recorded evidence state. A local login establishes credentials for that user; it does not grant Aider new tools or establish that an application assessment completed.
+Aider does not document native MCP client support. Do not add an invented `mcp-servers` YAML key, paste MCP credentials into Aider settings or interpret a standalone terminal check as an Aider MCP runtime receipt. Follow the current [Aider integration guide](/docs/integrations/aider). Authenticate the separate repository-check surface with `npx -y lyrashield@0.2.14 login --oauth`, then run `npx -y lyrashield@0.2.14 check-diff` for the authorized diff or `npx -y lyrashield@0.2.14 gate --verdict` when the workflow needs a gate. Review the command’s target, revision, coverage and recorded evidence state. A local login establishes credentials for that user; it does not grant Aider new tools or establish that an application assessment completed.
 
 Review Aider’s actual repository settings, selected model and permitted shell actions before each session. Remove settings or wrappers you do not recognize and keep model credentials outside version control. A third-party MCP bridge is a separate executable dependency with its own permissions and must not be credited to Aider core. The [Model Context Protocol specification](https://modelcontextprotocol.io/) describes protocol contracts, but cannot establish native support in a client that does not document it. Retain the exact versions and any wrapper source with your review. Inspect the diff before executing checks and preserve incomplete results. A successful diff check is bounded evidence for the files and detectors it covered; it does not prove every application risk has been reviewed.
 

@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os"
 import { execFileSync } from "node:child_process"
 import path from "node:path"
-import { getAgent } from "@lyrashield/agent-registry"
+import { getAgent, MCP_PACKAGE_SPEC } from "@lyrashield/agent-registry"
 import { installAgent, uninstallAgent } from "../../installers/install.js"
 import { mergeFile, removeFile } from "../../installers/merge.js"
 import { parse as parseJsonc } from "jsonc-parser"
@@ -118,7 +118,7 @@ describe("conformance: install/uninstall round-trips", () => {
     expect(servers).toHaveProperty("lyrashield")
     const lyra = servers["lyrashield"] as Record<string, unknown>
     expect(lyra).toHaveProperty("command", "npx")
-    expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp@0.2.11"])
+    expect(lyra).toHaveProperty("args", ["-y", MCP_PACKAGE_SPEC])
     expect(lyra).toHaveProperty("env")
   })
 
@@ -354,7 +354,7 @@ args = ["acme-mcp"]`
       serverName: "lyrashield",
       value: {
         command: "npx",
-        args: ["-y", "@lyrashield/mcp@0.2.11"],
+        args: ["-y", MCP_PACKAGE_SPEC],
         env: {
           LYRASHIELD_API_KEY: API_KEY,
           LYRASHIELD_API_URL: API_URL,
@@ -376,7 +376,7 @@ args = ["acme-mcp"]`
     expect(acme).toHaveProperty("args", ["acme-mcp"])
     const lyra = servers["lyrashield"] as Record<string, unknown>
     expect(lyra).toHaveProperty("command", "npx")
-    expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp@0.2.11"])
+    expect(lyra).toHaveProperty("args", ["-y", MCP_PACKAGE_SPEC])
     expect(lyra).toHaveProperty("env")
     const env = lyra["env"] as Record<string, unknown>
     expect(env).toEqual({
@@ -409,7 +409,7 @@ command = "acme-mcp"
       format: "toml",
       rootKey: "mcp_servers",
       serverName: "lyrashield",
-      value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+      value: { command: "npx", args: ["-y", MCP_PACKAGE_SPEC] },
     })
 
     const result = await readFile(filePath, "utf-8")
@@ -422,7 +422,7 @@ command = "acme-mcp"
     )
     expect(parsed.mcp_servers).toMatchObject({
       acme: { command: "acme-mcp" },
-      lyrashield: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+      lyrashield: { command: "npx", args: ["-y", MCP_PACKAGE_SPEC] },
     })
   })
 
@@ -437,7 +437,7 @@ command = "acme-mcp"
         format: "toml",
         rootKey: "mcp_servers",
         serverName: "lyrashield",
-        value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+        value: { command: "npx", args: ["-y", MCP_PACKAGE_SPEC] },
       })
     ).rejects.toThrow(/inline TOML entry/i)
 
@@ -463,7 +463,7 @@ command = "acme-mcp"
       format: "toml",
       rootKey: "mcp_servers",
       serverName: "lyrashield",
-      value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+      value: { command: "npx", args: ["-y", MCP_PACKAGE_SPEC] },
     })
     const merged = await readFile(filePath, "utf-8")
     const preservedBlock = "# Keep this note with Acme.\n# Owned by Platform.\n\n[mcp_servers.acme]"
@@ -496,7 +496,7 @@ mcp_servers:
       serverName: "lyrashield",
       value: {
         command: "npx",
-        args: ["-y", "@lyrashield/mcp@0.2.11"],
+        args: ["-y", MCP_PACKAGE_SPEC],
       },
     })
 
@@ -514,7 +514,7 @@ mcp_servers:
     expect(acme).toHaveProperty("args", ["acme-mcp"])
     const lyra = servers["lyrashield"] as Record<string, unknown>
     expect(lyra).toHaveProperty("command", "npx")
-    expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp@0.2.11"])
+    expect(lyra).toHaveProperty("args", ["-y", MCP_PACKAGE_SPEC])
   })
 
   it.each([
@@ -560,7 +560,7 @@ mcp_servers:
           format,
           rootKey,
           serverName: "lyrashield",
-          value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+          value: { command: "npx", args: ["-y", MCP_PACKAGE_SPEC] },
         })
       ).rejects.toThrow()
 
@@ -582,7 +582,7 @@ mcp_servers:
         format: "json",
         rootKey: "mcpServers",
         serverName: "lyrashield",
-        value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+        value: { command: "npx", args: ["-y", MCP_PACKAGE_SPEC] },
       })
     ).rejects.toThrow(/symlink/i)
 
@@ -601,7 +601,7 @@ mcp_servers:
       format: "json",
       rootKey: "mcpServers",
       serverName: "lyrashield",
-      value: { command: "npx", args: ["-y", "@lyrashield/mcp@0.2.11"] },
+      value: { command: "npx", args: ["-y", MCP_PACKAGE_SPEC] },
     })
 
     expect(result.backupPath).toBeDefined()

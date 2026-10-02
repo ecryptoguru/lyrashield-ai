@@ -34,13 +34,13 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 2,
         name: "Add the mcpServers entry",
-        text: 'Add an mcpServers key with the lyrashield entry using command "npx" and args ["-y","@lyrashield/mcp@0.2.11"].',
+        text: 'Add an mcpServers key with the lyrashield entry using command "npx" and args ["-y","@lyrashield/mcp@0.2.12"].',
       },
       {
         "@type": "HowToStep",
         position: 3,
         name: "Log in locally",
-        text: "Run npx -y lyrashield@0.2.13 login --oauth so the local MCP server can read the selected workspace credential.",
+        text: "Run npx -y lyrashield@0.2.14 login --oauth so the local MCP server can read the selected workspace credential.",
       },
       {
         "@type": "HowToStep",
@@ -70,11 +70,11 @@ const jsonLd: unknown[] = [
 
   <h2>Current guided setup</h2>
   <p>
-    Use the pinned direct-MCP configuration below. The published LyraShield CLI's Claude install
-    command prints plugin marketplace instructions; it does not provide a reviewed matching immutable
-    plugin release. The current marketplace preparation branch is mutable, and older releases must
-    not be substituted without validating their portable schema. Automatic config writes remain
-    withheld until the safe writer is released.
+    Use the pinned direct-MCP configuration below while the matching native plugin listing awaits
+    review and public readback. This Claude setup follows the plugin route, so the CLI does not
+    provide a direct-MCP config-writing command for it; merge the entry manually and preserve your
+    other settings. The client guide keeps plugin distribution, client discovery, authentication
+    and runtime acceptance as separate checks.
   </p>
 
   <h2>Option A — .mcp.json (recommended for teams)</h2>
@@ -86,7 +86,7 @@ const jsonLd: unknown[] = [
   <AgentSnippet agentId="claude-code" transport="stdio" />
 
   <div class="callout">
-    <strong>OAuth first:</strong> Run <code>npx -y lyrashield@0.2.13 login --oauth</code> to select one
+    <strong>OAuth first:</strong> Run <code>npx -y lyrashield@0.2.14 login --oauth</code> to select one
     workspace. API keys are the CI or non-OAuth-client fallback. A browser-confirmed remote OAuth
     delegation can run matching actions without repeated LyraShield approval.
   </div>
@@ -98,14 +98,15 @@ const jsonLd: unknown[] = [
   </p>
 
   <pre><code>{`claude mcp add --scope project --transport stdio lyrashield \\
-  -- npx -y @lyrashield/mcp@0.2.11`}</code></pre>
+  -- npx -y @lyrashield/mcp@0.2.12`}</code></pre>
 
-  <h2>Agent Plugin release pending</h2>
+  <h2>Public Agent Plugin listing pending</h2>
   <p>
-    The plugin bundle is in preparation. Use direct MCP until a reviewed matching immutable package
-    release passes schema, package and client-discovery checks. Do not install from the marketplace's
-    mutable preparation branch or assume an older release has a valid portable manifest. Publication,
-    plugin discovery, OAuth authentication and an authenticated read-only call are separate gates.
+    The portable Agent Plugin package <code>@lyrashield/agent-plugin@0.1.31</code> is published; this
+    client's public listing and authenticated runtime acceptance are still pending. Use direct MCP
+    until those checks pass. Do not install from the marketplace's mutable preparation branch.
+    Publication, plugin discovery, OAuth authentication and an authenticated read-only call are
+    separate gates.
   </p>
 
   <h2>Verify the connection</h2>
@@ -126,6 +127,6 @@ const jsonLd: unknown[] = [
   <div class="callout callout--warn">
     <strong>Requirements:</strong> For local stdio, Node.js 24+ and a local OAuth login or workspace API key. Remote OAuth needs no local key. The{" "}
     <code>@lyrashield/mcp</code> package is published on npm, so{" "}
-    <code>npx -y @lyrashield/mcp@0.2.11</code> resolves directly.
+    <code>npx -y @lyrashield/mcp@0.2.12</code> resolves directly.
   </div>
 </DocsLayout>

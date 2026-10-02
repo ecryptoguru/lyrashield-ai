@@ -1,6 +1,6 @@
 # LyraShield AI for Continue — preparation
 
-**State: PREPARATION.** The local MCP block, rule, and slash prompts are staged for review. No Continue Hub entry or authenticated client-runtime receipt is confirmed. The pinned stdio package `@lyrashield/mcp@0.2.12` is a release candidate and is not published; wait for its matching public release before installing this block.
+**State: PREPARATION.** The local MCP block, rule, and slash prompts are staged for review. `@lyrashield/mcp@0.2.12` is published, but no Continue Hub entry or authenticated client-runtime receipt is confirmed.
 
 ## Install the local integration
 
@@ -36,4 +36,4 @@ This package deliberately uses local stdio. Continue documents remote Streamable
 
 ## Verification and sources
 
-Contract research was checked on 2026-10-01. No Continue client was authenticated or tested, no Hub application was submitted, and the pinned MCP release is unpublished. See [Continue's MCP blocks](https://docs.continue.dev/customize/deep-dives/mcp), [YAML config reference](https://docs.continue.dev/reference), [rules](https://docs.continue.dev/customize/deep-dives/rules), [prompts](https://docs.continue.dev/customize/deep-dives/prompts), and [Continue CLI configuration](https://docs.continue.dev/cli/configuration).
+Contract research was checked on 2026-10-01. No Continue client was authenticated or tested, and no Hub application was submitted. See [Continue's MCP blocks](https://docs.continue.dev/customize/deep-dives/mcp), [YAML config reference](https://docs.continue.dev/reference), [rules](https://docs.continue.dev/customize/deep-dives/rules), [prompts](https://docs.continue.dev/customize/deep-dives/prompts), and [Continue CLI configuration](https://docs.continue.dev/cli/configuration).

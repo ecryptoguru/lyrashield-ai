@@ -43,6 +43,11 @@ export async function handleSkills(args: string[], output: Output): Promise<numb
     dryRun: parsed["dry-run"],
   })
 
+  if (output.json && result.outcome === "FAILED") {
+    output.error(result.message ?? "Skill operation failed.", 1)
+    return 1
+  }
+
   if (output.json) {
     output.result(result)
   } else {

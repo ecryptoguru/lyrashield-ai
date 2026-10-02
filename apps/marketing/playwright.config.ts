@@ -5,7 +5,11 @@ export default defineConfig({
   testMatch: "**/*.e2e.ts",
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
-  use: { baseURL: "http://127.0.0.1:8787" },
+  use: {
+    baseURL: "http://127.0.0.1:8787",
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+  },
   // The marketing-* specs were migrated from the retired root
   // playwright.marketing.config.ts; that config's webServer relied on
   // `astro dev`, which is broken under the Cloudflare adapter's workerd
@@ -32,6 +36,8 @@ export default defineConfig({
     // `pnpm preview` reuses the flagged artifact CI already built (see
     // scripts/preview-build.mjs) and builds it locally from a clean tree.
     command: "pnpm preview",
+    // Ensure local-preview builds ignore a configured production scanner URL.
+    env: { PUBLIC_SCANNER_URL: "https://scanner.example.test" },
     url: "http://127.0.0.1:8787/",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

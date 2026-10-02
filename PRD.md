@@ -454,7 +454,7 @@ These are implementation or revision-scoped milestones, not a claim of universal
 4. Retain longer-window Redis command/capacity evidence, verify RazorpayX and Payoneer payout access, and complete payout/tax operations before paid scale. A post-release backup and isolated restore are also pending.
 5. Triage the 25 findings from Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted; keep unverified results `DETECTED` or `INCONCLUSIVE`.
 6. After founder authorization, select and run a controlled Deep/Sol target with separate routing, cost, receipt, image, and terminal-state proof.
-7. Capture authenticated client-runtime acceptance and marketplace readback independently. The current product-source candidate packages are unpublished and no authenticated MCP workspace call was made.
+7. Capture authenticated client-runtime acceptance and marketplace readback independently. CLI `0.2.14`, MCP `0.2.12`, and Agent Plugin `0.1.31` are published; matching immutable marketplace release and authenticated client-runtime acceptance remain outstanding, and no authenticated MCP workspace call was made during the current acceptance pass.
 8. Capture webmaster indexing and answer-engine citation observations; code, simulated crawlers, and one LinkedIn unfurl do not prove universal discovery.
 
 ### Deferred

@@ -24,7 +24,7 @@ describe("agent wizard connection snippets", () => {
     const wizard = buildAgentWizard(id, "https://app.lyrashieldai.com")
     expect(wizard?.steps.find((step) => step.id === "install")?.command).toBeUndefined()
     const activation = wizard?.steps.find((step) => step.id === "config")
-    expect(activation?.summary).toContain("reviewed matching immutable package release")
+    expect(activation?.summary).toContain("public listing")
     expect(activation?.summary).toContain(configPath)
     expect(activation?.summary).toContain(MCP_PACKAGE_SPEC)
     expect(activation?.summary).toContain(CLI_PACKAGE_SPEC)
@@ -38,11 +38,11 @@ describe("agent wizard connection snippets", () => {
     expect(wizard?.steps.some((step) => step.kind === "rules")).toBe(false)
   })
 
-  it("keeps Claude's unpublished plugin path non-actionable and points to current MCP guidance", () => {
+  it("keeps Claude's plugin path gated and points to current MCP guidance", () => {
     const wizard = buildAgentWizard("claude-code-agent-plugin", "https://app.lyrashieldai.com")
     expect(wizard?.steps.find((step) => step.id === "install")?.command).toBeUndefined()
     const activation = wizard?.steps.find((step) => step.id === "config")
-    expect(activation?.summary).toContain("reviewed matching immutable package release")
+    expect(activation?.summary).toContain("public listing")
     expect(activation?.summary).toContain(".mcp.json")
     expect(activation?.summary).not.toContain("claude plugin marketplace add")
   })
@@ -73,15 +73,16 @@ describe("agent wizard connection snippets", () => {
     expect(wizard?.steps.find((step) => step.id === "verify")?.note).toContain("read-only")
   })
 
-  it("does not present the published CLI's obsolete Pi preview as native MCP setup", () => {
+  it("uses Pi's native MCP instructions without stale CLI release claims", () => {
     const install = buildAgentWizard("pi", "https://app.lyrashieldai.com")?.steps.find(
       (step) => step.id === "install"
     )
     expect(install?.command).toBeUndefined()
-    expect(install?.summary).toContain("pi mcp add")
-    expect(install?.summary).toContain("published CLI 0.2.13")
-    expect(install?.summary).toContain("predates Pi's native MCP")
-    expect(install?.summary).toContain("Skills installer remains pending release")
+    expect(install?.summary).toContain("built-in MCP client")
+    expect(install?.summary).toContain("https://app.lyrashieldai.com/api/mcp")
+    expect(install?.summary).toContain(CLI_PACKAGE_SPEC)
+    expect(install?.summary).not.toContain("published CLI")
+    expect(install?.summary).not.toContain("pending release")
   })
 
   it("keeps the standalone CLI workflow for Aider", () => {
@@ -108,7 +109,7 @@ describe("agent wizard connection snippets", () => {
     expect(wizard?.distribution?.state).toBe("PREPARATION")
   })
 
-  it("separates Augment's published MCP tools from the unreleased workflow bundle", () => {
+  it("keeps Augment marketplace status separate from candidate MCP and skill setup", () => {
     for (const id of ["augment-vscode", "augment-jetbrains"]) {
       const wizard = buildAgentWizard(id, "https://app.lyrashieldai.com")
       const install = wizard?.steps.find((step) => step.id === "install")
@@ -119,22 +120,18 @@ describe("agent wizard connection snippets", () => {
 
       expect(wizard?.distribution?.state, id).toBe("PREPARATION")
       expect(install?.title, id).toBe("Connect current MCP tools")
-      expect(install?.summary, id).toContain(
-        `published direct-MCP baseline uses ${CLI_PACKAGE_SPEC}`
-      )
-      expect(install?.summary, id).toContain(MCP_PACKAGE_SPEC)
-      expect(install?.summary, id).toContain("MCP tools only")
+      expect(install?.summary, id).toContain("native marketplace plugin remains under preparation")
+      expect(install?.summary, id).not.toContain("published")
       expect(install?.command, id).toBeUndefined()
-      expect(config?.summary, id).toContain("do not pair it with candidate workflow skills")
+      expect(config?.summary, id).toContain("MCP → Import from JSON")
+      expect(config?.summary, id).toContain("Preserve existing entries")
       expect(config?.snippet, id).toContain(MCP_PACKAGE_SPEC)
       expect(auth?.title, id).toBe("Authenticate current MCP server")
       expect(auth?.command, id).toBe(`npx -y ${CLI_PACKAGE_SPEC} login --oauth`)
-      expect(skills?.summary, id).toContain("published MCP baseline provides direct tools only")
-      expect(skills?.summary, id).toContain("coordinated candidate release")
-      expect(skills?.command, id).toBeUndefined()
-      expect(verify?.summary, id).toContain(
-        "Native workflow skills remain a separate, unpublished release"
-      )
+      expect(skills?.summary, id).toContain("Install the focused LyraShield workflows")
+      expect(skills?.command, id).toBe(`npx -y ${CLI_PACKAGE_SPEC} skills install ${id}`)
+      expect(verify?.summary, id).toContain("read-only LyraShield call")
+      expect(verify?.summary, id).toContain("Native marketplace plugin availability is separate")
     }
   })
 
@@ -187,15 +184,17 @@ describe("agent wizard connection snippets", () => {
     ).toContain('auth: "oauth"')
   })
 
-  it("keeps scans explicit and gives safe optional hook guidance", () => {
+  it("keeps scans explicit and makes hook installation available only as an opt-in", () => {
     const wizard = buildAgentWizard("claude-code", "https://app.lyrashieldai.com")
     const verify = wizard?.steps.find((step) => step.id === "verify")
     const hooks = wizard?.steps.find((step) => step.id === "hooks")
 
     expect(verify?.summary).toContain("Scans remain explicit")
     expect(verify?.command).toBe(`npx -y ${CLI_PACKAGE_SPEC} doctor`)
-    expect(hooks?.note).toContain("safer offline hook installer is prepared")
-    expect(hooks?.command).toBeUndefined()
+    expect(hooks?.note).toContain("Off by default")
+    expect(hooks?.command).toBe(`npx -y ${CLI_PACKAGE_SPEC} hook install`)
+    expect(hooks?.note).toContain("never starts a paid scan")
+    expect(hooks?.note).toContain("preserves unrelated hook commands")
     expect(hooks?.note).not.toContain("delete .git/hooks/pre-commit")
     expect(hooks?.optional).toBe(true)
   })
@@ -223,7 +222,7 @@ describe("agent wizard connection snippets", () => {
     )
   })
 
-  it("explains independent authentication for alternate transports and gates unpublished rule writes", () => {
+  it("explains independent authentication and accurately gates unsupported rule writes", () => {
     const local = buildAgentWizard("mistral-vibe", "https://app.lyrashieldai.com")
     const remote = local?.steps.find((step) => step.id === "config-remote")
     expect(remote?.optional).toBe(true)
@@ -233,8 +232,8 @@ describe("agent wizard connection snippets", () => {
     const rules = buildAgentWizard("cline", "https://app.lyrashieldai.com")?.steps.find(
       (step) => step.id === "rules"
     )
-    expect(rules?.command).toBeUndefined()
-    expect(rules?.note).toContain("next CLI release")
+    expect(rules?.command).toBe(`npx -y ${CLI_PACKAGE_SPEC} rules add cline`)
+    expect(rules?.note).toContain(`rules remove cline`)
     const piLocal = buildAgentWizard("pi", "https://app.lyrashieldai.com")?.steps.find(
       (step) => step.id === "config-local"
     )
@@ -253,14 +252,26 @@ describe("agent wizard connection snippets", () => {
     }
   })
 
-  it("separates native skills from rules and does not copy unpublished installers", () => {
+  it("offers the pinned skills installer while preserving guided client setup", () => {
     for (const id of ["picode", "devin-desktop", "mistral-vibe", "replit-agent"]) {
       const wizard = buildAgentWizard(id, "https://app.lyrashieldai.com")
       const skills = wizard?.steps.find((step) => step.id === "skills")
       expect(skills?.kind, id).toBe("skills")
-      expect(skills?.command, id).toBeUndefined()
-      expect(skills?.summary, id).toContain("next release")
+      expect(skills?.command, id).toBe(`npx -y ${CLI_PACKAGE_SPEC} skills install ${id}`)
+      expect(skills?.summary, id).toContain("Install the focused LyraShield workflows")
       expect(wizard?.steps.find((step) => step.id === "install")?.command, id).toBeUndefined()
+    }
+  })
+
+  it("uses the pinned CLI config writer for clients with a matching install contract", () => {
+    for (const id of ["vscode", "opencode", "gemini-cli", "copilot-cli"]) {
+      const wizard = buildAgentWizard(id, "https://app.lyrashieldai.com")
+      expect(wizard?.steps.find((step) => step.id === "install")?.command, id).toBe(
+        `npx -y ${CLI_PACKAGE_SPEC} install ${id}`
+      )
+      expect(wizard?.steps.find((step) => step.id === "config")?.summary, id).toContain(
+        "install command above can do this for you"
+      )
     }
   })
 
@@ -273,5 +284,15 @@ describe("agent wizard connection snippets", () => {
     expect(auth?.note).toContain("connect_required")
     expect(auth?.note).toContain("Never commit")
     expect(wizard?.steps.some((step) => step.id === "hooks")).toBe(false)
+    const localInstallSteps = wizard?.steps.filter(
+      (step) => step.id === "rules" || step.id === "skills"
+    )
+    expect(localInstallSteps?.every((step) => step.command === undefined)).toBe(true)
+    expect(wizard?.steps.find((step) => step.id === "skills")?.summary).toContain(
+      "Skill installation is withheld"
+    )
+    expect(
+      wizard?.steps.map((step) => `${step.command ?? ""} ${step.note ?? ""}`).join(" ")
+    ).not.toMatch(/\bnpx -y\b/i)
   })
 })

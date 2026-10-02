@@ -107,6 +107,34 @@ describe("agent skill installer", () => {
     )
   })
 
+  it("refuses withheld skill installs but still removes previously owned files", async () => {
+    await seedSource()
+    const permittedAgent = makeAgent(".github/skills")
+    const withheldAgent: AgentEntry = {
+      ...permittedAgent,
+      id: "github-copilot-cloud-agent",
+      displayName: "GitHub Copilot Cloud Agent",
+      skillInstallState: "withheld",
+    }
+    const skillFile = path.join(project, ".github", "skills", "example", "SKILL.md")
+
+    const denied = await testInstall({ agent: withheldAgent, scope: "project", cwd: project })
+    expect(denied.outcome).toBe("FAILED")
+    expect(denied.message).toContain(
+      "withheld for GitHub Copilot Cloud Agent until a workflow bundle is validated"
+    )
+    await expect(readFile(skillFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readdir(path.join(project, ".github"))).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(
+      readFile(ownershipManifestPath(path.join(project, ".github", "skills")), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" })
+
+    await testInstall({ agent: permittedAgent, scope: "project", cwd: project })
+    const removed = await testRemove({ agent: withheldAgent, scope: "project", cwd: project })
+    expect(removed.outcome).toBe("REMOVED")
+    await expect(readFile(skillFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("upgrades files only when their prior checksum still matches", async () => {
     await seedSource()
     const agent = makeAgent()
