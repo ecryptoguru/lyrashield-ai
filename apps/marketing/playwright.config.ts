@@ -5,7 +5,11 @@ export default defineConfig({
   testMatch: "**/*.e2e.ts",
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
-  use: { baseURL: "http://127.0.0.1:8787" },
+  use: {
+    baseURL: "http://127.0.0.1:8787",
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+  },
   // The marketing-* specs were migrated from the retired root
   // playwright.marketing.config.ts; that config's webServer relied on
   // `astro dev`, which is broken under the Cloudflare adapter's workerd
