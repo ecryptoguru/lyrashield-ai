@@ -53,8 +53,9 @@ export const dynamic = "force-dynamic"
  *    c. affiliate: commission/clawback via normalized domain events
  *    A failed track marks its row "failed", enqueues a durable BullMQ retry,
  *    and answers 5xx so the provider also redelivers. The parent `processed`
- *    flag is DERIVED: true only when every applicable track succeeded.
- * 4. Respond 200 only when every applicable track row is "succeeded".
+ *    flag is DERIVED: true only when every applicable track succeeded or has
+ *    an explicit audited disposition.
+ * 4. Respond 200 only when every applicable track row is resolved.
  *
  * Single webhook ingress — Track C never registers a second webhook route.
  * Both tracks consume the same idempotent WebhookEvent rows.
@@ -108,6 +109,77 @@ function authErrorResponse(error: unknown): NextResponse | null {
  */
 function deriveIdentity(parts: (string | number)[]): string {
   return createHash("sha256").update(parts.join("|")).digest("hex")
+}
+
+async function catalogRejectionResponse({
+  provider,
+  externalId,
+  identitySource,
+  eventType,
+  error,
+}: {
+  provider: "polar" | "razorpay"
+  externalId: string
+  identitySource: "delivery" | "derived"
+  eventType: string
+  error: unknown
+}): Promise<NextResponse> {
+  if (!(error instanceof WebhookPayloadError)) {
+    logger.error("Webhook catalog validation failed unexpectedly", {
+      provider,
+      eventType,
+      externalId,
+      reason: "processing_failed",
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+      },
+      { status: 500 }
+    )
+  }
+
+  try {
+    await recordWebhookRejection({
+      provider,
+      externalId,
+      identitySource,
+      eventType,
+      reasonCode: WEBHOOK_REJECTION_REASONS.catalogEvidenceMismatch,
+    })
+  } catch (receiptError) {
+    logger.error("Webhook rejection receipt persistence failed", {
+      provider,
+      eventType,
+      externalId,
+      reason: "rejection_persistence_failed",
+      error: receiptError instanceof Error ? receiptError.message : String(receiptError),
+    })
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
+      },
+      { status: 500 }
+    )
+  }
+
+  logger.warn("operator_alert", {
+    code: "webhook_catalog_rejection",
+    severity: "warning",
+    provider,
+    eventType,
+    reason: "catalog_evidence_mismatch",
+  })
+  return NextResponse.json(
+    {
+      success: false,
+      error: { code: "WEBHOOK_MALFORMED_PAYLOAD", message: "Webhook payload rejected" },
+    },
+    { status: 400 }
+  )
 }
 
 export async function POST(request: Request) {
@@ -246,64 +318,13 @@ export async function POST(request: Request) {
   try {
     assertProviderCatalogEvent(provider, eventType, payload)
   } catch (error) {
-    if (error instanceof WebhookPayloadError) {
-      // Catalog evidence mismatch — record the rejection durably. If the
-      // receipt cannot be persisted, the rejection is NOT durable: answer a
-      // retriable 5xx instead of a falsely final 400.
-      try {
-        await recordWebhookRejection({
-          provider,
-          externalId,
-          identitySource,
-          eventType,
-          reasonCode: WEBHOOK_REJECTION_REASONS.catalogEvidenceMismatch,
-        })
-      } catch (receiptError) {
-        logger.error("Webhook rejection receipt persistence failed", {
-          provider,
-          eventType,
-          externalId,
-          reason: "rejection_persistence_failed",
-          error: receiptError instanceof Error ? receiptError.message : String(receiptError),
-        })
-        return NextResponse.json(
-          {
-            success: false,
-            error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
-          },
-          { status: 500 }
-        )
-      }
-      logger.warn("Webhook catalog validation rejected", {
-        provider,
-        eventType,
-        externalId,
-        reason: "catalog_evidence_mismatch",
-      })
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: "WEBHOOK_MALFORMED_PAYLOAD", message: "Webhook payload rejected" },
-        },
-        { status: 400 }
-      )
-    }
-    // Provider-catalog configuration failures are our problem, not the
-    // delivery's — retriable 5xx, no rejection receipt.
-    logger.error("Webhook catalog validation failed unexpectedly", {
+    return await catalogRejectionResponse({
       provider,
-      eventType,
       externalId,
-      reason: "processing_failed",
-      error: error instanceof Error ? error.message : String(error),
+      identitySource,
+      eventType,
+      error,
     })
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "WEBHOOK_PROCESSING_FAILED", message: "Webhook processing error" },
-      },
-      { status: 500 }
-    )
   }
 
   const normalized = normalizeProviderEvent({
@@ -358,7 +379,7 @@ export async function POST(request: Request) {
 
         if (existingEvent.processed) {
           // Exact replay of an already-processed event — acknowledge immediately.
-          // Zero extra side effects: every applicable track is already succeeded.
+          // Zero extra side effects: every applicable track is already terminal.
           logger.info("Webhook replay acknowledged", { provider, eventType, externalId })
           return NextResponse.json({ success: true }, { status: 200 })
         } else if (Date.now() - existingEvent.createdAt.getTime() < REPROCESS_MIN_AGE_MS) {
@@ -399,7 +420,7 @@ export async function POST(request: Request) {
     // ── Phase 3: durable required tracks (billing/license/affiliate) ─────────
     // Track rows have no direct workspace key, while their parent does. Keep
     // the parent update inside the signed event's workspace RLS context so a
-    // replay can derive `processed` after all required tracks succeed.
+    // replay can derive `processed` after required tracks succeed or are reviewed.
     const summary = await runWithWorkspaceContext(normalized.workspaceId, () =>
       runApplicableTracks({
         webhookEventId,
@@ -409,7 +430,7 @@ export async function POST(request: Request) {
       })
     )
 
-    if (!summary.allSucceeded) {
+    if (!summary.allResolved) {
       // Durably queue one bounded retry per failed track (dead-lettered tracks
       // are terminal and are NOT re-enqueued). An enqueue failure is logged
       // with a reason code — the answer is 5xx either way, so the provider
@@ -417,14 +438,14 @@ export async function POST(request: Request) {
       for (const failure of summary.failures) {
         try {
           const schedule = await getWebhookTrackRetrySchedule(webhookEventId, failure.track)
-          if (schedule?.nextAttemptAt) {
+          if (schedule) {
             await enqueueWebhookTrackRetry(
               {
                 webhookEventId,
                 track: failure.track,
                 generation: schedule.generation,
               },
-              { delayMs: Math.max(0, schedule.nextAttemptAt.getTime() - Date.now()) }
+              { delayMs: schedule.delayMs }
             )
           }
         } catch (enqueueError) {

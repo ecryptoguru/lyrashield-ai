@@ -1,18 +1,14 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
 import { z } from "zod"
-import {
-  getSystemPrisma,
-  prisma,
-  withWorkspaceRLS,
-  findLicenseForSyncByKeyHash,
-} from "@lyrashield/db"
-import { requireAuth } from "@lyrashield/auth/server"
+import { getSystemPrisma, withWorkspaceRLS, findLicenseForSyncByKeyHash } from "@lyrashield/db"
+import { requireAuth, requirePermission } from "@lyrashield/auth/server"
+import { PERMISSIONS } from "@lyrashield/auth"
 import { type LocalSkuId } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { hashLicenseKey } from "../../../../lib/licenses/license-service"
-import { hasSyncWriteAccess } from "../../../../lib/sync-auth"
+import { hasSyncFindingWriteRole, hasSyncWriteAccess } from "../../../../lib/sync-auth"
 import { createSyncSessionToken } from "../../../../lib/sync-session"
 import { checkSyncEntitlement } from "../../../../lib/sync-license-auth"
 
@@ -49,11 +45,9 @@ async function post(request: Request) {
       return apiError("FORBIDDEN", "A write-capable key for this workspace is required", 403)
     }
 
-    const membership = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId: session.userId } },
-    })
-    if (!membership || membership.status !== "active") {
-      return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
+    const { workspace } = await requirePermission(workspaceId, PERMISSIONS.finding.update)
+    if (!hasSyncFindingWriteRole(workspace.role)) {
+      return apiError("FORBIDDEN", "A workspace finding-writer role is required", 403)
     }
 
     // Narrow privileged lookup — single purpose, minimal projection
@@ -68,15 +62,20 @@ async function post(request: Request) {
     }
 
     if (license.workspaceId && license.workspaceId !== workspaceId) {
-      const owningMembership = await prisma.workspaceMember.findUnique({
-        where: {
-          workspaceId_userId: { workspaceId: license.workspaceId, userId: session.userId },
-        },
-      })
-      if (!owningMembership || owningMembership.status !== "active") {
+      let canTransferFromOwner = false
+      try {
+        const { workspace: owningWorkspace } = await requirePermission(
+          license.workspaceId,
+          PERMISSIONS.finding.update
+        )
+        canTransferFromOwner = hasSyncFindingWriteRole(owningWorkspace.role)
+      } catch {
+        // Keep the ownership boundary opaque unless the actor can administer sync there.
+      }
+      if (!canTransferFromOwner) {
         return apiError(
           "LICENSE_ALREADY_LINKED",
-          "This license is already linked to another workspace. Contact the workspace owner to transfer it.",
+          "This license is already linked to another workspace. A finding-writer in that workspace must transfer it.",
           403
         )
       }

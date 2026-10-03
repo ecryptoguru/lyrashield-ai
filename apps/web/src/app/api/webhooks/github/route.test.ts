@@ -255,13 +255,8 @@ describe("GitHub fix-PR merge loop closure (W3-04)", () => {
     // The route passes an entitlement callback into the loop-closure handler;
     // the mock must exercise it the way the real handler does.
     handleMerged.mockImplementation(
-      async (
-        _ws: unknown,
-        _ref: unknown,
-        _pr: unknown,
-        ensure: (mode: string) => Promise<void>
-      ) => {
-        await ensure("STANDARD")
+      async (options: { assertRetestAllowed: (mode: string) => Promise<void> }) => {
+        await options.assertRetestAllowed("STANDARD")
         return null
       }
     )

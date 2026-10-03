@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const transactionMock = vi.hoisted(() => vi.fn())
 const executeRawMock = vi.hoisted(() => vi.fn().mockResolvedValue(1))
 const intentCreateMock = vi.hoisted(() => vi.fn().mockResolvedValue({}))
+const loggerWarnMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@lyrashield/db", () => ({
   prisma: { $transaction: transactionMock },
@@ -10,7 +11,7 @@ vi.mock("@lyrashield/db", () => ({
     transactionMock(callback, options),
 }))
 vi.mock("@lyrashield/logger", () => ({
-  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  logger: { debug: vi.fn(), info: vi.fn(), warn: loggerWarnMock, error: vi.fn() },
 }))
 vi.mock("@lyrashield/pricing", () => ({ DEEP_SCAN_MULTIPLIER: 3 }))
 
@@ -266,6 +267,16 @@ describe("recordAgentMinutes pack debits", () => {
   it("does not force a minute onto a zero-duration partial run", async () => {
     configureDatabase(100)
     expect((await recordAgentMinutes("ws_1", "partial", 0, { outcome: "partial" })).minutes).toBe(0)
+    expect(transactionMock).not.toHaveBeenCalled()
+  })
+  it("logs a stable reason when a usage tick over one hour is dropped", async () => {
+    configureDatabase(100)
+    const result = await recordAgentMinutes("ws_1", "oversized", 60 * 60 * 1000 + 1)
+
+    expect(result.created).toBe(false)
+    expect(loggerWarnMock).toHaveBeenCalledWith("Ignoring out-of-range agent-minute tick", {
+      reason: "agent_minute_tick_exceeds_one_hour",
+    })
     expect(transactionMock).not.toHaveBeenCalled()
   })
   it("debits only each tick's incremental spillover", async () => {

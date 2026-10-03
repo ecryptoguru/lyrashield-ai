@@ -71,6 +71,8 @@ describe("POST /api/admin/elevations", () => {
     "myra.case.resolve",
     "myra.case.assign",
     "myra.case.reply",
+    "billing.webhook-track.retry",
+    "billing.webhook-track.disposition",
   ])("issues a nonce for registered operator action %s", async (action) => {
     const response = await POST(request({ action, code: "123456" }))
 

@@ -51,7 +51,7 @@ const recordRejectionMock = vi.fn()
 const runTracksMock = vi.fn()
 const getRetryScheduleMock = vi
   .fn()
-  .mockImplementation(async () => ({ generation: 1, nextAttemptAt: new Date(Date.now() + 60_000) }))
+  .mockImplementation(async () => ({ generation: 1, delayMs: 60_000 }))
 vi.mock("@lyrashield/billing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/billing")>()
   return {
@@ -66,6 +66,7 @@ vi.mock("@lyrashield/billing", async (importOriginal) => {
 })
 
 import { prisma } from "@lyrashield/db"
+import { logger } from "@lyrashield/logger"
 import type { TrackRunSummary } from "@lyrashield/billing"
 import { WebhookAuthError, WebhookPayloadError } from "@lyrashield/billing"
 import { POST } from "./route"
@@ -76,7 +77,7 @@ const mockPrisma = prisma as unknown as {
 
 /** All applicable tracks succeeded. */
 function okSummary(): TrackRunSummary {
-  return { allSucceeded: true, attempted: 0, succeeded: 0, failures: [], deadLettered: [] }
+  return { allResolved: true, attempted: 0, succeeded: 0, failures: [], deadLettered: [] }
 }
 
 /** One required track failed (or dead-lettered). */
@@ -86,7 +87,7 @@ function failedSummary(
 ): TrackRunSummary {
   const failure = { track, error: `${track}_handler_failed` }
   return {
-    allSucceeded: false,
+    allResolved: false,
     attempted: 1,
     succeeded: 1,
     failures: opts.deadLetter ? [] : [failure],
@@ -189,6 +190,14 @@ describe("POST /billing/webhook — event identity and idempotency", () => {
       const first = await POST(razorpayRequest(event))
       expect(first.status).toBe(400)
       expect(recordRejectionMock).toHaveBeenCalledTimes(1)
+      expect(logger.warn).toHaveBeenCalledWith(
+        "operator_alert",
+        expect.objectContaining({
+          code: "webhook_catalog_rejection",
+          provider: "razorpay",
+          reason: "catalog_evidence_mismatch",
+        })
+      )
 
       // The dedupe layer reports the same identity already observed.
       recordRejectionMock.mockResolvedValue("duplicate")
@@ -604,7 +613,7 @@ describe("POST /billing/webhook — required-track durability (findings 12/18A)"
         track: "license",
         generation: 1,
       },
-      { delayMs: expect.any(Number) }
+      { delayMs: 60_000 }
     )
   })
 
@@ -649,7 +658,7 @@ describe("POST /billing/webhook — required-track durability (findings 12/18A)"
         track: "affiliate",
         generation: 1,
       },
-      { delayMs: expect.any(Number) }
+      { delayMs: 60_000 }
     )
   })
 

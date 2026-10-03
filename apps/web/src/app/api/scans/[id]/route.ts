@@ -47,7 +47,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const workspaceId = parsedWorkspace.data
 
   try {
-    await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
     // Optional event-id cursor: when present, the service returns only events
     // strictly AFTER the cursor (keyset on createdAt+id), so the dashboard's
     // poll loop fetches the tail instead of the full 200-event window on every
@@ -61,6 +61,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const scan = await getScanWithEvents(id, workspaceId, { eventsAfter })
     if (!scan) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
+    }
+    if (
+      session.oauth?.connectionId &&
+      session.oauth.scopes.includes("lyrashield.write") &&
+      !session.oauth.allTargets
+    ) {
+      assertOAuthDelegatedScope(session, scan.targetId)
     }
 
     // Queue position can change without a scan row or event update.

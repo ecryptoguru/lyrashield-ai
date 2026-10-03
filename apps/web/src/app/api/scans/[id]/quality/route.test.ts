@@ -11,10 +11,50 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@lyrashield/db", () => ({
   getScanQualitySurface: vi.fn(),
+  withWorkspaceRLS: (workspaceId: string, callback: (tx: unknown) => unknown) =>
+    withWorkspaceRLSMock(workspaceId, callback),
 }))
+
+const scanFindFirstMock = vi.fn()
+const withWorkspaceRLSMock = vi.fn((workspaceId: string, callback: (tx: unknown) => unknown) =>
+  callback({ scan: { findFirst: scanFindFirstMock } })
+)
+const assertOAuthDelegatedScopeMock = vi.fn(
+  (
+    session: {
+      oauth?: {
+        connectionId?: string
+        scopes?: string[]
+        allTargets?: boolean
+        allowedTargetIds?: string[]
+      }
+    },
+    targetId: string | null | undefined
+  ) => {
+    const connection = session.oauth
+    if (
+      connection?.connectionId &&
+      !connection.allTargets &&
+      (!targetId || !connection.allowedTargetIds?.includes(targetId))
+    ) {
+      throw new Error("FORBIDDEN")
+    }
+  }
+)
 
 vi.mock("@lyrashield/auth/server", () => ({
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
+  assertOAuthDelegatedScope: (
+    session: {
+      oauth?: {
+        connectionId?: string
+        scopes?: string[]
+        allTargets?: boolean
+        allowedTargetIds?: string[]
+      }
+    },
+    targetId: string | null | undefined
+  ) => assertOAuthDelegatedScopeMock(session, targetId),
 }))
 
 vi.mock("@lyrashield/auth", () => ({
@@ -89,6 +129,100 @@ describe("/api/scans/[id]/quality", () => {
     expect(body.data.facts.findings.verifiedCount).toBe(1)
     expect(body.data.estimates.verifiedFindingRatio.kind).toBe("heuristic")
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:view")
+    expect(getScanQualitySurface).toHaveBeenCalledWith("scan-1", "ws-1")
+    expect(withWorkspaceRLSMock).not.toHaveBeenCalled()
+  })
+
+  it("resolves the scan target and permits a connection scoped to that target", async () => {
+    const session = {
+      userId: "user-1",
+      oauth: {
+        connectionId: "connection-1",
+        scopes: ["lyrashield.read", "lyrashield.write"],
+        allTargets: false,
+        allowedTargetIds: ["target-1"],
+      },
+    }
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session } as never)
+    scanFindFirstMock.mockResolvedValueOnce({ targetId: "target-1" })
+    vi.mocked(getScanQualitySurface).mockResolvedValueOnce({
+      version: "lyrashield-scan-quality/1.0.0",
+      surfaceChecksum: "delegated-surface",
+    } as never)
+
+    const res = await GET(request("ws-1"), routeParams)
+
+    expect(res.status).toBe(200)
+    expect(withWorkspaceRLSMock).toHaveBeenCalledWith("ws-1", expect.any(Function))
+    expect(scanFindFirstMock).toHaveBeenCalledWith({
+      where: { id: "scan-1", workspaceId: "ws-1", deletedAt: null },
+      select: { targetId: true },
+    })
+    expect(assertOAuthDelegatedScopeMock).toHaveBeenCalledWith(session, "target-1")
+    expect(getScanQualitySurface).toHaveBeenCalledWith("scan-1", "ws-1")
+  })
+
+  it("denies a connection-scoped caller when the resolved scan target is outside its grant", async () => {
+    const session = {
+      userId: "user-1",
+      oauth: {
+        connectionId: "connection-1",
+        scopes: ["lyrashield.read", "lyrashield.write"],
+        allTargets: false,
+        allowedTargetIds: ["target-allowed"],
+      },
+    }
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session } as never)
+    scanFindFirstMock.mockResolvedValueOnce({ targetId: "target-forbidden" })
+
+    const res = await GET(request("ws-1"), routeParams)
+
+    expect(res.status).toBe(403)
+    expect(assertOAuthDelegatedScopeMock).toHaveBeenCalledWith(session, "target-forbidden")
+    expect(getScanQualitySurface).not.toHaveBeenCalled()
+  })
+
+  it("does not reveal a cross-workspace or missing scan to a connection-bound caller", async () => {
+    const session = {
+      userId: "user-1",
+      oauth: {
+        connectionId: "connection-1",
+        scopes: ["lyrashield.read", "lyrashield.write"],
+        allTargets: false,
+        allowedTargetIds: ["target-1"],
+      },
+    }
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session } as never)
+    scanFindFirstMock.mockResolvedValueOnce(null)
+
+    const res = await GET(request("ws-1"), routeParams)
+
+    expect(res.status).toBe(404)
+    expect(assertOAuthDelegatedScopeMock).not.toHaveBeenCalled()
+    expect(getScanQualitySurface).not.toHaveBeenCalled()
+  })
+
+  it("keeps workspace-wide read-only OAuth access without a target grant", async () => {
+    const session = {
+      userId: "user-1",
+      oauth: {
+        connectionId: "read-only-connection",
+        scopes: ["lyrashield.read"],
+        allTargets: false,
+        allowedTargetIds: [],
+      },
+    }
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session } as never)
+    vi.mocked(getScanQualitySurface).mockResolvedValueOnce({
+      version: "lyrashield-scan-quality/1.0.0",
+      surfaceChecksum: "workspace-read-surface",
+    } as never)
+
+    const res = await GET(request("ws-1"), routeParams)
+
+    expect(res.status).toBe(200)
+    expect(withWorkspaceRLSMock).not.toHaveBeenCalled()
+    expect(assertOAuthDelegatedScopeMock).not.toHaveBeenCalled()
     expect(getScanQualitySurface).toHaveBeenCalledWith("scan-1", "ws-1")
   })
 
