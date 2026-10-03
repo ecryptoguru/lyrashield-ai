@@ -10,10 +10,10 @@
 - Candidate checkout: /private/tmp/lyrashield-ai-readiness-20261002.
 - Engine main: a340d9d2fba716ff48e2996e950ba269783ce59a, merged as PR #198.
 - Marketplace main: 8cb880dbaee73f2c6e71d096e4b75db87f29c32a.
-- Draft web PR: [#897](https://github.com/ecryptoguru/lyrashield-ai/pull/897), opened at a4e2fc4ef554a7967239399d23e76c2142a918dc. A ledger/handoff follow-up will advance the branch head; query the PR for the authoritative current SHA and CI status.
+- Draft web PR: [#897](https://github.com/ecryptoguru/lyrashield-ai/pull/897), current application/test head `8cc339c8e2c0b4414ba5fbfcf2eaea2548b902e2`. This documentation update will advance the branch head; query the PR for its new authoritative SHA and CI status.
 - The primary engine checkout at /Users/defiankit/Desktop/lyrashield-engine has dirty user state. Preserve it; do not reset, stage or commit it.
 - Candidate implements the W0–W8 work in the production-readiness plan. The completion ledger beside this file contains the current local test receipts and evidence boundary.
-- Draft web PR #897 is published with the six-part body and W0–W8 commit map. Initial GitHub CI started on the opening SHA; a follow-up docs commit will trigger checks on the updated exact head. Keep the PR in draft until those checks pass and review/founder checkpoints are complete.
+- Draft web PR #897 has the six-part body and W0–W8 commit map. Application/test head `8cc339c8` passed CI run [37090846293](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/37090846293) and security scan [37090846415](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/37090846415). All required checks passed; Cloudflare marketing deployment was skipped for the PR, and CodeRabbit was skipped because the PR is draft. This evidence-only documentation update triggers fresh checks. Keep the PR in draft until the new exact head is green and reviewer/founder checkpoints are complete.
 
 ## Source commit map
 
@@ -27,13 +27,17 @@
 | 1b171ed1 | W6 Desktop provider setup and failure states.                                                                                                   |
 | 2d244a75 | W1 operations runbook and W7 retry, parser, settlement and permission test coverage.                                                            |
 | 20f0d8a1 | W8 engine revision pin in release workflows and compatibility references.                                                                       |
-| Pending  | Completion ledger and this handoff.                                                                                                             |
+| a4e2fc4e | Completion ledger and this handoff.                                                                                                             |
+| 60c5f114 | Published-PR status record.                                                                                                                     |
+| fe3198b1 | Fixed pnpm Astro package-root lookup in the advisory characterization test.                                                                     |
+| 8cc339c8 | Updated onboarding browser assertions for retry copy shown after a failed attempt and the visible Back action.                                  |
+| Pending  | Exact-head CI evidence refresh in this ledger and handoff.                                                                                      |
 
 ## Required execution
 
 1. Verify branch base and PR identity before changing anything. Fetch origin and inspect status. Do not delete worktrees, switch the primary engine checkout or push to main.
 2. The single web remediation branch is published as [draft PR #897](https://github.com/ecryptoguru/lyrashield-ai/pull/897) with the six required body parts: Result, Rulings honoured, Validation, Evidence boundary, Not touched and Report back. It includes the W0–W8 commit map and local test receipts. The source diffs include protected billing, auth, migrations and deployment workflows.
-3. Wait for all required GitHub checks on the exact PR head. Inspect every failed or skipped check. Fix failures in the same branch and rerun the affected local suites; push updates to the draft PR. Do not mark ready while any required check is red, skipped unexpectedly or tied to another SHA.
+3. Application/test head `8cc339c8e2c0b4414ba5fbfcf2eaea2548b902e2` passed all required checks in CI run [37090846293](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/37090846293) and security scan [37090846415](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/37090846415). The Cloudflare marketing deploy was skipped as expected for a PR and CodeRabbit skipped review because the PR is draft. This documentation update advances the branch, so verify every check against the new exact SHA and fix any failure before proceeding. Do not mark ready while any required check is red, skipped unexpectedly or tied to another SHA.
 4. Keep the reviewer approval checkpoint on the final ENGINE_REVISION update. Keep the founder heads-up checkpoint before marking ready because this PR changes billing, auth and deploy behavior. Do not merge.
 5. After a human merge, verify the Azure release, app/scanner images, worker image digest and both product/engine provenance. Public readiness checks alone do not prove worker provenance.
 6. Only after the exact web merge SHA exists, regenerate the marketplace export and open the single marketplace PR. Validate all exported artifacts and run verifier fixtures in CI.
@@ -61,11 +65,11 @@ Keep pricing numbers, the public score payload/allowlist, engine dependency caps
 
 ## Validation evidence already available
 
-The completion ledger records the exact command outcomes. The most relevant candidate receipts are: two full pnpm test runs; pnpm typecheck; pnpm lint; pnpm build with disposable CI variables; browser harness 121/121; provider meter 14/14; webhook retry 13/13; queue producer 6/6; trial/workspace/Myra 16/16; route authorization 56/56; migration diff against an empty disposable shadow; all-source formatting; Markdown lint; ShellCheck; and workflow shell tests.
+The completion ledger records the exact command outcomes. The most relevant candidate receipts are: two full pnpm test runs; pnpm typecheck; pnpm lint; pnpm build with disposable CI variables; Playwright critical flow 43/43 twice; browser harness 121/121; provider meter 14/14; webhook retry 13/13; queue producer 6/6; trial/workspace/Myra 16/16; route authorization 56/56; migration diff against an empty disposable shadow; all-source formatting; Markdown lint; ShellCheck; and workflow shell tests. Exact application/test head CI and security checks passed in the linked runs above; the evidence-only doc update needs a fresh exact-head CI result.
 
 The webhook retry suite depends on disposable PostgreSQL and Redis plus a privileged system URL and a restricted runtime URL. Two lease-only fixtures now set their due timestamp to the past so those cases isolate claim expiry; the separate test still verifies database-clock defaults. Run the complete integration file after any related edits, not a narrow test-name filter alone.
 
-Current public GET evidence on 2026-10-03 is health 200, scan readiness 200 with worker true, Myra status 200 with booking false and marketing homepage 200. These are for the deployed baseline. The candidate requires exact-head GitHub CI and a later production readback.
+Current public GET evidence on 2026-10-03 is health 200, scan readiness 200 with worker true, Myra status 200 with booking false and marketing homepage 200. The app API checks use `app.lyrashieldai.com`; `lyrashieldai.com` is the marketing host. These are for the deployed baseline. Application/test head 8cc339c8 passed exact-head CI; the current documentation-updated PR head needs a new run, and a later production readback is still required.
 
 ## Remaining operator/provider/client acceptance
 

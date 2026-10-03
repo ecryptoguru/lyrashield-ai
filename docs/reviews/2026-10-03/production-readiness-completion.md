@@ -2,37 +2,39 @@
 
 **Evidence date:** 2026-10-03, Asia/Kolkata.
 
-**Verdict:** The deployed release is healthy. The web remediation is locally verified and published as draft PR [#897](https://github.com/ecryptoguru/lyrashield-ai/pull/897). It is not yet exact-head CI-verified, deployed or provider-accepted. Do not describe LyraShield as unqualified production-ready until the external gates below are evidenced.
+**Verdict:** The deployed release is healthy. The candidate application and test changes through `8cc339c8e2c0b4414ba5fbfcf2eaea2548b902e2` passed exact-head GitHub CI and the security scan. Draft PR [#897](https://github.com/ecryptoguru/lyrashield-ai/pull/897) remains open for review. The candidate has not shipped and payment settlement, migration cutover, worker provenance and clean-profile Desktop acceptance remain unverified; do not describe LyraShield as unqualified production-ready until those gates are evidenced.
 
 This ledger updates the prior v23 review and its coding handoff. Historical findings remain useful context, but current source and the receipts recorded here take precedence. The original dirty engine checkout was preserved.
 
 ## Revisions and evidence boundaries
 
-| Area                              | Revision or state                                                 | Evidence                                                                                                                                                                                                                                               |
-| --------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Web main and candidate base       | 3819345c9ccdc5e96ca7bfd389eaab8d7ea4c530                          | origin/main was fetched and still matches the candidate base. Candidate changes are in /private/tmp/lyrashield-ai-readiness-20261002 on codex/production-readiness-20261002.                                                                           |
-| Web candidate                     | Draft PR #897; opened at a4e2fc4ef554a7967239399d23e76c2142a918dc | Eight ordered source commits plus the completion ledger and handoff are published. GitHub CI started on the opening SHA; this follow-up documentation commit advances the PR head, so use the linked PR for authoritative current SHA and check state. |
-| Engine main                       | a340d9d2fba716ff48e2996e950ba269783ce59a                          | PR #198 is merged. Main CI run 36980692433 passed. The web candidate pins this SHA in both release workflows.                                                                                                                                          |
-| Known engine worker-consumer base | 4822306e24f375800981bf282fd992a9c15dcde8                          | Direct commit ancestry to web HEAD passes. The pin file is not present in this web checkout. The original dirty engine checkout was not reset, staged or modified.                                                                                     |
-| Marketplace main                  | 8cb880dbaee73f2c6e71d096e4b75db87f29c32a                          | Earlier local normal/release validation passed for 55 artifacts and verifier fixtures passed 46/46. Regenerate after the web PR merges so sourceCommit names the exact merge.                                                                          |
-| Deployed web baseline             | 3819345c9ccdc5e96ca7bfd389eaab8d7ea4c530                          | Earlier release and readiness workflows succeeded for this revision. Production still runs engine #195, not the candidate engine #198 pin.                                                                                                             |
+| Area                              | Revision or state                                                                        | Evidence                                                                                                                                                                                              |
+| --------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web main and candidate base       | 3819345c9ccdc5e96ca7bfd389eaab8d7ea4c530                                                 | origin/main was fetched and still matches the candidate base. Candidate changes are in /private/tmp/lyrashield-ai-readiness-20261002 on codex/production-readiness-20261002.                          |
+| Web candidate                     | Draft PR #897; application/test changes through 8cc339c8e2c0b4414ba5fbfcf2eaea2548b902e2 | Exact-head CI run 37090846293 and security scan 37090846415 passed. A later documentation-only commit updates this ledger and handoff; the PR is authoritative for the current branch SHA and checks. |
+| Engine main                       | a340d9d2fba716ff48e2996e950ba269783ce59a                                                 | PR #198 is merged. Main CI run 36980692433 passed. The web candidate pins this SHA in both release workflows.                                                                                         |
+| Known engine worker-consumer base | 4822306e24f375800981bf282fd992a9c15dcde8                                                 | Direct commit ancestry to web HEAD passes. The pin file is not present in this web checkout. The original dirty engine checkout was not reset, staged or modified.                                    |
+| Marketplace main                  | 8cb880dbaee73f2c6e71d096e4b75db87f29c32a                                                 | Earlier local normal/release validation passed for 55 artifacts and verifier fixtures passed 46/46. Regenerate after the web PR merges so sourceCommit names the exact merge.                         |
+| Deployed web baseline             | 3819345c9ccdc5e96ca7bfd389eaab8d7ea4c530                                                 | Earlier release and readiness workflows succeeded for this revision. Production still runs engine #195, not the candidate engine #198 pin.                                                            |
 
 Candidate parity checks confirm both release workflows point to engine main #198. The deployed worker reports engine #195. The candidate pin is required for the engine fixes to reach the worker after a reviewed merge and release.
 
 ## Commit map
 
-| Commit    | Scope                                                                                                                                           |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| f971ec57  | W0–W1 payer-bound billing, rejection receipts, delegated target scope, sync permissions, webhook track recovery and additive schema migrations. |
-| febbc216  | W2 scan recovery, dashboard and onboarding flows, polling behavior and browser coverage.                                                        |
-| d50f5687  | W3 MCP operation-map contract, CLI behavior, detector and auth hardening.                                                                       |
-| aae15b40  | W4 CI routing, credential separation, container checks, webhook cutover tooling and ratchets.                                                   |
-| 3c786004  | W5 docs and marketplace source, client registry split, generated pricing and retention copy.                                                    |
-| 1b171ed1  | W6 Desktop provider setup and failure states.                                                                                                   |
-| 2d244a75  | W1 operations runbook and W7 retry, parser, settlement and permission test coverage.                                                            |
-| 20f0d8a1  | W8 engine revision pin in release workflows and compatibility references.                                                                       |
-| a4e2fc4e  | Completion ledger and self-contained next-agent handoff.                                                                                        |
-| Follow-up | CI false-positive cleanup and narrowly scoped handling for the newly published Astro transitive advisory.                                       |
+| Commit   | Scope                                                                                                                                           |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| f971ec57 | W0–W1 payer-bound billing, rejection receipts, delegated target scope, sync permissions, webhook track recovery and additive schema migrations. |
+| febbc216 | W2 scan recovery, dashboard and onboarding flows, polling behavior and browser coverage.                                                        |
+| d50f5687 | W3 MCP operation-map contract, CLI behavior, detector and auth hardening.                                                                       |
+| aae15b40 | W4 CI routing, credential separation, container checks, webhook cutover tooling and ratchets.                                                   |
+| 3c786004 | W5 docs and marketplace source, client registry split, generated pricing and retention copy.                                                    |
+| 1b171ed1 | W6 Desktop provider setup and failure states.                                                                                                   |
+| 2d244a75 | W1 operations runbook and W7 retry, parser, settlement and permission test coverage.                                                            |
+| 20f0d8a1 | W8 engine revision pin in release workflows and compatibility references.                                                                       |
+| a4e2fc4e | Completion ledger and self-contained next-agent handoff.                                                                                        |
+| 60c5f114 | Published-PR status record.                                                                                                                     |
+| fe3198b1 | Fixed pnpm Astro package-root lookup in the advisory characterization test.                                                                     |
+| 8cc339c8 | Updated onboarding browser assertions for retry copy shown only after a failed attempt and a visible Back action.                               |
 
 ## Implemented candidate scope
 
@@ -42,11 +44,11 @@ Candidate parity checks confirm both release workflows point to engine main #198
 | W1 billing reliability           | Implemented                                    | Provider-scoped daily reconciliation, retryable renewal failures, fenced claims, reviewed replay policy, audited recovery disposition and additive UTC scheduling fields.                                                                                                                                 |
 | W2 scan and customer flows       | Implemented                                    | Definitive refusal recovery, ETag handling, onboarding steps, plan selection, in-sheet errors, dashboard navigation, readable labels and responsive/accessibility fixes.                                                                                                                                  |
 | W3 MCP and operational contracts | Implemented                                    | Tool catalog parity, input-hash denial, detector positives and negatives, CLI cancellation and mode behavior, CSP ingest configuration, pool accounting and lock-guard changes. Production error delivery is not proven by source tests.                                                                  |
-| W4 CI and release                | Implemented                                    | Credential-free image builds, separated install/deploy jobs, routing and provenance guards, pagination, shell lint and monotone blocking ratchets. Exact-head GitHub CI is running on the current PR head; check the linked PR before changing its status.                                                |
+| W4 CI and release                | Implemented                                    | Credential-free image builds, separated install/deploy jobs, routing and provenance guards, pagination, shell lint and monotone blocking ratchets. Exact-head GitHub CI passed on application/test head 8cc339c8; a documentation-only evidence update requires a fresh run.                              |
 | W5 docs and registry             | Implemented                                    | Registry split behind existing facade, client configuration fixes, generated pricing and integration references, copy ratchets, retention wording and marketplace source cleanup. Final export provenance waits on the web merge.                                                                         |
 | W6 Desktop                       | Source and test work implemented               | ChatGPT and Azure wiring and UI states are covered by local tests. Clean-profile provider execution remains open; keep Local admission off.                                                                                                                                                               |
 | W7 debt work                     | Implemented where defined in the supplied plan | Undici direct pins now agree with the patched lock resolution; smol-toml override is bounded. Defined decomposition, route tests, adversarial parser tests and ratchets are present. The complete historical DA–DI register was not found, so no full-register closure count is asserted.                 |
-| W8 engine pin                    | Present in candidate                           | Release workflows point at engine main #198. Reviewer approval of this pin and successful exact-head CI remain required.                                                                                                                                                                                  |
+| W8 engine pin                    | Present in candidate                           | Release workflows point at engine main #198. Exact-head CI passed on 8cc339c8; reviewer approval of the pin and checks for the documentation-updated head remain required.                                                                                                                                |
 
 The coding handoff contained stale statements: Desktop model wiring is in source for both providers and the CLI safe config writer is available. Those source facts do not substitute for a clean-profile Desktop scan or an end-to-end client configuration run.
 
@@ -61,6 +63,7 @@ The full prescribed runner completed twice on the candidate before the final web
 - Browser harness passed 121/121, including mobile-width scan and Desktop states.
 - Focused Razorpay, top-up, scans, scan quality and report tests passed 56/56.
 - Web test typecheck, E2E typecheck, browser-harness typecheck and browser-harness lint passed.
+- The Playwright critical-flow suite passed 43/43 twice after updating its onboarding assertions to match the intended retry-only copy and visible Back action. The final exact-head CI run also passed its browser and 390px coverage.
 - Restricted local database and Redis checks passed: metering 14/14; webhook retry 13/13; queue producer 6/6; trial/workspace/Myra 16/16; team owner/runtime 4/4; growth metrics 1/1; dashboard overview and manifest checksum 2/2; account-preference RLS 2/2; agent-operation workspace FK 1/1. These used local disposable databases and the restricted runtime role where required.
 - pnpm build passed 12/12 tasks with dummy CI-only values. The motion bundle-size notice is informational.
 - pnpm test:browser-harness passed 121/121.
@@ -70,15 +73,15 @@ The full prescribed runner completed twice on the candidate before the final web
 - ShellCheck and the workflow, release, billing-admission, secret-sync, provenance, egress, stop-provenance, Azure VM, alert and engine-check pagination shell tests passed. pnpm pin parity passed.
 - After the first GitHub run, the Myra tests were adjusted so synthetic bearer credentials are assembled at runtime instead of matching the changed-file secret heuristic. The ledger's new Oxford comma was removed. Focused regression and workflow-pattern tests passed 34/34; the copy ratchet passed with no new candidates.
 - The current pnpm audit passes with two exact advisory exceptions. GHSA-ch52-4w7c-c8xp has no patched npm release; Astro's remote asset cache creates a fresh `Request(src)`, uses the policy for storage TTL and does not call the vulnerable `evaluateRequest(max-stale)` path. `astro-cache-advisory.test.ts` characterizes that use. GHSA-vfj7-8cjw-p6xm has no patched npm release and `pnpm why --prod braces` is empty; the affected copy is confined to root lint tooling. Remove each exception when its package has a patched release.
-- Engine/worker contract, engine controlled-derivative gate and marketplace validation were verified earlier in this candidate run; see the source revision boundary above. Exact candidate GitHub CI has not run yet.
+- Engine/worker contract and engine controlled-derivative verification passed earlier in this candidate run; the exact-head GitHub engine/worker contract job passed as well. Marketplace validation passed locally for the current source; final export provenance and marketplace CI wait for the web merge.
 
 Initial unconfigured build and integration-test invocations lacked required disposable test settings. After configuring the documented CI-only environment, the required build and integration checks ran. During local webhook-suite stabilization, one invocation also exposed an exact-boundary scheduling sensitivity in lease-focused fixtures; those fixtures now set their due timestamp explicitly while the independent database-clock test still checks default scheduling.
 
 ## GitHub and live state
 
-Draft PR [#897](https://github.com/ecryptoguru/lyrashield-ai/pull/897) is open from codex/production-readiness-20261002. The initial exact-head CI run found the new ledger copy candidate and the dependency advisory described above plus scanner false positives from test fixtures. Those have been corrected or narrowly documented on the branch. The linked PR is authoritative for current SHA and check state; the follow-up commit triggers a new exact-head run. Keep the PR draft until all required checks on the latest head are green and the reviewer/founder checkpoints are completed.
+Draft PR [#897](https://github.com/ecryptoguru/lyrashield-ai/pull/897) is open from codex/production-readiness-20261002. Exact application/test head `8cc339c8e2c0b4414ba5fbfcf2eaea2548b902e2` passed [CI run 37090846293](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/37090846293) and [security scan 37090846415](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/37090846415). All required checks passed, including web lint/typecheck/test/build, Desktop Rust and frontend, pinned engine/worker contract, no-push image build, SCA and secret scan, and the GitHub Action. Cloudflare marketing deployment was skipped as expected for a PR; CodeRabbit review was skipped because the PR is draft. The full Playwright web suite passed 43/43 locally twice. This evidence-only documentation update will advance the PR head, so rerun and inspect checks on that exact head before treating CI as final. Keep the PR in draft through the reviewer/founder checkpoints.
 
-Fresh public reads on 2026-10-03 returned:
+Fresh public reads on 2026-10-03 returned (application routes on `app.lyrashieldai.com`):
 
 - app health: HTTP 200, status ok;
 - scan readiness: HTTP 200, worker true;
@@ -91,7 +94,7 @@ The regenerated browser token does not need to be added to GitHub Actions or Azu
 
 ## Remaining gates and operator work
 
-1. Review exact-head CI on [PR #897](https://github.com/ecryptoguru/lyrashield-ai/pull/897) and resolve every failure or review finding. Do not merge the draft PR. The W8 engine pin still needs reviewer approval. Before marking ready, provide the billing/auth/deploy heads-up described in the handoff.
+1. Rerun and inspect exact-head CI after this documentation-only update, then resolve any review finding. The application/test head `8cc339c8` already passed CI and security. Do not merge the draft PR; the W8 engine pin still needs reviewer approval. Before marking ready, provide the billing/auth/deploy heads-up described in the handoff.
 2. After merge and production release, read back active Azure app and worker images and verify product revision, engine revision and provenance. Repeat readiness and health checks, ten authenticated preference reads, scan completion with findings, terminal findings retrieval, report generation and delegated denial against another target.
 3. Reconcile captured INR minute-pack payments since 2026-09-11 against durable credited receipts. Keep a private discrepancy list and correct only evidence-backed charges. Then perform an authorized INR pack purchase and duplicate-delivery check; source tests are not provider settlement proof.
 4. Apply the additive UTC webhook scheduling migration only under the documented admission-stop and drained-queue procedure. Record pre/post row counts and signed cutover evidence. Verify recovery and rejected-event alerts reach their operator channel.
