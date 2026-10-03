@@ -14,7 +14,7 @@ export interface IntegrationVerification {
   checkedOn: string
   clientVersion: string | null
   platforms: VerificationPlatform[]
-  /** Stable test, artifact, or external source that supports the current tier. */
+  /** Stable test, artifact or external source that supports the current tier. */
   reference: string
   /** Retained runtime receipt. Required before claiming NATIVE or VERIFIED. */
   receipt: string | null
@@ -59,6 +59,12 @@ export interface AgentEntry {
   preferredTransport?: Transport | null
   /** Preferred authentication for native remote HTTP connections. */
   remoteAuth?: "oauth" | "api-key"
+  /** Native remote fields for clients that model API-key auth differently. */
+  remoteAuthConfig?: {
+    apiKeyEnvVar?: string
+    bearerTokenEnvVarField?: string
+    headersField?: string
+  }
   credential: CredentialStyle
   requiredEntryFields?: Record<string, string>
   /** Per-transport fields. Use "<apiUrl>" as a placeholder; stdio env blocks receive the base apiUrl, remote HTTP entries receive the MCP endpoint. */

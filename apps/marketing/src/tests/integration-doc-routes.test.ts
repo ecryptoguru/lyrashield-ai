@@ -13,6 +13,7 @@ import {
 import { allRoutes, LEGACY_REDIRECTS } from "../../scripts/redirects-lib.mjs"
 
 const pageDirectory = new URL("../pages/docs/integrations/", import.meta.url)
+const userGuide = readFileSync(new URL("../../../../docs/user-guide.md", import.meta.url), "utf8")
 const authoredPages = readdirSync(pageDirectory)
   .filter((file) => file.endsWith(".astro") && file !== "[slug].astro")
   .map((file) => file.replace(/\.astro$/, ""))
@@ -35,6 +36,10 @@ const configPreviewClients = [
 ]
 
 describe("integration guide routes", () => {
+  it("points the user guide at the registry-derived integration directory", () => {
+    expect(userGuide).toMatch(/\[client-specific setup guides\]\(\/docs\/integrations\)/)
+  })
+
   it("resolves every preferred registry link to an authored or generated page", () => {
     const explicit = new Set(EXPLICIT_INTEGRATION_DOC_SLUGS)
     const generated = new Set(listGeneratedIntegrationDocs().map((agent) => agent.docsSlug))

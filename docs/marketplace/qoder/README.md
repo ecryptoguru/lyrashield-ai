@@ -1,7 +1,7 @@
 # LyraShield AI for Qoder — preparation
 
 This folder contains a Qoder plugin package plus a Qoder CLI user-hosted marketplace manifest. The
-plugin uses the documented `.qoder-plugin/plugin.json`, conventional `skills/`, `commands/`, and
+plugin uses the documented `.qoder-plugin/plugin.json`, conventional `skills/`, `commands/` and
 `.mcp.json` component paths. Its five skill files are canonical copies from
 `packages/agent-plugin/plugin/skills/`; the source-checkout maintainer validator checks manifest
 shape and byte parity before export. Maintainer validators are omitted from the public marketplace
@@ -42,14 +42,14 @@ documents browser-based OAuth for remote MCP. Qoder IDE supports plugin-bundled 
 public package docs do not establish that it uses the same OAuth path. Complete authentication,
 verify the intended workspace, and make a read-only call before relying on the integration. Scan,
 fix-proposal, and retest tools require explicit user intent and the appropriate LyraShield OAuth
-connection, workspace membership, and delegated authorization. No hooks or automatic scans are
+connection, workspace membership and delegated authorization. No hooks or automatic scans are
 installed.
 
 ## Distribution status
 
 **PREPARATION** — Qoder documents user-hosted CLI marketplaces and local IDE imports. Its curated
 marketplace is described as editor-curated; a public third-party submission intake could not be
-verified. No public LyraShield listing, submission, or authenticated client runtime receipt exists.
+verified. No public LyraShield listing, submission or authenticated client runtime receipt exists.
 
 Official references checked 2026-10-01:
 

@@ -41,14 +41,14 @@ directory for this plugin.
 The bundled hosted Streamable HTTP configuration requests only `lyrashield.read`; Factory documents
 OAuth Dynamic Client Registration and stores OAuth credentials in the system keyring (or a fallback
 file). Complete consent in the client, verify the intended workspace and make a read-only call.
-Scan, proposal, and retest workflows require the user's explicit request plus a LyraShield connection
+Scan, proposal and retest workflows require the user's explicit request plus a LyraShield connection
 and workspace authorization that permits the operation. Do not expand consent by editing config
 alone. No hooks or automatic scans are installed.
 
 ## Status
 
 **PREPARATION** — plugin shape matches the current Factory contract, but no Droid client runtime
-receipt, marketplace release, public listing, or listing readback exists. An installed plugin badge
+receipt, marketplace release, public listing or listing readback exists. An installed plugin badge
 does not prove MCP authentication or tool behavior. From the LyraShield AI source checkout, run
 `node docs/marketplace/factory/validate.mjs` for the offline manifest and skill-copy check.
 

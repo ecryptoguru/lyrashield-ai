@@ -37,7 +37,7 @@ const SECRET_PATTERNS: readonly SecretPattern[] = [
     // A generic `secret:` key can hold an actual credential. Exclude recognized
     // `process.env.NAME` references so source code does not look like a literal.
     pattern:
-      /(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|password|secret)["']?[ \t]{0,128}[:=][ \t]{0,4}["']?(?!process\.env\.[A-Za-z_][A-Za-z0-9_]*)([A-Za-z0-9._~+/=-]{16,})/gi,
+      /(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|password|secret)["']?[ \t]{0,128}[:=][ \t]*["']?(?!process\.env\.[A-Za-z_][A-Za-z0-9_]*)([A-Za-z0-9._~+/=-]{16,})/gi,
     valueGroup: 1,
   },
 ]

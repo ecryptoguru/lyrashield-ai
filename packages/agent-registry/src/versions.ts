@@ -22,7 +22,7 @@ export const CLI_CONFIG_WRITES_AVAILABLE = true
  * are separate release features, and the exact packed artifact must be verified.
  * Each fingerprint covers the serialized fields that control CLI installation:
  * identity/aliases, strategy, paths and formats, transports, credential shape,
- * vendor command, plugin paths, manual setup text, and rules files. This is a
+ * vendor command, plugin paths, manual setup text and rules files. This is a
  * compatibility drift guard, not a security boundary.
  */
 const PUBLISHED_CLI_INSTALL_CONTRACTS: Readonly<Record<string, string>> = {
@@ -92,6 +92,7 @@ function installContractFingerprint(agent: AgentEntry): string {
     integrationKind: agent.integrationKind ?? null,
     preferredTransport: agent.preferredTransport ?? null,
     remoteAuth: agent.remoteAuth ?? null,
+    ...(agent.remoteAuthConfig ? { remoteAuthConfig: agent.remoteAuthConfig } : {}),
     credential: agent.credential,
     requiredEntryFields: agent.requiredEntryFields ?? null,
     transportFields: agent.transportFields ?? null,

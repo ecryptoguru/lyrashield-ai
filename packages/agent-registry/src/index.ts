@@ -21,8 +21,8 @@ import type { AgentEntry, InstallStrategy } from "./types"
 //      agent. The same was true of `kiro`.
 //
 // Deliberately absent: `vscode`. It has a documented config-file path
-// (.vscode/mcp.json, root key `servers`), no generated VS Code-specific shim exists, and
-// its plugin discovery path lacks client-runtime proof — mapping it here would reroute a
+// (.vscode/mcp.json, root key `servers`), no generated VS Code-specific shim exists, and its
+// plugin discovery path lacks client-runtime proof — mapping it here would reroute a
 // documented install onto an unverified one. Its experimental Agent Plugin is
 // exposed as a separate GitHub Copilot in VS Code surface; the `vscode` install
 // name continues to select the documented config-file fallback until runtime

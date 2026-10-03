@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { listPreferredAgents } from "@lyrashield/agent-registry"
 import { agentOnboarding, renderAgentOnboardingMarkdown } from "../lib/agent-onboarding"
+import { buildLlmsPricingSummary } from "../lib/llms-pricing"
 
 describe("agent onboarding contract", () => {
   it("labels supported workflows and delegated authorization accurately", () => {
@@ -100,6 +101,7 @@ describe("agent onboarding contract", () => {
     const body = await response.text()
     expect(body).toContain("https://lyrashieldai.com/agents")
     expect(body).toContain("https://lyrashieldai.com/agents.md")
+    expect(body).toContain(buildLlmsPricingSummary())
     for (const slug of new Set(listPreferredAgents().map((agent) => agent.docsSlug))) {
       expect(body, `llms.txt must include the ${slug} integration guide`).toContain(
         `https://lyrashieldai.com/docs/integrations/${slug}`

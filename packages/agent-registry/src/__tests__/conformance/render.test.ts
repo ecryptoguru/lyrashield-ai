@@ -82,12 +82,19 @@ describe("conformance: renderConfig round-trips through the format parser", () =
               expect(entry).toHaveProperty("env")
             }
           }
+        } else if (transport === "remote-http" && agent.remoteAuthConfig?.bearerTokenEnvVarField) {
+          expect(entry).toHaveProperty(
+            agent.remoteAuthConfig.bearerTokenEnvVarField,
+            agent.remoteAuthConfig.apiKeyEnvVar
+          )
+          expect(entry).not.toHaveProperty("headers")
+          expect(entry).not.toHaveProperty(agent.remoteAuthConfig.headersField ?? "http_headers")
         } else if (agent.credential.kind === "shell-env" || agent.credential.kind === "env-names") {
           // These clients authenticate outside the persisted MCP config or
           // refer to environment variable names rather than literal values.
           expect(entry).not.toHaveProperty("headers")
         } else {
-          expect(entry).toHaveProperty("headers")
+          expect(entry).toHaveProperty(agent.remoteAuthConfig?.headersField ?? "headers")
         }
 
         // Data-driven structural checks.

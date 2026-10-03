@@ -1,6 +1,6 @@
 # Official MCP Registry preparation
 
-**State: READY FOR AUTHENTICATED SUBMISSION, NOT PUBLISHED.** `@lyrashield/mcp@0.2.12` is published and exposes the matching `mcpName: io.github.ecryptoguru/lyrashield-ai`. The prepared Registry metadata and package pass offline release-ready validation and official publisher validation. No LyraShield Registry listing has been read back; authenticate, submit, and verify the public version before claiming availability.
+**State: READY FOR AUTHENTICATED SUBMISSION, NOT PUBLISHED.** `@lyrashield/mcp@0.2.12` is published and exposes the matching `mcpName: io.github.ecryptoguru/lyrashield-ai`. The prepared Registry metadata and package pass offline release-ready validation and official publisher validation. No LyraShield Registry listing has been read back; authenticate, submit and verify the public version before claiming availability.
 
 ## Verified identities and endpoints
 
@@ -11,7 +11,7 @@
 - Candidate Registry name: io.github.ecryptoguru/lyrashield-ai, matching the official GitHub username namespace pattern. This is a prepared identity, not proof of namespace ownership or publication.
 - The exact prepared identity readback returned HTTP 404 and public search returned no LyraShield entry on 2026-10-02. This verifies absence for the prepared identity, not every possible alternate identity.
 
-The manifest lists both transports: npm stdio for clients that can run Node.js 24 or newer, and the hosted Streamable HTTP endpoint for clients that support remote MCP and OAuth. The Registry carries discovery metadata only; it does not publish the npm artifact or establish client compatibility, OAuth success, or marketplace acceptance. The official Registry remains documented as preview, so recheck its schema and CLI before submission.
+The manifest lists both transports: npm stdio for clients that can run Node.js 24 or newer, and the hosted Streamable HTTP endpoint for clients that support remote MCP and OAuth. The Registry carries discovery metadata only; it does not publish the npm artifact or establish client compatibility, OAuth success or marketplace acceptance. The official Registry remains documented as preview, so recheck its schema and CLI before submission.
 
 ## Offline validation
 
@@ -19,7 +19,7 @@ The official Registry JSON Schema is vendored at [schema/server.schema.json](./s
 
     pnpm exec node docs/marketplace/mcp-registry/validate.mjs
 
-This uses the existing Ajv dependency in @lyrashield/agent-plugin, validates against the vendored official schema, verifies the vendored checksum, and checks that the metadata version matches the local package. Release-ready mode reads public npm metadata to prove the published version exposes the same marker. It passed on 2026-10-02:
+This uses the existing Ajv dependency in @lyrashield/agent-plugin, validates against the vendored official schema, verifies the vendored checksum and checks that the metadata version matches the local package. Release-ready mode reads public npm metadata to prove the published version exposes the same marker. It passed on 2026-10-02:
 
     pnpm exec node docs/marketplace/mcp-registry/validate.mjs --release-ready
 
@@ -40,4 +40,4 @@ Only an authenticated `mcp-publisher publish` and public Registry API readback c
 3. Publish the reviewed package using the authenticated official CLI.
 4. Read back the exact public version and URL from the Registry API; record it in [../channels.md](../channels.md).
 
-Official references: [Registry quickstart](https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/quickstart.mdx), [generic server.json format](https://github.com/modelcontextprotocol/registry/blob/main/docs/reference/server-json/generic-server-json.md), and [Registry package ownership rules](https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/package-types.mdx).
+Official references: [Registry quickstart](https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/quickstart.mdx), [generic server.json format](https://github.com/modelcontextprotocol/registry/blob/main/docs/reference/server-json/generic-server-json.md) and [Registry package ownership rules](https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/package-types.mdx).

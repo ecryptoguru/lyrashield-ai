@@ -32,7 +32,7 @@ Auggie's current integration documentation confirms remote HTTP MCP configuratio
 does not document OAuth discovery or browser authentication for MCP servers. This package embeds no
 credential. The hosted LyraShield endpoint requires authenticated access, so a configured URL is
 not evidence that Auggie can connect. Treat hosted MCP runtime support as **PREPARATION** until an
-authenticated Auggie client completes OAuth, selects a workspace, lists tools, and makes a read-only
+authenticated Auggie client completes OAuth, selects a workspace, lists tools and makes a read-only
 call. If Auggie cannot complete that flow, the local stdio alternative requires Node.js 24 or newer
 and an authenticated LyraShield CLI credential store; keep those credentials outside plugin files.
 
@@ -43,7 +43,7 @@ path; mutation still requires the LyraShield connection and workspace authorizat
 ## Distribution state
 
 **PREPARATION** — Auggie supports user-hosted Git marketplaces. This package has not been installed
-in a current Auggie runtime, submitted to a curated catalog, or read back from a public listing.
+in a current Auggie runtime, submitted to a curated catalog or read back from a public listing.
 Marketplace availability and authenticated runtime support remain unverified.
 
 Official references checked 2026-10-01:
