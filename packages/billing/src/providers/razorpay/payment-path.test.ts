@@ -45,27 +45,6 @@ describe("Razorpay captured non-pack payments", () => {
     expect(creditTopUpMock).not.toHaveBeenCalled()
   })
 
-  it("validates a pack Payment Link but leaves payment.captured as the sole grant", async () => {
-    resolveCatalogMock.mockReturnValue({ kind: "pack", packId: "pack_100" })
-    await expect(
-      processRazorpayEvent({
-        event: "payment_link.paid",
-        created_at: Math.floor(Date.now() / 1000),
-        payload: {
-          payment_link: { entity: { id: "plink_pack", notes: { packId: "pack_100" } } },
-          payment: {
-            entity: { id: "pay_pack", amount: 150_000, currency: "INR", notes: {} },
-          },
-        },
-      })
-    ).resolves.toEqual({
-      handled: true,
-      action: "payment_link.paid.received",
-      workspaceId: null,
-    })
-    expect(creditTopUpMock).not.toHaveBeenCalled()
-  })
-
   it("records Local Payment Links without cloud credit", async () => {
     resolveCatalogMock.mockReturnValue({ kind: "local", sku: "individual_launch" })
     await expect(

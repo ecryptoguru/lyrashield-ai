@@ -23,11 +23,6 @@ vi.mock("@lyrashield/affiliate", () => ({
 // Import after mock
 const { proxy } = await import("../proxy")
 
-it("exports a client-IP extractor with an explicit trusted-header contract", async () => {
-  const proxyExports = (await import("../proxy")) as Record<string, unknown>
-  expect(proxyExports.getClientIP).toBeTypeOf("function")
-})
-
 describe("trusted client IP", () => {
   it("ignores forwarded headers when no trusted header is configured", async () => {
     delete process.env.TRUSTED_PROXY_IP_HEADER

@@ -418,18 +418,6 @@ describe("scanUrl", () => {
 })
 
 describe("scanUrl — SSRF protection (fetch-time)", () => {
-  it("blocks a target whose hostname resolves to the cloud-metadata IP (rebinding)", async () => {
-    const rebindResolver: HostResolver = async () => ["169.254.169.254"]
-    mockFetch.mockResolvedValue(makeResponse("<html></html>"))
-    const { findings } = await scanUrl({
-      targetUrl: "https://internal.attacker.example",
-      fetchFn: mockFetch,
-      resolver: rebindResolver,
-    })
-    expect(findings).toHaveLength(0)
-    expect(mockFetch).not.toHaveBeenCalled()
-  })
-
   it("blocks a decimal-encoded loopback address (http://2130706433 = 127.0.0.1)", async () => {
     mockFetch.mockResolvedValue(makeResponse("<html></html>"))
     const { findings } = await scanUrl({

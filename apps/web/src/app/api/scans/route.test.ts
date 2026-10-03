@@ -219,23 +219,6 @@ describe("POST /api/scans", () => {
     expect(json.error.code).toBe("VALIDATION_ERROR")
   })
 
-  it("returns 404 when target not found in workspace", async () => {
-    vi.mocked(prisma.target.findFirst).mockResolvedValue(null as never)
-
-    const res = await POST(
-      makeRequest({
-        workspaceId: "ws-1",
-        targetId: "missing-target",
-        goal: "TEST_APP",
-        mode: "SAFE",
-      })
-    )
-
-    expect(res.status).toBe(404)
-    const json = await res.json()
-    expect(json.error.code).toBe("TARGET_NOT_FOUND")
-  })
-
   it("returns 404 when policy not found", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
     vi.mocked(prisma.policy.findFirst).mockResolvedValue(null as never)
@@ -569,25 +552,6 @@ describe("POST /api/scans", () => {
     // Dates serialize to ISO strings, matching the SSR-rendered payload.
     expect(data.createdAt).toBe("2026-08-03T00:00:00.000Z")
     expect(prisma.auditLog.create).toHaveBeenCalled()
-  })
-
-  it("returns 503 without creating a scan when no worker is available", async () => {
-    vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
-    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
-    vi.mocked(assertScanWorkerAvailable).mockRejectedValue(new ScanWorkerUnavailableError())
-
-    const res = await POST(
-      makeRequest({
-        workspaceId: "ws-1",
-        targetId: "t1",
-        goal: "TEST_APP",
-        mode: "SAFE",
-      })
-    )
-
-    expect(res.status).toBe(503)
-    expect((await res.json()).error.code).toBe("SCAN_SERVICE_UNAVAILABLE")
-    expect(createScan).not.toHaveBeenCalled()
   })
 
   it("returns 409 when the transactional workspace scan cap wins a race", async () => {

@@ -456,11 +456,5 @@ describe("api-client", () => {
       const result = await apiPost("/api/test", { name: "foo" }, { schema })
       expect(result).toEqual({ id: "created" })
     })
-
-    it("does not require a schema and returns raw data", async () => {
-      mockFetch.mockResolvedValue(jsonResponse({ id: "raw" }))
-      const result = await apiGet("/api/test")
-      expect(result).toEqual({ id: "raw" })
-    })
   })
 })

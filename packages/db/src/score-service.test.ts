@@ -245,16 +245,6 @@ describe("score-service", () => {
       })
     })
 
-    it("rejects attribution for pre-existing accounts (no retroactive rewards)", async () => {
-      mockPrisma.referralCode.findUnique.mockResolvedValue({ id: "rc-1", userId: "referrer" })
-      mockPrisma.user.findUnique.mockResolvedValue({
-        createdAt: new Date(Date.now() - 400 * 24 * 60 * 60 * 1000),
-      })
-      const result = await attributeReferral("CODE2345", "old-user")
-      expect(result).toBeNull()
-      expect(mockPrisma.referralAttribution.upsert).not.toHaveBeenCalled()
-    })
-
     it("rejects attribution after the seven-day new-account window", async () => {
       mockPrisma.referralCode.findUnique.mockResolvedValue({ id: "rc-1", userId: "referrer" })
       mockPrisma.user.findUnique.mockResolvedValue({

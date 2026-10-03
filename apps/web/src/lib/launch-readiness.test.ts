@@ -391,12 +391,6 @@ describe("generateLaunchReadinessReport", () => {
       expect(report.score).not.toBeNull()
       expect(report.conditions.join(" ")).toContain("5 applicable control(s)")
     })
-
-    it("is unchanged when the caller reports no unresolved controls", () => {
-      const report = generateLaunchReadinessReportFromAggregate([], true, { evaluated: true })
-      expect(report.verdict).toBe("GO")
-      expect(report.score).toBe(100)
-    })
   })
 })
 

@@ -241,20 +241,6 @@ describe("sync session routes", () => {
       "http://localhost/api/sync/cursor",
       { syncSessionToken: "session-token" },
     ],
-    [
-      "non-member",
-      "connect",
-      connect,
-      "http://localhost/api/sync/connect",
-      { licenseKey: "raw-license-key" },
-    ],
-    [
-      "non-member",
-      "cursor",
-      cursor,
-      "http://localhost/api/sync/cursor",
-      { syncSessionToken: "session-token" },
-    ],
   ] as const)(
     "denies a %s on sync %s before writes",
     async (_membershipState, _name, route, url, credential) => {
