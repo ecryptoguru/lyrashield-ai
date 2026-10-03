@@ -7,7 +7,7 @@ import Link from "next/link"
 import { apiPost } from "@/lib/api-client"
 import { type ApprovalListItem } from "@lyrashield/db"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
-import { formatDateTime } from "@/lib/date-format"
+import { formatDateTimeUtc } from "@/lib/date-format"
 import { LocalTime } from "@/components/local-time"
 import type { AgentOperationListItem } from "@lyrashield/db"
 
@@ -187,7 +187,7 @@ export function ApprovalsClient({
                           {operationLabel(operation.operationName)}
                         </p>
                         <p className="text-muted-foreground mt-1 text-xs">
-                          {formatDateTime(operation.createdAt)}
+                          {formatDateTimeUtc(operation.createdAt)}
                           {operation.error ? ` · ${operation.error}` : ""}
                           {resultHref ? (
                             <>

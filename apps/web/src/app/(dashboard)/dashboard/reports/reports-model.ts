@@ -124,6 +124,7 @@ export type ShareableReport = z.infer<typeof shareableReportSchema>
 export const reportScanSchema = z
   .object({
     id: z.string(),
+    createdAt: z.string().datetime().or(z.string()),
     target: z
       .object({
         name: z.string(),

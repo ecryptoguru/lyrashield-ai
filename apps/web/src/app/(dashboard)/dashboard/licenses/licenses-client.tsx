@@ -73,7 +73,7 @@ export function LicensesClient({
               placeholder="Search by owner email..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="border-input bg-background w-full rounded-md border py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="border-input bg-background w-full rounded-md border py-2 pl-9 pr-3 text-base outline-none focus:ring-2 focus:ring-ring md:text-sm"
             />
           </label>
           <button

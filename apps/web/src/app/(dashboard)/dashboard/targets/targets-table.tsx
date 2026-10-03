@@ -8,7 +8,14 @@ import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { TARGET_PLURAL, TARGET_SINGULAR, SCAN_PLURAL, FINDING_PLURAL } from "@/lib/terminology"
 import { getTargetTypeLabel } from "@/lib/enum-labels"
 import { humanizeToken } from "@/lib/labels"
+import { formatTargetDomainStatus } from "@/lib/target-domain-status-format"
 import type { Target } from "./targets-model"
+
+function domainStatusLabel(target: Target): string {
+  const fallback =
+    target.type === "WEB_APP" || target.type === "API" ? "Not verified" : "Not applicable"
+  return formatTargetDomainStatus(target.domainVerificationStatus ?? fallback)
+}
 
 /**
  * True while a horizontal scroll container still has content off its right
@@ -157,10 +164,7 @@ export function TargetsTable({
                       t.domainVerificationStatus?.startsWith("Verified until") ? "success" : "muted"
                     }
                   >
-                    {t.domainVerificationStatus ??
-                      (t.type === "WEB_APP" || t.type === "API"
-                        ? "Not verified"
-                        : "Not applicable")}
+                    {domainStatusLabel(t)}
                   </Badge>
                 </td>
                 <td className="hidden px-4 py-3 lg:table-cell">{t.scanCount}</td>

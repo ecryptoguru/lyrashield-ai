@@ -8,7 +8,7 @@ import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import { z } from "zod"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetPaginated, apiPatch } from "@/lib/api-client"
-import { formatDateTime } from "@/lib/date-format"
+import { formatDateTimeUtc } from "@/lib/date-format"
 import { humanizeToken } from "@/lib/labels"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -197,8 +197,8 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
                       {notification.body}
                     </p>
                     <p className="text-muted-foreground mt-2 text-xs">
-                      {formatDateTime(notification.createdAt)}
-                      {notification.sentAt && <> · Sent {formatDateTime(notification.sentAt)}</>}
+                      {formatDateTimeUtc(notification.createdAt)}
+                      {notification.sentAt && <> · Sent {formatDateTimeUtc(notification.sentAt)}</>}
                     </p>
                   </div>
                   {notification.status !== "read" && (

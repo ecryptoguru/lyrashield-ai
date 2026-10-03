@@ -24,7 +24,7 @@ import {
   getTargetTypeLabel,
   getVerificationStatusLabel,
 } from "@/lib/enum-labels"
-import { formatDateTime, formatDuration, formatTime } from "@/lib/date-format"
+import { formatDateTimeUtc, formatDuration, formatTimeUtc } from "@/lib/date-format"
 import type { getScanPresentation } from "@/lib/scan-presentation"
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { reportsHref } from "@/lib/finding-list-params"
@@ -455,7 +455,7 @@ export function ScanDetailHeader({
             {scan.target ? `${scan.target.name} · ` : ""}
             {getScanGoalLabel(scan.goal)} · {getScanModeLabel(scan.mode)} ·{" "}
             {getScanTriggerLabel(scan.triggerType)}
-            {scan.endedAt ? ` · completed ${formatDateTime(scan.endedAt)}` : ""}
+            {scan.endedAt ? ` · completed ${formatDateTimeUtc(scan.endedAt)}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -808,7 +808,7 @@ export function ScanTechnicalDetails({ displayEvents }: { displayEvents: ScanDat
               {visibleEvents.map((event, idx) => (
                 <div key={event.id} className="flex items-start gap-3 py-2 text-sm">
                   <span className="text-muted-foreground shrink-0 text-xs">
-                    {formatTime(event.createdAt)}
+                    {formatTimeUtc(event.createdAt)}
                   </span>
                   <div className="min-w-0 flex-1">
                     <span

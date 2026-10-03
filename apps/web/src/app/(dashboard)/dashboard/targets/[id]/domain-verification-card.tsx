@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation"
 import { z } from "zod"
 import { Button, Card } from "@lyrashield/ui"
 import { apiGet, apiPost, apiPut } from "@/lib/api-client"
-import { formatDateTime } from "@/lib/date-format"
+import { formatDateTimeUtc } from "@/lib/date-format"
+import { formatTargetDomainStatus } from "@/lib/target-domain-status-format"
 
 const proofSchema = z.object({
   id: z.string(),
@@ -87,7 +88,7 @@ function DomainVerificationContent({
     ? expired
       ? "Not verified (expired)"
       : proof.status === "VERIFIED"
-        ? `Verified until ${formatDateTime(proof.expiresAt)}`
+        ? `Verified until ${formatDateTimeUtc(proof.expiresAt)}`
         : initialStatus === "Self-attested"
           ? initialStatus
           : "Not verified"
@@ -95,7 +96,7 @@ function DomainVerificationContent({
       ? "Not verified (expired)"
       : canValidate && initialExpiry !== null
         ? "Not verified"
-        : initialStatus
+        : formatTargetDomainStatus(initialStatus)
 
   async function mutate(issue: boolean) {
     setBusy(true)
@@ -206,7 +207,7 @@ function DomainVerificationContent({
                   <dt>
                     {proof.status === "VERIFIED" ? "Verification expires" : "Challenge expires"}
                   </dt>
-                  <dd>{formatDateTime(proof.expiresAt)}</dd>
+                  <dd>{formatDateTimeUtc(proof.expiresAt)}</dd>
                 </div>
               )}
             </dl>

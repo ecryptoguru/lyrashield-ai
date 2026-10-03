@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { useScansWebMcp } from "./scans-webmcp"
 import { useScanListState } from "./use-scan-list-state"
 import { CreateScanSheet } from "./create-scan-sheet"
+import { resolveScanSubmissionFailure } from "./scan-submission-failure"
 import { ScanList } from "./scan-list"
 import { ScanStatusNotices } from "./scan-status-notices"
 import { Play, RefreshCw } from "lucide-react"
@@ -30,10 +31,8 @@ import type { ScanEligibilityState, ScanItem, TargetItem } from "./scan-types"
 import {
   beginScanSubmission,
   clearPendingScanSubmission,
-  operationIdFromErrorDetails,
   readPendingScanSubmission,
   recordAcceptedScan,
-  recordScanOperation,
   runScanSubmission,
   scanOperationStatusSchema,
   scanRequestIdentity,
@@ -251,25 +250,17 @@ export function ScansClient({
             headers: { "Idempotency-Key": submission.idempotencyKey },
           })
         } catch (err) {
-          const operationId =
-            err instanceof ApiError ? operationIdFromErrorDetails(err.details) : null
-          if (operationId) {
-            const updated = recordScanOperation(
-              scanSubmissionScope,
-              submission.idempotencyKey,
-              operationId
-            )
-            submission = updated ?? { ...submission, operationId }
-          }
+          const failure = resolveScanSubmissionFailure({
+            scope: scanSubmissionScope,
+            submission,
+            error: err,
+          })
           if (!isCurrentScope()) return
-          setPendingScanSubmission(submission)
+          if (failure.recoveryUnavailable) setScanRecoveryUnavailable(true)
+          setPendingScanSubmission(failure.pendingSubmission)
           setError(err instanceof Error ? err.message : "Failed to create scan")
           setErrorCode(err instanceof ApiError ? err.code : null)
-          setScanRecoveryError(
-            err instanceof Error
-              ? err.message
-              : "We could not confirm whether the scan started. Retry with the same details."
-          )
+          setScanRecoveryError(failure.recoveryError)
           return
         }
 

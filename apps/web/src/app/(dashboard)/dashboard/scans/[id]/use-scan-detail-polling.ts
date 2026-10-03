@@ -9,6 +9,65 @@ import { isActiveScan } from "@/lib/scan-presentation"
 import type { FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
 import { asIsoString, asMetadata, mergeEvents } from "./scan-detail-utils"
 
+/** Keep a new validator uncommitted until its poll response has been fully applied. */
+export function selectScanPollEtag({
+  currentEtag,
+  responseEtag,
+  responseStatus,
+  responseProcessed,
+}: {
+  currentEtag: string | undefined
+  responseEtag: string | undefined
+  responseStatus: number
+  responseProcessed: boolean
+}): string | undefined {
+  if (responseStatus === 304) return responseEtag ?? currentEtag
+  if (!responseProcessed) return currentEtag
+  return responseEtag
+}
+
+type PollResponse = { etag: string | undefined; status: number; processed: boolean }
+
+function commitPollEtag(ref: { current: string | undefined }, response: PollResponse): void {
+  ref.current = selectScanPollEtag({
+    currentEtag: ref.current,
+    responseEtag: response.etag,
+    responseStatus: response.status,
+    responseProcessed: response.processed,
+  })
+}
+
+const TERMINAL_SCAN_STATUSES = new Set([
+  "COMPLETED",
+  "PARTIAL",
+  "FAILED",
+  "CANCELLED",
+  "STOPPED_BUDGET",
+  "TIMED_OUT",
+])
+
+async function fetchTerminalDetails(
+  scanId: string,
+  workspaceId: string,
+  signal: AbortSignal
+): Promise<{ findings: FindingItem[]; quality: ScanData["integrity"]["quality"] }> {
+  const page = await apiGetPaginated<FindingItem>(
+    "/api/findings",
+    { workspaceId, scanId, limit: "100" },
+    { signal, schema: findingDetailItemsPaginatedSchema }
+  )
+  let quality: ScanData["integrity"]["quality"] = null
+  try {
+    quality = await apiGet(
+      `/api/scans/${scanId}/quality?workspaceId=${encodeURIComponent(workspaceId)}`,
+      { signal, schema: ScanQualitySurfaceSchema }
+    )
+  } catch {
+    // Keep the terminal outcome visible; omit a stale quality snapshot.
+  }
+  return { findings: page.items, quality }
+}
+
 /**
  * Owns the live-state machinery of the scan detail page: the polled scan and
  * finding state, the ETag/event-cursor refs, the visibility-aware poll loop,
@@ -47,6 +106,7 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
 
   const refresh = useCallback(
     async (signal: AbortSignal) => {
+      let pollResponse: PollResponse | undefined
       try {
         // Incremental polling: once a cursor exists, ask only for events after
         // it. The first tick (or a full-window fallback) repopulates the whole
@@ -58,9 +118,13 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
           { signal, etag: etagRef.current, schema: scanPollDataSchema }
         )
         if (signal.aborted) return
-        etagRef.current = status === 304 ? (etag ?? etagRef.current) : etag
+        pollResponse = { etag, status, processed: false }
         setRefreshError(false)
-        if (!data) return
+        if (!data) {
+          pollResponse.processed = true
+          commitPollEtag(etagRef, pollResponse)
+          return
+        }
 
         const updated = data
         const nextScan: ScanData = {
@@ -113,33 +177,15 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
         }
         let refreshedFindings: FindingItem[] | null = null
         let refreshedQuality: ScanData["integrity"]["quality"] = null
-        if (
-          ["COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(
-            updated.status
-          )
-        ) {
-          // A single bounded fetch (limit 100) is sufficient for the scan detail
-          // view. Very large finding sets are navigated via the findings page.
-          const page = await apiGetPaginated<FindingItem>(
-            "/api/findings",
-            { workspaceId: updated.workspaceId, scanId: scan.id, limit: "100" },
-            { signal, schema: findingDetailItemsPaginatedSchema }
-          )
-          refreshedFindings = page.items
-          // The poll carries coverage receipts but the evidence-quality
-          // projection is server-rendered. Refresh it after persistence so a
-          // live page cannot show the pre-scan zero beside terminal receipts.
-          try {
-            refreshedQuality = await apiGet(
-              `/api/scans/${scan.id}/quality?workspaceId=${encodeURIComponent(updated.workspaceId)}`,
-              { signal, schema: ScanQualitySurfaceSchema }
-            )
-          } catch {
-            // Keep the terminal outcome visible; omit a stale quality snapshot.
-          }
+        if (TERMINAL_SCAN_STATUSES.has(updated.status)) {
+          const details = await fetchTerminalDetails(scan.id, updated.workspaceId, signal)
+          refreshedFindings = details.findings
+          refreshedQuality = details.quality
           nextScan.integrity.quality = refreshedQuality
         }
+        pollResponse.processed = true
         if (!signal.aborted) {
+          commitPollEtag(etagRef, pollResponse)
           // Commit the terminal status and its finding list together. If the
           // finding request fails transiently, the active poll remains alive
           // and retries instead of rendering a false zero until page reload.
@@ -150,7 +196,12 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
           }
         }
       } catch {
-        if (!signal.aborted) setRefreshError(true)
+        if (!signal.aborted) {
+          if (pollResponse) {
+            commitPollEtag(etagRef, pollResponse)
+          }
+          setRefreshError(true)
+        }
       }
     },
     [router, scan.id, scan.workspaceId]

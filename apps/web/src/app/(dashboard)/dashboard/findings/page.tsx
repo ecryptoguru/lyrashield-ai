@@ -20,6 +20,7 @@ import { listFixProposals } from "@lyrashield/db"
 import Link from "next/link"
 import { EmptyState, buttonVariants } from "@lyrashield/ui"
 import { SEVERITY_ORDER } from "@/lib/severity-presentation"
+import { permanentRedirect } from "next/navigation"
 
 const FINDINGS_TABS: SectionTab[] = [
   // The `issues` tab value is a compatibility URL parameter; the visible label
@@ -37,8 +38,35 @@ type FindingsTab = "issues" | "evidence" | "fixes"
 function normalizeTab(value: string | undefined): FindingsTab {
   if (value === "evidence") return value
   if (value === "fixes") return value
-  // The legacy reports tab is a permanent redirect to /dashboard/reports.
+  // The legacy reports tab is redirected before tab normalization.
   return "issues"
+}
+
+function legacyReportsHref(params: { scanId?: string; targetId?: string }): string {
+  const reportScope = new URLSearchParams()
+  if (params.scanId) reportScope.set("scanId", params.scanId)
+  if (params.targetId) reportScope.set("targetId", params.targetId)
+  const query = reportScope.toString()
+  return `/dashboard/reports${query ? `?${query}` : ""}`
+}
+
+type FindingsSearchParams = {
+  finding?: string
+  tab?: string
+  scanId?: string
+  targetId?: string
+  filter?: string
+  sort?: string
+  target?: string
+  q?: string
+}
+
+async function findingsSearchParams(
+  searchParams: Promise<FindingsSearchParams>
+): Promise<FindingsSearchParams> {
+  const params = await searchParams
+  if (params.tab === "reports") permanentRedirect(legacyReportsHref(params))
+  return params
 }
 
 export const metadata: Metadata = {
@@ -89,17 +117,10 @@ function FindingsScopeStrip({
 export default async function FindingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    finding?: string
-    tab?: string
-    scanId?: string
-    targetId?: string
-    filter?: string
-    sort?: string
-    target?: string
-    q?: string
-  }>
+  searchParams: Promise<FindingsSearchParams>
 }) {
+  const params = await findingsSearchParams(searchParams)
+
   const session = await getCachedSession()
   if (!session) return null
 
@@ -119,7 +140,6 @@ export default async function FindingsPage({
     )
   }
 
-  const params = await searchParams
   const tab = normalizeTab(params.tab)
   // Filter/sort/search are parsed on the server and passed as initial props so
   // the server-rendered tree and the client's first render match exactly.

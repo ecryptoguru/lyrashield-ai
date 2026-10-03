@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { clearFindingsListSessionStorage } from "@/lib/findings-list-session-storage"
 import {
   findingsContextKey,
   loadFindingsListContext,
@@ -23,7 +24,14 @@ function storage() {
   const data = new Map<string, string>()
   vi.stubGlobal("window", {
     sessionStorage: {
+      get length() {
+        return data.size
+      },
+      key: (index: number) => Array.from(data.keys())[index] ?? null,
       getItem: (key: string) => data.get(key) ?? null,
+      removeItem: (key: string) => {
+        data.delete(key)
+      },
       setItem: (key: string, value: string) => {
         data.set(key, value)
       },
@@ -35,6 +43,17 @@ function storage() {
 afterEach(() => vi.unstubAllGlobals())
 
 describe("findings list snapshots", () => {
+  it("clears only saved finding snapshots when the authenticated session ends", () => {
+    const data = storage()
+    data.set("lyrashield:findings-list:workspace-1:OPEN:priority::target-1:", "snapshot-1")
+    data.set("lyrashield:findings-list:workspace-2:ALL:priority::target-2:", "snapshot-2")
+    data.set("lyrashield.auth.callback", "/oauth/return")
+
+    clearFindingsListSessionStorage()
+
+    expect([...data.keys()]).toEqual(["lyrashield.auth.callback"])
+  })
+
   it("isolates saved pages by observed scan", () => {
     const base = { filter: "OPEN", sort: "priority", target: "target-1", q: "" }
     expect(findingsContextKey("workspace-1", { ...base, scanId: "scan-1" })).not.toBe(

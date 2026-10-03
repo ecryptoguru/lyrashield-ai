@@ -5,7 +5,7 @@ import { ChevronRight, Play, Radar, RotateCcw, Trash2, X } from "lucide-react"
 import { Badge, Button, buttonVariants, Card, EmptyState, Spinner } from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
-import { formatDateTime } from "@/lib/date-format"
+import { formatDateTimeUtc } from "@/lib/date-format"
 import { getGoalLabel, modeLabel } from "@/lib/labels"
 import { getScanPresentation, isActiveScan, type ScanStateFilter } from "@/lib/scan-presentation"
 import { SCAN_PLURAL, SCAN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
@@ -88,7 +88,7 @@ export function ScanList({
                 New {SCAN_SINGULAR}
               </Button>
             ) : (
-              <Link href="/dashboard/targets" className={buttonVariants()}>
+              <Link href="/dashboard/targets?add=1" className={buttonVariants()}>
                 Add a {TARGET_SINGULAR.toLowerCase()}
               </Link>
             )
@@ -120,10 +120,10 @@ export function ScanList({
                       </span>
                     </div>
                     <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                      <span className="whitespace-nowrap">{formatDateTime(scan.createdAt)}</span>
+                      <span className="whitespace-nowrap">{formatDateTimeUtc(scan.createdAt)}</span>
                       {scan.endedAt && (
                         <span className="whitespace-nowrap">
-                          · completed {formatDateTime(scan.endedAt)}
+                          · completed {formatDateTimeUtc(scan.endedAt)}
                         </span>
                       )}
                       {scan.findingCount !== undefined && scan.findingCount > 0 && (

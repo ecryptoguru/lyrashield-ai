@@ -1,23 +1,15 @@
 "use client"
 
 import Link from "next/link"
-import { Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lucide-react"
+import { Braces, Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lucide-react"
 import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
 import type { OperationFailurePresentation } from "@/lib/operation-failure"
 import type { ManualScanOption } from "@/lib/scan-presets"
 import { getWorkspacePlanLabel } from "@/lib/enum-labels"
-import {
-  SCAN_SINGULAR,
-  TARGET_DETAILS_LABEL,
-  TARGET_NAME_LABEL,
-  TARGET_SINGULAR,
-} from "@/lib/terminology"
-import {
-  pathLabel,
-  pathNeedsRepo,
-  stepModelForPath,
-  type OnboardingPath,
-} from "./onboarding-flow.utils"
+import { SCAN_SINGULAR, TARGET_DETAILS_LABEL, TARGET_NAME_LABEL } from "@/lib/terminology"
+import { pathLabel, stepModelForPath, type OnboardingPath } from "./onboarding-flow.utils"
+import { detailsCopy } from "./onboarding-step-copy"
+import { TargetNameSection } from "./onboarding-target-name-section"
 
 export interface Repo {
   id: number
@@ -254,7 +246,7 @@ export function PathChooserView({
           disabled={loading}
           className="hover:bg-accent rounded-lg border p-4 text-left transition-colors disabled:opacity-60"
         >
-          <Globe className="text-primary mb-2 size-6" aria-hidden="true" />
+          <Braces className="text-primary mb-2 size-6" aria-hidden="true" />
           <span className="block text-sm font-medium">Add an API</span>
           <span className="text-muted-foreground mt-1 block text-xs">
             Scan an API&apos;s public surface — no repo access needed.
@@ -470,6 +462,7 @@ export function TargetDetailsView({
   productName,
   onProductNameChange,
   retryingExistingTarget,
+  hasFailedScanAttempt,
   reviewOptions,
   selectedReview,
   eligibility,
@@ -485,6 +478,7 @@ export function TargetDetailsView({
   productName: string
   onProductNameChange: (name: string) => void
   retryingExistingTarget: boolean
+  hasFailedScanAttempt: boolean
   reviewOptions: ManualScanOption[]
   selectedReview: ManualScanOption | undefined
   eligibility: OnboardingEligibilityState
@@ -495,45 +489,22 @@ export function TargetDetailsView({
   onStart: (skipEligibilityCheck?: boolean) => void
   onStartTrial: () => void
 }) {
+  const description = detailsCopy(path, productName, retryingExistingTarget, hasFailedScanAttempt)
+
   return (
     <div className="space-y-5">
       <div>
         <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">{eyebrow}</p>
         <h2 className="mt-1 text-2xl font-bold tracking-tight">{TARGET_DETAILS_LABEL}</h2>
-        <p className="text-muted-foreground mt-2 text-sm">
-          {retryingExistingTarget
-            ? `Retry the review for ${productName || `this ${TARGET_SINGULAR.toLowerCase()}`}. The target stays locked so the retry cannot create or scan a different target.`
-            : pathNeedsRepo(path)
-              ? `Name your ${TARGET_SINGULAR.toLowerCase()}. You can classify its environment later in target settings.`
-              : `Reviewing your ${pathLabel(path)}. Confirm the details and choose what you need from this ${SCAN_SINGULAR.toLowerCase()}.`}
-        </p>
+        <p className="text-muted-foreground mt-2 text-sm">{description}</p>
       </div>
 
-      {retryingExistingTarget ? (
-        <div className="bg-muted/40 rounded-lg border p-4">
-          <p className="text-sm font-medium">{productName || `Existing ${TARGET_SINGULAR}`}</p>
-          <p className="text-muted-foreground mt-1 text-xs">
-            Existing {pathLabel(path)} · target details are locked for this retry
-          </p>
-        </div>
-      ) : pathNeedsRepo(path) ? (
-        // GitHub flow: the name is chosen here (v16 3.1 — asked once).
-        <FormField label={TARGET_NAME_LABEL} htmlFor="product-name">
-          <Input
-            id="product-name"
-            value={productName}
-            onChange={(e) => onProductNameChange(e.target.value)}
-            placeholder="My web app"
-          />
-        </FormField>
-      ) : (
-        // URL/API flow: the name was asked on the previous screen and is
-        // the name saved — shown here for confirmation only.
-        <div className="bg-muted/40 rounded-lg border p-4">
-          <p className="text-muted-foreground text-xs font-medium">{TARGET_NAME_LABEL}</p>
-          <p className="mt-1 text-sm font-medium">{productName || "Unnamed target"}</p>
-        </div>
-      )}
+      <TargetNameSection
+        path={path}
+        productName={productName}
+        retryingExistingTarget={retryingExistingTarget}
+        onProductNameChange={onProductNameChange}
+      />
 
       {/* W2-04: one recommended eligible review, with alternatives behind
           an explicit "Change review" toggle. Essential scope, limitation,
@@ -696,13 +667,9 @@ export function TargetDetailsView({
       <div className="flex justify-between gap-3">
         {/* GitHub path backs into repo-select (step 2); URL/API back into
             the URL form (step 1, path kept). */}
-        {retryingExistingTarget ? (
-          <span />
-        ) : (
-          <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
-            <ChevronLeft className="size-4" /> Back
-          </Button>
-        )}
+        <Button type="button" variant="ghost" onClick={onBack} disabled={loading}>
+          <ChevronLeft className="size-4" /> Back
+        </Button>
         <Button
           type="button"
           onClick={() =>
@@ -791,6 +758,7 @@ export function OnboardingStepSection({
   onRepoBack,
   onRepoContinue,
   retryingExistingTarget,
+  hasFailedScanAttempt,
   reviewOptions,
   selectedReview,
   eligibility,
@@ -827,6 +795,7 @@ export function OnboardingStepSection({
   onRepoBack: () => void
   onRepoContinue: () => void
   retryingExistingTarget: boolean
+  hasFailedScanAttempt: boolean
   reviewOptions: ManualScanOption[]
   selectedReview: ManualScanOption | undefined
   eligibility: OnboardingEligibilityState
@@ -889,6 +858,7 @@ export function OnboardingStepSection({
           productName={productName}
           onProductNameChange={onProductNameChange}
           retryingExistingTarget={retryingExistingTarget}
+          hasFailedScanAttempt={hasFailedScanAttempt}
           reviewOptions={reviewOptions}
           selectedReview={selectedReview}
           eligibility={eligibility}

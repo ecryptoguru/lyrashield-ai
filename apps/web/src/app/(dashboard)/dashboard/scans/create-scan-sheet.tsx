@@ -2,8 +2,8 @@
 
 import Link from "next/link"
 import { useRef, type Dispatch, type SetStateAction } from "react"
-import { AlertCircle, Check, ChevronDown, ChevronRight, Clock, Play } from "lucide-react"
-import { Badge, Button, cn, FormField, Input, Select, Spinner } from "@lyrashield/ui"
+import { AlertCircle, Check, ChevronDown, ChevronRight, Clock } from "lucide-react"
+import { Badge, Button, cn, FormField, Input, Select } from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Sheet,
@@ -17,6 +17,7 @@ import { getScanModeLabel, getTargetTypeLabel } from "@/lib/enum-labels"
 import type { ManualScanOption } from "@/lib/scan-presets"
 import { SCAN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
 import { getReviewSetupGuidance, isBillingRecoveryCode } from "./scans-client.utils"
+import { ScanSubmissionFooter, useScanSheetErrorVisibility } from "./scan-submission-feedback"
 import type { ScanEligibilityState, TargetItem } from "./scan-types"
 import type { ScanAttachmentItem } from "@/lib/api-schemas"
 
@@ -105,6 +106,11 @@ export function CreateScanSheet({
   toggleAttachment: (id: string) => void
 }) {
   const returnFocusRef = useRef<HTMLElement | null>(null)
+  const { submissionErrorRef, visibleErrorMessage } = useScanSheetErrorVisibility(
+    open,
+    errorMessage
+  )
+
   // Roving tabindex for the review-type radiogroup: exactly one radio is
   // tabbable — the selected option, or the first enabled option when nothing
   // is selected yet. With no selection, `isSelected ? 0 : -1` left the whole
@@ -142,25 +148,19 @@ export function CreateScanSheet({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <div className="space-y-5">
-            {(errorMessage || scanRecoveryError) && (
-              <div role="alert" className="border-destructive/40 rounded-lg border p-3 text-sm">
-                {errorMessage && <p>{errorMessage}</p>}
-                {scanRecoveryError && scanRecoveryError !== errorMessage && (
-                  <p>{scanRecoveryError}</p>
-                )}
-              </div>
-            )}
-            {errorCode === "DOMAIN_VERIFICATION_REQUIRED" && selectedTarget && (
-              <div role="alert" className="border-destructive/40 rounded-lg border p-3 text-sm">
-                <p>Domain verification is required before this review can start.</p>
-                <Link
-                  href={`/dashboard/targets/${encodeURIComponent(selectedTarget)}#domain-verification`}
-                  className="text-primary inline-flex min-h-11 items-center font-medium hover:underline"
-                >
-                  Verify control of this domain
-                </Link>
-              </div>
-            )}
+            {errorCode === "DOMAIN_VERIFICATION_REQUIRED" &&
+              visibleErrorMessage &&
+              selectedTarget && (
+                <div role="alert" className="border-destructive/40 rounded-lg border p-3 text-sm">
+                  <p>Domain verification is required before this review can start.</p>
+                  <Link
+                    href={`/dashboard/targets/${encodeURIComponent(selectedTarget)}#domain-verification`}
+                    className="text-primary inline-flex min-h-11 items-center font-medium hover:underline"
+                  >
+                    Verify control of this domain
+                  </Link>
+                </div>
+              )}
             <FormField label={TARGET_SINGULAR} htmlFor="scan-target">
               <Select
                 id="scan-target"
@@ -569,24 +569,17 @@ export function CreateScanSheet({
           </div>
         </div>
 
-        <div className="flex gap-2 border-t px-6 py-4">
-          <Button onClick={handleCreateScan} disabled={startDisabled} className="min-h-11 flex-1">
-            {creating ? (
-              <>
-                <Spinner className="mr-2 h-4 w-4" />
-                Starting…
-              </>
-            ) : (
-              <>
-                <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-                Start {SCAN_SINGULAR}
-              </>
-            )}
-          </Button>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="min-h-11">
-            Cancel
-          </Button>
-        </div>
+        <ScanSubmissionFooter
+          errorCode={errorCode}
+          errorMessage={visibleErrorMessage}
+          recoveryError={scanRecoveryError}
+          canManageBilling={canManageBilling}
+          creating={creating}
+          startDisabled={startDisabled}
+          onStart={handleCreateScan}
+          onCancel={() => onOpenChange(false)}
+          submissionErrorRef={submissionErrorRef}
+        />
       </SheetContent>
     </Sheet>
   )

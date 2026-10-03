@@ -264,7 +264,14 @@ test("scoped finding drawer keeps keyboard and report handoff context at respons
       body: JSON.stringify({
         success: true,
         data: {
-          items: [{ id: "retest-scan", target: { name: "Test target" }, status: "COMPLETED" }],
+          items: [
+            {
+              id: "retest-scan",
+              createdAt: "2026-09-01T00:00:00.000Z",
+              target: { name: "Test target" },
+              status: "COMPLETED",
+            },
+          ],
           nextCursor: null,
         },
       }),

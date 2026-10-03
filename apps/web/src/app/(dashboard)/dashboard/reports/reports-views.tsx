@@ -16,7 +16,8 @@ import {
 import Link from "next/link"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import { LocalTime } from "@/components/local-time"
-import { formatDateTime } from "@/lib/date-format"
+import { formatDateTimeUtc } from "@/lib/date-format"
+import { getScanStatusLabel } from "@/lib/enum-labels"
 import { humanizeToken } from "@/lib/labels"
 import { gateReasonSentence } from "@/lib/launch-readiness"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -104,9 +105,9 @@ function LaunchReportProvenanceBlock({
         </div>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1">
-        <dd>Assessed {formatDateTime(provenance.assessedAt)} UTC</dd>
-        <dd>Issued {formatDateTime(provenance.issuedAt)} UTC</dd>
-        <dd>Applicability checked {formatDateTime(provenance.applicabilityCheckedAt)} UTC</dd>
+        <dd>Assessed {formatDateTimeUtc(provenance.assessedAt)}</dd>
+        <dd>Issued {formatDateTimeUtc(provenance.issuedAt)}</dd>
+        <dd>Applicability checked {formatDateTimeUtc(provenance.applicabilityCheckedAt)}</dd>
       </div>
       {provenance.reasonCodes.length > 0 && (
         <dd>
@@ -125,6 +126,7 @@ export interface ReportScanOption {
   id: string
   targetName: string
   status: string
+  createdAt: string
 }
 
 export function ReportCreateForm({
@@ -227,7 +229,7 @@ export function ReportCreateForm({
               )}
             {scans.map((s) => (
               <option key={s.id} value={`scan:${s.id}`}>
-                {s.targetName} — {s.status} — {s.id}
+                {s.targetName} — {getScanStatusLabel(s.status)} · {formatDateTimeUtc(s.createdAt)}
               </option>
             ))}
           </Select>

@@ -145,6 +145,7 @@ describe("AnalyticsPreferences", () => {
 
     const failed = render()
     expect(failed.some((element) => element.props.role === "alert")).toBe(true)
+    expect(status(failed)).toBe("Unable to confirm your analytics preference.")
     const retry = failed.find((element) => element.type === controls.Button)
     expect(retry?.props.children).toBe("Retry")
 

@@ -123,7 +123,7 @@ export function TwoFactorSecurity({ enabled }: { enabled: boolean }) {
                 rows={4}
                 value={setup.totpURI}
                 aria-label="Authenticator setup URI"
-                className="bg-muted w-full break-all rounded-md border p-3 font-mono text-xs"
+                className="bg-muted w-full break-all rounded-md border p-3 font-mono text-base md:text-xs"
               />
               <p className="text-sm font-medium">Save these one-time backup codes now</p>
               <ul className="grid gap-1 sm:grid-cols-2" aria-label="Backup codes">

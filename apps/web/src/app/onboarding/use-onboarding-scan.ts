@@ -3,15 +3,13 @@ import { useRouter } from "next/navigation"
 import { z } from "zod"
 import { apiGet, apiPost, ApiError } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
-import { idSchema, scanEligibilitySchema } from "@/lib/api-schemas"
+import { idSchema } from "@/lib/api-schemas"
 import { presentOperationFailure } from "@/lib/operation-failure"
 import {
   beginScanSubmission,
   clearPendingScanSubmission,
-  operationIdFromErrorDetails,
   readPendingScanSubmission,
   recordAcceptedScan,
-  recordScanOperation,
   runScanSubmission,
   scanOperationStatusSchema,
   scanRequestIdentity,
@@ -19,6 +17,12 @@ import {
   type ScanOperationStatus,
   type ScanSubmissionScope,
 } from "@/lib/scan-submission"
+import { resolveScanSubmissionFailure } from "../(dashboard)/dashboard/scans/scan-submission-failure"
+import {
+  ensureOnboardingTrialStarted,
+  readScanEligibility,
+  type OnboardingTrialStartState,
+} from "./onboarding-scan-eligibility"
 import { TARGET_SINGULAR } from "@/lib/terminology"
 import type { ManualScanOption } from "@/lib/scan-presets"
 import {
@@ -54,6 +58,7 @@ interface ScanFlowContext {
   scanSubmissionLock: { current: boolean }
   startNewScanAfterPreflight: { current: boolean }
   targetRecovery: { current: { identity: string; targetId: string } | null }
+  trialStart: { current: OnboardingTrialStartState }
   checkedEligibilityKey: string | null
   setCheckedEligibilityKey: (key: string | null) => void
   scanEligibility: OnboardingEligibilityState
@@ -67,6 +72,10 @@ interface ScanFlowContext {
   // the visible source; the flow reuses it only when this is true.
   persistedTargetReusable: boolean
   onTargetBound: (needsRepo: boolean) => void
+}
+
+function createIdleScanEligibility(): OnboardingEligibilityState {
+  return { status: "idle" }
 }
 
 /**
@@ -276,22 +285,7 @@ async function gateOnEligibility(
   ) {
     return false
   }
-  ctx.setCheckedEligibilityKey(eligibilityKey)
-  ctx.setScanEligibility({ status: "checking" })
-  const query = new URLSearchParams({
-    workspaceId,
-    targetId,
-    goal: scanRequest.goal,
-    mode: scanRequest.mode,
-  })
-  try {
-    const eligibility = await apiGet(`/api/scans/eligibility?${query.toString()}`, {
-      schema: scanEligibilitySchema,
-    })
-    ctx.setScanEligibility({ status: "ready", eligibility })
-  } catch {
-    ctx.setScanEligibility({ status: "error" })
-  }
+  await readScanEligibility(ctx, workspaceId, targetId, scanRequest)
   return true
 }
 
@@ -348,17 +342,9 @@ async function submitScanRequest(
       headers: { "Idempotency-Key": submission.idempotencyKey },
     })
   } catch (cause) {
-    const operationId =
-      cause instanceof ApiError ? operationIdFromErrorDetails(cause.details) : null
-    if (operationId) {
-      const updated = recordScanOperation(scope, submission.idempotencyKey, operationId)
-      ctx.setPendingScanSubmission(updated ?? { ...submission, operationId })
-    }
-    ctx.setScanRecoveryError(
-      cause instanceof Error
-        ? cause.message
-        : "We could not confirm whether the scan started. Retry with the same details."
-    )
+    const failure = resolveScanSubmissionFailure({ scope, submission, error: cause })
+    ctx.setPendingScanSubmission(failure.pendingSubmission)
+    ctx.setScanRecoveryError(failure.recoveryError)
     presentFailure(
       ctx,
       cause,
@@ -452,8 +438,17 @@ async function runCreateTargetAndStart(
         return
       }
 
-      if (startTrial) {
-        await apiPost("/api/billing/trial/start", { workspaceId })
+      if (
+        startTrial &&
+        !(await ensureOnboardingTrialStarted({
+          view: ctx,
+          workspaceId,
+          targetId,
+          scanRequest,
+          trialStart: ctx.trialStart,
+        }))
+      ) {
+        return
       }
 
       const explicitlyStartingNew = startNewScan || ctx.startNewScanAfterPreflight.current
@@ -568,12 +563,11 @@ export function useOnboardingScan({
   const [checkingScanOperation, setCheckingScanOperation] = useState(false)
   const [scanRecoveryError, setScanRecoveryError] = useState<string | null>(null)
   const [scanRecoveryUnavailable, setScanRecoveryUnavailable] = useState(false)
-  const [scanEligibility, setScanEligibility] = useState<OnboardingEligibilityState>({
-    status: "idle",
-  })
+  const [scanEligibility, setScanEligibility] = useState(createIdleScanEligibility)
   const [checkedEligibilityKey, setCheckedEligibilityKey] = useState<string | null>(null)
   const startNewScanAfterPreflight = useRef(false)
   const targetRecovery = useRef<{ identity: string; targetId: string } | null>(null)
+  const trialStart = useRef<OnboardingTrialStartState>({ confirmed: null, unknown: null })
 
   const ctx: ScanFlowContext = {
     principalId,
@@ -594,6 +588,7 @@ export function useOnboardingScan({
     scanSubmissionLock,
     startNewScanAfterPreflight,
     targetRecovery,
+    trialStart,
     checkedEligibilityKey,
     setCheckedEligibilityKey,
     scanEligibility,
