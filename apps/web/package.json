@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@better-auth/oauth-provider": "1.7.1",
+    "@better-auth/oauth-provider": "1.7.6",
     "@lyrashield/affiliate": "workspace:*",
     "@lyrashield/agent-registry": "workspace:*",
     "@lyrashield/auth": "workspace:*",
