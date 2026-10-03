@@ -12,6 +12,7 @@
  * implying coverage.
  */
 import { z } from "zod"
+import { canonicalJson } from "./json"
 
 export const SCAN_QUALITY_SURFACE_VERSION = "lyrashield-scan-quality/1.0.0" as const
 
@@ -214,16 +215,6 @@ const CONNECTOR_RECEIPT_PREFIX = "connector:"
 
 function increment(record: Record<string, number>, key: string): void {
   record[key] = (record[key] ?? 0) + 1
-}
-
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`
-  const record = value as Record<string, unknown>
-  return `{${Object.keys(record)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-    .join(",")}}`
 }
 
 /**

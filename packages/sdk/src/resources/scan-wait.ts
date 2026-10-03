@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { LyraShieldClient } from "../client"
 import { LyraShieldError, isNotModified } from "../errors"
 import type { ScanSchema } from "../schemas"
+import { sleep } from "../sleep"
 import { getScan } from "./scans"
 
 export type ScanSnapshot = z.infer<typeof ScanSchema>
@@ -68,24 +69,6 @@ function waitTimeoutError(scanId: string, timeoutMs: number): LyraShieldError {
     status: 0,
     code: "SCAN_WAIT_TIMEOUT",
     message: `Scan ${scanId} did not reach a terminal state within ${Math.round(timeoutMs / 1000)}s. It keeps running — resume with: lyrashield status ${scanId} --watch`,
-  })
-}
-
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new DOMException("Aborted", "AbortError"))
-      return
-    }
-    const onAbort = () => {
-      clearTimeout(timer)
-      reject(new DOMException("Aborted", "AbortError"))
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort)
-      resolve()
-    }, ms)
-    signal?.addEventListener("abort", onAbort, { once: true })
   })
 }
 
