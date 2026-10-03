@@ -34,7 +34,7 @@ pnpm build
 
 # Build the Tauri app (produces platform-specific installer)
 cd apps/desktop
-pnpm build
+pnpm tauri:build
 ```
 
 ## Rust checks
