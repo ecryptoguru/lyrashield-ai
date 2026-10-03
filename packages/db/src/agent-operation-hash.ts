@@ -7,7 +7,7 @@ import { createHash } from "node:crypto"
  * the exact production hash — a changed input under the same idempotency key
  * must produce a different hash — without initializing the DB client.
  */
-function sortKeysReplacer(_key: string, value: unknown): unknown {
+export function sortKeysReplacer(_key: string, value: unknown): unknown {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const sorted: Record<string, unknown> = {}
     for (const k of Object.keys(value as Record<string, unknown>).sort()) {

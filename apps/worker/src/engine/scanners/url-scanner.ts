@@ -6,7 +6,6 @@ import {
   redactUrlForLogs,
   type SurfaceCollection,
   type SurfaceCollectionIssue,
-  type SurfaceSignal,
 } from "@lyrashield/security"
 import {
   getUrlScanProfile,
@@ -17,6 +16,7 @@ import {
 import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 import { runUrlBehaviorProbes } from "./url-behavior-probes"
+import { toEngineVulnerability } from "./openapi-scanner-support"
 
 interface UrlScanConfig {
   targetUrl: string
@@ -34,44 +34,6 @@ type UrlScannerResult = {
   findings: EngineVulnerability[]
   execution: UrlExecutionSummary
   issues: SurfaceCollectionIssue[]
-}
-
-function controlToCwe(controlId: number | undefined): string {
-  switch (controlId) {
-    case 3:
-      return "CWE-798"
-    case 14:
-      return "CWE-942"
-    case 27:
-      return "CWE-693"
-    case 28:
-      return "CWE-614"
-    case 29:
-      return "CWE-319"
-    case 31:
-      return "CWE-209"
-    case 32:
-      return "CWE-540"
-    default:
-      return "CWE-693"
-  }
-}
-
-function toEngineVulnerability(signal: SurfaceSignal): EngineVulnerability {
-  const controlId = signal.controlIds[0]
-  return {
-    id: signal.id,
-    title: signal.title,
-    severity: (signal.severity ?? "MEDIUM").toLowerCase(),
-    timestamp: new Date().toISOString(),
-    cwe: controlToCwe(controlId),
-    description: signal.description,
-    remediation_steps: signal.remediation,
-    control_ids: [...signal.controlIds],
-    target: signal.subjectUrl,
-    endpoint: signal.subjectUrl,
-    evidence: JSON.stringify(signal.evidence),
-  }
 }
 
 function buildExecution(

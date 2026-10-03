@@ -2,6 +2,7 @@ import { prisma } from "./client"
 import type { AgentApproval, ApprovalStatus } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import { createHash } from "node:crypto"
+import { sortKeysReplacer } from "./agent-operation-hash"
 
 export interface CreateApprovalParams {
   workspaceId: string
@@ -352,17 +353,6 @@ export async function expireStaleApprovals(workspaceId?: string): Promise<number
 export function hashInput(actionName: string, input: Record<string, unknown>): string {
   const canonical = JSON.stringify({ actionName, input }, sortKeysReplacer)
   return createHash("sha256").update(canonical).digest("hex")
-}
-
-function sortKeysReplacer(_key: string, value: unknown): unknown {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const sorted: Record<string, unknown> = {}
-    for (const k of Object.keys(value as Record<string, unknown>).sort()) {
-      sorted[k] = (value as Record<string, unknown>)[k]
-    }
-    return sorted
-  }
-  return value
 }
 
 export function verifyInputHash(

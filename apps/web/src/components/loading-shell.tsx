@@ -60,3 +60,29 @@ export function LoadingShellHeader({
     </div>
   )
 }
+
+export function ListLoadingShell() {
+  return (
+    <LoadingShell className="space-y-6">
+      <LoadingShellHeader />
+      <div className="space-y-2">
+        {[0, 1, 2, 3].map((item) => (
+          <Skeleton key={item} className="bg-card h-14 w-full rounded-none border" />
+        ))}
+      </div>
+    </LoadingShell>
+  )
+}
+
+export function ScanLoadingShell() {
+  return (
+    <LoadingShell label="Loading scans" className="space-y-6">
+      <LoadingShellHeader />
+      <div className="space-y-3">
+        {[0, 1, 2, 3, 4].map((item) => (
+          <Skeleton key={item} className="bg-card border-border h-16 rounded-lg border" />
+        ))}
+      </div>
+    </LoadingShell>
+  )
+}
