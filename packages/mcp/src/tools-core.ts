@@ -42,7 +42,7 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
         mode: {
           type: "string",
           description:
-            "Scan depth: QUICK, STANDARD, DEEP or CUSTOM. SAFE remains a compatibility alias for QUICK. Depth is always explicit — it is never inferred from the target shape.",
+            "Scan depth: QUICK, STANDARD, DEEP or CUSTOM. SAFE remains a compatibility alias for QUICK. Defaults to STANDARD when omitted.",
         },
         ...WORKFLOW_INPUT_PROPERTIES,
       },
@@ -112,6 +112,7 @@ export function createGetFindingsTool(context: ToolHandlerContext): McpTool {
       "Retrieve a page of security findings. Follow nextCursor with cursor until it is absent.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: { type: "string", description: "Optional target ID filter" },
@@ -159,6 +160,7 @@ export function createGetLaunchReadinessTool(context: ToolHandlerContext): McpTo
       "Get the versioned release-gate result for one target. READY is enforceable only when a matching commit or artifact digest is supplied.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: { type: "string", description: "Target ID" },
@@ -246,7 +248,7 @@ export function createListWorkspacesTool(context: ToolHandlerContext): McpTool {
     mutating: false,
     description:
       "List the workspaces this API key can access. Use this first to find the workspaceId the other tools need.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
     handler: async () => {
       try {
         return makeToolResult(await apiCall(context, "GET", "/api/workspaces"))
@@ -265,6 +267,7 @@ export function createListTargetsTool(context: ToolHandlerContext): McpTool {
       "List a page of registered targets (repos / apps / APIs). Follow nextCursor with cursor to reach later pages.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         projectId: { type: "string", description: "Optional project ID filter" },
@@ -299,6 +302,7 @@ export function createGetScanStatusTool(context: ToolHandlerContext): McpTool {
       "Get the current status, timing and event trail of a scan by its scanId. Poll this after starting a scan. Supply operationId instead of scanId to inspect durable retry status and recovery.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         operationId: {
@@ -335,6 +339,7 @@ export function createGetScanEligibilityTool(context: ToolHandlerContext): McpTo
       "Advisory read-only preflight for a security scan on a registered target: whether POST /api/scans would currently admit the requested review — same permission, plan, domain-proof and entitlement gates, evaluated with no trial, billing, scan or audit mutation. allowed:false is a successful read carrying the structured denial code/message/blockers, not a tool error. POST /api/scans re-checks authoritatively at creation; a pass here never guarantees admission. Inputs mirror lyrashield_scan_target (goal, mode, workflow fields); the workflow and attachment semantics match POST.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string" },
         targetId: {
@@ -406,6 +411,7 @@ export function createGetScanQualityTool(context: ToolHandlerContext): McpTool {
       "Get a scan's measured evidence-quality surface: stored-evidence facts (finding verification tiers, coverage receipts, manifest checksum), labeled heuristics and the per-surface parity table. Read-only; nothing here is a model claim or accuracy guarantee.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         scanId: { type: "string", description: "Scan ID" },

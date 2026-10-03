@@ -3,6 +3,31 @@ import { describe, expect, it } from "vitest"
 import { resolveScanProfile, scanDepthContract } from "./scan-profile"
 
 describe("resolveScanProfile", () => {
+  it("keeps the published repository durations in the user guide aligned with profiles", () => {
+    const guide = readFileSync(new URL("../../../docs/user-guide.md", import.meta.url), "utf8")
+    const rows = new Map(
+      guide
+        .split("\n")
+        .filter((line) => line.startsWith("|"))
+        .map((line) => line.split("|").map((cell) => cell.trim()))
+        .filter((cells) => cells.length >= 5)
+        .map((cells) => [cells[1], cells[4]])
+    )
+
+    for (const [label, mode] of [
+      ["Release Check", "QUICK"],
+      ["Code Review", "STANDARD"],
+      ["Deep Security Review", "DEEP"],
+      ["Weekly Monitor", "QUICK"],
+    ] as const) {
+      const duration = rows.get(label)?.match(/^(\d+)\s+min$/)?.[1]
+      const profile = resolveScanProfile({ targetType: "REPO", mode })
+      expect(duration, `${label} duration in docs/user-guide.md`).toBe(
+        String(profile.maxDurationMinutes)
+      )
+    }
+  })
+
   it("normalizes legacy repository Safe to the requested Quick profile", () => {
     expect(resolveScanProfile({ targetType: "REPO", mode: "SAFE" })).toMatchObject({
       id: "REPO_QUICK",
