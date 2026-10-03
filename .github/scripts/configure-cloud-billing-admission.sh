@@ -73,6 +73,7 @@ for attempt in {1..12}; do
     candidate_ready=1
     break
   fi
+  echo "Readiness probe attempt ${attempt}/12 did not succeed." >&2
   sleep 5
 done
 [ "$candidate_ready" -eq 1 ]

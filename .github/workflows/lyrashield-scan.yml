@@ -291,13 +291,8 @@ jobs:
               bump_severity MEDIUM
             fi
 
-            # Check for eval/exec usage (severity: HIGH). Detection-code files
-            # whose regex literals intentionally match eval/exec text are a
-            # known false positive when scanned as executable calls. Keep the
-            # exemption exact per file.
-            if [ "$file" != "packages/mcp/src/prompt-injection-guard.ts" ] && \
-              [ "$file" != "packages/security/src/diff-advisory.ts" ] && \
-              grep -qE '(^|[^.[:alnum:]_])(eval|exec)[[:space:]]*\(' <<< "$ADDED"; then
+            # Keep case-insensitive matching aligned with the reusable action.
+            if grep -qiE '(^|[^.[:alnum:]_])(eval|exec)[[:space:]]*\(' <<< "$ADDED"; then
               echo "::warning file=$file::Use of eval/exec detected"
               ISSUES_FOUND=1
               bump_severity HIGH
@@ -366,7 +361,7 @@ jobs:
               if grep -qE '(csrf|cors|xss|helmet|secure).*(false|disabled|off|none)' <<< "$ADDED"; then
                 add_result "disabled-security-control" "warning" "Security control may be disabled in $file" "$file"
               fi
-              if grep -qE '(^|[^.[:alnum:]_])(eval|exec)[[:space:]]*\(' <<< "$ADDED"; then
+              if grep -qiE '(^|[^.[:alnum:]_])(eval|exec)[[:space:]]*\(' <<< "$ADDED"; then
                 add_result "eval-exec" "warning" "Use of eval/exec in $file" "$file"
               fi
             done < changed_files.txt

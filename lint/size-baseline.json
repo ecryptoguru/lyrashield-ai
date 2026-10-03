@@ -1,0 +1,879 @@
+{
+  "version": 1,
+  "limits": {
+    "max-lines": 600,
+    "max-lines-per-function": 150
+  },
+  "metrics": {
+    "apps/desktop/frontend/src/screens/LicenseStatusScreen.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 64,
+      "maxExcess": 64
+    },
+    "apps/desktop/frontend/src/screens/ScanProgressScreen.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 181,
+      "maxExcess": 181
+    },
+    "apps/desktop/frontend/src/screens/ScanScreen.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 285,
+      "maxExcess": 285
+    },
+    "apps/desktop/frontend/src/screens/SetupScreen.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 115,
+      "maxExcess": 115
+    },
+    "apps/desktop/frontend/src/screens/SyncScreen.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 195,
+      "maxExcess": 195
+    },
+    "apps/marketing/src/components/myra/myra-case-composer.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 9,
+      "maxExcess": 9
+    },
+    "apps/marketing/src/components/myra/myra-conversation.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 146,
+      "maxExcess": 146
+    },
+    "apps/marketing/src/components/myra/myra-dom-renderer.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 15,
+      "maxExcess": 15
+    },
+    "apps/marketing/src/components/myra/myra-dom-renderer.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 113,
+      "maxExcess": 113
+    },
+    "apps/marketing/src/components/myra/myra-panel.client.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 109,
+      "maxExcess": 109
+    },
+    "apps/marketing/src/lib/webmcp-security.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 184,
+      "maxExcess": 184
+    },
+    "apps/web/src/app/(dashboard)/dashboard/admin/affiliates/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 35,
+      "maxExcess": 35
+    },
+    "apps/web/src/app/(dashboard)/dashboard/admin/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 79,
+      "maxExcess": 79
+    },
+    "apps/web/src/app/(dashboard)/dashboard/admin/support/support-case-detail.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 120,
+      "maxExcess": 120
+    },
+    "apps/web/src/app/(dashboard)/dashboard/admin/support/support-inbox-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 226,
+      "maxExcess": 226
+    },
+    "apps/web/src/app/(dashboard)/dashboard/agents/[agentId]/agent-wizard.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 26,
+      "maxExcess": 26
+    },
+    "apps/web/src/app/(dashboard)/dashboard/agents/agents-grid.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 78,
+      "maxExcess": 78
+    },
+    "apps/web/src/app/(dashboard)/dashboard/ai-assurance/ai-assurance-client.tsx|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 355,
+      "maxExcess": 302
+    },
+    "apps/web/src/app/(dashboard)/dashboard/ai-assurance/assurance-inventory.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 227,
+      "maxExcess": 227
+    },
+    "apps/web/src/app/(dashboard)/dashboard/approvals/approvals-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 62,
+      "maxExcess": 62
+    },
+    "apps/web/src/app/(dashboard)/dashboard/billing/billing-actions.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 22,
+      "maxExcess": 22
+    },
+    "apps/web/src/app/(dashboard)/dashboard/billing/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 214,
+      "maxExcess": 214
+    },
+    "apps/web/src/app/(dashboard)/dashboard/findings/finding-action-tab.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 225,
+      "maxExcess": 225
+    },
+    "apps/web/src/app/(dashboard)/dashboard/findings/finding-detail-drawer.tsx|max-lines": {
+      "count": 1,
+      "totalExcess": 46,
+      "maxExcess": 46
+    },
+    "apps/web/src/app/(dashboard)/dashboard/findings/finding-detail-drawer.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 252,
+      "maxExcess": 252
+    },
+    "apps/web/src/app/(dashboard)/dashboard/findings/finding-detail-tabs.tsx|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 161,
+      "maxExcess": 84
+    },
+    "apps/web/src/app/(dashboard)/dashboard/findings/findings-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 421,
+      "maxExcess": 421
+    },
+    "apps/web/src/app/(dashboard)/dashboard/findings/fixes-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 20,
+      "maxExcess": 20
+    },
+    "apps/web/src/app/(dashboard)/dashboard/findings/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 113,
+      "maxExcess": 113
+    },
+    "apps/web/src/app/(dashboard)/dashboard/integrations/cli-integration.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 45,
+      "maxExcess": 45
+    },
+    "apps/web/src/app/(dashboard)/dashboard/integrations/github-integration.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 27,
+      "maxExcess": 27
+    },
+    "apps/web/src/app/(dashboard)/dashboard/integrations/mcp-integration.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 49,
+      "maxExcess": 49
+    },
+    "apps/web/src/app/(dashboard)/dashboard/launch-readiness/launch-readiness-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 269,
+      "maxExcess": 269
+    },
+    "apps/web/src/app/(dashboard)/dashboard/licenses/licenses-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 42,
+      "maxExcess": 42
+    },
+    "apps/web/src/app/(dashboard)/dashboard/notifications/notifications-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 23,
+      "maxExcess": 23
+    },
+    "apps/web/src/app/(dashboard)/dashboard/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 246,
+      "maxExcess": 246
+    },
+    "apps/web/src/app/(dashboard)/dashboard/projects/projects-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 61,
+      "maxExcess": 61
+    },
+    "apps/web/src/app/(dashboard)/dashboard/reports/reports-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 351,
+      "maxExcess": 351
+    },
+    "apps/web/src/app/(dashboard)/dashboard/reports/reports-views.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 26,
+      "maxExcess": 26
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/[id]/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 77,
+      "maxExcess": 77
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/[id]/scan-detail-presentation.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 2,
+      "maxExcess": 2
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/[id]/scan-detail-sections.tsx|max-lines": {
+      "count": 1,
+      "totalExcess": 208,
+      "maxExcess": 208
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/[id]/scan-detail-sections.tsx|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 74,
+      "maxExcess": 52
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/[id]/scan-evidence-sections.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 369,
+      "maxExcess": 369
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/[id]/scan-in-progress.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 67,
+      "maxExcess": 67
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/[id]/use-scan-detail-polling.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 36,
+      "maxExcess": 36
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/create-scan-sheet.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 387,
+      "maxExcess": 387
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 5,
+      "maxExcess": 5
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/scan-list.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 46,
+      "maxExcess": 46
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/scan-status-notices.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 47,
+      "maxExcess": 47
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx|max-lines": {
+      "count": 1,
+      "totalExcess": 183,
+      "maxExcess": 183
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 564,
+      "maxExcess": 564
+    },
+    "apps/web/src/app/(dashboard)/dashboard/scans/use-scan-list-state.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 185,
+      "maxExcess": 185
+    },
+    "apps/web/src/app/(dashboard)/dashboard/schedules/schedules-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 234,
+      "maxExcess": 234
+    },
+    "apps/web/src/app/(dashboard)/dashboard/settings/api-keys.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 145,
+      "maxExcess": 145
+    },
+    "apps/web/src/app/(dashboard)/dashboard/settings/two-factor-security.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 23,
+      "maxExcess": 23
+    },
+    "apps/web/src/app/(dashboard)/dashboard/targets/[id]/domain-verification-card.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 66,
+      "maxExcess": 66
+    },
+    "apps/web/src/app/(dashboard)/dashboard/targets/[id]/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 104,
+      "maxExcess": 104
+    },
+    "apps/web/src/app/(dashboard)/dashboard/targets/[id]/scorecard-controls.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 31,
+      "maxExcess": 31
+    },
+    "apps/web/src/app/(dashboard)/dashboard/targets/targets-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 110,
+      "maxExcess": 110
+    },
+    "apps/web/src/app/(dashboard)/dashboard/targets/targets-form.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 1,
+      "maxExcess": 1
+    },
+    "apps/web/src/app/(dashboard)/dashboard/team/team-client.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 210,
+      "maxExcess": 210
+    },
+    "apps/web/src/app/affiliates/activity/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 100,
+      "maxExcess": 100
+    },
+    "apps/web/src/app/affiliates/apply/apply-form.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 89,
+      "maxExcess": 89
+    },
+    "apps/web/src/app/affiliates/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 18,
+      "maxExcess": 18
+    },
+    "apps/web/src/app/affiliates/payouts/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 45,
+      "maxExcess": 45
+    },
+    "apps/web/src/app/api/connections/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 24,
+      "maxExcess": 24
+    },
+    "apps/web/src/app/api/findings/[id]/retests/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 49,
+      "maxExcess": 49
+    },
+    "apps/web/src/app/api/integrations/github/install/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 43,
+      "maxExcess": 43
+    },
+    "apps/web/src/app/api/licenses/issue/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 84,
+      "maxExcess": 84
+    },
+    "apps/web/src/app/api/mcp/remote-approval-gate.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 216,
+      "maxExcess": 111
+    },
+    "apps/web/src/app/api/scans/[id]/artifacts/sarif/route.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 259,
+      "maxExcess": 172
+    },
+    "apps/web/src/app/api/scans/eligibility/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 77,
+      "maxExcess": 77
+    },
+    "apps/web/src/app/api/scans/route.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 210,
+      "maxExcess": 210
+    },
+    "apps/web/src/app/api/scans/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 485,
+      "maxExcess": 485
+    },
+    "apps/web/src/app/api/sync/findings/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 166,
+      "maxExcess": 166
+    },
+    "apps/web/src/app/api/targets/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 59,
+      "maxExcess": 59
+    },
+    "apps/web/src/app/api/team/invitations/accept/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 54,
+      "maxExcess": 54
+    },
+    "apps/web/src/app/api/team/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 50,
+      "maxExcess": 50
+    },
+    "apps/web/src/app/billing/checkout/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 11,
+      "maxExcess": 11
+    },
+    "apps/web/src/app/billing/webhook/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 115,
+      "maxExcess": 115
+    },
+    "apps/web/src/app/oauth/consent/oauth-consent-form.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 14,
+      "maxExcess": 14
+    },
+    "apps/web/src/app/onboarding/onboarding-step-views.tsx|max-lines": {
+      "count": 1,
+      "totalExcess": 239,
+      "maxExcess": 239
+    },
+    "apps/web/src/app/onboarding/onboarding-step-views.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 89,
+      "maxExcess": 89
+    },
+    "apps/web/src/app/onboarding/onboarding-wizard.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 61,
+      "maxExcess": 61
+    },
+    "apps/web/src/app/onboarding/use-onboarding-scan.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 31,
+      "maxExcess": 31
+    },
+    "apps/web/src/app/onboarding/use-onboarding-scan.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 24,
+      "maxExcess": 24
+    },
+    "apps/web/src/app/reports/shared/[id]/launch-report-view.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 1,
+      "maxExcess": 1
+    },
+    "apps/web/src/app/reports/shared/[id]/shared-report-view.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 52,
+      "maxExcess": 52
+    },
+    "apps/web/src/app/sign-in/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 260,
+      "maxExcess": 260
+    },
+    "apps/web/src/app/sign-up/page.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 259,
+      "maxExcess": 259
+    },
+    "apps/web/src/components/myra/myra-panel.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 245,
+      "maxExcess": 245
+    },
+    "apps/web/src/components/myra/myra-presentation.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 146,
+      "maxExcess": 146
+    },
+    "apps/web/src/components/myra/use-myra-panel.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 379,
+      "maxExcess": 379
+    },
+    "apps/web/src/components/scorecard-share-composer.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 127,
+      "maxExcess": 127
+    },
+    "apps/web/src/components/v2-sidebar.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 42,
+      "maxExcess": 42
+    },
+    "apps/web/src/components/webmcp/webmcp-activity-drawer.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 22,
+      "maxExcess": 22
+    },
+    "apps/web/src/lib/agent-wizard.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 169,
+      "maxExcess": 169
+    },
+    "apps/web/src/lib/dashboard-overview.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 81,
+      "maxExcess": 81
+    },
+    "apps/web/src/lib/dashboard-overview.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 168,
+      "maxExcess": 124
+    },
+    "apps/web/src/lib/mcp-tasks.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 160,
+      "maxExcess": 160
+    },
+    "apps/web/src/lib/webmcp/register.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 61,
+      "maxExcess": 61
+    },
+    "apps/web/src/proxy.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 17,
+      "maxExcess": 17
+    },
+    "apps/worker/src/engine/deterministic-retest.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 60,
+      "maxExcess": 60
+    },
+    "apps/worker/src/engine/finding-persister.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 87,
+      "maxExcess": 71
+    },
+    "apps/worker/src/engine/output-parser-findings.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 18,
+      "maxExcess": 18
+    },
+    "apps/worker/src/engine/result-integrity/retest-completion.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 103,
+      "maxExcess": 54
+    },
+    "apps/worker/src/engine/runner-process.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 60,
+      "maxExcess": 41
+    },
+    "apps/worker/src/engine/scanner-orchestrator.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 284,
+      "maxExcess": 284
+    },
+    "apps/worker/src/engine/scanner-orchestrator.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 352,
+      "maxExcess": 349
+    },
+    "apps/worker/src/engine/scanners/ai-app-security.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 40,
+      "maxExcess": 40
+    },
+    "apps/worker/src/engine/scanners/ai-app-security.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 98,
+      "maxExcess": 98
+    },
+    "apps/worker/src/engine/scanners/ai-app-source-discovery.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 10,
+      "maxExcess": 10
+    },
+    "apps/worker/src/engine/scanners/iac-scanner.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 54,
+      "maxExcess": 54
+    },
+    "apps/worker/src/engine/scanners/iac-scanner.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 46,
+      "maxExcess": 46
+    },
+    "apps/worker/src/engine/scanners/openapi-scanner.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 194,
+      "maxExcess": 194
+    },
+    "apps/worker/src/engine/scanners/resolved-dependencies.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 17,
+      "maxExcess": 17
+    },
+    "apps/worker/src/engine/scanners/sast-scanner.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 23,
+      "maxExcess": 23
+    },
+    "apps/worker/src/engine/scanners/sca-scanner.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 154,
+      "maxExcess": 154
+    },
+    "apps/worker/src/index.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 103,
+      "maxExcess": 103
+    },
+    "apps/worker/src/jobs/run-scan.job.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 97,
+      "maxExcess": 97
+    },
+    "apps/worker/src/jobs/run-scan.job.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 956,
+      "maxExcess": 482
+    },
+    "apps/worker/src/jobs/run-scan/admission.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 23,
+      "maxExcess": 23
+    },
+    "apps/worker/src/jobs/run-scan/authority.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 14,
+      "maxExcess": 14
+    },
+    "apps/worker/src/jobs/run-scan/execution.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 185,
+      "maxExcess": 185
+    },
+    "apps/worker/src/jobs/run-scan/execution.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 291,
+      "maxExcess": 217
+    },
+    "apps/worker/src/jobs/run-scan/finalization.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 43,
+      "maxExcess": 43
+    },
+    "apps/worker/src/jobs/run-scan/triage.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 2,
+      "maxExcess": 2
+    },
+    "apps/worker/src/jobs/run-scan/usage.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 52,
+      "maxExcess": 52
+    },
+    "apps/worker/src/operations/verify-queue-orphan-fixture.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 99,
+      "maxExcess": 99
+    },
+    "packages/affiliate/src/commission/engine.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 182,
+      "maxExcess": 182
+    },
+    "packages/affiliate/src/commission/local.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 4,
+      "maxExcess": 4
+    },
+    "packages/affiliate/src/payout/request.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 101,
+      "maxExcess": 101
+    },
+    "packages/agent-plugin/src/build.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 86,
+      "maxExcess": 86
+    },
+    "packages/billing/src/license-fulfillment.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 29,
+      "maxExcess": 29
+    },
+    "packages/billing/src/providers/razorpay/adapter.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 5,
+      "maxExcess": 5
+    },
+    "packages/billing/src/sync.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 78,
+      "maxExcess": 78
+    },
+    "packages/cli/src/commands/connections.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 11,
+      "maxExcess": 11
+    },
+    "packages/cli/src/commands/preflight.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 1,
+      "maxExcess": 1
+    },
+    "packages/cli/src/commands/scan.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 66,
+      "maxExcess": 66
+    },
+    "packages/cli/src/commands/targets.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 8,
+      "maxExcess": 8
+    },
+    "packages/cli/src/installers/agent-plugin.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 16,
+      "maxExcess": 16
+    },
+    "packages/cli/src/oauth-login.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 17,
+      "maxExcess": 17
+    },
+    "packages/db/src/account-deletion.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 471,
+      "maxExcess": 271
+    },
+    "packages/db/src/ai-assurance-service.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 32,
+      "maxExcess": 32
+    },
+    "packages/db/src/connector-service.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 51,
+      "maxExcess": 51
+    },
+    "packages/db/src/connector-service.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 62,
+      "maxExcess": 62
+    },
+    "packages/db/src/finding-service.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 28,
+      "maxExcess": 28
+    },
+    "packages/db/src/fix-pr-merge-service.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 37,
+      "maxExcess": 37
+    },
+    "packages/db/src/gate-evaluation-service.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 57,
+      "maxExcess": 31
+    },
+    "packages/db/src/gate-verdict-batch.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 2,
+      "maxExcess": 2
+    },
+    "packages/db/src/notification-service.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 11,
+      "maxExcess": 11
+    },
+    "packages/db/src/osv-client.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 9,
+      "maxExcess": 9
+    },
+    "packages/db/src/report-generator-html.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 176,
+      "maxExcess": 176
+    },
+    "packages/db/src/report-generator.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 272,
+      "maxExcess": 272
+    },
+    "packages/db/src/report-generator.validation.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 72,
+      "maxExcess": 72
+    },
+    "packages/db/src/scan-service.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 44,
+      "maxExcess": 44
+    },
+    "packages/egress-proxy/src/index.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 5,
+      "maxExcess": 5
+    },
+    "packages/egress-proxy/src/relay.ts|max-lines-per-function": {
+      "count": 2,
+      "totalExcess": 264,
+      "maxExcess": 212
+    },
+    "packages/gate/src/index.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 7,
+      "maxExcess": 7
+    },
+    "packages/mcp/src/create-server.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 6,
+      "maxExcess": 6
+    },
+    "packages/mcp/src/local-task-backend.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 128,
+      "maxExcess": 128
+    },
+    "packages/mcp/src/server.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 16,
+      "maxExcess": 16
+    },
+    "packages/myra/src/client.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 19,
+      "maxExcess": 19
+    },
+    "packages/myra/src/server/loop.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 40,
+      "maxExcess": 40
+    },
+    "packages/myra/src/server/service.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 164,
+      "maxExcess": 164
+    },
+    "packages/myra/src/server/tools/demo.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 150,
+      "maxExcess": 150
+    },
+    "packages/security/src/diff-advisory.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 61,
+      "maxExcess": 61
+    },
+    "packages/security/src/diff-advisory.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 30,
+      "maxExcess": 30
+    },
+    "packages/security/src/public-surface.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 148,
+      "maxExcess": 148
+    },
+    "packages/security/src/public-surface.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 145,
+      "maxExcess": 145
+    },
+    "packages/security/src/webmcp/discover-imperative.ts|max-lines": {
+      "count": 1,
+      "totalExcess": 3,
+      "maxExcess": 3
+    },
+    "packages/security/src/webmcp/discover-imperative.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 20,
+      "maxExcess": 20
+    },
+    "packages/security/src/webmcp/discover.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 30,
+      "maxExcess": 30
+    }
+  }
+}

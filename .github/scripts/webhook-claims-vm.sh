@@ -65,7 +65,7 @@ verify_retained_candidate() {
   if [ "$image" != "$previous" ]; then
     product=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
     engine=$(docker image inspect --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}' "$image")
-    oneshot 'const [saved,image,revision,engine]=process.argv.slice(1); const receipt=JSON.parse(saved); const {WEBHOOK_TRACK_CLAIM_PROTOCOL}=await import("@lyrashield/billing"); if(![receipt.candidateWorkerImage,receipt.previousCandidateWorkerImage].includes(image)||receipt.candidateProductRevision!==revision||receipt.productRevision!==revision||receipt.candidateEngineRevision!==engine||receipt.candidateWebhookTrackClaimProtocol!=="durable-claims/1"||WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/1")throw new Error("Retained candidate capability identity mismatch");' "$saved" "$image" "$product" "$engine"
+    oneshot 'const [saved,image,revision,engine]=process.argv.slice(1); const receipt=JSON.parse(saved); const {WEBHOOK_TRACK_CLAIM_PROTOCOL}=await import("@lyrashield/billing"); if(![receipt.candidateWorkerImage,receipt.previousCandidateWorkerImage].includes(image)||receipt.candidateProductRevision!==revision||receipt.productRevision!==revision||receipt.candidateEngineRevision!==engine||receipt.candidateWebhookTrackClaimProtocol!=="durable-claims/2"||WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/2")throw new Error("Retained candidate capability identity mismatch");' "$saved" "$image" "$product" "$engine"
   fi
 }
 assert_receipt() {
@@ -183,7 +183,7 @@ resume)
   # The local workflow has already verified every active app/scanner identity.
   # Independently require the exact new worker identity and protocol here.
   systemctl is-active --quiet "$service"
-  docker exec -w /app/apps/worker "$container" node --import tsx --input-type=module -e 'const [revision]=process.argv.slice(1); const billing=await import("@lyrashield/billing"); if(process.env.LYRASHIELD_PRODUCT_REVISION!==revision || billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/1") throw new Error("Compatible worker required before resume");' "$revision"
+  docker exec -w /app/apps/worker "$container" node --import tsx --input-type=module -e 'const [revision]=process.argv.slice(1); const billing=await import("@lyrashield/billing"); if(process.env.LYRASHIELD_PRODUCT_REVISION!==revision || billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/2") throw new Error("Compatible worker required before resume");' "$revision"
   persist_phase resuming
   systemctl enable --now "$timer"
   oneshot 'const receipt=JSON.parse(process.argv[1]); const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { const deleted=await redis.eval("if redis.call(\"GET\",KEYS[1]) == ARGV[1] then return redis.call(\"DEL\",KEYS[1]) else return 0 end",1,"lyrashield:scan-admission:stopped",receipt.admissionStopValue); if(deleted!==1) throw new Error("Admission ownership lost; no override"); } finally { await redis.quit(); }' "$saved"

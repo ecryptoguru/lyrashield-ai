@@ -154,7 +154,7 @@ if [ -e "$cutover_receipt" ]; then
   docker run --rm --network none --env-file "$environment_file" $env_args \
     --env TMPDIR=/tmp --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     -w /app/apps/worker "$LYRASHIELD_WORKER_IMAGE" \
-    node --import tsx --input-type=module -e 'import {createHash} from "node:crypto"; const receipt=JSON.parse(process.argv[1]); const billing=await import("@lyrashield/billing"); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); if(process.env.LYRASHIELD_PRODUCT_REVISION!==receipt.productRevision || billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/1" || receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL) || receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL) || receipt.redisUrlSha256!==hash(process.env.REDIS_URL)) throw new Error("Cutover worker environment does not match owned receipt");' "$saved_cutover"
+    node --import tsx --input-type=module -e 'import {createHash} from "node:crypto"; const receipt=JSON.parse(process.argv[1]); const billing=await import("@lyrashield/billing"); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); if(process.env.LYRASHIELD_PRODUCT_REVISION!==receipt.productRevision || billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/2" || receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL) || receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL) || receipt.redisUrlSha256!==hash(process.env.REDIS_URL)) throw new Error("Cutover worker environment does not match owned receipt");' "$saved_cutover"
 fi
 
 socket_group=$(stat -c '%g' /var/run/docker.sock)

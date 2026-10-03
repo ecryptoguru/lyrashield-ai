@@ -75,7 +75,7 @@ overrides:
   # GHSA-7w5x-hrqm-74c2: smol-toml <=1.7.0 DoS via malformed TOML.
   # Transitive via markdownlint-cli2; force the patched line (already used
   # by @astrojs/internal-helpers).
-  smol-toml: ">=1.7.1"
+  smol-toml: "^1.7.1"
 
 allowBuilds:
   "@prisma/engines": true

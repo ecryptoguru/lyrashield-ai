@@ -206,6 +206,8 @@ scenario "1|ERROR: permission denied"
 export KV_FAILURE_SENTINEL="failure-path-secret-sentinel"
 if (
   trap - EXIT
+  # The helper path is a temporary fixture path, so ShellCheck cannot resolve it statically.
+  # shellcheck disable=SC1090
   source "$helper"
   azure_keyvault_sync_env_group test-vault failure-secret:KV_FAILURE_SENTINEL
 ); then

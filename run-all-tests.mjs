@@ -5,8 +5,8 @@ import { join } from "node:path"
 import { assertNamedTestsPassed } from "./.github/scripts/assert-named-vitest-tests.mjs"
 
 /**
- * Run all test suites independently and report every result.
- * This runner runs independent suites in parallel and exits non-zero if any fail.
+ * Run each requested suite independently, in order, and report every result.
+ * Exits non-zero if any suite fails.
  */
 
 const isCi = process.env.CI === "true"
@@ -54,22 +54,36 @@ if (suites.length === 0) throw new Error("At least one test suite is required")
 function run(name, command) {
   return new Promise((resolve) => {
     console.log(`\n==> Starting ${name} tests: ${command.join(" ")}\n`)
+    const startedAt = performance.now()
     const child = spawn(command[0], command.slice(1), { stdio: "inherit" })
+    let settled = false
+    const finish = (code, message) => {
+      if (settled) return
+      settled = true
+      const durationSeconds = (performance.now() - startedAt) / 1000
+      console.log(`\n==> ${message} after ${durationSeconds.toFixed(2)}s\n`)
+      resolve({ name, code, durationSeconds })
+    }
     // A missing/renamed binary makes spawn emit "error" and "close" never
     // fires — without this handler the Promise would never settle and CI
     // would hang to the job timeout instead of failing fast.
     child.on("error", (error) => {
-      console.error(`\n==> ${name} tests could not start: ${error.message}\n`)
-      resolve({ name, code: 127 })
+      finish(127, `${name} tests could not start: ${error.message}`)
     })
-    child.on("close", (code) => {
-      console.log(`\n==> ${name} tests exited with code ${code ?? 1}\n`)
-      resolve({ name, code: code ?? 1 })
+    child.on("close", (code, signal) => {
+      finish(code ?? 1, `${name} tests exited with code ${code ?? `signal ${signal}`}`)
     })
   })
 }
 
-const results = await Promise.all(suites.map((suite) => run(suite.name, suite.command)))
+// The combined run starts four independent test processes at once. Two local
+// combined-run timeouts passed when isolated; contention during imports and
+// database setup is plausible but not proven. Run suites sequentially first
+// and report their wall times while retaining every suite and assertion.
+const results = []
+for (const suite of suites) {
+  results.push(await run(suite.name, suite.command))
+}
 const coreResult = results.find((r) => r.name === "core")
 
 if (coreReportPath && coreResult && coreResult.code !== 0) {

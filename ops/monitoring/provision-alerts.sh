@@ -228,6 +228,28 @@ az_run monitor scheduled-query create \
   --description "Scan readiness unavailable for more than five minutes" \
   --output none
 
+app_log_alert() {
+  name=$1
+  code=$2
+  severity=$3
+  query="ContainerAppConsoleLogs_CL | where TimeGenerated > ago(10m) | where ContainerAppName_s =~ '$app_name' | where Log_s has '\"code\":\"${code}\"'"
+  az_run monitor scheduled-query create \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --location "$AZURE_LOCATION" \
+    --name "$name" \
+    --scopes "$LOG_ANALYTICS_WORKSPACE_ID" \
+    --condition "count 'Signal' > 0" \
+    --condition-query "Signal=$query" \
+    --evaluation-frequency 5m \
+    --window-size 10m \
+    --severity "$severity" \
+    --action-groups "$action_group_id" \
+    --auto-mitigate true \
+    --description "LyraShield application alert: $code" \
+    --output none
+}
+app_log_alert webhook-catalog-rejection webhook_catalog_rejection 1
+
 worker_log_alert scan-queue-depth-high scan_queue_depth_high 2
 worker_log_alert scan-queue-oldest-wait-high scan_queue_oldest_wait_high 2
 worker_log_alert reconciliation-drift reconciliation_drift 1
@@ -318,6 +340,7 @@ for rule in \
   reconciliation-drift \
   reconciliation-backlog \
   reconciliation-duplicates \
+  webhook-catalog-rejection \
   webhook-dead-letter \
   evidence-persistence-failure \
   terminal-cost-unreconciled
