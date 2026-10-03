@@ -112,3 +112,16 @@ minimumReleaseAgeExclude:
   # would deadlock the publish pipeline and buys nothing (we control the
   # artifact end-to-end). Exempt the whole scope permanently.
   - "@lyrashield/*"
+# GHSA-ch52-4w7c-c8xp has no patched npm version as of 2026-10-03. Astro's
+# remote asset helper creates a fresh Request(src) and only asks its cache
+# policy for storable/timeToLive; it does not invoke the vulnerable
+# evaluateRequest(max-stale) path. The characterization test must be updated
+# before changing Astro usage. Remove this exception after the upstream fix:
+# https://github.com/kornelski/http-cache-semantics/pull/58
+# GHSA-vfj7-8cjw-p6xm also has no patched npm release. `pnpm why --prod braces`
+# is empty: this copy is used only by root ESLint/Markdown tooling. Keep the
+# ignore scoped to that exact advisory and remove it when upstream fixes braces.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-ch52-4w7c-c8xp
+    - GHSA-vfj7-8cjw-p6xm

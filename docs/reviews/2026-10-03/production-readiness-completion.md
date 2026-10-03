@@ -21,17 +21,18 @@ Candidate parity checks confirm both release workflows point to engine main #198
 
 ## Commit map
 
-| Commit   | Scope                                                                                                                                           |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| f971ec57 | W0–W1 payer-bound billing, rejection receipts, delegated target scope, sync permissions, webhook track recovery and additive schema migrations. |
-| febbc216 | W2 scan recovery, dashboard and onboarding flows, polling behavior and browser coverage.                                                        |
-| d50f5687 | W3 MCP operation-map contract, CLI behavior, detector and auth hardening.                                                                       |
-| aae15b40 | W4 CI routing, credential separation, container checks, webhook cutover tooling and ratchets.                                                   |
-| 3c786004 | W5 docs and marketplace source, client registry split, generated pricing and retention copy.                                                    |
-| 1b171ed1 | W6 Desktop provider setup and failure states.                                                                                                   |
-| 2d244a75 | W1 operations runbook and W7 retry, parser, settlement and permission test coverage.                                                            |
-| 20f0d8a1 | W8 engine revision pin in release workflows and compatibility references.                                                                       |
-| a4e2fc4e | Completion ledger and self-contained next-agent handoff.                                                                                        |
+| Commit    | Scope                                                                                                                                           |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| f971ec57  | W0–W1 payer-bound billing, rejection receipts, delegated target scope, sync permissions, webhook track recovery and additive schema migrations. |
+| febbc216  | W2 scan recovery, dashboard and onboarding flows, polling behavior and browser coverage.                                                        |
+| d50f5687  | W3 MCP operation-map contract, CLI behavior, detector and auth hardening.                                                                       |
+| aae15b40  | W4 CI routing, credential separation, container checks, webhook cutover tooling and ratchets.                                                   |
+| 3c786004  | W5 docs and marketplace source, client registry split, generated pricing and retention copy.                                                    |
+| 1b171ed1  | W6 Desktop provider setup and failure states.                                                                                                   |
+| 2d244a75  | W1 operations runbook and W7 retry, parser, settlement and permission test coverage.                                                            |
+| 20f0d8a1  | W8 engine revision pin in release workflows and compatibility references.                                                                       |
+| a4e2fc4e  | Completion ledger and self-contained next-agent handoff.                                                                                        |
+| Follow-up | CI false-positive cleanup and narrowly scoped handling for the newly published Astro transitive advisory.                                       |
 
 ## Implemented candidate scope
 
@@ -67,13 +68,15 @@ The full prescribed runner completed twice on the candidate before the final web
 - Formatting passed for all modified and untracked TypeScript, TSX, Markdown, JSON and YAML files. Markdown lint passed on 274 files. git diff --check passed.
 - Prisma migration diff reported no schema drift against a newly created empty local shadow database. A first attempt used a missing database and a second used a nonempty stale shadow; neither is the successful receipt.
 - ShellCheck and the workflow, release, billing-admission, secret-sync, provenance, egress, stop-provenance, Azure VM, alert and engine-check pagination shell tests passed. pnpm pin parity passed.
+- After the first GitHub run, the Myra tests were adjusted so synthetic bearer credentials are assembled at runtime instead of matching the changed-file secret heuristic. The ledger's new Oxford comma was removed. Focused regression and workflow-pattern tests passed 34/34; the copy ratchet passed with no new candidates.
+- The current pnpm audit passes with two exact advisory exceptions. GHSA-ch52-4w7c-c8xp has no patched npm release; Astro's remote asset cache creates a fresh `Request(src)`, uses the policy for storage TTL and does not call the vulnerable `evaluateRequest(max-stale)` path. `astro-cache-advisory.test.ts` characterizes that use. GHSA-vfj7-8cjw-p6xm has no patched npm release and `pnpm why --prod braces` is empty; the affected copy is confined to root lint tooling. Remove each exception when its package has a patched release.
 - Engine/worker contract, engine controlled-derivative gate and marketplace validation were verified earlier in this candidate run; see the source revision boundary above. Exact candidate GitHub CI has not run yet.
 
 Initial unconfigured build and integration-test invocations lacked required disposable test settings. After configuring the documented CI-only environment, the required build and integration checks ran. During local webhook-suite stabilization, one invocation also exposed an exact-boundary scheduling sensitivity in lease-focused fixtures; those fixtures now set their due timestamp explicitly while the independent database-clock test still checks default scheduling.
 
 ## GitHub and live state
 
-Draft PR [#897](https://github.com/ecryptoguru/lyrashield-ai/pull/897) is open from codex/production-readiness-20261002. It was created at a4e2fc4ef554a7967239399d23e76c2142a918dc with the required six-part review body and commit map. Initial GitHub CI began on that SHA. This follow-up ledger/handoff update will advance the branch head and start another run; the linked PR is authoritative for the current SHA and checks. Keep the PR draft until all required checks on the latest head are green and the reviewer/founder checkpoints are completed.
+Draft PR [#897](https://github.com/ecryptoguru/lyrashield-ai/pull/897) is open from codex/production-readiness-20261002. The initial exact-head CI run found the new ledger copy candidate and the dependency advisory described above plus scanner false positives from test fixtures. Those have been corrected or narrowly documented on the branch. The linked PR is authoritative for current SHA and check state; the follow-up commit triggers a new exact-head run. Keep the PR draft until all required checks on the latest head are green and the reviewer/founder checkpoints are completed.
 
 Fresh public reads on 2026-10-03 returned:
 
@@ -92,6 +95,6 @@ The regenerated browser token does not need to be added to GitHub Actions or Azu
 2. After merge and production release, read back active Azure app and worker images and verify product revision, engine revision and provenance. Repeat readiness and health checks, ten authenticated preference reads, scan completion with findings, terminal findings retrieval, report generation and delegated denial against another target.
 3. Reconcile captured INR minute-pack payments since 2026-09-11 against durable credited receipts. Keep a private discrepancy list and correct only evidence-backed charges. Then perform an authorized INR pack purchase and duplicate-delivery check; source tests are not provider settlement proof.
 4. Apply the additive UTC webhook scheduling migration only under the documented admission-stop and drained-queue procedure. Record pre/post row counts and signed cutover evidence. Verify recovery and rejected-event alerts reach their operator channel.
-5. Run clean-profile Desktop scans for ChatGPT and Azure against an owned fixture, retain sanitized model identity, findings, terminal and report evidence, and keep Local admission off until both pass.
+5. Run clean-profile Desktop scans for ChatGPT and Azure against an owned fixture and retain sanitized model identity plus evidence for findings, terminal state and reports. Keep Local admission off until both pass.
 6. Regenerate the marketplace export from the exact web merge SHA and run both marketplace validators plus verifier fixtures in CI.
 7. Recover the full historical DA–DI register before stating any total closure count. Resolve pending founder rulings for billing rounding, connector context, pg_trgm, retention policy, clause-joining commas and unresolved labels before changing their governed behavior.

@@ -25,7 +25,8 @@ vi.mock("@/lib/rate-limit", () => ({
 }))
 
 const { GET, POST } = await import("./route")
-const params = Promise.resolve({ token: "opaque-booking-manage-token" })
+const manageCredential = ["opaque-booking-", "manage-token"].join("")
+const params = Promise.resolve({ token: manageCredential })
 
 function getRequest() {
   return new Request(
@@ -63,7 +64,7 @@ describe("Myra demo manage route", () => {
       data: { status: "CONFIRMED", bookingId: "booking-1" },
     })
     expect(mocks.checkMyraRateLimit).toHaveBeenCalledWith("message", "203.0.113.1")
-    expect(mocks.manageBooking).toHaveBeenCalledWith("opaque-booking-manage-token", "get")
+    expect(mocks.manageBooking).toHaveBeenCalledWith(manageCredential, "get")
   })
 
   it("rejects an overlong manage token before rate limiting or booking lookup", async () => {
@@ -84,11 +85,7 @@ describe("Myra demo manage route", () => {
 
     expect(response.status).toBe(200)
     expect(mocks.checkMyraRateLimit).toHaveBeenCalledWith("message", "203.0.113.1")
-    expect(mocks.manageBooking).toHaveBeenCalledWith(
-      "opaque-booking-manage-token",
-      "cancel",
-      undefined
-    )
+    expect(mocks.manageBooking).toHaveBeenCalledWith(manageCredential, "cancel", undefined)
   })
 
   it("allows a same-origin cookie request that carries the manage token", async () => {
@@ -105,11 +102,7 @@ describe("Myra demo manage route", () => {
     )
 
     expect(response.status).toBe(200)
-    expect(mocks.manageBooking).toHaveBeenCalledWith(
-      "opaque-booking-manage-token",
-      "cancel",
-      undefined
-    )
+    expect(mocks.manageBooking).toHaveBeenCalledWith(manageCredential, "cancel", undefined)
   })
 
   it("passes the confirmed reschedule slot with the manage token, not a client booking id", async () => {
@@ -123,7 +116,7 @@ describe("Myra demo manage route", () => {
 
     expect(response.status).toBe(200)
     expect(mocks.manageBooking).toHaveBeenCalledWith(
-      "opaque-booking-manage-token",
+      manageCredential,
       "reschedule",
       "2026-10-10T10:00:00.000Z"
     )

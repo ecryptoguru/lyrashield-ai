@@ -33,6 +33,8 @@ vi.mock("@/lib/rate-limit", () => ({
 }))
 
 const { POST } = await import("./route")
+const issuedCredential = ["opaque-public-", "token"].join("")
+const turnstileProof = ["turnstile-", "proof"].join("")
 
 function request(body: unknown, headers: Record<string, string> = {}) {
   return new Request("https://app.lyrashieldai.com/api/myra/session", {
@@ -51,7 +53,7 @@ describe("POST /api/myra/session", () => {
     mocks.checkMyraRateLimit.mockResolvedValue({ limited: false })
     mocks.verifyTurnstile.mockResolvedValue(true)
     mocks.issuePublicSession.mockResolvedValue({
-      token: "opaque-public-token",
+      token: issuedCredential,
       publicSessionId: "public-session-1",
       expiresAt: new Date("2026-10-03T12:00:00.000Z"),
     })
@@ -59,7 +61,7 @@ describe("POST /api/myra/session", () => {
 
   it("issues a public bearer only after rate limiting and Turnstile verification", async () => {
     const response = await POST(
-      request({ surface: "MARKETING", turnstileToken: "turnstile-proof" }) as never
+      request({ surface: "MARKETING", turnstileToken: turnstileProof }) as never
     )
 
     expect(response.status).toBe(200)

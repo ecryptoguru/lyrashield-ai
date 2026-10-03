@@ -52,6 +52,10 @@ jobs:
         # Fail immediately for findings or registry errors; retrying pnpm's
         # shared nonzero exit code can delay a vulnerability result without
         # distinguishing it from a transport failure.
+        # This repo has narrowly documented GHSA exceptions in
+        # pnpm-workspace.yaml. Remove it when Astro/http-cache-semantics ships
+        # and root braces ship patched releases; tests and `pnpm why --prod`
+        # pin the reviewed usage.
         run: pnpm audit --audit-level=high --prod
 
       - name: Secret scan (gitleaks)
