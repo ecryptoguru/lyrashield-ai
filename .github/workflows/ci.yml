@@ -52,6 +52,10 @@ jobs:
         # Fail immediately for findings or registry errors; retrying pnpm's
         # shared nonzero exit code can delay a vulnerability result without
         # distinguishing it from a transport failure.
+        # This repo has narrowly documented GHSA exceptions in
+        # pnpm-workspace.yaml. Remove it when Astro/http-cache-semantics ships
+        # and root braces ship patched releases; tests and `pnpm why --prod`
+        # pin the reviewed usage.
         run: pnpm audit --audit-level=high --prod
 
       - name: Secret scan (gitleaks)
@@ -258,50 +262,8 @@ jobs:
         continue-on-error: true
         run: pnpm lint:md
 
-      # Advisory only — rendered copy must never put a comma immediately
-      # before "and" or "or". Raw hits are advisory because comments and
-      # fenced code blocks can legitimately match the pattern. The path set
-      # covers the site copy sources: marketing pages/components, served
-      # public assets, docs/ and the shared registries that render into the
-      # site (WebMCP/AI-security controls, the agent registry, Myra copy,
-      # pricing strings and the OpenAPI description source).
-      - name: Serial-comma copy scan (advisory)
-        continue-on-error: true
-        shell: bash
-        run: |
-          hits=$(grep -rnE ', +(and|or)\b' \
-            apps/marketing/src apps/marketing/public docs \
-            packages/security/src packages/agent-registry/src \
-            packages/myra/src packages/pricing/src \
-            packages/agent-rules/src packages/mcp/src \
-            packages/types/src/openapi || true)
-          {
-            echo '### Serial-comma copy scan (advisory)'
-            echo
-            echo 'Rendered copy must not put a comma immediately before "and" or "or".'
-            echo 'Raw hits are advisory: comments and fenced code can legitimately match.'
-            echo
-            echo 'Scanned: apps/marketing/src, apps/marketing/public, docs,'
-            echo 'packages/security/src, packages/agent-registry/src, packages/myra/src,'
-            echo 'packages/pricing/src, packages/agent-rules/src, packages/mcp/src'
-            echo 'and packages/types/src/openapi.'
-            echo
-            if [ -n "$hits" ]; then
-              echo '```'
-              printf '%s\n' "$hits"
-              echo '```'
-            else
-              echo 'No raw hits in the rendered-copy sources.'
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ -z "$hits" ]; then
-            echo "clean: no raw serial-comma candidates"
-            exit 0
-          fi
-          printf '%s\n' "$hits" | sed -n '1,20p'
-          total=$(printf '%s\n' "$hits" | wc -l)
-          echo "::notice::$total raw serial-comma candidate(s) — inspect the step summary (advisory)"
-          exit 1
+      - name: Serial-comma copy ratchet
+        run: pnpm lint:copy-comma
 
       - name: Generate Prisma Client
         if: needs.changes.outputs.docs-only != 'true'
@@ -393,9 +355,8 @@ jobs:
               -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci"
           done
 
-      - name: Size lint (advisory)
+      - name: Size lint ratchet
         if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true') || needs.changes.outputs.marketing == 'true'
-        continue-on-error: true
         run: pnpm lint:size
 
       - name: Smoke-test production-equivalent account and workspace grants
@@ -411,8 +372,19 @@ jobs:
             -c "DO \$\$ BEGIN IF has_table_privilege(current_user, 'public.billing_reconciliation_state', 'SELECT') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'INSERT') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'UPDATE') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'DELETE') THEN RAISE EXCEPTION 'app_runtime_ci must not access billing_reconciliation_state'; END IF; END \$\$;"
 
       - name: Lint CI tooling
-        if: needs.changes.outputs.tooling-only == 'true'
-        run: pnpm exec eslint run-all-tests.mjs .github/scripts/*.mjs .github/scripts/tests/*.mjs
+        if: needs.changes.outputs.tooling-only == 'true' || needs.changes.outputs.shared == 'true'
+        env:
+          LYRASHIELD_RATCHET_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TOOLING_ONLY: ${{ needs.changes.outputs.tooling-only }}
+        run: |
+          pnpm exec eslint run-all-tests.mjs .github/scripts/*.mjs .github/scripts/tests/*.mjs
+          if [ "$TOOLING_ONLY" = 'true' ]; then
+            pnpm exec vitest run lint/size-ratchet.test.mjs lint/serial-comma-ratchet.test.mjs lint/ratchet-baseline-shrink.test.mjs
+          fi
+          bash .github/scripts/tests/test-verify-engine-revision-pagination.sh
+          find .github/scripts ops -type f -name '*.sh' -print0 | xargs -0 shellcheck --severity=warning
+          node .github/scripts/verify-pnpm-pin.mjs
+          pnpm lint:ratchet-baselines
 
       - name: Lint
         if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
@@ -807,7 +779,7 @@ jobs:
   container-build:
     name: Container image build (no push)
     needs: changes
-    if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+    if: needs.changes.outputs.azure-deploy == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -1045,7 +1017,6 @@ jobs:
           node apps/marketing/scripts/indexnow.mjs --origin https://lyrashieldai.com
 
       - name: Lighthouse production measurement
-        continue-on-error: true
         shell: bash
         run: |
           # Exact CLI version keeps the live gate reproducible without adding a

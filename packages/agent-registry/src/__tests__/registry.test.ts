@@ -13,6 +13,7 @@ import {
   renderConfig,
   renderEntry,
 } from "../index.js"
+import { AGENTS as AGENTS_MODULE_EXPORT } from "../agents.js"
 import type { AgentEntry, InstallOptions, Transport } from "../types.js"
 
 const TEST_BASE_URL = "https://app.lyrashieldai.com"
@@ -39,6 +40,53 @@ it("keeps OAuth config free of credential provenance overrides", () => {
   expect(JSON.stringify(entry.value)).not.toContain("LYRASHIELD_API_URL")
   expect(JSON.stringify(entry.value)).not.toContain("LYRASHIELD_API_KEY")
   expect(JSON.stringify(entry.value)).toContain(MCP_PACKAGE_SPEC)
+})
+
+it("renders Codex remote API keys with its documented authentication fields", () => {
+  const agent = getAgent("openai-codex")!
+  const inline = renderEntry(agent, {
+    transport: "remote-http",
+    apiUrl: TEST_BASE_URL,
+    apiKey: TEST_API_KEY,
+    secretMode: "inline",
+  })
+
+  expect(inline.rootKey).toBe("mcp_servers")
+  expect(inline.value).toMatchObject({
+    url: TEST_MCP_URL,
+    http_headers: { Authorization: `Bearer ${TEST_API_KEY}` },
+  })
+  expect(inline.value).not.toHaveProperty("headers")
+
+  const environment = renderEntry(agent, {
+    transport: "remote-http",
+    apiUrl: TEST_BASE_URL,
+    secretMode: "interpolated",
+  })
+  expect(environment.value).toMatchObject({
+    url: TEST_MCP_URL,
+    bearer_token_env_var: "LYRASHIELD_API_KEY",
+  })
+  expect(environment.value).not.toHaveProperty("headers")
+  expect(environment.value).not.toHaveProperty("http_headers")
+  const { content } = renderConfig(agent, {
+    transport: "remote-http",
+    apiUrl: TEST_BASE_URL,
+    secretMode: "interpolated",
+  })
+  expect(content).toContain('bearer_token_env_var = "LYRASHIELD_API_KEY"')
+})
+
+it("uses MiMo Code's vendor-documented project and global configuration paths", () => {
+  const mimo = getAgent("mimo-code")!
+  expect(mimo.locations.map((location) => location.path)).toEqual([
+    ".mimocode/mimocode.jsonc",
+    "~/.config/mimocode/mimocode.jsonc",
+  ])
+  expect(mimo.source).toMatchObject({
+    checkedOn: "2026-10-02",
+    url: "https://mimo.xiaomi.com/mimocode/config-overrides",
+  })
 })
 
 function testOptions(agent: AgentEntry, transport: Transport): InstallOptions {
@@ -193,7 +241,7 @@ describe("agent registry", () => {
     expect(copilotCloud.manualInstructions).not.toContain("copy only")
     expect(copilotCloud.manualInstructions).toContain("lyrashield_check_diff")
     expect(copilotCloud.manualInstructions).toContain(
-      "get-started`, `review-changes`, and `launch-readiness"
+      "get-started`, `review-changes` and `launch-readiness"
     )
     expect(copilotCloud.manualInstructions).toContain("scan-project`, `fix-and-retest")
     for (const readOnlyTool of [
@@ -711,6 +759,7 @@ describe("gotchas from §3.4 are represented", () => {
     "VS Code uses `servers`, not `mcpServers`",
     "Zed settings use flat command",
     "Codex reserves `env_vars` for an array",
+    "Codex remote MCP authentication uses `bearer_token_env_var` or `http_headers`",
     "single-brace `{env:VAR}`",
     "Gemini CLI expands `$VAR_NAME`",
     "Cline defaults to legacy SSE",
@@ -736,6 +785,64 @@ describe("gotchas from §3.4 are represented", () => {
 })
 
 describe("registry helpers", () => {
+  it("preserves the public facade identity and registry ordering", () => {
+    expect(AGENTS_MODULE_EXPORT).toBe(AGENTS)
+    expect(listAgents()).toBe(AGENTS_MODULE_EXPORT)
+    expect(AGENTS_MODULE_EXPORT.map((agent) => agent.id)).toEqual([
+      "claude-code",
+      "cursor",
+      "devin",
+      "devin-desktop",
+      "vscode",
+      "openai-codex",
+      "cline",
+      "opencode",
+      "opencode-v2",
+      "kilo-code",
+      "zed",
+      "gemini-cli",
+      "jetbrains",
+      "junie",
+      "junie-cli",
+      "jetbrains-claude-agent",
+      "jetbrains-codex-agent",
+      "amp",
+      "picode",
+      "openclaw",
+      "hermes",
+      "antigravity",
+      "copilot-cli",
+      "github-copilot-cloud-agent",
+      "goose",
+      "aider",
+      "devin-cli",
+      "roo-code",
+      "mimo-code",
+      "codebuff",
+      "oh-my-pi",
+      "auggie",
+      "augment-vscode",
+      "augment-jetbrains",
+      "factory-droid",
+      "qoder",
+      "qoder-cli",
+      "qwen-code",
+      "continue",
+      "mistral-vibe",
+      "lovable",
+      "v0",
+      "replit-agent",
+      "claude-desktop",
+      "claude-web",
+      "claude-code-agent-plugin",
+      "cursor-agent-plugin",
+      "vscode-agent-plugin",
+      "openai-codex-agent-plugin",
+      "github-copilot-agent-plugin",
+      "kiro-agent-plugin",
+    ])
+  })
+
   it("getAgent returns the requested entry or undefined", () => {
     expect(getAgent("cursor")?.id).toBe("cursor")
     expect(getAgent("not-real")).toBeUndefined()

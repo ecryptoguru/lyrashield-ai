@@ -1,6 +1,6 @@
 import "../test-env"
 import { describe, expect, it, vi } from "vitest"
-import { executeSubmitSupportCase, runProposeSupportCase } from "./cases"
+import { executeSubmitSupportCase, runProposeSupportCase, submitSupportCaseInput } from "./cases"
 import type { MyraToolContext } from "./types"
 
 const userPrincipal = {
@@ -82,6 +82,31 @@ describe("reply destination verification", () => {
     })
     expect(result.proposals?.[0]?.id).toBe("op-1")
     expect(db.myraIdentityVerification.findFirst).not.toHaveBeenCalled()
+  })
+
+  it("accepts an owner-attached trace on confirmation without widening public tool input", async () => {
+    const db = Object.assign(fakeDb(), {
+      supportCase: {
+        create: vi.fn().mockResolvedValue({ id: "case-1", reference: "LS-4F8K2N" }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+    })
+    const payload = {
+      ...baseInput,
+      replyEmail: "owner@example.com",
+      traceId: "trace-1234",
+    }
+
+    await expect(
+      executeSubmitSupportCase(payload, {
+        principal: userPrincipal,
+        conversationId: "conversation-1",
+        db: db as never,
+        deps: { sendNotification: vi.fn().mockResolvedValue(false) },
+      })
+    ).resolves.toMatchObject({ result: { caseId: "case-1" } })
+    expect(db.supportCase.create).toHaveBeenCalledOnce()
+    expect(() => submitSupportCaseInput.parse(payload)).toThrow()
   })
 
   it("accepts a foreign replyEmail verified within the window", async () => {

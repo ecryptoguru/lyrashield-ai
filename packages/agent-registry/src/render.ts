@@ -143,7 +143,16 @@ function buildRemoteEntry(agent: AgentEntry, opts: InstallOptions): Record<strin
   }
 
   const entry: Record<string, unknown> = { [urlKey]: mcpUrl }
-  if (Object.keys(headers).length > 0) entry.headers = headers
+  const remoteAuthConfig = agent.remoteAuthConfig
+  if (
+    remoteAuthConfig?.apiKeyEnvVar &&
+    remoteAuthConfig.bearerTokenEnvVarField &&
+    opts.secretMode === "interpolated"
+  ) {
+    entry[remoteAuthConfig.bearerTokenEnvVarField] = remoteAuthConfig.apiKeyEnvVar
+  } else if (Object.keys(headers).length > 0) {
+    entry[remoteAuthConfig?.headersField ?? "headers"] = headers
+  }
 
   Object.assign(entry, remoteFields)
 

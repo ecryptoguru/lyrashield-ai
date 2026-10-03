@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { Worker, type Job } from "bullmq"
 import { PrismaClient } from "../../../../packages/db/src/generated/prisma"
 import { createBoundedPgAdapter } from "../../../../packages/db/src/pool"
@@ -66,21 +66,50 @@ async function fixture(workspaceId?: string) {
     }),
   }
 }
-async function row(id: string) {
-  return owner.webhookEventTrack.findUniqueOrThrow({
-    where: { webhookEventId_track: { webhookEventId: id, track: "affiliate" } },
+async function packFixture() {
+  const id = `webhook-pack-fixture-${randomUUID()}`
+  const payload = {
+    type: "order.paid",
+    data: {
+      id,
+      amount: 1500,
+      currency: "USD",
+      metadata: { accountId: `account-${id}`, packId: "pack_100" },
+    },
+  }
+  eventIds.push(id)
+  await owner.webhookEvent.create({
+    data: { id, provider: "polar", eventType: "order.paid", externalId: id, payload },
   })
+  await billing.ensureWebhookTrackRows(id, ["billing"])
+  await owner.webhookEventTrack.updateMany({
+    where: { webhookEventId: id, track: "billing" },
+    data: { nextAttemptAt: new Date(0), nextAttemptAtUtc: new Date(0) },
+  })
+  return { id, payload }
+}
+async function rowForTrack(id: string, track: "billing" | "license" | "affiliate") {
+  return owner.webhookEventTrack.findUniqueOrThrow({
+    where: { webhookEventId_track: { webhookEventId: id, track } },
+  })
+}
+async function row(id: string) {
+  return rowForTrack(id, "affiliate")
 }
 async function due(id: string) {
   await owner.webhookEventTrack.updateMany({
     where: { webhookEventId: id, status: "failed" },
-    data: { nextAttemptAt: new Date(0) },
+    data: { nextAttemptAt: new Date(0), nextAttemptAtUtc: new Date(0) },
   })
 }
-async function enqueue(id: string, generation: number) {
+async function enqueue(
+  id: string,
+  generation: number,
+  track: "billing" | "license" | "affiliate" = "affiliate"
+) {
   const jobId = await integrations.enqueueWebhookTrackRetry({
     webhookEventId: id,
-    track: "affiliate",
+    track,
     generation,
   })
   jobs.add(jobId)
@@ -89,10 +118,11 @@ async function enqueue(id: string, generation: number) {
 async function consume(
   id: string,
   generation: number,
-  handlers: Parameters<typeof workerModule.processWebhookTrackRetry>[1]
+  handlers: Parameters<typeof workerModule.processWebhookTrackRetry>[1],
+  track: "billing" | "license" | "affiliate" = "affiliate"
 ) {
   const queue = integrations.getWebhookTrackRetryQueue()
-  const jobId = await enqueue(id, generation)
+  const jobId = await enqueue(id, generation, track)
   const worker = new Worker(integrations.WEBHOOK_TRACK_RETRY_QUEUE_NAME, undefined, {
     connection: { url: process.env.REDIS_URL!, maxRetriesPerRequest: null },
     autorun: false,
@@ -108,11 +138,11 @@ async function consume(
   )
   await job!.moveToCompleted(result, token, false)
   if (result.retryRepresented) {
-    const next = await row(id)
+    const next = await rowForTrack(id, track)
     jobs.add(
       integrations.webhookTrackRetryJobId({
         webhookEventId: id,
-        track: "affiliate",
+        track,
         generation: next.generation,
       })
     )
@@ -123,6 +153,48 @@ async function consume(
 }
 
 describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () => {
+  it("materializes UTC and compatibility due times from the database clock", async () => {
+    const f = await fixture()
+    const [clockCheck] = await owner.$queryRaw<
+      Array<{ closeToDbClock: boolean; legacyCloseToDbClock: boolean }>
+    >`
+      SELECT ABS(EXTRACT(EPOCH FROM ("nextAttemptAtUtc" - now()))) < 5 AS "closeToDbClock",
+        ABS(EXTRACT(EPOCH FROM (
+          "nextAttemptAt" - (now() AT TIME ZONE current_setting('TimeZone'))
+        ))) < 5 AS "legacyCloseToDbClock"
+      FROM "WebhookEventTrack"
+      WHERE "webhookEventId" = ${f.id} AND track = 'affiliate'
+    `
+
+    expect(clockCheck).toEqual({ closeToDbClock: true, legacyCloseToDbClock: true })
+  })
+
+  it("uses timezone-aware scheduler columns and explicitly interprets legacy values as UTC", async () => {
+    const columns = await owner.$queryRaw<Array<{ name: string; type: string }>>`
+      SELECT attname AS name, format_type(atttypid, atttypmod) AS type
+      FROM pg_attribute
+      WHERE attrelid = '"WebhookEventTrack"'::regclass
+        AND attname IN ('nextAttemptAtUtc', 'leaseExpiresAtUtc') AND NOT attisdropped
+      ORDER BY attname
+    `
+    expect(Object.fromEntries(columns.map(({ name, type }) => [name, type]))).toEqual({
+      leaseExpiresAtUtc: "timestamp(3) with time zone",
+      nextAttemptAtUtc: "timestamp(3) with time zone",
+    })
+
+    const [conversion] = await owner.$queryRaw<Array<{ mismatches: bigint }>>`
+      SELECT count(*) FILTER (
+        WHERE "nextAttemptAt" IS NOT NULL
+          AND "nextAttemptAtUtc" IS DISTINCT FROM ("nextAttemptAt" AT TIME ZONE 'UTC')
+      ) + count(*) FILTER (
+        WHERE "leaseExpiresAt" IS NOT NULL
+          AND "leaseExpiresAtUtc" IS DISTINCT FROM ("leaseExpiresAt" AT TIME ZONE 'UTC')
+      ) AS mismatches
+      FROM "WebhookEventTrack"
+    `
+    expect(conversion?.mismatches).toBe(0n)
+  })
+
   beforeAll(async () => {
     const ownerUrl = process.env.DATABASE_URL
     const runtimeUrl = process.env.RLS_RUNTIME_DATABASE_URL
@@ -159,6 +231,22 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
     expect(role).toEqual({ superuser: false, bypass: false })
     await integrations.getWebhookTrackRetryQueue().waitUntilReady()
   }, 30_000)
+  beforeEach(async () => {
+    // Recovery tests assert exact due-row counts. Keep each case isolated from
+    // initial pending tracks and retained retries created by earlier cases.
+    const queue = integrations.getWebhookTrackRetryQueue()
+    await queue.drain(true)
+    for (const id of jobs) await (await queue.getJob(id))?.remove()
+    jobs.clear()
+    if (eventIds.length) {
+      await owner.webhookEvent.deleteMany({ where: { id: { in: [...eventIds] } } })
+      eventIds.length = 0
+    }
+    if (workspaceIds.length) {
+      await owner.workspace.deleteMany({ where: { id: { in: [...workspaceIds] } } })
+      workspaceIds.length = 0
+    }
+  })
   afterAll(async () => {
     for (const worker of workers) await worker.close()
     if (integrations) {
@@ -259,7 +347,7 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
     ).toBe("busy")
     expect(await row(f.id)).toMatchObject({ status: "processing", attempts: 1 })
     release()
-    expect((await inline).allSucceeded).toBe(true)
+    expect((await inline).allResolved).toBe(true)
     expect(await row(f.id)).toMatchObject({ status: "succeeded", attempts: 1 })
     expect(handler).toHaveBeenCalledTimes(1)
   })
@@ -339,6 +427,10 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
 
   it("expired claim after external effect requires receipt review and rejects stale completion", async () => {
     const f = await fixture()
+    await owner.webhookEventTrack.updateMany({
+      where: { webhookEventId: f.id },
+      data: { nextAttemptAt: new Date(0), nextAttemptAtUtc: new Date(0) },
+    })
     const claimed = await billing.claimWebhookTrack(f.id, "affiliate", 0)
     expect(claimed.outcome).toBe("claimed")
     if (claimed.outcome !== "claimed") throw new Error("claim missing")
@@ -347,7 +439,7 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
     await effect()
     await owner.webhookEventTrack.updateMany({
       where: { webhookEventId: f.id },
-      data: { leaseExpiresAt: new Date(0) },
+      data: { leaseExpiresAt: new Date(0), leaseExpiresAtUtc: new Date(0) },
     })
     expect(await billing.renewWebhookTrackClaim(claimed.claim)).toBe(false)
     expect((await workerModule.recoverDueWebhookTrackRetries()).ambiguous).toBe(1)
@@ -368,8 +460,48 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
     expect(effect).toHaveBeenCalledTimes(1)
   })
 
+  it("reclaims an expired minute-pack billing claim and queues the next generation", async () => {
+    const f = await packFixture()
+    const claimed = await billing.claimWebhookTrack(f.id, "billing", 0)
+    expect(claimed.outcome).toBe("claimed")
+    if (claimed.outcome !== "claimed") throw new Error("claim missing")
+    await owner.webhookEventTrack.updateMany({
+      where: { webhookEventId: f.id, track: "billing" },
+      data: { leaseExpiresAt: new Date(0), leaseExpiresAtUtc: new Date(0) },
+    })
+
+    const recovery = await workerModule.recoverDueWebhookTrackRetries()
+
+    expect(recovery).toEqual({ examined: 1, represented: 1, ambiguous: 0 })
+    expect(await rowForTrack(f.id, "billing")).toMatchObject({
+      status: "failed",
+      attempts: 1,
+      generation: 1,
+      lastError: "claim_expired_replay_safe",
+    })
+    expect(
+      (
+        await consume(
+          f.id,
+          1,
+          { dispatchAffiliate: vi.fn().mockResolvedValue(undefined) },
+          "billing"
+        )
+      ).outcome
+    ).toBe("succeeded")
+    expect(await rowForTrack(f.id, "billing")).toMatchObject({
+      status: "succeeded",
+      attempts: 2,
+      generation: 1,
+    })
+  })
+
   it("lease expiry during a slow handler blocks takeover and fences its late completion", async () => {
     const f = await fixture()
+    await owner.webhookEventTrack.updateMany({
+      where: { webhookEventId: f.id },
+      data: { nextAttemptAt: new Date(0), nextAttemptAtUtc: new Date(0) },
+    })
     let release!: () => void
     let started!: () => void
     const start = new Promise<void>((resolve) => {
@@ -398,13 +530,14 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
       token: owned.claimToken!,
     }
     expect(await billing.renewWebhookTrackClaim(claim)).toBe(true)
-    expect((await row(f.id)).leaseExpiresAt!.getTime()).toBeGreaterThanOrEqual(
-      owned.leaseExpiresAt!.getTime()
+    expect((await row(f.id)).leaseExpiresAtUtc!.getTime()).toBeGreaterThanOrEqual(
+      owned.leaseExpiresAtUtc!.getTime()
     )
     await owner.webhookEventTrack.updateMany({
       where: { webhookEventId: f.id },
-      data: { leaseExpiresAt: new Date(0) },
+      data: { leaseExpiresAt: new Date(0), leaseExpiresAtUtc: new Date(0) },
     })
+    expect((await workerModule.recoverDueWebhookTrackRetries()).ambiguous).toBe(1)
     expect(
       await billing.retryWebhookTrack({
         webhookEventId: f.id,
@@ -445,12 +578,14 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
       status: "processing",
       attempts: 1,
       nextAttemptAt: null,
+      nextAttemptAtUtc: null,
     })
     expect((await workerModule.recoverDueWebhookTrackRetries()).examined).toBe(0)
     await owner.webhookEventTrack.updateMany({
       where: { webhookEventId: f.id },
-      data: { leaseExpiresAt: new Date(0) },
+      data: { leaseExpiresAt: new Date(0), leaseExpiresAtUtc: new Date(0) },
     })
+    expect((await workerModule.recoverDueWebhookTrackRetries()).ambiguous).toBe(1)
     expect(
       await billing.retryWebhookTrack({
         webhookEventId: f.id,
@@ -486,7 +621,7 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
     const before = new Date(Date.now() + 45_000)
     await owner.webhookEventTrack.updateMany({
       where: { webhookEventId: f.id },
-      data: { leaseExpiresAt: before },
+      data: { leaseExpiresAt: before, leaseExpiresAtUtc: before },
     })
     try {
       // This waits for runClaimedTrack's actual thirty-second renewal timer;
@@ -494,7 +629,7 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
       await new Promise<void>((resolve) => setTimeout(resolve, 31_000))
       await vi.waitFor(
         async () => {
-          expect((await row(f.id)).leaseExpiresAt!.getTime()).toBeGreaterThan(
+          expect((await row(f.id)).leaseExpiresAtUtc!.getTime()).toBeGreaterThan(
             before.getTime() + 60_000
           )
         },
@@ -555,7 +690,7 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
     handler.mockClear()
     await owner.webhookEventTrack.updateMany({
       where: { webhookEventId: f.id },
-      data: { nextAttemptAt: null },
+      data: { nextAttemptAt: null, nextAttemptAtUtc: null },
     })
     expect((await workerModule.recoverDueWebhookTrackRetries()).examined).toBe(0)
     expect(
@@ -573,7 +708,7 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
           rawPayload: f.payload,
           handlers: { dispatchAffiliate: handler },
         })
-      ).allSucceeded
+      ).allResolved
     ).toBe(false)
     const legacyFixture = {
       id: `${f.id}:affiliate`,
@@ -587,12 +722,13 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
       status: "pending",
       attempts: 0,
       nextAttemptAt: null,
+      nextAttemptAtUtc: null,
       claimToken: null,
     })
     const old = await fixture()
     await owner.webhookEventTrack.updateMany({
       where: { webhookEventId: old.id },
-      data: { nextAttemptAt: null, attempts: 1, status: "failed" },
+      data: { nextAttemptAt: null, nextAttemptAtUtc: null, attempts: 1, status: "failed" },
     })
     expect(
       await billing.retryWebhookTrack({

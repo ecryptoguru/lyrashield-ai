@@ -195,6 +195,20 @@ export function clearPendingScanSubmission(
   return true
 }
 
+/** Clear only on the explicit outcome marker; the expected key protects newer submissions. */
+export function clearPendingScanSubmissionIfNotSubmitted(
+  scope: ScanSubmissionScope,
+  idempotencyKey: string,
+  errorDetails: unknown,
+  storage?: ScanSubmissionStorage
+): boolean {
+  const result = z
+    .object({ operationOutcome: z.literal("OPERATION_NOT_SUBMITTED") })
+    .safeParse(errorDetails)
+  if (!result.success) return false
+  return clearPendingScanSubmission(scope, idempotencyKey, storage)
+}
+
 export function operationIdFromErrorDetails(details: unknown): string | null {
   const parsed = z.object({ operationId: z.string().min(1) }).safeParse(details)
   return parsed.success ? parsed.data.operationId : null

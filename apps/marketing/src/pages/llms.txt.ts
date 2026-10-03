@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro"
 import { getCollection, getEntry } from "astro:content"
+import { buildLlmsPricingSummary } from "../lib/llms-pricing"
 // Docs pages carry `const updatedDate = "YYYY-MM-DD"` — the convention
 // astro.config.mjs's sitemap lastmod reads. Raw glob inlines the sources at
 // build time, so this still works inside the deployed worker (no node:fs).
@@ -215,7 +216,7 @@ export const GET: APIRoute = async (context) => {
     `Last updated: ${await latestContentDate()}`,
     "",
     "LyraShield AI is a SaaS release-assurance platform for AI-built apps. The same review-and-evidence engine also ships as a published CLI, a GitHub Action and an MCP server inside coding agents — it is one product across four surfaces, not four separate tools. It is in open beta with open registration; there is no waitlist.",
-    "Pricing: Trial includes 60 one-time agent-minutes. Starter is $29/month, Pro is $99/month, Agency is $499/month and Enterprise starts at $1,500/month. Regional INR pricing and annual options are published on /pricing.",
+    buildLlmsPricingSummary(),
     "Core loop: target an authorized repo, URL or API; run deterministic and AI-assisted review as separate coverage layers; record every finding with an explicit evidence state; prepare an approval-gated fix proposal; retest from a clean server-owned run; and assemble one reviewable release report.",
     "",
     "## The six stages",
@@ -244,7 +245,7 @@ export const GET: APIRoute = async (context) => {
     ...publicLinks.map(({ label, url }) => markdownLink(label, url)),
     "",
     "## Agent-native setup",
-    "Use the client-specific guide. Local stdio connections can use `npx lyrashield login --oauth` and `npx lyrashield init`; supported hosted connections authenticate in the client. Pi supports built-in MCP, hosted OAuth, and Agent Skills; Aider uses standalone CLI or CI checks. Pi setup and authenticated runtime acceptance are separate evidence. Hosted writes require a browser-confirmed grant and execution-time checks; local stdio clients use local approval.",
+    "Use the client-specific guide. Local stdio connections can use `npx lyrashield login --oauth` and `npx lyrashield init`; supported hosted connections authenticate in the client. Pi supports built-in MCP, hosted OAuth and Agent Skills; Aider uses standalone CLI or CI checks. Pi setup and authenticated runtime acceptance are separate evidence. Hosted writes require a browser-confirmed grant and execution-time checks; local stdio clients use local approval.",
     `Human-facing setup: ${markdownLink("Coding-agent security", `${origin}/agents`)}. Machine-readable setup contract: ${markdownLink("agents.md", `${origin}/agents.md`)}. Full guide: ${markdownLink("Agent Plugin installation", `${origin}/docs/integrations/agent-plugins`)}.`,
     "",
     "## How to cite this site",

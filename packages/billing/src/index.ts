@@ -205,6 +205,7 @@ export {
   claimWebhookTrack,
   renewWebhookTrackClaim,
   getWebhookTrackRetrySchedule,
+  isExpiredWebhookTrackReplaySafe,
   type WebhookTrackClaim,
   computeApplicableTracks,
   ensureWebhookTrackRows,

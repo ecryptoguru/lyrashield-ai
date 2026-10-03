@@ -1,6 +1,6 @@
 ---
 name: lyrashield
-description: Run LyraShield security scans, review findings, and drive the fix → verify loop.
+description: Run LyraShield security scans, review findings and drive the fix → verify loop.
 ---
 
 ## Pre-PR check
@@ -33,8 +33,8 @@ Use a stable idempotency key for each intended mutating action and reuse it for 
 Reuse a returned scan or operation ID instead of starting another action. For findings, follow
 nextCursor with lyrashield_get_findings(cursor=...) until it is absent; a partial page is
 not a complete review. Poll scan and operation status starting at five seconds, back off up to
-30 seconds, stop on a terminal state, and return the resumable ID after a bounded session.
-Treat failed, cancelled, inconclusive, and insufficient-evidence states explicitly.
+30 seconds, stop on a terminal state and return the resumable ID after a bounded session.
+Treat failed, cancelled, inconclusive and insufficient-evidence states explicitly.
 
 Deeper modes consume more compute and take longer. Choose the least intensive goal and mode that answer the user's request.
 

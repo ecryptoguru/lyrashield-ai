@@ -63,6 +63,16 @@ export const MANAGED_REDIS_DRAIN_DELAY_SECONDS = 600
 export const MANAGED_REDIS_STALLED_INTERVAL_MS = 120_000
 export const MANAGED_REDIS_BULLMQ_WORKER_COUNT = 3
 export const MANAGED_REDIS_MONTHLY_COMMAND_BUDGET = 500_000
+const WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY = 2
+const FIX_GENERATE_WORKER_CONCURRENCY = 2
+
+function assertConfiguredWorkerDbPoolCapacity(): void {
+  assertWorkerDbPoolCapacity(
+    env.LYRASHIELD_WORKER_CONCURRENCY,
+    resolveDbPoolMax(),
+    WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY + FIX_GENERATE_WORKER_CONCURRENCY
+  )
+}
 
 export function advanceReconciliationTimestamp(currentMs: number, completedTickMs: number): number {
   return Math.max(currentMs, completedTickMs)
@@ -344,7 +354,7 @@ export function assertWorkerStartupProvenance() {
 }
 
 async function main(): Promise<void> {
-  assertWorkerDbPoolCapacity(env.LYRASHIELD_WORKER_CONCURRENCY, resolveDbPoolMax())
+  assertConfiguredWorkerDbPoolCapacity()
   await initSentry()
   // Gate readiness BEFORE the worker can claim anything: missing or malformed
   // provenance throws, main() rejects, and the process exits without ever
@@ -429,7 +439,7 @@ async function main(): Promise<void> {
         url: env.REDIS_URL || "redis://localhost:6379",
         maxRetriesPerRequest: null,
       },
-      concurrency: 2,
+      concurrency: WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY,
       autorun: false,
       // Keep instant job pickup while avoiding BullMQ's five-second idle poll,
       // which alone exceeds a 500,000-command monthly managed Redis budget.
@@ -473,7 +483,7 @@ async function main(): Promise<void> {
         url: env.REDIS_URL || "redis://localhost:6379",
         maxRetriesPerRequest: null,
       },
-      concurrency: 2,
+      concurrency: FIX_GENERATE_WORKER_CONCURRENCY,
       autorun: false,
       drainDelay: MANAGED_REDIS_DRAIN_DELAY_SECONDS,
       stalledInterval: MANAGED_REDIS_STALLED_INTERVAL_MS,

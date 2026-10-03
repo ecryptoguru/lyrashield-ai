@@ -126,6 +126,7 @@ for path in \
   .github/scripts/azure_secret_set.sh \
   .github/scripts/validate-worker-provenance.sh \
   .github/scripts/migration-database-identity.mjs \
+  .github/scripts/verify-webhook-timezone-evidence.mjs \
   .github/scripts/verify-webhook-cutover.mjs; do
   out=$(run_classify "$path")
   assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
@@ -242,6 +243,24 @@ for path in .github/scripts/promote-worker-vm.sh .github/scripts/classify-main-c
   assert_eq "$path: tooling-only" "true" "$(get_field "$out" "tooling-only")"
   assert_eq "$path: shared retained" "true" "$(get_field "$out" "shared")"
 done
+
+# Runtime workflow and rollout tooling changes must schedule an Azure release,
+# even when the files do not live under apps/ or packages/.
+for path in \
+  .github/workflows/deploy-azure-runtime.yml \
+  .github/scripts/deploy-azure-preflight.sh \
+  .github/scripts/deploy-azure-rollout.sh \
+  .github/scripts/webhook-claims-maintenance.sh \
+  .github/scripts/webhook-claims-vm.sh \
+  .github/scripts/azure_secret_set.sh \
+  .github/scripts/validate-worker-provenance.sh \
+  .github/scripts/migration-database-identity.mjs \
+  .github/scripts/verify-webhook-timezone-evidence.mjs \
+  .github/scripts/verify-webhook-cutover.mjs; do
+  out=$(run_classify "$path")
+  assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+done
+
 for paths in $'run-all-tests.mjs\napps/web/src/app/page.tsx' $'.github/workflows/ci.yml\ninfra/new.txt' $'.github/workflows/ci.yml\npnpm-lock.yaml' $'.github/workflows/ci.yml\nvitest.config.ts' $'.github/workflows/ci.yml\nops/worker/run-worker.sh' README.md; do
   out=$(run_classify "$paths")
   assert_eq "$paths: broad validation retained" "false" "$(get_field "$out" "tooling-only")"

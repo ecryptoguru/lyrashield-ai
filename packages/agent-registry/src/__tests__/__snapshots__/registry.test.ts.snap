@@ -458,7 +458,7 @@ exports[`renderConfig snapshot — every agent × every transport > openai-codex
 "[mcp_servers.lyrashield]
 url = "https://app.lyrashieldai.com/api/mcp"
 
-[mcp_servers.lyrashield.headers]
+[mcp_servers.lyrashield.http_headers]
 Authorization = "Bearer lsk_test_lyrashield_api_key""
 `;
 

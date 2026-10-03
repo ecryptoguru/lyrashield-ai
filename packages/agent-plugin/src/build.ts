@@ -120,8 +120,8 @@ Use a stable idempotency key for each intended mutating action and reuse it for 
 Reuse a returned scan or operation ID instead of starting another action. For findings, follow
 nextCursor with lyrashield_get_findings(cursor=...) until it is absent; a partial page is
 not a complete review. Poll scan and operation status starting at five seconds, back off up to
-30 seconds, stop on a terminal state, and return the resumable ID after a bounded session.
-Treat failed, cancelled, inconclusive, and insufficient-evidence states explicitly.
+30 seconds, stop on a terminal state and return the resumable ID after a bounded session.
+Treat failed, cancelled, inconclusive and insufficient-evidence states explicitly.
 
 Deeper modes consume more compute and take longer. Choose the least intensive goal and mode that answer the user's request.
 
@@ -158,17 +158,17 @@ Deeper modes consume more compute and take longer. Choose the least intensive mo
 const WORKFLOW_SKILLS = [
   {
     name: "get-started",
-    description: "Connect LyraShield, choose a workspace, and inspect authorized targets.",
+    description: "Connect LyraShield, choose a workspace and inspect authorized targets.",
     instructions: `# Get started
 
-Use this workflow when the user asks to connect LyraShield, check access, or find a target.
+Use this workflow when the user asks to connect LyraShield, check access or find a target.
 
 1. Call \`lyrashield_list_workspaces\` and let the user choose a workspace unless the active client already supplies one and a LyraShield response confirms it.
 2. Call \`lyrashield_list_targets\` with the selected \`workspaceId\`. Follow \`nextCursor\` with \`cursor\` until it is absent before claiming the target list is complete.
 3. Use only a target returned for that workspace. Explain that configuration on disk does not prove the client loaded the server; verify with the client's MCP status or tool list.
-4. Explain hosted OAuth and local stdio/API-key options using the client’s current setup instructions. Never request, print, or store a secret in a shared config file.
+4. Explain hosted OAuth and local stdio/API-key options using the client’s current setup instructions. Never request, print or store a secret in a shared config file.
 
-This workflow is read-only. Do not start scans or change target, workspace, billing, or authorization state.`,
+This workflow is read-only. Do not start scans or change target, workspace, billing or authorization state.`,
   },
   {
     name: "review-changes",
@@ -193,24 +193,24 @@ Start a recorded scan only when the user asks for one.
 
 1. Resolve the selected \`workspaceId\` and an authorized \`targetId\` using \`lyrashield_list_workspaces\` and \`lyrashield_list_targets\` when needed.
 2. Call \`lyrashield_get_scan_eligibility\` as a read-only advisory preflight. A pass does not guarantee that scan creation will be admitted; the server checks again.
-3. Use the least intensive requested profile: QUICK for an ordinary pre-PR check, STANDARD for a general review, and DEEP only when the user explicitly requests it and the selected target/profile permits it. Set the intended goal and mode explicitly.
+3. Use the least intensive requested profile: QUICK for an ordinary pre-PR check, STANDARD for a general review and DEEP only when the user explicitly requests it and the selected target/profile permits it. Set the intended goal and mode explicitly.
 4. Call \`lyrashield_scan_target\` or the PR-specific \`lyrashield_run_pr_scan\` using only fields in the current tool schema. Create and retain one unique \`idempotencyKey\` for this intended action and reuse it for identical retries. Use a new key only for a separately requested scan.
 5. Save the returned \`scanId\` or \`operationId\`. Poll \`lyrashield_get_scan_status\` with exactly one identifier, starting after 2 seconds and doubling the delay up to 30 seconds. Stop at a terminal state or after 20 checks. If the session or polling limit ends first, return the resumable identifier and resume it later instead of starting a replacement scan.
 
-Never scan a guessed, third-party, or unapproved target. Report failed, cancelled, inconclusive, and insufficient-evidence outcomes explicitly.`,
+Never scan a guessed, third-party or unapproved target. Report failed, cancelled, inconclusive and insufficient-evidence outcomes explicitly.`,
   },
   {
     name: "fix-and-retest",
-    description: "Review finding evidence, prepare a fix proposal, and verify an applied fix.",
+    description: "Review finding evidence, prepare a fix proposal and verify an applied fix.",
     instructions: `# Fix and retest
 
 1. Retrieve findings with \`lyrashield_get_findings\` in the selected workspace. Follow every \`nextCursor\` with \`cursor\` before claiming the result set is complete.
-2. Use \`lyrashield_explain_finding\` and \`lyrashield_generate_fix_plan\` with the selected workspace and finding ID. Keep detection, confidence, and verification states distinct.
+2. Use \`lyrashield_explain_finding\` and \`lyrashield_generate_fix_plan\` with the selected workspace and finding ID. Keep detection, confidence and verification states distinct.
 3. Treat a generated plan as a proposal. Persist one with \`lyrashield_record_fix_proposal\` only when the user asks to record it; never treat a proposal as a verified fix. Create and retain one unique \`idempotencyKey\` for recording the proposal and reuse it for identical retries.
 4. After the user confirms that a fix was applied, call \`lyrashield_verify_fix\` with \`workspaceId\` and \`findingId\`. Create and retain a separate unique \`idempotencyKey\` for this retest and reuse it for identical retries.
-5. Retain the returned retest scan identifier. Poll \`lyrashield_get_scan_status\`, starting after 2 seconds and doubling the delay up to 30 seconds, for at most 20 checks or until terminal. Return the identifier if polling or the session ends first and resume that retest later. Preserve \`FIXED_PENDING_RETEST\`, \`DETECTED\`, \`INCONCLUSIVE\`, and \`INSUFFICIENT_EVIDENCE\` exactly as reported. Claim validation only when the trusted retest evidence establishes it.
+5. Retain the returned retest scan identifier. Poll \`lyrashield_get_scan_status\`, starting after 2 seconds and doubling the delay up to 30 seconds, for at most 20 checks or until terminal. Return the identifier if polling or the session ends first and resume that retest later. Preserve \`FIXED_PENDING_RETEST\`, \`DETECTED\`, \`INCONCLUSIVE\` and \`INSUFFICIENT_EVIDENCE\` exactly as reported. Claim validation only when the trusted retest evidence establishes it.
 
-Do not create a pull request, merge, or deploy unless the user separately requests that action and the server-authorized workflow supports it.`,
+Do not create a pull request, merge or deploy unless the user separately requests that action and the server-authorized workflow supports it.`,
   },
   {
     name: "launch-readiness",
@@ -222,9 +222,9 @@ Use this workflow only when the user asks whether a registered target is ready f
 1. Resolve the selected workspace and authorized target. Call \`lyrashield_get_launch_readiness\` with \`workspaceId\` and \`targetId\`.
 2. Bind the query to the supplied release commit or artifact digest when available. A readiness result is enforceable only when it matches the release identity.
 3. Explain each returned gate and evidence state. Identify missing or stale evidence as unresolved; do not fill gaps from assumptions or a clean advisory diff.
-4. Keep operational readiness separate from a security guarantee, certification, compliance claim, or proof that every vulnerability was detected.
+4. Keep operational readiness separate from a security guarantee, certification, compliance claim or proof that every vulnerability was detected.
 
-This workflow is read-only. It does not start a scan, deploy an artifact, or change a release gate.`,
+This workflow is read-only. It does not start a scan, deploy an artifact or change a release gate.`,
   },
 ] as const
 
@@ -241,7 +241,7 @@ export async function buildPlugin({
 
   const skillBody = `---
 name: lyrashield
-description: Run LyraShield security scans, review findings, and drive the fix → verify loop.
+description: Run LyraShield security scans, review findings and drive the fix → verify loop.
 ---
 
 ${renderMarkdownBody(LYRASHIELD_POLICY, 2)}

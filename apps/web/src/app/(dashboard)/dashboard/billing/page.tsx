@@ -10,6 +10,7 @@ import {
   resolveAccountBilling,
   resolveWorkspaceScanSponsor,
   CLOUD_PLAN_MAP,
+  TRIAL_AGENT_MINUTES,
 } from "@lyrashield/billing"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
@@ -97,10 +98,10 @@ export default async function BillingPage({
   const cloudPlan =
     CLOUD_PLAN_MAP[(trialState.isActive ? "TRIAL" : plan) as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = trialState.isActive
-  const displayedTrialMinutesLeft =
-    effectivePlan === "FREE" && trialState.isExpired ? 0 : trialState.minutesLeft
-  const displayedAccountMinutesRemaining =
-    effectivePlan === "FREE" && trialState.isExpired ? 0 : balance.totalRemaining
+  const isExpiredFreeTrial = effectivePlan === "FREE" && trialState.isExpired
+  const displayedTrialMinutesLeft = isExpiredFreeTrial ? 0 : trialState.minutesLeft
+  const displayedAccountMinutesRemaining = isExpiredFreeTrial ? 0 : balance.totalRemaining
+  const displayedPoolMinutes = isExpiredFreeTrial ? TRIAL_AGENT_MINUTES : balance.poolMinutes
   const trialDaysLabel = `${NUMBER_FORMAT.format(trialState.daysLeft)} ${trialState.daysLeft === 1 ? "day" : "days"}`
   const isLaunchAssurance = plan === "LAUNCH_ASSURANCE"
   const isComplimentary = billingAccount?.provider === "complimentary"
@@ -253,8 +254,8 @@ export default async function BillingPage({
                   </span>
                 </div>
               )}
-              {!trialState.isExpired && purchasesAvailable && (
-                <UpgradeNowButton workspaceId={workspaceId} />
+              {canManageBilling && !trialState.isExpired && purchasesAvailable && (
+                <UpgradeNowButton />
               )}
             </CardContent>
           </Card>
@@ -274,7 +275,7 @@ export default async function BillingPage({
                 <p className="text-sm text-muted-foreground">Pool Minutes</p>
                 <p className="text-xl font-semibold">
                   {NUMBER_FORMAT.format(balance.poolConsumed)} used of{" "}
-                  {NUMBER_FORMAT.format(balance.poolMinutes)}
+                  {NUMBER_FORMAT.format(displayedPoolMinutes)}
                 </p>
               </div>
               <div>
@@ -298,8 +299,8 @@ export default async function BillingPage({
                   className="h-full rounded-full bg-primary"
                   style={{
                     width: `${
-                      balance.poolMinutes > 0
-                        ? Math.min(100, (balance.poolConsumed / balance.poolMinutes) * 100)
+                      displayedPoolMinutes > 0
+                        ? Math.min(100, (balance.poolConsumed / displayedPoolMinutes) * 100)
                         : 0
                     }%`,
                   }}

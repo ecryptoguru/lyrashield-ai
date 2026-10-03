@@ -51,10 +51,48 @@ import { getScanQueuePosition } from "@lyrashield/integrations"
 import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const routeParams = { params: Promise.resolve({ id: "scan-1" }) }
+const cookieSession = { userId: "user-1" }
+const narrowSession = {
+  userId: "user-1",
+  oauth: {
+    connectionId: "connection-1",
+    scopes: ["lyrashield.read", "lyrashield.write"],
+    allTargets: false,
+    allowedTargetIds: ["target-1"],
+  },
+}
+const allTargetsSession = {
+  userId: "user-1",
+  oauth: {
+    connectionId: "connection-2",
+    scopes: ["lyrashield.read", "lyrashield.write"],
+    allTargets: true,
+    allowedTargetIds: [],
+  },
+}
+const readOnlySession = {
+  userId: "user-1",
+  oauth: {
+    connectionId: "connection-3",
+    scopes: ["lyrashield.read"],
+    allTargets: false,
+    allowedTargetIds: ["target-1"],
+  },
+}
 
 describe("/api/scans/[id] workspace boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(assertOAuthDelegatedScope).mockImplementation((session, targetId) => {
+      const connection = session.oauth
+      if (
+        connection?.connectionId &&
+        !connection.allTargets &&
+        (!targetId || !connection.allowedTargetIds?.includes(targetId))
+      ) {
+        throw new Error("FORBIDDEN")
+      }
+    })
   })
 
   it("requires an explicit workspace before reading a scan", async () => {
@@ -65,7 +103,12 @@ describe("/api/scans/[id] workspace boundary", () => {
   })
 
   it("authorizes and queries inside the requested workspace", async () => {
-    vi.mocked(getScanWithEvents).mockResolvedValue({ id: "scan-1", workspaceId: "ws-1" } as never)
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: cookieSession } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+    } as never)
 
     const response = await GET(
       new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
@@ -74,8 +117,78 @@ describe("/api/scans/[id] workspace boundary", () => {
 
     expect(response.status).toBe(200)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:view")
+    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
     // No `eventsAfter` param = no cursor: the full event window is returned.
     expect(getScanWithEvents).toHaveBeenCalledWith("scan-1", "ws-1", { eventsAfter: undefined })
+  })
+
+  it("denies a target-a connection reading a scan persisted on target-b", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: narrowSession } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValueOnce({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-2",
+    } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(403)
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(narrowSession, "target-2")
+    expect(getScanQueuePosition).not.toHaveBeenCalled()
+  })
+
+  it("allows a connection when the persisted scan target is in its grant", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: narrowSession } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValueOnce({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+    } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(narrowSession, "target-1")
+  })
+
+  it("allows an all-targets connection to read another target's scan", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: allTargetsSession } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValueOnce({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-2",
+    } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
+  })
+
+  it("keeps read-only OAuth scan reads workspace-wide", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({ session: readOnlySession } as never)
+    vi.mocked(getScanWithEvents).mockResolvedValueOnce({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-2",
+    } as never)
+
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+
+    expect(response.status).toBe(200)
+    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
   })
 
   it("omits cost fields and internal accounting events from the dashboard response", async () => {

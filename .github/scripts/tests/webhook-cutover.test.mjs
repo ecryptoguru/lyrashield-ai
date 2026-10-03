@@ -10,7 +10,7 @@ const product = "a".repeat(40)
 const engine = "b".repeat(40)
 const digest = `sha256:${"c".repeat(64)}`
 const image = `ghcr.io/example/worker:${product}@${digest}`
-const protocol = "durable-claims/1"
+const protocol = "durable-claims/2"
 
 function fixture(t, scenario) {
   const directory = mkdtempSync(path.join(tmpdir(), "ls-webhook-cutover-"))
@@ -25,8 +25,9 @@ function fixture(t, scenario) {
       },
     },
   ]
-  const state = { protocol, product, engine, digest, migrated: true }
+  const state = { protocol, product, engine, digest, migrated: true, utcColumns: true }
   if (scenario === "pending migration") state.migrated = false
+  if (scenario === "missing UTC columns") state.utcColumns = false
   if (scenario === "old worker") state.protocol = "legacy"
   if (scenario === "no active app") revisions[0].properties.active = false
   if (scenario === "image mismatch")
@@ -45,7 +46,7 @@ function fixture(t, scenario) {
   )
   executable(
     "docker",
-    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : product)}}}})); } else if(args[0]==="inspect") { const format=args[2]; console.log(format.includes("State.Running")?"true":format.includes("Config.Image")?${JSON.stringify(image)}:format.includes("engine.revision")?${JSON.stringify(engine)}:${JSON.stringify(product)}); } else if(args[0]==="exec") { const code=args.at(-1); const state=${JSON.stringify(state)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ const matched=query.includes("migration_name = $1")?parameters[0]==="20260930120000_webhook_track_claims":query.includes(${JSON.stringify("migration_name = '20260930120000_webhook_track_claims'")}); if(!matched) throw new Error("Migration identity lost in shell transport"); return [{count:state.migrated?1:0}]; },$disconnect:async()=>{}}; const load=async(name)=>name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
+    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : product)}}}})); } else if(args[0]==="inspect") { const format=args[2]; console.log(format.includes("State.Running")?"true":format.includes("Config.Image")?${JSON.stringify(image)}:format.includes("engine.revision")?${JSON.stringify(engine)}:${JSON.stringify(product)}); } else if(args[0]==="exec") { const code=args.at(-1); const state=${JSON.stringify(state)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ if(query.includes("migration_name = $1")){ const expected=["20260930120000_webhook_track_claims","20261002120000_webhook_track_due_db_default","20261002130000_webhook_track_utc_schedule","20261002130100_webhook_track_utc_schedule_index","20261002130200_webhook_track_operator_recovery"]; if(JSON.stringify(parameters)!==JSON.stringify(expected)) throw new Error("Migration identity lost in shell transport"); return [{count:state.migrated?5:4}]; } if(query.includes("FROM pg_attribute")) return [{count:state.utcColumns?2:1}]; throw new Error("Unexpected worker schema probe"); },$disconnect:async()=>{}}; const load=async(name)=>name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
   )
   executable(
     "az",
@@ -77,6 +78,7 @@ test("compatible migration, active writers and immutable worker permit ordinary 
 })
 for (const scenario of [
   "pending migration",
+  "missing UTC columns",
   "old worker",
   "no active app",
   "image mismatch",
@@ -103,6 +105,28 @@ test("guard precedes configuration and migration mutations in protected producti
     assert.ok(gate < workflow.indexOf(`- name: ${step}`), step)
   }
   assert.doesNotMatch(readFileSync(script, "utf8"), /BYPASS|ALLOW_UNSAFE|CONFIRMATION/)
+})
+
+test("ordinary-release webhook guard uses the same default worker name as deployment", () => {
+  const workflow = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
+  const start = workflow.indexOf("- name: Verify compatible webhook cutover baseline")
+  const end = workflow.indexOf("- name: Preserve live Cloud billing admission", start)
+  const guard = workflow.slice(start, end)
+  assert.match(
+    guard,
+    /AZURE_WORKER_VM_NAME:\s*\$\{\{\s*vars\.AZURE_WORKER_VM_NAME\s*\|\|\s*'lyrashield-worker'\s*\}\}/
+  )
+})
+
+test("approved-cutover webhook guard uses the same default worker name as deployment", () => {
+  const workflow = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
+  const start = workflow.indexOf("- name: Verify installed compatible webhook writer baseline")
+  const end = workflow.indexOf("- name: Resume only owned admission after compatible cutover", start)
+  const guard = workflow.slice(start, end)
+  assert.match(
+    guard,
+    /AZURE_WORKER_VM_NAME:\s*\$\{\{\s*vars\.AZURE_WORKER_VM_NAME\s*\|\|\s*'lyrashield-worker'\s*\}\}/
+  )
 })
 
 test("web images bind the exact source revision into OCI provenance", () => {

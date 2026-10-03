@@ -84,6 +84,7 @@ for code in \
   reconciliation_drift \
   reconciliation_backlog \
   reconciliation_duplicates \
+  webhook_catalog_rejection \
   webhook_dead_letter \
   evidence_persistence_failure \
   terminal_cost_unreconciled
@@ -97,7 +98,7 @@ if grep -q "ContainerAppConsoleLogs_CL.*_ResourceId" "$capture"; then
   exit 1
 fi
 
-test "$(grep -c 'monitor scheduled-query create' "$capture")" = 9
+test "$(grep -c 'monitor scheduled-query create' "$capture")" = 10
 test "$(grep -c 'monitor metrics alert create' "$capture")" = 6
 
 worker_readback_line=$(grep -n 'log-analytics query.*LyraShield worker starting' "$capture" | cut -d: -f1)
@@ -167,9 +168,9 @@ export FAKE_APP_LOG_COUNT=1
 sh ops/monitoring/provision-alerts.sh >/dev/null
 test "$(grep -c 'metrics alert show.*--query enabled' "$capture")" = 6
 test "$(grep -c 'metrics alert show.*actionGroupId' "$capture")" = 6
-test "$(grep -c 'scheduled-query show.*--query enabled' "$capture")" = 9
-test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 9
-test "$(grep -c 'scheduled-query show.*actionGroups\[0\]' "$capture")" = 9
+test "$(grep -c 'scheduled-query show.*--query enabled' "$capture")" = 10
+test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 10
+test "$(grep -c 'scheduled-query show.*actionGroups\[0\]' "$capture")" = 10
 test "$(grep -c 'action-group show' "$capture")" = 5
 for rule in \
   worker-vm-unavailable worker-cpu-high app-no-active-replica \
@@ -181,7 +182,7 @@ for rule in \
   scan-readiness-unavailable scan-queue-depth-high scan-queue-oldest-wait-high \
   reconciliation-drift reconciliation-backlog reconciliation-duplicates \
   webhook-dead-letter evidence-persistence-failure \
-  terminal-cost-unreconciled
+  terminal-cost-unreconciled webhook-catalog-rejection
 do
   grep -q "scheduled-query show.*--name $rule" "$capture"
 done
@@ -193,7 +194,7 @@ done
 # documented exception (scan_worker_lease_expired, no durable counter yet) is
 # never provisioned. The metric set also includes infrastructure-only rules
 # (VM availability, scanner replicas) that have no application code.
-expected_scheduled="evidence-persistence-failure reconciliation-backlog reconciliation-drift reconciliation-duplicates scan-queue-depth-high scan-queue-oldest-wait-high scan-readiness-unavailable terminal-cost-unreconciled webhook-dead-letter"
+expected_scheduled="evidence-persistence-failure reconciliation-backlog reconciliation-drift reconciliation-duplicates scan-queue-depth-high scan-queue-oldest-wait-high scan-readiness-unavailable terminal-cost-unreconciled webhook-catalog-rejection webhook-dead-letter"
 created_scheduled=$(grep 'scheduled-query create' "$capture" | sed -E 's/.*--name ([^ ]+) .*/\1/' | sort | tr '\n' ' ' | sed 's/ $//')
 test "$created_scheduled" = "$expected_scheduled"
 expected_metric="app-no-active-replica app-replica-restart scanner-no-active-replica scanner-replica-restart worker-cpu-high worker-vm-unavailable"
@@ -216,16 +217,20 @@ for code in reconciliation_backlog reconciliation_duplicates; do
   printf '%s\n' "$creation" | grep -Fq -- "--evaluation-frequency 5m --window-size 10m --severity $severity"
   printf '%s\n' "$creation" | grep -Fq -- "--action-groups /subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts --auto-mitigate true"
 done
+rejection_creation=$(grep 'scheduled-query create.*--name webhook-catalog-rejection ' "$capture")
+printf '%s\n' "$rejection_creation" | grep -Fq "Signal=ContainerAppConsoleLogs_CL | where TimeGenerated > ago(10m) | where ContainerAppName_s =~ 'app' | where Log_s has '\"code\":\"webhook_catalog_rejection\"'"
+printf '%s\n' "$rejection_creation" | grep -Fq -- "--evaluation-frequency 5m --window-size 10m --severity 1"
+printf '%s\n' "$rejection_creation" | grep -Fq -- "--action-groups /subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts --auto-mitigate true"
 cp "$capture" "$test_dir/first-success.calls"
 
 # ── Idempotent rerun ────────────────────────────────────────────────────────
 : >"$capture"
 sh ops/monitoring/provision-alerts.sh >/dev/null
 cmp "$test_dir/first-success.calls" "$capture"
-test "$(grep -c 'monitor scheduled-query create' "$capture")" = 9
+test "$(grep -c 'monitor scheduled-query create' "$capture")" = 10
 test "$(grep -c 'monitor metrics alert create' "$capture")" = 6
 test "$(grep -c 'metrics alert show.*--query enabled' "$capture")" = 6
-test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 9
+test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 10
 if grep -q 'delete' "$capture"; then
   echo "provisioning rerun must not delete or recreate rules" >&2
   exit 1
@@ -286,7 +291,7 @@ fi
 test "$(grep -c 'monitor scheduled-query create' "$capture" || true)" = 0
 unset FAKE_ACTION_GROUP_ENABLED
 
-for rule in reconciliation-backlog reconciliation-duplicates; do
+for rule in reconciliation-backlog reconciliation-duplicates webhook-catalog-rejection; do
   export FAKE_FAILED_RULE="$rule"
   for failure in enabled auto-mitigate action-group; do
     : >"$capture"

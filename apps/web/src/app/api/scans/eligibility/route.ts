@@ -11,6 +11,7 @@ import { CreateScanInputSchema, CreateScanSchema } from "@lyrashield/types"
 import { evaluateScanEntitlement, isTrialAvailable } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
+import { z } from "zod"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError } from "../../../../lib/api-response"
 import {
@@ -31,7 +32,8 @@ import {
 
 /**
  * The eligibility query shares POST /api/scans' input contract minus the
- * submission-only fields (policyId, focus). Cross-field workflow rules are
+ * submission-only fields (focus). Policy selection is retained because it
+ * changes workflow admission. Cross-field workflow rules are
  * applied by re-validating through CreateScanInputSchema, so a preflight can
  * never pass a combination the mutation gate would reject at parse time.
  */
@@ -40,6 +42,7 @@ const EligibilityQuerySchema = CreateScanSchema.pick({
   targetId: true,
   goal: true,
   mode: true,
+  policyId: true,
   workflow: true,
   baseRef: true,
   headRef: true,
@@ -101,6 +104,7 @@ async function evaluateWorkflowPreflight(input: {
   }
   workflow?: string
   authorizationRef?: string
+  policy: Awaited<ReturnType<typeof findScanPolicy>> | undefined
 }): Promise<{ blockers: EligibilityBlocker[]; limitations: string[] }> {
   const blockers: EligibilityBlocker[] = []
   const limitations: string[] = []
@@ -147,7 +151,7 @@ async function evaluateWorkflowPreflight(input: {
     } else {
       // Same order as POST: a destructive-allowed policy forbids the beta,
       // then the recorded scoped authorization must cover this exact target.
-      const policy = await findScanPolicy(input.workspaceId)
+      const policy = input.policy
       if (policy?.destructiveTestsAllowed === true) {
         blockers.push({
           code: "SCAN_PLAN_DENIED",
@@ -176,6 +180,41 @@ async function evaluateWorkflowPreflight(input: {
   }
 
   return { blockers, limitations }
+}
+
+async function evaluatePolicyAndWorkflow(
+  input: z.infer<typeof EligibilityQuerySchema>,
+  target: {
+    type: string
+    installationId?: unknown
+    repoOwner?: string | null
+    repoName?: string | null
+    repoFullName?: string | null
+  },
+  workspaceId: string,
+  targetId: string
+): Promise<{
+  blockers: EligibilityBlocker[]
+  limitations: string[]
+}> {
+  const blockers: EligibilityBlocker[] = []
+  const shouldResolvePolicy =
+    Boolean(input.policyId) || input.workflow === "AUTHENTICATED_ASSESSMENT"
+  const policy = shouldResolvePolicy ? await findScanPolicy(workspaceId, input.policyId) : undefined
+  if (input.policyId && !policy) {
+    blockers.push({ code: "POLICY_NOT_FOUND", message: "Policy not found in this workspace" })
+    return { blockers, limitations: [] }
+  }
+
+  const workflow = await evaluateWorkflowPreflight({
+    workspaceId,
+    targetId,
+    target,
+    workflow: input.workflow,
+    authorizationRef: input.authorizationRef,
+    policy,
+  })
+  return { blockers: [...blockers, ...workflow.blockers], limitations: workflow.limitations }
 }
 
 /**
@@ -440,13 +479,7 @@ export async function GET(request: Request) {
     // entitlement stays the top-level verdict (matching POST order); further
     // workflow blockers are reported alongside so callers see every known
     // reason without a second call.
-    const workflowCheck = await evaluateWorkflowPreflight({
-      workspaceId,
-      targetId,
-      target,
-      workflow: input.workflow,
-      authorizationRef: input.authorizationRef,
-    })
+    const workflowCheck = await evaluatePolicyAndWorkflow(input, target, workspaceId, targetId)
     blockers.push(...workflowCheck.blockers)
 
     logger.info("Scan eligibility preflight", {

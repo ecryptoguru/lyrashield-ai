@@ -201,12 +201,12 @@ globalThis.readAdmission = () => {
   fs.appendFileSync(process.env.MOCK_ORDER_LOG, "redis-read\n");
   return fs.readFileSync(process.env.MOCK_ADMISSION_STOP, "utf8");
 };
-const billing = `Promise.resolve({WEBHOOK_TRACK_CLAIM_PROTOCOL:${JSON.stringify(process.env.MOCK_CLAIM_PROTOCOL || "durable-claims/1")}})`;
+const billing = `Promise.resolve({WEBHOOK_TRACK_CLAIM_PROTOCOL:${JSON.stringify(process.env.MOCK_CLAIM_PROTOCOL || "durable-claims/2")}})`;
 const source = code.replace('import("ioredis")', replacement).replace('import("@lyrashield/billing")', billing);
 await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 NODE
         ;;
-      *WEBHOOK_TRACK_CLAIM_PROTOCOL*) printf '%s\n' "${MOCK_CLAIM_PROTOCOL:-durable-claims/1}" ;;
+      *WEBHOOK_TRACK_CLAIM_PROTOCOL*) printf '%s\n' "${MOCK_CLAIM_PROTOCOL:-durable-claims/2}" ;;
       *'cjson.decode'*)
         promotion_stop='{"operator":"github-actions","reason":"worker-promotion"}'
         if [ ! -s "$MOCK_ADMISSION_STOP" ]; then
@@ -332,7 +332,7 @@ run_case() {
   local restart_fails=${15:-0}
   local cutover=${16:-0}
   local receipt_mode=${17:-owned}
-  local protocol=${18:-durable-claims/1}
+  local protocol=${18:-durable-claims/2}
   local queue_counts=${19:-}
   local unhealthy=0 receipt_stat=0:600 docker_ps_fail=0 live_stale=0
   [ "$name" != cutover-docker-uncertain ] || docker_ps_fail=1
@@ -385,7 +385,7 @@ run_case() {
         cp "$case_dir/runtime.conf" "$case_dir/runtime.conf.cutover-prior-$app_revision-${old_image##*@sha256:}"
         recorded=$target
         [ "$receipt_mode" != wrong-candidate ] || recorded="ghcr.io/example/worker@sha256:$(printf 'f%.0s' {1..64})"
-        durable=$(node -e 'const saved=JSON.parse(process.argv[1]); console.log(JSON.stringify({...saved,candidateWorkerImage:process.argv[2],candidateProductRevision:process.argv[3],candidateEngineRevision:process.argv[4],candidateWebhookTrackClaimProtocol:"durable-claims/1"}))' "$durable" "$recorded" "$app_revision" "$engine_revision")
+        durable=$(node -e 'const saved=JSON.parse(process.argv[1]); console.log(JSON.stringify({...saved,candidateWorkerImage:process.argv[2],candidateProductRevision:process.argv[3],candidateEngineRevision:process.argv[4],candidateWebhookTrackClaimProtocol:"durable-claims/2"}))' "$durable" "$recorded" "$app_revision" "$engine_revision")
         printf '%s' "$durable" > "$case_dir/cutover.json"
         printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$target" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
         if [ "$receipt_mode" = rebuilt-retry ] || [ "$receipt_mode" = previous-candidate ]; then
@@ -495,7 +495,7 @@ run_case() {
       if grep -Fxq redis-read "$case_dir/order.log"; then echo 'Stale connections reached Redis' >&2; exit 1; fi
     fi
     if [ "$expected" = success ] || [ "$fail_image_check" = 1 ] || [ "$restart_fails" = 1 ] || [ "$unhealthy" = 1 ] || [ "$live_stale" = 1 ]; then
-      node -e 'const saved=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); if(saved.candidateWorkerImage!==process.argv[2] || saved.candidateProductRevision!==process.argv[3] || saved.candidateEngineRevision!==process.argv[4] || saved.candidateWebhookTrackClaimProtocol!=="durable-claims/1") process.exit(1);' "$case_dir/cutover.json" "$target" "$app_revision" "$engine_revision"
+      node -e 'const saved=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); if(saved.candidateWorkerImage!==process.argv[2] || saved.candidateProductRevision!==process.argv[3] || saved.candidateEngineRevision!==process.argv[4] || saved.candidateWebhookTrackClaimProtocol!=="durable-claims/2") process.exit(1);' "$case_dir/cutover.json" "$target" "$app_revision" "$engine_revision"
       if [ "$receipt_mode" = rebuilt-retry ] || [ "$receipt_mode" = previous-candidate ]; then
         node -e 'const saved=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); if(saved.previousCandidateWorkerImage!==process.argv[2]) process.exit(1);' "$case_dir/cutover.json" "$configured_image"
       fi
@@ -626,7 +626,7 @@ run_case cutover-stale-run 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 sta
 run_case cutover-live-worker 0 1 0 failure 1 '' 0 '' 9999999000 1 1 '' env 0 1
 run_case cutover-old-container 0 1 0 failure 0 '' 0 '' 9999999000 1 1 '' env 0 1
 run_case cutover-missing-capability 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 owned legacy
-run_case cutover-nonempty-queue 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 owned durable-claims/1 '{"nonterminal":1}'
+run_case cutover-nonempty-queue 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 1 owned durable-claims/2 '{"nonterminal":1}'
 run_case cutover-identity-failure 0 1 0 failure 0 '' 1 '' 9999999000 0 1 '' env 0 1
 run_case cutover-restart-failure 0 1 0 failure 0 '' 0 '' 9999999000 0 1 '' env 1 1
 run_case healthy 1 1 1 success

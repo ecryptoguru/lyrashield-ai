@@ -86,6 +86,27 @@ function renderDetail(props: {
 const html = renderDetail({ scan, findings: [finding] })
 
 describe("scan detail badge labels", () => {
+  it("labels UTC timestamps on the scan detail page", () => {
+    expect(html).toContain("completed Jan 1, 2026, 00:05 UTC")
+
+    const eventHtml = renderDetail({
+      scan: {
+        ...scan,
+        events: [
+          {
+            id: "event-1",
+            stage: "worker",
+            level: "info",
+            message: "Started scan",
+            createdAt: "2026-01-01T00:03:00.000Z",
+          },
+        ],
+      },
+      findings: [],
+    })
+    expect(eventHtml).toContain("00:03 UTC")
+  })
+
   it("uses the same goal label as the scan list", () => {
     for (const [goal, label] of [
       ["CHECK_PR", "Check a PR"],

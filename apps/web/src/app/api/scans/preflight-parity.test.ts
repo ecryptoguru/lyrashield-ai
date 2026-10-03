@@ -263,4 +263,59 @@ describe("preflight → POST parity", () => {
       expect.objectContaining({ mutateOnTrialExpiry: false })
     )
   })
+
+  it("uses the explicitly selected policy for authenticated-assessment preflight", async () => {
+    configMocks.authAssessment.enabled = "1"
+    configMocks.authAssessment.allowlist = "ws-1:target-1"
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://app.example.com",
+    } as never)
+    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+      id: "proof-1",
+    } as never)
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue({
+      id: "selected-policy",
+      destructiveTestsAllowed: true,
+    } as never)
+
+    const response = await eligibilityGET(
+      eligibilityRequest({
+        ...query,
+        workflow: "AUTHENTICATED_ASSESSMENT",
+        authorizationRef: "authz-1",
+        policyId: "selected-policy",
+      })
+    )
+
+    expect((await response.json()).data).toMatchObject({
+      allowed: false,
+      code: "SCAN_PLAN_DENIED",
+    })
+    expect(prisma.policy.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "selected-policy", workspaceId: "ws-1", deletedAt: null },
+      })
+    )
+  })
+
+  it("reports an explicit policy outside the workspace as POLICY_NOT_FOUND", async () => {
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue(null as never)
+
+    const response = await eligibilityGET(
+      eligibilityRequest({ ...query, policyId: "foreign-policy" })
+    )
+
+    expect((await response.json()).data).toMatchObject({
+      allowed: false,
+      code: "POLICY_NOT_FOUND",
+      blockers: [expect.objectContaining({ code: "POLICY_NOT_FOUND" })],
+    })
+    expect(prisma.policy.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "foreign-policy", workspaceId: "ws-1", deletedAt: null },
+      })
+    )
+  })
 })

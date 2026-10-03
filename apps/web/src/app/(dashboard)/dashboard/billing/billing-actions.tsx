@@ -33,6 +33,18 @@ const PLANS = [
   ["LAUNCH_ASSURANCE", "Agency"],
 ] as const
 
+function planChoiceLabel(
+  label: string,
+  interval: string,
+  loading: boolean,
+  amount: string | null
+): string {
+  const cadence = interval === "annual" ? "Annual" : "Monthly"
+  return `Choose ${label}, ${interval} billing${amount ? `, ${amount}` : ""} — ${
+    loading ? "Starting checkout…" : amount ? `${cadence} · ${amount}` : `${cadence} billing`
+  }`
+}
+
 export function BillingActions({
   plan,
   isComplimentary,
@@ -174,9 +186,7 @@ export function BillingActions({
                       type="button"
                       onClick={() => handleCheckout(targetPlan, interval)}
                       disabled={loading !== null}
-                      aria-label={`Choose ${label}, ${interval} billing${
-                        amount ? `, ${amount}` : ""
-                      }`}
+                      aria-label={planChoiceLabel(label, interval, loading === action, amount)}
                       className={`${buttonVariants({ variant: "outline", size: "sm" })} w-full`}
                     >
                       {loading === action

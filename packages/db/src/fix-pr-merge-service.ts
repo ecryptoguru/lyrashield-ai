@@ -9,6 +9,24 @@ import type { FixPrMergeResult } from "./fix-proposal-service"
 import { evaluateGateForTarget } from "./gate-evaluation-service"
 import { bindAccountRLSContext, withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
+type FixPrMergeReevaluationOptions = {
+  workspaceId: string
+  branchName: string
+  prNumber: number | undefined
+  assertRetestAllowed: (
+    mode: ScanMode,
+    sponsorAccountId: string,
+    tx: ScopedTransaction
+  ) => Promise<void>
+  repoFullName: string | undefined
+  assertRetestWorkerAvailable: () => Promise<void>
+}
+
+async function checkRetestWorkerAvailable(assertAvailable: () => Promise<void>): Promise<void> {
+  // Complete Redis-backed admission before opening the advisory-lock transaction.
+  await assertAvailable()
+}
+
 /**
  * WP3 loop-closure orchestration: mark a merged fix PR, then queue a REAL
  * retest — a new scan of the finding's target that the retest binds to — and
@@ -25,18 +43,17 @@ import { bindAccountRLSContext, withWorkspaceRLS, type ScopedTransaction } from 
  * Returns null (a no-op) when the branch matches no open or merged fix PR in this
  * workspace.
  */
-export async function handleFixPrMergedAndReevaluate(
-  workspaceId: string,
-  branchName: string,
-  prNumber: number | undefined,
-  assertRetestAllowed: (
-    mode: ScanMode,
-    sponsorAccountId: string,
-    tx: ScopedTransaction
-  ) => Promise<void>,
-  repoFullName?: string
-): Promise<FixPrMergeOutcome | null> {
-  if (typeof assertRetestAllowed !== "function") throw new Error("Retest admission guard required")
+export async function handleFixPrMergedAndReevaluate({
+  workspaceId,
+  branchName,
+  prNumber,
+  assertRetestAllowed,
+  repoFullName,
+  assertRetestWorkerAvailable,
+}: FixPrMergeReevaluationOptions): Promise<FixPrMergeOutcome | null> {
+  if (typeof assertRetestAllowed !== "function") {
+    throw new Error("Retest admission guard required")
+  }
   const [repoOwner, repoName, ...extra] = repoFullName?.split("/") ?? []
   if (repoFullName && (!repoOwner || !repoName || extra.length > 0)) {
     throw new Error("Invalid GitHub repository identity")
@@ -99,6 +116,8 @@ export async function handleFixPrMergedAndReevaluate(
   // resume on redelivery. It takes the same advisory lock in its transaction.
   const result = await handleFixPrMerged({ workspaceId, branchName, prNumber, repoFullName })
   if (!result) return null
+
+  await checkRetestWorkerAvailable(assertRetestWorkerAvailable)
 
   const outcome = await withWorkspaceRLS(
     workspaceId,

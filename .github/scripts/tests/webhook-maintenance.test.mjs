@@ -69,7 +69,7 @@ function setup(t, scenario = "normal") {
   const billing = path.join(directory, "billing.mjs")
   writeFileSync(
     billing,
-    `export const WEBHOOK_TRACK_CLAIM_PROTOCOL=${JSON.stringify(scenario === "old candidate" ? "legacy" : "durable-claims/1")}`
+    `export const WEBHOOK_TRACK_CLAIM_PROTOCOL=${JSON.stringify(scenario === "old candidate" ? "legacy" : "durable-claims/2")}`
   )
   const redisModule = path.join(directory, "redis.mjs")
   writeFileSync(
@@ -243,6 +243,7 @@ test("launch checks refreshed secrets before any worker queue consumer starts", 
   assert.ok(start > 0 && end > start)
   assert.ok(end < source.indexOf("docker create"))
   const block = source.slice(start, end)
+  assert.match(block, /WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims\/2"/)
   const run = (overrides = {}) =>
     spawnSync(
       "sh",
@@ -267,7 +268,7 @@ test("retained compatible candidate uses the image engine label during claim rec
     candidateWorkerImage: candidate,
     candidateProductRevision: revision,
     candidateEngineRevision: "d".repeat(40),
-    candidateWebhookTrackClaimProtocol: "durable-claims/1",
+    candidateWebhookTrackClaimProtocol: "durable-claims/2",
   })
   writeFileSync(f.receipt, JSON.stringify(receipt), { mode: 0o600 })
   writeFileSync(

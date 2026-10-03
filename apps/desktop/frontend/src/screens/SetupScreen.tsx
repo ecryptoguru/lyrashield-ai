@@ -20,6 +20,45 @@ interface Props {
 
 type Step = "runtime" | "byok" | "ready"
 
+function providerIsConfigured(
+  choice: ByokProvider,
+  chatgptStatus: ChatGptAuthStatus | null,
+  azureMeta: AzureMetadata | null
+): boolean {
+  return choice === "chatgpt"
+    ? chatgptStatus?.status === "signed_in"
+    : (azureMeta?.configured ?? false)
+}
+
+function SetupBackButton({
+  provider,
+  loading,
+  setProvider,
+  setStep,
+  setValidationError,
+}: {
+  provider: ByokProvider | null
+  loading: boolean
+  setProvider: (provider: ByokProvider | null) => void
+  setStep: (step: Step) => void
+  setValidationError: (error: string | null) => void
+}) {
+  return (
+    <button
+      onClick={() => {
+        setValidationError(null)
+        if (provider === null) setStep("runtime")
+        else setProvider(null)
+      }}
+      disabled={loading}
+      className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+    >
+      Back
+    </button>
+  )
+}
+
+// Configured-provider selections are recorded natively; credential flows validate the saved provider before becoming ready.
 export function SetupScreen({ onComplete, onBack }: Props) {
   const [step, setStep] = useState<Step>("runtime")
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null)
@@ -57,16 +96,9 @@ export function SetupScreen({ onComplete, onBack }: Props) {
     if (engineOk && dockerOk) setStep("byok")
   }
 
-  // Picking a provider that is already configured records the selection
-  // natively — the scan resolver honors exactly this choice. Picking an
-  // unconfigured provider opens its credential form; saving or signing in
-  // records the selection as part of that write.
   async function handleProviderSelect(choice: ByokProvider) {
     setValidationError(null)
-    const configured =
-      choice === "chatgpt"
-        ? chatgptStatus?.status === "signed_in"
-        : (azureMeta?.configured ?? false)
+    const configured = providerIsConfigured(choice, chatgptStatus, azureMeta)
     if (!configured) {
       setProvider(choice)
       return
@@ -181,6 +213,7 @@ export function SetupScreen({ onComplete, onBack }: Props) {
               Choose your AI provider. Your credentials stay on this machine.
             </p>
           </div>
+          <SetupBackButton {...{ provider, loading, setProvider, setStep, setValidationError }} />
           {azureMeta?.configured && (
             <p className="text-xs text-muted-foreground">
               Azure configured: {azureMeta.endpoint}

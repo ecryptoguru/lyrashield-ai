@@ -13,6 +13,14 @@ const productionRelease = readFileSync(
   new URL("../../workflows/release-production.yml", import.meta.url),
   "utf8"
 )
+const azureDeploy = readFileSync(
+  new URL("../../workflows/deploy-azure.yml", import.meta.url),
+  "utf8"
+)
+const admissionWorkflow = readFileSync(
+  new URL("../../workflows/configure-cloud-billing-admission.yml", import.meta.url),
+  "utf8"
+)
 const steps = new Map(
   [...workflow.matchAll(/^      - name: (.+)\n        if: (.+)$/gm)].map((match) => [
     match[1],
@@ -252,6 +260,24 @@ test("CI cancels superseded PRs without interrupting a main release verification
   )
 })
 
+test("Lighthouse production measurement can fail the release verification", () => {
+  const step = workflow.match(
+    /      - name: Lighthouse production measurement\n([\s\S]*?)(?=      - name: Upload Lighthouse reports)/
+  )?.[0]
+  assert.ok(step, "Missing production Lighthouse step")
+  assert.doesNotMatch(step, /^        continue-on-error:/m)
+  assert.match(step, /if \(failed\) process\.exit\(1\)/)
+})
+
+test("Azure deployment and admission serialize traffic mutations on one resource group", () => {
+  const deployGroup = azureDeploy.match(/^  group: (.+)$/m)?.[1]
+  const admissionGroup = admissionWorkflow.match(/^  group: (.+)$/m)?.[1]
+  assert.ok(deployGroup)
+  assert.equal(admissionGroup, deployGroup)
+  assert.match(azureDeploy, /^  cancel-in-progress: false$/m)
+  assert.match(admissionWorkflow, /^  cancel-in-progress: false$/m)
+})
+
 test("main change routing carries pending runtime changes across a docs-only successor", (t) => {
   const fixture = createMainGapFixture()
   t.after(() => rmSync(fixture.directory, { recursive: true, force: true }))
@@ -400,29 +426,17 @@ test("automatic Azure release remains bound to the completed run's current-main 
   assert.match(productionRelease, /source_sha: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/)
 })
 
-test("large advisory copy output reaches its notice without a broken pipe", () => {
-  const body = workflow.match(
-    /- name: Serial-comma copy scan \(advisory\)[\s\S]*?        run: \|\n([\s\S]*?)(?=\n      - name:)/
-  )?.[1]
-  assert.ok(body, "Missing advisory copy scan")
-  const directory = mkdtempSync("/tmp/lyrashield-copy-scan-")
-  try {
-    const script = body
-      .replace(/^          /gm, "")
-      .replace(
-        /hits=\$\(grep[\s\S]*?\|\| true\)/,
-        'hits=$(for ((i=0; i<10000; i++)); do printf "fixture:%s: comment, and text\\n" "$i"; done)'
-      )
-    const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", script], {
-      encoding: "utf8",
-      env: { ...process.env, GITHUB_STEP_SUMMARY: `${directory}/summary` },
-    })
-    assert.equal(result.status, 1, "Candidates retain the advisory status")
-    assert.match(result.stdout, /::notice::\s*10000 raw serial-comma candidate/)
-    assert.equal(result.stdout.split("fixture:").length - 1, 20)
-    assert.equal(result.stderr, "")
-    assert.equal(readFileSync(`${directory}/summary`, "utf8").split("fixture:").length - 1, 10000)
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+test("rendered-copy comma ratchet is a blocking CI step", () => {
+  const step = workflow.match(
+    /      - name: Serial-comma copy ratchet\n([\s\S]*?)(?=      - name:)/
+  )?.[0]
+  assert.ok(step, "Missing rendered-copy comma ratchet")
+  assert.match(step, /run: pnpm lint:copy-comma/)
+  assert.doesNotMatch(step, /^        continue-on-error:/m)
+})
+
+test("CI tooling gates also run when shared ratchet baselines change", () => {
+  const step = workflow.match(/      - name: Lint CI tooling\n        if: ([^\n]+)/)?.[1]
+  assert.ok(step, "Missing CI tooling lint gate")
+  assert.match(step, /needs\.changes\.outputs\.shared == 'true'/)
 })

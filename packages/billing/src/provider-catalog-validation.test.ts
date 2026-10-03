@@ -15,6 +15,7 @@ const envState = vi.hoisted(() => ({
 vi.mock("@lyrashield/config", () => ({ env: envState }))
 
 import {
+  assertProviderCatalogEvent,
   resolvePolarCatalogEvent,
   resolveRazorpayCatalogEvent,
 } from "./provider-catalog-validation"
@@ -505,6 +506,45 @@ describe("provider catalog entitlement validation", () => {
             },
           },
         })
+      ).toEqual({ kind: "local", sku: "individual_launch" })
+    })
+
+    it("verifies signed packs and Local SKUs through the webhook consumer entry point", () => {
+      const packNotes = routePackNotes()
+      expect(
+        assertProviderCatalogEvent("razorpay", "payment.captured", capturedEvent(packNotes))
+      ).toEqual({ kind: "pack", packId: "pack_100" })
+      expect(
+        assertProviderCatalogEvent("razorpay", "payment_link.paid", linkPaidEvent(packNotes))
+      ).toEqual({ kind: "pack", packId: "pack_100" })
+
+      const tamperedAccount = routePackNotes({
+        accountId: "acct_other",
+        signAccountId: ACCOUNT,
+      })
+      expect(() =>
+        assertProviderCatalogEvent("razorpay", "payment.captured", capturedEvent(tamperedAccount))
+      ).toThrow(/catalog evidence/)
+
+      const localAmount = 1_990_000
+      const localNotes = {
+        productId: "individual_launch",
+        quoteWorkspaceId: "local-reference-1",
+        ...billingQuoteNotes({
+          provider: "razorpay",
+          kind: "local",
+          workspaceId: "local-reference-1",
+          catalogKey: "individual_launch",
+          amountMinor: localAmount,
+          currency: "INR",
+        }),
+      }
+      expect(
+        assertProviderCatalogEvent(
+          "razorpay",
+          "payment_link.paid",
+          linkPaidEvent(localNotes, {}, localAmount)
+        )
       ).toEqual({ kind: "local", sku: "individual_launch" })
     })
   })

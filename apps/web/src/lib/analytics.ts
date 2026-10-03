@@ -252,6 +252,7 @@ export function resolveAnalyticsPreference(): Promise<boolean | null> {
     setAnalyticsPreference(false)
     return Promise.resolve(false)
   }
+  if (analyticsPreference !== null) return Promise.resolve(analyticsPreference)
   if (typeof window === "undefined") return Promise.resolve(null)
 
   const epoch = analyticsPreferenceEpoch

@@ -101,6 +101,7 @@ export function createCheckDiffTool(context: ToolHandlerContext): McpTool {
       "Fast ADVISORY heuristic scan of a code diff for obviously risky patterns (hardcoded secrets, eval, unsafe HTML, SQL concatenation), plus structural WebMCP checks when optional full-file snapshots are supplied. This is a lightweight pre-PR pre-filter only — it is NOT a substitute for a full recorded scan. Run lyrashield_run_pr_scan for a bounded repository scan with findings, coverage receipts, evidence states and explicit limitations; results are not automatically independently verified or exploit-validated.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         diff: {
           type: "string",
@@ -268,6 +269,7 @@ export function createExplainFindingTool(context: ToolHandlerContext): McpTool {
       "Get the full detail and plain-language explanation (what it is, why it matters, how to fix) for a single finding by its findingId.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         findingId: { type: "string", description: "Finding ID" },
@@ -302,6 +304,7 @@ export function createGenerateFixPlanTool(context: ToolHandlerContext): McpTool 
       "Assemble a remediation plan for a finding from its recorded detail, recommended fix and plain-language explanation. Read-only — records nothing. Use lyrashield_record_fix_proposal to persist a proposal on the finding.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         findingId: { type: "string", description: "Finding ID" },
@@ -417,6 +420,7 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
       "Assemble a PR-ready security recap for one target: the effective release-gate result and unresolved findings by severity. Read-only — paste the result into a PR comment.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: { type: "string", description: "Target ID to scope the recap" },

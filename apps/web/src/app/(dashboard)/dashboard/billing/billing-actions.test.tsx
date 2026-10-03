@@ -46,6 +46,9 @@ describe("BillingActions", () => {
         expect(html).toContain(`Choose ${label}, ${interval} billing`)
     }
     expect(html).toContain("4,500<!-- --> agent-minutes / month")
+    expect(html).toContain(
+      'aria-label="Choose Starter, monthly billing, $29.00/mo — Monthly · $29.00/mo"'
+    )
   })
   it("labels prices in the server-resolved catalog currency without touching checkout", () => {
     // The chooser displays the catalog for the region the server resolved —

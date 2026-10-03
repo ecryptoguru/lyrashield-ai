@@ -20,6 +20,28 @@ beforeEach(() => {
   setAnalyticsPreference(null)
 })
 
+describe("anonymous analytics preference cache", () => {
+  it("reuses an anonymous 401 result until authentication state is invalidated", async () => {
+    vi.stubGlobal("window", {})
+    vi.stubGlobal("document", { cookie: "" })
+    vi.stubGlobal("navigator", { doNotTrack: null, globalPrivacyControl: false })
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 401 }))
+    vi.stubGlobal("fetch", fetch)
+
+    try {
+      await expect(resolveAnalyticsPreference()).resolves.toBe(true)
+      await expect(resolveAnalyticsPreference()).resolves.toBe(true)
+      expect(fetch).toHaveBeenCalledTimes(1)
+
+      invalidateAnalyticsPreference()
+      await expect(resolveAnalyticsPreference()).resolves.toBe(true)
+      expect(fetch).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
 describe("sanitizeProperties", () => {
   it("returns only allowed properties for an event", () => {
     const result = sanitizeProperties("landing_view", {

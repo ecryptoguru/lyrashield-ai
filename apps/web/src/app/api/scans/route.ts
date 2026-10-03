@@ -51,7 +51,7 @@ import {
   checkScanCreateRateLimit,
   clientIpFromRequest,
 } from "../../../lib/rate-limit"
-import { refuseScan } from "../../../lib/scan-refusal"
+import { createScanRefusalContext } from "../../../lib/scan-refusal"
 
 /** Full lowercase git object IDs (SHA-1 = 40, SHA-256 = 64) pass through as
  * immutable revisions; anything else resolves through the installation. */
@@ -129,11 +129,11 @@ async function post(request: Request) {
   const workspaceId = data.workspaceId
 
   let operationClaim: Awaited<ReturnType<typeof claimOrGetAgentOperation>> | null = null
-  let submissionAttempted = false
   let submittedScanId: string | undefined
   let operationCompleted = false
   // Captured once auth succeeds so catch-block refusals can attribute the actor.
   let actorUserId: string | undefined
+  const { submission, refuseScan } = createScanRefusalContext(request)
   try {
     const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
     actorUserId = session.userId
@@ -621,7 +621,7 @@ async function post(request: Request) {
       }
     }
 
-    submissionAttempted = true
+    submission.attempted = true
     const scan = await createScan({
       workspaceId,
       targetId: data.targetId,
@@ -818,7 +818,7 @@ async function post(request: Request) {
     if (operationClaim?.status === "NEW" && !operationCompleted) {
       const operationId = operationClaim.operation.id
       await failAgentOperation(operationId, workspaceId, {
-        error: submissionAttempted ? "OPERATION_OUTCOME_UNKNOWN" : "OPERATION_NOT_SUBMITTED",
+        error: submission.attempted ? "OPERATION_OUTCOME_UNKNOWN" : "OPERATION_NOT_SUBMITTED",
         resultReference: submittedScanId,
       }).catch((error) =>
         logger.error("Failed to record scan operation outcome", {

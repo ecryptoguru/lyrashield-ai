@@ -70,11 +70,14 @@ describe("processLoopClosureSweep — durable retry with terminal visibility", (
 
     expect(result).toEqual({ claimed: 1, completed: 1, deferred: 0, failedTerminal: 0 })
     expect(handleMergedMock).toHaveBeenCalledWith(
-      "ws-1",
-      "lyrashield/fix-abc",
-      42,
-      expect.any(Function),
-      "acme/repo"
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        branchName: "lyrashield/fix-abc",
+        prNumber: 42,
+        assertRetestAllowed: expect.any(Function),
+        repoFullName: "acme/repo",
+        assertRetestWorkerAvailable: expect.any(Function),
+      })
     )
     expect(enqueueScanMock).toHaveBeenCalledWith(
       expect.objectContaining({ scanId: "scan-retest-1", workspaceId: "ws-1" })

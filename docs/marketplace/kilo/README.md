@@ -22,7 +22,7 @@ Skills only provide workflow instructions; they do not configure MCP or grant to
 For a remote server, open **Settings → Agent Behaviour → MCP Servers → Add Server → Remote HTTP**
 and use `https://app.lyrashieldai.com/api/mcp`, or configure it under `mcp` in
 `~/.config/kilo/kilo.json` or `~/.config/kilo/kilo.jsonc` globally, or in the project's
-`kilo.json`, `kilo.jsonc`, `.kilo/kilo.json`, or `.kilo/kilo.jsonc`. See
+`kilo.json`, `kilo.jsonc`, `.kilo/kilo.json` or `.kilo/kilo.jsonc`. See
 [Kilo's MCP setup guide](https://kilo.ai/docs/automate/mcp/using-in-kilo-code).
 Kilo supports OAuth for remote MCP servers when the server advertises it; in the CLI use
 `kilo mcp auth lyrashield`. The API-key header example is an alternative hosted API-key path, not
@@ -34,5 +34,5 @@ published archives and a top-level `skills` list in `MCP.yaml`; this manifest no
 bundled skill IDs. Archive publication and the official marketplace packaging/generation flow are
 still pending, so automatic companion installation is not available yet. Install the prepared
 folders manually until the bundles are released. The files follow Kilo's documented format, but
-native loading, OAuth delegation, and authenticated workflow acceptance have not yet been verified
+native loading, OAuth delegation and authenticated workflow acceptance have not yet been verified
 against a live Kilo client.

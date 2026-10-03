@@ -52,7 +52,7 @@ const narrowSession = {
   oauth: {
     connectionId: "conn-1",
     workspaceId: "ws-1",
-    scopes: ["lyrashield.write"],
+    scopes: ["lyrashield.read", "lyrashield.write"],
     allowedOperations: ["report.create"],
     allowedTargetIds: ["target-a"],
     allTargets: false,
@@ -63,10 +63,20 @@ const allTargetsSession = {
   oauth: {
     connectionId: "conn-1",
     workspaceId: "ws-1",
-    scopes: ["lyrashield.write"],
+    scopes: ["lyrashield.read", "lyrashield.write"],
     allowedOperations: ["report.create"],
     allowedTargetIds: [],
     allTargets: true,
+  },
+}
+const readOnlySession = {
+  userId: "read-only-user",
+  oauth: {
+    connectionId: "read-only-connection",
+    workspaceId: "ws-1",
+    scopes: ["lyrashield.read"],
+    allowedTargetIds: ["target-a"],
+    allTargets: false,
   },
 }
 
@@ -299,6 +309,7 @@ describe("GET /api/reports/[id] — authenticated private detail", () => {
     expect(body.data.launchReport.provenance.gateVerdictId).toBe("verdict-1")
     expect(body.data.launchReport.provenance.assessedIdentity.value).toBe("b".repeat(40))
     expect(getLaunchReportDetail).toHaveBeenCalledWith("report-1", "ws-1")
+    expect(resolveReportDelegationTarget).not.toHaveBeenCalled()
   })
 
   it("omits launch provenance for other report types", async () => {
@@ -325,6 +336,49 @@ describe("GET /api/reports/[id] — authenticated private detail", () => {
       "GET"
     )
     expect(getShareableReport).not.toHaveBeenCalled()
+  })
+
+  it("denies a target-a connection reading a report persisted on target-b", async () => {
+    vi.mocked(requirePermission).mockResolvedValue({ session: narrowSession } as never)
+    resolveReportDelegationTarget.mockResolvedValue({ targetId: "target-b" })
+
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "report-1" }) })
+
+    expect(response.status).toBe(403)
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(narrowSession, "target-b")
+    expect(getLaunchReportDetail).not.toHaveBeenCalled()
+  })
+
+  it("allows a connection to read a report when its persisted target is in the grant", async () => {
+    vi.mocked(requirePermission).mockResolvedValue({ session: narrowSession } as never)
+    resolveReportDelegationTarget.mockResolvedValue({ targetId: "target-a" })
+
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "report-1" }) })
+
+    expect(response.status).toBe(200)
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(narrowSession, "target-a")
+  })
+
+  it("allows an all-targets connection to read a report outside its explicit target list", async () => {
+    vi.mocked(requirePermission).mockResolvedValue({ session: allTargetsSession } as never)
+    resolveReportDelegationTarget.mockResolvedValue({ targetId: "target-b" })
+
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "report-1" }) })
+
+    expect(response.status).toBe(200)
+    expect(resolveReportDelegationTarget).not.toHaveBeenCalled()
+    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
+  })
+
+  it("keeps read-only OAuth report reads workspace-wide", async () => {
+    vi.mocked(requirePermission).mockResolvedValue({ session: readOnlySession } as never)
+    resolveReportDelegationTarget.mockResolvedValue({ targetId: "target-b" })
+
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "report-1" }) })
+
+    expect(response.status).toBe(200)
+    expect(resolveReportDelegationTarget).not.toHaveBeenCalled()
+    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
   })
 
   it("returns an ETag on 200 and a bodyless 304 for a matching If-None-Match (W2.4)", async () => {

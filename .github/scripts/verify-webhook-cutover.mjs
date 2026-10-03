@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process"
 
-const protocol = "durable-claims/1"
+const protocol = "durable-claims/2"
 const fail = (message) => {
   throw new Error(
     `${message}. First webhook cutover requires the approved maintenance runbook; normal release cannot bootstrap or bypass it.`
@@ -96,7 +96,7 @@ for (const name of [
 
 // Inspect the running container only; no one-shot job, restart, queue write or secret read.
 const code =
-  'const billing=await import("@lyrashield/billing"); const {getSystemPrisma}=await import("@lyrashield/db"); const prisma=getSystemPrisma(); try { const rows=await prisma.$queryRawUnsafe(`SELECT count(*)::int AS count FROM "_prisma_migrations" WHERE migration_name = $1 AND finished_at IS NOT NULL AND rolled_back_at IS NULL`, "20260930120000_webhook_track_claims"); console.log(JSON.stringify({protocol:billing.WEBHOOK_TRACK_CLAIM_PROTOCOL,product:process.env.LYRASHIELD_PRODUCT_REVISION,digest:process.env.LYRASHIELD_WORKER_IMAGE_DIGEST,engine:process.env.LYRASHIELD_ENGINE_REVISION,migrated:rows[0]?.count===1})); } finally { await prisma.$disconnect(); }'
+  'const billing=await import("@lyrashield/billing"); const {getSystemPrisma}=await import("@lyrashield/db"); const prisma=getSystemPrisma(); try { const migrations=await prisma.$queryRawUnsafe(`SELECT count(*)::int AS count FROM "_prisma_migrations" WHERE (migration_name = $1 OR migration_name = $2 OR migration_name = $3 OR migration_name = $4 OR migration_name = $5) AND finished_at IS NOT NULL AND rolled_back_at IS NULL`, "20260930120000_webhook_track_claims", "20261002120000_webhook_track_due_db_default", "20261002130000_webhook_track_utc_schedule", "20261002130100_webhook_track_utc_schedule_index", "20261002130200_webhook_track_operator_recovery"); const columns=await prisma.$queryRawUnsafe(`SELECT count(*)::int AS count FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid WHERE c.relname = $1 AND a.attname IN ($2, $3) AND format_type(a.atttypid, a.atttypmod) = $4 AND NOT a.attisdropped`, "WebhookEventTrack", "nextAttemptAtUtc", "leaseExpiresAtUtc", "timestamp(3) with time zone"); console.log(JSON.stringify({protocol:billing.WEBHOOK_TRACK_CLAIM_PROTOCOL,product:process.env.LYRASHIELD_PRODUCT_REVISION,digest:process.env.LYRASHIELD_WORKER_IMAGE_DIGEST,engine:process.env.LYRASHIELD_ENGINE_REVISION,migrated:migrations[0]?.count===5 && columns[0]?.count===2})); } finally { await prisma.$disconnect(); }'
 // Constant script text; no user-controlled shell interpolation.
 const script = `set -eu
 systemctl is-active --quiet lyrashield-worker.service

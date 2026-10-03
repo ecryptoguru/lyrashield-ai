@@ -82,9 +82,15 @@ import {
   completeAgentOperation,
   failAgentOperation,
   createScan,
+  WorkspaceScanConcurrencyLimitError,
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
-import { enqueueScanJob } from "../../../lib/queue"
+import { ScanExecutionPlanInputError } from "@lyrashield/types"
+import {
+  assertScanWorkerAvailable,
+  enqueueScanJob,
+  ScanWorkerUnavailableError,
+} from "../../../lib/queue"
 import { checkScanCreateRateLimit } from "../../../lib/rate-limit"
 import { assertScanAllowed } from "@lyrashield/billing"
 
@@ -167,9 +173,126 @@ describe("scan operation route regressions", () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(null)
     const res = await POST(request())
     expect(res.status).toBe(404)
+    expect((await res.json()).error.details.operationOutcome).toBe("OPERATION_NOT_SUBMITTED")
     expect(claimOrGetAgentOperation).not.toHaveBeenCalled()
     expect(failAgentOperation).not.toHaveBeenCalled()
     expect(completeAgentOperation).not.toHaveBeenCalled()
+  })
+  it("records a concurrency refusal as not submitted and exposes that outcome", async () => {
+    vi.mocked(createScan).mockRejectedValue(new WorkspaceScanConcurrencyLimitError() as never)
+
+    const res = await POST(request())
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error.details).toMatchObject({
+      operationOutcome: "OPERATION_NOT_SUBMITTED",
+      refusal: { reason: "concurrency_limit" },
+    })
+    expect(failAgentOperation).toHaveBeenCalledWith(
+      "op-1",
+      "ws-1",
+      expect.objectContaining({ error: "OPERATION_NOT_SUBMITTED" })
+    )
+    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+  it.each([
+    [
+      "duplicate active scan",
+      Object.assign(new Error("unique target scan"), { code: "P2002" }),
+      "scan_in_progress",
+      409,
+    ],
+    [
+      "target removed before creation",
+      new Error("Target not found in this workspace"),
+      "target_not_found",
+      404,
+    ],
+    [
+      "invalid execution plan",
+      new ScanExecutionPlanInputError("Plan inputs are invalid"),
+      "plan_invalid",
+      400,
+    ],
+  ])("marks %s as not submitted", async (_label, rejection, reason, expectedStatus) => {
+    vi.mocked(createScan).mockRejectedValue(rejection as never)
+
+    const res = await POST(request())
+
+    expect(res.status).toBe(expectedStatus)
+    expect((await res.json()).error.details).toMatchObject({
+      operationOutcome: "OPERATION_NOT_SUBMITTED",
+      refusal: { reason },
+    })
+    expect(failAgentOperation).toHaveBeenCalledWith(
+      "op-1",
+      "ws-1",
+      expect.objectContaining({ error: "OPERATION_NOT_SUBMITTED" })
+    )
+    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+  it("marks a rate-limit refusal as not submitted", async () => {
+    vi.mocked(checkScanCreateRateLimit).mockResolvedValue({
+      limited: true,
+      remaining: 0,
+      retryAfter: 10,
+    } as never)
+
+    const res = await POST(request())
+
+    expect(res.status).toBe(429)
+    expect((await res.json()).error.details).toMatchObject({
+      operationOutcome: "OPERATION_NOT_SUBMITTED",
+      refusal: { reason: "rate_limited" },
+    })
+    expect(failAgentOperation).toHaveBeenCalledWith(
+      "op-1",
+      "ws-1",
+      expect.objectContaining({ error: "OPERATION_NOT_SUBMITTED" })
+    )
+  })
+  it("marks an unavailable worker refusal as not submitted", async () => {
+    vi.mocked(assertScanWorkerAvailable).mockRejectedValue(new ScanWorkerUnavailableError())
+
+    const res = await POST(request())
+
+    expect(res.status).toBe(503)
+    expect((await res.json()).error.details).toMatchObject({
+      operationOutcome: "OPERATION_NOT_SUBMITTED",
+      refusal: { reason: "worker_unavailable" },
+    })
+    expect(failAgentOperation).toHaveBeenCalledWith(
+      "op-1",
+      "ws-1",
+      expect.objectContaining({ error: "OPERATION_NOT_SUBMITTED" })
+    )
+  })
+  it("keeps an enqueue failure recoverable and does not claim it was not submitted", async () => {
+    vi.mocked(enqueueScanJob).mockRejectedValueOnce(new Error("queue unavailable"))
+
+    const res = await POST(request())
+
+    expect(res.status).toBe(503)
+    expect((await res.json()).error.details?.operationOutcome).toBeUndefined()
+    expect(failAgentOperation).toHaveBeenCalledWith(
+      "op-1",
+      "ws-1",
+      expect.objectContaining({ error: "OPERATION_OUTCOME_UNKNOWN", resultReference: "new-scan" })
+    )
+  })
+  it("keeps an ambiguous scan creation failure recoverable", async () => {
+    vi.mocked(createScan).mockRejectedValueOnce(new Error("database connection lost") as never)
+
+    const res = await POST(request())
+
+    expect(res.status).toBe(500)
+    expect((await res.json()).error.details?.operationOutcome).toBeUndefined()
+    expect(failAgentOperation).toHaveBeenCalledWith(
+      "op-1",
+      "ws-1",
+      expect.objectContaining({ error: "OPERATION_OUTCOME_UNKNOWN" })
+    )
+    expect(enqueueScanJob).not.toHaveBeenCalled()
   })
   it("binds the selected policy to operation input", async () => {
     await POST(request("policy-a"))

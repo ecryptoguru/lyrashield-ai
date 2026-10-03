@@ -28,6 +28,7 @@ import { useReportsWebMcp } from "./reports-webmcp"
 
 type ReportCreationScope = { kind: "workspace" } | { kind: "scan"; scanId: string }
 type ReadFailure = { kind: "denied" | "failed"; message: string }
+type AvailableScan = { id: string; createdAt: string; target: { name: string }; status: string }
 
 function readFailure(error: unknown, fallback: string): ReadFailure {
   if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
@@ -170,17 +171,15 @@ export function ReportsClient({
     setScansError(null)
     setScanPageError(null)
 
-    let availableScans: Array<{ id: string; target: { name: string }; status: string }> = []
+    let availableScans: AvailableScan[] = []
     let cursor: string | null = null
     let listFailure: ReadFailure | null = null
     try {
       const params: Record<string, string> = { workspaceId, status: "COMPLETED" }
       if (initialTargetId) params.targetId = initialTargetId
-      const res = await apiGetPaginated<{
-        id: string
-        target: { name: string }
-        status: string
-      }>("/api/scans", params, { schema: reportScansPaginatedSchema })
+      const res = await apiGetPaginated<AvailableScan>("/api/scans", params, {
+        schema: reportScansPaginatedSchema,
+      })
       availableScans = res.items
       cursor = res.nextCursor
     } catch (error) {
@@ -191,13 +190,12 @@ export function ReportsClient({
     let linkedScanFound = !initialScanId
     if (initialScanId && !availableScans.some((scan) => scan.id === initialScanId)) {
       try {
-        const linkedScan = await apiGet<{
-          id: string
-          target: { name: string }
-          status: string
-        }>(`/api/scans/${initialScanId}?workspaceId=${encodeURIComponent(workspaceId)}`, {
-          schema: reportScanSchema,
-        })
+        const linkedScan = await apiGet<AvailableScan>(
+          `/api/scans/${initialScanId}?workspaceId=${encodeURIComponent(workspaceId)}`,
+          {
+            schema: reportScanSchema,
+          }
+        )
         if (linkedScan.status === "COMPLETED") {
           availableScans.unshift(linkedScan)
           linkedScanFound = true
@@ -213,6 +211,7 @@ export function ReportsClient({
     setScans(
       availableScans.map((scan) => ({
         id: scan.id,
+        createdAt: scan.createdAt,
         targetName: scan.target.name,
         status: scan.status,
       }))
@@ -238,11 +237,9 @@ export function ReportsClient({
     try {
       const params: Record<string, string> = { workspaceId, status: "COMPLETED", cursor }
       if (initialTargetId) params.targetId = initialTargetId
-      const res = await apiGetPaginated<{
-        id: string
-        target: { name: string }
-        status: string
-      }>("/api/scans", params, { schema: reportScansPaginatedSchema })
+      const res = await apiGetPaginated<AvailableScan>("/api/scans", params, {
+        schema: reportScansPaginatedSchema,
+      })
       if (!isPickerScopeCurrent(requestScope) || scansPageRequestRef.current !== requestId) return
       setScans((current) => {
         const knownIds = new Set(current.map((scan) => scan.id))
@@ -252,6 +249,7 @@ export function ReportsClient({
             .filter((scan) => !knownIds.has(scan.id))
             .map((scan) => ({
               id: scan.id,
+              createdAt: scan.createdAt,
               targetName: scan.target.name,
               status: scan.status,
             })),

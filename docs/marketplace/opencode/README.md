@@ -37,7 +37,7 @@ available skills. Upgrade with the same command; remove LyraShield-owned files w
 
 Merge [opencode.json](./opencode.json) into `opencode.json` at your project root or
 `~/.config/opencode/opencode.json`. It uses the hosted Streamable HTTP MCP endpoint and requests
-only `lyrashield.read`; it contains no API key, client secret, or bearer header. Authenticate with
+only `lyrashield.read`; it contains no API key, client secret or bearer header. Authenticate with
 `opencode mcp auth lyrashield`, then inspect connection state with `opencode mcp list`. OpenCode
 performs OAuth and keeps tokens in its own credential store. Run `opencode mcp logout lyrashield`
 to remove the stored connection.
@@ -48,7 +48,7 @@ add that scope unless those writes are intended.
 
 ## Support boundary
 
-OpenCode stable documents native skill discovery, remote MCP, OAuth, and dynamic client
+OpenCode stable documents native skill discovery, remote MCP, OAuth and dynamic client
 registration. The configuration matches those documented interfaces and LyraShield's current
 OAuth endpoint, but authenticated OpenCode client runtime acceptance, expiry/reconnect behavior,
 and marketplace listing are not verified by this artifact. Treat those as pending until tested in

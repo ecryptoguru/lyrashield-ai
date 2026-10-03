@@ -25,12 +25,6 @@ export interface ToolOperationDescriptor {
 
 export const TOOL_OPERATION_MAP: Record<string, ToolOperationDescriptor> = {
   // Read tools
-  lyrashield_get_workspace: {
-    canonicalOperation: CANONICAL_OPERATIONS.WORKSPACE_READ,
-    mutating: false,
-    requiresTarget: false,
-    isBillable: false,
-  },
   lyrashield_list_workspaces: {
     canonicalOperation: CANONICAL_OPERATIONS.WORKSPACE_READ,
     mutating: false,
@@ -43,20 +37,8 @@ export const TOOL_OPERATION_MAP: Record<string, ToolOperationDescriptor> = {
     requiresTarget: false,
     isBillable: false,
   },
-  lyrashield_get_target: {
-    canonicalOperation: CANONICAL_OPERATIONS.TARGET_READ,
-    mutating: false,
-    requiresTarget: true,
-    isBillable: false,
-  },
   lyrashield_get_findings: {
     canonicalOperation: CANONICAL_OPERATIONS.FINDING_LIST,
-    mutating: false,
-    requiresTarget: false,
-    isBillable: false,
-  },
-  lyrashield_get_finding_detail: {
-    canonicalOperation: CANONICAL_OPERATIONS.FINDING_READ,
     mutating: false,
     requiresTarget: false,
     isBillable: false,
@@ -67,28 +49,16 @@ export const TOOL_OPERATION_MAP: Record<string, ToolOperationDescriptor> = {
     requiresTarget: false,
     isBillable: false,
   },
-  lyrashield_get_reports: {
-    canonicalOperation: CANONICAL_OPERATIONS.REPORT_LIST,
+  lyrashield_get_scan_quality: {
+    canonicalOperation: CANONICAL_OPERATIONS.SCAN_READ,
     mutating: false,
     requiresTarget: false,
-    isBillable: false,
-  },
-  lyrashield_check_eligibility: {
-    canonicalOperation: CANONICAL_OPERATIONS.SCAN_ELIGIBILITY,
-    mutating: false,
-    requiresTarget: true,
     isBillable: false,
   },
   lyrashield_get_scan_eligibility: {
     canonicalOperation: CANONICAL_OPERATIONS.SCAN_ELIGIBILITY,
     mutating: false,
     requiresTarget: true,
-    isBillable: false,
-  },
-  lyrashield_get_verdict: {
-    canonicalOperation: CANONICAL_OPERATIONS.GATE_READ,
-    mutating: false,
-    requiresTarget: false,
     isBillable: false,
   },
   lyrashield_get_launch_readiness: {
@@ -141,35 +111,17 @@ export const TOOL_OPERATION_MAP: Record<string, ToolOperationDescriptor> = {
     requiresTarget: false,
     isBillable: false,
   },
-  lyrashield_create_fix_proposal: {
-    canonicalOperation: CANONICAL_OPERATIONS.FIX_PROPOSAL_CREATE,
-    mutating: true,
-    requiresTarget: false,
-    isBillable: false,
-  },
   lyrashield_record_fix_proposal: {
     canonicalOperation: CANONICAL_OPERATIONS.FIX_PROPOSAL_CREATE,
     mutating: true,
     requiresTarget: false,
     isBillable: false,
   },
-  lyrashield_request_retest: {
-    canonicalOperation: CANONICAL_OPERATIONS.RETEST_CREATE,
-    mutating: true,
-    requiresTarget: false,
-    isBillable: true,
-  },
   lyrashield_verify_fix: {
     canonicalOperation: CANONICAL_OPERATIONS.RETEST_CREATE,
     mutating: true,
     requiresTarget: false,
     isBillable: true,
-  },
-  lyrashield_create_fix_pr: {
-    canonicalOperation: CANONICAL_OPERATIONS.FIX_PR_CREATE,
-    mutating: true,
-    requiresTarget: false,
-    isBillable: false,
   },
   lyrashield_cancel_scan: {
     canonicalOperation: CANONICAL_OPERATIONS.SCAN_CANCEL,

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { formatAge, formatDate, formatDateTime, formatDuration, formatTime } from "./date-format"
+import {
+  formatAge,
+  formatDate,
+  formatDateTime,
+  formatDateTimeUtc,
+  formatDuration,
+  formatTime,
+  formatTimeUtc,
+} from "./date-format"
 
 describe("deterministic date formatting", () => {
   const value = "2026-07-14T09:05:06.000Z"
@@ -7,7 +15,9 @@ describe("deterministic date formatting", () => {
   it("uses a fixed locale and UTC timezone for server/client parity", () => {
     expect(formatDate(value)).toBe("Jul 14, 2026")
     expect(formatDateTime(value)).toBe("Jul 14, 2026, 09:05")
+    expect(formatDateTimeUtc(value)).toBe("Jul 14, 2026, 09:05 UTC")
     expect(formatTime(value)).toBe("09:05")
+    expect(formatTimeUtc(value)).toBe("09:05 UTC")
   })
 
   it("treats timezone-less API date-times as UTC on every host", () => {

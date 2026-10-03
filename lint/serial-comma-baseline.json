@@ -1,0 +1,405 @@
+{
+  "version": 1,
+  "pattern": ", +(and|or)\\b in list-final contexts; clause-joining commas excluded",
+  "roots": [
+    "apps/marketing/src",
+    "apps/marketing/public",
+    "docs",
+    "packages/security/src",
+    "packages/agent-registry/src",
+    "packages/agent-plugin/plugin/skills",
+    "packages/agent-plugin/plugin/codex-plugin/skills",
+    "packages/agent-plugin/src/build.ts",
+    "packages/myra/src",
+    "packages/pricing/src",
+    "packages/agent-rules/src",
+    "packages/mcp/src",
+    "packages/types/src/openapi"
+  ],
+  "files": {
+    "apps/marketing/src/components/landing/EvidenceWorld.astro": {
+      "3ee9f096149c0e6862368a493068ab35427b839c2ec6b21d439d4db26ed4aee0": 1
+    },
+    "apps/marketing/src/content/blog/copilot-cli-mcp-security-workflow.mdx": {
+      "7a79c4b28cf23a2083af993d8e1277da2530a68bc1271804d1d24caf682bca46": 1
+    },
+    "apps/marketing/src/lib/blog-categories.ts": {
+      "032b1599f3253254bd3a45b16de917a0b11f67ca9f520ea2fe0f0c6c19d68cc0": 1
+    },
+    "apps/marketing/src/lib/blog-publishing.ts": {
+      "220891539ad511cb015080406fc3d59034fd4657059f8ae87378dea548a7d72b": 1
+    },
+    "apps/marketing/src/lib/posthog-privacy.test.ts": {
+      "bf1eb09b7da03eca7cfc299e2feaa90144673739c20cff167acefdda2fb3270c": 1
+    },
+    "apps/marketing/src/lib/reveal.ts": {
+      "124fd5401add553dd9d85ccaf30ce2dafb09605b80e740fd2a7a3029559f96bf": 1
+    },
+    "apps/marketing/src/lib/tool-checks.test.ts": {
+      "c1387397ab93ad655b44195ab82901b081445abc105d87c6d101fa67737b43ad": 1
+    },
+    "apps/marketing/src/lib/webmcp-security.test.ts": {
+      "08d2b97a74b6479df6af5bcd66f29cb80a7826b92fbf73153b1b4b173f2b46b7": 1
+    },
+    "apps/marketing/src/pages/demo.astro": {
+      "d18dec63e1df174dcb8ed5b34a33c97b13eaf697059657b1358661fdd7b43f08": 1
+    },
+    "apps/marketing/src/pages/llms.txt.ts": {
+      "e61905926408aa2ee5e9fb920113c9814df1c6ad55ee85b5fe701479d526190e": 1
+    },
+    "apps/marketing/src/styles/global.css": {
+      "cbe7928e8e3ea2d61072371dc4ff55f0ce01859c9888e28dfc79edaa74fbb309": 1
+    },
+    "apps/marketing/src/tests/blog-built-crawler.test.ts": {
+      "276ae95f438cb472d0e4930929955d2ab3f717f9a157a4a9bef891b4a0ac7619": 1,
+      "7e5999cc8da5e75fadd39e1b0da1f574491ccb2650115108a434f22d4204d4e8": 1,
+      "ba219ff3e3a853f4ddcd38d7db3c0acbd7553b6bc2eb41149034d0b046b055ac": 1
+    },
+    "apps/marketing/src/tests/blog-rendering.test.ts": {
+      "2b4d46182ce2d8a153699eb2faff72e513b33ca7908f7df6e6eae50d141f0463": 1,
+      "bf3b40e7401a401bacf3cb2d6a29f4fe40877149a835e435fe25f1b6f8d202ce": 1
+    },
+    "apps/marketing/src/tests/blog-validation.test.ts": {
+      "0abc3cc95882f0b4b31318db4dd8879de0ace6762ad9a00d77a2ec164ae12815": 1,
+      "0cb18e09fa3bbeec5dd30b1ff509ba43cc6a58bea5c7a0b0a9f92a1f8fcdb396": 1,
+      "bbee7543fe78ad5b3ab0d6e97630dd10b4f0c9c1dc93396596b8f224a0a57737": 1,
+      "cb8453886107ea16540f32a4e9d04054656faa00dd6dbed8bd31867ffecb2aae": 1,
+      "cc9d1f4eb355b76987225b53fa6c404809123607e30c1d01644fe06a2ba35325": 1,
+      "d0f283079d6aa33731abb3cb8bde621f19507377173ef9739b9d5ca5bd79a800": 1
+    },
+    "apps/marketing/src/tests/compare-validation.test.ts": {
+      "ce7bdae54c82ea823984d40672f0c587ebd4cefdc2e5856a817ebc1ed04d8f0d": 1
+    },
+    "apps/marketing/src/tests/myra-status.test.ts": {
+      "8c2e3092064bea6436a69e494e1c81aae72838c0d771f20701c9870c346c64b3": 1
+    },
+    "apps/marketing/src/tests/seo.test.ts": {
+      "f6f7e4fc55f42cd150655bc4b68a77cecd1f9bf77249806237eaaba59df270e8": 1
+    },
+    "apps/marketing/src/tests/site-seo-gate.test.ts": {
+      "840809138848e857fe17e3ab0ed746f2267649ab506ebabded28af9ca124a1c1": 1
+    },
+    "docs/Phase2.md": {
+      "63cdcd15368f3af8ed155f2a25e16970f16bb996c3fffe7129ec826ba22b5b30": 1,
+      "925b4a6028879739fc83ace427182cbe3b84ca4ba6a70f713a5197664ee636b5": 1,
+      "bb0e9a093538ff269f16a59d829cc45de7cc8ef44ef8d60610e2848b2539fe7c": 1,
+      "ece621e4ec7084ccb2bb29345efdc1970552ee0b1e894b7968a5c669b04beb78": 1
+    },
+    "docs/editorial/blog-image-manifests/batch-11.json": {
+      "e05b7110ff2418561b361fd17b6004345c0d47dd6b4b7256d350a49fd22dfbb4": 1,
+      "f51da54c1a33ee865d36281b70c43c1a170eae65517ecbb25e6295bdcd51b530": 1
+    },
+    "docs/marketplace/LICENSE": {
+      "12e1e083a9183360dc40207faa47b5766a386b37dd7c187527e99065b470265c": 1,
+      "201b96535abd093127148bed06685294b5244873bfd4a11d373330c358f532ce": 1,
+      "3d8fcc49538bd134588f46e9554d6450c3939b112f68b5e4f2d85986fbac48b2": 1,
+      "4e47bc19bf77cab89a4195d78417b73e08c21d751c73dd18659740c4c2643c65": 1,
+      "50538afff59a09297b41a2dc9148c59840f7b5a870cfcf9018c1f95a4a86bf11": 1,
+      "67364d4d2bc57e2d779b46ab7345c2ce96d96cf7fd8274eeb703951cc26810ef": 1,
+      "683d7362e52deda34dc75c1edcbc5d53cda67ca9dbc5595fedbd0e9ccf120e61": 1,
+      "9449c3ad9c541e23cbe01cdb5f428e2bb9fb6789edf97e8b31037c91c4b420a3": 1,
+      "aca1c019d2a0a4a626a8267256a4572c0dba73a8cb78c8deda6ff939c950b595": 1,
+      "d96bc66289b05117b093d7bb84cfca7920f4b3bd3b9df7e16a7aae836fbacb9f": 1,
+      "d9fc76c3be457555505f527419a293843ee2c3a207e59cb3a95b6fc6bc3ba13a": 1
+    },
+    "docs/marketplace/devin-desktop/README.md": {
+      "88744c87ec250241e60897493f3500cfe26fbf388d900f397ed5ee2d157685d7": 1
+    },
+    "docs/marketplace/gemini-extension/commands/lyrashield/review-changes.toml": {
+      "68b7b6b8bc8607a1f5eb22285c382d56f666620a3a82d27b95a188df4d923993": 1,
+      "7a8dfd539c39eb4c6e305f199a73bd592bed98c12d7d0ada37e671499560e776": 1
+    },
+    "docs/marketplace/gemini-extension/commands/lyrashield/scan-project.toml": {
+      "1015495d5be71bc1e032c5f07f534c3128160546fbe7655d29ded2de4caec59a": 1,
+      "6807535863af70e95a768d49da76be4f58bef80ea3ca31990b018079de021530": 1,
+      "73743b9d67d750acf8d469bbd1ec79b927b69bde3f44307e9dbd542c6cd7bc15": 1,
+      "a23ba6be875968a72a328e84a03c6ca1a25e3d4fd62e0f4456159a48caf3f2e7": 1
+    },
+    "docs/marketplace/github-copilot-cloud-agent/README.md": {
+      "70b33488f65c6d1be622b2d37af7ca36c711b14ed5afe9bf56d5c774818f4e76": 1
+    },
+    "docs/marketplace/lovable/imports/fix-and-retest.zip": {
+      "35ba1d24269fca653146b14c917f534dfa77ad6f7e66cd3ea0e4f1ce66708e2a": 1,
+      "460472e1f8ea1d0afca23f65d1856700599e31b5cb52c14c648efc567b04ce34": 1,
+      "8363491c5782f462c2326b4fea263c707c8b7dd03e3eb8ec76efb77632e6b563": 1,
+      "d2adc8efa591da9b4e64fa0e92945ecc36f9b0bd385bb58099715e2ce510a9bb": 1
+    },
+    "docs/marketplace/lovable/imports/get-started.zip": {
+      "1e13fe898beea91c4e559fe21ebacdeebfa32fd4c725782628eaaa5010eb2e56": 1,
+      "5651123aaad4c4525314446800e3e07963cd70255ab81618a563a3a4fff4ccf9": 1,
+      "cc052f28262fa640e2e2f1b9f81ee2ae2830ed0d394555587403a799788aa685": 1,
+      "d65d8a4fdff7559f9add2b30771d3826994f7410ff4b584d2f7d13bd3a75bdf5": 1
+    },
+    "docs/marketplace/lovable/imports/launch-readiness.zip": {
+      "59e983af224da0af8fb2abbf5347d314747678de7f1f7b58abcfdc15cf1d59ca": 1,
+      "6dcf8691fbddbc75aab818ca67d31f8738bdb445b80bb29fdbfc45aeab551b8c": 1
+    },
+    "docs/marketplace/lovable/imports/scan-project.zip": {
+      "1caecbd16cf8a48d6f8405047fe3f4620d0a5ea4f4f17d3dab205ea116b0ba6c": 1,
+      "fb187239ecfbb14b719d4e5902cc60b45ce29800f97729b2191b6256fff326f2": 1
+    },
+    "docs/marketplace/mcp-registry/schema/server.schema.json": {
+      "0134001208bf1b8dcdaae434267b1a3e0b6b7b4f2882e8b20e55809c3775d9aa": 1,
+      "2df422f33f6e6239a8629cd55b9670c4d3bfb4b236a54c88ea3750b4820ffa76": 1,
+      "569555c3b6f7e888701b2214bca4a259e5f6dfaf995f600a9d42c6d15341d3b7": 1,
+      "6ffb77157f222d0587d942815d0a3da5d25fd7867cf08021e63d1e2cb80ad1a7": 1,
+      "b7b954795417aee70866572f7276687741eff5c7fbfc2deec4e9d4c436a58d63": 1
+    },
+    "docs/marketplace/pi/validate.mjs": {
+      "c92b26facbec794bc213545d39b164e219f942eda9d6c1538683b299ce60763d": 1,
+      "d2f2f931532d8ff58b14bc7971c85cb53f3275cd0aef70f4e47f63b18fae7c7e": 1
+    },
+    "docs/marketplace/replit/README.md": {
+      "577483050cc7bccc2026ba25f39085dba0124099100be5e8b48e424df9c0bbb3": 1
+    },
+    "docs/marketplace/reviewer-pack/workflows.json": {
+      "527f26fd6d785d92ab3ccb53e69ea2317d99885408c8e5ccdbe969558c34c29a": 1,
+      "64a398f13b905e393a0ad11c6da94f47c7342fc8593b506d185f7f3c7d98f1e9": 1,
+      "687d45c5cae22f19021c8bc4b1875e818f5918022fa1062d69ca78c70867cdb2": 1,
+      "7137c522bb0bf0164a1e657df4552187546f7324c268d561a831e91bc3c9abb1": 1,
+      "7525d552f04e5531983a9d1ee47d2bbe9b4c06f4fcd3a11346b7813756a84826": 1,
+      "98fcdfdab39c309e9cb0c0a7402d3c44a285afa78345fac348b0b766ec62d5af": 1,
+      "9a9f9a49c523722b058bf22bd88b52fe6c34ab40f0436704d908080f7526eb11": 1,
+      "9f13d11133635feed6f3f712af0bc732d9642dada4dd4302c04e799dc8ebd3ca": 1,
+      "c4df3148cd7d2e47181fc29dc7da8473cc62c563564c7716946f6927c330a6db": 1
+    },
+    "docs/marketplace/scripts/tests/verify-published-mcp.fixtures.mjs": {
+      "bd978bae39b7d9a10566ee567bc7b4620f29634f657a903c7cb895cb8b06c213": 1
+    },
+    "docs/marketplace/scripts/validate.mjs": {
+      "7e77e2c63559fa8657ef40a7b74be39e88bf5e1a2a2a8b5a5051fc2f3c03ddc7": 1,
+      "862f517a27fd28f8c7f1c23875a526957a0b343ca51a8a37de0623f446989212": 1
+    },
+    "docs/operations.md": {
+      "2376f76da19bf7743e5e513779aad2d13c5eb0af980bd8c53fb333cdd028820c": 1,
+      "3036413f9a1ea6aabd0572c7935debbc7ddc8326336e36f281aed834133a4823": 1,
+      "37e925b68b5c649a38615c7fcd0e7b0ee3fe008908560ca5258a615f364ac5b5": 1,
+      "3a4867833676b697bb9eb4c7c274f7f02bd6eb6da35bd65279386f905840c7a6": 1,
+      "5b39421fd180f30fe42146f7e22c1ce186ad26b36d8350c6ea01d1a721703c92": 1,
+      "6f9fc08bb06d2b3994d1b206593a66b10699e6ffabec4062d1a461b329884bb2": 1,
+      "905c2b3f97718f48ff73482f0324983b57c4b48c6e0743f0e158d5cf5118e25a": 1,
+      "979c4c86be154d3be954f9d97d1bc3f228d0ba688cdeee3a3abd638c677cbdbc": 1,
+      "d044438e1627e88cdb51d46d760bf7aa9cc1ec593ccc23471010c3be0345bd2c": 1,
+      "e2abf1bbe5d0ad2550ea49af027d9b7fa79b3e3c657555f9d19dfb7fdc4837c2": 1
+    },
+    "docs/reviews/2026-09-30/cross-repo-fix-plan.md": {
+      "0268b70720f6c21b82f24af4d71406df84d4a8b9d2d6855504f00e089d62e817": 1,
+      "03203374e0f6a811e3c9e32a8c1068d259eac3e3ecf212a5f5a8fbd2ed4720b0": 1,
+      "0e0826070b8557c351c6a058cfeccbd56d366991040097112b9792be2645301b": 1,
+      "0e57210e56016e4e62c50bcb218c3059843265771ecca692f7177a882eb57315": 1,
+      "0ee0ba9920e27b0f84fcab830edb8f9eb2f4dc12febb8d3199e9e2c54e936f1e": 1,
+      "13558da68a9ea7d84654d3777776457d1d02bc5d1e915533af71b58a1d6501e9": 1,
+      "136d558fff6c382e140489fa6170d1909fb302b3df875cba24ae2e287c7b0e68": 1,
+      "1630565e02d1b7184d8968b75ed2033f69e1ea84842c0ef19d6d9f50fef449a9": 1,
+      "178240c16d32a2cd1d670d41839f474a895ffb181f47916d54c8238437aa48cd": 1,
+      "1c8747a0b8d87e2ee8c0c46bad34acd02864752e078c99d01f19248a63a5c4c2": 1,
+      "1f42f4ac940899bb7298ccf6d7259b02c874dfb1eb525d83a4e9e228d81868dd": 1,
+      "234abe5cf9a1c5794f56b57034e4d05acafed0cf7082c679fe5a5fd385d6ece9": 1,
+      "2408def4b62b9468841092c42aacb7eb244800197ca5e78a93f836ab11165a3c": 1,
+      "26dbcd338e61ab3e8981ce3864f737dfa5400e68e54be79b332734f5e5dfd482": 1,
+      "272623881672c1efddb8d7d4ed76f131aefa3cd6161e39bb98356f2c439504ed": 1,
+      "273521c94e58627c52d503ecb5a66d5910e6243c2503a49031e22c5bf0d8395d": 1,
+      "2c98168e2963a8ccc5d8d5ae4314d422b63ae3949ee2af17d2b71ba801fbe3a2": 1,
+      "3a1fc689c38057bee0d7c415f382b787bbc4a7ba8b4c71408d07aa1a24d5ada6": 1,
+      "448b9ccd659b33fc7340e3a10d6f4c52bc7405f06495bb13ebc6abdddf9e0fa9": 1,
+      "45ad12cc93d12586a3c10cdbdf08864cd51d5dd1a4fd57591e573c02773c6e3d": 1,
+      "4d0d465a89840c5cf9d6b11fa1c252896ec5014bec864965ad7d1ac1563f37aa": 1,
+      "4ec94bd5011a40bf1ddbce765001e5377e0b9240a915b114fada917f920819c2": 1,
+      "53e67eb81c1028bdf672ed6a064efce659655ce7a71fe3ce7cab77aed490a36b": 1,
+      "58ac831e72cdc4de73198134d8405254f076ecd92fd0d285e75ced4ce438ceae": 1,
+      "58ae3cfea53c76e616bacbf3172aaf7e20f7f914f432171e51dddc81589a6d19": 1,
+      "5a55965bb79ed98b32accd287faa653f6e2c3e8b4049893275b7a5b7d2a24a85": 1,
+      "5ba3333b511f2640324cffccc963eebe37b4ce2a4def69c30c7f6246c19437da": 1,
+      "5d6dbfe72304f71a69f08f7d40edfc42224b62e1781fbfd721e0abfd6ce51cca": 1,
+      "5f9d23053f02b9b84f960b02e71ed84489dbbeda57401f83516acdc060ee1368": 1,
+      "626bad81fc7de23645250c5717046de3fe5e07bff88925b139751e3b3de100fa": 1,
+      "641300818598f9cb989ad2f6f18ed17c71dff7e4b4dcd71dd29c41f05bfe49ae": 1,
+      "645264f11712862731ea465df35e9f4188884a5ee50f144aa7df09b2fe8a51f5": 1,
+      "659af76f51321c300b6a4db9a22f3c564bc17cc71cd9eb9ecccd7f7068d922d4": 1,
+      "697d369a81294746d8bcf877d3c787d7895f85bb4c5ef13f0398f2db1c847974": 1,
+      "6b3dd31855b33772ef104fe600e7e63260b9245db34fee4927ecbd0be608e004": 1,
+      "6f13ddc8d656beb2dcd038aaebc6eb3edeecda1fbcdd4fed3c9ebf5e6f8bbddb": 1,
+      "6f5daa179e37ca67e4fb8a75ec7f34ad9afbe42490b839b2c19d3067a1b93f1a": 1,
+      "717e7db86afc8cb859d09a009553a73cda2c36172f9aa36cefc6eb62e147e90d": 1,
+      "75d4a0311d44769d6e7f76c827fe586e2fa5dbd3328cc486ac87ba12ee28d772": 1,
+      "781eeac8ddc9f4823b47566200bc303969ffc8007bf254cd98c579c422e1ccf2": 1,
+      "7ac8f01dd3c3608259ea250dad40a79cc44430854469d26cc64eb7be4284ca49": 1,
+      "7e62e51ef676ee95e4bc92aa5feb61b06bcbe994c31c79be71addd3d5229bcd5": 1,
+      "7f3e937d3d06e73e5db301b300537eef0576a9245ddd0d0ea277d097e4c032c1": 1,
+      "7f82346dc9edd583c2ffa885bd9c31f104250fa7890ed13708b0388fe6bc4c42": 1,
+      "839fcc09624e0fd294b3a4a9c30a585466c613d6ea6182d97ba2c0f4a703b31d": 1,
+      "8b85bf6c189fe405bcbf10da09308fb3f23afabca477b7e607d5cd8ec3002f09": 1,
+      "8c879e46f5e87b54a310ed5fcccafbfaf35fb9cb86ca125fed01c27ec71cf1d9": 1,
+      "8c9369ce079487e35778f52312e19c15f0eef5e8783a822a321180474d866671": 1,
+      "91619e4ab9662d556703532214096067210dba90f1f56cc820bcadd615d59f5f": 1,
+      "94b27bf17363b26476f85ee69395068cb4782aee03c08bf9190f786023ab5b25": 1,
+      "9a1c4e39d403645ed6eb7cd9b4adc4d184e0634086bdff64ed742013262ccf04": 1,
+      "9a487438e8aa3074b5bc1e5b912126dec2eaa067ca2bc566de955016a644dab3": 1,
+      "9ca1ec164b6beaafaeaa6280b1072a3f2227de659a3f61983b207de6aa9c619c": 1,
+      "a593dd747fcc54ad77edd8b260701842d07a9dad6b08ae6ee6cf0545d3acae17": 1,
+      "a65842d4da715597f9a414be598e164bfc1f1f779c4a42bf1aa2e4e8593df36d": 1,
+      "abfeb2dcd1ac0aafec066080613f1afc3858d32bfdb2e2336b7f885f1b3ac12b": 1,
+      "b12889644d4c2a1dabd11d7b5f3e6e173c9f8b78daac08d2d6e344941e805864": 1,
+      "b51e5b5c9ad714f8699dcd8e482fa687a30c245dfa96b4027f609cc9c2c8f578": 1,
+      "ba8951baf59e47ec00365f594bc9f47201ec1d616ece8eb2d0b5c857c79ff76f": 1,
+      "bb3db6ed0d05bf5f6c79ffbfeeb2e0f48a4b87ed4821f8973cba126c20cf046f": 1,
+      "bceea614f1ff5a0e3a9620c2650f8d908daf456d7c97f7397272d84d968b60af": 1,
+      "c01ec6db36721b43e098549eff2f88bd40a5731668c3b3c9b40a8202c256191c": 1,
+      "c0eec0e2a2ecfb3b8b20d3cc1a44ba25acde96d518d7743afba880e291651309": 1,
+      "c31577e7a8a559763a2f3fdfee5d8e551f9d5b2eba89ce8b352c4ba97ef40abd": 1,
+      "c3ea8f2e439533c80cf92757bef87d3b1472b7a8fd0a4bcd8cc2c3e8e7f114f6": 1,
+      "c8773809e9371c10df1787d8518d88951f6e62cafabecaf69f6c782ab902005a": 1,
+      "d418e594cf633c62671394c90ff93e56e16fd4924ac7c1a984296fbdcfc9b4cf": 1,
+      "d97521c76f477e8a47d4c7a06eecc2fa3719adcb5aba4a41e731d11382287364": 1,
+      "db21f9acd52dade621930b0316ade10eadc13d84609ce29820d211e093c115f5": 1,
+      "dd260c38b270c7ffcb888a1421cdf4c3e1ebf3af8640fe866a9418e59af53f55": 1,
+      "df7da008a606f8284956917f72737eac4ae96d2d3fb97bb0e85df332112e92bf": 1,
+      "e286bf8f18edd3c46e096f40e113a690b467bd7095499be9db63baaaeb892daf": 1,
+      "e2d604f068a03c413f767e7d88b0aaedbdaf395d70bf16113302cdaad6e77ba9": 1,
+      "e39914728f7402228addfd58b6573c4329879af8b38dd198506d10088c0b5f57": 1,
+      "e39cffea442d38b8d196eb4b306ed88ef175af17ba77dce1f80d4c070f79b2af": 1,
+      "e54d8d9e10a29ba8c7b9e4c4721cb5406dac8d87f9d80584d14dd98d18e2d8d6": 1,
+      "ebbf0507d60713a7daea837b37576beaf0896474e125b95813366d2390b6e644": 1,
+      "efe4c2c6186dc3fc9c2d63afe2424168ef0cae85ce5a2aa9e51c8fa5a7ace799": 1,
+      "f96385901a2994589c4792fc36283b7b22b18e585bc7cafd59ceeb0f9829ff98": 1,
+      "fddaa0bf7c946b0f4b45fb0fde0f31f848e7d7273cf2285f42a32a57ffcc15af": 1
+    },
+    "docs/reviews/2026-09-30/docker-results.md": {
+      "51aa2d47848f0f94e411a8530511a5ff54a6977cfd6bebfedc343ff85a615198": 1
+    },
+    "docs/reviews/2026-09-30/execution-results.md": {
+      "ecb2adf8e723c9ed4748351041a942250f0b0d40b6ad137a692a0ddd14264502": 1
+    },
+    "docs/reviews/2026-09-30/webhook-production-cutover.md": {
+      "0e0ce7747828148c00d495b69c023348aa6f600821aa8e9c732cdeb20020cdbc": 1,
+      "59b86a23b012ac765aeb5b9bc2c74cc96a3f2a728a0f03a88512910bf3ef4c4d": 1,
+      "f1a2c0bdea8485984259a934cab3b2d73f426bcab2b9b4b68e4c0a50c9e7fb18": 1
+    },
+    "docs/user-guide.md": {
+      "539c759701ef643196edceaef2b874c4f4cec649709f9fd6b897ac090975e33a": 1,
+      "53d7f90ebb2c5fc8cd50d5b00ee8d6f200b74f44c036a03ba526f65390273a5e": 1,
+      "cd24a1635df7976ff055371c95f61795158d7a087fdf9b86f499e66d6bdc194e": 1
+    },
+    "docs/webmcp-runtime.md": {
+      "690834858b1ae05e6a3318212c83189e53dc840519c117c758fdd46680d4e190": 1,
+      "e3daa94966a073bae192b9da7f385de46b58c9f6f3f9b4767f149c3f8cb278c4": 1
+    },
+    "docs/whitepaper.md": {
+      "68f4af70b2fe7566f0fee9128f167482e0b6edfd17669307b1439d5d3d22e0d5": 1
+    },
+    "docs/yellowpaper.md": {
+      "145b208dec256acb9d9dc423947defde000678e584a958f0aac4708fad42b5eb": 1,
+      "2f62b077a47a8ec09d81b399caabc80ee024d518478df706a696fc4291d0a129": 1,
+      "722a8dd14792f12d23d657d9d1216cadd74d9c951c6ad3f29118c81d559f56b3": 1,
+      "d240317d98df0835b00d9bfd93774e1fc46d46fbcabdbca55bd375dd9bcaccd7": 1,
+      "f9c5d209bd557f844e657eea0ea54abc935688befe9e601c28043e5755db62ba": 1
+    },
+    "packages/agent-registry/src/index.ts": {
+      "d53e24013ef3ba0ffd3e62faa35f681243a54b15bf4e8aae371eae61c04a296e": 1
+    },
+    "packages/agent-rules/src/__tests__/rules-cli.test.ts": {
+      "0222d2a672c4d82aeeb14ae86b4c40f3c9aa0e4709c2ef20ad045123aed6a4fa": 1
+    },
+    "packages/mcp/src/args-and-cap.test.ts": {
+      "2ccac2bf8883a01f2d7a95c62eb491eb3e0ec20fa3474ebfbe4936f03e0e52fc": 1
+    },
+    "packages/mcp/src/packed-stdio.test.ts": {
+      "67e322244e81ec99017aa035b05e4123b6b5ac6763f9052229abd6ed54c4538e": 1,
+      "a18188f512c59930fb515501d2fc81e1592a4f8f73febfb19fbd62e143993a9c": 1
+    },
+    "packages/mcp/src/prompt-injection-guard.ts": {
+      "14cae60908fcbd7f97c983cc78a1f59aa7a3bf19ff44bb537dea34ad8af85874": 1
+    },
+    "packages/mcp/src/stdio-transport.ts": {
+      "c0504dfbef286b5a80f2cfcf42d44175f438bf162c2539264f4211340f9b1428": 1
+    },
+    "packages/mcp/src/task-adapter.ts": {
+      "3901b1847d29f52726bbdc10e488855f1ad991a4d47d94a4e6a5b03003564372": 1
+    },
+    "packages/mcp/src/tool-policy.ts": {
+      "b3d7a2bfd303a5c0b4eb9070a07d6fbfc525262e630a43ad9d2c2070eed37af6": 1
+    },
+    "packages/mcp/src/tools-attachments.ts": {
+      "cc3f3aa3f16dd2436c89f50fe3a037893d72aeb33aca114e17b382db43361c5b": 1
+    },
+    "packages/mcp/src/tools-workflow.ts": {
+      "21d926bfa9c9f18ed171a0c542862bec2e42cc019dc08530f3ed646cf4733867": 1,
+      "b5a6c98ffc4d70da099b53f08796f53fc3e37472d96f6152ac278651d237fce6": 1
+    },
+    "packages/mcp/src/tools.test.ts": {
+      "570b501a30158d33d6bf05a7ce33bbe9aa73df5f4486ca06e360952cd9a9daf3": 1
+    },
+    "packages/myra/src/contracts.ts": {
+      "6619750293e4295df7d9edb9da8f20586f5650cc17adb66edb939fd91d1de3fa": 1
+    },
+    "packages/myra/src/flows.test.ts": {
+      "589e66778379a267a02c8284449718f57d61d5fecb85318a0c29cf767bccd50d": 1
+    },
+    "packages/myra/src/server/audit.test.ts": {
+      "1cb0d5718c75b2318431539799a0890fbbf92ac9c03cedcfdf88e65a4de92fee": 1
+    },
+    "packages/myra/src/server/verify.ts": {
+      "232218fee936b029e4e0c0ce14dd3b68fb54f15efd7143bbd24450131509a3f3": 1
+    },
+    "packages/pricing/src/payload-detect.ts": {
+      "70bdc61c38fe34576cd78d9cd873044cb467185d3b8a6ce25039eb6c1c8c357d": 1
+    },
+    "packages/security/src/ai-built-failure-taxonomy.test.ts": {
+      "a45ee8213f7656f59c76723b13139e85f30025330b7c6ef9c9c64b86d4ef8411": 1
+    },
+    "packages/security/src/ai-security/engine-triage.ts": {
+      "5a2dd1b0caf8d4ef3ab9ff1c4e233abf31759611cd5a8c6bfba777e5e2e2965e": 1,
+      "cf8a4998ca6b1507ee3a4f34b189eadd51e4a55fab7c27ef42e8a8235feb318f": 1
+    },
+    "packages/security/src/ai-security/fixtures.test.ts": {
+      "7e6a8deda006c985e65dbed3f811e5c608c592b9b473c3bafc5fbb26a09b51aa": 1
+    },
+    "packages/security/src/ai-security/score.test.ts": {
+      "4685aed83601695d0ec17168ce28cfc5609546ca1f266a200c5475b2c6f81ef4": 1
+    },
+    "packages/security/src/diff-advisory.ts": {
+      "5a7d488b4a9591ac482476a3ac446cb641e055c8062ccc5032aeeef606fe4a4c": 1,
+      "c372122f86b24c8b016ed9d96c02db504f4fca3f46acf1bc6211ff5085b9920c": 1
+    },
+    "packages/security/src/lite-scorecard.ts": {
+      "692f19f303dcabe28dc9d6da4bb30dfa4e05d294a80e04a900a9d7e7fa932913": 1
+    },
+    "packages/security/src/public-surface-analysis.test.ts": {
+      "8b878ee7bb9c76982dfeca31c0bddf71877e7a28c6ffbd7f7f30c074a27e9168": 1
+    },
+    "packages/security/src/public-surface.test.ts": {
+      "2c5afafe9cce376299d721aee0ba3efbe5e8c817337cf6f7fe332c817ed8bda3": 1
+    },
+    "packages/security/src/ssrf.test.ts": {
+      "59ef6d10cd91b974605706a86424a96b63d5b41c2f4f5bf384f555a45f33eb3d": 1
+    },
+    "packages/security/src/ssrf.ts": {
+      "25871adeb6bc04b67425e8dd7f888431bc31919e0817123f4850794ed75e8646": 1,
+      "78070989a1125983e3a345a1f07e0a47616793578ec1d1231beeced5f6c63a24": 1,
+      "d9c9b35cd6bf8ffdcd1b4754ec608c5221f3bebfd0e55f6a64bedb9c79f613d5": 1
+    },
+    "packages/security/src/standards/registry.ts": {
+      "cbe7072bcedaf745a474dc6473b8c95d1e05ba359b4b1050e05004045fa4d56e": 1
+    },
+    "packages/security/src/vibe-security-controls.ts": {
+      "0b1b666bb266edad06e5c76921f6a808ddd5c0b579c914ac10cf5af915f2a7bd": 1
+    },
+    "packages/security/src/webmcp/discover.test.ts": {
+      "872875088b31abb9b8d69d1a5831b1872bfc772255da8cac958d61f421f19395": 1
+    },
+    "packages/security/src/webmcp/evaluate.test.ts": {
+      "25b43979366a35fff348ac1c160f662d79205bd7c0d7e2c6cb9afb79130130e2": 1
+    },
+    "packages/security/src/webmcp/fixtures/index.ts": {
+      "b2232717117e487b42ee77cb7bc852fa2f599afe31952f0d1a9dbc9da27827d9": 1,
+      "c012faa93da02d8f94d63414656eb915d09fcba60735f75dea995c444cdb7b17": 1,
+      "c299616bca4307e41c9eb39bb80328783be0370be46fea63bd63192c0a0d0e75": 1
+    },
+    "packages/security/src/webmcp/runtime-receipt.ts": {
+      "92f392f85671b76754c9c9c6288f3add6633ae0afbb29702880f82722f774a98": 1,
+      "d1d39c7ed5a08835602c6872594015a0d7c1244efc15bc6d9c7bbb7bb83f15db": 1,
+      "d98dde41d4a39db3c579f0b5c878af236b8e835f36e86dd6479b0c40bcaef9e7": 1,
+      "f81110f51b36c682e533877cf1aca999dc055eace936eae45c1fbfa3e4b19be6": 1
+    }
+  }
+}

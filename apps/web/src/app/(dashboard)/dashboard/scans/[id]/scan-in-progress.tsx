@@ -11,7 +11,7 @@ import {
   ShieldAlert,
 } from "lucide-react"
 import { Badge, Button, Card } from "@lyrashield/ui"
-import { formatTime } from "@/lib/date-format"
+import { formatTimeUtc } from "@/lib/date-format"
 import { estimateRunMinutes, formatEstimate } from "@/lib/estimator"
 import {
   deriveCurrentStage,
@@ -270,7 +270,7 @@ export function ScanInProgress({
                     isNewest ? "text-foreground bg-teal-500/10" : "text-muted-foreground"
                   }`}
                 >
-                  <span className="shrink-0 tabular-nums">{formatTime(event.createdAt)}</span>
+                  <span className="shrink-0 tabular-nums">{formatTimeUtc(event.createdAt)}</span>
                   <span className="min-w-0 wrap-break-word">{stripStagePrefix(event.message)}</span>
                   {isNewest && (
                     <span className="ml-auto shrink-0" aria-hidden="true">

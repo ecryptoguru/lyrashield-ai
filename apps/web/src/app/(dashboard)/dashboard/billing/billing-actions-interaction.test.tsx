@@ -5,6 +5,7 @@ import { beforeEach, expect, it, vi } from "vitest"
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0 }))
 const post = vi.hoisted(() => vi.fn())
 const refresh = vi.hoisted(() => vi.fn())
+const track = vi.hoisted(() => vi.fn())
 vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
   useRef: (initial: unknown) => {
@@ -25,6 +26,7 @@ vi.mock("react", async (original) => ({
 }))
 vi.mock("@/lib/api-client", () => ({ apiPost: post, ApiError: class extends Error {} }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }))
+vi.mock("@/lib/analytics", () => ({ track }))
 import { BillingActions } from "./billing-actions"
 
 type Element = ReactElement<{
@@ -80,6 +82,11 @@ it("blocks all checkout and trial actions while a request is pending, including 
   expect(post).toHaveBeenCalledTimes(1)
   expect(post).toHaveBeenCalledWith("/billing/checkout", {
     workspaceId: "ws",
+    plan: "PRO",
+    interval: "annual",
+  })
+  expect(track).toHaveBeenNthCalledWith(1, "upgrade_clicked", { plan: "PRO", interval: "annual" })
+  expect(track).toHaveBeenNthCalledWith(2, "checkout_started", {
     plan: "PRO",
     interval: "annual",
   })

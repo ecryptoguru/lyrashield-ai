@@ -1,6 +1,6 @@
 # LyraShield AI marketplace release source
 
-PREPARATION ONLY: npm Agent Plugin `0.1.31`, MCP `0.2.12`, and CLI `0.2.14` are published.
+PREPARATION ONLY: npm Agent Plugin `0.1.31`, MCP `0.2.12` and CLI `0.2.14` are published.
 This source export has not yet been regenerated from the final merged product revision and tagged
 as a matching immutable marketplace release. Do not treat a package publication or mutable branch
 as proof of a marketplace listing or authenticated client acceptance. Channel-specific listing
@@ -10,14 +10,14 @@ versions and review states may lag this source.
 
 The previously exported product source is `4822306e24f375800981bf282fd992a9c15dcde8`. Public marketplace `main` is commit `8cb880dbaee73f2c6e71d096e4b75db87f29c32a`, regenerated from that product revision; a fresh clean export matched its tracked artifact bytes. That export predates the current product release and is not an immutable matching marketplace release.
 
-Current npm latest versions are CLI `0.2.14`, MCP `0.2.12`, and Agent Plugin `0.1.31`. The published MCP package exposes `mcpName: io.github.ecryptoguru/lyrashield-ai`; package integrity and consumer install readbacks passed. The latest immutable marketplace GitHub Release remains `v0.1.29` (2026-09-25); its Kiro MCP shim pins `@lyrashield/mcp@0.2.9`. No matching marketplace release for the current npm packages has been read back.
+Current npm latest versions are CLI `0.2.14`, MCP `0.2.12` and Agent Plugin `0.1.31`. The published MCP package exposes `mcpName: io.github.ecryptoguru/lyrashield-ai`; package integrity and consumer install readbacks passed. The latest immutable marketplace GitHub Release remains `v0.1.29` (2026-09-25); its Kiro MCP shim pins `@lyrashield/mcp@0.2.9`. No matching marketplace release for the current npm packages has been read back.
 
 The prepared official MCP Registry package has no public listing: the exact identity readback returned HTTP 404 and public search returned no LyraShield entry on 2026-10-02. Offline `--release-ready` validation and the official `mcp-publisher validate` pass against the published MCP package. Authenticated publisher login, submission and public version readback remain pending. Package/export validation and public branch synchronization do not establish immutable marketplace availability or authenticated client-runtime acceptance.
 
 ## Current customer setup
 
 This mutable preparation branch is not a supported customer install source. Do not register it
-with a plugin marketplace, import it into VS Code, enable it in shared settings, or use an older
+with a plugin marketplace, import it into VS Code, enable it in shared settings or use an older
 plugin release without matching portable-schema validation. Plugin installation recommendations
 for Claude Code, Cursor, Copilot CLI, Codex and VS Code await a reviewed matching immutable release.
 
@@ -105,5 +105,5 @@ marketplace program.
 
 Public channel states were last checked on 2026-10-01. Private publisher dashboards remain
 `UNKNOWN` unless there is a current authenticated readback. See the [distribution channel ledger](./channels.md)
-for the current public links, versions, evidence, and next step for each channel. Directory status
+for the current public links, versions, evidence and next step for each channel. Directory status
 does not establish client compatibility.

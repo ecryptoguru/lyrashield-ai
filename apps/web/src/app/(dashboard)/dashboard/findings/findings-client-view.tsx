@@ -126,7 +126,7 @@ export function FindingsControls({
             onChange={(e) => handleQueryChange(e.target.value)}
             placeholder={`Search ${FINDING_PLURAL.toLowerCase()}…`}
             aria-label={`Search ${FINDING_PLURAL.toLowerCase()}`}
-            className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none lg:w-56"
+            className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-11 w-full rounded-md border px-3 text-base focus-visible:ring-2 focus-visible:outline-none md:h-9 md:text-sm lg:w-56"
           />
 
           {/* Sort control */}

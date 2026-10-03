@@ -73,6 +73,13 @@ export const agentEntrySchema = z
     integrationKind: z.enum(["mcp", "standalone-cli"]).optional(),
     preferredTransport: transportSchema.nullable().optional(),
     remoteAuth: z.enum(["oauth", "api-key"]).optional(),
+    remoteAuthConfig: z
+      .object({
+        apiKeyEnvVar: z.string().min(1).optional(),
+        bearerTokenEnvVarField: z.string().min(1).optional(),
+        headersField: z.string().min(1).optional(),
+      })
+      .optional(),
     credential: credentialStyleSchema,
     requiredEntryFields: z.record(z.string(), z.string()).optional(),
     transportFields: z.partialRecord(transportSchema, z.record(z.string(), z.string())).optional(),

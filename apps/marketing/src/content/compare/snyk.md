@@ -15,7 +15,7 @@ faq:
   - q: "When should I choose Snyk over LyraShield?"
     a: "Choose Snyk when you need one platform for continuous scanning across code, dependencies, containers and infrastructure, with broad language support and risk-based prioritization. Check Snyk’s current pricing and limits with the vendor. Choose LyraShield when you need scoped evidence to inform a release review for an AI-built app."
   - q: "What does LyraShield add over Snyk Code?"
-    a: "Snyk Code finds vulnerabilities in source and suggests AI autofixes. LyraShield adds a target, review, evidence, fix, retest, report loop: it attempts checks against an authorized target, records detected candidates separately from findings with verification receipts and retest-confirmed outcomes, and records fix proposals for review before the team merges a change. Each outcome remains bound to its retained evidence and scope."
+    a: "Snyk Code finds vulnerabilities in source and suggests AI autofixes. LyraShield adds a target, review, evidence, fix, retest, report loop: it attempts checks against an authorized target, records detected candidates separately from findings with verification receipts and retest-confirmed outcomes and records fix proposals for review before the team merges a change. Each outcome remains bound to its retained evidence and scope."
 ---
 
 ## Core approach

@@ -6,6 +6,6 @@ In Settings → Tools → AI Assistant → Model Context Protocol (MCP), add the
 
 AI Assistant documents Agent Skills for **Claude Agent and Codex**. Import selected shared skills through the IDE's Skills page only for those supported agents. Do not claim Junie or every AI Assistant agent consumes these skills; see [`jetbrains-junie`](../jetbrains-junie/README.md) for Junie.
 
-Verify the server is connected, inspect its tools, and make a read-only call. Setup is not runtime acceptance.
+Verify the server is connected, inspect its tools and make a read-only call. Setup is not runtime acceptance.
 
 Sources: [AI Assistant MCP](https://www.jetbrains.com/help/ai-assistant/mcp.html), [AI Assistant Agent Skills](https://www.jetbrains.com/help/ai-assistant/agent-skills.html), [AI Assistant agents](https://www.jetbrains.com/help/ai-assistant/agents.html).

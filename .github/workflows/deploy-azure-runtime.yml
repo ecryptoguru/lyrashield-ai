@@ -81,8 +81,77 @@ env:
   MYRA_SUPPORT_NOTIFY_EMAIL: ${{ vars.MYRA_SUPPORT_NOTIFY_EMAIL || 'support@lyrashieldai.com' }}
 
 jobs:
+  # Install-time dependency scripts run without a production environment or
+  # OIDC permission. The archive is tied to the exact deployment SHA and lock
+  # file, then downloaded by the isolated deployment job below.
+  prepare-dependencies:
+    name: Prepare migration dependencies without production credentials
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    if: >
+      (vars.AZURE_RESOURCE_GROUP != '') &&
+      ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
+    steps:
+      - name: Checkout deployment source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies without deployment credentials
+        run: pnpm install --frozen-lockfile
+
+      - name: Package revision-bound migration dependencies
+        id: migration-dependencies
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          actual_source_sha="$(git rev-parse HEAD)"
+          if [ "$actual_source_sha" != "$EXPECTED_SOURCE_SHA" ]; then
+            echo "::error::Dependency preparation checkout does not match the deployment SHA."
+            exit 1
+          fi
+
+          mapfile -d '' module_dirs < <(find . -type d -name node_modules -not -path './.git/*' -prune -print0)
+          if [ "${#module_dirs[@]}" -eq 0 ]; then
+            echo "::error::pnpm install did not create workspace dependencies."
+            exit 1
+          fi
+
+          archive="$RUNNER_TEMP/migration-node-modules.tar.gz"
+          manifest="$RUNNER_TEMP/migration-dependency-manifest.json"
+          tar -czf "$archive" -- "${module_dirs[@]}"
+          lockfile_sha="$(sha256sum pnpm-lock.yaml | cut -d ' ' -f 1)"
+          archive_sha="$(sha256sum "$archive" | cut -d ' ' -f 1)"
+          printf '{"sourceSha":"%s","lockfileSha256":"%s","archiveSha256":"%s"}\n' \
+            "$actual_source_sha" "$lockfile_sha" "$archive_sha" > "$manifest"
+
+      - name: Upload revision-bound migration dependencies
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: migration-dependencies-${{ inputs.source_sha }}
+          path: |
+            ${{ runner.temp }}/migration-node-modules.tar.gz
+            ${{ runner.temp }}/migration-dependency-manifest.json
+          if-no-files-found: error
+          retention-days: 1
+
   deploy:
     name: Deploy Azure Container Apps
+    needs: prepare-dependencies
     runs-on: ubuntu-24.04
     # This budget covers migrations, parallel bounded candidate health checks,
     # production smoke, and bounded traffic recovery. Individual Azure
@@ -110,6 +179,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.DEPLOY_SHA }}
+          persist-credentials: false
+
+      # The legacy timestamp interpretation is an external operator fact. Require
+      # its signed evidence before Azure login, admission changes or migration work.
+      - name: Verify webhook timezone evidence
+        if: inputs.webhook_claims_cutover == true
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+          MIGRATION_DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT }}
+          WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM }}
+        run: node .github/scripts/verify-webhook-timezone-evidence.mjs
 
       # Myra fail-closed check (Deep Review v18): confirmed writes require the
       # Google calendar provider and usable credentials; the mock adapter and
@@ -170,7 +251,7 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
-          AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME }}
+          AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           GHCR_USERNAME: ${{ github.repository_owner }}
         run: node .github/scripts/verify-webhook-cutover.mjs
@@ -230,25 +311,50 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.DEPLOY_SHA }}
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
         with:
-          # Every workflow runs pnpm install as an explicit step; the
-          # successor action's install default is true, so opt out.
+          # Dependency preparation already ran in the unprivileged job above.
+          # The successor action's install default is true, so opt out.
           install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          cache: pnpm
 
-      - name: Install dependencies (no secrets)
-        # VULN-H-001: install-time build scripts inherit step env. Dependency
-        # installation must never share a step with a bound secret — a
-        # malicious allowlisted build script could read the production DB URL.
-        run: pnpm install --frozen-lockfile
+      - name: Download source-bound migration dependencies
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: migration-dependencies-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/migration-dependencies
+
+      - name: Verify and unpack migration dependencies
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/migration-dependencies/migration-node-modules.tar.gz"
+          manifest="$RUNNER_TEMP/migration-dependencies/migration-dependency-manifest.json"
+          lockfile_sha="$(sha256sum pnpm-lock.yaml | cut -d ' ' -f 1)"
+          archive_sha="$(sha256sum "$archive" | cut -d ' ' -f 1)"
+          EXPECTED_LOCKFILE_SHA="$lockfile_sha" EXPECTED_ARCHIVE_SHA="$archive_sha" \
+            node - "$manifest" <<'NODE'
+          const fs = require("node:fs")
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
+          if (manifest.sourceSha !== process.env.EXPECTED_SOURCE_SHA) {
+            throw new Error("Prepared dependencies do not match the deployment source SHA")
+          }
+          if (manifest.lockfileSha256 !== process.env.EXPECTED_LOCKFILE_SHA) {
+            throw new Error("Prepared dependencies do not match the deployment lockfile")
+          }
+          if (manifest.archiveSha256 !== process.env.EXPECTED_ARCHIVE_SHA) {
+            throw new Error("Prepared dependency archive checksum mismatch")
+          }
+          NODE
+          tar -xzf "$archive" --no-same-owner -C "$GITHUB_WORKSPACE"
 
       - name: Verify migration database continuity before maintenance
         if: inputs.webhook_claims_cutover == true
@@ -626,7 +732,7 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
-          AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME }}
+          AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           GHCR_USERNAME: ${{ github.repository_owner }}
         run: node .github/scripts/verify-webhook-cutover.mjs

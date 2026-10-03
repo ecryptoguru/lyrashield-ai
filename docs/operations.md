@@ -158,18 +158,67 @@ separately approved non-admin canary is needed to verify aggregate inclusion.
 
 Flip to `public` per provider. `canary` remains available as a kill-switch.
 
+### Durable webhook-track UTC schema cutover
+
+The UTC scheduler columns and audited recovery counters require the controlled
+first-cutover path. Before dispatching it, confirm the legacy timestamp values
+were written as UTC wall times; the additive migration interprets them with
+`AT TIME ZONE 'UTC'`. If that assumption cannot be established from the
+production database session configuration and receipts, stop and resolve the
+timezone mapping before any migration runs.
+
+Use the `Deploy to Azure` workflow on the exact current `main` SHA with
+`webhook_claims_cutover=true` and confirmation `webhook-cutover:<source_sha>`.
+That path claims an owned admission stop, closes old webhook writers, proves
+scan and webhook queues are empty, stops the legacy worker, applies the
+additive migrations, verifies the schema and boots the compatible worker before
+reopening ingress. Do not run the UTC migrations through a normal release or
+resume admission manually if a phase fails; preserve the cutover receipt and
+keep admission held for operator recovery.
+
 ### Checkout rollback
 
 Set the affected `*_BILLING_ADMISSION` back to `off` and redeploy. Existing
 subscriptions are unaffected — admission gates _new_ purchases only. Failed
-tracks below the retry cap can reconcile; `dead_letter` tracks are terminal and
-are **not** automatically re-enqueued. Check `admin → Billing`, retain event
-and track IDs and diagnose provider delivery and processing without exposing
-raw payloads. There is currently no supported operator retry/reset operation
-for dead-letter tracks. Do not edit database state or enqueue a track directly.
+tracks below the retry cap can reconcile; `dead_letter` tracks are not
+automatically re-enqueued. Check `admin → Billing`, retain event and track IDs
+and diagnose provider delivery and processing without exposing raw payloads.
+
+An elevated platform administrator can request recovery with
+`POST /api/admin/webhook-tracks/{trackId}/retry`. The operation requires a
+cookie session with recent TOTP elevation, a single-use action nonce, the
+expected generation and a bounded audit reason. It only retries replay-safe
+minute-pack billing events with a verified provider receipt. It also accepts a
+historical `pending` or `failed` pack track, or an orphaned `processing` track
+with no claim token or lease, only when both old and UTC due-time columns are
+NULL. These rows are never retried automatically because the old worker may
+have completed an effect without recording an attempt. Each recovery archives
+that cycle's attempts, resets the bounded automatic attempt budget and allows
+at most three operator recoveries. Stale generations, exhausted
+recovery counts, subscriptions, licenses and affiliate effects are rejected.
+The durable row remains due if Redis enqueue fails, so the worker sweep can
+recover it. Never edit database state or enqueue a track directly.
+
+For an unsafe dead letter, or a historical null-due pending, failed or orphaned
+processing track whose effect must not be replayed, use
+`POST /api/admin/webhook-tracks/{trackId}/disposition`. It requires a separate
+TOTP elevation, single-use action nonce, expected generation, one of the
+bounded reasons (`effect_confirmed` or `no_effect_required`) and a short opaque
+evidence reference. The transaction records the disposition in the platform
+audit log and moves the track to `reviewed`; it never enqueues a job or calls a
+provider handler. Use `effect_confirmed` only after the actual entitlement,
+license, refund or affiliate effect is verified or corrected through its own
+audited workflow. Use `no_effect_required` only when the provider receipt proves
+no business effect was due. A reviewed track is not a successful payment or
+fulfillment receipt. It is terminal for retries, reduces the dead-letter count
+and, once every required track is succeeded or reviewed, marks the parent event
+processed so duplicate delivery cannot run the handler again. If a required
+business effect is missing and cannot be replayed safely, leave the track
+unresolved until an approved domain-specific correction is complete.
+
 Provider redelivery may retry eligible nonterminal tracks but can expire or be
-rejected as stale. Keep the affected rail unready until an authorized recovery
-operation is implemented and its idempotency and audit behavior are verified.
+rejected as stale. Keep the affected rail unready until the provider receipt,
+track state and audit entry have been reviewed.
 
 ### What this runbook does not cover
 

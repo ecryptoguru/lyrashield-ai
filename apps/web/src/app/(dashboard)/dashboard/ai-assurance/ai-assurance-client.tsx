@@ -222,7 +222,7 @@ export function AiAssuranceClient({
         <label className="grid gap-2">
           <span className="text-sm font-medium">Target</span>
           <select
-            className="h-11 rounded-md border bg-background px-3 text-sm"
+            className="h-11 rounded-md border bg-background px-3 text-base md:text-sm"
             value={targetId}
             onChange={(e) => {
               const id = e.target.value
@@ -240,7 +240,7 @@ export function AiAssuranceClient({
         <Link
           href={`/dashboard/reports?targetId=${encodeURIComponent(targetId)}`}
           className={buttonVariants({ variant: "outline", size: "sm" })}
-          aria-label="Generate an assurance report"
+          aria-label="Generate report for AI assurance"
         >
           <FileText className="mr-2 h-4 w-4" aria-hidden="true" />
           Generate report

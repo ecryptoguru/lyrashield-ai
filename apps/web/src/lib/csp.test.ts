@@ -63,6 +63,20 @@ function makePublicRequest(pathname: string): NextRequest {
   return new NextRequest(new URL(`https://app.example.com${pathname}`))
 }
 
+async function cspForBrowserSentryDsn(dsn: string | undefined): Promise<string> {
+  const previousDsn = process.env.NEXT_PUBLIC_SENTRY_DSN
+  if (dsn === undefined) delete process.env.NEXT_PUBLIC_SENTRY_DSN
+  else process.env.NEXT_PUBLIC_SENTRY_DSN = dsn
+
+  try {
+    const response = await proxy(makeRequest("/dashboard"))
+    return response.headers.get("Content-Security-Policy") ?? ""
+  } finally {
+    if (previousDsn === undefined) delete process.env.NEXT_PUBLIC_SENTRY_DSN
+    else process.env.NEXT_PUBLIC_SENTRY_DSN = previousDsn
+  }
+}
+
 describe("CSP nonce proxy", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -169,6 +183,25 @@ describe("CSP nonce proxy", () => {
     const csp = (await proxy(makeRequest("/dashboard"))).headers.get("Content-Security-Policy")!
     expect(csp).toContain("https://us-assets.i.posthog.com")
     expect(csp).toContain("connect-src 'self' https://api.razorpay.com https://us.i.posthog.com")
+  })
+
+  it("allows only the exact HTTPS origin from a valid browser Sentry DSN", async () => {
+    const csp = await cspForBrowserSentryDsn("https://public-key@example.ingest.sentry.io/42")
+    expect(csp).toContain("https://example.ingest.sentry.io")
+    expect(csp).not.toContain("*.sentry.io")
+  })
+
+  it.each([
+    "https://example.ingest.sentry.io/42",
+    "http://public-key@example.ingest.sentry.io/42",
+    "https://public-key:password@example.ingest.sentry.io/42",
+    "https://public-key@example.ingest.sentry.io/42?next=https://other.example",
+    "https://public-key@example.ingest.sentry.io/42#fragment",
+    "not a DSN",
+  ])("does not add a CSP origin for an invalid browser Sentry DSN", async (dsn) => {
+    const csp = await cspForBrowserSentryDsn(dsn)
+    expect(csp).not.toContain("example.ingest.sentry.io")
+    expect(csp).not.toContain("other.example")
   })
 
   it("allows only Razorpay checkout frames needed by subscription management", async () => {
