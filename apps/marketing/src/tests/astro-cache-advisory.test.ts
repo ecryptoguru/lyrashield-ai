@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
 const require = createRequire(import.meta.url)
-const astroRoot = resolve(dirname(require.resolve("astro")), "../..")
+const astroRoot = dirname(require.resolve("astro/package.json"))
 const remoteCacheSource = await readFile(resolve(astroRoot, "dist/assets/build/remote.js"), "utf8")
 
 describe("Astro's http-cache-semantics advisory exposure", () => {
