@@ -10,9 +10,10 @@
 - Candidate checkout: /private/tmp/lyrashield-ai-readiness-20261002.
 - Engine main: a340d9d2fba716ff48e2996e950ba269783ce59a, merged as PR #198.
 - Marketplace main: 8cb880dbaee73f2c6e71d096e4b75db87f29c32a.
+- Draft web PR: [#897](https://github.com/ecryptoguru/lyrashield-ai/pull/897), opened at a4e2fc4ef554a7967239399d23e76c2142a918dc. A ledger/handoff follow-up will advance the branch head; query the PR for the authoritative current SHA and CI status.
 - The primary engine checkout at /Users/defiankit/Desktop/lyrashield-engine has dirty user state. Preserve it; do not reset, stage or commit it.
 - Candidate implements the W0–W8 work in the production-readiness plan. The completion ledger beside this file contains the current local test receipts and evidence boundary.
-- Draft web PR URL: pending publication after the ledger and handoff commit. GitHub exact-head checks are not evidence until the PR exists.
+- Draft web PR #897 is published with the six-part body and W0–W8 commit map. Initial GitHub CI started on the opening SHA; a follow-up docs commit will trigger checks on the updated exact head. Keep the PR in draft until those checks pass and review/founder checkpoints are complete.
 
 ## Source commit map
 
@@ -31,7 +32,7 @@
 ## Required execution
 
 1. Verify branch base and PR identity before changing anything. Fetch origin and inspect status. Do not delete worktrees, switch the primary engine checkout or push to main.
-2. Publish the single web remediation branch as a draft PR with the six required body parts: Result, Rulings honoured, Validation, Evidence boundary, Not touched and Report back. Include the W0–W8 commit map and exact local test receipts. The source diffs include protected billing, auth, migrations and deployment workflows.
+2. The single web remediation branch is published as [draft PR #897](https://github.com/ecryptoguru/lyrashield-ai/pull/897) with the six required body parts: Result, Rulings honoured, Validation, Evidence boundary, Not touched and Report back. It includes the W0–W8 commit map and local test receipts. The source diffs include protected billing, auth, migrations and deployment workflows.
 3. Wait for all required GitHub checks on the exact PR head. Inspect every failed or skipped check. Fix failures in the same branch and rerun the affected local suites; push updates to the draft PR. Do not mark ready while any required check is red, skipped unexpectedly or tied to another SHA.
 4. Keep the reviewer approval checkpoint on the final ENGINE_REVISION update. Keep the founder heads-up checkpoint before marking ready because this PR changes billing, auth and deploy behavior. Do not merge.
 5. After a human merge, verify the Azure release, app/scanner images, worker image digest and both product/engine provenance. Public readiness checks alone do not prove worker provenance.
