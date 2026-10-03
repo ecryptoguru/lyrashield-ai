@@ -240,14 +240,22 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   // other supported reviews behind "Change review".
   await expect(page.getByText("Recommended review for this API")).toBeVisible()
   await expect(page.getByText("Endpoint Review", { exact: true }).first()).toBeVisible()
-  await expect(page.getByText("target details are locked for this retry")).toBeVisible()
+  // W2-03: an existing target stays read-only, but the retry-specific copy
+  // appears only after an unsuccessful scan attempt. The user can always go
+  // back to update the source.
+  await expect(
+    page.getByText("Reviewing your existing API. Go back to update the source if needed.")
+  ).toBeVisible()
+  await expect(page.getByText(/target details are locked$/)).toBeVisible()
   await expect(page.locator("#product-name")).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Back" })).toBeVisible()
   await page.getByRole("button", { name: "Check availability" }).click()
   await expect(page.getByRole("status").filter({ hasText: "Current plan:" })).toBeVisible()
   expect(scanAttempts).toBe(0)
   const restoredReviewButton = page.getByRole("button", { name: "Start endpoint review" })
   await restoredReviewButton.click()
+  await expect(page.getByText(/Retry the review for API without contract/)).toBeVisible()
+  await expect(page.getByRole("button", { name: "Back" })).toBeVisible()
   await expect(restoredReviewButton).toBeEnabled()
   await restoredReviewButton.click()
   await expect(restoredReviewButton).toBeEnabled()
