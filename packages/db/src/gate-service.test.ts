@@ -75,8 +75,20 @@ import {
   handleFixPrMergedAndReevaluate as handleMerge,
 } from "./gate-service"
 const admission = vi.fn(async () => {})
+const workerAvailable = vi.fn(async () => {
+  if (rlsTransactionNestingGuard.depth > 0) {
+    throw new Error("Redis worker admission check ran inside a database transaction")
+  }
+})
 const handleFixPrMergedAndReevaluate = (workspaceId: string, branch: string, prNumber?: number) =>
-  handleMerge(workspaceId, branch, prNumber, admission)
+  handleMerge({
+    workspaceId,
+    branchName: branch,
+    prNumber,
+    assertRetestAllowed: admission,
+    repoFullName: undefined,
+    assertRetestWorkerAvailable: workerAvailable,
+  })
 
 const mockPrisma = prisma as unknown as {
   $executeRaw: ReturnType<typeof vi.fn>
@@ -97,6 +109,11 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
     rlsTransactionNestingGuard.enabled = false
     rlsTransactionNestingGuard.depth = 0
     admission.mockResolvedValue(undefined)
+    workerAvailable.mockImplementation(async () => {
+      if (rlsTransactionNestingGuard.depth > 0) {
+        throw new Error("Redis worker admission check ran inside a database transaction")
+      }
+    })
     vi.mocked(prisma.retest.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.findingCandidate.findMany).mockResolvedValue([])
     vi.mocked(createScan).mockResolvedValue({ id: "new-retest-scan-id" } as never)
@@ -154,6 +171,14 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
       rlsTransactionNestingGuard.enabled = false
       rlsTransactionNestingGuard.depth = 0
     }
+  })
+
+  it("checks Redis worker availability before opening the retest lock transaction", async () => {
+    await expect(
+      handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
+    ).resolves.not.toBeNull()
+
+    expect(workerAvailable).toHaveBeenCalledOnce()
   })
 
   it("loads only verdict-relevant verification receipts", async () => {
@@ -309,7 +334,14 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
   })
   it("fails closed without the injected admission boundary", async () => {
     await expect(
-      handleMerge("workspace-1", "branch", undefined, undefined as never)
+      handleMerge({
+        workspaceId: "workspace-1",
+        branchName: "branch",
+        prNumber: undefined,
+        assertRetestAllowed: undefined as never,
+        repoFullName: undefined,
+        assertRetestWorkerAvailable: workerAvailable,
+      })
     ).rejects.toThrow("Retest admission guard required")
   })
 })

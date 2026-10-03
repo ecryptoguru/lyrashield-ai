@@ -8,8 +8,15 @@ describe("assertWorkerDbPoolCapacity", () => {
 
   it("rejects scan concurrency that can occupy every database connection", () => {
     expect(() => assertWorkerDbPoolCapacity(4, 4)).toThrow(
-      "LYRASHIELD_WORKER_CONCURRENCY (4) must be lower than LYRASHIELD_DB_POOL_MAX (4)"
+      "Total worker concurrency (4 scan + 0 auxiliary = 4) must be lower than LYRASHIELD_DB_POOL_MAX (4)"
     )
+  })
+
+  it("counts retry and fix-generation jobs before reserving a finalization connection", () => {
+    expect(() => assertWorkerDbPoolCapacity(3, 7, 4)).toThrow(
+      "Total worker concurrency (3 scan + 4 auxiliary = 7) must be lower than LYRASHIELD_DB_POOL_MAX (7)"
+    )
+    expect(() => assertWorkerDbPoolCapacity(3, 8, 4)).not.toThrow()
   })
 })
 

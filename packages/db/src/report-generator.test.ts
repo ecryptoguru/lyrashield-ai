@@ -287,7 +287,7 @@ describe("report-generator", () => {
       mockPrisma.scan.findFirst.mockResolvedValue({
         id: "scan-1",
         goal: "TEST_APP",
-        mode: "STANDARD",
+        mode: status === "PARTIAL" ? "DEEP" : "STANDARD",
         status,
         summary: null,
         target: { name: "example.com", type: "WEB_APP", url: "https://example.com" },
@@ -334,10 +334,11 @@ describe("report-generator", () => {
         expect(data.assurance?.narrative).toContain("Coverage is incomplete")
         expect(data.assurance?.narrative).toContain("engine")
         expect(data.scanInfo?.targetId).toBe("target-1")
+        expect(data.scanInfo?.mode).toBe("DEEP")
         const html = generateReportHTML(data)
         expect(html).toContain("Complete coverage")
         expect(html).toContain(
-          "/dashboard/scans?new=1&amp;target=target-1&amp;goal=TEST_APP&amp;mode=STANDARD"
+          "/dashboard/scans?new=1&amp;target=target-1&amp;goal=TEST_APP&amp;mode=DEEP"
         )
       }
     })

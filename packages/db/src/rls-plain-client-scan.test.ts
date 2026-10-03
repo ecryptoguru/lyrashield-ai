@@ -75,6 +75,7 @@ const FORCE_RLS_ACCESSORS = new Set([
   "liveAiSafetyPlan",
   "liveAiSafetyRun",
   "gateVerdict",
+  "billingReconciliationState",
   "agentConnection",
   "agentOperation",
   "loopClosure",
@@ -338,6 +339,19 @@ describe("plain-client FORCE-RLS reads (v16 2.2 tripwire)", () => {
     ].join("\n")
     const offenders = scanSource(unboundRead)
     expect(offenders.join("\n")).toContain("prisma.scanAttachment.findMany")
+  })
+
+  it("catches a bare billing reconciliation state read without system scope", () => {
+    const unboundRead = [
+      'import { prisma } from "./client"',
+      "",
+      "export async function readBillingCheckpoint() {",
+      '  return prisma.billingReconciliationState.findUnique({ where: { id: "singleton" } })',
+      "}",
+      "",
+    ].join("\n")
+    const offenders = scanSource(unboundRead)
+    expect(offenders.join("\n")).toContain("prisma.billingReconciliationState.findUnique")
   })
 
   it("the allowlist stays honest: every entry still exists on disk", () => {

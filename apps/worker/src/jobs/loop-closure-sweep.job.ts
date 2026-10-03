@@ -49,11 +49,11 @@ export async function processLoopClosureSweep(
 
   for (const closure of due) {
     try {
-      const outcome = await handleFixPrMergedAndReevaluate(
-        closure.workspaceId,
-        closure.branchName,
-        closure.prNumber,
-        async (mode, sponsorAccountId, tx) => {
+      const outcome = await handleFixPrMergedAndReevaluate({
+        workspaceId: closure.workspaceId,
+        branchName: closure.branchName,
+        prNumber: closure.prNumber,
+        assertRetestAllowed: async (mode, sponsorAccountId, tx) => {
           const entitlement = await assertScanAllowed(
             closure.workspaceId,
             mode,
@@ -61,10 +61,10 @@ export async function processLoopClosureSweep(
             tx
           )
           if (!entitlement.allowed) throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
-          await assertScanWorkerAvailable()
         },
-        closure.repoFullName
-      )
+        repoFullName: closure.repoFullName,
+        assertRetestWorkerAvailable: assertScanWorkerAvailable,
+      })
       if (outcome) {
         await enqueueScan({
           scanId: outcome.retestScanId,

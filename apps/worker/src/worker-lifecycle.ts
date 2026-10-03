@@ -2,14 +2,19 @@ type WorkerRunTermination =
   { reason: "BULLMQ_RUN_RETURNED" } | { reason: "BULLMQ_RUN_FAILURE"; error: unknown }
 
 /**
- * Finalization holds one connection while it runs nested evidence transactions.
- * Keep one connection available so concurrent finalizers cannot all wait on
- * connections held by their own outer transactions.
+ * All BullMQ workers in this process share the Prisma pool. Count every
+ * concurrently active processor and keep one connection available for scan
+ * finalization's nested evidence transactions.
  */
-export function assertWorkerDbPoolCapacity(workerConcurrency: number, dbPoolMax: number): void {
-  if (workerConcurrency >= dbPoolMax) {
+export function assertWorkerDbPoolCapacity(
+  scanConcurrency: number,
+  dbPoolMax: number,
+  auxiliaryWorkerConcurrency = 0
+): void {
+  const totalWorkerConcurrency = scanConcurrency + auxiliaryWorkerConcurrency
+  if (totalWorkerConcurrency >= dbPoolMax) {
     throw new Error(
-      `LYRASHIELD_WORKER_CONCURRENCY (${workerConcurrency}) must be lower than LYRASHIELD_DB_POOL_MAX (${dbPoolMax}) to reserve a connection for nested scan finalization.`
+      `Total worker concurrency (${scanConcurrency} scan + ${auxiliaryWorkerConcurrency} auxiliary = ${totalWorkerConcurrency}) must be lower than LYRASHIELD_DB_POOL_MAX (${dbPoolMax}) to reserve a connection for nested scan finalization.`
     )
   }
 }

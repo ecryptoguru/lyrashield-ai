@@ -2,7 +2,11 @@ import { resolveAccountBilling } from "@lyrashield/billing"
 import { env } from "@lyrashield/config"
 import { addScanEvent, runWithAccountContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { applyEngineTriageArtifact, type AISecuritySignal } from "@lyrashield/security"
+import {
+  applyEngineTriageArtifact,
+  type AISecuritySignal,
+  type EngineTriageArtifact,
+} from "@lyrashield/security"
 import { buildEngineTriageInput, eligibleForEngineTriage } from "../../engine/ai-security-triage"
 import { mergeLlmUsage } from "../../engine/output-parser"
 import { resolveEngineProfile, runEngineTriage, type EngineRunResult } from "../../engine/runner"
@@ -24,11 +28,30 @@ export type EngineTriageSnapshot = {
 export type EngineTriageOverlayResult = {
   aiSecuritySignals: AISecuritySignal[]
   triageSnapshot: EngineTriageSnapshot | undefined
-  triageTerminalReason: string
+  triageTerminalReason: string | null
   budgetExceeded: boolean
   billedCostUsd: number | null
   costReconciled: boolean
   reconciliationReason?: string
+}
+
+function terminalReason(snapshot: EngineTriageSnapshot | undefined): string | null {
+  return snapshot ? snapshot.terminalReason : "TRIAGE_ARTIFACT_UNAVAILABLE"
+}
+
+function artifactSnapshot(
+  artifact: EngineTriageArtifact,
+  accountingAvailable = true
+): EngineTriageSnapshot {
+  return {
+    status: accountingAvailable ? artifact.status : "FAILED",
+    terminalReason: accountingAvailable ? artifact.terminalReason : "TRIAGE_ACCOUNTING_UNAVAILABLE",
+    policyVersion: artifact.policyVersion,
+    modelRoute: artifact.modelRoute,
+    inputChecksum: artifact.inputChecksum,
+    redactionReceipt: artifact.redactionReceipt.inputChecksum,
+    resultCount: accountingAvailable ? artifact.results.length : 0,
+  }
 }
 
 export async function runEngineTriageOverlay(params: {
@@ -107,7 +130,7 @@ export async function runEngineTriageOverlay(params: {
     maxBudgetUsd,
     triageCapUsd: env.LYRASHIELD_AI_TRIAGE_MAX_BUDGET_USD,
   })
-  let triageTerminalReason = triageEligibility.reason
+  let triageTerminalReason: string | null = triageEligibility.reason
 
   if (
     targetType === "REPO" &&
@@ -136,46 +159,26 @@ export async function runEngineTriageOverlay(params: {
           await updateAccounting(mergedUsage)
           if (artifact) {
             aiSecuritySignals = applyEngineTriageArtifact(aiSecuritySignals, artifact)
-            triageSnapshot = {
-              status: artifact.status,
-              terminalReason: artifact.terminalReason,
-              policyVersion: artifact.policyVersion,
-              modelRoute: artifact.modelRoute,
-              inputChecksum: artifact.inputChecksum,
-              redactionReceipt: artifact.redactionReceipt.inputChecksum,
-              resultCount: artifact.results.length,
-            }
+            triageSnapshot = artifactSnapshot(artifact)
           }
         } else {
+          // The overlay may have spent tokens even though its receipt cannot
+          // be merged with the scan usage. Invalidate the total rather than
+          // retaining a billable amount for only the engine phase.
+          await updateAccounting()
           if (!artifact) {
             triageTerminalReason = "TRIAGE_ARTIFACT_UNAVAILABLE"
           } else {
-            triageSnapshot = {
-              status: "FAILED",
-              terminalReason: "TRIAGE_ACCOUNTING_UNAVAILABLE",
-              policyVersion: artifact.policyVersion,
-              modelRoute: artifact.modelRoute,
-              inputChecksum: artifact.inputChecksum,
-              redactionReceipt: artifact.redactionReceipt.inputChecksum,
-              resultCount: 0,
-            }
+            triageSnapshot = artifactSnapshot(artifact, false)
           }
         }
       } else if (artifact) {
         await updateAccounting()
-        triageSnapshot = {
-          status: artifact.status,
-          terminalReason: artifact.terminalReason,
-          policyVersion: artifact.policyVersion,
-          modelRoute: artifact.modelRoute,
-          inputChecksum: artifact.inputChecksum,
-          redactionReceipt: artifact.redactionReceipt.inputChecksum,
-          resultCount: 0,
-        }
+        triageSnapshot = { ...artifactSnapshot(artifact), resultCount: 0 }
       } else {
         await updateAccounting()
       }
-      triageTerminalReason = triageSnapshot?.terminalReason ?? "TRIAGE_ARTIFACT_UNAVAILABLE"
+      triageTerminalReason = terminalReason(triageSnapshot)
     } catch {
       // An additive overlay can never fail the deterministic scan.
       triageTerminalReason = "TRIAGE_COMMAND_FAILED"
