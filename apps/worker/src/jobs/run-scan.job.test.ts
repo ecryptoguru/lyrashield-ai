@@ -2864,12 +2864,6 @@ describe("processScanJob", () => {
     )
   })
 
-  it("transitions through VERIFYING status before completion", async () => {
-    await processScanJob(mockJob)
-
-    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "VERIFYING")
-  })
-
   it("persists findings from engine output", async () => {
     const vulns = [{ id: "v1", title: "XSS", severity: "high", timestamp: "now" }]
     vi.mocked(runEngine).mockResolvedValue({

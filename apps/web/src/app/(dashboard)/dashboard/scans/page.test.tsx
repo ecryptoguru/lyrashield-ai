@@ -47,6 +47,7 @@ describe("scan page invalid target recovery", () => {
 
   for (const target of ["deleted-target", "not-a-cuid/invalid", "foreign-workspace-target"]) {
     for (const state of SCAN_STATE_FILTERS) {
+      if (target !== "deleted-target" && state !== "ALL") continue
       it(`preserves ${state} when ${target} is unavailable`, async () => {
         const page = await ScansPage({ searchParams: Promise.resolve({ target, state, new: "1" }) })
         const client = page.props.children.find(

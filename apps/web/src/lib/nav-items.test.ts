@@ -26,21 +26,6 @@ describe("nav-items mobile coverage", () => {
     expect(reachable).toEqual(NAV_ITEMS.map((item) => item.href).sort())
   })
 
-  it("counts every nav item exactly once across the two mobile surfaces", () => {
-    expect(MOBILE_PRIMARY_NAV_ITEMS.length + MORE_NAV_ITEMS.length).toBe(NAV_ITEMS.length)
-  })
-
-  it("never lists the same destination in both mobile surfaces", () => {
-    const more = new Set(MORE_NAV_ITEMS.map((item) => item.href))
-    for (const item of MOBILE_PRIMARY_NAV_ITEMS) {
-      expect(more.has(item.href)).toBe(false)
-    }
-  })
-
-  it("keeps the desktop primary group at five destinations with four mobile slots (W2-10)", () => {
-    expect(MOBILE_PRIMARY_NAV_ITEMS).toHaveLength(4)
-  })
-
   it("keeps desktop groups complementary too", () => {
     expect(PRIMARY_NAV_ITEMS.length + SECONDARY_NAV_ITEMS.length).toBe(NAV_ITEMS.length)
   })

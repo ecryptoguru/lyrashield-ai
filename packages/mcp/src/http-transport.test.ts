@@ -65,13 +65,6 @@ const INIT = {
 }
 
 describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
-  it("initializes and negotiates the protocol version", async () => {
-    const res = await handleRemoteMcpRequest(mcpRequest(INIT), { toolContext: ctx(fetchStub()) })
-    expect(res.status).toBe(200)
-    const body = await readJson(res)
-    expect((body.result as { protocolVersion?: string })?.protocolVersion).toBe(PROTOCOL)
-  })
-
   it.each(SUPPORTED_PROTOCOL_VERSIONS)(
     "negotiates every SDK-supported protocol version via initialize: %s",
     async (protocolVersion) => {

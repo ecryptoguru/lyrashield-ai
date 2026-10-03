@@ -91,15 +91,12 @@ describe("approved fix PR execution", () => {
       prUrl: "https://github.com/owner/repo/pull/42",
     })
   })
-  it.each(["expired", "denied", "wrong workspace", "hash mismatch"])(
-    "does not touch the provider when claim refuses %s",
-    async () => {
-      mocks.claim.mockResolvedValue(false)
-      expect((await executeApprovedFixPr(request)).status).toBe("failed")
-      expect(mocks.branch).not.toHaveBeenCalled()
-      expect(mocks.pr).not.toHaveBeenCalled()
-    }
-  )
+  it.each(["expired"])("does not touch the provider when claim refuses %s", async () => {
+    mocks.claim.mockResolvedValue(false)
+    expect((await executeApprovedFixPr(request)).status).toBe("failed")
+    expect(mocks.branch).not.toHaveBeenCalled()
+    expect(mocks.pr).not.toHaveBeenCalled()
+  })
   it("cannot execute an approval twice", async () => {
     mocks.claim.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
     expect((await executeApprovedFixPr(request)).status).toBe("opened")

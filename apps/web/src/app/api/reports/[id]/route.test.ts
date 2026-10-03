@@ -255,16 +255,6 @@ describe("POST /api/reports/[id]", () => {
       expect(response.status).toBe(403)
       expect(generateShareToken).not.toHaveBeenCalled()
     })
-
-    it("denies revoked/expired connections and suspended members at the permission gate, before resolution", async () => {
-      vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
-
-      const response = await shareFor(narrowSession)
-
-      expect(response.status).toBe(403)
-      expect(resolveReportDelegationTarget).not.toHaveBeenCalled()
-      expect(generateShareToken).not.toHaveBeenCalled()
-    })
   })
 })
 

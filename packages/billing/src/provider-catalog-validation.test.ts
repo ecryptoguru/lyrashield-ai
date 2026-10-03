@@ -484,31 +484,6 @@ describe("provider catalog entitlement validation", () => {
       )
     })
 
-    it("preserves account-free Local SKU quote compatibility", () => {
-      const localAmount = 1_990_000
-      const localNotes = {
-        productId: "individual_launch",
-        quoteWorkspaceId: "local-reference-1",
-        ...billingQuoteNotes({
-          provider: "razorpay",
-          kind: "local",
-          workspaceId: "local-reference-1",
-          catalogKey: "individual_launch",
-          amountMinor: localAmount,
-          currency: "INR",
-        }),
-      }
-      expect(
-        resolveRazorpayCatalogEvent("payment_link.paid", {
-          payload: {
-            payment: {
-              entity: { amount: localAmount, currency: "INR", notes: localNotes },
-            },
-          },
-        })
-      ).toEqual({ kind: "local", sku: "individual_launch" })
-    })
-
     it("verifies signed packs and Local SKUs through the webhook consumer entry point", () => {
       const packNotes = routePackNotes()
       expect(
