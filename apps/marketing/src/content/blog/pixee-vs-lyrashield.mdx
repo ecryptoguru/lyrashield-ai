@@ -2,7 +2,7 @@
 title: "Pixee vs LyraShield"
 description: "How LyraShield AI release assurance compares to Pixee agentic security engineering, scanner triage and automated fixes for AI-built apps."
 pubDate: 2026-08-07
-updatedDate: 2026-09-22
+updatedDate: 2026-10-04
 author: lyrashield-team
 tags:
   - vibe-coding-security
@@ -45,7 +45,7 @@ LyraShield runs inside AI coding agents through the [Model Context Protocol](htt
 
 For dependency risk, LyraShield uses SCA backed by sources like the [OSV database](https://osv.dev/). Pixee's strength is reducing backlog across an existing scanner stack; LyraShield's is the release-assurance loop for one AI-built app at a time. The two can coexist, with Pixee triaging and fixing scanner output continuously and LyraShield running the assurance loop before a release.
 
-The philosophical difference between a merged fix and a retested finding is central to how the two tools diverge. Pixee's 76 percent first-time merge rate is a strong result for remediation throughput and the remaining 24 percent still requires human editing. LyraShield's reviewable proposal model does not optimize for merge rate; it optimizes for the trustworthiness of the evidence record that results. A fresh retest is needed to record whether the finding persists after a developer applies a fix, which is slower but produces a record a reviewer can rely on for a release decision.
+The philosophical difference between a merged fix and a retested finding is central to how the two tools diverge. Pixee's 76 percent first-time merge rate is a strong result for remediation throughput and the other fixes are not merged as-is. LyraShield's reviewable proposal model does not optimize for merge rate; it optimizes for the trustworthiness of the evidence record that results. A fresh retest is needed to record whether the finding persists after a developer applies a fix, which is slower but produces a record a reviewer can rely on for a release decision.
 
 ## Who each tool fits
 
