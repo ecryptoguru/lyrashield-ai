@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url"
 import test from "node:test"
 import {
   assertMigrationUrlBinding,
+  createDisposablePostgresClient,
   canonicalSupabaseDatabaseIdentity,
   EXPECTED_EMPTY_MIGRATIONS,
   hashDatabaseIdentity,
   parsePostgresConnectionTarget,
+  normalizeDefault,
   validateEmptyStateAuthorization,
   verifySignedEmptyStateReceipt,
 } from "../webhook-empty-state-contract.mjs"
@@ -113,6 +115,11 @@ test("direct and project-bound Supavisor URLs canonicalize to one logical databa
   })
 })
 
+test("column default normalization preserves case inside SQL string literals", () => {
+  assert.equal(normalizeDefault("('pending'::text)"), normalizeDefault("'pending'::TEXT"))
+  assert.notEqual(normalizeDefault("'PENDING'::text"), normalizeDefault("'pending'::text"))
+})
+
 test("effective node-postgres target rejects query endpoint, credential, duplicate, and encoded-key overrides", () => {
   const attacks = [
     "host=other.invalid",
@@ -144,6 +151,17 @@ test("migration endpoint never accepts a transaction-mode Supavisor port", async
     ClientClass: NeverConnect,
   }), /port 5432/)
   assert.equal(constructed, false)
+})
+
+test("disposable rehearsal rejects effective host overrides before constructing an admin client", async () => {
+  let constructed = false
+  class NeverConnect { constructor() { constructed = true } }
+  const hostile = "postgresql://postgres:masked@127.0.0.1:5432/postgres?schema=public&host=remote.invalid"
+  assert.throws(() => createDisposablePostgresClient(hostile, NeverConnect), /unsupported or unsafe query parameter/)
+  assert.equal(constructed, false)
+  const source = await readFile(resolve(dirname(fileURLToPath(import.meta.url)), "webhook-empty-state-postgres-rehearsal.mjs"), "utf8")
+  assert.ok(source.indexOf("createDisposablePostgresClient(databaseUrl") < source.indexOf("await admin.connect()"))
+  assert.ok(source.indexOf("createDisposablePostgresClient(databaseUrl") < source.indexOf("DROP TABLE"))
 })
 
 test("signed maintenance receipt rejects tampering and an untrusted key", () => {

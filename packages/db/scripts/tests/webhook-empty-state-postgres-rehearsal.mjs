@@ -4,17 +4,12 @@ import { readFileSync, readdirSync } from "node:fs"
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Client } from "pg"
-import { EXPECTED_EMPTY_MIGRATIONS, hashDatabaseIdentity } from "../webhook-empty-state-contract.mjs"
+import { createDisposablePostgresClient, EXPECTED_EMPTY_MIGRATIONS, hashDatabaseIdentity } from "../webhook-empty-state-contract.mjs"
 import { runEmptyStateMigration } from "../webhook-empty-state-migration.mjs"
 
 const databaseUrl = process.env.DATABASE_DIRECT_URL
 if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1") throw new Error("Refusing destructive rehearsal without an explicitly disposable PostgreSQL service")
 if (typeof databaseUrl !== "string" || databaseUrl !== process.env.DATABASE_URL) throw new Error("Rehearsal requires identical direct and Prisma database URLs")
-const adminUrl = new URL(databaseUrl)
-if (!["127.0.0.1", "localhost", "::1"].includes(adminUrl.hostname) || adminUrl.pathname !== "/postgres" || (adminUrl.port && adminUrl.port !== "5432")) {
-  throw new Error("Rehearsal URL must be the isolated loopback postgres database on session port 5432")
-}
-
 const projectRef = "localtestprojectref1"
 const identity = { provider: "supabase", projectRef, database: "postgres", schema: "public" }
 const identitySha = hashDatabaseIdentity(identity)
@@ -23,15 +18,15 @@ if (!/^[a-f0-9]{40}$/.test(sourceSha || "")) throw new Error("Workflow source SH
 const runId = process.env.GITHUB_RUN_ID || "37200000001"
 const signingKeys = generateKeyPairSync("ed25519")
 const publicKeyPem = signingKeys.publicKey.export({ type: "spki", format: "pem" })
-const roleName = "empty_state_rehearsal"
+const roleName = "empty_state_rehearsal_" + randomBytes(6).toString("hex")
 const rolePassword = randomBytes(24).toString("hex")
 const runnerUrl = new URL(databaseUrl)
 runnerUrl.username = roleName
 runnerUrl.password = rolePassword
 const runnerDatabaseUrl = runnerUrl.toString()
-const admin = new Client({ connectionString: databaseUrl, application_name: "lyrashield-empty-state-rehearsal-admin" })
+const admin = createDisposablePostgresClient(databaseUrl, Client, { application_name: "lyrashield-empty-state-rehearsal-admin" })
 await admin.connect()
-await admin.query(`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${roleName}') THEN CREATE ROLE ${roleName} LOGIN PASSWORD '${rolePassword}' NOSUPERUSER NOBYPASSRLS; END IF; END $$`)
+await admin.query(`CREATE ROLE ${roleName} LOGIN PASSWORD '${rolePassword}' NOSUPERUSER NOBYPASSRLS`)
 await admin.query(`GRANT CONNECT ON DATABASE postgres TO ${roleName}`)
 await admin.query(`GRANT USAGE, CREATE ON SCHEMA public TO ${roleName}`)
 
@@ -157,8 +152,46 @@ async function prepareBaseline({ processedEvents = false, hiddenRows = false, fo
     await admin.query('INSERT INTO public."WebhookEvent"(id,processed,"deletedAt") VALUES ($1,true,NULL),($2,true,now())', ["processed-receipt-one", "processed-receipt-two"])
   }
   if (hiddenRows) {
-    await admin.query('CREATE POLICY rehearsal_hide_track_rows ON public."WebhookEventTrack" FOR SELECT USING (false)')
+    await admin.query('INSERT INTO public."WebhookEvent"(id,processed) VALUES ($1,true)', ["rls-hidden-parent"])
+    await admin.query(
+      'INSERT INTO public."WebhookEventTrack"(id,"webhookEventId",track,status,"updatedAt") VALUES ($1,$2,$3,$4,now())',
+      ["rls-hidden-track", "rls-hidden-parent", "billing", "pending"],
+    )
+    await admin.query('CREATE POLICY rehearsal_allow_track_rows ON public."WebhookEventTrack" AS PERMISSIVE FOR SELECT USING (true)')
+    await admin.query('CREATE POLICY rehearsal_hide_track_rows ON public."WebhookEventTrack" AS RESTRICTIVE FOR SELECT USING (false)')
+    await admin.query('ALTER TABLE public."WebhookEventTrack" ENABLE ROW LEVEL SECURITY')
     await admin.query('ALTER TABLE public."WebhookEventTrack" FORCE ROW LEVEL SECURITY')
+    const state = await admin.query(
+      'SELECT c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced, ' +
+      'pg_get_userbyid(c.relowner) = $1 AS runner_owns_table, r.rolsuper AS runner_superuser, ' +
+      'r.rolbypassrls AS runner_bypasses_rls FROM pg_class c JOIN pg_roles r ON r.rolname = $1 ' +
+      'WHERE c.oid = \'public."WebhookEventTrack"\'::regclass',
+      [roleName],
+    )
+    assert.deepEqual(state.rows[0], {
+      enabled: true,
+      forced: true,
+      runner_owns_table: true,
+      runner_superuser: false,
+      runner_bypasses_rls: false,
+    }, "RLS fixture must enable FORCE RLS for a non-bypass table-owner role")
+  }
+}
+
+async function assertRunnerRoleRlsBoundary() {
+  const probe = new Client({ connectionString: runnerDatabaseUrl, application_name: "lyrashield-empty-state-rls-probe" })
+  await probe.connect()
+  try {
+    const visible = await probe.query('SELECT count(*)::integer AS count FROM public."WebhookEventTrack" WHERE id=$1', ["rls-hidden-track"])
+    assert.equal(visible.rows[0].count, 0, "the rehearsal runner role must not see the policy-hidden fixture row")
+    await probe.query("SET row_security = off")
+    await assert.rejects(
+      probe.query('SELECT count(*) FROM public."WebhookEventTrack" WHERE id=$1', ["rls-hidden-track"]),
+      (error) => error?.code === "42501" && /row-level security/i.test(error.message),
+      "row_security=off must reject a query whose results RLS would filter",
+    )
+  } finally {
+    await probe.end()
   }
 }
 
@@ -287,7 +320,10 @@ await expectFailure(makeEnvironment(), /Unresolved webhook events exist, includi
 assert.equal(await hasColumn("nextAttemptAtUtc"), false)
 
 await prepareBaseline({ hiddenRows: true })
+await assertRunnerRoleRlsBoundary()
 await expectFailure(makeEnvironment(), /row-level security/i)
+const hidden = await admin.query('SELECT count(*)::integer AS count FROM public."WebhookEventTrack" WHERE id=$1', ["rls-hidden-track"])
+assert.equal(hidden.rows[0].count, 1, "the runner must reject a fixture row hidden from its non-privileged connection")
 assert.equal(await hasColumn("nextAttemptAtUtc"), false, "RLS-hidden rows must abort before DDL")
 
 await prepareBaseline({ foreignHistory: true })
@@ -304,15 +340,21 @@ const foreignMarker = await admin.query(
 await admin.query(foreignMarker.rows[0].statement)
 await expectFailure(foreignMarkerEnv, /does not match this run/)
 
-await prepareBaseline()
-await expectFailure(makeEnvironment(), /simulated process crash after index-intent/, { faultInjector: crashAt("index-intent") })
-await admin.query('CREATE INDEX "WebhookEventTrack_status_nextAttemptAtUtc_idx" ON public."WebhookEventTrack" (track)')
-await expectFailure(makeEnvironment(), /does not match the required definition/)
+  await prepareBaseline()
+  const malformedIndexEnv = makeEnvironment()
+  await expectFailure(malformedIndexEnv, /simulated process crash after index-intent/, { faultInjector: crashAt("index-intent") })
+  await admin.query('CREATE INDEX "WebhookEventTrack_status_nextAttemptAtUtc_idx" ON public."WebhookEventTrack" (track)')
+  await expectFailure(malformedIndexEnv, /does not match the required definition/)
+  const indexHistory = await admin.query('SELECT count(*)::integer AS count FROM public."_prisma_migrations" WHERE migration_name=$1', [EXPECTED_EMPTY_MIGRATIONS[2].name])
+  assert.equal(indexHistory.rows[0].count, 0, "malformed index must stop before migration-history reconciliation")
 
 await prepareBaseline()
-await expectFailure(makeEnvironment(), /simulated process crash after core-committed/, { faultInjector: crashAt("core-committed") })
+const legacyDriftEnv = makeEnvironment()
+await expectFailure(legacyDriftEnv, /simulated process crash after core-committed/, { faultInjector: crashAt("core-committed") })
 await admin.query('ALTER TABLE public."WebhookEventTrack" ALTER COLUMN "nextAttemptAt" SET DEFAULT (CURRENT_TIMESTAMP + interval \'1 day\')')
-await expectFailure(makeEnvironment(), /column contract differs at core: nextAttemptAt/)
+await expectFailure(legacyDriftEnv, /column contract differs at core: nextAttemptAt/)
+const legacyHistory = await admin.query('SELECT count(*)::integer AS count FROM public."_prisma_migrations" WHERE migration_name=$1', [EXPECTED_EMPTY_MIGRATIONS[0].name])
+assert.equal(legacyHistory.rows[0].count, 0, "legacy default drift must stop before migration-history reconciliation")
 
 for (const alter of [
   'ALTER TABLE public."WebhookEventTrack" ALTER COLUMN "historicalAttempts" TYPE text USING "historicalAttempts"::text',
@@ -329,6 +371,8 @@ for (const alter of [
 }
 
 await admin.query('DROP TABLE IF EXISTS public."WebhookEventTrack", public."WebhookEvent", public."_prisma_migrations" CASCADE')
+await admin.query(`REVOKE CONNECT ON DATABASE postgres FROM ${roleName}`)
+await admin.query(`REVOKE CREATE, USAGE ON SCHEMA public FROM ${roleName}`)
 await admin.query(`DROP ROLE IF EXISTS ${roleName}`)
 await admin.end()
 process.stdout.write("PostgreSQL 17 empty-state migration rehearsal passed, including crash recovery, lock expiry, RLS, marker/history, soft-delete, and schema-drift gates\n")

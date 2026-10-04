@@ -8,6 +8,7 @@ import {
   canonicalSupabaseDatabaseIdentity,
   EXPECTED_EMPTY_MIGRATIONS,
   hashDatabaseIdentity,
+  normalizeDefault,
   parsePostgresConnectionTarget,
   validateEmptyStateAuthorization,
   verifySignedEmptyStateReceipt,
@@ -202,13 +203,6 @@ const BASELINE_COLUMNS = Object.freeze({
   leaseExpiresAt: ["timestamp(3) without time zone", false, null],
 })
 
-function normalizedDefault(value) {
-  if (value === null || value === undefined) return null
-  let normalized = String(value).trim().replace(/\s+/g, " ")
-  while (normalized.startsWith("(") && normalized.endsWith(")")) normalized = normalized.slice(1, -1).trim()
-  return normalized.toUpperCase()
-}
-
 function expectedColumns(stage) {
   const expected = Object.fromEntries(Object.entries(BASELINE_COLUMNS).map(([name, value]) => [name, value.slice()]))
   if (stage !== "baseline") expected.nextAttemptAt = ["timestamp(3) without time zone", false, "CURRENT_TIMESTAMP"]
@@ -231,7 +225,7 @@ async function assertColumnStage(client, stage) {
   }
   for (const [name, [type, notnull, defaultValue]] of Object.entries(expected)) {
     const column = actual.get(name)
-    if (!column || column.type !== type || column.notnull !== notnull || normalizedDefault(column.default) !== normalizedDefault(defaultValue)) {
+    if (!column || column.type !== type || column.notnull !== notnull || normalizeDefault(column.default) !== normalizeDefault(defaultValue)) {
       fail("WebhookEventTrack column contract differs at " + stage + ": " + name)
     }
   }
@@ -285,13 +279,13 @@ async function verifyUtc(client) {
   const legacy = columns.get("nextAttemptAt")
   const due = columns.get("nextAttemptAtUtc")
   const lease = columns.get("leaseExpiresAtUtc")
-  if (!legacy || legacy.type !== "timestamp(3) without time zone" || normalizedDefault(legacy.default) !== "CURRENT_TIMESTAMP") {
+  if (!legacy || legacy.type !== "timestamp(3) without time zone" || normalizeDefault(legacy.default) !== "CURRENT_TIMESTAMP") {
     fail("Legacy due-time column does not have the exact PostgreSQL current-time default")
   }
-  if (!due || due.type !== "timestamp(3) with time zone" || due.notnull || normalizedDefault(due.default) !== "CURRENT_TIMESTAMP") {
+  if (!due || due.type !== "timestamp(3) with time zone" || due.notnull || normalizeDefault(due.default) !== "CURRENT_TIMESTAMP") {
     fail("UTC due-time column differs from the exact timestamp/default contract")
   }
-  if (!lease || lease.type !== "timestamp(3) with time zone" || lease.notnull || normalizedDefault(lease.default) !== null) {
+  if (!lease || lease.type !== "timestamp(3) with time zone" || lease.notnull || normalizeDefault(lease.default) !== null) {
     fail("UTC lease-expiry column differs from the exact timestamp/default contract")
   }
 }

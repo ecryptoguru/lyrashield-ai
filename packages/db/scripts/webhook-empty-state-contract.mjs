@@ -69,6 +69,76 @@ export function parsePostgresConnectionTarget(raw, label = "database URL") {
   return { url, host: url.hostname, user, database, schema, port: targetPort || "5432" }
 }
 
+export function assertDisposablePostgresUrl(raw, label = "disposable PostgreSQL URL") {
+  const target = parsePostgresConnectionTarget(raw, label)
+  if (!["localhost", "127.0.0.1", "::1"].includes(target.host) ||
+      target.port !== "5432" || target.database !== "postgres" || target.schema !== "public") {
+    throw new Error(`${label} must target loopback PostgreSQL postgres/public on port 5432`)
+  }
+  return target
+}
+
+export function createDisposablePostgresClient(raw, ClientClass, options = {}) {
+  assertDisposablePostgresUrl(raw)
+  if (typeof ClientClass !== "function") throw new Error("A PostgreSQL client constructor is required")
+  return new ClientClass({ ...options, connectionString: raw })
+}
+
+function hasOuterParentheses(expression) {
+  if (!expression.startsWith("(") || !expression.endsWith(")")) return false
+  let depth = 0
+  let quote = null
+  for (let index = 0; index < expression.length; index += 1) {
+    const char = expression[index]
+    if (quote) {
+      if (char === quote) {
+        if (expression[index + 1] === quote) index += 1
+        else quote = null
+      }
+      continue
+    }
+    if (char === "'" || char === '"') quote = char
+    else if (char === "(") depth += 1
+    else if (char === ")") {
+      depth -= 1
+      if (depth === 0 && index !== expression.length - 1) return false
+    }
+  }
+  return depth === 0 && quote === null
+}
+
+export function normalizeDefault(value) {
+  if (value === null || value === undefined) return null
+  let expression = String(value).trim()
+  while (hasOuterParentheses(expression)) expression = expression.slice(1, -1).trim()
+  let normalized = ""
+  let quote = null
+  let pendingSpace = false
+  for (let index = 0; index < expression.length; index += 1) {
+    const char = expression[index]
+    if (quote) {
+      normalized += char
+      if (char === quote) {
+        if (expression[index + 1] === quote) normalized += expression[++index]
+        else quote = null
+      }
+      continue
+    }
+    if (char === "'" || char === '"') {
+      if (pendingSpace && normalized) normalized += " "
+      pendingSpace = false
+      quote = char
+      normalized += char
+    } else if (/\s/.test(char)) pendingSpace = true
+    else {
+      if (pendingSpace && normalized) normalized += " "
+      pendingSpace = false
+      normalized += char.toUpperCase()
+    }
+  }
+  return normalized
+}
+
 function parseDatabaseUrl(raw, label) {
   const parsed = parsePostgresConnectionTarget(raw, label)
   const { url, user, database, schema, port } = parsed
