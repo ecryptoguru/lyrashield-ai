@@ -2,6 +2,7 @@
 title: "SonarQube vs LyraShield"
 description: "How LyraShield AI release assurance compares to SonarQube static analysis, quality gates and AI code verification for AI-built apps."
 pubDate: 2026-08-07
+updatedDate: 2026-10-04
 author: lyrashield-team
 tags:
   - vibe-coding-security
@@ -42,7 +43,7 @@ The LyraShield loop is target, review, evidence, fix, retest, report. A SAST fin
 
 LyraShield runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), the same protocol SonarQube's MCP Server uses to reach agents. The difference is that LyraShield's checks are part of a release-assurance loop with reviewed fix proposals, not continuous quality analysis. Fix proposals require a developer's approval before merging and a mandatory retest closes each finding. This is a stronger constraint than a suggestion or a one-click fix.
 
-For dependency risk, LyraShield uses SCA backed by sources like the [OSV database](https://osv.dev/). SonarQube does not currently provide deep SCA as a primary capability, so the two complement each other on supply-chain coverage. LyraShield emits SARIF so results can flow into existing tooling alongside SonarQube's findings.
+For dependency risk, LyraShield uses SCA backed by sources like the [OSV database](https://osv.dev/). SonarQube offers SCA through the paid [Advanced Security add-on](https://www.sonarsource.com/products/sonarqube/advanced-security/), so the two complement each other on supply-chain coverage. LyraShield emits SARIF so results can flow into existing tooling alongside SonarQube's findings.
 
 The difference between a quality gate and an evidence state is worth stating precisely. A quality gate is a binary pipeline check: the code either meets the configured standards or it does not and the pipeline fails or passes accordingly. An evidence state is a per-finding record of the retained evidence, its scope and any later retest. The quality gate checks configured rules; the evidence state helps a team review a specific target and release. Both are legitimate and they serve different moments in the lifecycle.
 

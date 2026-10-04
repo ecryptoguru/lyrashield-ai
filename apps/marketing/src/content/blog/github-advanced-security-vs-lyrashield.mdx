@@ -2,6 +2,7 @@
 title: "GitHub Advanced Security vs LyraShield"
 description: "How LyraShield AI release assurance compares to GitHub Advanced Security code scanning, secret scanning and Dependabot for AI-built apps."
 pubDate: 2026-08-07
+updatedDate: 2026-10-04
 author: lyrashield-team
 tags:
   - vibe-coding-security
@@ -11,7 +12,7 @@ draft: false
 heroImage: agent-security-42
 faq:
   - q: "Does GitHub Advanced Security cover AI-generated code?"
-    a: "Yes. GHAS code scanning, including its AI-powered detections, runs on AI-generated code the same way it runs on human-written code. It flags known vulnerability patterns and leaked secrets. It does not, however, produce an independent scoped evidence about what authorized checks observed or an immutable release-assurance record for the app as a whole."
+    a: "Yes. GHAS code scanning, including its AI-powered detections, analyzes code regardless of who or what wrote it. It flags known vulnerability patterns and leaked secrets. It does not, however, produce an independent scoped evidence about what authorized checks observed or an immutable release-assurance record for the app as a whole."
   - q: "Can LyraShield replace GitHub Advanced Security?"
     a: "Not as a general-purpose SAST engine. LyraShield runs an agentic pentest alongside SCA and secrets and focuses on evidence, retesting and a release decision. Many teams use GHAS for continuous deterministic scanning inside GitHub and add LyraShield for a scoped evidence record that complements the assurance workflow that GHAS does not provide."
   - q: "Is LyraShield available as a GitHub Action?"

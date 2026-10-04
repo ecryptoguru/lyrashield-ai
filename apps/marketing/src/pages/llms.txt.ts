@@ -82,7 +82,8 @@ async function latestContentDate(): Promise<string> {
 }
 
 const docsLinks = [
-  { label: "REST API reference", path: "/docs/api" },
+  { label: "REST API reference", path: "/docs/integrations/rest-api" },
+  { label: "API v1 OpenAPI reference", path: "/docs/api" },
   { label: "Remote action approvals", path: "/docs/approvals" },
   { label: "Coding-agent integrations", path: "/docs/integrations" },
   { label: "Agent Plugin installation", path: "/docs/integrations/agent-plugins" },
@@ -190,7 +191,7 @@ export const GET: APIRoute = async (context) => {
     })),
     { label: "Vibe Security 50 controls", url: `${origin}/vibe-security-50` },
     { label: "Operational Evidence Vault", url: `${origin}/evidence-vault` },
-    { label: "AI safety claims and limits", url: `${origin}/ai-safety` },
+    { label: "MCP guard claims and limits", url: `${origin}/ai-safety` },
     { label: "LyraShield AI support", url: `${origin}/support` },
     { label: "Security vulnerability reporting", url: `${origin}/security-reporting` },
     { label: "Privacy policy", url: `${origin}/privacy` },

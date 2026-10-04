@@ -3,7 +3,7 @@ title: "LyraShield vs Horizon3 NodeZero — compared"
 description: "How LyraShield AI compares to Horizon3.ai for autonomous infra pentest. Approach, evidence model, coverage framework and deployment model differences."
 competitor: "Horizon3.ai"
 heading: "LyraShield AI vs Horizon3.ai"
-disclaimer: "Factual comparison. [Horizon3.ai's NodeZero](https://www.horizon3.ai/nodezero/) is an autonomous, production-safe pentest platform that runs real attack techniques across web apps, infrastructure, cloud, data and identity — chaining weaknesses into attack paths and verifying fixes, with no agents. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports and reviewed fix proposals. NodeZero validates production resilience across the whole environment; LyraShield AI gates AI-generated-code releases. Neither replaces the other."
+disclaimer: 'Factual comparison. <a href="https://www.horizon3.ai/nodezero/">Horizon3.ai''s NodeZero</a> is an autonomous, production-safe pentest platform that runs real attack techniques across web apps, infrastructure, cloud, data and identity — chaining weaknesses into attack paths and verifying fixes, with no agents. <a href="https://lyrashieldai.com/">LyraShield AI</a> is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, checksum-bound assurance reports and reviewed fix proposals. NodeZero validates production resilience across the whole environment; LyraShield AI gates AI-generated-code releases. Neither replaces the other.'
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
@@ -11,9 +11,9 @@ faq:
   - q: "Does LyraShield replace Horizon3 NodeZero?"
     a: "No. NodeZero is an autonomous, production-safe pentest that chains weaknesses across internal, external, cloud, Kubernetes, Active Directory and identity, with attack-path diagrams and Quick Verify retests. LyraShield in open beta is app-layer release assurance for AI-built apps with evidence states, coverage receipts and reviewed fix proposals."
   - q: "Can I use Horizon3 NodeZero and LyraShield together?"
-    a: "Yes. Use NodeZero to prove production resilience across your environment and meet CTEM goals and use LyraShield to gate releases of AI-built apps with an immutable assurance record. NodeZero offers Docker and OVA deploy for internal tests and has commercial terms that vary by scope; LyraShield is live open beta."
+    a: "Yes. Use NodeZero to prove production resilience across your environment and meet CTEM goals and use LyraShield to gate releases of AI-built apps with a checksum-bound assurance record. NodeZero offers Docker and OVA deploy for internal tests and has commercial terms that vary by scope; LyraShield is live open beta."
   - q: "When should I choose Horizon3 NodeZero over LyraShield?"
-    a: "Choose NodeZero when you need continuous exposure validation across networks, identities and cloud, not just one app, with FedRAMP High options for federal environments. Its strength is proving what an attacker can actually achieve across environments. Choose LyraShield when your bottleneck is AI-specific patterns, MCP configs and a ship or no-ship decision."
+    a: "Choose NodeZero when you need continuous exposure validation across networks, identities and cloud, not just one app, with FedRAMP High options for federal environments. Its strength is proving what an attacker can actually achieve across environments. Choose LyraShield when your bottleneck is AI-specific patterns, agent instruction files and a ship or no-ship decision."
 ---
 
 ## Core approach
@@ -22,27 +22,27 @@ faq:
 | ----------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | Primary focus     | Release assurance for AI-built apps                                          | Continuous, autonomous production pentesting and exposure validation                       |
 | Scanning approach | Agentic engine with coverage framework and evidence states; AI-pattern focus | Autonomous AI that pivots through networks, chaining weaknesses and safely exploiting them |
-| Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive         | Attack path → proven exploit with impact → prioritized → fix → Quick Verify retest         |
+| Finding lifecycle | Detected → retest-confirmed or inconclusive                                  | Attack path → proven exploit with impact → prioritized → fix → Quick Verify retest         |
 | Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                  | No published control framework; threat-informed, attack-path prioritization                |
 | Environment focus | App-layer + AI-generated code; MCP/agent configs                             | Internal + external + cloud + Kubernetes + Active Directory + web apps + identity          |
 | Deployment model  | Hosted + CLI + MCP + GitHub Action                                           | Internal tests via Docker/OVA; external from Horizon3 cloud; no agents                     |
 
 ## Capability comparison
 
-| Capability                          | LyraShield AI                                                   | Horizon3 NodeZero                                               |
-| ----------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
-| Agentic / AI-driven pentest         | Yes (app-layer)                                                 | Yes (cross-environment)                                         |
-| Independent finding verification    | Yes (separate receipt; scope-bound)                             | Yes (proven attack paths with impact)                           |
-| SCA (dependency scanning)           | Yes (engine)                                                    | Not a primary focus                                             |
-| Secret scanning                     | Yes (engine + GitHub Action)                                    | Detects exposed credentials/secret-related weaknesses           |
-| Evidence states (4-state lifecycle) | Yes                                                             | Findings carry exploit proof; no explicit multi-state lifecycle |
-| Deterministic retest                | Yes                                                             | Quick Verify re-test after fix                                  |
-| Coverage receipts                   | Yes (per-control)                                               | No (attack-path + impact diagrams instead)                      |
-| Assurance reports (immutable)       | Yes                                                             | Executive/auditor reporting; CTEM-aligned evidence              |
-| MCP server integration              | Yes (inside AI coding agents)                                   | Yes (MCP server to accelerate remediation / find-fix-verify)    |
-| Permission-gated Fix PR requests    | Fix PR requests require permission and a server-generated patch | No (remediation guidance + verify)                              |
-| Production-safe execution           | App-layer scope                                                 | Yes (zero-downtime claim across production tests)               |
-| AI-generated-code focus             | Built for AI-built apps                                         | No AI-generated-code positioning found                          |
+| Capability                          | LyraShield AI                                                                                 | Horizon3 NodeZero                                               |
+| ----------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Agentic / AI-driven pentest         | Yes (app-layer)                                                                               | Yes (cross-environment)                                         |
+| Independent finding verification    | No. Fixes are confirmed by deterministic retest; independent verification is a reserved state | Yes (proven attack paths with impact)                           |
+| SCA (dependency scanning)           | Yes (engine)                                                                                  | Not a primary focus                                             |
+| Secret scanning                     | Yes (engine + GitHub Action)                                                                  | Detects exposed credentials/secret-related weaknesses           |
+| Evidence states (4-state lifecycle) | Yes                                                                                           | Findings carry exploit proof; no explicit multi-state lifecycle |
+| Deterministic retest                | Yes                                                                                           | Quick Verify re-test after fix                                  |
+| Coverage receipts                   | Yes (per-control)                                                                             | No (attack-path + impact diagrams instead)                      |
+| Assurance reports (checksum-bound)  | Yes                                                                                           | Executive/auditor reporting; CTEM-aligned evidence              |
+| MCP server integration              | Yes (inside AI coding agents)                                                                 | Yes (MCP server to accelerate remediation / find-fix-verify)    |
+| Permission-gated Fix PR requests    | Fix PR requests require permission and a server-generated patch                               | No (remediation guidance + verify)                              |
+| Production-safe execution           | App-layer scope                                                                               | Yes (zero-downtime claim across production tests)               |
+| AI-generated-code focus             | Built for AI-built apps                                                                       | No AI-generated-code positioning found                          |
 
 ## Deployment and pricing
 
@@ -57,7 +57,7 @@ faq:
 ### Use LyraShield AI when
 
 - Your app is AI-built and you need AI-specific pattern coverage and a release-gate assurance record
-- You need immutable assurance reports with coverage receipts for compliance or client handoff
+- You need checksum-bound assurance reports with coverage receipts for compliance or client handoff
 - You want reviewable fix proposals and a separate permission gate for Fix PR requests
 - You want security checks inside your AI coding agent via MCP
 - You need SCA + secrets + agentic pentest in one release-assurance loop
@@ -72,7 +72,7 @@ faq:
 
 ---
 
-NodeZero proves production resilience across the environment; LyraShield AI gates AI-built-app releases. [Read our comparison methodology](https://lyrashieldai.com) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
+NodeZero proves production resilience across the environment; LyraShield AI gates AI-built-app releases. [Read our comparison methodology](/methodology) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 
 ## Methodology and scope
 
