@@ -121,7 +121,7 @@ const jsonLd = [
           Every finding carries one of three shipped evidence states: <strong>detected</strong> (a scanner signal that needs review), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent) or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today. A score or clean result never overrides these facts.
         </p>
       </div>
-      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-07-29">July 29, 2026</time> · Maintained by LyraShield Security + Engineering</p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-10-05">5 Oct 2026</time> · Maintained by LyraShield Security + Engineering</p>
     </header>
 
     <section aria-labelledby="record-heading" class="mt-16 border-y border-border py-12">
@@ -197,6 +197,53 @@ const jsonLd = [
           <dd class="mt-2 leading-7 text-text-muted">No score snapshot was available for the shared record.</dd>
         </div>
       </dl>
+    </section>
+
+    <section aria-labelledby="coverage-heading" class="border-t border-border py-16" data-reveal-group>
+      <h2 id="coverage-heading" class="text-2xl font-semibold text-text" data-reveal>Coverage states</h2>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>
+        Coverage records what happened to each check, which is a separate question from what a
+        finding is. A verdict is only as strong as the coverage behind it.
+      </p>
+      <div
+        class="mt-8 overflow-x-auto rounded-xl border border-border bg-bg-raised focus-visible:ring-2 focus-visible:ring-accent"
+        tabindex="0"
+        role="region"
+        aria-label="Coverage states"
+      >
+        <table class="w-full min-w-140 border-collapse text-left text-sm">
+          <caption class="sr-only">Coverage states and what each one means for a verdict</caption>
+          <thead class="bg-bg-raised text-text">
+            <tr>
+              <th scope="col" class="px-4 py-3 font-semibold">Coverage state</th>
+              <th scope="col" class="px-4 py-3 font-semibold">What it means</th>
+              <th scope="col" class="px-4 py-3 font-semibold">Effect on the verdict</th>
+            </tr>
+          </thead>
+          <tbody class="text-text-muted">
+            <tr class="border-t border-border">
+              <th scope="row" class="px-4 py-3 font-medium text-text">Completed</th>
+              <td class="px-4 py-3">The check ran against the authorized scope and returned a result.</td>
+              <td class="px-4 py-3">Counts toward the verdict.</td>
+            </tr>
+            <tr class="border-t border-border">
+              <th scope="row" class="px-4 py-3 font-medium text-text">Limited</th>
+              <td class="px-4 py-3">The check ran but could not see everything in its scope.</td>
+              <td class="px-4 py-3">Counts, with the limitation retained on the record.</td>
+            </tr>
+            <tr class="border-t border-border">
+              <th scope="row" class="px-4 py-3 font-medium text-text">Skipped</th>
+              <td class="px-4 py-3">The check did not run, for example because a prerequisite was absent.</td>
+              <td class="px-4 py-3">Surfaces as insufficient evidence rather than a pass.</td>
+            </tr>
+            <tr class="border-t border-border">
+              <th scope="row" class="px-4 py-3 font-medium text-text">Not applicable</th>
+              <td class="px-4 py-3">The control does not apply to the scanned target type.</td>
+              <td class="px-4 py-3">Excluded from the denominator and stated as such.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section aria-labelledby="limits-heading" class="rounded-2xl border border-border bg-bg-raised p-7 sm:p-9" data-reveal="scale">

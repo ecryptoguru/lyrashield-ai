@@ -65,6 +65,17 @@ export function evaluateLighthouseReports(reports, origin = "https://lyrashielda
       report?.finalDisplayedUrl || report?.finalUrl || new URL(page.path, origin).toString()
     const cells = []
 
+    if (report?.runtimeError) {
+      const code =
+        typeof report.runtimeError.code === "string" && report.runtimeError.code.length > 0
+          ? report.runtimeError.code
+          : "unknown"
+      const message =
+        typeof report.runtimeError.message === "string" ? report.runtimeError.message : ""
+      messages.push("FAIL " + url + " runtimeError: " + code + (message ? ": " + message : ""))
+      failed = true
+    }
+
     for (const [category, threshold] of Object.entries(LIGHTHOUSE_MINIMUM)) {
       const score = report?.categories?.[category]?.score
       const valid = typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 1
@@ -86,7 +97,12 @@ export function evaluateLighthouseReports(reports, origin = "https://lyrashielda
   return {
     failed,
     messages,
-    summary: "## Lighthouse production scores\n\n" + rows.join("\n") + "\n",
+    summary:
+      "## Lighthouse production scores\n\n" +
+      rows.join("\n") +
+      "\n" +
+      messages.filter((message) => message.includes(" runtimeError: ")).join("\n") +
+      (messages.some((message) => message.includes(" runtimeError: ")) ? "\n" : ""),
   }
 }
 

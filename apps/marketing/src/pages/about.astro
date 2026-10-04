@@ -1,11 +1,11 @@
 ---
-// Contact routing: the general contact mailbox is the one actually configured in
-// wrangler.jsonc (PUBLIC_ABUSE_EMAIL — the variable name predates this page
-// using it for partnership and product questions). Security vulnerabilities are
-// routed through /security-reporting rather than a raw mailto so the disclosure
-// policy and the monitored address stay in one place.
-const abuseEmail =
-  (import.meta.env.PUBLIC_ABUSE_EMAIL as string | undefined) || "admin@lyrashieldai.com"
+// Contact routing: one rule, stated in the vocabulary lock. support@ is for
+// help and product questions; security@ is for vulnerability reports and is
+// reached through /security-reporting so the disclosure policy and the
+// monitored address stay in one place. The earlier admin@ general mailbox is
+// retired from public pages.
+const supportEmail =
+  (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
 // Fallback must stay in sync with DEFAULT_API_URL in packages/credentials/src/index.ts
 // (marketing deliberately has no dependency edge on that package).
 const appUrl =
@@ -97,6 +97,11 @@ const jsonLd: unknown[] = [
         LyraShield AI is the evidence-backed launch gate for AI-built software. We
         believe a security result should say what it knows — and what it does not — rather than
         turning scanner confidence into a universal verdict.
+      </p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
+        Last reviewed: <time datetime="2026-10-05">5 Oct 2026</time>. The evidence states and
+        coverage limits this page refers to are defined once on{" "}
+        <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">the methodology page</a>.
       </p>
     </header>
 
@@ -234,9 +239,9 @@ const jsonLd: unknown[] = [
       <p class="mt-5 leading-7 text-text-muted" data-reveal>
         For a security vulnerability, follow the{" "}
         <a href="/security-reporting" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">coordinated disclosure process</a>{" "}
-        so the report reaches the monitored mailbox with the detail we need. For partnership or
-        product questions, email{" "}
-        <a href={`mailto:${abuseEmail}`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">{abuseEmail}</a>.
+        so the report reaches the monitored mailbox with the detail we need. For help and product
+        questions, email{" "}
+        <a href={`mailto:${supportEmail}`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">{supportEmail}</a>.
         Registration is open in the beta &mdash;{" "}
         <a href={`${appUrl}/sign-up?source=about&cta=create_account`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">{CTA_LABEL.signUp}</a>{" "}
         to start a launch report.

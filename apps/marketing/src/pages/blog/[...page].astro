@@ -17,6 +17,27 @@ export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
 
 const { page } = Astro.props
 
+/**
+ * "Start here" row (Spec item 6.3). A fixed, hand-picked shortlist of evergreen
+ * guides, resolved against the FULL published collection rather than the page
+ * slice, so the row renders the same on page 1 regardless of publish order.
+ */
+const START_HERE_SLUGS = [
+  "vibe-coding-security-guide",
+  "ai-app-prelaunch-security-checklist",
+  "what-data-shows-ai-generated-code-security-2026",
+  "ai-app-privacy-checklist",
+  "review-ai-generated-pull-request",
+]
+const allPublished = await getCollection(
+  "blog",
+  (entry) => !entry.data.draft && isNotAfterBuildDate(entry.data)
+)
+const startHerePosts = START_HERE_SLUGS.flatMap((slug) => {
+  const post = allPublished.find((entry) => entry.id === slug)
+  return post ? [post] : []
+})
+
 const origin = Astro.site?.origin || "http://localhost:4321"
 // Paginated pages 2+ share the index's description with a page suffix, which
 // reads as near-duplicate content to crawlers. Canonical to /blog and keep the
@@ -65,6 +86,40 @@ const jsonLd = [
         <p id="featured-heading">Latest resource</p>
         <BlogCard post={featuredPost} heroImage={imagesByPost.get(featuredPost.id)} featured />
       </section>
+    )}
+
+    {page.currentPage === 1 && (
+      <section aria-labelledby="start-here-heading" class="blog-index__start-here" data-reveal-group>
+        <div class="blog-index__section-heading" data-reveal="fade">
+          <h2 id="start-here-heading">Start here</h2>
+          <span>Five guides to read first</span>
+        </div>
+        <ol class="blog-index__start-here-list">
+          {startHerePosts.map((post) => (
+            <li data-reveal>
+              <a href={`/blog/${post.id}`}>
+                <span>{post.data.title}</span>
+                <span aria-hidden="true">→</span>
+              </a>
+            </li>
+          ))}
+        </ol>
+      </section>
+    )}
+
+    {page.currentPage === 1 && (
+      <form class="blog-index__search" role="search" data-blog-search data-reveal="fade">
+        <label for="blog-search-input" class="text-sm font-semibold text-text">Search the guides</label>
+        <input
+          type="search"
+          id="blog-search-input"
+          name="q"
+          placeholder="Search by title or topic"
+          autocomplete="off"
+          class="mt-2 min-h-11 w-full max-w-md rounded-lg border border-border bg-bg-raised px-4 text-base text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        />
+        <p class="mt-2 text-sm text-text-muted" data-blog-search-count aria-live="polite"></p>
+      </form>
     )}
 
     <section class="blog-index__categories" aria-labelledby="categories-heading">
@@ -127,6 +182,34 @@ const jsonLd = [
       </nav>
     )}
   </section>
+
+  <script>
+    // Client-side filter over the rendered cards (Spec item 6.3). It reads only
+    // the visitor's own query and touches no network surface.
+    const search = document.querySelector<HTMLFormElement>("[data-blog-search]")
+    const input = document.querySelector<HTMLInputElement>("#blog-search-input")
+    const count = document.querySelector<HTMLElement>("[data-blog-search-count]")
+    if (search && input) {
+      search.addEventListener("submit", (event) => event.preventDefault())
+      const cards = Array.from(document.querySelectorAll<HTMLElement>(".blog-index__latest article, .blog-index__featured article"))
+      const apply = () => {
+        const term = input.value.trim().toLowerCase()
+        if (term.length === 0) {
+          for (const card of cards) card.hidden = false
+          if (count) count.textContent = ""
+          return
+        }
+        let visible = 0
+        for (const card of cards) {
+          const match = card.textContent?.toLowerCase().includes(term) ?? false
+          card.hidden = !match
+          if (match) visible += 1
+        }
+        if (count) count.textContent = `${visible} ${visible === 1 ? "guide" : "guides"} match "${input.value.trim()}".`
+      }
+      input.addEventListener("input", apply)
+    }
+  </script>
 </Base>
 
 <style>
@@ -142,6 +225,15 @@ const jsonLd = [
   .blog-index__featured { margin-top: clamp(1rem, 3vw, 2rem); }
   .blog-index__featured > p { margin-bottom: 1rem; }
   .blog-index__categories { margin-top: clamp(4rem, 9vw, 8rem); }
+  .blog-index__start-here { margin-top: clamp(3rem, 7vw, 5rem); }
+  .blog-index__start-here-list { display: grid; gap: .5rem; margin: 1.5rem 0 0; padding: 0; list-style: none; counter-reset: start-here; }
+  .blog-index__start-here-list li { counter-increment: start-here; }
+  .blog-index__start-here-list a { display: flex; min-height: 2.75rem; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--color-border); border-radius: .75rem; background: var(--color-bg-raised); padding: .85rem 1.1rem; color: var(--color-text); font-weight: 600; text-decoration: none; }
+  .blog-index__start-here-list a::before { content: counter(start-here, decimal-leading-zero); margin-right: .9rem; color: var(--color-accent); font-family: "JetBrains Mono Variable", monospace; font-size: .75rem; font-weight: 600; }
+  .blog-index__start-here-list a:hover { border-color: var(--color-accent); }
+  .blog-index__search { margin-top: clamp(2.5rem, 6vw, 4rem); }
+  .blog-index__search label { display: block; }
+  .blog-index__search a:focus-visible, .blog-index__start-here-list a:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
   .blog-index__category-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 0; padding: 0; list-style: none; }
   .blog-index__category-grid > li { display: grid; }
   .category-card { display: grid; align-content: start; gap: .8rem; min-height: 13rem; border: 1px solid var(--color-border); border-radius: 1rem; padding: clamp(1.35rem, 2.5vw, 1.85rem); background: linear-gradient(160deg, var(--color-bg-raised), var(--color-bg)); color: var(--color-text); text-decoration: none; }

@@ -331,7 +331,7 @@ describe("marketing SEO metadata", () => {
     expect(scanner).toContain('"@type": "BreadcrumbList"')
   })
 
-  it("uses one page-level main landmark and keeps breadcrumbs in metadata only", () => {
+  it("uses one page-level main landmark and keeps breadcrumbs out of the page chrome", () => {
     const methodology = source("../pages/methodology.astro")
     const toolLayout = source("../layouts/ToolLayout.astro")
     const breadcrumbSurfaces = [
@@ -341,7 +341,8 @@ describe("marketing SEO metadata", () => {
       source("../pages/scan.astro"),
       source("../pages/terms.astro"),
       source("../pages/blog/[...page].astro"),
-      source("../layouts/BlogPost.astro"),
+      // BlogPost.astro moved to this list when Wave 6 item 6.7 added the
+      // visible breadcrumb; its guard is now the count assertion below.
     ]
 
     expect(methodology).not.toMatch(/<main(?:\s|>)/)
@@ -350,6 +351,10 @@ describe("marketing SEO metadata", () => {
     breadcrumbSurfaces.forEach((surface) =>
       expect(surface).not.toContain('aria-label="Breadcrumb"')
     )
+    // The one visible breadcrumb per template is the Wave 6 contract; a second
+    // would double the trail in the page outline.
+    expect(source("../layouts/BlogPost.astro").match(/aria-label="Breadcrumb"/g)).toHaveLength(1)
+    expect(source("../layouts/DocsLayout.astro").match(/aria-label="Breadcrumb"/g)).toHaveLength(1)
     expect(toolLayout).toContain("tool.checks.map")
     expect(toolLayout).toContain("tool.limitations.map")
     expect(toolLayout).toContain('target="_blank"')

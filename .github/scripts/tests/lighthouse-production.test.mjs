@@ -222,6 +222,43 @@ test("a finite category score with a NO_NAVSTART runtime error is retained and a
   assert.ok(evaluation.messages.includes("ok   https://lyrashieldai.com/agents seo: 1 (min 0.95)"))
 })
 
+test("runtime errors fail closed while retaining every route's category scores", async (t) => {
+  const reportsDir = mkdtempSync(path.join(tmpdir(), "lyra-lighthouse-runtime-error-"))
+  t.after(() => rmSync(reportsDir, { recursive: true, force: true }))
+  const origin = "https://lyrashieldai.com"
+  const invocations = []
+  const reports = await collectLighthouseReports({
+    reportsDir,
+    origin,
+    logger: { warn() {} },
+    invoke: async (url) => {
+      invocations.push(url)
+      const result = report(0.98, null, url)
+      if (url.endsWith("/agents")) result.runtimeError = { code: "PROTOCOL_TIMEOUT" }
+      return {
+        report: result,
+        diagnostic: url.endsWith("/agents") ? "NO_NAVSTART in diagnostic output" : "",
+        exitCode: url.endsWith("/agents") ? 1 : 0,
+      }
+    },
+  })
+  assert.deepEqual(
+    invocations,
+    LIGHTHOUSE_PAGES.map((page) => new URL(page.path, origin).toString())
+  )
+  assert.equal(Object.keys(reports).length, LIGHTHOUSE_PAGES.length)
+  assert.equal(reports._agents.categories.accessibility.score, 1)
+  const evaluation = evaluateLighthouseReports(reports)
+  assert.equal(evaluation.failed, true)
+  assert.equal(evaluation.messages.filter((message) => message.startsWith("ok   ")).length, 15)
+  assert.ok(
+    evaluation.messages.includes(
+      "FAIL https://lyrashieldai.com/agents runtimeError: PROTOCOL_TIMEOUT"
+    )
+  )
+  assert.match(evaluation.summary, /runtimeError: PROTOCOL_TIMEOUT/)
+})
+
 test("retries a thrown NO_NAVSTART instrumentation failure only once", async (t) => {
   const reportsDir = mkdtempSync(path.join(tmpdir(), "lyra-lighthouse-thrown-"))
   t.after(() => rmSync(reportsDir, { recursive: true, force: true }))
