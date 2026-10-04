@@ -67,7 +67,7 @@ Record the Devin CLI version, operating system, active configuration scope, tran
 
 ## 4. Run an inline security check
 
-With the client read call verified, ask Devin to use `lyrashield_list_targets`, choose an authorized target and call `lyrashield_scan_target`. Keep the returned scan ID, poll `lyrashield_get_scan_status` to a terminal state and page through `lyrashield_get_findings`. A detected issue is not independently verified without a separate receipt. A runner-local `npx -y lyrashield@0.2.14 scan` is a different workflow and does not prove inline Devin MCP behavior.
+With the client read call verified, ask Devin to use `lyrashield_list_targets`, choose an authorized target and call `lyrashield_scan_target`. Keep the returned scan ID, poll `lyrashield_get_scan_status` to a terminal state and page through `lyrashield_get_findings`. A detected issue is not retest-confirmed without a fresh applicable retest. A runner-local `npx -y lyrashield@0.2.14 scan` is a different workflow and does not prove inline Devin MCP behavior.
 
 Review the scan output in the session. If a candidate issue is real, a fix proposal is generated for review. Approval gated fix proposals require a human review before a patch reaches a pull request, so a fix is never automatic. As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action and SARIF output. Run the [free AI app security checklist](/tools/ai-app-security-checklist) to see the full release review.
 
@@ -96,13 +96,13 @@ jobs:
 Tell Devin CLI to use LyraShield before proposing a fix. Add a line to AGENTS.md in your project root:
 
 ```
-Run the LyraShield scan tool before proposing a fix. Do not apply a patch until a human reviews the fix proposal. Keep detected issues in a detected state until independent verification confirms the behavior.
+Run the LyraShield scan tool before proposing a fix. Do not apply a patch until a human reviews the fix proposal. Keep detected issues in a detected state until a fresh applicable retest confirms the behavior.
 ```
 
 A rules file states intent. The approval gate enforces it. A prompt can be changed in a pull request or ignored under pressure, but a server side gate that blocks a patch until a human binds it to an approval cannot be talked past. That is the difference between stating a policy and holding one. Require a security owner for changes to agent configuration and include AGENTS.md in normal code review and branch protection. The [Codex security workflow](/blog/codex-security-workflow) covers a related command line agent if your team uses multiple tools.
 
 ## Why pair Devin CLI with LyraShield
 
-Devin CLI accelerates implementation as a Cognition command line agent. LyraShield AI provides release assurance through a loop of target, review, evidence, fix, retest and report. The platform keeps detected candidates distinct from findings with separate verification receipts and from later retest outcomes. Each receipt is limited to its stated evidence and scope, and the assurance record preserves what was checked and the result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
+Devin CLI accelerates implementation as a Cognition command line agent. LyraShield AI provides release assurance through a loop of target, review, evidence, fix, retest and report. The platform keeps detected candidates, retest outcomes and inconclusive results distinct. Each receipt is limited to its stated evidence and scope, and the assurance record preserves what was checked and the result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
 
 As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate and SARIF output. Fix proposals are approval gated and never unattended. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request. [Create an account](https://app.lyrashieldai.com/sign-up) to start or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Windsurf security workflow](/blog/windsurf-security-workflow) covers a related tool if your team uses multiple agents.

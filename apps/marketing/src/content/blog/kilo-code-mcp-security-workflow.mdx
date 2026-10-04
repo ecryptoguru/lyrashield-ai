@@ -30,7 +30,7 @@ When you generate code with an agent, you generate more attack surface than a hu
 
 Start with Node.js 24 or newer which you can confirm via [Node.js docs](https://nodejs.org/en/docs), Git with pull request workflow and a LyraShield API key in the form lsk\_... Set the key as an environment variable named LYRASHIELD_API_KEY and avoid pasting raw values into checked in files. Kilo Code resolves `{env:LYRASHIELD_API_KEY}` at runtime, so secrets stay out of kilo.jsonc.
 
-Take stock of the app scope you want to protect. LyraShield combines bounded repository review, SCA, secrets scanning, a GitHub Action and SARIF output. Findings retain their recorded evidence states; scan detection alone is not independent verification. Fix proposals and retests remain approval-gated and PR execution remains unavailable until a server-generated patch can be bound to an exact approval. Read [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for why stdio works locally and streamable HTTP fits remote hosting.
+Take stock of the app scope you want to protect. LyraShield combines bounded repository review, SCA, secrets scanning, a GitHub Action and SARIF output. Findings retain their recorded evidence states; scan detection alone is not a retest. Fix proposals and retests remain approval-gated and PR execution remains unavailable until a server-generated patch can be bound to an exact approval. Read [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for why stdio works locally and streamable HTTP fits remote hosting.
 
 Quick sanity checks for the MCP package and env wiring:
 
@@ -118,7 +118,7 @@ Include OWASP mapping when applicable.
 Save report id for PR gate.
 ```
 
-A good response contains finding id, severity, evidence state, file path, evidence and suggested patch location. Prioritize independently verified findings while retaining detected and inconclusive items for triage. For context on categories, see [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) again for category definitions and examples. Do not claim fixes, branches or PRs exist unless the corresponding action completed.
+A good response contains finding id, severity, evidence state, file path, evidence and suggested patch location. Prioritize retest-confirmed findings while retaining detected and inconclusive items for triage. For context on categories, see [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) again for category definitions and examples. Do not claim fixes, branches or PRs exist unless the corresponding action completed.
 
 This inline check is also where you catch secrets that were generated into sample env files. LyraShield v1 includes secrets scanning alongside SCA, so a single scan can surface both hardcoded credentials and vulnerable packages. When evidence points to a config file, rotate the secret first, then fix the code path that introduced it.
 
@@ -150,7 +150,7 @@ jobs:
           fail_on_severity: HIGH
 ```
 
-Require the security job in branch protection settings. The pairing of MCP for local dev plus the Action for CI mirrors the Model Context Protocol idea of keeping context close to the agent while enforcing policy in CI. See [GitHub Actions docs](https://docs.github.com/en/actions) for reusable workflows and [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for transport details. Once required, developers cannot merge when findings meet the configured severity gate; that policy does not turn a detected finding into an independently verified one.
+Require the security job in branch protection settings. The pairing of MCP for local dev plus the Action for CI mirrors the Model Context Protocol idea of keeping context close to the agent while enforcing policy in CI. See [GitHub Actions docs](https://docs.github.com/en/actions) for reusable workflows and [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for transport details. Once required, developers cannot merge when findings meet the configured severity gate; that policy does not turn a detected finding into a retest-confirmed one.
 
 ## 6. Add agent rules for consistent secure coding
 
@@ -178,6 +178,6 @@ Store the file as .kilo/rules.md or kilo.md in your repo root so it travels with
 
 ## Why pair Kilo Code with LyraShield
 
-Kilo Code gives you fast scaffolding and agent controlled edits, but fast generation still needs bounded review. LyraShield records findings with explicit evidence states, maps each issue to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), checks dependencies using [OSV](https://osv.dev/) and keeps the loop inside MCP so you avoid context switching. The configured gate and SARIF output make triage visible where developers already work without claiming that every detection is independently verified.
+Kilo Code gives you fast scaffolding and agent controlled edits, but fast generation still needs bounded review. LyraShield records findings with explicit evidence states, maps each issue to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), checks dependencies using [OSV](https://osv.dev/) and keeps the loop inside MCP so you avoid context switching. The configured gate and SARIF output make triage visible where developers already work without claiming that every detection is retest-confirmed.
 
 Close the loop with the working checklist: walk through [AI app security checklist](/tools/ai-app-security-checklist) on each release candidate and confirm your config matches [Kilo Code integration guide](/docs/integrations/kilo-code). When you are ready to evaluate managed scanning, [create an account at LyraShield AI](https://app.lyrashieldai.com/sign-up) and keep the PR gate as your source of truth for verification.

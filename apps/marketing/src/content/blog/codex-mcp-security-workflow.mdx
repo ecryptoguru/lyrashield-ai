@@ -11,7 +11,7 @@ faq:
   - q: "Where does Codex store MCP config?"
     a: "Codex stores MCP servers in ~/.codex/config.toml under [mcp_servers.*]. Each entry defines command, args and bearer_token_env_var for remote auth to LyraShield."
   - q: "How does LyraShield handle false positives in Codex?"
-    a: "LyraShield returns findings with recorded evidence states. A clean deterministic retest can be retest-confirmed; independent verification requires a separate receipt. Current tools record fix proposals and queue retests but do not edit code or open pull requests."
+    a: "LyraShield returns findings with recorded evidence states. A clean deterministic retest can be retest-confirmed. Current tools record fix proposals and queue retests but do not edit code or open pull requests."
   - q: "Do I need both local and remote MCP?"
     a: "Use local stdio when Codex should launch the npm package or remote HTTP when Codex should connect to the hosted endpoint. Local uses command and args; remote uses url and bearer_token_env_var."
   - q: "Where does Codex store MCP server config?"
@@ -22,7 +22,7 @@ Current setup: follow the [Codex integration guide](/docs/integrations/openai-co
 
 You can review AI generated pull requests in Codex with evidence-state AppSec findings by connecting LyraShield AI through MCP, running a targeted scan from your Codex session and enforcing the same policy in CI with a diff aware gate. The config lives in `~/.codex/config.toml` and supports both local stdio and remote HTTP with a bearer token.
 
-OpenAI Codex excels at large refactors, but refactors can introduce auth bypasses, injection and vulnerable dependencies that are hard to spot in a diff. The [vibe coding security guide](/blog/vibe-coding-security-guide) describes why AI built code needs findings with recorded evidence states instead of noisy lint. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This guide gives you the exact `~/.codex/config.toml` entries for local and remote MCP using `npx -y @lyrashield/mcp@0.2.12` and `https://app.lyrashieldai.com/api/mcp`, plus verification, inline checks and a GitHub Action. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
+OpenAI Codex excels at large refactors, but refactors can introduce auth bypasses, injection and vulnerable dependencies that are hard to spot in a diff. The [vibe coding security guide](/blog/vibe-coding-security-guide) describes why AI built code needs findings with recorded evidence states instead of noisy lint. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This guide gives you the exact `~/.codex/config.toml` entries for local and remote MCP using `npx -y @lyrashield/mcp@0.2.12` and `https://app.lyrashieldai.com/api/mcp`, plus verification, inline checks and a GitHub Action. Findings retain their recorded evidence states. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
 
 ## 1. Prerequisites and setup
 
@@ -62,9 +62,9 @@ Start a new Codex session with `codex --verbose` and run `codex mcp list` or ask
 
 ## 4. Run an inline scan from a Codex session
 
-In your Codex prompt, target the authorized workspace and request a focused scan. Ask for every finding’s recorded evidence state, supporting evidence, file location, CWE and limitations. Call `lyrashield_scan_target`, then use `lyrashield_get_findings`; do not request “verified findings only,” because detection and independent verification are separate states.
+In your Codex prompt, target the authorized workspace and request a focused scan. Ask for every finding’s recorded evidence state, supporting evidence, file location, CWE and limitations. Call `lyrashield_scan_target`, then use `lyrashield_get_findings`; do not request “verified findings only,” because detection and retest-confirmed are separate states.
 
-A finding retains its recorded evidence state, supporting detail, file location, CWE, severity and limitations when available. Evidence strength and reproducibility depend on that state; detection alone does not imply a reachable sink, confirmed vulnerable call path or independent verification. When you ask the agent to show findings, request the evidence block so the PR reviewer can assess the same recorded context without rerunning the scan. Independent verification still requires a separate receipt.
+A finding retains its recorded evidence state, supporting detail, file location, CWE, severity and limitations when available. Evidence strength and reproducibility depend on that state; detection alone does not imply a reachable sink, a confirmed vulnerable call path or a retest-confirmed outcome. When you ask the agent to show findings, request the evidence block so the PR reviewer can assess the same recorded context without rerunning the scan. A retest-confirmed outcome still requires a fresh applicable retest.
 
 Example Codex instruction you can paste:
 
