@@ -87,7 +87,7 @@ Version rules:
 
 Generated output—`.next`, `dist`, `.turbo`, `.astro`, `.wrangler`, motion renders, media-local, Prisma generated client, `node_modules`, and `*.tsbuildinfo`—is not source.
 
-The former `packages/eval-ai-safety` runner was removed as unused in `b96e597`. Its recorded 2026-08-13 result artifact remains at `apps/marketing/src/data/ai-safety-results.json` and is rendered by `apps/marketing/src/pages/ai-safety.astro`; rerunning that historical benchmark requires restoring or replacing the runner. The separate fixed, non-destructive live AI safety catalog is tracked in `packages/types/src/ai-safety-tests.ts` and documented in `docs/yellowpaper.md` §3.5.
+The former `packages/eval-ai-safety` runner was removed as unused in `b96e597`. Its recorded 2026-08-13 result artifact was deleted from `apps/marketing/src/data/ai-safety-results.json` in the landing-page redesign (Wave 0 item 0.2), and `apps/marketing/src/pages/ai-safety.astro` no longer renders any figure from it: the page is now "MCP guard evaluation" and describes only the guard's pattern categories and its limits. Rerunning that historical benchmark requires restoring or replacing the runner. The separate fixed, non-destructive live AI safety catalog is tracked in `packages/types/src/ai-safety-tests.ts` and documented in `docs/yellowpaper.md` §3.5.
 
 ## 4. Runtime architecture
 

@@ -88,8 +88,8 @@ export const OG_CARDS = [
   },
   {
     slug: "ai-safety",
-    eyebrow: "AI SAFETY",
-    title: "Prompt-injection guard evaluation",
+    eyebrow: "MCP GUARD",
+    title: "MCP guard evaluation",
     path: "lyrashieldai.com/ai-safety",
   },
   {

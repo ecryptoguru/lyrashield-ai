@@ -20,7 +20,10 @@ describe("homepage journey and plan summary", () => {
     expect(stages.every((position) => position >= 0)).toBe(true)
     expect(stages).toEqual([...stages].sort((left, right) => left - right))
     expect(page).toContain('href="/evidence-vault"')
-    expect(page).toContain('href="/ai-safety"')
+    // The MCP guard evaluation page is no longer cited from the home page as
+    // proof: D7 removed the figures and the reproducible runner does not exist,
+    // so there is nothing to point at as evidence yet.
+    expect(page).not.toContain('href="/ai-safety"')
   })
 
   it("renders plan prices and limits from the shared catalog without a recommended tier", () => {
