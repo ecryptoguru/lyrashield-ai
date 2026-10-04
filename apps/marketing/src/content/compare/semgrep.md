@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to Semgrep for AI-built application sec
 competitor: "Semgrep"
 heading: "LyraShield AI vs Semgrep"
 disclaimer: "Factual comparison. Semgrep by Semgrep Inc. provides pattern-based static analysis with custom rules, SCA and secrets detection. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence and a fresh retest into one reviewable assurance record. Neither replaces the other."
-updatedDate: 2026-09-19
+updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
 faq:
@@ -25,27 +25,27 @@ faq:
 | Primary focus           | Release assurance for AI-built apps: one record of what was tested, the evidence behind each result and what a retest established before shipping | Pattern-based static analysis, SCA, secrets, custom rules                         |
 | Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                        | Semantic pattern matching with data-flow and taint analysis                       |
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays distinct from separate verification receipts)               | Open → reviewing → fixed or ignored; AI auto-triage for false positives           |
-| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                       | No published control framework; rule-based detection                              |
-| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                            | AI autofix suggestions (not approval-bound)                                       |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                       | No coverage framework; offers OWASP Top 10 and language rulesets                  |
+| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                            | AI-suggested fixes and autofix PRs that go through normal review                  |
 | Custom rules            | Not a primary feature                                                                                                                             | Yes — write custom rules in Semgrep syntax (key differentiator)                   |
 | AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                              | Semgrep Multimodal (AI detection for business logic flaws); AI triage and autofix |
 | Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes and limitations                                        | No release assurance record; finding-based dashboard                              |
 
 ## Capability comparison
 
-| Capability                | LyraShield AI                                                                    | Semgrep                                 |
-| ------------------------- | -------------------------------------------------------------------------------- | --------------------------------------- |
-| Static analysis (SAST)    | Deterministic + AI-assisted (separate layers)                                    | Pattern-based                           |
-| Custom rules              | No                                                                               | Yes (key feature)                       |
-| SCA (dependency scanning) | Via engine                                                                       | Yes (with reachability)                 |
-| Secret scanning           | Yes (engine + GitHub Action)                                                     | Yes (630+ credential types)             |
-| Evidence states           | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                                      |
-| Deterministic retest      | Yes                                                                              | Auto-mark fixed when no longer detected |
-| Coverage receipts         | Yes (per-control)                                                                | No                                      |
-| Assurance reports         | Yes (immutable snapshots)                                                        | No                                      |
-| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch                  | No                                      |
-| MCP server integration    | Yes (documented MCP client workflows)                                            | No                                      |
-| Open-source CLI           | CLI is npm-published                                                             | Yes (LGPL-2.1, Community Edition)       |
+| Capability                | LyraShield AI                                                                    | Semgrep                                                        |
+| ------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Static analysis (SAST)    | Deterministic + AI-assisted (separate layers)                                    | Pattern-based                                                  |
+| Custom rules              | No                                                                               | Yes (key feature)                                              |
+| SCA (dependency scanning) | Via engine                                                                       | Yes (with reachability)                                        |
+| Secret scanning           | Yes (engine + GitHub Action)                                                     | Yes (630+ credential types)                                    |
+| Evidence states           | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                                                             |
+| Deterministic retest      | Yes                                                                              | Auto-mark fixed when no longer detected                        |
+| Coverage receipts         | Yes (per-control)                                                                | No equivalent                                                  |
+| Assurance reports         | Yes (immutable snapshots)                                                        | No equivalent                                                  |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch                  | No equivalent (Autofix PRs are reviewed fixes)                 |
+| MCP server integration    | Yes (runs checks and records evidence inside AI coding agents)                   | Yes (Semgrep MCP server and Guardian plugin for coding agents) |
+| Open-source CLI           | CLI is npm-published                                                             | Yes (LGPL-2.1, Community Edition)                              |
 
 ## Deployment and pricing
 

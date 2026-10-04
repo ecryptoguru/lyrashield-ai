@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to Aikido for developer-centric CI/CD s
 competitor: "Aikido"
 heading: "LyraShield AI vs Aikido"
 disclaimer: "Factual comparison. [Aikido Security](https://www.aikido.dev/) is a unified security platform covering code, cloud and runtime from one interface — SAST, SCA, secrets, IaC/container scanning, CSPM, DAST, AI pentesting and runtime protection — with auto-generated fix PRs. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports and reviewed fix proposals. Aikido is a broad AppSec platform with a pentest layer; LyraShield AI is a focused release-assurance loop purpose-built for AI-generated code. Neither replaces the other."
-updatedDate: 2026-09-19
+updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
 faq:
@@ -40,11 +40,11 @@ faq:
 | Cloud posture (CSPM)                | Not a primary focus                                             | Yes                                                            |
 | DAST / surface monitoring           | Via agentic pentest                                             | Yes (surface monitoring)                                       |
 | AI / agentic pentest                | Yes                                                             | Yes (200+ agents; continuous autonomous pentesting)            |
-| Evidence states (4-state lifecycle) | Yes                                                             | No (AutoT prioritization instead)                              |
+| Evidence states (4-state lifecycle) | Yes                                                             | No documented equivalent (AutoTriage prioritization instead)   |
 | Deterministic retest                | Yes                                                             | Re-test after fix (continuous testing)                         |
-| Coverage receipts                   | Yes (per-control)                                               | No                                                             |
+| Coverage receipts                   | Yes (per-control)                                               | No documented equivalent                                       |
 | Assurance reports (immutable)       | Yes                                                             | Audit-grade pentest reports                                    |
-| MCP server integration              | Yes (inside AI coding agents)                                   | Not advertised                                                 |
+| MCP server integration              | Yes (runs checks and records evidence inside AI coding agents)  | Yes (Aikido MCP plugin for Cursor and Claude Code and others)  |
 | Permission-gated Fix PR requests    | Fix PR requests require permission and a server-generated patch | AutoFix PRs (reviewable, not permission-gated Fix PR requests) |
 | Runtime protection                  | Not in v1                                                       | Yes (in-app firewall, bot/device protection)                   |
 

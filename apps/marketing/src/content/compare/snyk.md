@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to Snyk for AI-built application securi
 competitor: "Snyk"
 heading: "LyraShield AI vs Snyk"
 disclaimer: "Factual comparison. This page compares publicly documented capabilities. Snyk is a mature vulnerability scanning platform. LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence and a fresh retest into one reviewable assurance record. Neither replaces the other."
-updatedDate: 2026-09-19
+updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
 faq:
@@ -26,26 +26,26 @@ faq:
 | Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                        | Multi-engine: DeepCode AI for SAST, vulnerability DB for SCA, image analysis for containers |
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays distinct from separate verification receipts)               | Open → fixed (re-test confirms scanner can no longer replicate)                             |
 | Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                       | No published control framework; uses vulnerability databases (CVEs, custom rules)           |
-| Coverage reporting      | Per-control coverage receipts: completed, limited, skipped, not-applicable                                                                        | Per-finding severity and fix suggestions; no coverage framework                             |
-| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                            | AI autofixes (85% accuracy claimed, not approval-bound)                                     |
+| Coverage reporting      | Per-control coverage receipts: completed, limited, skipped, not-applicable                                                                        | Per-finding severity and fix suggestions; no per-control coverage receipts                  |
+| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                            | AI fixes that the developer reviews and applies with one click                              |
 | AI-generated code focus | Built specifically for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                 | DeepCode AI engine; LLM library tracking (OpenAI, HuggingFace, Anthropic, Google)           |
 | Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes and limitations                                        | No release assurance record; vulnerability-based reporting                                  |
 
 ## Capability comparison
 
-| Capability                | LyraShield AI                                                                    | Snyk                                    |
-| ------------------------- | -------------------------------------------------------------------------------- | --------------------------------------- |
-| SAST (static analysis)    | Deterministic + AI-assisted (separate layers)                                    | DeepCode AI                             |
-| SCA (dependency scanning) | Via engine                                                                       | Yes (vulnerability DB)                  |
-| Container scanning        | No                                                                               | Yes (Snyk Container)                    |
-| IaC scanning              | No                                                                               | Yes (Snyk IaC)                          |
-| Secret scanning           | Yes (engine + GitHub Action)                                                     | Limited                                 |
-| Evidence states           | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                                      |
-| Deterministic retest      | Yes                                                                              | Re-test (scanner replication)           |
-| Coverage receipts         | Yes (per-control)                                                                | No                                      |
-| Assurance reports         | Yes (immutable snapshots)                                                        | No                                      |
-| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch                  | No (AI autofixes, 85% accuracy claimed) |
-| MCP server integration    | Yes (documented MCP client workflows)                                            | No                                      |
+| Capability                | LyraShield AI                                                                    | Snyk                                                                            |
+| ------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| SAST (static analysis)    | Deterministic + AI-assisted (separate layers)                                    | DeepCode AI                                                                     |
+| SCA (dependency scanning) | Via engine                                                                       | Yes (vulnerability DB)                                                          |
+| Container scanning        | No                                                                               | Yes (Snyk Container)                                                            |
+| IaC scanning              | No                                                                               | Yes (Snyk IaC)                                                                  |
+| Secret scanning           | Yes (engine + GitHub Action)                                                     | Yes (Snyk Secrets, generally available since 4 August 2026)                     |
+| Evidence states           | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                                                                              |
+| Deterministic retest      | Yes                                                                              | Re-test (scanner replication)                                                   |
+| Coverage receipts         | Yes (per-control)                                                                | No                                                                              |
+| Assurance reports         | Yes (immutable snapshots)                                                        | No                                                                              |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch                  | Fixes are reviewed and applied by the developer                                 |
+| MCP server integration    | Yes (runs checks and records evidence inside AI coding agents)                   | Yes (local MCP server in the Snyk CLI and Snyk Studio; no hosted remote server) |
 
 ## Deployment and pricing
 

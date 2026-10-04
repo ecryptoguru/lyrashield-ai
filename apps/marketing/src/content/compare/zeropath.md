@@ -4,14 +4,14 @@ description: "How LyraShield AI compares to ZeroPath for AI-native SAST and auto
 competitor: "ZeroPath"
 heading: "LyraShield AI vs ZeroPath"
 disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native application security platform that unifies SAST, SCA, secrets, IaC and DAST-style runtime validation into a single reasoning engine and generates fix PRs. LyraShield AI is release assurance for AI-built apps — it keeps detected candidates, separate verification receipts and retest outcomes distinct in scoped evidence reports, with fixes gated behind approvals. Neither replaces the other."
-updatedDate: 2026-09-19
+updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
 faq:
   - q: "Does LyraShield replace ZeroPath?"
-    a: "No. ZeroPath is a unified AI-native SAST plus SCA, secrets, IaC and DAST-style runtime validation with taint tracking, natural-language policy, CycloneDX AI-BOM across 17 component kinds and an open-source MCP server and CLI. LyraShield in open beta focuses on agentic pentest as core with SCA, secrets, evidence states and reviewed fix proposals."
+    a: "No. ZeroPath is a unified AI-native SAST plus SCA, secrets, IaC and DAST-style runtime validation with taint tracking, natural-language policy, CycloneDX AI-BOM across 17 component kinds and an open-source MCP server and a downloadable CLI. LyraShield in open beta focuses on agentic pentest as core with SCA, secrets, evidence states and reviewed fix proposals."
   - q: "Can I use ZeroPath and LyraShield together?"
-    a: "Yes. ZeroPath can serve as your broad AI-native scanner replacing multiple detectors, with an open-source CLI and SARIF; confirm current commercial terms with the vendor. Add LyraShield for the release assurance loop that records fix proposals for review before the team merges a change and produces an immutable snapshot. Both support MCP, so they can run inside AI coding agents."
+    a: "Yes. ZeroPath can serve as your broad AI-native scanner replacing multiple detectors, with a downloadable CLI and SARIF; confirm current commercial terms with the vendor. Add LyraShield for the release assurance loop that records fix proposals for review before the team merges a change and produces an immutable snapshot. Both support MCP, so they can run inside AI coding agents."
   - q: "When should I choose ZeroPath over LyraShield?"
     a: "Choose ZeroPath when you need business-logic and authorization flaw detection, AI-component inventory, one-click fix PRs with natural-language refinement and broad language coverage with 700+ secret detectors. Its strength is consolidating SAST, SCA, secrets and runtime validation. Choose LyraShield when scoped evidence and approval-gated fix proposals would help inform a release review."
 ---
@@ -29,29 +29,29 @@ faq:
 
 ## Capability comparison
 
-| Capability                | LyraShield AI                                                   | ZeroPath                                                                        |
-| ------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Static analysis (SAST)    | Via engine                                                      | Yes (AI-native flagship; business logic and auth flaws)                         |
-| Custom rules              | Not a primary feature                                           | Natural-language policy engine                                                  |
-| SCA (dependency scanning) | Yes                                                             | Yes (reachability-aware, exploitability fusion)                                 |
-| Secret scanning           | Yes (engine + GitHub Action)                                    | Yes (700+ detectors, rotation guidance PRs)                                     |
-| Agentic pentest           | Yes (core)                                                      | Runtime validation of SAST findings against a live app (not open-ended pentest) |
-| Evidence states           | Yes (4 states)                                                  | Exploitation-setup metadata per finding                                         |
-| Deterministic retest      | Yes                                                             | Auto re-scan verification after fix                                             |
-| Coverage receipts         | Yes (per-control)                                               | No                                                                              |
-| Assurance reports         | Yes (immutable snapshots)                                       | Compliance and audit reports; GRC sync                                          |
-| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch | One-click merge fix PRs; no formal approval gate                                |
-| MCP server integration    | Yes (documented MCP client workflows)                           | Yes (open-source MCP server for Claude, Cursor, Windsurf)                       |
-| AI-BOM / AI inventory     | Not a primary feature                                           | Yes (17 AI component kinds, CycloneDX AI-BOM)                                   |
-| Open-source CLI           | CLI is npm-published                                            | Yes (zeropath-cli with SARIF output)                                            |
+| Capability                | LyraShield AI                                                   | ZeroPath                                                                      |
+| ------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Static analysis (SAST)    | Via engine                                                      | Yes (AI-native flagship; business logic and auth flaws)                       |
+| Custom rules              | Not a primary feature                                           | Natural-language policy engine                                                |
+| SCA (dependency scanning) | Yes                                                             | Yes (reachability-aware, exploitability fusion)                               |
+| Secret scanning           | Yes (engine + GitHub Action)                                    | Yes (700+ detectors, rotation guidance PRs)                                   |
+| Agentic pentest           | Yes (core)                                                      | Dynamic testing that confirms SAST findings and discovers runtime-only issues |
+| Evidence states           | Yes (4 states)                                                  | Exploitation-setup metadata per finding                                       |
+| Deterministic retest      | Yes                                                             | Auto re-scan verification after fix                                           |
+| Coverage receipts         | Yes (per-control)                                               | No                                                                            |
+| Assurance reports         | Yes (immutable snapshots)                                       | Compliance and audit reports; GRC sync                                        |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch | One-click merge fix PRs; no formal approval gate                              |
+| MCP server integration    | Yes (documented MCP client workflows)                           | Yes (open-source MCP server for Claude, Cursor, Windsurf)                     |
+| AI-BOM / AI inventory     | Not a primary feature                                           | Yes (17 AI component kinds, CycloneDX AI-BOM)                                 |
+| Open-source CLI           | CLI is npm-published                                            | Downloadable CLI with SARIF output (closed source)                            |
 
 ## Deployment and pricing
 
-| Aspect     | LyraShield AI                                    | ZeroPath                                                                                                              |
-| ---------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS, on-prem (Enterprise), CLI, VS Code plugin, GitHub/GitLab/Bitbucket/Azure DevOps, MCP server, Claude Code plugin |
-| Pricing    | See [pricing](/pricing) for current plan details | Check the vendor's current pricing or sales quote                                                                     |
-| Languages  | Language-agnostic                                | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin and more)                                   |
+| Aspect     | LyraShield AI                                    | ZeroPath                                                                                                                           |
+| ---------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS, on-prem (Enterprise), downloadable CLI, VS Code plugin, GitHub/GitLab/Bitbucket/Azure DevOps, MCP server, Claude Code plugin |
+| Pricing    | See [pricing](/pricing) for current plan details | Check the vendor's current pricing or sales quote                                                                                  |
+| Languages  | Language-agnostic                                | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin and more)                                                |
 
 ## When to use which
 

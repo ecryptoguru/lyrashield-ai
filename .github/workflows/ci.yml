@@ -112,6 +112,9 @@ jobs:
       - name: Test Desktop release manifest
         run: python3 .github/scripts/test_desktop_release.py
 
+      - name: Test webhook cutover verification workflow invariants
+        run: node .github/scripts/tests/webhook-cutover-verification.workflow.test.mjs
+
       - name: Classify changed files
         id: classify
         shell: bash
