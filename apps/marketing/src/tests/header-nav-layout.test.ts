@@ -82,6 +82,16 @@ describe("marketing header information architecture", () => {
     }
   })
 
+  it("renders the Lite Check destination in the desktop nav", () => {
+    // /scan is declared once in freeToolItems and rendered by both navs, so the
+    // desktop assertion has to be the render call, not the raw href. Without
+    // this, deleting the desktop render would leave the mobile test green.
+    expect(navList, "desktop nav must render the free-tool menu").toContain("{freeToolItems.map")
+    expect(code, "freeToolItems must declare the Lite Check at /scan").toContain(
+      '{ label: "Lite Check", href: "/scan"'
+    )
+  })
+
   it("removes WebMCP from the header (D6)", () => {
     expect(navList).not.toMatch(/>\s*WebMCP\s*</)
     expect(navList).not.toContain('href="/webmcp"')
@@ -167,6 +177,12 @@ describe("marketing mobile nav sheet", () => {
     // Pricing and Coding agents are direct sheet links.
     expect(dialog).toContain('href="/pricing"')
     expect(dialog).toContain('href="/agents"')
+    // The free-tool menu renders inside the sheet, so /scan is reachable there
+    // too — this is the mobile half of the pair asserted above.
+    expect(dialog, "mobile sheet must render the free-tool menu").toContain("{freeToolItems.map")
+    expect(code, "freeToolItems must declare the Lite Check at /scan").toContain(
+      '{ label: "Lite Check", href: "/scan"'
+    )
   })
 
   it("keeps the account hooks on the mobile sheet", () => {
