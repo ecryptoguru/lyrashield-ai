@@ -399,6 +399,15 @@ const learnItems = [
     gap: 0.25rem;
   }
 
+  /* A touch target must be 44px, not 2.75rem: 2.75rem resolves against the root
+     font-size, which can land a fraction under 44 and fail the minimum. */
+  .mobile-menu__primary .menu-link,
+  .mobile-menu__account .menu-link,
+  .mobile-menu__resource,
+  .mobile-menu__accordion > summary {
+    min-height: 44px;
+  }
+
   .mobile-menu__account {
     grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
     margin-top: 0.25rem;

@@ -48,22 +48,31 @@ test("stacks the field and button at 390px with touch-sized targets", async ({ p
   // 44px minimum touch target.
   expect(input!.height).toBeGreaterThanOrEqual(44)
   expect(button!.height).toBeGreaterThanOrEqual(44)
-  // The button sits under the field rather than beside it.
-  expect(button!.y).toBeGreaterThanOrEqual(input!.y + input!.height - 1)
+  // The button stacks under the field rather than sitting beside it.
+  expect(button!.y, "the button stacks below the field").toBeGreaterThanOrEqual(
+    input!.y + input!.height - 1
+  )
+  expect(button!.x, "the button is not pushed off the right edge").toBeGreaterThanOrEqual(0)
 })
 
-test("shows the no-JavaScript link to the Lite Check", async ({ browser }) => {
-  const context = await browser.newContext({ javaScriptEnabled: false })
-  const page = await context.newPage()
+test("keeps the no-JavaScript fallback in the markup", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/")
 
-  const fallback = page.locator(`${FIELD} a[href="/scan"]`)
-  await expect(fallback).toBeVisible()
+  // <noscript> content is not rendered when scripting is on, so the fallback is
+  // asserted from the served markup. A JS-disabled context cannot be used here:
+  // with no JavaScript the page's reveal animation never runs and its content
+  // stays transparent, which no visibility assertion can see through.
+  const fallback = page.locator(`${FIELD} noscript a[href="/scan"]`)
+  await expect(fallback).toHaveCount(1)
   await expect(fallback).toHaveText("Open the free Lite Check")
+
   // With no JavaScript the form posts natively to /scan with no query string.
   await expect(page.locator(FIELD)).toHaveAttribute("action", "/scan")
   await expect(page.locator(FIELD)).toHaveAttribute("method", "get")
-  await context.close()
+  // The field must carry no name, or a native GET submit would put the typed
+  // URL in the query string.
+  await expect(page.locator(URL_INPUT)).not.toHaveAttribute("name", /./)
 })
 
 test("does not put the typed URL into the page URL", async ({ page }) => {
