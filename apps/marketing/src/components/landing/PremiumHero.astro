@@ -93,7 +93,10 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     --hero-cyan: #54d6df;
     position: relative;
     display: grid;
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not 1fr: a bare fr track keeps an auto minimum equal to
+       its items' min-content width, so one long word in the headline grew the
+       whole track past the viewport at 200% text. */
+    grid-template-columns: minmax(0, 1fr);
     min-height: min(720px, calc(100svh - 3.5rem));
     overflow: hidden;
     isolation: isolate;
@@ -138,6 +141,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
 
   .premium-hero__content {
     align-self: center;
+    min-width: 0;
     width: min(100% - 2rem, 1280px);
     margin-inline: auto;
     padding-block: clamp(4rem, 8vh, 6.5rem) clamp(2.5rem, 5vh, 3.5rem);
@@ -163,7 +167,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     color: var(--hero-cyan);
     font-size: clamp(0.78rem, 1vw, 0.95rem);
     font-weight: 650;
-    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
   }
 
   h1 {
@@ -175,7 +179,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     line-height: 0.9;
     letter-spacing: -0.055em;
     text-wrap: balance;
-    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
   }
 
   .premium-hero__lede {
