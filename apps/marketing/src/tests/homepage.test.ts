@@ -23,6 +23,16 @@ describe("homepage journey and plan summary", () => {
     expect(stages.every((position) => position >= 0)).toBe(true)
     expect(stages).toEqual([...stages].sort((left, right) => left - right))
     expect(page).toContain('href="/evidence-vault"')
+    // Block 2's evidence-states card names the three shipped states only. The
+    // fourth exists in the schema but no shipped path produces it, so the card
+    // must not imply it is live (founder ruling, 2026-10-04).
+    const different = page.slice(page.indexOf('id="different"'), page.indexOf("<HomeLiteScan />"))
+    expect(different).toContain("Three evidence states, never blended")
+    expect(different).not.toMatch(/independently verified|verification receipt/i)
+    // The retest card must not promise that every finding gets a confirming
+    // retest: an engine-only finding ends inconclusive.
+    expect(different).toContain("ends inconclusive")
+
     // Block 5 and 6 ids.
     expect(page).toContain('id="surfaces-heading"')
     expect(page).toContain('id="coverage-heading"')
@@ -52,6 +62,16 @@ describe("homepage journey and plan summary", () => {
   })
 
   it("renders plan prices and limits from the shared catalog without a recommended tier", () => {
+    // Retired internal wording (spec finding B2): purchase availability is
+    // public on both rails, so neither sentence may come back.
+    expect(page).not.toContain("existing monthly or annual catalog")
+    expect(page).not.toContain("authenticated product")
+    // Each card carries a Choose button labelled from the plan name.
+    expect(page).toContain("Choose {plan.name}")
+    expect(page).toContain("planIntent[plan.id]")
+    // The agent-minute definition appears once, as a tooltip.
+    expect(page).toContain("Wall-clock server time")
+    expect(page.match(/Wall-clock server time/g)).toHaveLength(1)
     expect(page).toContain("CLOUD_PLANS.filter((plan) => plan.selfServe)")
     expect(page).toContain("formatUSD(plan.price.usd.monthly)")
     expect(page).toContain("formatUSD(plan.price.usd.annual)")
