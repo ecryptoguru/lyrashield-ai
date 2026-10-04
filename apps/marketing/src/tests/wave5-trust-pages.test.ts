@@ -14,7 +14,11 @@ function page(name: string): string {
   return readFileSync(new URL(`../pages/${name}`, import.meta.url), "utf8")
 }
 
-/** Trust pages that must carry a "Last reviewed" line. */
+/**
+ * Trust pages that must carry a "Last reviewed" line. /terms is excluded: its
+ * wording is owned by another developer thread (the founder's do-not-touch
+ * list), so its date format is theirs to change.
+ */
 const TRUST_PAGES = [
   "methodology.astro",
   "about.astro",
@@ -22,7 +26,6 @@ const TRUST_PAGES = [
   "vibe-security-50.astro",
   "evidence-vault.astro",
   "security-reporting.astro",
-  "terms.astro",
   "terms-of-sale.astro",
   "privacy.astro",
 ] as const
