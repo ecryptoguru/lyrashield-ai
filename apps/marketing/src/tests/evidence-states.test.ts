@@ -31,6 +31,12 @@ const ALLOWLIST: Array<{ file: string; text: string }> = [
     file: "pages/methodology.astro",
     text: "A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today. A score or clean result never overrides these facts.",
   },
+  {
+    // A no-finding result genuinely is not independent verification. The
+    // negation is the point of the sentence, so it stays.
+    file: "pages/vibe-security-50.astro",
+    text: "is not independent verification and LyraShield never shows it as passed.",
+  },
 ]
 
 /** Files that render customer-facing marketing copy. */
@@ -47,7 +53,8 @@ function copyFiles(dir: string, found: string[] = []): string[] {
   return found
 }
 
-const FORBIDDEN = /\bindependently verified\b|\bverification receipt/i
+const FORBIDDEN =
+  /\bindependently verified\b|\bverification receipt\b|\bindependent verification\b/i
 
 describe("public evidence-state copy", () => {
   it("never presents independent verification as a shipped state", () => {
