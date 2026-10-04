@@ -114,6 +114,7 @@ jobs:
 
       - name: Test webhook cutover verification workflow invariants
         run: node .github/scripts/tests/webhook-cutover-verification.workflow.test.mjs
+
       - name: Test Lighthouse NO_NAVSTART retry policy
         run: node --test .github/scripts/tests/lighthouse-production.test.mjs
 
