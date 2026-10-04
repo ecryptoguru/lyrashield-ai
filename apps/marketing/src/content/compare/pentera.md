@@ -15,7 +15,7 @@ faq:
   - q: "Can I use Pentera and LyraShield together?"
     a: "Yes. Pentera validates what is actually exploitable across your enterprise and drives CTEM programs with measurable risk reduction. LyraShield adds the per-build assurance run for AI-built apps with target, review, evidence, fix, retest, report and reviewed fix proposals. Pentera pricing is not public and enterprise quote-based; LyraShield is live with open registration."
   - q: "When should I choose Pentera over LyraShield?"
-    a: "Choose Pentera when you run a continuous threat exposure management program needing lateral movement, privilege escalation and asset reach validation in live production with guardrails and emergency stop. It is a representative vendor in Gartner Adversarial Exposure Validation. Choose LyraShield when you need a checksum-bound assurance record for AI-generated code releases."
+    a: "Choose Pentera when you run a continuous threat exposure management program needing lateral movement, privilege escalation and asset reach validation in live production with guardrails and emergency stop. It is a representative vendor in Gartner Adversarial Exposure Validation (https://pentera.io/press-release/pentera-gartner-market-guide-2025-aev/). Choose LyraShield when you need a checksum-bound assurance record for AI-generated code releases."
 ---
 
 ## Core approach
@@ -48,11 +48,11 @@ faq:
 
 ## Deployment and pricing
 
-| Aspect             | LyraShield AI                                     | Pentera                                                                                                                            |
-| ------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment         | Hosted + CLI + MCP + GitHub Action                | Platform (Core/Surface/Cloud/Resolve); enterprise deployment; live production                                                      |
-| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote                                                                                  |
-| Compliance posture | Assurance-record orientation for release sign-off | Maps validated findings to controls; ISO/IEC 42001 AI governance; Gartner representative vendor in Adversarial Exposure Validation |
+| Aspect             | LyraShield AI                                     | Pentera                                                                                                                                                                                                                              |
+| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | Platform (Core/Surface/Cloud/Resolve); enterprise deployment; live production                                                                                                                                                        |
+| Pricing            | See [pricing](/pricing) for current plan details  | Check the vendor's current pricing or sales quote                                                                                                                                                                                    |
+| Compliance posture | Assurance-record orientation for release sign-off | Maps validated findings to controls; ISO/IEC 42001 AI governance; Gartner representative vendor in Adversarial Exposure Validation ([Pentera announcement](https://pentera.io/press-release/pentera-gartner-market-guide-2025-aev/)) |
 
 ## When to use which
 
@@ -91,6 +91,7 @@ It also closes the remediation loop. Its [Pentera Resolve page](https://pentera.
 - [Pentera Core](https://pentera.io/pentera-core/)
 - [Pentera Surface](https://pentera.io/pentera-surface/)
 - [Pentera Resolve](https://pentera.io/pentera-resolve/)
+- [Pentera recognized in the Gartner Market Guide for Adversarial Exposure Validation](https://pentera.io/press-release/pentera-gartner-market-guide-2025-aev/)
 - [Pentera trust center](https://trust.pentera.io/)
 
 ## Methodology and scope

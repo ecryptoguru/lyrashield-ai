@@ -11,7 +11,7 @@ competitorClaims: true
 competitorDomain: snyk.io
 faq:
   - q: "Does LyraShield replace Snyk?"
-    a: "No. Snyk is a broad developer-first platform covering SAST, SCA, container, IaC and secrets with IDE plugins and a mature vulnerability database; it is a Leader in Gartner AST. LyraShield in open beta is narrower: agentic pentest plus SCA and secrets focused on checksum-bound release assurance with reviewed fix proposals."
+    a: "No. Snyk is a broad developer-first platform covering SAST, SCA, container, IaC and secrets with IDE plugins and a mature vulnerability database; it is a Leader in Gartner AST (Snyk's own announcement: https://snyk.io/blog/snyk-named-a-leader-in-the-2025-gartner-r-magic-quadrant-tm-for-application/). LyraShield in open beta is narrower: agentic pentest plus SCA and secrets focused on checksum-bound release assurance with reviewed fix proposals."
   - q: "Can I use Snyk and LyraShield together?"
     a: "Teams can run both. Use Snyk for continuous scanning throughout the SDLC and its fix PRs, then run LyraShield for the release check: scoped evidence, detected candidates and retest outcomes in a checksum-bound report. LyraShield's SARIF comes from the GitHub Action, which writes to the same code scanning view."
   - q: "When should I choose Snyk over LyraShield?"
@@ -94,6 +94,7 @@ Its free tier is genuinely accessible. Its [plans page](https://snyk.io/plans/) 
 - [Snyk plans](https://snyk.io/plans/)
 - [Snyk DeepCode AI](https://snyk.io/platform/deepcode-ai/)
 - [Snyk supported languages](https://docs.snyk.io/supported-languages/supported-languages-list)
+- [Snyk named a Leader in the 2025 Gartner Magic Quadrant for AST](https://snyk.io/blog/snyk-named-a-leader-in-the-2025-gartner-r-magic-quadrant-tm-for-application/)
 - [Snyk automatic upgrade PRs](https://docs.snyk.io/scan-fix-and-prevent/fix/snyk-pull-or-merge-requests/enable-automatic-upgrade-prs-for-new-dependency-upgrades)
 - [Snyk Evo announcement](https://snyk.io/news/snyk-launches-evo-continuous-offensive-security/)
 
