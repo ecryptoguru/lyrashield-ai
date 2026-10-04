@@ -17,6 +17,13 @@ const worldModule = readFileSync(
 )
 const astroConfig = readFileSync(new URL("../../astro.config.mjs", import.meta.url), "utf8")
 
+/**
+ * Hero copy is wrapped across source lines, so assertions run against a
+ * whitespace-collapsed copy of the component. Without this, re-wrapping the same
+ * approved sentence would fail the test.
+ */
+const heroCopy = hero.replace(/\s+/g, " ")
+
 describe("premium assurance-world homepage", () => {
   it("promotes the assurance world to the canonical homepage", () => {
     expect(astroConfig).not.toContain('pathname !== "/premium-preview"')
