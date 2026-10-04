@@ -700,41 +700,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   }
 </style>
 
-<script>
-  import { bindLiteHandoff } from "../../lib/lite-handoff"
-  import { sanitizeMarketingProperties } from "../../lib/posthog-privacy"
-
-  // The hero field never fetches anything. It validates, parks the target for
-  // /scan and navigates, exactly like the Lite Check section further down.
-  //
-  // Analytics carry the CTA id and a boolean only. The typed URL is never a
-  // property, so it cannot leave this component.
-  const capture = (valid: boolean) =>
-    window.posthog?.capture(
-      "hero_lite_check_submit",
-      sanitizeMarketingProperties("hero_lite_check_submit", {
-        cta_id: "hero_lite_check_submit",
-        valid,
-      }) ?? {}
-    )
-
-  const error = () => document.querySelector<HTMLElement>("#hero-scan-error")
-  bindLiteHandoff({
-    formId: "hero-lite-form",
-    inputId: "hero-scan-url",
-    errorId: "hero-scan-error",
-    consentId: "hero-scan-authorized",
-    onClear: () => error()?.classList.add("hidden"),
-    onError: (message) => {
-      const node = error()
-      if (!node) return
-      node.textContent = message
-      node.classList.remove("hidden")
-      capture(false)
-    },
-    onSuccess: () => capture(true),
-  })
-</script>
+<style>
 
   :global(:root[data-theme="light"]) .premium-hero {
     --hero-cyan: #087f78;
@@ -812,3 +778,39 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     }
   }
 </style>
+
+<script>
+  import { bindLiteHandoff } from "../../lib/lite-handoff"
+  import { sanitizeMarketingProperties } from "../../lib/posthog-privacy"
+
+  // The hero field never fetches anything. It validates, parks the target for
+  // /scan and navigates, exactly like the Lite Check section further down.
+  //
+  // Analytics carry the CTA id and a boolean only. The typed URL is never a
+  // property, so it cannot leave this component.
+  const capture = (valid: boolean) =>
+    window.posthog?.capture(
+      "hero_lite_check_submit",
+      sanitizeMarketingProperties("hero_lite_check_submit", {
+        cta_id: "hero_lite_check_submit",
+        valid,
+      }) ?? {}
+    )
+
+  const error = () => document.querySelector<HTMLElement>("#hero-scan-error")
+  bindLiteHandoff({
+    formId: "hero-lite-form",
+    inputId: "hero-scan-url",
+    errorId: "hero-scan-error",
+    consentId: "hero-scan-authorized",
+    onClear: () => error()?.classList.add("hidden"),
+    onError: (message) => {
+      const node = error()
+      if (!node) return
+      node.textContent = message
+      node.classList.remove("hidden")
+      capture(false)
+    },
+    onSuccess: () => capture(true),
+  })
+</script>
