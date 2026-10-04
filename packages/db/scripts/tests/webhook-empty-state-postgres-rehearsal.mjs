@@ -205,7 +205,7 @@ for (const migration of EXPECTED_EMPTY_MIGRATIONS) {
   assert.equal(result.rows[0].checksum, migration.sha256)
   assert.ok(result.rows[0].finished_at)
 }
-await admin.query('INSERT INTO public."WebhookEventTrack"(id,"webhookEventId",track,status,"nextAttemptAt") VALUES ($1,$2,$3,$4,now()),($5,$6,$7,$8,now())', [
+await admin.query('INSERT INTO public."WebhookEventTrack"(id,"webhookEventId",track,status,"nextAttemptAt","updatedAt") VALUES ($1,$2,$3,$4,now(),now()),($5,$6,$7,$8,now(),now())', [
   "post-cutover-track-one", "processed-receipt-one", "billing", "pending",
   "post-cutover-track-two", "processed-receipt-two", "license", "pending",
 ])
