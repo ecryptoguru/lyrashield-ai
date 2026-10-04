@@ -89,4 +89,6 @@ assert.match(smoke, /claim_expired_requires_receipt_review/)
 assert.match(smoke, /fixture-worker-smoke-pro-monthly/)
 assert.doesNotMatch(smoke, /process\.env\.(?:POLAR|RAZORPAY)|fetch\(|https?:\/\//)
 
+await import("../../../packages/db/scripts/tests/webhook-empty-state-migration.contract.mjs")
+
 console.log("Webhook production preflight invariants passed.")

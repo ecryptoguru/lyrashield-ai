@@ -1,0 +1,68 @@
+name: Webhook empty-state migration rehearsal
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/webhook-empty-state-rehearsal.yml"
+      - "packages/db/package.json"
+      - "packages/db/prisma/migrations/20261002120000_webhook_track_due_db_default/migration.sql"
+      - "packages/db/prisma/migrations/20261002130000_webhook_track_utc_schedule/migration.sql"
+      - "packages/db/prisma/migrations/20261002130100_webhook_track_utc_schedule_index/migration.sql"
+      - "packages/db/prisma/migrations/20261002130200_webhook_track_operator_recovery/migration.sql"
+      - "packages/db/scripts/webhook-empty-state-*.mjs"
+      - "packages/db/scripts/tests/webhook-empty-state-*.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-17:
+    name: Disposable PostgreSQL 17 and Prisma 7.9 rehearsal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: rehearsal-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      LYRASHIELD_TEST_DB_DISPOSABLE: "1"
+      DATABASE_DIRECT_URL: postgresql://postgres:rehearsal-only@127.0.0.1:5432/postgres?schema=public
+      DATABASE_URL: postgresql://postgres:rehearsal-only@127.0.0.1:5432/postgres?schema=public
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify exact Prisma CLI version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(pnpm --filter @lyrashield/db exec prisma --version)"
+          printf '%s\n' "$version"
+          grep -Eq '^prisma[[:space:]]*:[[:space:]]*7\.9\.1$' <<< "$version"
+
+      - name: Rehearse fresh empty-state migration and completed retry
+        run: node packages/db/scripts/tests/webhook-empty-state-postgres-rehearsal.mjs
