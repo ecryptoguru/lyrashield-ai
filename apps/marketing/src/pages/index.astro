@@ -9,6 +9,7 @@ import FinalCta from "@components/landing/FinalCta.astro"
 import { CLOUD_PLANS, formatUSD } from "@lyrashield/pricing"
 import { createMotionMediaManifest } from "../lib/motion-manifest"
 import { tools } from "../lib/tools"
+import { TRIAL_LINE } from "../lib/site-copy"
 import { buildDateFor } from "../lib/build-date"
 
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
@@ -21,7 +22,6 @@ const buildDate =
 const updatedDate = "2026-09-27"
 const dateModified = buildDate ?? `${updatedDate}T00:00:00.000Z`
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
-const trialPlan = CLOUD_PLANS.find((plan) => plan.id === "TRIAL")!
 const enterprisePlan = CLOUD_PLANS.find((plan) => plan.id === "ENTERPRISE")!
 const renderHash = import.meta.env.PUBLIC_MOTION_RENDER_HASH as string
 const mediaUrl = renderHash === "local" ? "/media-local" : import.meta.env.PUBLIC_MEDIA_URL
@@ -177,7 +177,7 @@ const jsonLd = [
       <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Cloud plans</p>
       <h2 id="home-pricing-heading" class="mt-3 text-2xl font-semibold tracking-tight text-text sm:text-3xl">Choose by review depth and capacity</h2>
       <p class="mt-3 min-w-0 max-w-3xl break-words text-sm leading-6 text-text-muted">
-        Start with a {trialPlan.agentMinutes}-minute, {trialPlan.targetCaps}-target trial for 7 days with no card. Paid plans use the existing monthly or annual catalog; regional prices and full limits are on <a href="/pricing" class="font-semibold text-accent underline underline-offset-4">pricing</a>.
+        Start with a free trial: {TRIAL_LINE}. Paid plans bill monthly or annually; regional prices and full limits are on <a href="/pricing" class="font-semibold text-accent underline underline-offset-4">pricing</a>.
       </p>
       <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         {cloudPlans.map((plan) => (
@@ -199,7 +199,7 @@ const jsonLd = [
         ))}
       </div>
       <p class="mt-4 min-w-0 break-words text-sm text-text-muted">
-        Enterprise is contact-led from {formatUSD(enterprisePlan.price.usd.monthly)}/month. Paid plans and purchase availability are confirmed in the authenticated product.
+        Enterprise is contact-led from {formatUSD(enterprisePlan.price.usd.monthly)}/month. Talk to us about custom limits and a contact-led rollout.
       </p>
     </div>
   </section>

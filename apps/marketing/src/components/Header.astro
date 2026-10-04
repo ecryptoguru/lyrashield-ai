@@ -1,5 +1,6 @@
 ---
 import { tools, toolUrl } from "../lib/tools"
+import { CTA_LABEL } from "../lib/site-copy"
 
 const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "")
 ---
@@ -98,7 +99,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
               class="inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
               data-cta-id="header_get_started"
             >
-              Get started
+              {CTA_LABEL.signUp}
             </a>
           </li>
         )}
@@ -150,7 +151,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         {appUrl && (
           <div class="mobile-menu__account">
             <a href={`${appUrl}/sign-in`} class="menu-link inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_sign_in_mobile">Sign in</a>
-            <a href={`${appUrl}/sign-up?source=marketing_header&cta=get_started_mobile`} class="menu-link inline-flex min-h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">Get started</a>
+            <a href={`${appUrl}/sign-up?source=marketing_header&cta=get_started_mobile`} class="menu-link inline-flex min-h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">{CTA_LABEL.signUp}</a>
           </div>
         )}
       </dialog>

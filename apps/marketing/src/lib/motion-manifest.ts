@@ -157,7 +157,7 @@ const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "p
       title: "Turn the next release into evidence your team can review.",
       body: "Create a workspace, add the target you are shipping and choose the depth of review. LyraShield keeps the resulting scope, evidence and retest outcome together.",
       primaryCta: {
-        label: "Create account",
+        label: "Start free trial",
         href: "https://app.lyrashieldai.com/sign-up?source=landing_story&cta=report",
         id: "story-report-create-account",
       },

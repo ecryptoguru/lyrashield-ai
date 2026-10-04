@@ -12,6 +12,7 @@ const appUrl =
   (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
   "https://app.lyrashieldai.com"
 import Base from "@layouts/Base.astro"
+import { CTA_LABEL } from "../lib/site-copy"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/about", origin).toString()
@@ -237,7 +238,7 @@ const jsonLd: unknown[] = [
         product questions, email{" "}
         <a href={`mailto:${abuseEmail}`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">{abuseEmail}</a>.
         Registration is open in the beta &mdash;{" "}
-        <a href={`${appUrl}/sign-up?source=about&cta=create_account`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">create a free account</a>{" "}
+        <a href={`${appUrl}/sign-up?source=about&cta=create_account`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">{CTA_LABEL.signUp}</a>{" "}
         to start a release record.
       </p>
     </section>

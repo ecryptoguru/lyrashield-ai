@@ -29,7 +29,11 @@ describe("homepage journey and plan summary", () => {
     expect(page).toContain("formatUSD(plan.price.usd.annual)")
     expect(page).toContain("plan.agentMinutes.toLocaleString()")
     expect(page).toContain("plan.targetCaps")
-    expect(page).toContain("trialPlan.agentMinutes")
+    // The trial line now comes from the single source (src/lib/site-copy.ts)
+    // instead of an inline expression, so the pricing page and the homepage
+    // can no longer state the trial differently.
+    expect(page).toContain("TRIAL_LINE")
+    expect(page).toContain('from "../lib/site-copy"')
     expect(page).toContain("enterprisePlan.price.usd.monthly")
     expect(page).toContain('href="/pricing"')
     expect(page).not.toMatch(/most popular|recommended plan|best value/i)

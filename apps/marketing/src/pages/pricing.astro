@@ -9,6 +9,7 @@ import {
   formatUSD,
   getPlan,
 } from "@lyrashield/pricing"
+import { CTA_LABEL, TRIAL_LINE, TRIAL_SUMMARY } from "../lib/site-copy"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/pricing", origin).toString()
@@ -29,7 +30,7 @@ const pricingFaqs = [
   },
   {
     q: "Is there a free trial?",
-    a: "Yes. New accounts can claim one 7-day limited trial with 60 agent-minutes and up to 3 targets, with no credit card required. Agency is purchase-only.",
+    a: `Yes. New accounts can claim one ${TRIAL_SUMMARY}. Agency is purchase-only.`,
   },
   {
     q: "What happens if I run out of agent-minutes?",
@@ -418,20 +419,20 @@ const appUrl =
           Not sure yet? Start with a free trial.
         </h2>
         <p class="mt-2 text-sm text-text-muted">
-          60 agent-minutes, up to 3 targets, 7 days. No credit card required.
+          {TRIAL_SUMMARY}.
         </p>
         <a
           href={`${appUrl}/sign-up`}
           class="mt-4 inline-block rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-bg hover:bg-accent/90 transition-colors"
         >
-          Start Free Trial
+          {CTA_LABEL.signUp}
         </a>
       </div>
 
       <!-- Free trial -->
       <div class="mt-12 rounded-lg bg-accent-dim/30 p-4 text-center">
         <p class="text-sm text-text-muted">
-          Start with a 7-day free trial — no credit card required.
+          Start with a free trial: {TRIAL_LINE}.
         </p>
       </div>
     </div>

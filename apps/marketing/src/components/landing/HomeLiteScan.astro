@@ -1,4 +1,6 @@
 ---
+import { CTA_LABEL } from "../../lib/site-copy"
+
 const appOrigin = __MARKETING_SCANNER_URL__.replace(/\/$/, "")
 const scannerAvailable = Boolean(appOrigin)
 ---
@@ -11,7 +13,7 @@ const scannerAvailable = Boolean(appOrigin)
       <p class="mt-5 text-lg leading-8 text-text-muted">Paste your live app URL for a passive check of exposed secrets, browser protections, frontend data-layer signals and HTTPS. We fetch only the public URL you authorize. No login or installation.</p>
       <p class="mt-4 text-sm leading-6 text-text-muted">For checks that never leave your browser, use the <a href="/tools/webmcp-security-checker" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4">WebMCP Security Checker</a> or other <a href="/tools" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4">browser-local tools</a>.</p>
       <a href="/scan" class="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">What it covers / what it cannot prove</a>
-      <p class="mt-5 text-sm leading-6 text-text-muted">Want the full repo and target loop? <a href="https://app.lyrashieldai.com/sign-up?source=landing_lite_check&cta=review_app&target=url" data-cta-id="home-lite-scan-create-account" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create an account</a>.</p>
+      <p class="mt-5 text-sm leading-6 text-text-muted">Want the full repo and target loop? <a href="https://app.lyrashieldai.com/sign-up?source=landing_lite_check&cta=review_app&target=url" data-cta-id="home-lite-scan-create-account" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{CTA_LABEL.signUp}</a>.</p>
     </div>
 
     {/* `data-reveal` (vertical) rather than `data-reveal="right"`: the horizontal
@@ -23,7 +25,7 @@ const scannerAvailable = Boolean(appOrigin)
       <label for="home-scan-url" class="block text-sm font-semibold text-text">Public app URL</label>
       <div class="mt-2 flex min-w-0 flex-col gap-3 sm:flex-row">
         <input id="home-scan-url" type="text" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="example.com or https://your-app.com" disabled={!scannerAvailable} class="min-h-13 w-full min-w-0 flex-1 rounded-xl border border-border bg-bg px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
-        <button type="submit" data-cta-id="homepage_lite_scan" disabled={!scannerAvailable} class="min-h-13 max-w-full whitespace-normal break-words rounded-xl bg-accent px-6 font-semibold text-bg shadow-sm hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-55">{scannerAvailable ? "Scan my app" : "Scanner unavailable"}</button>
+        <button type="submit" data-cta-id="homepage_lite_scan" disabled={!scannerAvailable} class="min-h-13 max-w-full whitespace-normal break-words rounded-xl bg-accent px-6 font-semibold text-bg shadow-sm hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-55">{scannerAvailable ? CTA_LABEL.liteCheck : "Scanner unavailable"}</button>
       </div>
       <label class="mt-4 flex min-w-0 cursor-pointer items-start gap-3 text-sm leading-6 text-text-muted">
         <input id="home-scan-authorized" type="checkbox" required disabled={!scannerAvailable} class="mt-1 size-4 shrink-0 accent-(--accent)" />

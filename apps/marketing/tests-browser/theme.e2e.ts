@@ -217,7 +217,7 @@ test("keeps the compact mobile menu inside the visible viewport", async ({ page 
   await expect(menu).toHaveCSS("transform", "none")
   await expect(menu.getByText("Resources", { exact: true })).toBeVisible()
   await expect(menu.getByRole("link", { name: "Free tools", exact: true })).toBeVisible()
-  await expect(menu.getByRole("link", { name: "Get started" })).toBeVisible()
+  await expect(menu.getByRole("link", { name: "Start free trial" })).toBeVisible()
   const bounds = await menu.boundingBox()
   expect(bounds).not.toBeNull()
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(384)

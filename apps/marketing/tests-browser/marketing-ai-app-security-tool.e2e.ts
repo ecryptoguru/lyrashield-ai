@@ -36,7 +36,7 @@ test.describe("AI App Security scanner tool", () => {
 
     await expect(page.getByText("DETECTED").first()).toBeVisible()
     await expect(page.getByText("AI-01")).toBeVisible()
-    await expect(page.getByText("Create account and scan the complete repository")).toBeVisible()
+    await expect(page.getByText("Start a free trial to scan the complete repository")).toBeVisible()
     expect(
       networkRequests.filter((url) => !url.includes("localhost") && !url.includes("127.0.0.1"))
     ).toHaveLength(0)
