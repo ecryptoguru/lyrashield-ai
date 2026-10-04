@@ -17,6 +17,27 @@ export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
 
 const { page } = Astro.props
 
+/**
+ * "Start here" row (Spec item 6.3). A fixed, hand-picked shortlist of evergreen
+ * guides, resolved against the FULL published collection rather than the page
+ * slice, so the row renders the same on page 1 regardless of publish order.
+ */
+const START_HERE_SLUGS = [
+  "vibe-coding-security-guide",
+  "ai-app-prelaunch-security-checklist",
+  "what-data-shows-ai-generated-code-security-2026",
+  "ai-app-privacy-checklist",
+  "review-ai-generated-pull-request",
+]
+const allPublished = await getCollection(
+  "blog",
+  (entry) => !entry.data.draft && isNotAfterBuildDate(entry.data)
+)
+const startHerePosts = START_HERE_SLUGS.flatMap((slug) => {
+  const post = allPublished.find((entry) => entry.id === slug)
+  return post ? [post] : []
+})
+
 const origin = Astro.site?.origin || "http://localhost:4321"
 // Paginated pages 2+ share the index's description with a page suffix, which
 // reads as near-duplicate content to crawlers. Canonical to /blog and keep the
@@ -34,23 +55,6 @@ const description =
     : `${baseDescription} — Page ${page.currentPage}`
 const featuredPost = page.currentPage === 1 ? page.data[0] : undefined
 const remainingPosts = featuredPost ? page.data.slice(1) : page.data
-
-/**
- * "Start here" row (Spec item 6.3). A fixed, hand-picked shortlist of the five
- * evergreen guides, resolved against the published collection so a retired
- * post can never leave a dead link. Order is editorial, not chronological.
- */
-const START_HERE_SLUGS = [
-  "vibe-coding-security-guide",
-  "ai-app-prelaunch-security-checklist",
-  "what-data-shows-ai-generated-code-security-2026",
-  "ai-app-privacy-checklist",
-  "review-ai-generated-pull-request",
-]
-const startHerePosts = START_HERE_SLUGS.flatMap((slug) => {
-  const post = page.data.find((entry) => entry.id === slug)
-  return post ? [post] : []
-})
 // All six categories with counts computed from the FULL published set —
 // stable across every pagination page, never derived from page.data.
 const categories = await getCategoriesWithCounts()

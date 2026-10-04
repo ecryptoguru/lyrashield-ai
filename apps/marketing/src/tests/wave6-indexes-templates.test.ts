@@ -58,6 +58,7 @@ describe("Wave 6 indexes and templates", () => {
     expect(layout).toContain("Sample result")
     expect(layout).toContain("Related tools")
     expect(layout).toContain("Run this on your whole app")
+    expect(layout).toContain("TOOL_SAMPLE_RESULTS")
   })
 
   it("6.6 keeps one shared compare template structure", () => {
@@ -70,7 +71,9 @@ describe("Wave 6 indexes and templates", () => {
     const blog = readFileSync(new URL("../layouts/BlogPost.astro", import.meta.url), "utf8")
     const docs = readFileSync(new URL("../layouts/DocsLayout.astro", import.meta.url), "utf8")
     expect(blog).toContain('aria-label="Breadcrumb"')
+    expect(blog).toContain('aria-current="page"')
     expect(docs).toContain('aria-label="Breadcrumb"')
+    expect(docs).toContain('aria-current="page"')
   })
 
   it("6.8 gives the 404 four destinations", () => {
