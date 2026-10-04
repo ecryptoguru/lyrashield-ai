@@ -82,7 +82,7 @@ LyraShield AI is live and open for registration — create an account and run yo
 
 ## Where Snyk is genuinely strong
 
-Snyk is the developer security platform most teams know. Its [platform page](https://snyk.io/platform/) describes Snyk Code for SAST, Snyk Open Source for SCA, Snyk Container, Snyk Infrastructure as Code and Snyk Secrets, all integrated into IDEs, the CLI and CI pipelines. Its [documentation](https://docs.snyk.io/scan-fix-and-prevent/fix/snyk-pull-or-merge-requests/enable-automatic-upgrade-prs-for-new-dependency-upgrades) describes automated fix pull requests for dependencies, and the same platform page describes a risk-based approach that focuses effort on issues with meaningful impact.
+Snyk is the developer security platform most development teams already run. Its [platform page](https://snyk.io/platform/) describes Snyk Code for SAST, Snyk Open Source for SCA, Snyk Container, Snyk Infrastructure as Code and Snyk Secrets, all integrated into IDEs, the CLI and CI pipelines. Its [documentation](https://docs.snyk.io/scan-fix-and-prevent/fix/snyk-pull-or-merge-requests/enable-automatic-upgrade-prs-for-new-dependency-upgrades) describes automated fix pull requests for dependencies, and the same platform page describes a risk-based approach that focuses effort on issues with meaningful impact.
 
 Snyk has moved aggressively into AI and agentic security. The platform page describes Agentic Development Security to govern what coding agents use and generate, AI Security Posture Management for code-first governance and Continuous Offensive Security with AI pentesting. Its [announcement of Evo](https://snyk.io/news/snyk-launches-evo-continuous-offensive-security/) covers the offensive side.
 
