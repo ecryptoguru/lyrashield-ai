@@ -3,7 +3,7 @@ title: "LyraShield vs ZeroPath — release assurance compared"
 description: "How LyraShield AI compares to ZeroPath for AI-native SAST and auto-fix. Evidence states, deterministic retest, coverage framework and deployment model."
 competitor: "ZeroPath"
 heading: "LyraShield AI vs ZeroPath"
-disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native application security platform that unifies SAST, SCA, secrets, IaC and DAST-style runtime validation into a single reasoning engine and generates fix PRs. LyraShield AI is release assurance for AI-built apps — it keeps detected candidates, separate verification receipts and retest outcomes distinct in scoped evidence reports, with fixes gated behind approvals. Neither replaces the other."
+disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native application security platform that unifies SAST, SCA, secrets, IaC and DAST-style runtime validation into a single reasoning engine and generates fix PRs. LyraShield AI is release assurance for AI-built apps — it keeps detected candidates and retest outcomes distinct in scoped evidence reports, with fixes gated behind approvals. Neither replaces the other."
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
@@ -11,7 +11,7 @@ faq:
   - q: "Does LyraShield replace ZeroPath?"
     a: "No. ZeroPath is a unified AI-native SAST plus SCA, secrets, IaC and DAST-style runtime validation with taint tracking, natural-language policy, CycloneDX AI-BOM across 17 component kinds and an open-source MCP server and a downloadable CLI. LyraShield in open beta focuses on agentic pentest as core with SCA, secrets, evidence states and reviewed fix proposals."
   - q: "Can I use ZeroPath and LyraShield together?"
-    a: "Yes. ZeroPath can serve as your broad AI-native scanner replacing multiple detectors, with a downloadable CLI and SARIF; confirm current commercial terms with the vendor. Add LyraShield for the release assurance loop that records fix proposals for review before the team merges a change and produces an immutable snapshot. Both support MCP, so they can run inside AI coding agents."
+    a: "Yes. ZeroPath can serve as your broad AI-native scanner replacing multiple detectors, with a downloadable CLI and SARIF; confirm current commercial terms with the vendor. Add LyraShield for the release assurance loop that records fix proposals for review before the team merges a change and produces a checksum-bound snapshot. Both support MCP, so they can run inside AI coding agents."
   - q: "When should I choose ZeroPath over LyraShield?"
     a: "Choose ZeroPath when you need business-logic and authorization flaw detection, AI-component inventory, one-click fix PRs with natural-language refinement and broad language coverage with 700+ secret detectors. Its strength is consolidating SAST, SCA, secrets and runtime validation. Choose LyraShield when scoped evidence and approval-gated fix proposals would help inform a release review."
 ---
@@ -22,10 +22,10 @@ faq:
 | ----------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | Primary focus           | Evidence-backed release assurance for AI-built apps                                  | AI-native SAST plus SCA, secrets, IaC and DAST validation in one platform         |
 | Scanning approach       | Agentic engine, coverage framework, evidence states                                  | LLMs combined with static analysis, taint tracking and AI validation              |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                 | Found → AI-validated for exploitability → fix PR generated                        |
+| Finding lifecycle       | Detected → retest-confirmed or inconclusive                                          | Found → AI-validated for exploitability → fix PR generated                        |
 | Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                          | No published control framework; convention-deviation and auth-predicate analysis  |
 | Fix model               | Recorded fix proposals; Fix PR requests need permission and a server-generated patch | Fix PRs opened for one-click merge with natural-language refinement               |
-| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                 | Agent installer with stop hooks; scans uncommitted diffs at end of AI agent turns |
+| AI-generated code focus | Built for AI-built apps; scans agent rules, agent instruction files and AI patterns  | Agent installer with stop hooks; scans uncommitted diffs at end of AI agent turns |
 
 ## Capability comparison
 
@@ -39,7 +39,7 @@ faq:
 | Evidence states           | Yes (4 states)                                                  | Exploitation-setup metadata per finding                                       |
 | Deterministic retest      | Yes                                                             | Auto re-scan verification after fix                                           |
 | Coverage receipts         | Yes (per-control)                                               | No                                                                            |
-| Assurance reports         | Yes (immutable snapshots)                                       | Compliance and audit reports; GRC sync                                        |
+| Assurance reports         | Yes (checksum-bound snapshots)                                  | Compliance and audit reports; GRC sync                                        |
 | Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch | One-click merge fix PRs; no formal approval gate                              |
 | MCP server integration    | Yes (documented MCP client workflows)                           | Yes (open-source MCP server for Claude, Cursor, Windsurf)                     |
 | AI-BOM / AI inventory     | Not a primary feature                                           | Yes (17 AI component kinds, CycloneDX AI-BOM)                                 |
@@ -51,7 +51,7 @@ faq:
 | ---------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Deployment | Hosted + CLI + MCP + GitHub Action               | SaaS, on-prem (Enterprise), downloadable CLI, VS Code plugin, GitHub/GitLab/Bitbucket/Azure DevOps, MCP server, Claude Code plugin |
 | Pricing    | See [pricing](/pricing) for current plan details | Check the vendor's current pricing or sales quote                                                                                  |
-| Languages  | Language-agnostic                                | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin and more)                                                |
+| Languages  | 13 source extensions; 7 dependency ecosystems    | 15+ for SAST (Python, JS/TS, Java, C#, Go, Ruby, PHP, Rust, Swift, Kotlin and more)                                                |
 
 ## When to use which
 
@@ -59,7 +59,7 @@ faq:
 
 - You need evidence-backed assurance with coverage receipts for release decisions
 - Your app is AI-built and you want security checks inside your AI coding agent via MCP
-- You need immutable assurance reports for compliance or client handoff
+- You need checksum-bound assurance reports for compliance or client handoff
 - You want recorded fix proposals before your team applies a patch
 - You want agentic pentest as a core capability, not runtime validation of scanner findings
 

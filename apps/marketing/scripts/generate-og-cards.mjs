@@ -88,8 +88,8 @@ export const OG_CARDS = [
   },
   {
     slug: "ai-safety",
-    eyebrow: "AI SAFETY",
-    title: "Prompt-injection guard evaluation",
+    eyebrow: "MCP GUARD",
+    title: "MCP guard evaluation",
     path: "lyrashieldai.com/ai-safety",
   },
   {
@@ -131,7 +131,10 @@ async function fontFace(family, file) {
 
 export async function renderCards({ write = true } = {}) {
   const faces = [
-    await fontFace("Bricolage", "bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2"),
+    await fontFace(
+      "Bricolage",
+      "bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2"
+    ),
     await fontFace("JetBrains", "jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2"),
     await fontFace("Inter", "inter/files/inter-latin-wght-normal.woff2"),
   ].join("")
