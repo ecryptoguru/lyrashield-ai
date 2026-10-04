@@ -6,13 +6,6 @@ import { tmpdir } from "node:os"
 import test from "node:test"
 
 const workflow = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
-const start = workflow.indexOf("        run: |") + "        run: |\n".length
-const end = workflow.indexOf("\n  build:", start)
-const script = workflow
-  .slice(start, end)
-  .split("\n")
-  .map((line) => line.replace(/^ {10}/, ""))
-  .join("\n")
 const source = "a".repeat(40)
 function dispatch(t, attempt, originalStatus, currentMain = source) {
   const directory = mkdtempSync(path.join(tmpdir(), "ls-cutover-dispatch-"))
@@ -25,7 +18,7 @@ function dispatch(t, attempt, originalStatus, currentMain = source) {
   chmodSync(gh, 0o755)
   const output = path.join(directory, "output")
   writeFileSync(output, "")
-  const result = spawnSync("bash", ["-c", script], {
+  const result = spawnSync("bash", [".github/scripts/validate-webhook-deploy-dispatch.sh"], {
     encoding: "utf8",
     env: {
       ...process.env,
@@ -41,6 +34,13 @@ function dispatch(t, attempt, originalStatus, currentMain = source) {
   })
   return { ...result, output: readFileSync(output, "utf8") }
 }
+test("dispatch workflow invokes the independently tested fail-closed validator", () => {
+  const job = workflow.slice(
+    workflow.indexOf("name: Validate emergency production dispatch"),
+    workflow.indexOf("\n  preflight-cutover-evidence:")
+  )
+  assert.match(job, /run: bash \.github\/scripts\/validate-webhook-deploy-dispatch\.sh/)
+})
 test("new dispatch must still select current main", (t) =>
   assert.notEqual(dispatch(t, 1, "success", "b".repeat(40)).status, 0))
 test("same run preserves successfully validated original SHA after main advances but demands receipt proof", (t) => {
