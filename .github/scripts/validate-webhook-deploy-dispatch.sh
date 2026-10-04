@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${SOURCE_SHA:?}" "${CONFIRMATION:?}" "${WEBHOOK_CLAIMS_CUTOVER:?}" "${GITHUB_REPOSITORY:?}" "${GITHUB_RUN_ID:?}" "${GITHUB_RUN_ATTEMPT:?}" "${GITHUB_OUTPUT:?}"
+: "${SOURCE_SHA:?}" "${CONFIRMATION:?}" "${WEBHOOK_CLAIMS_CUTOVER:?}" "${GITHUB_REPOSITORY:?}" "${GITHUB_RUN_ID:?}" "${GITHUB_RUN_ATTEMPT:?}" "${GITHUB_OUTPUT:?}" "${GITHUB_REF:?}"
+if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+  echo "::error::Manual production dispatch workflow must run from refs/heads/main."
+  exit 1
+fi
 echo "recovery_requires_receipt=false" >> "$GITHUB_OUTPUT"
 
 expected_confirmation="deploy:${SOURCE_SHA}"
