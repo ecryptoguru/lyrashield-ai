@@ -3,7 +3,7 @@ title: "LyraShield vs GitHub Advanced Security — compared"
 description: "How LyraShield AI compares to GitHub Advanced Security (GHAS). Evidence states, coverage framework, MCP integration and deployment model differences."
 competitor: "GitHub Advanced Security"
 heading: "LyraShield AI vs GitHub Advanced Security"
-disclaimer: "Factual comparison. GitHub Advanced Security is GitHub's security suite (CodeQL, secret scanning, Dependabot). LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence and a fresh retest into one reviewable assurance record. The LyraShield GitHub Action complements GHAS rather than replacing it — it adds diff-aware pattern checks that run in your own runner with no LyraShield account required."
+disclaimer: "Factual comparison. GitHub Advanced Security is GitHub's security suite (CodeQL, secret scanning, Dependabot). LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence and a fresh retest into one reviewable assurance record. The LyraShield GitHub Action complements GHAS rather than replacing it — it adds diff-aware pattern checks that run in your own runner with no account required."
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true

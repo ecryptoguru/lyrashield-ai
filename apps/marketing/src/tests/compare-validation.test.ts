@@ -92,6 +92,33 @@ describe("compare governance", () => {
     expect(validateComparePage(page({ body }))).toContain("missing required /methodology link")
   })
 
+  it("rejects Markdown link syntax in the disclaimer the template renders as HTML", () => {
+    // The compare template renders `disclaimer` with set:html, so Markdown link
+    // syntax prints literally. Five pages shipped that way before this guard.
+    const markdown = {
+      ...page().data,
+      disclaimer: "Factual comparison. [Rival](https://rival.example/) is a scanner.",
+    }
+    expect(validateComparePage(page({ data: markdown }))).toContain(
+      "disclaimer must use HTML anchors, not Markdown link syntax"
+    )
+    const html = {
+      ...page().data,
+      disclaimer: 'Factual comparison. <a href="https://rival.example/">Rival</a> is a scanner.',
+    }
+    expect(validateComparePage(page({ data: html }))).toEqual([])
+  })
+
+  it("rejects a plain-HTTP citation inside the disclaimer", () => {
+    const data = {
+      ...page().data,
+      disclaimer: 'Factual comparison. <a href="http://rival.example/">Rival</a> is a scanner.',
+    }
+    expect(validateComparePage(page({ data }))).toContain(
+      "citation must use HTTPS: http://rival.example/"
+    )
+  })
+
   it("rejects unpublished internal blog dependencies", () => {
     const body = `${BODY}\n\nSee [the comparison](/blog/rival-vs-lyrashield).`
     const context = { publishedBlogSlugs: new Set(["something-else"]) }

@@ -3,7 +3,7 @@ title: "LyraShield vs Horizon3 NodeZero — compared"
 description: "How LyraShield AI compares to Horizon3.ai for autonomous infra pentest. Approach, evidence model, coverage framework and deployment model differences."
 competitor: "Horizon3.ai"
 heading: "LyraShield AI vs Horizon3.ai"
-disclaimer: "Factual comparison. [Horizon3.ai's NodeZero](https://www.horizon3.ai/nodezero/) is an autonomous, production-safe pentest platform that runs real attack techniques across web apps, infrastructure, cloud, data and identity — chaining weaknesses into attack paths and verifying fixes, with no agents. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, checksum-bound assurance reports and reviewed fix proposals. NodeZero validates production resilience across the whole environment; LyraShield AI gates AI-generated-code releases. Neither replaces the other."
+disclaimer: 'Factual comparison. <a href="https://www.horizon3.ai/nodezero/">Horizon3.ai''s NodeZero</a> is an autonomous, production-safe pentest platform that runs real attack techniques across web apps, infrastructure, cloud, data and identity — chaining weaknesses into attack paths and verifying fixes, with no agents. <a href="https://lyrashieldai.com/">LyraShield AI</a> is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, checksum-bound assurance reports and reviewed fix proposals. NodeZero validates production resilience across the whole environment; LyraShield AI gates AI-generated-code releases. Neither replaces the other.'
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
