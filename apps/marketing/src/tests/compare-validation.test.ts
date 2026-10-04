@@ -251,18 +251,22 @@ describe("compare governance", () => {
     const files = readdirSync(compareRoot).filter((name) => /\.mdx?$/.test(name))
     expect(files).toHaveLength(13)
     for (const name of files) {
-      const { data, body } = parseArticle(readFileSync(join(compareRoot, name), "utf8"))
+      const parsed = parseArticle(readFileSync(join(compareRoot, name), "utf8"))
+      const data = parsed.data as { competitorClaims?: boolean; competitorDomain?: string }
+      const body: string = parsed.body
       const slug = name.replace(/\.mdx?$/, "")
       expect(data.competitorClaims, `${slug} must declare competitorClaims`).toBe(true)
       expect(typeof data.competitorDomain, `${slug} must declare competitorDomain`).toBe("string")
-      const sources = collectCompetitorSources({ body }).filter((url) => /^https:\/\//i.test(url))
+      const sources = collectCompetitorSources({ body }).filter((url: string) =>
+        /^https:\/\//i.test(url)
+      )
       expect(
         sources.length,
         `${slug} needs at least ${COMPARE_SOURCE_MINIMUM} sources`
       ).toBeGreaterThanOrEqual(COMPARE_SOURCE_MINIMUM)
       const citable = [...sources, ...collectDisclaimerAnchors(data)]
       expect(
-        citable.some((url) => isCompetitorHost(citationHost(url), data.competitorDomain)),
+        citable.some((url: string) => isCompetitorHost(citationHost(url), data.competitorDomain)),
         `${slug} needs a source on ${data.competitorDomain}`
       ).toBe(true)
     }
