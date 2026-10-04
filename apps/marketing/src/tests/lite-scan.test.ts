@@ -16,8 +16,8 @@ const globalStyles = readFileSync(new URL("../styles/global.css", import.meta.ur
 
 describe("Lite Check marketing surface", () => {
   it("keeps the founder-provided promise and permission copy", () => {
-    expect(page).toContain("Free security check for AI-built apps")
-    expect(page).toContain("Scan my app")
+    expect(page).toContain("Run the free Lite Check")
+    expect(page).toContain("A free security check for AI-built apps")
     expect(page).toContain("Scan only apps you own or have permission to test")
     expect(page).toContain("We only read what your app already sends to any visitor.")
   })

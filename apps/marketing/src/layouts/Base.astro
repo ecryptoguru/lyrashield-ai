@@ -71,7 +71,7 @@ const organizationLogo = {
 const supportEmail =
   (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
 const securityEmail =
-  (import.meta.env.PUBLIC_SECURITY_EMAIL as string | undefined) || "support@lyrashieldai.com"
+  (import.meta.env.PUBLIC_SECURITY_EMAIL as string | undefined) || "security@lyrashieldai.com"
 
 const siteGraph: unknown[] = [
   {
@@ -86,7 +86,7 @@ const siteGraph: unknown[] = [
       "AI application security",
       "launch gate",
       "security evidence",
-      "independent finding verification",
+      "retest-confirmed findings",
       "security retesting",
     ],
     // Both mailboxes are already published on /support, /privacy and
@@ -189,6 +189,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
         optionalTrackingCookieExpirations,
         privacyBoundedMarketingEvent,
         sanitizeMarketingProperties,
+        isMarketingEventName,
       } from "../lib/posthog-privacy"
 
       const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY
@@ -280,6 +281,38 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
                 { send_instantly: true, transport: "sendBeacon" }
               )
           })
+        })
+        // Spec section 10 events ride a declarative hook so a page can emit one
+        // without adding script. Only allowlisted properties survive, so a
+        // typed value can never reach analytics even if it were attached.
+        document.querySelectorAll<HTMLElement>("[data-analytics-event]").forEach((element) => {
+          const eventName = element.getAttribute("data-analytics-event")
+          if (!eventName || !isMarketingEventName(eventName)) return
+          const trigger = element.getAttribute("data-analytics-trigger") ?? "click"
+          const send = () => {
+            const props: Record<string, unknown> = {}
+            for (const [key, value] of Object.entries(element.dataset)) {
+              if (!key.startsWith("analyticsProp")) continue
+              const propName = key.slice("analyticsProp".length)
+              if (!propName) continue
+              props[propName.charAt(0).toLowerCase() + propName.slice(1)] = value
+            }
+            const sanitized = sanitizeMarketingProperties(eventName, props)
+            if (sanitized) posthog?.capture(eventName, sanitized, { send_instantly: true })
+          }
+          if (trigger === "view") {
+            if (typeof IntersectionObserver === "undefined") return
+            const observer = new IntersectionObserver((entries) => {
+              for (const entry of entries) {
+                if (!entry.isIntersecting) continue
+                send()
+                observer.disconnect()
+              }
+            })
+            observer.observe(element)
+            return
+          }
+          element.addEventListener(trigger, send)
         })
         document.querySelectorAll("details[data-question-id]").forEach((element) => {
           element.addEventListener("toggle", () => {

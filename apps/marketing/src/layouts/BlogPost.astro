@@ -148,6 +148,17 @@ if (faq && faq.length > 0) {
   <div class="blog-post-shell">
     <article class="blog-post">
       <header class="blog-post__header">
+        {/* Visible breadcrumb (Spec item 6.7). The layout already emitted
+            BreadcrumbList JSON-LD; this surfaces the same trail to readers. */}
+        <nav aria-label="Breadcrumb" class="mb-4">
+          <ol class="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+            <li><a href="/" class="hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Home</a></li>
+            <li aria-hidden="true">/</li>
+            <li><a href="/blog" class="hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Guides</a></li>
+            <li aria-hidden="true">/</li>
+            <li aria-current="page" class="text-text">{title}</li>
+          </ol>
+        </nav>
         {draft && (
           <span class="blog-post__draft">
             Draft
