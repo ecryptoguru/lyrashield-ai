@@ -281,7 +281,9 @@ const jsonLd = [
       <p class="font-mono text-xs font-semibold tracking-[.2em] text-(--terminal-cyan) uppercase">Full loop · open registration</p>
       <h2 class="mt-4 text-3xl font-semibold tracking-tight">Review the repository too</h2>
       <p class="mt-4 max-w-3xl leading-7 text-(--terminal-dim)">The Lite Check reads only the public surface. The full platform runs an agentic repository scan, records evidence state, prepares a fix proposal, retests and hands you a shareable report. PR execution stays blocked until an exact server-generated patch is bound to approval and every result retains its coverage limits.</p>
-      {dashboardOrigin && <a href={`${dashboardOrigin}/sign-up?source=lite_check&cta=review_app&from=scan&target=url`} data-cta-id="lite-check-review-app" class="mt-7 inline-flex min-h-12 items-center justify-center rounded-lg bg-(--terminal-cyan) px-5 font-semibold text-(--terminal-void) hover:bg-(--terminal-cyan-hover) focus:outline-none focus-visible:ring-2 focus-visible:ring-white">{CTA_LABEL.signUp}</a>}
+      {dashboardOrigin && <a href={`${dashboardOrigin}/sign-up?source=lite_check&cta=review_app&from=scan&target=url`} data-cta-id="lite-check-review-app"
+        data-analytics-event="litecheck_trial_click"
+        data-analytics-prop-cta-id="lite-check-review-app" class="mt-7 inline-flex min-h-12 items-center justify-center rounded-lg bg-(--terminal-cyan) px-5 font-semibold text-(--terminal-void) hover:bg-(--terminal-cyan-hover) focus:outline-none focus-visible:ring-2 focus-visible:ring-white">{CTA_LABEL.signUp}</a>}
       <form id="capture-form" class="mt-7 max-w-2xl">
         <label for="result-email" class="block text-sm font-semibold">Email for product updates and scorecards</label>
         <div class="mt-2 flex flex-col gap-3 sm:flex-row"><input id="result-email" type="email" required autocomplete="email" placeholder="you@example.com" class="min-h-12 flex-1 rounded-lg border border-(--terminal-panel) bg-(--terminal-raised) px-4 text-(--terminal-text) placeholder:text-(--terminal-muted)" /><button type="submit" data-capture-action="waitlist" class="min-h-12 rounded-lg bg-(--terminal-cyan) px-5 font-semibold text-(--terminal-void)">Get product updates</button></div>
@@ -460,12 +462,11 @@ const jsonLd = [
         details.addEventListener("toggle", () => { if (details.open) capture("finding_expanded") })
         findings.appendChild(details)
       })
-      results?.classList.remove("hidden"); results?.focus(); capture("scan_completed", { duration_ms: durationMs, finding_count: summary.findingCount, had_findings: summary.findingCount > 0 }); capture("upsell_viewed")
+      results?.classList.remove("hidden"); results?.focus(); capture("litecheck_complete", { product: "lite_check", finding_count: summary.findingCount, had_findings: summary.findingCount > 0 }); capture("upsell_viewed")
     }
 
     function captureScanStarted() {
-      const device = matchMedia("(max-width: 767px)").matches ? "mobile" : "desktop"
-      capture("scan_started", { device, ...attribution })
+      capture("litecheck_start", { product: "lite_check", ...attribution })
     }
 
     function showScanningUi() {

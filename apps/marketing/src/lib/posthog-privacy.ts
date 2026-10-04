@@ -148,9 +148,32 @@ export const MARKETING_EVENT_ALLOWLIST = {
   waitlist_submit_error: ["error_type"],
   waitlist_submit_success: ["role"],
   waitlist_referral_share: ["channel"],
+  // Spec section 10 event set. Property lists stay narrow: a CTA id, a menu
+  // name, a template name or a boolean. No event may carry a value a visitor
+  // typed into a field, and the Lite Check target is never a property.
+  hero_primary_click: ["cta_id"],
+  hero_lite_check_click: ["cta_id", "valid"],
+  hero_agent_link_click: ["cta_id"],
+  nav_menu_open: ["menu"],
+  nav_item_click: ["item", "menu"],
+  different_card_view: ["card_id"],
+  journey_chapter_view: ["chapter_id"],
+  surface_tab_click: ["tab"],
+  plan_choose_click: ["plan"],
+  final_cta_click: ["cta_id"],
+  sticky_bar_click: ["cta_id"],
+  litecheck_start: ["product", "valid"],
+  litecheck_complete: ["product", "finding_count", "had_findings"],
+  litecheck_trial_click: ["cta_id"],
+  template_cta_click: ["template", "cta_id"],
 } as const
 
 export type MarketingEventName = keyof typeof MARKETING_EVENT_ALLOWLIST
+
+/** Runtime guard for the declarative data-analytics-event hook in Base.astro. */
+export function isMarketingEventName(value: string): value is MarketingEventName {
+  return Object.prototype.hasOwnProperty.call(MARKETING_EVENT_ALLOWLIST, value)
+}
 
 const MAX_PROPERTY_STRING_LENGTH = 500
 

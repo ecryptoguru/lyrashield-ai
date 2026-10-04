@@ -158,6 +158,8 @@ const appUrl =
               </div>
               <a
                 href={`${appUrl}/sign-up?plan=${plan.id}`}
+                data-analytics-event="plan_choose_click"
+                data-analytics-prop-plan={plan.id.toLowerCase()}
                 class="inline-flex min-h-11 items-center justify-center rounded-lg border border-border bg-bg px-4 text-sm font-semibold text-text hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 Choose {plan.name}
