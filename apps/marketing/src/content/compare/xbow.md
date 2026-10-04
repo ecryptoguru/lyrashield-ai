@@ -7,6 +7,8 @@ disclaimer: 'Factual comparison. <a href="https://xbow.com/">XBOW</a> by XBOW, I
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
+competitorClaims: true
+competitorDomain: xbow.com
 faq:
   - q: "Does LyraShield replace XBOW?"
     a: "No. XBOW is an autonomous offensive platform that proves exploitability with working exploits, decision logs and complete case files at portfolio scale across apps and APIs. LyraShield in open beta is a focused release assurance loop for AI-built apps that keeps detected candidates and retest outcomes distinct, alongside SCA, secrets and reviewed fix proposals."
@@ -76,8 +78,22 @@ faq:
 
 LyraShield keeps detected, retest-confirmed and inconclusive results distinct. [Read our comparison methodology](/methodology) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 
+## Where XBOW is genuinely strong
+
+Its core value is proving exploitability rather than listing suspicions. The [XBOW platform page](https://xbow.com/platform) says it runs the entire pentest autonomously and continuously, from the context you give it to a confirmed working exploit, and that independent validators confirm exploitability to reduce the false positives that can come from AI hallucinations. Its [home page](https://xbow.com/) describes every finding as a complete case file with the chained attack path, the working exploit and a full decision log.
+
+It runs continuously and at portfolio scale. Its [API documentation](https://xbow.com/api) describes triggering a pentest on merge or pre-deploy as a release gate and pulling proven findings into a SIEM or ticketing system, so per-asset tests can run across a large estate without adding headcount.
+
+Its [autonomous pentesting brief](https://xbow.com/brief/what-is-autonomous-pentesting) is explicit that the platform, not the model alone, is the hard part to build, which is an honest framing of the engineering problem. Its [results guidance](https://docs.xbow.com/console/guidance/interpreting-results/) describes how to read a case file.
+
+## Sources
+
+- [XBOW platform overview](https://xbow.com/platform)
+- [XBOW autonomous pentesting brief](https://xbow.com/brief/what-is-autonomous-pentesting)
+- [XBOW API](https://xbow.com/api)
+- [XBOW results guidance](https://docs.xbow.com/console/guidance/interpreting-results/)
+- [OWASP automated security testing guidance](https://owasp.org)
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
-
-For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs XBOW](/blog/xbow-vs-lyrashield).
