@@ -91,6 +91,12 @@ describe("Terms of Service page", () => {
     expect(terms).toContain("datetime={lastReviewedIso}")
     // Open beta is stated in clause 2, per the draft.
     expect(terms).toContain("LyraShield is in open beta.")
+    // The lawyer-review disclaimer is not rendered: it stays in the code
+    // comment for the next reader, and the page no longer tells a visitor who
+    // is agreeing to it that the text is unreviewed.
+    const rendered = terms.slice(terms.indexOf("---\n<Base"))
+    expect(rendered).not.toContain("not been reviewed by a lawyer")
+    expect(terms).toContain(" * pages. It has not been reviewed by a lawyer.")
   })
 
   it("covers all nineteen clauses", () => {
