@@ -6,20 +6,28 @@ const page = readFileSync(new URL("../pages/index.astro", import.meta.url), "utf
 
 describe("homepage journey and plan summary", () => {
   it("keeps the landing path in decision order and links deeper capability pages", () => {
+    // The nine-block order from spec section 8: hero, what is different, Lite
+    // Check, journey, surfaces, coverage and fit, pricing, FAQ, closing CTA.
     const stages = [
       page.indexOf("<PremiumHero />"),
-      page.indexOf('id="how-it-works"'),
-      page.indexOf("<HeroProductFrame />"),
+      page.indexOf('id="different"'),
       page.indexOf("<HomeLiteScan />"),
+      page.indexOf("<EvidenceWorld"),
+      page.indexOf("<HeroProductFrame />"),
       page.indexOf('id="capabilities-heading"'),
       page.indexOf('id="cloud-plans"'),
       page.indexOf("<Faq items={faqItems} />"),
-      page.indexOf('id="demo-heading"'),
       page.indexOf("<FinalCta />"),
     ]
     expect(stages.every((position) => position >= 0)).toBe(true)
     expect(stages).toEqual([...stages].sort((left, right) => left - right))
     expect(page).toContain('href="/evidence-vault"')
+    // The journey block owns the anchor the header and footer link to.
+    expect(page).toContain('id="how-it-works"')
+    expect(page.indexOf('id="how-it-works"')).toBeGreaterThan(page.indexOf("<HomeLiteScan />"))
+    // The static three-step block is gone: the journey retells that story.
+    expect(page).not.toContain("One review, from authorized scope to useful evidence")
+    expect(page).not.toContain("Choose scope")
     // The MCP guard evaluation page is no longer cited from the home page as
     // proof: D7 removed the figures and the reproducible runner does not exist,
     // so there is nothing to point at as evidence yet.
@@ -51,7 +59,10 @@ describe("homepage journey and plan summary", () => {
 
   it("keeps the preview bounded and makes no customer-count or certification claim", () => {
     expect(page).toContain("<HeroProductFrame />")
-    expect(page).toContain("what was checked, what needs attention")
+    // The old assertion read the retired three-step block. The same point is
+    // still made on the page by the journey block and the coverage section.
+    expect(page).toContain("Missing evidence stays visible")
+    expect(page).toContain("instead of rounding up to a pass")
     expect(page).not.toMatch(/\b\d+[k+] users\b|certified|guaranteed secure/i)
   })
 })

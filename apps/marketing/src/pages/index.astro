@@ -114,37 +114,60 @@ const jsonLd = [
   jsonLd={jsonLd}
 >
   <PremiumHero />
-  <section
-    id="how-it-works"
-    aria-labelledby="workflow-heading"
-    class="px-4 py-10 sm:px-6 sm:py-12 lg:px-8"
-    style="scroll-margin-top: 4.5rem"
-  >
+
+  {/* Block 2: what is different. Four claims, each provable in code, placed
+      directly under the hero so the differentiator is not buried below pricing.
+      The "Nothing auto-merges" sentence is a locked contract (waitlist.test.ts),
+      so it stays verbatim. */}
+  <section id="different" aria-labelledby="different-heading" class="border-y border-border bg-bg-raised/45 px-4 py-12 sm:px-6 sm:py-14 lg:px-8" style="scroll-margin-top: 4.5rem">
     <div class="mx-auto max-w-6xl">
-      <h2 id="workflow-heading" class="text-2xl font-semibold tracking-tight text-text sm:text-3xl">
-        One review, from authorized scope to useful evidence
+      <h2 id="different-heading" class="text-2xl font-semibold tracking-tight text-text sm:text-3xl">
+        A verdict that shows its work.
       </h2>
-      <ol class="mt-6 grid gap-4 md:grid-cols-3">
-        <li class="rounded-xl border border-border bg-bg-raised p-5">
-          <span class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">01 · Choose scope</span>
-          <p class="mt-3 font-semibold text-text">Select a repository, URL or API you are authorized to review.</p>
-        </li>
-        <li class="rounded-xl border border-border bg-bg-raised p-5">
-          <span class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">02 · Review evidence</span>
-          <p class="mt-3 font-semibold text-text">See what was checked, what needs attention and what could not be established.</p>
-        </li>
-        <li class="rounded-xl border border-border bg-bg-raised p-5">
-          <span class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">03 · Decide what is next</span>
-          <p class="mt-3 font-semibold text-text">If needed, review a proposed fix, approve it explicitly and run a fresh retest.</p>
-        </li>
-      </ol>
+      <p class="mt-3 max-w-3xl leading-7 text-text-muted">
+        Four things stay visible so you can defend the decision to ship.
+      </p>
+      <div class="mt-6 grid gap-4 md:grid-cols-2">
+        <article class="rounded-xl border border-border bg-bg p-5">
+          <h3 class="font-semibold text-text">Three evidence states, never blended</h3>
+          <p class="mt-2 text-sm leading-6 text-text-muted">
+            Detected, retest-confirmed and inconclusive stay separate on every finding.
+          </p>
+          <a href="/methodology" data-cta-id="homepage-different-methodology" class="mt-3 inline-flex min-h-11 items-center font-semibold text-accent underline underline-offset-4">Read the definitions</a>
+        </article>
+        <article class="rounded-xl border border-border bg-bg p-5">
+          <h3 class="font-semibold text-text">Missing evidence stays visible</h3>
+          <p class="mt-2 text-sm leading-6 text-text-muted">
+            If a check did not run or cannot prove a fix, the verdict says insufficient evidence instead of rounding up to a pass.
+          </p>
+        </article>
+        <article class="rounded-xl border border-border bg-bg p-5">
+          <h3 class="font-semibold text-text">You approve every fix</h3>
+          <p class="mt-2 text-sm leading-6 text-text-muted">
+            Fixes arrive as proposals. Nothing auto-merges. A connected coding agent acts only inside a grant you confirm in the browser.
+          </p>
+        </article>
+        <article class="rounded-xl border border-border bg-bg p-5">
+          <h3 class="font-semibold text-text">A fresh run confirms the fix</h3>
+          <p class="mt-2 text-sm leading-6 text-text-muted">
+            A new server-owned retest checks the change. The conversation that wrote the patch never grades its own work.
+          </p>
+        </article>
+      </div>
       <p class="mt-4 text-sm leading-6 text-text-muted">
-        Fixes are proposals, retests are separate runs, and a finding changes state only when retained evidence supports it.
+        Works alongside the scanners you already run. LyraShield adds evidence states, fix proposals and retests.
       </p>
     </div>
   </section>
-  <HeroProductFrame />
+
   <HomeLiteScan />
+  {/* Block 4: the journey. It carries the #how-it-works anchor because the
+      header, the footer and the Product menu all link to it. */}
+  <div id="how-it-works" class="cinematic-threshold cinematic-threshold--to-dark" aria-hidden="true"></div>
+  <EvidenceWorld manifest={motionManifest} />
+  <div class="cinematic-threshold cinematic-threshold--to-light" aria-hidden="true"></div>
+  <HeroProductFrame />
+
   <section aria-labelledby="capabilities-heading" class="px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
     <div class="mx-auto max-w-6xl">
       <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Review the full release context</p>
@@ -199,9 +222,6 @@ const jsonLd = [
       </p>
     </div>
   </section>
-  <div class="cinematic-threshold cinematic-threshold--to-dark" aria-hidden="true"></div>
-  <EvidenceWorld manifest={motionManifest} />
-  <div class="cinematic-threshold cinematic-threshold--to-light" aria-hidden="true"></div>
   <Faq items={faqItems} />
   <section id="demo" aria-labelledby="demo-heading" class="px-4 py-14 sm:px-6 lg:px-8" style="scroll-margin-top: 4.5rem">
     <div class="mx-auto max-w-3xl" data-reveal-group>
