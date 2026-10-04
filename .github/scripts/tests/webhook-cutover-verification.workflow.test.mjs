@@ -6,6 +6,7 @@ const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8
 const verifier = readFileSync(".github/workflows/verify-webhook-production-prerequisites.yml", "utf8")
 const candidatePath = ".github/workflows/verify-webhook-worker-image.yml"
 const candidate = existsSync(candidatePath) ? readFileSync(candidatePath, "utf8") : ""
+const imageReferenceHelper = readFileSync(".github/scripts/normalize-worker-image-reference.sh", "utf8")
 const cutover = readFileSync(".github/scripts/verify-webhook-cutover.mjs", "utf8")
 const smoke = readFileSync(".github/scripts/webhook-track-image-smoke.mjs", "utf8")
 
@@ -27,7 +28,12 @@ assert.match(evidence, /environment:\s*\n\s+name:\s*azure-production/)
 assert.match(evidence, /secrets\.DATABASE_DIRECT_URL/)
 assert.match(evidence, /secrets\.WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT/)
 assert.match(evidence, /secrets\.WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM/)
+assert.match(evidence, /needs:\s*validate-manual-production-dispatch/)
 assert.doesNotMatch(evidence, /id-token:\s*write|azure\/login|az login/)
+assert.match(deploy, /recovery_requires_receipt:\s*\$\{\{\s*steps\.dispatch\.outputs\.recovery_requires_receipt\s*\}\}/)
+assert.match(deploy, /bash \.github\/scripts\/validate-webhook-deploy-dispatch\.sh/)
+assert.match(evidence, /RECOVERY_REQUIRES_RECEIPT:\s*\$\{\{\s*needs\.validate-manual-production-dispatch\.outputs\.recovery_requires_receipt\s*\}\}/)
+assert.match(evidence, /SOURCE_SHA.*RECOVERY_REQUIRES_RECEIPT.*current main/s)
 assert.match(baseline, /environment:\s*\n\s+name:\s*azure-production/)
 assert.match(baseline, /id-token:\s*write/)
 assert.match(baseline, /verify-webhook-cutover\.mjs/)
@@ -54,14 +60,29 @@ assert.match(verifier, /worker_image:/)
 assert.match(verifier, /verify-webhook-worker-image\.yml/)
 assert.doesNotMatch(verifier, /sha256:caf33ad|86537799e615fb3c07376106b315393e81d7ae9d/)
 assert.match(candidate, /workflow_call:/)
-assert.match(candidate, /@sha256:/)
+assert.match(imageReferenceHelper, /sha256:\[a-f0-9\]\{64\}/)
 assert.match(candidate, /postgres:16-alpine/)
 assert.match(candidate, /redis:7-alpine/)
 assert.match(candidate, /EXPECTED_SOURCE_SHA:\s*\$\{\{ inputs\.product_source_sha \}\}/)
 assert.match(candidate, /EXPECTED_ENGINE_REVISION:\s*\$\{\{ inputs\.engine_revision \}\}/)
 assert.match(candidate, /WORKER_IMAGE:\s*\$\{\{ inputs\.worker_image \}\}/)
+assert.match(candidate, /normalize-worker-image-reference\.sh/)
+assert.match(candidate, /docker image inspect "\$CANONICAL_WORKER_IMAGE"/)
+assert.match(candidate, /grep -Fxq "\$CANONICAL_WORKER_IMAGE"/)
 assert.match(candidate, /--read-only/)
 assert.doesNotMatch(candidate, /environment:|secrets\.|id-token:|azure\/login/)
+
+const recoveryGate = runtime.indexOf("- name: Verify existing owned receipt before original-source recovery")
+assert.ok(recoveryGate > -1)
+assert.match(runtime, /bash \.github\/scripts\/webhook-claims-maintenance\.sh recovery/)
+for (const mutation of [
+  "Ensure app and scanner system identities",
+  "Prepare private registry and zero-downtime rollout",
+  "Run database migrations",
+  "Promote healthy candidate revisions",
+]) {
+  assert.ok(recoveryGate < runtime.indexOf("- name: " + mutation), mutation)
+}
 
 assert.match(smoke, /recoverDueWebhookTrackRetries/)
 assert.match(smoke, /claim_expired_requires_receipt_review/)

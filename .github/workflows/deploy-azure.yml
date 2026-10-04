@@ -60,46 +60,11 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
           CONFIRMATION: ${{ inputs.confirmation }}
           WEBHOOK_CLAIMS_CUTOVER: ${{ inputs.webhook_claims_cutover }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "recovery_requires_receipt=false" >> "$GITHUB_OUTPUT"
-          expected_confirmation="deploy:${SOURCE_SHA}"
-          if [ "$WEBHOOK_CLAIMS_CUTOVER" = true ]; then
-            expected_confirmation="webhook-cutover:${SOURCE_SHA}"
-          fi
-          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || [ "$CONFIRMATION" != "$expected_confirmation" ]; then
-            if [ "$WEBHOOK_CLAIMS_CUTOVER" = true ]; then
-              echo "::error::First webhook cutover requires current main SHA and exact confirmation webhook-cutover:${SOURCE_SHA}; do not use a normal release to bootstrap it."
-            else
-              echo "::error::Manual production deployment requires current main SHA and exact confirmation deploy:${SOURCE_SHA}."
-            fi
-            exit 1
-          fi
-          latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
-          if [ "$SOURCE_SHA" = "$latest_main" ]; then exit 0; fi
-          if [ "${GITHUB_RUN_ATTEMPT:-1}" -gt 1 ] && [ "$WEBHOOK_CLAIMS_CUTOVER" = true ]; then
-            original_validation=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/1/jobs" \
-              --jq '.jobs[] | select(.name == "Validate emergency production dispatch") | .conclusion')
-            if [ "$original_validation" != success ]; then
-              echo "::error::Maintenance recovery requires successful original dispatch validation."
-              exit 1
-            fi
-            latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
-            if [ "$SOURCE_SHA" != "$latest_main" ]; then
-              echo "recovery_requires_receipt=true" >> "$GITHUB_OUTPUT"
-            fi
-            echo "Recovering the original approved immutable source in the same GitHub run."
-            exit 0
-          fi
-          latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
-          if [ "$SOURCE_SHA" != "$latest_main" ]; then
-            echo "::error::Manual production deployment may only target current main."
-            exit 1
-          fi
+        run: bash .github/scripts/validate-webhook-deploy-dispatch.sh
 
   preflight-cutover-evidence:
     name: Verify signed cutover evidence before image build
+    needs: validate-manual-production-dispatch
     if: >-
       github.ref == 'refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
@@ -122,14 +87,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+          RECOVERY_REQUIRES_RECEIPT: ${{ needs.validate-manual-production-dispatch.outputs.recovery_requires_receipt }}
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
-          if [ "$SOURCE_SHA" != "$latest_main" ]; then
+          if [ "$SOURCE_SHA" != "$latest_main" ] && [ "$RECOVERY_REQUIRES_RECEIPT" != true ]; then
             echo "::error::Cutover source is no longer current main; select the current SHA and refresh the signed receipt."
             exit 1
+          fi
+          if [ "$SOURCE_SHA" != "$latest_main" ]; then
+            echo "Revalidating signed evidence for the original immutable source; runtime recovery still requires its owned maintenance receipt."
           fi
 
       - name: Verify signed historical UTC receipt before image build

@@ -66,19 +66,6 @@ jobs:
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3100
       PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
     steps:
-      - name: Validate immutable worker source and digest inputs
-        env:
-          PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
-          ENGINE_REVISION: ${{ inputs.engine_revision }}
-          WORKER_IMAGE: ${{ inputs.worker_image }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$PRODUCT_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
-          [[ "$ENGINE_REVISION" =~ ^[a-f0-9]{40}$ ]]
-          [[ "$WORKER_IMAGE" == "ghcr.io/${GITHUB_REPOSITORY}/lyrashield-worker:"*@sha256:* ]]
-          [[ "$WORKER_IMAGE" =~ @sha256:[a-f0-9]{64}$ ]]
-
       - name: Checkout exact worker source and schema revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,6 +85,20 @@ jobs:
         env:
           HARNESS_SHA: ${{ github.sha }}
         run: test "$(git rev-parse HEAD)" = "$HARNESS_SHA"
+
+      - name: Validate immutable worker source and digest inputs
+        env:
+          PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
+          ENGINE_REVISION: ${{ inputs.engine_revision }}
+          WORKER_IMAGE: ${{ inputs.worker_image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PRODUCT_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$ENGINE_REVISION" =~ ^[a-f0-9]{40}$ ]]
+          canonical_worker_image="$(bash harness/.github/scripts/normalize-worker-image-reference.sh \
+            "$WORKER_IMAGE" "$GITHUB_REPOSITORY")"
+          echo "CANONICAL_WORKER_IMAGE=$canonical_worker_image" >> "$GITHUB_ENV"
 
       - name: Verify the worker image source matches its OCI provenance
         working-directory: product
@@ -162,11 +163,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker pull "$WORKER_IMAGE"
-          repo_digests="$(docker image inspect "$WORKER_IMAGE" --format '{{join .RepoDigests "\n"}}')"
-          grep -Fxq "$WORKER_IMAGE" <<<"$repo_digests"
+          docker pull "$CANONICAL_WORKER_IMAGE"
+          repo_digests="$(docker image inspect "$CANONICAL_WORKER_IMAGE" --format '{{join .RepoDigests "\n"}}')"
+          grep -Fxq "$CANONICAL_WORKER_IMAGE" <<<"$repo_digests"
           bash apps/worker/scripts/verify-worker-image.sh \
-            "$WORKER_IMAGE" "$EXPECTED_SOURCE_SHA" "$EXPECTED_ENGINE_REVISION"
+            "$CANONICAL_WORKER_IMAGE" "$EXPECTED_SOURCE_SHA" "$EXPECTED_ENGINE_REVISION"
 
       - name: Run actual retry code from the worker image against disposable Postgres and Redis
         shell: bash
@@ -203,11 +204,11 @@ jobs:
             --env BETTER_AUTH_URL=http://127.0.0.1:3100 \
             --env NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 \
             --env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com \
-            "$WORKER_IMAGE" .ci-webhook-track-image-smoke.mjs
+            "$CANONICAL_WORKER_IMAGE" .ci-webhook-track-image-smoke.mjs
           {
             echo "## Exact worker image rehearsal passed"
             echo
-            echo "- Image: \`$WORKER_IMAGE\`"
+            echo "- Image: \`$CANONICAL_WORKER_IMAGE\`"
             echo "- Product source: \`$EXPECTED_SOURCE_SHA\`"
             echo "- Engine revision: \`$EXPECTED_ENGINE_REVISION\`"
             echo "- Coverage: actual webhook retry and due-recovery code on disposable PostgreSQL and Redis."
