@@ -39,7 +39,15 @@ describe("Wave 7 analytics events", () => {
   })
 
   it("never allowlists a URL or target-derived property", () => {
-    const banned = new Set(["url", "target", "target_url", "hostname", "referrer", "title", "email"])
+    const banned = new Set([
+      "url",
+      "target",
+      "target_url",
+      "hostname",
+      "referrer",
+      "title",
+      "email",
+    ])
     for (const event of SPEC_EVENTS) {
       const props = (MARKETING_EVENT_ALLOWLIST as Record<string, readonly string[]>)[event] ?? []
       for (const prop of props) {

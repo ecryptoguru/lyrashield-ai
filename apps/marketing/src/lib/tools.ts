@@ -240,12 +240,9 @@ export const TOOL_SAMPLE_RESULTS: Record<Tool["slug"], string> = {
     "7 of 11 launch controls documented · 4 need an owner before release",
   "ai-app-security-scanner":
     "3 signals detected across 12 files · 1 high, 2 review · 5 checks not assessed",
-  "security-headers-checker":
-    "2 headers missing · Content-Security-Policy and Referrer-Policy",
-  "secret-exposure-scanner":
-    "1 high-confidence credential pattern found in a client bundle",
-  "supabase-rls-checker":
-    "2 policies allow an anonymous read on a tenant table",
+  "security-headers-checker": "2 headers missing · Content-Security-Policy and Referrer-Policy",
+  "secret-exposure-scanner": "1 high-confidence credential pattern found in a client bundle",
+  "supabase-rls-checker": "2 policies allow an anonymous read on a tenant table",
   "jwt-session-inspector":
     "Token has no expiry claim and is not marked HttpOnly at the cookie layer",
   "webmcp-security-checker":
@@ -256,7 +253,12 @@ export const TOOL_SAMPLE_RESULTS: Record<Tool["slug"], string> = {
  * Visitor-shaped grouping for the tools index (Spec item 6.1): group by what
  * the visitor has, not by what the tool is called.
  */
-export const TOOL_GROUPS: Array<{ id: string; label: string; blurb: string; slugs: Tool["slug"][] }> = [
+export const TOOL_GROUPS: Array<{
+  id: string
+  label: string
+  blurb: string
+  slugs: Tool["slug"][]
+}> = [
   {
     id: "app",
     label: "Your running app",

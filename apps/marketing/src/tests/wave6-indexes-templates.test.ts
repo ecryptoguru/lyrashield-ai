@@ -75,7 +75,12 @@ describe("Wave 6 indexes and templates", () => {
 
   it("6.8 gives the 404 four destinations", () => {
     const notFound = page("404.astro")
-    for (const href of ['href="/scan"', 'href="/pricing"', 'href="/blog"', 'href="/docs/integrations"']) {
+    for (const href of [
+      'href="/scan"',
+      'href="/pricing"',
+      'href="/blog"',
+      'href="/docs/integrations"',
+    ]) {
       expect(notFound, `404 must link ${href}`).toContain(href)
     }
   })
@@ -83,7 +88,9 @@ describe("Wave 6 indexes and templates", () => {
   it("6.9 renders the Myra panel heading as a paragraph and moves the launcher right", () => {
     const myra = component("myra/MyraPanel.astro")
     expect(myra).not.toMatch(/<h2[^>]*>\{MYRA_COPY\.header\}/)
-    expect(myra).toContain("<p class=\"text-base font-semibold leading-5 tracking-tight text-text\">{MYRA_COPY.header}</p>")
+    expect(myra).toContain(
+      '<p class="text-base font-semibold leading-5 tracking-tight text-text">{MYRA_COPY.header}</p>'
+    )
     expect(myra).toContain("fixed right-5 bottom-5")
   })
 })
