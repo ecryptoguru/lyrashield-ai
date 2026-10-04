@@ -9,7 +9,13 @@
 import { CLOUD_PLAN_MAP } from "@lyrashield/pricing"
 
 const TRIAL = CLOUD_PLAN_MAP.TRIAL
-const TRIAL_DAYS = 7
+
+/**
+ * The trial length comes from the catalog, so it cannot drift from the plan the
+ * billing layer grants. The fallback exists only so a malformed catalog fails
+ * loudly in the test rather than printing "undefined days" on the site.
+ */
+const TRIAL_DAYS = TRIAL.trialDays ?? 0
 
 /** "7 days · 60 agent-minutes · 3 targets · no card" */
 export function buildTrialLine({

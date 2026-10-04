@@ -8,6 +8,12 @@ import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
 import { CLOUD_PLANS, formatUSD } from "@lyrashield/pricing"
 import { createMotionMediaManifest } from "../lib/motion-manifest"
+import { agentOnboarding } from "../lib/agent-onboarding"
+import {
+  VIBE_SECURITY_CONTROLS,
+  VIBE_SECURITY_COVERAGE_VERSION,
+} from "../../../../packages/security/src/vibe-security-controls"
+import { WEBMCP_CONTROLS } from "../../../../packages/security/src/webmcp/controls"
 import { tools } from "../lib/tools"
 import { TRIAL_LINE } from "../lib/site-copy"
 import { buildDateFor } from "../lib/build-date"
@@ -19,12 +25,36 @@ const buildDate =
 // Explicit freshness floor: the last content change to this page. The
 // git-derived buildDate wins when it resolves; the floor keeps dateModified
 // honest when the page ships without .git.
-const updatedDate = "2026-09-27"
+const updatedDate = "2026-10-05"
 const dateModified = buildDate ?? `${updatedDate}T00:00:00.000Z`
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
+
+// Per-plan audience line and the Choose label, keyed by plan id so the card
+// never invents a name. The label form is "Choose {name}", per the vocabulary
+// lock (the retired form was "Start with {name}").
+const planIntent: Record<string, string> = {
+  STARTER: "For solo builders reviewing up to five targets with standard scans.",
+  PRO: "For solo builders who need Deep and Custom scans across up to 15 targets.",
+  LAUNCH_ASSURANCE: "For a team of up to five sharing one minute pool across up to 50 targets.",
+}
 const enterprisePlan = CLOUD_PLANS.find((plan) => plan.id === "ENTERPRISE")!
+const appSignUpUrl =
+  "https://app.lyrashieldai.com/sign-up?source=landing_pricing&cta=choose"
 const renderHash = import.meta.env.PUBLIC_MOTION_RENDER_HASH as string
 const mediaUrl = renderHash === "local" ? "/media-local" : import.meta.env.PUBLIC_MEDIA_URL
+// Every number below is derived from the registry the scanner executes, so this
+// page cannot drift from /vibe-security-50 or llms.txt. The 43/7 split is
+// asserted at build time on that page, and asserted again by homepage.test.ts.
+const vibeControls = VIBE_SECURITY_CONTROLS
+const evidenceControlCount = vibeControls.filter((control) => control.strategy === "evidence").length
+const reviewControlCount = vibeControls.length - evidenceControlCount
+
+// The CLI line reads the pinned version from agent-onboarding, so the version
+// pin lives in exactly one place.
+const webmcpControlCount = WEBMCP_CONTROLS.length
+const cliLoginCommand = agentOnboarding.commands[0]
+const documentedClientCount = agentOnboarding.clients.length
+
 const motionManifest = createMotionMediaManifest(mediaUrl, renderHash)
 
 const description =
@@ -53,7 +83,7 @@ const faqItems = [
   },
   {
     q: "What is live today and what is on the roadmap?",
-    a: `Live today: the free Lite Check, ${tools.length} browser-local tools, the full launch-gate platform in open beta, the Operational Evidence Vault, MCP and GitHub integrations, a published CLI and a GitHub Action with a diff-aware gate and SARIF output. Registration is open; product pages describe current coverage and limits. Cloud prices are listed on /pricing, while purchase availability is shown in the authenticated product.`,
+    a: `Live today: the free Lite Check, ${tools.length} browser-local tools, the full launch-gate platform in open beta, the Operational Evidence Vault, MCP and GitHub integrations, a published CLI and a GitHub Action with a diff-aware gate and SARIF output. Registration is open; product pages describe current coverage and limits. Cloud prices and full limits are listed on /pricing.`,
   },
   {
     q: "Do you store my codebase?",
@@ -148,9 +178,9 @@ const jsonLd = [
           </p>
         </article>
         <article class="rounded-xl border border-border bg-bg p-5">
-          <h3 class="font-semibold text-text">A fresh run confirms the fix</h3>
+          <h3 class="font-semibold text-text">A fresh server-run retest checks the change</h3>
           <p class="mt-2 text-sm leading-6 text-text-muted">
-            A new server-owned retest checks the change. The conversation that wrote the patch never grades its own work.
+            The retest runs server-side from a clean baseline, so the conversation that wrote the patch never grades its own work. It confirms a fix only for a finding a deterministic scanner raised; one the model engine alone raised ends inconclusive.
           </p>
         </article>
       </div>
@@ -168,27 +198,105 @@ const jsonLd = [
   <div class="cinematic-threshold cinematic-threshold--to-light" aria-hidden="true"></div>
   <HeroProductFrame />
 
-  <section aria-labelledby="capabilities-heading" class="px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
+  {/* Block 5: surfaces. Merges the old product frame's role into tabs. The
+      CLI line reads the pinned version from agent-onboarding so the pin lives in
+      one place. Native radio/checkbox-free tabs: buttons with aria-selected. */}
+  <section aria-labelledby="surfaces-heading" class="px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
     <div class="mx-auto max-w-6xl">
-      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Review the full release context</p>
-      <h2 id="capabilities-heading" class="mt-3 text-2xl font-semibold tracking-tight text-text sm:text-3xl">
-        Code, connected tools and operational evidence
+      <h2 id="surfaces-heading" class="text-2xl font-semibold tracking-tight text-text sm:text-3xl">
+        Use it where you already work.
       </h2>
-      <div class="mt-6 grid gap-4 md:grid-cols-3">
-        <article class="rounded-xl border border-border bg-bg-raised p-5">
-          <h3 class="font-semibold text-text">Repository, URL and API reviews</h3>
-          <p class="mt-2 text-sm leading-6 text-text-muted">Review the authorized target and keep the tested scope attached to findings and reports.</p>
-        </article>
-        <article class="rounded-xl border border-border bg-bg-raised p-5">
-          <h3 class="font-semibold text-text">Agent-tool surfaces</h3>
-          <p class="mt-2 text-sm leading-6 text-text-muted">Check MCP and WebMCP tool surfaces alongside the rest of the review. Coverage remains bounded to the checks that ran.</p>
-        </article>
-        <article class="rounded-xl border border-border bg-bg-raised p-5">
-          <h3 class="font-semibold text-text">Operational evidence</h3>
-          <p class="mt-2 text-sm leading-6 text-text-muted">Keep customer-provided operational evidence separate from what a repository or URL scan can establish.</p>
-          <a href="/evidence-vault" data-cta-id="homepage-evidence-vault" class="mt-3 inline-flex min-h-11 items-center font-semibold text-accent underline underline-offset-4">Explore the Evidence Vault</a>
-        </article>
+      <div class="mt-6 flex flex-wrap gap-2" role="tablist" aria-label="Surfaces">
+        {[
+          { id: "web", label: "Web app" },
+          { id: "cli", label: "CLI" },
+          { id: "action", label: "GitHub Action" },
+          { id: "agents", label: "Coding agents" },
+        ].map((surface, index) => (
+          <button
+            type="button"
+            role="tab"
+            id={`surface-tab-${surface.id}`}
+            aria-controls={`surface-panel-${surface.id}`}
+            aria-selected={index === 0 ? "true" : "false"}
+            tabindex={index === 0 ? 0 : -1}
+            data-cta-id={`homepage-surface-tab-${surface.id}`}
+            class="surface-tab min-h-11 rounded-xl border border-border px-4 text-sm font-semibold text-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {surface.label}
+          </button>
+        ))}
       </div>
+
+      <div class="mt-5">
+        <div role="tabpanel" id="surface-panel-web" aria-labelledby="surface-tab-web" class="surface-panel">
+          <p class="leading-7 text-text-muted">
+            The console keeps scope, coverage, findings and their evidence states, fix proposals and fresh retest outcomes together, so the release decision is reviewable rather than reconstructed.
+          </p>
+        </div>
+        <div role="tabpanel" id="surface-panel-cli" aria-labelledby="surface-tab-cli" class="surface-panel" hidden>
+          <p class="leading-7 text-text-muted">Start a local workspace session from the command line.</p>
+          <pre class="mt-3 overflow-x-auto rounded-xl border border-border bg-bg-raised p-4 text-sm"><code>{cliLoginCommand}</code></pre>
+          <p class="mt-3 leading-7 text-text-muted">
+            The installer pins the client version, so the command above is the one this site is built against.
+          </p>
+        </div>
+        <div role="tabpanel" id="surface-panel-action" aria-labelledby="surface-tab-action" class="surface-panel" hidden>
+          <p class="leading-7 text-text-muted">
+            Runs scan-level SARIF in GitHub repositories without a LyraShield account or API key, so a pull request gets a check before anyone signs up.
+          </p>
+          <a href="/docs/integrations/github-action" data-cta-id="homepage-surface-action-docs" class="mt-3 inline-flex min-h-11 items-center font-semibold text-accent underline underline-offset-4">Read the GitHub Action guide</a>
+        </div>
+        <div role="tabpanel" id="surface-panel-agents" aria-labelledby="surface-tab-agents" class="surface-panel" hidden>
+          <p class="leading-7 text-text-muted">
+            {documentedClientCount} documented client workflows. Your agent runs the checks and brings back evidence. Hosted writes still need a browser-confirmed grant.
+          </p>
+          <a href="/agents" data-cta-id="homepage-surface-agents-setup" class="mt-3 inline-flex min-h-11 items-center font-semibold text-accent underline underline-offset-4">Set up your coding agent</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {/* Block 6: coverage and fit. The 43/7 split and the 14 WebMCP controls are
+      read from their registries, not typed here. */}
+  <section aria-labelledby="coverage-heading" class="border-y border-border bg-bg-raised/45 px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
+    <div class="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.6fr_1fr] lg:items-start">
+      <div>
+        <h2 id="coverage-heading" class="text-2xl font-semibold tracking-tight text-text sm:text-3xl">
+          {vibeControls.length} launch controls, {evidenceControlCount} of which need proof only you can give.
+        </h2>
+        <p class="mt-4 leading-7 text-text-muted">
+          {reviewControlCount} are reviewed from code or a URL. The other {evidenceControlCount} describe how you operate: audit coverage, monitoring, restore proof, deployment egress, test independence, multi-agent trust and accountable review. Those live in the Operational Evidence Vault.
+        </p>
+        <p class="mt-3 text-sm leading-6 text-text-muted">
+          Coverage version {VIBE_SECURITY_COVERAGE_VERSION}. A clean result does not prove an application has no vulnerabilities.
+        </p>
+        <div class="mt-6 grid gap-4 sm:grid-cols-3">
+          <article class="rounded-xl border border-border bg-bg p-5">
+            <h3 class="font-semibold text-text">LyraShield covers</h3>
+            <p class="mt-2 text-sm leading-6 text-text-muted">Repository, URL and API reviews, agent-tool surfaces and an operational evidence record.</p>
+          </article>
+          <article class="rounded-xl border border-border bg-bg p-5">
+            <h3 class="font-semibold text-text">Scanners you already run</h3>
+            <p class="mt-2 text-sm leading-6 text-text-muted">Dependency and secrets scanning in depth. LyraShield adds evidence states, fix proposals and retests rather than replacing them.</p>
+          </article>
+          <article class="rounded-xl border border-border bg-bg p-5">
+            <h3 class="font-semibold text-text">No tool can prove</h3>
+            <p class="mt-2 text-sm leading-6 text-text-muted">That an application has no vulnerabilities.</p>
+          </article>
+        </div>
+        <div class="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm font-semibold">
+          <a href="/vibe-security-50" data-cta-id="homepage-coverage-controls" class="inline-flex min-h-11 items-center text-accent underline underline-offset-4">Vibe Security 50</a>
+          <a href="/evidence-vault" data-cta-id="homepage-coverage-vault" class="inline-flex min-h-11 items-center text-accent underline underline-offset-4">Evidence Vault</a>
+        </div>
+      </div>
+      <aside class="rounded-xl border border-border bg-bg p-5">
+        <h3 class="font-semibold text-text">WebMCP Assurance</h3>
+        <p class="mt-2 text-sm leading-6 text-text-muted">
+          {webmcpControlCount} WebMCP controls checked in your browser. Nothing is uploaded.
+        </p>
+        <a href="/webmcp" data-cta-id="homepage-coverage-webmcp" class="mt-3 inline-flex min-h-11 items-center font-semibold text-accent underline underline-offset-4">Open WebMCP Assurance</a>
+      </aside>
     </div>
   </section>
   <section id="cloud-plans" aria-labelledby="home-pricing-heading" class="border-y border-border bg-bg-raised/45 px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
@@ -209,11 +317,22 @@ const jsonLd = [
             <p class="mt-1 min-w-0 break-words text-sm text-text-muted">
               <span>{formatUSD(plan.price.usd.annual)}/yr</span>
               <span aria-hidden="true"> · </span>
-              <span>{plan.agentMinutes.toLocaleString()} agent-minutes/month</span>
+              <span>
+                {plan.agentMinutes.toLocaleString()} agent-minutes/month
+                <abbr title="Wall-clock server time. Deep and Custom scans count 3x." class="cursor-help no-underline">ⓘ</abbr>
+              </span>
               <span aria-hidden="true"> · </span>
               <span>up to {plan.targetCaps} targets</span>
             </p>
-            <p class="mt-3 min-w-0 break-words text-sm text-text-muted">{plan.deepAllowed ? "Deep and Custom scans included." : "Safe, Quick and Standard scans."}</p>
+            <p class="mt-3 min-w-0 break-words text-sm text-text-muted">{planIntent[plan.id]}</p>
+            <p class="mt-2 min-w-0 break-words text-sm text-text-muted">{plan.deepAllowed ? "Deep and Custom scans included." : "Safe, Quick and Standard scans."}</p>
+            <a
+              href={`${appSignUpUrl}&cta=choose_${plan.id.toLowerCase()}`}
+              data-cta-id={`homepage-plan-choose-${plan.id.toLowerCase()}`}
+              class="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-accent px-4 text-sm font-semibold text-accent hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              Choose {plan.name}
+            </a>
           </article>
         ))}
       </div>
@@ -223,33 +342,52 @@ const jsonLd = [
     </div>
   </section>
   <Faq items={faqItems} />
-  <section id="demo" aria-labelledby="demo-heading" class="px-4 py-14 sm:px-6 lg:px-8" style="scroll-margin-top: 4.5rem">
-    <div class="mx-auto max-w-3xl" data-reveal-group>
-      <p class="font-mono text-xs font-semibold tracking-[.18em] text-accent uppercase" data-reveal>
-        Talk to the founder
-      </p>
-      <h2 id="demo-heading" data-reveal class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl">
-        See how LyraShield fits your app.
-      </h2>
-      <p data-reveal class="mt-5 max-w-2xl text-lg leading-8 text-text-muted">
-        Walk through the product with Ankit. Discuss what you are shipping, how the evidence and
-        retest workflow works and where a review would fit your release process.
-      </p>
-      <div class="mt-8" data-reveal>
-        <a
-          href="/demo"
-          data-cta-id="home-demo"
-          class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg px-6 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          Book a demo
-        </a>
-      </div>
-    </div>
-  </section>
   <FinalCta />
 </Base>
 
+<script>
+  // Surfaces tabs (spec section 8 block 5). Every panel is present in the
+  // markup, so with JavaScript off the first panel still reads and the links
+  // inside the other panels are still in the document.
+  const tablist = document.querySelector('[role="tablist"]')
+  if (tablist) {
+    const tabs = Array.from(tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    const panels = tabs
+      .map((tab) => document.getElementById(tab.getAttribute("aria-controls") ?? ""))
+      .filter((panel): panel is HTMLElement => Boolean(panel))
+
+    const select = (index: number) => {
+      tabs.forEach((tab, position) => {
+        const active = position === index
+        tab.setAttribute("aria-selected", active ? "true" : "false")
+        tab.tabIndex = active ? 0 : -1
+      })
+      panels.forEach((panel, position) => {
+        panel.hidden = position !== index
+      })
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => select(index))
+      tab.addEventListener("keydown", (event) => {
+        const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0
+        if (!step) return
+        event.preventDefault()
+        const next = (index + step + tabs.length) % tabs.length
+        select(next)
+        tabs[next]?.focus()
+      })
+    })
+  }
+</script>
+
 <style>
+  .surface-tab[aria-selected="true"] {
+    border-color: var(--accent);
+    color: var(--text);
+    background: var(--bg-raised);
+  }
+
   .cinematic-threshold {
     min-height: clamp(3rem, 7vw, 7rem);
     pointer-events: none;

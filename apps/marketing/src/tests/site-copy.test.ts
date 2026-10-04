@@ -31,14 +31,20 @@ describe("site copy single source", () => {
   it("builds the trial line from the TRIAL catalog entry", () => {
     const trial = CLOUD_PLAN_MAP.TRIAL
     expect(TRIAL_LINE).toContain(`${trial.agentMinutes} agent-minutes`)
-    expect(TRIAL_LINE).toContain("7 days")
+    expect(TRIAL_LINE).toContain(`${trial.trialDays} days`)
     expect(TRIAL_LINE).toContain(`${trial.targetCaps} targets`)
     expect(TRIAL_LINE).toContain("no card")
+    // The days are read from the catalog, not typed here: the catalog carries
+    // the value and the copy follows it.
+    expect(trial.trialDays).toBe(7)
+    expect(TRIAL_SUMMARY.startsWith(`${trial.trialDays}-day`)).toBe(true)
     // The line is derived, not hardcoded: a catalog change moves the copy.
     expect(buildTrialLine({ days: 9, agentMinutes: 42, targets: 4 })).toBe(
       "9 days · 42 agent-minutes · 4 targets · no card"
     )
-    expect(TRIAL_SUMMARY).toBe("7-day limited trial: 60 agent-minutes, up to 3 targets, no card")
+    expect(TRIAL_SUMMARY).toBe(
+      `${CLOUD_PLAN_MAP.TRIAL.trialDays}-day limited trial: 60 agent-minutes, up to 3 targets, no card`
+    )
   })
 
   it("exports the single sign-up CTA label", () => {

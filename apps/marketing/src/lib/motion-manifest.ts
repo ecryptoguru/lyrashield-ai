@@ -150,7 +150,7 @@ const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "p
     start: 36,
     end: 42,
     eyebrow: "06 / Report",
-    title: "Ship one report that shows limits too.",
+    title: "Ship one report that shows its limits too.",
     body: "Scope, coverage, findings, fixes, retest outcomes and limits become one checksum-bound launch report: a private snapshot written once per scan and report type, bound to a recorded sha256 manifest checksum. Shared versions exclude repository coordinates and raw secrets.",
     supportingCard: {
       eyebrow: "Your first launch report",
@@ -162,7 +162,7 @@ const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "p
         id: "story-report-create-account",
       },
       secondaryCta: {
-        label: "Read methodology",
+        label: "Read the definitions",
         href: "/methodology",
         id: "story-report-methodology",
       },

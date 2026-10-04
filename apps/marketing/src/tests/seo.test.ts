@@ -314,7 +314,12 @@ describe("marketing SEO metadata", () => {
     expect(premiumHero).toContain('href="#free-scan" data-cta-id="premium-hero-lite-check"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('href="/scan"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('action="/scan"')
-    expect(source("../components/landing/FinalCta.astro")).toContain('href="/methodology"')
+    // The closing CTA is the single closer now and carries no methodology
+    // button, so the guarantee is asserted where the homepage actually offers
+    // it: block 2's evidence-states card.
+    expect(source("../pages/index.astro")).toContain('href="/methodology"')
+    expect(source("../components/Footer.astro")).toContain('href: "/methodology"')
+    expect(source("../components/Header.astro")).toContain('href: "/methodology"')
     expect(scanner).toContain(
       'const title = "Free AI app security check — URL scan | LyraShield AI"'
     )
