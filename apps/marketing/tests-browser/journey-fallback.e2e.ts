@@ -10,7 +10,11 @@ import { expect, test } from "@playwright/test"
  * With JavaScript off the reveal animation never runs, so nothing is held at
  * opacity 0 and every step is genuinely visible.
  */
-const CHAPTERS = 6
+// The manifest holds seven chapter blocks: a gateway intro that carries no
+// number, then the six numbered steps of the loop. The spec's "six-step list"
+// is those six numbered steps.
+const CHAPTERS = 7
+const LOOP_STEPS = 6
 
 test("shows all six journey steps with JavaScript disabled", async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false })
@@ -37,7 +41,10 @@ test("shows all six journey steps with JavaScript disabled", async ({ browser })
     .evaluateAll((chapters) =>
       chapters.map((chapter) => chapter.querySelector("p")?.textContent?.trim() ?? "")
     )
-  expect(eyebrows).toEqual([
+  expect(eyebrows).toHaveLength(CHAPTERS)
+  // The numbered steps are the loop, in order. The gateway intro carries no
+  // number, so it is asserted separately rather than being counted as a step.
+  expect(eyebrows.filter((label) => /^\d\d \/ /.test(label))).toEqual([
     "01 / Target",
     "02 / Review",
     "03 / Evidence",
@@ -45,6 +52,7 @@ test("shows all six journey steps with JavaScript disabled", async ({ browser })
     "05 / Retest",
     "06 / Report",
   ])
+  expect(eyebrows.filter((label) => /^\d\d \/ /.test(label))).toHaveLength(LOOP_STEPS)
 
   // No video is fetched when the controller cannot run.
   const video = page.locator("evidence-world video")
