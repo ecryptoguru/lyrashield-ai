@@ -7,6 +7,10 @@ import test from "node:test"
 import { runInNewContext } from "node:vm"
 
 const workflow = readFileSync(new URL("../../workflows/ci.yml", import.meta.url), "utf8")
+const lighthouseScript = readFileSync(
+  new URL("../lighthouse-production.mjs", import.meta.url),
+  "utf8"
+)
 const mainGapScript = new URL("../classify-main-change-gap.sh", import.meta.url)
 const pathClassifier = new URL("../classify-paths.sh", import.meta.url)
 const productionRelease = readFileSync(
@@ -49,7 +53,9 @@ function runs(name, paths) {
 }
 
 function git(repository, ...args) {
-  return execFileSync("git", ["-C", repository, ...args], { encoding: "utf8" }).trim()
+  return execFileSync("git", ["-C", repository, ...args], {
+    encoding: "utf8",
+  }).trim()
 }
 
 function writeFile(repository, relativePath, contents) {
@@ -183,7 +189,11 @@ printf '<meta name="lyrashield-build-revision" content="%s">' "$CF_DEPLOYED_SHA"
 
 function azureCodeReleaseFixture(id, sha, runId, pathName, conclusion = "success") {
   return {
-    deployment: { id, sha, created_at: `2026-10-01T00:00:${String(id).padStart(2, "0")}Z` },
+    deployment: {
+      id,
+      sha,
+      created_at: `2026-10-01T00:00:${String(id).padStart(2, "0")}Z`,
+    },
     statuses: [
       {
         state: "success",
@@ -266,7 +276,8 @@ test("Lighthouse production measurement can fail the release verification", () =
   )?.[0]
   assert.ok(step, "Missing production Lighthouse step")
   assert.doesNotMatch(step, /^        continue-on-error:/m)
-  assert.match(step, /if \(failed\) process\.exit\(1\)/)
+  assert.match(step, /run: node \.github\/scripts\/lighthouse-production\.mjs lighthouse-reports/)
+  assert.match(lighthouseScript, /if \(evaluation\.failed\) process\.exitCode = 1/)
 })
 
 test("Azure deployment and admission serialize traffic mutations on one resource group", () => {
@@ -319,7 +330,10 @@ test("renames from app paths into documentation still route affected artifacts",
   const fixture = createMainGapFixture({
     renames: [
       { from: "apps/web/src/renamed-out.ts", to: "web-change.md" },
-      { from: "apps/marketing/src/pages/renamed-out.astro", to: "marketing-change.md" },
+      {
+        from: "apps/marketing/src/pages/renamed-out.astro",
+        to: "marketing-change.md",
+      },
     ],
   })
   t.after(() => rmSync(fixture.directory, { recursive: true, force: true }))
@@ -342,7 +356,9 @@ test("renames from app paths into documentation still route affected artifacts",
 })
 
 test("main change routing is target-specific when Azure is current but marketing is behind", (t) => {
-  const fixture = createMainGapFixture({ pendingFile: "apps/marketing/src/pages/pending.astro" })
+  const fixture = createMainGapFixture({
+    pendingFile: "apps/marketing/src/pages/pending.astro",
+  })
   t.after(() => rmSync(fixture.directory, { recursive: true, force: true }))
   const latestRelease = azureCodeReleaseFixture(
     1,
