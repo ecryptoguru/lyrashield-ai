@@ -55,23 +55,21 @@ test("stacks the field and button at 390px with touch-sized targets", async ({ p
   expect(button!.x, "the button is not pushed off the right edge").toBeGreaterThanOrEqual(0)
 })
 
-test("keeps the no-JavaScript fallback in the markup", async ({ page }) => {
+test("keeps the no-JavaScript fallback in the served markup", async ({ page, request }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/")
 
-  // <noscript> content is not rendered when scripting is on, so the fallback is
-  // asserted from the served markup. A JS-disabled context cannot be used here:
-  // with no JavaScript the page's reveal animation never runs and its content
-  // stays transparent, which no visibility assertion can see through.
-  const fallback = page.locator(`${FIELD} noscript a[href="/scan"]`)
-  await expect(fallback).toHaveCount(1)
-  await expect(fallback).toHaveText("Open the free Lite Check")
+  // A browser parses <noscript> children as text when scripting is on, so they
+  // are absent from the live DOM and no locator can see them. The fallback is
+  // therefore asserted from the served bytes.
+  const html = await (await request.get("/")).text()
+  expect(html).toContain("<noscript>")
+  expect(html).toMatch(/<noscript>[\s\S]*?Open the free Lite Check[\s\S]*?<\/noscript>/)
 
-  // With no JavaScript the form posts natively to /scan with no query string.
+  // The form posts natively to /scan, and the input carries no name, so a
+  // native GET cannot put the typed URL into the query string.
   await expect(page.locator(FIELD)).toHaveAttribute("action", "/scan")
   await expect(page.locator(FIELD)).toHaveAttribute("method", "get")
-  // The field must carry no name, or a native GET submit would put the typed
-  // URL in the query string.
   await expect(page.locator(URL_INPUT)).not.toHaveAttribute("name", /./)
 })
 
