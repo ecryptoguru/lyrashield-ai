@@ -1,10 +1,10 @@
 ---
 title: "LyraShield vs RunSybil — release assurance compared"
 description: "How LyraShield AI compares to RunSybil for AI black-box pentest. Evidence model, verification approach, coverage framework and deployment model differences."
-competitor: "Runsybil"
-heading: "LyraShield AI vs Runsybil"
+competitor: "RunSybil"
+heading: "LyraShield AI vs RunSybil"
 disclaimer: 'Factual comparison. [RunSybil](https://www.runsybil.com/) is an AI-native offensive security platform whose "Sybil" agents reason like elite attackers — black-box first, mapping the attack surface, chaining vulnerabilities across code, APIs, cloud and infrastructure and validating exploitability continuously on every deployment. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports and reviewed fix proposals. Both independently validate findings and run continuously. Neither replaces the other.'
-updatedDate: 2026-09-19
+updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
 faq:
@@ -23,27 +23,27 @@ faq:
 | Primary focus     | Release assurance for AI-built apps                                            | AI-native black-box offensive testing that automates hacker intuition                                                       |
 | Scanning approach | Agentic engine with coverage framework and evidence states; AI-pattern focus   | Hierarchy of reasoning agents: map surface → hypothesis-driven tests → oversee campaign; black-box first, white-box-capable |
 | Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive           | Hypothesis → confirmed/reproducible finding → prioritized → AI-ready remediation guidance                                   |
-| Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                    | No published control framework; CTEM Phase 4 (Validation) focus                                                             |
+| Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                    | No published control framework found; CTEM Phase 4 (Validation) focus                                                       |
 | Access model      | App-layer + source/MCP/agent configs                                           | Black-box first (no source required); accepts white-box context                                                             |
 | Fix model         | Recorded fix proposals; Fix PR execution is not enabled in the current release | AI-ready remediation guidance integrated with coding tools; PR-level feedback                                               |
 
 ## Capability comparison
 
-| Capability                            | LyraShield AI                                                   | RunSybil                                                                      |
-| ------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Agentic / AI-driven pentest           | Yes (app-layer)                                                 | Yes (hierarchical multi-agent)                                                |
-| Independent finding verification      | Yes (separate receipt; scope-bound)                             | Yes (live exploitation; reproducible findings)                                |
-| Black-box (no source required)        | Source/MCP-aware (not black-box-first)                          | Yes (core differentiator)                                                     |
-| SCA (dependency scanning)             | Yes (engine)                                                    | Not a primary focus                                                           |
-| Secret scanning                       | Yes (engine + GitHub Action)                                    | Not a primary focus                                                           |
-| Evidence states (4-state lifecycle)   | Yes                                                             | Findings are confirmed/reproducible; no explicit multi-state lifecycle        |
-| Deterministic retest                  | Yes                                                             | Continuous re-evaluation on every deployment                                  |
-| Coverage receipts                     | Yes (per-control)                                               | No                                                                            |
-| Assurance reports (immutable)         | Yes                                                             | Pre-validated findings with reproducible evidence                             |
-| MCP server integration                | Yes (inside AI coding agents)                                   | Not advertised as primary                                                     |
-| Permission-gated Fix PR requests      | Fix PR requests require permission and a server-generated patch | No (remediation guidance + PR feedback, not permission-gated Fix PR requests) |
-| Multi-tenant / business-logic testing | App-layer                                                       | Yes (cross-tenant access, privilege escalation, transaction manipulation)     |
-| AI-generated-code focus               | Built for AI-built apps                                         | Not specific to AI-generated code                                             |
+| Capability                            | LyraShield AI                                                   | RunSybil                                                                            |
+| ------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Agentic / AI-driven pentest           | Yes (app-layer)                                                 | Yes (hierarchical multi-agent)                                                      |
+| Independent finding verification      | Yes (separate receipt; scope-bound)                             | Yes (live exploitation; reproducible findings)                                      |
+| Black-box (no source required)        | Source/MCP-aware (not black-box-first)                          | Yes (core differentiator)                                                           |
+| SCA (dependency scanning)             | Yes (engine)                                                    | Not a primary focus                                                                 |
+| Secret scanning                       | Yes (engine + GitHub Action)                                    | Not a primary focus                                                                 |
+| Evidence states (4-state lifecycle)   | Yes                                                             | Findings are confirmed/reproducible; no explicit multi-state lifecycle              |
+| Deterministic retest                  | Yes                                                             | Continuous re-evaluation on every deployment                                        |
+| Coverage receipts                     | Yes (per-control)                                               | No                                                                                  |
+| Assurance reports (immutable)         | Yes                                                             | Pre-validated findings with reproducible evidence                                   |
+| MCP server integration                | Yes (runs checks and records evidence inside AI coding agents)  | Yes (RunSybil MCP server for findings and remediation; cannot launch tests via MCP) |
+| Permission-gated Fix PR requests      | Fix PR requests require permission and a server-generated patch | No (remediation guidance + PR feedback, not permission-gated Fix PR requests)       |
+| Multi-tenant / business-logic testing | App-layer                                                       | Yes (cross-tenant access, privilege escalation, transaction manipulation)           |
+| AI-generated-code focus               | Built for AI-built apps                                         | Not specific to AI-generated code                                                   |
 
 ## Deployment and pricing
 
@@ -79,4 +79,4 @@ RunSybil automates attacker intuition black-box; LyraShield AI gates AI-built-ap
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
 
-For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Runsybil](/blog/runsybil-vs-lyrashield).
+For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs RunSybil](/blog/runsybil-vs-lyrashield).
