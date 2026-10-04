@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to GitHub Advanced Security (GHAS). Evi
 competitor: "GitHub Advanced Security"
 heading: "LyraShield AI vs GitHub Advanced Security"
 disclaimer: "Factual comparison. GitHub Advanced Security is GitHub's security suite (CodeQL, secret scanning, Dependabot). LyraShield AI is a live, open-beta release-assurance platform for AI-built apps — it turns an authorized target, retained evidence and a fresh retest into one reviewable assurance record. The LyraShield GitHub Action complements GHAS rather than replacing it — it adds diff-aware pattern checks that run in your own runner with no account required."
-updatedDate: 2026-09-19
+updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
 faq:
@@ -20,32 +20,32 @@ faq:
 
 ## Core approach
 
-| Aspect                  | LyraShield AI                                                                                                                                     | GHAS                                                                        |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Primary focus           | Release assurance for AI-built apps: one record of what was tested, the evidence behind each result and what a retest established before shipping | Code scanning, secret scanning, dependency management within GitHub         |
-| Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                        | CodeQL (data-flow analysis), pattern matching for secrets                   |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays distinct from separate verification receipts)               | Open → dismissed or fixed (alert-based workflow)                            |
-| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                       | No published control framework; query-based detection                       |
-| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                            | Copilot Autofix for CodeQL alerts (suggested, not approval-bound)           |
-| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                              | Copilot Autofix for CodeQL alerts; AI-powered detections for some languages |
-| Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes and limitations                                        | No release assurance record; alert-based findings                           |
-| Platform lock-in        | No — works with any Git repo or public URL                                                                                                        | Yes — requires GitHub (cloud or Enterprise Server)                          |
+| Aspect                  | LyraShield AI                                                                                                                                     | GHAS                                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Primary focus           | Release assurance for AI-built apps: one record of what was tested, the evidence behind each result and what a retest established before shipping | Code scanning, secret scanning, dependency management within GitHub                                |
+| Scanning approach       | Deterministic scanners and AI-assisted review run as separate coverage layers, never a universal guarantee                                        | CodeQL (data-flow analysis), pattern matching for secrets                                          |
+| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive (detection stays distinct from separate verification receipts)               | Open → dismissed or fixed (alert-based workflow)                                                   |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                                                                       | Query suites mapped to CWE categories; no published control framework                              |
+| Fix handling            | Recorded fix proposals; a Fix PR request needs permission and a server-generated patch                                                            | Copilot Autofix suggests a fix the developer reviews and applies; agentic autofix opens a draft PR |
+| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                                                                              | Copilot Autofix for CodeQL alerts; AI-powered detections for some languages                        |
+| Assurance record        | Immutable assurance report assembling coverage, findings, evidence states, retest outcomes and limitations                                        | No release assurance record; alert-based findings                                                  |
+| Platform lock-in        | No — works with any Git repo or public URL                                                                                                        | GitHub (cloud or Enterprise Server) or Azure DevOps with the Azure variant                         |
 
 ## Capability comparison
 
-| Capability                | LyraShield AI                                                                    | GHAS                        |
-| ------------------------- | -------------------------------------------------------------------------------- | --------------------------- |
-| Code scanning (SAST)      | Deterministic + AI-assisted (separate layers)                                    | CodeQL                      |
-| Secret scanning           | Yes (engine + GitHub Action)                                                     | Yes (pattern matching)      |
-| Dependency scanning (SCA) | Via engine                                                                       | Dependabot                  |
-| Evidence states           | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                          |
-| Deterministic retest      | Yes                                                                              | Re-scan on PR               |
-| Coverage receipts         | Yes (per-control)                                                                | No                          |
-| Assurance reports         | Yes (immutable snapshots)                                                        | No                          |
-| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch                  | No                          |
-| MCP server integration    | Yes (documented MCP client workflows)                                            | No                          |
-| GitHub Action             | Yes (diff-aware, no account required)                                            | Yes (requires GHAS license) |
-| Non-GitHub repos          | Yes                                                                              | No                          |
+| Capability                | LyraShield AI                                                                    | GHAS                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Code scanning (SAST)      | Deterministic + AI-assisted (separate layers)                                    | CodeQL                                                                   |
+| Secret scanning           | Yes (engine + GitHub Action)                                                     | Yes (pattern matching)                                                   |
+| Dependency scanning (SCA) | Via engine                                                                       | Dependabot                                                               |
+| Evidence states           | Yes (4 states: detected, independently verified, retest-confirmed, inconclusive) | No                                                                       |
+| Deterministic retest      | Yes                                                                              | Re-scan on PR                                                            |
+| Coverage receipts         | Yes (per-control)                                                                | No                                                                       |
+| Assurance reports         | Yes (immutable snapshots)                                                        | No                                                                       |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch                  | Copilot Autofix suggestions (developer applies)                          |
+| MCP server integration    | Yes (runs checks and records evidence inside AI coding agents)                   | Yes (GitHub MCP server exposes code scanning and secret scanning alerts) |
+| GitHub Action             | Yes (diff-aware, no account required)                                            | Yes (requires GHAS license)                                              |
+| Non-GitHub repos          | Yes                                                                              | Azure Repos only, through the Azure DevOps variant                       |
 
 ## Deployment and pricing
 
