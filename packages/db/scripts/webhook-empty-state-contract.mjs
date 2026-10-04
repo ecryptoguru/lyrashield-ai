@@ -97,21 +97,45 @@ export function validateEmptyStateAuthorization(receipt, expected) {
   if (receipt.stableNonce !== expected.stableNonce || !/^[A-Za-z0-9_-]{32,128}$/.test(receipt.stableNonce || "")) {
     throw new Error("Maintenance receipt stable nonce does not match")
   }
-  if (receipt.databaseIdentitySha256 !== expected.databaseIdentitySha256 || !SHA256.test(receipt.databaseIdentitySha256 || "")) {
-    throw new Error("Maintenance receipt database identity does not match")
+  const logicalIdentityFields = [
+    "databaseIdentitySha256",
+    "migrationDatabaseIdentitySha256",
+    "appDatabaseIdentitySha256",
+    "workerDatabaseUrlIdentitySha256",
+    "workerDatabaseSystemUrlIdentitySha256",
+  ]
+  for (const field of logicalIdentityFields) {
+    if (!SHA256.test(receipt[field] || "") || receipt[field] !== expected.databaseIdentitySha256) {
+      throw new Error("Maintenance receipt database identity does not match: " + field)
+    }
   }
   for (const field of ["rootReceiptSha256", "workerStopReceiptSha256", "admissionStopValueSha256"]) {
     if (!SHA256.test(receipt[field] || "")) throw new Error(`Maintenance receipt ${field} is invalid`)
+  }
+  for (const field of ["redisIdentitySha256", "queueSnapshotSha256", "fallbackEvidenceSha256"]) {
+    if (!SHA256.test(receipt[field] || "")) throw new Error("Maintenance receipt " + field + " is invalid")
+  }
+  for (const field of ["workerStopImageDigest", "fallbackWorkerImageDigest"]) {
+    if (!/^sha256:[a-f0-9]{64}$/.test(receipt[field] || "")) throw new Error("Maintenance receipt " + field + " is invalid")
+  }
+  if (!SOURCE_SHA.test(receipt.workerStopSourceSha || "") || !SOURCE_SHA.test(receipt.fallbackSourceSha || "")) {
+    throw new Error("Maintenance receipt worker image source is invalid")
+  }
+  if (!/^[a-f0-9]{40}$/.test(receipt.fallbackEngineRevision || "") || receipt.fallbackProtocol !== "durable-claims/1") {
+    throw new Error("Maintenance receipt fallback protocol is not verified")
   }
   const issued = Date.parse(receipt.issuedAt)
   const now = expected.now ?? Date.now()
   if (!Number.isFinite(issued) || issued > now + 5 * 60_000 || now - issued > 30 * 60_000) {
     throw new Error("Maintenance receipt is outside its 30-minute validity window")
   }
-  if (receipt.nonterminalScans !== 0 || receipt.pendingQueueJobs !== 0) {
+  if (receipt.nonterminalScans !== 0 || receipt.pendingQueueJobs !== 0 ||
+      receipt.activeWriterRevisions !== 0 || receipt.inFlightHandlers !== 0) {
     throw new Error("Maintenance receipt does not prove drained work")
   }
-  if (receipt.writersStopped !== true || receipt.admissionHeld !== true || receipt.fallbackVerified !== true) {
+  if (receipt.writersStopped !== true || receipt.admissionHeld !== true ||
+      receipt.fallbackVerified !== true || receipt.redisContinuityVerified !== true ||
+      receipt.appConnectionReadbackVerified !== true) {
     throw new Error("Maintenance receipt does not prove all writer and fallback gates")
   }
   return Object.freeze({
@@ -122,6 +146,19 @@ export function validateEmptyStateAuthorization(receipt, expected) {
     owner: receipt.owner,
     stableNonce: receipt.stableNonce,
     databaseIdentitySha256: receipt.databaseIdentitySha256,
+    migrationDatabaseIdentitySha256: receipt.migrationDatabaseIdentitySha256,
+    appDatabaseIdentitySha256: receipt.appDatabaseIdentitySha256,
+    workerDatabaseUrlIdentitySha256: receipt.workerDatabaseUrlIdentitySha256,
+    workerDatabaseSystemUrlIdentitySha256: receipt.workerDatabaseSystemUrlIdentitySha256,
+    redisIdentitySha256: receipt.redisIdentitySha256,
+    queueSnapshotSha256: receipt.queueSnapshotSha256,
+    workerStopImageDigest: receipt.workerStopImageDigest,
+    workerStopSourceSha: receipt.workerStopSourceSha,
+    fallbackWorkerImageDigest: receipt.fallbackWorkerImageDigest,
+    fallbackSourceSha: receipt.fallbackSourceSha,
+    fallbackEngineRevision: receipt.fallbackEngineRevision,
+    fallbackProtocol: receipt.fallbackProtocol,
+    fallbackEvidenceSha256: receipt.fallbackEvidenceSha256,
     rootReceiptSha256: receipt.rootReceiptSha256,
     workerStopReceiptSha256: receipt.workerStopReceiptSha256,
     admissionStopValueSha256: receipt.admissionStopValueSha256,
