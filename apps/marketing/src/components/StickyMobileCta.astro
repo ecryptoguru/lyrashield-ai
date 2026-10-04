@@ -1,0 +1,68 @@
+---
+/**
+ * Sticky mobile CTA bar (redesign spec section 7, item 2.4).
+ *
+ * Shown on Home, Pricing and Scan only, after the first screen of scroll, on
+ * mobile widths. It hides while a form control has focus so it never covers a
+ * field the visitor is typing into — the Lite Check form on Home and the URL
+ * field on Scan are both below the fold on a phone.
+ */
+import { CTA_LABEL } from "../lib/site-copy"
+
+const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "")
+const path = Astro.url.pathname.replace(/\/$/, "") || "/"
+const eligible = ["/", "/pricing", "/scan"].includes(path)
+---
+
+{
+  eligible && appUrl && (
+    <div
+      id="sticky-mobile-cta"
+      class="fixed inset-x-0 bottom-0 z-30 hidden border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur-xl lg:hidden"
+      style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));"
+      data-sticky-cta
+    >
+      <a
+        href={`${appUrl}/sign-up?source=marketing_sticky&cta=get_started`}
+        class="flex min-h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        data-cta-id="sticky_get_started"
+      >
+        {CTA_LABEL.signUp}
+      </a>
+    </div>
+    <script>
+      // Reveal after one screen of scroll; hide while a form control is
+      // focused so the bar never sits over a field being typed into.
+      const bar = document.querySelector<HTMLElement>("[data-sticky-cta]")
+      if (bar) {
+        let fieldFocused = false
+        const sync = () => {
+          const pastFirstScreen = window.scrollY > window.innerHeight
+          bar.classList.toggle("hidden", !pastFirstScreen || fieldFocused)
+        }
+        document.addEventListener(
+          "focusin",
+          (event) => {
+            const target = event.target
+            fieldFocused =
+              target instanceof HTMLElement &&
+              ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+            sync()
+          },
+          { passive: true }
+        )
+        document.addEventListener(
+          "focusout",
+          () => {
+            fieldFocused = false
+            sync()
+          },
+          { passive: true }
+        )
+        addEventListener("scroll", sync, { passive: true })
+        addEventListener("resize", sync, { passive: true })
+        sync()
+      }
+    </script>
+  )
+}

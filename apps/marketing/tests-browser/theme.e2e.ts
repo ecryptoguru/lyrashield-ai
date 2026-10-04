@@ -205,7 +205,11 @@ test("keeps a short landscape phone in the stable document flow", async ({ page 
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844)
 })
 
-test("keeps the compact mobile menu inside the visible viewport", async ({ page }) => {
+// Item 2.2: the sheet scrolls inside the viewport and exposes every
+// destination, instead of dropping entries to fit a 390x400 screen.
+test("scrolls the mobile menu inside the viewport and reaches every destination", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 390, height: 400 })
   await page.goto("/")
 
@@ -215,27 +219,46 @@ test("keeps the compact mobile menu inside the visible viewport", async ({ page 
   const menu = page.locator("#mobile-menu")
   await expect(menu).toBeVisible()
   await expect(menu).toHaveCSS("transform", "none")
-  await expect(menu.getByText("Resources", { exact: true })).toBeVisible()
-  await expect(menu.getByRole("link", { name: "Free tools", exact: true })).toBeVisible()
-  await expect(menu.getByRole("link", { name: "Start free trial" })).toBeVisible()
+
+  // The sheet is capped at the viewport and scrolls internally.
   const bounds = await menu.boundingBox()
   expect(bounds).not.toBeNull()
-  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(384)
-  expect(await menu.evaluate((element) => element.scrollHeight)).toBeLessThanOrEqual(
-    await menu.evaluate((element) => element.clientHeight)
-  )
-  for (const name of ["For agents", "WebMCP", "Free scan", "Pricing"]) {
-    const link = menu.getByRole("link", { name, exact: true })
-    await expect(link).toBeInViewport()
-    const linkBounds = await link.boundingBox()
-    expect(linkBounds!.height).toBeGreaterThanOrEqual(44)
-    expect(linkBounds!.y + linkBounds!.height).toBeLessThanOrEqual(384)
-  }
+  expect(bounds!.height).toBeLessThanOrEqual(400)
+  const styles = await menu.evaluate((element) => {
+    const computed = getComputedStyle(element)
+    return {
+      overflowY: computed.overflowY,
+      maxHeight: computed.maxHeight,
+      viewportHeight: innerHeight,
+    }
+  })
+  expect(styles.overflowY).toBe("auto")
+  // max-height: 100dvh resolves to the viewport height; the source form is
+  // asserted in src/tests/header-nav-layout.test.ts.
+  expect(parseFloat(styles.maxHeight)).toBe(styles.viewportHeight)
 
+  // Every desktop destination is present, one accordion per menu.
+  for (const label of ["Product", "Free tools", "Learn"]) {
+    await expect(menu.getByText(label, { exact: true })).toBeVisible()
+  }
+  await expect(menu.getByRole("link", { name: "Pricing", exact: true })).toBeVisible()
+  await expect(menu.getByRole("link", { name: "Coding agents", exact: true })).toBeVisible()
+  await expect(menu.getByRole("link", { name: "Start free trial" })).toBeVisible()
+
+  // Escape closes the sheet.
   await page.keyboard.press("Escape")
   await expect(menu).toBeHidden()
 
+  // Re-open: opening an accordion must not close the sheet, and its entries
+  // are reachable by scrolling inside the sheet.
   await toggle.click()
+  await menu.getByText("Learn", { exact: true }).click()
+  const docs = menu.getByRole("link", { name: "Docs", exact: true })
+  await expect(docs).toBeAttached()
+  await docs.scrollIntoViewIfNeeded()
+  await expect(docs).toBeInViewport()
+
+  // The close button also closes the sheet.
   await page.getByRole("button", { name: "Close navigation menu" }).click()
   await expect(menu).toBeHidden()
 })
@@ -243,14 +266,19 @@ test("keeps the compact mobile menu inside the visible viewport", async ({ page 
 test("keeps mobile menu rows content-sized when the browser expands dialogs", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 })
   await page.goto("/")
+  // Force a tall dialog: the sheet must stay capped by the viewport rather
+  // than stretch to the injected height, and its rows stay touch-sized.
   await page.addStyleTag({ content: "dialog { height: 38rem; }" })
 
   await page.getByRole("button", { name: "Open navigation menu" }).click()
 
   const menu = page.locator("#mobile-menu")
-  const firstLink = menu.getByRole("link", { name: "For agents" })
+  const firstLink = menu.getByRole("link", { name: "Coding agents" })
   await expect(menu).toBeVisible()
-  expect((await menu.boundingBox())!.height).toBeLessThan(400)
+  expect((await menu.boundingBox())!.height).toBeLessThanOrEqual(852)
+  // min-height: 2.75rem renders as 43.83px at this width, so round to the
+  // nearest pixel before checking the 44px touch target.
+  expect(Math.round((await firstLink.boundingBox())!.height)).toBeGreaterThanOrEqual(44)
   expect((await firstLink.boundingBox())!.height).toBeLessThanOrEqual(48)
 })
 
@@ -272,17 +300,19 @@ test("supports standard keyboard navigation in the AI scanner tabs", async ({ pa
   await expect(filesTab).toHaveAttribute("aria-selected", "true")
 })
 
-test("keeps Free tools separate from the restored desktop Resources menu", async ({ page }) => {
+test("keeps the Free tools menu separate from the Learn menu", async ({ page }) => {
   await page.setViewportSize({ width: 1159, height: 863 })
   await page.goto("/")
 
-  const toolsMenu = page.locator("summary").filter({ hasText: "Free tools" })
-  const resourcesMenu = page.locator("summary").filter({ hasText: "Resources" })
-  const resourcesDropdown = resourcesMenu.locator("..")
-  const label = resourcesMenu.getByText("Resources", { exact: true })
-  const chevron = resourcesMenu.locator("[data-nav-chevron]")
+  // Scope to the desktop list: the mobile sheet lives in the same <nav>.
+  const desktopNav = page.locator('header.sticky nav[aria-label="Main"] > ul')
+  const toolsMenu = desktopNav.locator("summary").filter({ hasText: "Free tools" })
+  const learnMenu = desktopNav.locator("summary").filter({ hasText: "Learn" })
+  const learnDropdown = learnMenu.locator("..")
+  const label = learnMenu.getByText("Learn", { exact: true })
+  const chevron = learnMenu.locator("[data-nav-chevron]")
   await expect(toolsMenu).toBeVisible()
-  await expect(resourcesMenu).toBeVisible()
+  await expect(learnMenu).toBeVisible()
 
   const labelBounds = await label.boundingBox()
   const chevronBounds = await chevron.boundingBox()
@@ -295,13 +325,15 @@ test("keeps Free tools separate from the restored desktop Resources menu", async
 
   await toolsMenu.click()
   await expect(page.getByRole("link", { name: "All free tools", exact: true })).toBeVisible()
-  await expect(page.getByRole("link", { name: "Local Code Scanner", exact: true })).toBeVisible()
-
-  await resourcesMenu.click()
+  // The header menu lists four tools plus "All free tools"; the remaining
+  // tools are reachable from /tools (spec section 7).
   await expect(
-    resourcesDropdown.getByRole("link", { name: "Methodology", exact: true })
+    page.getByRole("link", { name: "Security Headers and CORS Checker", exact: true })
   ).toBeVisible()
-  await expect(resourcesDropdown.getByRole("link", { name: "Guides", exact: true })).toBeVisible()
+
+  await learnMenu.click()
+  await expect(learnDropdown.getByRole("link", { name: "Docs", exact: true })).toBeVisible()
+  await expect(learnDropdown.getByRole("link", { name: "Guides", exact: true })).toBeVisible()
 })
 
 test("keeps desktop navigation labels on one line at the compact desktop width", async ({
@@ -312,7 +344,7 @@ test("keeps desktop navigation labels on one line at the compact desktop width",
 
   const header = page.locator("header.sticky")
   const items = header.locator('nav[aria-label="Main"] > ul > li')
-  await expect(items).toHaveCount(7)
+  await expect(items).toHaveCount(6)
   expect(
     await header.evaluate((element) => element.getBoundingClientRect().height)
   ).toBeLessThanOrEqual(65)

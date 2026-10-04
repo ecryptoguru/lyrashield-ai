@@ -28,7 +28,8 @@ test("mobile navigation reaches agent onboarding", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 })
   await page.goto("/")
   await page.getByRole("button", { name: "Open navigation menu" }).click()
-  await page.getByRole("link", { name: "For agents" }).click()
+  // "Coding agents" also exists in the desktop nav, so scope to the open sheet.
+  await page.getByLabel("Mobile navigation").getByRole("link", { name: "Coding agents" }).click()
   await expect(page).toHaveURL(/\/agents$/)
   await expect(
     page.getByRole("heading", { name: /launch gate your coding agent can act on/i })
