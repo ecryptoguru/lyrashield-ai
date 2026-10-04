@@ -125,6 +125,8 @@ const docsLinks = [
 ]
 
 // Paths that are always noindex or scanner-gated and should not be cited.
+// /terms is noindex and its sibling legal page /terms-of-sale is not listed, so
+// it stays excluded here to keep the two consistent.
 const excludedPathnames = new Set(["/terms", "/scan", "/404"])
 const markdownLink = (label: string, url: string) => `[${label}](${url})`
 
