@@ -45,6 +45,17 @@ describe("Terms of Service page", () => {
     expect(intro).toContain('href="/privacy"')
   })
 
+  it("is reachable from the footer and carries the merge-day dates", () => {
+    // The footer label is "Terms" and points at /terms, so the label is accurate
+    // now that the page is a real Terms of Service.
+    const footer = readFileSync(new URL("../components/Footer.astro", import.meta.url), "utf8")
+    expect(footer).toContain('{ label: "Terms", href: "/terms" }')
+    // The effective date is the day the page ships.
+    expect(terms).toContain('const effectiveDate = "5 Oct 2026"')
+    expect(terms).toContain('const lastReviewed = "5 Oct 2026"')
+    expect(terms).toContain('const lastReviewedIso = "2026-10-05"')
+  })
+
   it("keeps the page title and the route", () => {
     expect(terms).toContain('title="Terms of Service | LyraShield AI"')
     expect(terms).toContain('new URL("/terms", origin)')

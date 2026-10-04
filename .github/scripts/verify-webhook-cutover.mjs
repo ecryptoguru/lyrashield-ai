@@ -2,8 +2,17 @@ import { execFileSync } from "node:child_process"
 
 const protocol = "durable-claims/2"
 const fail = (message) => {
+  const runbook =
+    "https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/reviews/2026-09-30/webhook-production-cutover.md"
   throw new Error(
-    `${message}. First webhook cutover requires the approved maintenance runbook; normal release cannot bootstrap or bypass it.`
+    `${message}. First webhook cutover requires the approved maintenance runbook; normal release cannot bootstrap or bypass it. See ${runbook}.`
+  )
+}
+const failIncompatibleWriter = (name, identity) => {
+  const runbook =
+    "https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/reviews/2026-09-30/webhook-production-cutover.md"
+  throw new Error(
+    `${name} has an incompatible active writer revision ${identity}; expected ${protocol}. This is the first durable-claims/2 transition and requires the separately approved maintenance runbook. Do not deactivate revisions manually. After historical UTC evidence is reviewed and signed and the founder authorizes the maintenance window, use Actions > Deploy to Azure with exact current main, webhook_claims_cutover=true, and confirmation webhook-cutover:<source_sha>. See ${runbook}.`
   )
 }
 const run = (command, args) =>
@@ -90,7 +99,7 @@ for (const name of [
     run("git", ["fetch", "--no-tags", "origin", identity])
     const source = run("git", ["show", `${identity}:packages/billing/src/webhook-tracks.ts`])
     if (!source.includes(`export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "${protocol}"`))
-      fail(`${name} has an incompatible active writer revision`)
+      failIncompatibleWriter(name, identity)
   }
 }
 
