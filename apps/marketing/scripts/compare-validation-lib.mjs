@@ -20,6 +20,14 @@ export const COMPARE_REVIEW_MAX_AGE_DAYS = 180
 
 const extractLinks = (body) => [...body.matchAll(/\]\(([^)\s]+)/g)].map((match) => match[1])
 
+/**
+ * Anchor targets from HTML markup. The `disclaimer` field is rendered with
+ * set:html, so its links are real `<a href>` markup rather than Markdown and
+ * `extractLinks` never sees them. Without this the HTTPS rule silently skipped
+ * the one field that is most likely to carry a competitor citation.
+ */
+const extractHrefs = (text) => [...text.matchAll(/<a\s[^>]*href="([^"]+)"/gi)].map((m) => m[1])
+
 export function validateCompareProgram(program) {
   const errors = []
   if (!Array.isArray(program)) return ["compare program must be a top-level array"]
@@ -80,7 +88,7 @@ export function validateComparePage({ slug, data, body, programEntry, context = 
   if (/\[[^\]]*\]\([^)]*\)/.test(disclaimer)) {
     errors.push("disclaimer must use HTML anchors, not Markdown link syntax")
   }
-  for (const link of extractLinks(disclaimer)) {
+  for (const link of extractHrefs(disclaimer)) {
     if (/^http:\/\//i.test(link)) errors.push(`citation must use HTTPS: ${link}`)
   }
 
@@ -89,8 +97,9 @@ export function validateComparePage({ slug, data, body, programEntry, context = 
     errors.push("duplicate description")
   }
 
-  // A comparison that cites nothing is allowed; a citation that is not HTTPS is not.
-  for (const link of extractLinks(body).concat(extractLinks(data.disclaimer ?? ""))) {
+  // A comparison that cites nothing is allowed; a citation that is not HTTPS is
+  // not. The body is Markdown; the disclaimer is HTML.
+  for (const link of extractLinks(body)) {
     if (/^http:\/\//i.test(link)) errors.push(`citation must use HTTPS: ${link}`)
   }
 
