@@ -51,6 +51,8 @@ assert.match(imageJob, /docker network disconnect "\$network" "\$POSTGRES_CONTAI
 
 assert.match(ci, /webhook-cutover-verification\.workflow\.test\.mjs/)
 assert.match(smoke, /dispatchAffiliate/)
+assert.match(smoke, /recoverDueWebhookTrackRetries/)
+assert.match(smoke, /claim_expired_requires_receipt_review/)
 assert.match(smoke, /WebhookEventTrack/)
 assert.match(smoke, /skipped_succeeded/)
 assert.match(smoke, /finally/)
