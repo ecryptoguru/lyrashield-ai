@@ -140,7 +140,9 @@ export function validateCompetitorSources({
   }
   if (competitorHost) {
     const citable = [...https, ...collectDisclaimerAnchors(data)]
-    const onVendorDomain = citable.some((url) => isCompetitorHost(citationHost(url), competitorHost))
+    const onVendorDomain = citable.some((url) =>
+      isCompetitorHost(citationHost(url), competitorHost)
+    )
     if (!onVendorDomain) {
       errors.push(
         `comparison requires at least one source on the competitor's own domain (${competitorHost})`
@@ -254,7 +256,8 @@ export function validateComparePage({ slug, data, body, programEntry, context = 
     ...validateCompetitorSources({
       data,
       body,
-      competitorHost: context.competitorHost ?? data.competitorDomain ?? competitorHostFromDisclaimer(data),
+      competitorHost:
+        context.competitorHost ?? data.competitorDomain ?? competitorHostFromDisclaimer(data),
       minimum: COMPARE_SOURCE_MINIMUM,
       required: COMPARE_SOURCES_REQUIRED,
       declared: data.competitorClaims,

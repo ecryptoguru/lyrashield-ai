@@ -82,11 +82,11 @@ Aikido is the broad AppSec platform; LyraShield AI is the release-assurance loop
 
 ## Where Aikido is genuinely strong
 
-Its breadth is the headline. A single platform covers repository scanning, cloud configuration, containers and domains, and its [SCA page](https://www.aikido.dev/code/open-source-dependency-scanning-sca) says it correlates findings across stages to avoid duplicate alerts and traces whether your code actually reaches a vulnerable dependency. The same page describes pre-CVE intelligence and detection of known malicious packages across npm, PyPI, GitHub Actions and Maven.
+Its breadth is the headline. A single platform covers repository scanning, cloud configuration, containers and domains. Its [SCA page](https://www.aikido.dev/code/open-source-dependency-scanning-sca) says it correlates findings across stages to avoid duplicate alerts and traces whether your code actually reaches a vulnerable dependency. The same page describes pre-CVE intelligence and detection of known malicious packages across npm, PyPI, GitHub Actions and Maven.
 
 Aikido has strong developer workflow integration. Its [SAST page](https://www.aikido.dev/code/static-code-analysis-sast) shows vulnerabilities flagged inline in the editor, offers one-click AutoFix that opens a pull request and supports custom rules for codebase-specific risks. Its [SBOM page](https://www.aikido.dev/use-cases/sbom-generator-create-software-bill-of-materials) describes one-click CycloneDX, SPDX or CSV export.
 
-Aikido also ships an [MCP plugin](https://help.aikido.dev/ai-and-dev-tools/aikido-mcp) that connects its security engine to AI coding tools and scans AI-generated code for vulnerabilities and hardcoded secrets as it is created. That is a direct overlap with part of what LyraShield does, and it is worth stating plainly.
+Aikido also ships an [MCP plugin](https://help.aikido.dev/ai-and-dev-tools/aikido-mcp) that connects its security engine to AI coding tools and scans AI-generated code for vulnerabilities and hardcoded secrets as it is created. That is a direct overlap with part of what LyraShield does and it is worth stating plainly.
 
 ## Sources
 

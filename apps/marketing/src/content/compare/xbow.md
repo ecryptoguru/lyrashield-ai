@@ -80,7 +80,7 @@ LyraShield keeps detected, retest-confirmed and inconclusive results distinct. [
 
 ## Where XBOW is genuinely strong
 
-Its core value is proving exploitability rather than listing suspicions. The [XBOW platform page](https://xbow.com/platform) says it runs the entire pentest autonomously and continuously, from the context you give it to a confirmed working exploit, and that independent validators confirm exploitability to reduce the false positives that can come from AI hallucinations. Its [home page](https://xbow.com/) describes every finding as a complete case file with the chained attack path, the working exploit and a full decision log.
+Its core value is proving exploitability rather than listing suspicions. The [XBOW platform page](https://xbow.com/platform) says it runs the entire pentest autonomously and continuously, from the context you give it to a confirmed working exploit. Independent validators confirm exploitability to reduce the false positives that can come from AI hallucinations. Its [home page](https://xbow.com/) describes every finding as a complete case file with the chained attack path, the working exploit and a full decision log.
 
 It runs continuously and at portfolio scale. Its [API documentation](https://xbow.com/api) describes triggering a pentest on merge or pre-deploy as a release gate and pulling proven findings into a SIEM or ticketing system, so per-asset tests can run across a large estate without adding headcount.
 

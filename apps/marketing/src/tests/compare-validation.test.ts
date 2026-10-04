@@ -210,7 +210,7 @@ describe("compare governance", () => {
     const data = {
       ...page().data,
       disclaimer:
-        "Factual comparison. Rival is a scanning platform. <a href=\"https://lyrashieldai.com/\">LyraShield AI</a> is release assurance. Neither replaces the other.",
+        'Factual comparison. Rival is a scanning platform. <a href="https://lyrashieldai.com/">LyraShield AI</a> is release assurance. Neither replaces the other.',
     }
     expect(competitorHostFromDisclaimer(data)).toBeNull()
     expect(isCompetitorHost("rival.example", null)).toBe(false)
