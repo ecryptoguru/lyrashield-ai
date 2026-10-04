@@ -88,7 +88,7 @@ function markerFor(context, state) {
 
 async function setMarker(client, context, state) {
   const result = await client.query(
-    "SELECT format('COMMENT ON COLUMN public.\"WebhookEventTrack\".\"nextAttemptAtUtc\" IS %L', $1) AS statement",
+    "SELECT format('COMMENT ON COLUMN public.\"WebhookEventTrack\".\"nextAttemptAtUtc\" IS %L', $1::text) AS statement",
     [markerFor(context, state)],
   )
   await client.query(result.rows[0].statement)
