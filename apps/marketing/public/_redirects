@@ -4,6 +4,33 @@
 /docs/integrations/windsurf /docs/integrations/devin 301
 /docs/integrations/picode /docs/integrations/pi 301
 /docs/integrations/picode/ /docs/integrations/pi 301
+
+/blog/aikido-vs-lyrashield /compare/aikido 301
+/blog/aikido-vs-lyrashield/ /compare/aikido 301
+/blog/corgea-vs-lyrashield /compare/corgea 301
+/blog/corgea-vs-lyrashield/ /compare/corgea 301
+/blog/github-advanced-security-vs-lyrashield /compare/github-advanced-security 301
+/blog/github-advanced-security-vs-lyrashield/ /compare/github-advanced-security 301
+/blog/horizon3-vs-lyrashield /compare/horizon3 301
+/blog/horizon3-vs-lyrashield/ /compare/horizon3 301
+/blog/mobb-vs-lyrashield /compare/mobb 301
+/blog/mobb-vs-lyrashield/ /compare/mobb 301
+/blog/pentera-vs-lyrashield /compare/pentera 301
+/blog/pentera-vs-lyrashield/ /compare/pentera 301
+/blog/pixee-vs-lyrashield /compare/pixee 301
+/blog/pixee-vs-lyrashield/ /compare/pixee 301
+/blog/runsybil-vs-lyrashield /compare/runsybil 301
+/blog/runsybil-vs-lyrashield/ /compare/runsybil 301
+/blog/semgrep-vs-lyrashield /compare/semgrep 301
+/blog/semgrep-vs-lyrashield/ /compare/semgrep 301
+/blog/snyk-vs-lyrashield /compare/snyk 301
+/blog/snyk-vs-lyrashield/ /compare/snyk 301
+/blog/sonarqube-vs-lyrashield /compare/sonarqube 301
+/blog/sonarqube-vs-lyrashield/ /compare/sonarqube 301
+/blog/xbow-vs-lyrashield /compare/xbow 301
+/blog/xbow-vs-lyrashield/ /compare/xbow 301
+/blog/zeropath-vs-lyrashield /compare/zeropath 301
+/blog/zeropath-vs-lyrashield/ /compare/zeropath 301
 /sitemap.xml /sitemap-index.xml 301
 
 # Trailing-slash canonicalisation for prerendered pages. Astro's trailingSlash
