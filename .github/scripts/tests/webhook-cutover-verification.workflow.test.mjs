@@ -9,6 +9,8 @@ const smoke = readFileSync(".github/scripts/webhook-track-image-smoke.mjs", "utf
 assert.match(workflow, /pull_request:\s*\n\s+branches:\s*\[main\]/)
 assert.match(workflow, /workflow_run:\s*\n\s+workflows:\s*\[CI\]/)
 assert.doesNotMatch(workflow, /workflow_dispatch:|id-token:\s*write|deploy-azure-runtime\.yml|webhook_claims_cutover/)
+assert.ok(workflow.includes("group: webhook-production-prerequisites-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}"))
+assert.ok(workflow.includes("cancel-in-progress: ${{ github.event_name == 'pull_request' }}"))
 assert.match(workflow, /github\.event\.workflow_run\.event == 'push'/)
 assert.match(workflow, /github\.event\.workflow_run\.head_branch == 'main'/)
 assert.match(workflow, /github\.event\.workflow_run\.head_sha == github\.sha/)
