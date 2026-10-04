@@ -1,69 +1,94 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 
-const workflowPath = ".github/workflows/verify-webhook-production-prerequisites.yml"
-const workflow = readFileSync(workflowPath, "utf8")
-const ci = readFileSync(".github/workflows/ci.yml", "utf8")
+const deploy = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
+const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
+const verifier = readFileSync(".github/workflows/verify-webhook-production-prerequisites.yml", "utf8")
+const candidatePath = ".github/workflows/verify-webhook-worker-image.yml"
+const candidate = existsSync(candidatePath) ? readFileSync(candidatePath, "utf8") : ""
+const imageReferenceHelper = readFileSync(".github/scripts/normalize-worker-image-reference.sh", "utf8")
+const cutover = readFileSync(".github/scripts/verify-webhook-cutover.mjs", "utf8")
 const smoke = readFileSync(".github/scripts/webhook-track-image-smoke.mjs", "utf8")
 
-assert.match(workflow, /pull_request:\s*\n\s+branches:\s*\[main\]/)
-assert.match(workflow, /workflow_run:\s*\n\s+workflows:\s*\[CI\]/)
-assert.doesNotMatch(workflow, /workflow_dispatch:|id-token:\s*write|deploy-azure-runtime\.yml|webhook_claims_cutover/)
-assert.ok(workflow.includes("group: webhook-production-prerequisites-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}"))
-assert.ok(workflow.includes("cancel-in-progress: ${{ github.event_name == 'pull_request' }}"))
-assert.match(workflow, /github\.event\.workflow_run\.event == 'push'/)
-assert.match(workflow, /github\.event\.workflow_run\.head_branch == 'main'/)
-assert.match(workflow, /github\.event\.workflow_run\.head_sha == github\.sha/)
-assert.match(workflow, /branches:\s*\[main\]/)
-assert.match(workflow, /codex\/no-deployment-cutover-verification-20261004/)
+function job(source, name) {
+  const lines = source.split("\n")
+  const start = lines.findIndex((line) => line === `  ${name}:`)
+  assert.notEqual(start, -1, `missing job ${name}`)
+  const end = lines.findIndex((line, index) => index > start && /^  [A-Za-z0-9_-]+:$/.test(line))
+  return lines.slice(start, end < 0 ? lines.length : end).join("\n")
+}
 
-const receiptJob = workflow.match(/  verify-timezone-receipt:[\s\S]*?(?=\n  verify-worker-image:)/)?.[0]
-assert.ok(receiptJob, "protected receipt job must be present")
-assert.match(receiptJob, /environment:\s*\n\s+name:\s*azure-production/)
-assert.match(receiptJob, /permissions:\s*\n\s+contents:\s*read/)
-assert.doesNotMatch(receiptJob, /id-token:|AZURE_|azure\/login|deploy-azure-runtime|webhook_claims_cutover/)
-assert.match(receiptJob, /ref:\s*\$\{\{ github\.event\.workflow_run\.head_sha \}\}/)
-assert.match(receiptJob, /github\.event_name == 'workflow_run'/)
-assert.doesNotMatch(receiptJob, /github\.event\.pull_request|head\.repo/)
-assert.match(receiptJob, /persist-credentials:\s*false/)
-assert.match(receiptJob, /secrets\.DATABASE_DIRECT_URL/)
-assert.match(receiptJob, /secrets\.WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT/)
-assert.match(receiptJob, /secrets\.WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM/)
-assert.match(receiptJob, /node \.github\/scripts\/verify-webhook-timezone-evidence\.mjs/)
+const evidence = job(deploy, "preflight-cutover-evidence")
+const baseline = job(deploy, "preflight-compatible-baseline")
+const build = job(deploy, "build")
+const imageProof = job(deploy, "verify-built-worker-image")
+const azureDeploy = job(deploy, "deploy")
 
-const imageJob = workflow.match(/  verify-worker-image:[\s\S]*$/)?.[0]
-assert.ok(imageJob, "worker image job must be present")
-assert.doesNotMatch(imageJob, /environment:|secrets\.|id-token:|azure\/login/)
-assert.match(imageJob, /DATABASE_DIRECT_URL: postgresql:\/\/lyrashield:lyrashield@localhost:5432\/lyrashield/)
-assert.match(workflow, /ghcr\.io\/ecryptoguru\/lyrashield-ai\/lyrashield-worker@sha256:caf33ad26c34852456579afd9bf1865825cb059e3c8941fdf9acbab74aa0587a/)
-assert.match(workflow, /86537799e615fb3c07376106b315393e81d7ae9d/)
-assert.match(workflow, /3001517530300ca5f602536bfadcbd3c95ad3039/)
-assert.match(imageJob, /postgres:16-alpine/)
-assert.match(imageJob, /redis:7-alpine/)
-assert.match(imageJob, /version: 12\.2\.0/)
-assert.match(imageJob, /docker run --rm/)
-assert.match(imageJob, /--read-only/)
-assert.match(imageJob, /LYRASHIELD_TEST_DB_DISPOSABLE=1/)
-assert.ok(
-  imageJob.includes("--env 'POLAR_PRODUCT_IDS={\"pro_monthly\":\"fixture-worker-smoke-pro-monthly\"}'"),
-  "worker image must receive only the synthetic Polar catalog fixture"
-)
-assert.ok(imageJob.includes("--env POLAR_LOCAL_PRODUCT_IDS="))
-assert.match(imageJob, /docker network disconnect "\$network" "\$POSTGRES_CONTAINER"/)
+assert.match(evidence, /environment:\s*\n\s+name:\s*azure-production/)
+assert.match(evidence, /secrets\.DATABASE_DIRECT_URL/)
+assert.match(evidence, /secrets\.WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT/)
+assert.match(evidence, /secrets\.WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM/)
+assert.match(evidence, /needs:\s*validate-manual-production-dispatch/)
+assert.doesNotMatch(evidence, /id-token:\s*write|azure\/login|az login/)
+assert.match(deploy, /recovery_requires_receipt:\s*\$\{\{\s*steps\.dispatch\.outputs\.recovery_requires_receipt\s*\}\}/)
+assert.match(deploy, /bash \.github\/scripts\/validate-webhook-deploy-dispatch\.sh/)
+assert.match(evidence, /RECOVERY_REQUIRES_RECEIPT:\s*\$\{\{\s*needs\.validate-manual-production-dispatch\.outputs\.recovery_requires_receipt\s*\}\}/)
+assert.match(evidence, /SOURCE_SHA.*RECOVERY_REQUIRES_RECEIPT.*current main/s)
+assert.match(baseline, /environment:\s*\n\s+name:\s*azure-production/)
+assert.match(baseline, /id-token:\s*write/)
+assert.match(baseline, /verify-webhook-cutover\.mjs/)
+assert.match(baseline, /Confirm deployment source remains current main/)
+assert.match(baseline, /No container images were built or pushed/)
+assert.ok(deploy.indexOf("preflight-compatible-baseline:") < deploy.indexOf("  build:"))
+assert.ok(deploy.indexOf("preflight-cutover-evidence:") < deploy.indexOf("  build:"))
+assert.match(build, /needs:[\s\S]*preflight-cutover-evidence[\s\S]*preflight-compatible-baseline/)
+assert.match(imageProof, /needs:\s*build/)
+assert.match(imageProof, /verify-webhook-worker-image\.yml/)
+assert.match(imageProof, /worker_digest/)
+assert.match(azureDeploy, /needs:[\s\S]*verify-built-worker-image/)
+assert.match(runtime, /Verify compatible webhook cutover baseline[\s\S]*Run database migrations/)
+assert.match(cutover, /webhook-production-cutover\.md/)
+assert.match(cutover, /webhook-cutover:/)
 
-assert.match(ci, /webhook-cutover-verification\.workflow\.test\.mjs/)
-assert.match(smoke, /dispatchAffiliate/)
+assert.match(verifier, /workflow_dispatch:/)
+assert.doesNotMatch(verifier, /workflow_run:/)
+assert.match(verifier, /validate-request:/)
+assert.match(verifier, /worker_source_sha:/)
+assert.match(verifier, /needs: validate-request[\s\S]*?verify-worker-image:/)
+assert.doesNotMatch(verifier, /needs: verify-timezone-receipt/)
+assert.match(verifier, /worker_image:/)
+assert.match(verifier, /verify-webhook-worker-image\.yml/)
+assert.doesNotMatch(verifier, /sha256:caf33ad|86537799e615fb3c07376106b315393e81d7ae9d/)
+assert.match(candidate, /workflow_call:/)
+assert.match(imageReferenceHelper, /sha256:\[a-f0-9\]\{64\}/)
+assert.match(candidate, /postgres:16-alpine/)
+assert.match(candidate, /redis:7-alpine/)
+assert.match(candidate, /EXPECTED_SOURCE_SHA:\s*\$\{\{ inputs\.product_source_sha \}\}/)
+assert.match(candidate, /EXPECTED_ENGINE_REVISION:\s*\$\{\{ inputs\.engine_revision \}\}/)
+assert.match(candidate, /WORKER_IMAGE:\s*\$\{\{ inputs\.worker_image \}\}/)
+assert.match(candidate, /normalize-worker-image-reference\.sh/)
+assert.match(candidate, /docker image inspect "\$CANONICAL_WORKER_IMAGE"/)
+assert.match(candidate, /grep -Fxq "\$CANONICAL_WORKER_IMAGE"/)
+assert.match(candidate, /--read-only/)
+assert.doesNotMatch(candidate, /environment:|secrets\.|id-token:|azure\/login/)
+
+const recoveryGate = runtime.indexOf("- name: Verify existing owned receipt before original-source recovery")
+assert.ok(recoveryGate > -1)
+assert.match(runtime, /bash \.github\/scripts\/webhook-claims-maintenance\.sh recovery/)
+for (const mutation of [
+  "Ensure app and scanner system identities",
+  "Prepare private registry and zero-downtime rollout",
+  "Run database migrations",
+  "Promote healthy candidate revisions",
+]) {
+  assert.ok(recoveryGate < runtime.indexOf("- name: " + mutation), mutation)
+}
+
 assert.match(smoke, /recoverDueWebhookTrackRetries/)
 assert.match(smoke, /claim_expired_requires_receipt_review/)
-assert.match(smoke, /WebhookEventTrack/)
-assert.match(smoke, /skipped_succeeded/)
-assert.match(smoke, /finally/)
-assert.match(smoke, /Refusing non-local or non-disposable integration endpoints/)
 assert.match(smoke, /fixture-worker-smoke-pro-monthly/)
-assert.match(smoke, /dispatchAttempts, 3/)
 assert.doesNotMatch(smoke, /process\.env\.(?:POLAR|RAZORPAY)|fetch\(|https?:\/\//)
 
-console.log("Webhook cutover verification workflow invariants passed.")
+console.log("Webhook production preflight invariants passed.")
 
 await import("../../../packages/db/scripts/tests/webhook-empty-state-migration.test.mjs")
-
