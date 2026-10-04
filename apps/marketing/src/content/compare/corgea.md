@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to Corgea for LLM-core SAST and auto-fi
 competitor: "Corgea"
 heading: "LyraShield AI vs Corgea"
 disclaimer: "Factual comparison. Corgea is an AI-native application security platform spanning AI SAST, SCA, secrets detection, IaC, container scanning and a multi-agent AI pentest, delivering review-ready fix PRs. LyraShield AI is release assurance for AI-built apps — it keeps detected candidates, separate verification receipts and retest outcomes distinct in scoped evidence reports, with fixes gated behind approvals. The two overlap on pentest, SCA and secrets; neither fully replaces the other."
-updatedDate: 2026-09-19
+updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
 faq:
@@ -36,9 +36,9 @@ faq:
 | SCA (dependency scanning) | Yes                                                             | Yes (reachability-aware, dead-package analysis)                              |
 | Secret scanning           | Yes (engine + GitHub Action)                                    | Yes (detection; no shipped rotation feature)                                 |
 | Agentic pentest           | Yes (core)                                                      | Yes (multi-agent, ~4–8 hr, exploitability validation, auditor-ready reports) |
-| Evidence states           | Yes (4 states)                                                  | No explicit evidence-state model                                             |
+| Evidence states           | Yes (4 states)                                                  | No documented evidence-state model                                           |
 | Deterministic retest      | Yes                                                             | Pentest continuous retesting loop                                            |
-| Coverage receipts         | Yes (per-control)                                               | No                                                                           |
+| Coverage receipts         | Yes (per-control)                                               | No documented equivalent                                                     |
 | Assurance reports         | Yes (immutable snapshots)                                       | Auditor-ready pentest reports (SOC 2 / ISO 27001)                            |
 | Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch | Standard PR review; no formal approval gate                                  |
 | MCP server integration    | Yes (documented MCP client workflows)                           | Agent integrations for AI coding tools                                       |
