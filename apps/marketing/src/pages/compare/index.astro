@@ -47,7 +47,9 @@ const COMPARE_GROUPS: Array<{ id: string; label: string; blurb: string; slugs: s
 
 const bySlug = new Map(comparisons.map((c) => [c.slug, c] as const))
 const grouped = COMPARE_GROUPS.map((group) => ({
-  ...group,
+  id: group.id,
+  label: group.label,
+  blurb: group.blurb,
   items: group.slugs.map((slug) => bySlug.get(slug)).filter((c): c is (typeof comparisons)[number] => Boolean(c)),
 }))
 // Any page not named by a group above still renders, so a new compare page can

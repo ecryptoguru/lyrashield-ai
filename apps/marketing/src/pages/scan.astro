@@ -401,7 +401,7 @@ const jsonLd = [
     const severityLabel = { needs_attention: "Needs attention", worth_reviewing: "Worth reviewing", ok: "Looks OK" }
     const severityTone = { needs_attention: "border-danger/40 bg-danger/10 text-danger", worth_reviewing: "border-[var(--terminal-warning)]/40 bg-[var(--terminal-amber)]/10 text-[var(--terminal-warning-text)] dark:text-[var(--terminal-amber)]", ok: "border-accent/40 bg-accent-dim/35 text-accent" }
 
-    function renderResult(result: LiteResult, durationMs: number) {
+    function renderResult(result: LiteResult) {
       currentResult = result
       const summary = result.liteResultSummary
       const heading = document.querySelector<HTMLElement>("#result-heading")!
@@ -557,9 +557,9 @@ const jsonLd = [
       captureScanStarted()
       const progress = showScanningUi()
       try {
-        const { result, durationMs } = await runLiteScan(url, turnstileToken)
+        const { result } = await runLiteScan(url, turnstileToken)
         await progress.finished
-        renderResult(result, durationMs)
+        renderResult(result)
       } catch (cause) {
         handleScanError(cause as Error & { reason?: string })
       } finally {
