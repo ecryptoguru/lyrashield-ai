@@ -144,7 +144,7 @@ test("motion video waits for approach and buffers before the story enters view",
     expect(await page.locator("#assurance-world video").getAttribute("src")).toBeNull()
     await page.evaluate(() => {
       const story = document.getElementById("assurance-world")!
-      scrollTo(0, story.getBoundingClientRect().top + scrollY - innerHeight * 2)
+      scrollTo(0, story.getBoundingClientRect().top + scrollY - innerHeight * 1.75)
     })
     await expect.poll(() => motionRequests.length).toBeGreaterThan(0)
     expect(
@@ -152,6 +152,24 @@ test("motion video waits for approach and buffers before the story enters view",
     ).toBeGreaterThan(viewport.height)
     await page.locator("#assurance-world").scrollIntoViewIfNeeded()
     await expect(page.locator("#assurance-world")).toHaveClass(/is-enhanced/)
+    await expect
+      .poll(
+        () =>
+          page
+            .locator("#assurance-world video")
+            .evaluate((video) => (video as HTMLVideoElement).readyState),
+        { timeout: 30_000 }
+      )
+      .toBeGreaterThanOrEqual(2)
+    await expect
+      .poll(
+        () =>
+          page
+            .locator("#assurance-world video")
+            .evaluate((video) => (video as HTMLVideoElement).buffered.length),
+        { timeout: 30_000 }
+      )
+      .toBeGreaterThan(0)
     await context.close()
   }
 })

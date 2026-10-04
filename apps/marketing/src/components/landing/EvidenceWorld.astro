@@ -112,19 +112,27 @@ const { manifest } = Astro.props
     )
     observer.observe(el)
 
-    // Buffer ahead of the story, without downloading its multi-megabyte
-    // timeline while a visitor is still at the hero. The wider observer warms
-    // the source two viewports before the existing 50% activation observer.
+    // Buffer one viewport beyond the visible viewport, without downloading
+    // the timeline while a visitor is still at the hero. Use height-based
+    // pixels: IntersectionObserver percentage margins are based on width.
+    // The controller's existing 50% observer still owns story activation.
     if (!reduced && !saveData && !slowNetwork) {
-      const warmObserver = new IntersectionObserver(
-        (entries, obs) => {
-          if (!entries.some((entry) => entry.isIntersecting)) return
-          obs.disconnect()
-          bootstrapEvidenceWorld()
-        },
-        { rootMargin: "200% 0px" }
-      )
-      warmObserver.observe(el)
+      let warmObserver: IntersectionObserver | undefined
+      const observeApproach = () => {
+        warmObserver?.disconnect()
+        warmObserver = new IntersectionObserver(
+          (entries, obs) => {
+            if (!entries.some((entry) => entry.isIntersecting)) return
+            obs.disconnect()
+            removeEventListener("resize", observeApproach)
+            bootstrapEvidenceWorld()
+          },
+          { rootMargin: `${innerHeight}px 0px` }
+        )
+        warmObserver.observe(el)
+      }
+      addEventListener("resize", observeApproach, { passive: true })
+      observeApproach()
     }
   } else {
     bootstrapEvidenceWorld()

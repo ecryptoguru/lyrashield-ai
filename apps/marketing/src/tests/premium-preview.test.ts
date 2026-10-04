@@ -196,8 +196,9 @@ describe("premium assurance-world homepage", () => {
     )
 
     // Warm ahead of activation, with no unconditional idle-after-load fetch.
-    expect(world).toContain('rootMargin: "200% 0px"')
+    expect(world).toContain("rootMargin: `${innerHeight}px 0px`")
     expect(world).toContain("warmObserver.observe(el)")
+    expect(world).toContain('removeEventListener("resize", observeApproach)')
     expect(world).not.toContain("requestIdleCallback")
 
     // A multi-megabyte prefetch has to stay opt-out-able.

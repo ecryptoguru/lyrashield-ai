@@ -61,7 +61,7 @@ class EvidenceWorldElement extends HTMLElement {
     this.video.addEventListener("seeked", this.handleSeeked)
     this.video.addEventListener("error", this.handleVideoError)
 
-    // The bootstrap warms the timeline two viewports before arrival. Keep
+    // The bootstrap warms the timeline one viewport beyond the visible viewport. Keep
     // buffering ahead of the 50% activation boundary so the first scrub has
     // frames ready, while visits that stay near the hero fetch no video.
     // Scroll/resize listeners still wait for the activation observer below.
