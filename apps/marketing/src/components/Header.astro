@@ -293,7 +293,11 @@ const learnItems = [
         }
       })
 
-      menu.querySelectorAll<HTMLAnchorElement>(".menu-link").forEach((link) => {
+      // Close the sheet only when a real link is followed. The accordion
+      // <summary> elements also carry the menu-link class, so a plain
+      // querySelectorAll(".menu-link") would close the sheet the moment a
+      // visitor opened a menu — the accordion could never be used.
+      menu.querySelectorAll<HTMLAnchorElement>("a.menu-link").forEach((link) => {
         link.addEventListener("click", () => menu.close())
       })
 
@@ -373,6 +377,8 @@ const learnItems = [
 
   #mobile-menu {
     box-sizing: border-box;
+    /* No display here: a closed <dialog> must stay hidden, and the
+       #mobile-menu[open] rule below sets the grid layout when it opens. */
     max-height: 100dvh;
     align-content: start;
     overflow-y: auto;
