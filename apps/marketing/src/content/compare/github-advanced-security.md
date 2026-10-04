@@ -7,6 +7,8 @@ disclaimer: "Factual comparison. GitHub Advanced Security is GitHub's security s
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
+competitorClaims: true
+competitorDomain: github.com
 faq:
   - q: "Does LyraShield replace GitHub Advanced Security?"
     a: "No. GHAS is a mature, integrated scanner inside GitHub with CodeQL, secret scanning for 180+ providers and Dependabot. LyraShield is release assurance for AI-built apps in open beta that keeps detected candidates and retest outcomes distinct in a checksum-bound, scoped evidence record. They solve different problems and complement each other."
@@ -78,8 +80,24 @@ The LyraShield GitHub Action complements GHAS — it adds diff-aware pattern che
 
 LyraShield AI is live and open for registration — create an account and run your first authorized check through the release-assurance loop: target, review, evidence, fix, retest, report. Prefer to explore first? Read the evidence methodology or try the free browser-local tools.
 
+## Where GitHub Advanced Security is genuinely strong
+
+The genuine strength of GHAS is integration. [GitHub's own documentation](https://docs.github.com/en/get-started/learning-about-github/about-github-advanced-security) says developers do not leave GitHub to see findings and that pull request review shows code scanning alerts inline. The same page says code scanning and secret scanning are available at no cost for public repositories, which makes GHAS the lowest-friction entry point for many open source projects and small teams.
+
+Its detection is broad and well documented. GitHub describes the [AI-powered security detections](https://docs.github.com/en/code-security/concepts/code-scanning/ai-powered-security-detections) as extending coverage to languages and frameworks that CodeQL does not yet support natively. [Copilot Autofix](https://docs.github.com/en/code-security/code-scanning/managing-code-scanning-alerts/about-autofix-for-codeql-code-scanning) suggests fixes for code scanning alerts directly in the pull request.
+
+Its governance features are unusually deep for a first-party tool. The overview page describes security campaigns for accumulated security debt, a security overview that shows risk distribution across repositories and delegated bypass for push protection and alert dismissal. [Dependency review](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependency-review) enforces checks on pull requests that change a manifest file.
+
+## Sources
+
+- [About GitHub Advanced Security](https://docs.github.com/en/get-started/learning-about-github/about-github-advanced-security)
+- [What is GitHub Advanced Security](https://github.com/security/advanced-security/what-is-github-advanced-security)
+- [GitHub security features](https://docs.github.com/en/code-security/getting-started/github-security-features)
+- [AI-powered security detections](https://docs.github.com/en/code-security/concepts/code-scanning/ai-powered-security-detections)
+- [Copilot Autofix for code scanning](https://docs.github.com/en/code-security/code-scanning/managing-code-scanning-alerts/about-autofix-for-codeql-code-scanning)
+- [Dependency review](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependency-review)
+- [GitHub Advanced Security pricing](https://github.com/security/advanced-security)
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
-
-For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs GitHub Advanced Security](/blog/github-advanced-security-vs-lyrashield).

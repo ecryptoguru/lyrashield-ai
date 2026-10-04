@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { readdirSync } from "node:fs"
 
 // Routing and freshness regression coverage for the trailing-slash
 // canonicalisation work (PR #591 + follow-ups). Every canonical URL on this
@@ -56,6 +57,66 @@ test("legacy Pi integration URLs redirect permanently to the canonical guide", a
     const res = await page.request.get(path, { maxRedirects: 0 })
     expect(res.status(), `${path} must be 301`).toBe(301)
     expect(res.headers()["location"]).toBe("/docs/integrations/pi")
+  }
+})
+
+test("retired vs-lyrashield posts redirect permanently to their compare page", async ({ page }) => {
+  // Wave 8 (D9): the 13 long-form posts were retired and their content folded
+  // into the compare page. Both the slashless and the trailing-slash form must
+  // reach /compare/<slug>, never the platform 404 or the drop-trailing-slash
+  // 307. The slugs are derived from the compare collection so the two lists
+  // cannot drift apart.
+  const slugs = readdirSync(new URL("../src/content/compare/", import.meta.url))
+    .filter((name) => name.endsWith(".md"))
+    .map((name) => name.replace(/\.md$/, ""))
+    .sort()
+  expect(slugs, "the compare program should still be 13 pages").toHaveLength(13)
+
+  for (const slug of slugs) {
+    for (const path of [`/blog/${slug}-vs-lyrashield`, `/blog/${slug}-vs-lyrashield/`]) {
+      const res = await page.request.get(path, { maxRedirects: 0 })
+      expect(res.status(), `${path} must be 301`).toBe(301)
+      expect(res.headers()["location"], `${path} target`).toBe(`/compare/${slug}`)
+    }
+  }
+})
+
+test("every retired post URL is gone from the served sitemap and llms.txt", async ({
+  page,
+  baseURL,
+}) => {
+  const sitemap = await page.request.get("/sitemap-index.xml")
+  expect(sitemap.status()).toBe(200)
+  const llms = await page.request.get("/llms.txt")
+  expect(llms.status()).toBe(200)
+  const llmsBody = await llms.text()
+
+  // The sitemap index advertises absolute production URLs. Fetch each child
+  // from the LOCAL preview under test by taking only its pathname, the same way
+  // scripts/crawl-built-site.mjs does — fetching the absolute URL would hit the
+  // deployed site instead of the build being verified.
+  const indexBody = await sitemap.text()
+  const children = [...indexBody.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
+    (match) => new URL(match[1], baseURL).pathname
+  )
+  expect(children.length, "the sitemap index should advertise its children").toBeGreaterThan(0)
+  let urls = ""
+  for (const child of children) {
+    const res = await page.request.get(child)
+    if (res.status() === 200) urls += await res.text()
+  }
+
+  const compareSlugs = readdirSync(new URL("../src/content/compare/", import.meta.url))
+    .filter((name) => name.endsWith(".md"))
+    .map((name) => name.replace(/\.md$/, ""))
+  for (const slug of compareSlugs) {
+    const retired = `/blog/${slug}-vs-lyrashield`
+    expect(urls.includes(retired), `${retired} must not appear in the sitemap`).toBe(false)
+    expect(llmsBody.includes(retired), `${retired} must not appear in llms.txt`).toBe(false)
+    // The compare page it folded into must still be advertised.
+    expect(urls.includes(`/compare/${slug}`), `/compare/${slug} must remain in the sitemap`).toBe(
+      true
+    )
   }
 })
 

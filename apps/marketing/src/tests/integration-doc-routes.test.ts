@@ -65,18 +65,25 @@ describe("integration guide routes", () => {
     const redirects = readFileSync(new URL("../../public/_redirects", import.meta.url), "utf8")
     const redirectLines = new Set(redirects.split("\n").map((line) => line.trim()))
 
-    expect(LEGACY_REDIRECTS).toEqual([
-      {
-        source: "/docs/integrations/picode",
-        target: "/docs/integrations/pi",
-        code: "301",
-      },
-      {
-        source: "/docs/integrations/picode/",
-        target: "/docs/integrations/pi",
-        code: "301",
-      },
-    ])
+    // The legacy region also carries the Wave 8 compare-consolidation redirects
+    // (both the slashless and the trailing-slash form of each retired
+    // -vs-lyrashield post). Assert the Pi pair is present and correct rather
+    // than pinning the whole array, so adding a legacy redirect elsewhere does
+    // not break an unrelated guide assertion.
+    expect(LEGACY_REDIRECTS).toEqual(
+      expect.arrayContaining([
+        {
+          source: "/docs/integrations/picode",
+          target: "/docs/integrations/pi",
+          code: "301",
+        },
+        {
+          source: "/docs/integrations/picode/",
+          target: "/docs/integrations/pi",
+          code: "301",
+        },
+      ])
+    )
     for (const redirect of LEGACY_REDIRECTS) {
       expect(redirectLines).toContain(`${redirect.source} ${redirect.target} ${redirect.code}`)
     }
