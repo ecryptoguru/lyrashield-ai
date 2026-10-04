@@ -7,6 +7,10 @@ on:
       - .github/workflows/verify-webhook-production-prerequisites.yml
       - .github/scripts/webhook-track-image-smoke.mjs
       - .github/scripts/tests/webhook-cutover-verification.workflow.test.mjs
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
@@ -24,8 +28,11 @@ jobs:
   verify-timezone-receipt:
     name: Verify signed UTC review receipt (no deployment)
     if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'codex/no-deployment-cutover-verification-20261004'
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_sha == github.sha
     runs-on: ubuntu-24.04
     environment:
       name: azure-production
@@ -35,14 +42,20 @@ jobs:
       - name: Checkout the exact reviewed base revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           path: product
           persist-credentials: false
+
+      - name: Confirm checkout is the successful main CI revision
+        working-directory: product
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
 
       - name: Validate protected receipt and logical database identity
         working-directory: product
         env:
-          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.base.sha }}
+          EXPECTED_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
           MIGRATION_DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
           WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT }}
           WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM }}
@@ -51,6 +64,7 @@ jobs:
   verify-worker-image:
     name: Exercise exact compatible worker image on disposable services
     if: >-
+      github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'codex/no-deployment-cutover-verification-20261004'
     runs-on: ubuntu-24.04
@@ -120,6 +134,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
         with:
+          version: 12.2.0
           install: false
 
       - name: Setup Node.js
@@ -213,8 +228,13 @@ jobs:
       - name: Remove disposable service network
         if: always()
         shell: bash
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          REDIS_CONTAINER: ${{ job.services.redis.id }}
         run: |
           network="webhook-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           if docker network inspect "$network" >/dev/null 2>&1; then
+            docker network disconnect "$network" "$POSTGRES_CONTAINER" || true
+            docker network disconnect "$network" "$REDIS_CONTAINER" || true
             docker network rm "$network"
           fi

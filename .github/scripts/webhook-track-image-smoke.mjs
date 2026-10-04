@@ -57,6 +57,7 @@ const jobIds = [0, 1, 2].map((generation) =>
 )
 const workers = []
 let fixtureCreated = false
+let rehearsalFailed = true
 
 async function setDue() {
   await owner.webhookEventTrack.updateMany({
@@ -170,14 +171,30 @@ try {
     "skipped_succeeded"
   )
   assert.equal(dispatchAttempts, 3)
+  rehearsalFailed = false
   console.log("Exact worker image webhook retry recovery passed with disposable fixtures.")
 } finally {
-  for (const runtimeWorker of workers) await runtimeWorker.close()
-  for (const jobId of jobIds) await (await queue.getJob(jobId))?.remove()
-  await queue.close()
-  await integrations.closeRedis()
-  if (fixtureCreated) await owner.webhookEvent.deleteMany({ where: { id: eventId } })
-  await owner.$disconnect()
-  await db.prisma.$disconnect()
-  await db.getSystemPrisma().$disconnect()
+  let cleanupFailed = false
+  const attemptCleanup = async (cleanup) => {
+    try {
+      await cleanup()
+    } catch {
+      cleanupFailed = true
+    }
+  }
+  for (const runtimeWorker of workers) await attemptCleanup(() => runtimeWorker.close())
+  for (const jobId of jobIds) {
+    await attemptCleanup(async () => (await queue.getJob(jobId))?.remove())
+  }
+  await attemptCleanup(() => queue.close())
+  await attemptCleanup(() => integrations.closeRedis())
+  if (fixtureCreated)
+    await attemptCleanup(() => owner.webhookEvent.deleteMany({ where: { id: eventId } }))
+  await attemptCleanup(() => owner.$disconnect())
+  await attemptCleanup(() => db.prisma.$disconnect())
+  await attemptCleanup(() => db.getSystemPrisma().$disconnect())
+  if (cleanupFailed) {
+    if (rehearsalFailed) console.error("Disposable rehearsal cleanup encountered an error.")
+    else throw new Error("Disposable rehearsal cleanup encountered an error.")
+  }
 }
