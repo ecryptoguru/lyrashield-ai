@@ -78,12 +78,24 @@ const navGroups: { heading: string; links: NavLink[] }[] =
           <span>Browse documentation</span>
         </summary>
         <nav>
+          {/* Search across the sidebar (Spec item 6.4). Filters the rendered
+              links only; it reads no value the visitor did not type here. */}
+          <label class="docs-sidebar__search">
+            <span class="sr-only">Search documentation</span>
+            <input
+              type="search"
+              id="docs-search-input"
+              data-docs-search
+              placeholder="Search docs"
+              autocomplete="off"
+            />
+          </label>
           {navGroups.map((group) => (
             <>
               <p class="docs-sidebar__heading">{group.heading}</p>
-              <ul class="docs-sidebar__list">
+              <ul class="docs-sidebar__list" data-docs-group>
                 {group.links.map((link) => (
-                  <li>
+                  <li data-docs-link={link.label.toLowerCase()}>
                     <a
                       href={link.href}
                       class:list={[
@@ -99,11 +111,24 @@ const navGroups: { heading: string; links: NavLink[] }[] =
               </ul>
             </>
           ))}
+          <p class="docs-sidebar__empty" data-docs-empty hidden>No matching page. Clear the field to see every section.</p>
         </nav>
       </details>
     </aside>
 
     <div class="docs-main">
+      {/* Visible breadcrumb (Spec item 6.7): Docs > current page. The layout
+          already carried BreadcrumbList metadata for some callers; this makes
+          the trail visible on every docs page. */}
+      <nav aria-label="Breadcrumb" class="mb-4">
+        <ol class="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+          <li><a href="/" class="hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Home</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/docs/integrations" class="hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Docs</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-text">{title}</li>
+        </ol>
+      </nav>
       {updatedDate && (
         <p class="docs-updated">
           Updated <time datetime={updatedDate}>{updatedDate}</time>
@@ -113,6 +138,26 @@ const navGroups: { heading: string; links: NavLink[] }[] =
     </div>
   </div>
 </Base>
+
+<script>
+  // Sidebar search (Spec item 6.4). Filters the rendered nav links only.
+  const docsSearch = document.querySelector<HTMLInputElement>("[data-docs-search]")
+  if (docsSearch) {
+    const links = Array.from(document.querySelectorAll<HTMLElement>("[data-docs-link]"))
+    const empty = document.querySelector<HTMLElement>("[data-docs-empty]")
+    const apply = () => {
+      const term = docsSearch.value.trim().toLowerCase()
+      let visible = 0
+      for (const link of links) {
+        const match = term.length === 0 || (link.dataset.docsLink ?? "").includes(term)
+        link.hidden = !match
+        if (match) visible += 1
+      }
+      if (empty) empty.hidden = visible > 0
+    }
+    docsSearch.addEventListener("input", apply)
+  }
+</script>
 
 <script>
   // Add a copy control to every docs code block. Purely progressive: if this
@@ -578,4 +623,18 @@ const navGroups: { heading: string; links: NavLink[] }[] =
       margin-left: 0.2rem;
     }
   }
+
+  .docs-sidebar__search { display: block; margin: 0.5rem 0 0.75rem; }
+  .docs-sidebar__search input {
+    width: 100%;
+    min-height: 2.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    background: var(--color-bg-raised);
+    padding: 0 0.75rem;
+    color: var(--color-text);
+    font-size: 0.85rem;
+  }
+  .docs-sidebar__search input:focus-visible { border-color: var(--color-accent); outline: 2px solid var(--color-accent); outline-offset: 1px; }
+  .docs-sidebar__empty { margin: 0.75rem 0.2rem; color: var(--color-text-muted); font-size: 0.8rem; line-height: 1.5; }
 </style>

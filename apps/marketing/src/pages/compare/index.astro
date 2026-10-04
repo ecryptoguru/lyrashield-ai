@@ -19,6 +19,67 @@ const comparisons = entries
   }))
   .sort((a, b) => a.name.localeCompare(b.name))
 
+/**
+ * Grouped by the category a visitor is shopping in, with a one-line
+ * "Choose this if" per card (Spec item 6.2). The grouping is a presentation
+ * choice over the same 13 pages; compare-validation.test.ts still sees all 13.
+ */
+const COMPARE_GROUPS: Array<{ id: string; label: string; blurb: string; slugs: string[] }> = [
+  {
+    id: "code",
+    label: "Code and dependency scanners",
+    blurb: "Tools that read source, dependencies or quality signals in a repository.",
+    slugs: ["snyk", "semgrep", "sonarqube", "github-advanced-security", "corgea"],
+  },
+  {
+    id: "pentest",
+    label: "AI pentest and autonomous testing",
+    blurb: "Tools that probe a running target and report what they could reach.",
+    slugs: ["pentera", "xbow", "horizon3", "runsybil"],
+  },
+  {
+    id: "platform",
+    label: "Platform and lifecycle suites",
+    blurb: "Broader platforms that combine several layers behind one console.",
+    slugs: ["aikido", "mobb", "zeropath", "pixee"],
+  },
+]
+
+const bySlug = new Map(comparisons.map((c) => [c.slug, c] as const))
+const grouped = COMPARE_GROUPS.map((group) => ({
+  ...group,
+  items: group.slugs.map((slug) => bySlug.get(slug)).filter((c): c is (typeof comparisons)[number] => Boolean(c)),
+}))
+// Any page not named by a group above still renders, so a new compare page can
+// never silently disappear from the index.
+const named = new Set(COMPARE_GROUPS.flatMap((group) => group.slugs))
+const ungrouped = comparisons.filter((c) => !named.has(c.slug))
+if (ungrouped.length > 0) {
+  grouped.push({
+    id: "other",
+    label: "More comparisons",
+    blurb: "Additional tools compared against the same evidence standard.",
+    items: ungrouped,
+  })
+}
+
+/** "Choose this if" line per competitor, in the visitor's own decision terms. */
+const CHOOSE_IF: Record<string, string> = {
+  aikido: "you want one console covering several security layers and value breadth over evidence depth",
+  snyk: "your priority is dependency and container risk inside the developer workflow",
+  semgrep: "you want fast custom rules over your own code patterns",
+  sonarqube: "you need code quality and maintainability gates as much as security",
+  "github-advanced-security": "your whole workflow already lives in GitHub and you want native code scanning",
+  pentera: "you run scheduled adversarial testing of production networks",
+  xbow: "you want autonomous exploitation attempts against a live target",
+  horizon3: "you need continuous attack-path validation across infrastructure",
+  runsybil: "you want AI-assisted validation of findings you already have",
+  mobb: "you want automated remediation suggestions alongside findings",
+  zeropath: "you want AI triage that ranks findings by reachability",
+  corrgea: "you want a hosted review of code changes with a plain-language report",
+  "endor-labs": "you want dependency and reachability analysis at platform scale",
+}
+
 const jsonLd: unknown[] = [
   {
     "@context": "https://schema.org",
@@ -60,19 +121,32 @@ const jsonLd: unknown[] = [
     </header>
 
     <div class="callout mt-10" data-reveal>
-      <strong>How to read these comparisons.</strong> LyraShield AI is an open-beta
+      <strong>How we compare.</strong> LyraShield AI is an open-beta
       evidence-backed launch gate layer, not a replacement for vulnerability scanners,
-      code quality tools or dependency analyzers. These comparisons help you understand where
-      each tool fits in your security workflow.
+      code quality tools or dependency analyzers. Every claim on these pages is checked
+      against public documentation; read{" "}
+      <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">the methodology</a>{" "}
+      for how we record evidence and limits.
     </div>
 
-    <div class="mt-12 grid gap-6 sm:grid-cols-2" data-reveal-group>
-      {comparisons.map((c) => (
-        <a href={`/compare/${c.slug}`} class="lift rounded-xl border border-border bg-bg-raised p-6 hover:border-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-reveal>
-          <h2 class="text-xl font-semibold text-text">vs {c.name}</h2>
-          <p class="mt-2 text-sm text-text-muted">{c.tagline}</p>
-          <p class="mt-4 text-sm text-accent">Read comparison →</p>
-        </a>
+    <div class="mt-12 space-y-12">
+      {grouped.map((group) => (
+        <section aria-labelledby={`compare-group-${group.id}`} data-reveal-group>
+          <h2 id={`compare-group-${group.id}`} class="text-2xl font-semibold text-text">{group.label}</h2>
+          <p class="mt-2 leading-7 text-text-muted">{group.blurb}</p>
+          <div class="mt-5 grid gap-6 sm:grid-cols-2">
+            {group.items.map((c) => (
+              <a href={`/compare/${c.slug}`} class="lift rounded-xl border border-border bg-bg-raised p-6 hover:border-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-reveal>
+                <h3 class="text-xl font-semibold text-text">vs {c.name}</h3>
+                <p class="mt-2 text-sm text-text-muted">{c.tagline}</p>
+                {CHOOSE_IF[c.slug] && (
+                  <p class="mt-4 text-sm leading-6 text-text"><span class="font-semibold">Choose this if</span> {CHOOSE_IF[c.slug]}.</p>
+                )}
+                <p class="mt-4 text-sm font-medium text-accent">{c.name} comparison →</p>
+              </a>
+            ))}
+          </div>
+        </section>
       ))}
     </div>
 

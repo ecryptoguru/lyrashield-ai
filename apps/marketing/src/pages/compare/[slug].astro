@@ -63,6 +63,18 @@ const jsonLd: unknown[] = [
 
     <div class="callout mt-10" data-reveal set:html={disclaimer} />
 
+    {/* Shared structure (Spec item 6.6): every comparison opens with the same
+        three differences, then the page body, then the same next step. The
+        competitor-specific body below is authored per page. */}
+    <section aria-labelledby="differ-heading" class="mt-12 rounded-2xl border border-border bg-bg-raised p-6 sm:p-8" data-reveal>
+      <h2 id="differ-heading" class="text-2xl font-semibold text-text">Where we differ</h2>
+      <ul class="mt-5 space-y-3 leading-7 text-text-muted">
+        <li class="flex gap-3"><span class="text-accent" aria-hidden="true">—</span><span>A launch verdict in three states: ready, not ready or insufficient evidence.</span></li>
+        <li class="flex gap-3"><span class="text-accent" aria-hidden="true">—</span><span>Every finding keeps its evidence state, and a fresh retest confirms a fix.</span></li>
+        <li class="flex gap-3"><span class="text-accent" aria-hidden="true">—</span><span>Fix proposals wait for a human approval before any pull request opens.</span></li>
+      </ul>
+    </section>
+
     <div class="compare-body mt-16 border-t border-border pt-12" data-reveal-group>
       <Content />
     </div>
@@ -81,8 +93,15 @@ const jsonLd: unknown[] = [
       </dl>
     </section>
 
-    <div class="mt-16 border-t border-border pt-12" data-reveal>
-      <a href="/compare" class="text-sm font-semibold text-accent hover:underline">All comparisons</a>
-    </div>
+    <section aria-labelledby="next-heading" class="mt-16 flex flex-col gap-5 border-t border-border pt-12 sm:flex-row sm:items-center sm:justify-between" data-reveal>
+      <div>
+        <h2 id="next-heading" class="text-2xl font-semibold text-text">What happens next</h2>
+        <p class="mt-2 leading-7 text-text-muted">Run the free Lite Check on your own app, then start a trial to review the repository behind it.</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a href="/scan" data-cta-id="compare-lite-check" class="inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Run the free Lite Check</a>
+        <a href="/compare" class="inline-flex min-h-12 items-center justify-center rounded-lg border border-border px-5 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">All comparisons</a>
+      </div>
+    </section>
   </section>
 </Base>
