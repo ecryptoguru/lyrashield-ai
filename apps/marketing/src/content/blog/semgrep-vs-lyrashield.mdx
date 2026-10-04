@@ -2,6 +2,7 @@
 title: "Semgrep vs LyraShield"
 description: "How LyraShield AI release assurance compares to Semgrep open-source SAST and the Semgrep AppSec Platform for AI-built apps."
 pubDate: 2026-08-07
+updatedDate: 2026-10-04
 author: lyrashield-team
 tags:
   - vibe-coding-security
@@ -26,11 +27,11 @@ This comparison is part of our broader [vibe coding security guide](/blog/vibe-c
 
 ## What Semgrep does well
 
-[Semgrep](https://semgrep.dev/docs/introduction) is the tool most developers reach for when they want lightweight, customizable static analysis. Its Community Edition is open source under an LGPL license, supports more than 30 programming languages and ships with over a thousand community rules from the Semgrep Registry. Rules are written in a syntax that resembles the code being scanned, which makes custom rule authoring approachable without learning a separate query language or wrestling with abstract syntax trees. Semgrep runs without a build for most languages, which means it works on almost any repository without complex setup.
+[Semgrep](https://semgrep.dev/docs/introduction) is the tool most developers reach for when they want lightweight, customizable static analysis. Its Community Edition is open source under an LGPL license, supports more than 30 programming languages and ships with over a thousand community rules from the Semgrep Registry. Rules are written in a syntax that resembles the code being scanned, which makes custom rule authoring approachable without learning a separate query language or wrestling with abstract syntax trees. Semgrep scans source code directly, so it works on almost any repository without complex setup.
 
 The commercial [Semgrep AppSec Platform](https://github.com/semgrep/semgrep) adds cross-file and interfile taint analysis, reachability checks for open-source dependencies, secrets detection, pull request comments and an AI Assistant for triage and remediation. The Semgrep team is explicit in its own documentation that Community Edition, limited to single-function analysis, will miss many true positives and recommends the platform for real security use cases. The AI Assistant reports that humans agree with its auto-triage decisions 97 percent of the time and rate generated remediation guidance as helpful 80 percent of the time.
 
-Semgrep Supply Chain covers 12 languages across 15 package managers, detecting reachable vulnerabilities in open-source dependencies. The platform now combines deterministic static analysis with AI-powered detection to extend coverage to complex business-logic flaws like insecure direct object reference and broken authentication. Semgrep's strengths are speed, customizability and a mature open-source ecosystem. For organizations that want deterministic pattern matching they fully control, with the ability to encode their own policies as rules, Semgrep is a strong foundation. The [OWASP Top 10](https://owasp.org/www-project-top-ten/) and common [CWE](https://cwe.mitre.org/) categories are covered by community and Pro rules.
+Semgrep Supply Chain [supports 14 languages](https://semgrep.dev/docs/supported-languages), detecting reachable vulnerabilities in open-source dependencies. The platform now combines deterministic static analysis with AI-powered detection to extend coverage to complex business-logic flaws like insecure direct object reference and broken authentication. Semgrep's strengths are speed, customizability and a mature open-source ecosystem. For organizations that want deterministic pattern matching they fully control, with the ability to encode their own policies as rules, Semgrep is a strong foundation. The [OWASP Top 10](https://owasp.org/www-project-top-ten/) and common [CWE](https://cwe.mitre.org/) categories are covered by community and Pro rules.
 
 Semgrep's rule ecosystem is one of its most practical assets. The Semgrep Registry hosts community and Pro rules contributed by security researchers and practitioners and teams can write their own rules in minutes because the pattern syntax mirrors the target language. This makes Semgrep well suited to enforcing organization-specific policies that a commercial scanner would not ship out of the box, such as banning a deprecated crypto API or requiring a particular input-sanitization helper. The AI Assistant adds triage and remediation guidance on top of those rules, which helps teams that lack dedicated security engineers.
 
@@ -40,7 +41,7 @@ LyraShield AI does not compete with Semgrep on rule breadth or pattern detection
 
 The LyraShield loop is target, review, evidence, fix, retest, report. An agentic pentest attempts checks against an authorized target. Results keep detected candidates, independent verification receipts and retest-confirmed outcomes distinct, each within its recorded evidence scope. That separation matters because a SAST finding, however precise, is a signal about the code. A Semgrep rule can tell you a pattern matches, but it cannot establish from that match alone whether the pattern is reachable in the deployed app.
 
-LyraShield also runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), so security checks happen at the point where an agent generates code, not only in a later CI scan. This is a different integration point than Semgrep's CLI and IDE plugins, which are designed for developer-initiated scans. Fix proposals are recorded for review; repository controls govern whether a developer merges any resulting change. The full assurance record is immutable and can be shared for compliance or handoff.
+LyraShield also runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), so security checks happen at the point where an agent generates code, not only in a later CI scan. Semgrep also has an [MCP server](https://github.com/semgrep/mcp) and the Guardian plugin for Claude Code and Cursor, so the real difference is LyraShield's pentest loop and the evidence record it keeps, not the integration point. Fix proposals are recorded for review; repository controls govern whether a developer merges any resulting change. The full assurance record is immutable and can be shared for compliance or handoff.
 
 For dependency risk, LyraShield uses SCA backed by sources like the [OSV database](https://osv.dev/) and it emits SARIF so findings integrate with existing tooling rather than replacing it. This means a team can run Semgrep for continuous scanning and LyraShield for the assurance run, with both feeding results into the same workflow.
 
@@ -54,13 +55,13 @@ Use LyraShield AI when the bottleneck is the release decision for an AI-built ap
 
 For teams already running Semgrep, adding LyraShield does not require ripping out existing rules or CI configuration. LyraShield emits SARIF and ships as a GitHub Action, so its findings can appear alongside Semgrep's in the same pull request or code scanning view. The division of labor is straightforward: Semgrep handles continuous, customizable detection that developers trust and can extend and LyraShield handles the release-assurance run that preserves scoped evidence and an immutable record. That complementary pattern avoids tool sprawl while giving each tool the job it does best.
 
-| Dimension         | Semgrep                                       | LyraShield AI                                          |
-| ----------------- | --------------------------------------------- | ------------------------------------------------------ |
-| Primary goal      | Pattern detection and custom rules            | Scoped evidence for AI-built app release reviews       |
-| Detection model   | SAST, SCA, secrets (platform); SAST only (CE) | Agentic pentest plus SCA plus secrets, evidence states |
-| Customization     | User-written rules in code-like syntax        | Approval-gated fix proposals, retest before close      |
-| Agent integration | CLI, IDE plugins, CI                          | MCP inside AI coding agents plus GitHub Action         |
-| Output            | SARIF, JSON, PR comments                      | Immutable assurance record, SARIF                      |
+| Dimension         | Semgrep                                           | LyraShield AI                                          |
+| ----------------- | ------------------------------------------------- | ------------------------------------------------------ |
+| Primary goal      | Pattern detection and custom rules                | Scoped evidence for AI-built app release reviews       |
+| Detection model   | SAST, SCA, secrets (platform); SAST only (CE)     | Agentic pentest plus SCA plus secrets, evidence states |
+| Customization     | User-written rules in code-like syntax            | Approval-gated fix proposals, retest before close      |
+| Agent integration | CLI, IDE plugins, CI, MCP server, Guardian plugin | MCP inside AI coding agents plus GitHub Action         |
+| Output            | SARIF, JSON, PR comments                          | Immutable assurance record, SARIF                      |
 
 For the detailed breakdown see the [Semgrep comparison page](/compare/semgrep). The [Claude Code security workflow](/blog/claude-code-security-workflow) guide covers how agent-native checks fit alongside traditional scanners.
 
