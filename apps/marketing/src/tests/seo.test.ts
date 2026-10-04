@@ -140,7 +140,7 @@ describe("marketing SEO metadata", () => {
     )
     expect(llms).toContain("const publicLinks = [")
     expect(llms).toContain("...publicLinks.map(({ label, url }) => markdownLink(label, url))")
-    expect(llms).toContain('markdownLink("Create a free LyraShield AI account"')
+    expect(llms).toContain('markdownLink("Start free trial"')
     expect(llms).toContain('markdownLink("LyraShield AI source code on GitHub"')
     expect(llms).not.toContain("const publicPaths = [")
   })
@@ -301,7 +301,11 @@ describe("marketing SEO metadata", () => {
     const premiumHero = source("../components/landing/PremiumHero.astro")
     const scanner = source("../pages/scan.astro")
 
-    expect(header.match(/href="\/scan"/g)).toHaveLength(2)
+    // The header's route list is data-driven since the five-item redesign, so
+    // assert the destinations rather than a literal count of one href string:
+    // Lite Check is the Free tools menu's "Start here" entry and /scan is still
+    // reachable from both the desktop menu and the mobile sheet.
+    expect(header).toContain('{ label: "Lite Check", href: "/scan", note: "Start here" }')
     expect(header.match(/\$\{appUrl\}\/sign-in/g)).toHaveLength(2)
     expect(header).not.toContain('href="/#free-scan"')
     // The hero primary CTA now jumps to the on-page Lite Check form instead of the
@@ -310,7 +314,12 @@ describe("marketing SEO metadata", () => {
     expect(premiumHero).toContain('href="#free-scan" data-cta-id="premium-hero-lite-check"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('href="/scan"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('action="/scan"')
-    expect(source("../components/landing/FinalCta.astro")).toContain('href="/methodology"')
+    // The closing CTA is the single closer now and carries no methodology
+    // button, so the guarantee is asserted where the homepage actually offers
+    // it: block 2's evidence-states card.
+    expect(source("../pages/index.astro")).toContain('href="/methodology"')
+    expect(source("../components/Footer.astro")).toContain('href: "/methodology"')
+    expect(source("../components/Header.astro")).toContain('href: "/methodology"')
     expect(scanner).toContain(
       'const title = "Free AI app security check — URL scan | LyraShield AI"'
     )

@@ -78,7 +78,7 @@ describe("agent onboarding contract", () => {
 
     expect(response.headers.get("Content-Type")).toContain("text/markdown")
     const body = await response.text()
-    expect(body).toContain("# Release assurance for coding agents")
+    expect(body).toContain("# Launch gate for coding agents")
     expect(body).toContain("https://lyrashieldai.com/docs/integrations/agent-plugins")
     expect(body).not.toContain("init --dry-run")
     expect(body).toContain("## Set up and authenticate")

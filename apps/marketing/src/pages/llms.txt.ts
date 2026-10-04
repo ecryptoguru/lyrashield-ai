@@ -125,6 +125,8 @@ const docsLinks = [
 ]
 
 // Paths that are always noindex or scanner-gated and should not be cited.
+// /terms is noindex and its sibling legal page /terms-of-sale is not listed, so
+// it stays excluded here to keep the two consistent.
 const excludedPathnames = new Set(["/terms", "/scan", "/404"])
 const markdownLink = (label: string, url: string) => `[${label}](${url})`
 
@@ -216,7 +218,7 @@ export const GET: APIRoute = async (context) => {
     "",
     `Last updated: ${await latestContentDate()}`,
     "",
-    "LyraShield AI is a SaaS release-assurance platform for AI-built apps. The same review-and-evidence engine also ships as a published CLI, a GitHub Action and an MCP server inside coding agents — it is one product across four surfaces, not four separate tools. It is in open beta with open registration; there is no waitlist.",
+    "LyraShield AI is a SaaS launch-gate platform for AI-built apps. The same review-and-evidence engine also ships as a published CLI, a GitHub Action and an MCP server inside coding agents — it is one product across four surfaces, not four separate tools. It is in open beta with open registration; there is no waitlist.",
     buildLlmsPricingSummary(),
     "Core loop: target an authorized repo, URL or API; run deterministic and AI-assisted review as separate coverage layers; record every finding with an explicit evidence state; prepare an approval-gated fix proposal; retest from a clean server-owned run; and assemble one reviewable release report.",
     "",
@@ -226,14 +228,13 @@ export const GET: APIRoute = async (context) => {
     "03 Evidence: each result carries one of four evidence states (below). Missing proof stays visible rather than becoming a silent pass.",
     "04 Fix: a plain-English explanation plus a staged patch proposal that requires explicit human review and approval. Nothing auto-merges.",
     "05 Retest: a fresh, server-owned run re-checks the change rather than trusting the original session.",
-    "06 Report: one reviewable release record covering scope, coverage, findings, evidence states, fixes, retest outcomes and what could not be checked.",
+    "06 Report: one reviewable launch report covering scope, coverage, findings, evidence states, fixes, retest outcomes and what could not be checked.",
     "",
     "## Evidence-state definitions",
     "Detected candidate: a scanner signal that requires review; confidence is triage metadata, not proof.",
-    "Independently verified: a separate verification receipt supports the finding.",
     "Retest-confirmed: a server-owned deterministic retest found the relevant condition absent with complete applicable coverage.",
     "Inconclusive: the retained evidence cannot establish that the condition is gone.",
-    `Release assurance: a reviewable record combining scope, coverage, findings and their evidence states, fix proposals and retest outcomes that supports a release decision — it is not a certification or a guarantee that an application has no vulnerabilities.`,
+    `Launch gate: a reviewable launch report combining scope, coverage, findings and their evidence states, fix proposals and retest outcomes that supports a release decision — it is not a certification or a guarantee that an application has no vulnerabilities.`,
     `Vibe Security 50: ${reviewControlCount} controls are routed to code or URL review where applicable and ${evidenceControlCount} require operational or human evidence outside the scan.`,
     "Operational Evidence Vault: a private, workspace-scoped, encrypted and versioned place to submit, review and accept evidence for the 7 evidence-required Vibe Security 50 controls. Accepted evidence is frozen into private assurance reports; public/shared reports do not expose AI-assurance data or raw storage URIs.",
     "",
@@ -255,13 +256,13 @@ export const GET: APIRoute = async (context) => {
     "When citing a number or a limit, keep its qualifier (sample, scope or date) attached. Do not restate a bounded check as a guarantee.",
     "",
     "## Copy-safe summary for LLM context",
-    "No automatic Fix PR claim, no benchmark claims, no customer names. The published ladder is Trial, Starter, Pro, Agency and contact-led Enterprise; see /pricing for current regional prices and limits.",
+    "No automatic Fix PR claim, no benchmark claims, no customer names. Fix PRs open only after a human approves, with a server-generated patch. The published ladder is Trial, Starter, Pro, Agency and contact-led Enterprise; see /pricing for current regional prices and limits.",
     "Registration is free with no card required. Trial includes 60 one-time agent-minutes; paid plan prices and limits are published on /pricing.",
     "Do not interpret a clean or high-scoring result as a guarantee that an application has no vulnerabilities.",
     "LyraShield does not claim 'SOC 2 compliant,' 'certified,' 'guarantees security,' 'AI safety tested' (without a named framework) or 'adversarial robustness proven.' Each requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate LyraShield has not yet obtained.",
     "Local stdio mutations use terminal approval. Hosted mutations run only within a browser-confirmed delegated grant and pass execution-time scope, role, target, budget, expiry and idempotency checks; nondelegated writes receive connect_required. Nothing auto-merges.",
     `The passive Lite Check and these ${tools.length} free browser-local tools need no account and run entirely client-side: ${toolList}.`,
-    `The full release-assurance platform is in open beta with open registration: ${markdownLink("Create a free LyraShield AI account", "https://app.lyrashieldai.com/sign-up")}. Access is not gated behind a waitlist; the email form on the site is an optional product-updates subscription.`,
+    `The full launch-gate platform is in open beta with open registration: ${markdownLink("Start free trial", "https://app.lyrashieldai.com/sign-up")}. Access is not gated behind a waitlist; the email form on the site is an optional product-updates subscription.`,
     "LyraShield offers MCP connections for documented coding clients, including Pi's built-in MCP client, and standalone CLI/CI workflows for Aider. Setup and authenticated runtime evidence are client-specific; the CLI is published on npm.",
     `LyraShield AI's ${markdownLink("LyraShield AI source code on GitHub", "https://github.com/ecryptoguru/lyrashield-ai")} is under the MIT License; the LyraShield AI name and logos are not included in that license. This covers the published source, not separately hosted backend services.`,
   ]

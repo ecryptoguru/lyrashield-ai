@@ -16,6 +16,9 @@ describe("trial contract", () => {
     expect(CLOUD_PLAN_MAP.TRIAL.agentMinutes).toBe(60)
     expect(CLOUD_PLAN_MAP.TRIAL.targetCaps).toBe(3)
     expect(CLOUD_PLAN_MAP.TRIAL.deepAllowed).toBe(false)
+    // The trial length lives on the plan, so the copy and the grant cannot
+    // disagree about how long the trial runs.
+    expect(CLOUD_PLAN_MAP.TRIAL.trialDays).toBe(7)
     expect(CLOUD_PLAN_MAP.TRIAL.price.usd).toEqual({ monthly: 0, annual: 0 })
   })
 

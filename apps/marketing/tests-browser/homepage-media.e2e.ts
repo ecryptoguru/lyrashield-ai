@@ -74,22 +74,18 @@ test("homepage loads only the selected lazy product screenshots for either saved
       })
     ).toBe(true)
 
+    // The collage is block 5 now, so it sits below the fold and the browser may
+    // defer it past this point. Lazy loading is asserted on the attributes
+    // above; here the point is that nothing eager was fetched and that the
+    // theme selects exactly one file per frame, which is checked after the
+    // scroll below where the images are guaranteed to have loaded.
     await page.waitForTimeout(500)
     const initialProductRequests = requests.filter((path) => productImage.test(path))
-    const expectedSuffix = theme === "light" ? "-light.webp" : ".webp"
-    const primaryPaths = initialProductRequests.filter((path) => path.includes("/console-home"))
-    expect(primaryPaths).toHaveLength(1)
-    expect(primaryPaths[0].endsWith(expectedSuffix)).toBe(true)
-    for (const imageName of [
-      "console-home",
-      "console-issues-thumb",
-      "console-coding-agents-thumb",
-    ]) {
-      const paths = initialProductRequests.filter((path) => path.includes(`/${imageName}`))
-      expect(paths.length).toBeLessThanOrEqual(1)
-      if (paths.length === 1) expect(paths[0].endsWith(expectedSuffix)).toBe(true)
-    }
     expect(initialProductRequests.length).toBeLessThanOrEqual(3)
+    // Nothing from the collage may be fetched eagerly at either theme.
+    await expect(
+      page.locator(".hero-frame__img[loading='eager'], .hero-frame__img[fetchpriority='high']")
+    ).toHaveCount(0)
 
     console.log(
       JSON.stringify({
@@ -110,6 +106,20 @@ test("homepage loads only the selected lazy product screenshots for either saved
           )
       )
       .toBe(3)
+
+    // After the scroll the collage is loaded, so the theme contract is asserted
+    // here: exactly one file per frame, and the right variant for the theme.
+    const expectedSuffix = theme === "light" ? "-light.webp" : ".webp"
+    const loaded = requests.filter((path) => productImage.test(path))
+    for (const imageName of [
+      "console-home",
+      "console-issues-thumb",
+      "console-coding-agents-thumb",
+    ]) {
+      const paths = loaded.filter((path) => path.includes(`/${imageName}`))
+      expect(paths.length, `${imageName} must load exactly once`).toBe(1)
+      expect(paths[0].endsWith(expectedSuffix), `${imageName} must match the theme`).toBe(true)
+    }
     await context.close()
   }
 })
