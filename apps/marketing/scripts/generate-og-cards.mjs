@@ -34,7 +34,7 @@ const COLORS = {
 export const OG_CARDS = [
   {
     slug: "home",
-    eyebrow: "RELEASE ASSURANCE",
+    eyebrow: "LAUNCH GATE",
     title: "Ship AI-built apps with evidence, not hope.",
     path: "lyrashieldai.com",
   },
@@ -65,7 +65,7 @@ export const OG_CARDS = [
   {
     slug: "agents",
     eyebrow: "FOR CODING AGENTS",
-    title: "Release assurance your agent can act on",
+    title: "A launch gate your agent can act on",
     path: "lyrashieldai.com/agents",
   },
   {

@@ -1,4 +1,10 @@
 ---
+import { CTA_LABEL, TRIAL_LINE } from "../../lib/site-copy"
+
+// Same flag the Lite Check section uses: with no scanner configured the field
+// is disabled and shows the same status line, so the hero never offers a
+// control that cannot work.
+const scannerAvailable = Boolean(__MARKETING_SCANNER_URL__.replace(/\/$/, ""))
 import premiumHeroAvif from "../../assets/premium-hero.avif"
 import premiumHeroJpeg from "../../assets/premium-hero.jpg"
 import premiumHeroWebp from "../../assets/premium-hero.webp"
@@ -21,62 +27,120 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   <div class="premium-hero__veil" aria-hidden="true"></div>
   <div class="premium-hero__content">
     <p class="premium-hero__eyebrow">
-      Open beta · Release assurance for AI-built apps
+      Open beta · Security review for AI-built apps
     </p>
-    <h1 id="premium-hero-title">Know what your AI-built app is ready to ship.</h1>
+    <h1 id="premium-hero-title">The launch gate for AI-built apps.</h1>
     <p class="premium-hero__lede">
-      Review an authorized repository, URL or API. See what was checked, what needs attention and
-      what a fresh retest confirms.
+      Point LyraShield at a repository, URL or API you are authorized to test. It reviews what
+      your coding agents shipped and returns one verdict: ready, not ready or insufficient
+      evidence.
     </p>
     <ul class="premium-hero__proof">
-      <li>Nothing auto-merges</li>
-      <li>Missing evidence stays visible</li>
-      <li>Works with GitHub and coding agents</li>
+      <li>Every finding shows its evidence</li>
+      <li>Fixes are proposals you approve</li>
+      <li>A fresh retest confirms each fix</li>
     </ul>
+
     <div class="premium-hero__actions">
       <a
         class="premium-hero__primary"
-        href="https://app.lyrashieldai.com/sign-up?source=landing_hero&cta=review_app"
-        data-cta-id="premium-hero-review-app"
+        href="https://app.lyrashieldai.com/sign-up?source=landing_hero&cta=start_trial"
+        data-cta-id="premium-hero-primary"
       >
-        Start a review
+        {CTA_LABEL.signUp}
       </a>
       <a
         class="premium-hero__secondary"
         href="#free-scan" data-cta-id="premium-hero-lite-check"
       >
-        Try the free Lite Check
+        Run the free Lite Check
       </a>
     </div>
-    <p class="premium-hero__trial-note">
-      No card needed. The trial includes 60 agent-minutes over 7 days — coverage depends on
-      target size and review depth.
-    </p>
+
+    <form id="hero-lite-form" class="premium-hero__field" action="/scan" method="get" novalidate>
+      <label class="premium-hero__field-label" for="hero-scan-url">Public app URL</label>
+      <div class="premium-hero__field-row">
+        <input
+          id="hero-scan-url"
+          type="text"
+          inputmode="url"
+          autocomplete="url"
+          maxlength="2048"
+          placeholder="example.com or https://your-app.com"
+          disabled={!scannerAvailable}
+          class="premium-hero__field-input"
+        />
+        <button
+          type="submit"
+          disabled={!scannerAvailable}
+          data-cta-id="hero_lite_check_submit"
+          class="premium-hero__field-button"
+        >
+          Run Lite Check
+        </button>
+      </div>
+      <label class="premium-hero__field-consent">
+        <input
+          id="hero-scan-authorized"
+          type="checkbox"
+          disabled={!scannerAvailable}
+          class="premium-hero__field-check"
+        />
+        <span
+          >I own this app or have permission to test it. The check is passive and read-only. By
+          scanning I agree to the <a href="/terms">Terms</a>.</span
+        >
+      </label>
+      {
+        !scannerAvailable && (
+          <p class="premium-hero__field-status" role="status">
+            The separately protected scanner API is not connected in this environment.
+          </p>
+        )
+      }
+      <p id="hero-scan-error" class="premium-hero__field-error hidden" role="alert"></p>
+      <noscript>
+        <p class="premium-hero__field-status">
+          <a href="/scan">Open the free Lite Check</a> to run the check without JavaScript.
+        </p>
+      </noscript>
+    </form>
+    <p class="premium-hero__trial-note">{TRIAL_LINE}</p>
     <a
       class="premium-hero__agent-link"
       href="/agents"
       data-cta-id="premium-hero-agent-setup"
     >
-      Using a coding agent? Use LyraShield from it →
+      Set up LyraShield in your coding agent →
     </a>
     <p class="premium-hero__boundary">
-      Evidence is limited to the authorized scope and checks that ran. No security guarantee.
+      Evidence is limited to the authorized scope and the checks that ran. No security guarantee.
     </p>
   </div>
 
-  <div class="premium-hero__artifact hidden lg:block" aria-hidden="true">
+  <figure class="premium-hero__artifact" aria-labelledby="premium-hero-artifact-caption">
+    <figcaption id="premium-hero-artifact-caption" class="premium-hero__artifact-sample">
+      Sample verdict card
+    </figcaption>
     <div class="premium-hero__artifact-card">
       <div class="premium-hero__artifact-header">
         <span class="premium-hero__artifact-dot"></span>
-        <span class="premium-hero__artifact-status">Example finding · Detected</span>
+        <span class="premium-hero__artifact-status">Verdict · Insufficient evidence</span>
       </div>
-      <p class="premium-hero__artifact-title">Server credential referenced by client build</p>
-      <p class="premium-hero__artifact-meta">Target: mock-app.example</p>
+      <ul class="premium-hero__artifact-findings">
+        <li>
+          <span class="premium-hero__artifact-state">Detected</span>
+          Server credential referenced by client build
+        </li>
+        <li>
+          <span class="premium-hero__artifact-state">Detected</span>
+          Missing rate limit on login route
+        </li>
+      </ul>
+      <p class="premium-hero__artifact-meta">7 controls need your evidence</p>
       <p class="premium-hero__artifact-meta">Evidence: bounded to the checks that ran</p>
     </div>
-  </div>
-
-  <div class="premium-hero__rail" aria-hidden="true"><span>01</span><i></i><span>07</span></div>
+  </figure>
 </section>
 
 <style>
@@ -84,7 +148,10 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     --hero-cyan: #54d6df;
     position: relative;
     display: grid;
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not 1fr: a bare fr track keeps an auto minimum equal to
+       its items' min-content width, so one long word in the headline grew the
+       whole track past the viewport at 200% text. */
+    grid-template-columns: minmax(0, 1fr);
     min-height: min(720px, calc(100svh - 3.5rem));
     overflow: hidden;
     isolation: isolate;
@@ -129,6 +196,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
 
   .premium-hero__content {
     align-self: center;
+    min-width: 0;
     width: min(100% - 2rem, 1280px);
     margin-inline: auto;
     padding-block: clamp(4rem, 8vh, 6.5rem) clamp(2.5rem, 5vh, 3.5rem);
@@ -154,6 +222,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     color: var(--hero-cyan);
     font-size: clamp(0.78rem, 1vw, 0.95rem);
     font-weight: 650;
+    overflow-wrap: anywhere;
   }
 
   h1 {
@@ -165,6 +234,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     line-height: 0.9;
     letter-spacing: -0.055em;
     text-wrap: balance;
+    overflow-wrap: anywhere;
   }
 
   .premium-hero__lede {
@@ -186,10 +256,115 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     list-style: none;
   }
 
+  .premium-hero__proof li {
+    max-width: 100%;
+  }
+
   .premium-hero__proof li::before {
     margin-right: 0.45rem;
     color: var(--hero-cyan);
     content: "✓";
+  }
+
+  .premium-hero__field {
+    max-width: 34rem;
+    margin-top: 1.35rem;
+  }
+
+  .premium-hero__field-label {
+    display: block;
+    color: #b7cad8;
+    font: 600 0.72rem/1.4 "JetBrains Mono Variable", monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .premium-hero__field-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 0.5rem;
+  }
+
+  .premium-hero__field-input {
+    flex: 1 1 12rem;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 3.25rem;
+    border: 1px solid rgba(84, 214, 223, 0.3);
+    border-radius: 0.25rem;
+    padding: 0.7rem 0.9rem;
+    color: #edf6fb;
+    background: rgba(8, 17, 28, 0.72);
+    font-size: 1rem;
+  }
+
+  .premium-hero__field-input::placeholder {
+    color: #7d92a4;
+  }
+
+  .premium-hero__field-input:focus-visible {
+    border-color: var(--hero-cyan);
+    outline: 3px solid #f5b84b;
+    outline-offset: 2px;
+  }
+
+  .premium-hero__field-button {
+    flex: 0 1 auto;
+    min-height: 3.25rem;
+    max-width: 100%;
+    border: 1px solid var(--hero-cyan);
+    border-radius: 0.25rem;
+    padding: 0.7rem 1.15rem;
+    color: #08111c;
+    background: var(--hero-cyan);
+    font-size: 0.95rem;
+    font-weight: 750;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  .premium-hero__field-input:disabled,
+  .premium-hero__field-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .premium-hero__field-consent {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.6rem;
+    color: #b7cad8;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .premium-hero__field-consent a {
+    color: var(--hero-cyan);
+    text-underline-offset: 3px;
+  }
+
+  .premium-hero__field-check {
+    flex: none;
+    margin-top: 0.2rem;
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--hero-cyan);
+  }
+
+  .premium-hero__field-status,
+  .premium-hero__field-error {
+    margin: 0.6rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .premium-hero__field-status {
+    color: #91a7b8;
+  }
+
+  .premium-hero__field-error {
+    color: #ff9b93;
   }
 
   .premium-hero__actions {
@@ -202,6 +377,10 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   .premium-hero__actions a {
     display: inline-flex;
     min-height: 3.25rem;
+    /* At 200% root text on a 320px viewport the label plus padding is wider
+       than the screen, so the box must be capped and the label allowed to
+       wrap. Without this the button clipped off the right edge. */
+    max-width: 100%;
     align-items: center;
     justify-content: center;
     border: 1px solid rgba(84, 214, 223, 0.42);
@@ -262,24 +441,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     color: #91a7b8;
     font-size: 0.69rem;
     line-height: 1.6;
-  }
-
-  .premium-hero__rail {
-    position: absolute;
-    right: clamp(1rem, 3vw, 3rem);
-    bottom: 2.25rem;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    color: #91a7b8;
-    font: 600 0.66rem/1 "JetBrains Mono Variable", monospace;
-  }
-
-  .premium-hero__rail i {
-    display: block;
-    width: min(10vw, 7rem);
-    height: 1px;
-    background: linear-gradient(90deg, var(--hero-cyan), rgba(84, 214, 223, 0.15));
   }
 
   @media (prefers-reduced-motion: no-preference) {
@@ -346,6 +507,8 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       order: 3;
     }
 
+    /* The field is the primary action on a phone, so it sits above the sign-up
+       button and the secondary link. */
     .premium-hero__actions {
       order: 4;
       margin-top: 1.1rem;
@@ -356,16 +519,20 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       padding: 0.7rem 1.05rem;
     }
 
-    .premium-hero__trial-note {
+    .premium-hero__field {
       order: 5;
     }
 
-    .premium-hero__agent-link {
+    .premium-hero__trial-note {
       order: 6;
     }
 
-    .premium-hero__boundary {
+    .premium-hero__agent-link {
       order: 7;
+    }
+
+    .premium-hero__boundary {
+      order: 8;
     }
   }
 
@@ -425,15 +592,79 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     font: 500 0.75rem/1.5 "JetBrains Mono Variable", monospace;
   }
 
+  .premium-hero__artifact-sample {
+    margin: 0 0 0.4rem;
+    color: #91a7b8;
+    font: 600 0.66rem/1 "JetBrains Mono Variable", monospace;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .premium-hero__artifact-findings {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .premium-hero__artifact-findings li {
+    display: grid;
+    gap: 0.25rem;
+    color: #edf6fb;
+    font-size: 0.86rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  /* Only Detected is ever shown on this card: the artifact is a synthetic
+     sample, so it must never claim a retest-confirmed or verified state. */
+  .premium-hero__artifact-state {
+    width: fit-content;
+    border: 1px solid rgba(84, 214, 223, 0.42);
+    border-radius: 0.2rem;
+    padding: 0.1rem 0.4rem;
+    color: var(--hero-cyan);
+    font: 600 0.62rem/1.4 "JetBrains Mono Variable", monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* The sample verdict card is part of the promise, so it is shown at every
+     width instead of being hidden below the two-column breakpoint. */
   @media (max-width: 1023px) {
     .premium-hero__artifact {
-      display: none;
+      align-self: start;
+      justify-self: stretch;
+      padding: 0 1rem 2.5rem;
+    }
+
+    .premium-hero__artifact-card {
+      max-width: none;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .premium-hero__artifact-sample {
+      margin-bottom: 0.5rem;
+      text-align: right;
     }
   }
 
   @media (max-width: 720px) {
     .premium-hero {
       min-height: calc(100svh - 3.5rem);
+    }
+
+    /* Flex would shrink both controls onto one line rather than wrap them, so
+       the phone layout is an explicit single column with full-width targets. */
+    .premium-hero__field-row {
+      display: grid;
+    }
+
+    .premium-hero__field-input,
+    .premium-hero__field-button {
+      width: 100%;
     }
 
     .premium-hero__poster img {
@@ -457,9 +688,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       display: grid;
     }
 
-    .premium-hero__rail {
-      display: none;
-    }
   }
 
   @media (max-width: 480px) {
@@ -482,6 +710,9 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       transition: none;
     }
   }
+</style>
+
+<style>
 
   :global(:root[data-theme="light"]) .premium-hero {
     --hero-cyan: #087f78;
@@ -519,8 +750,8 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   }
 
   :global(:root[data-theme="light"]) .premium-hero__boundary,
-  :global(:root[data-theme="light"]) .premium-hero__rail,
-  :global(:root[data-theme="light"]) .premium-hero__artifact-meta {
+  :global(:root[data-theme="light"]) .premium-hero__artifact-meta,
+  :global(:root[data-theme="light"]) .premium-hero__artifact-sample {
     color: #5f7081;
   }
 
@@ -559,3 +790,39 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     }
   }
 </style>
+
+<script>
+  import { bindLiteHandoff } from "../../lib/lite-handoff"
+  import { sanitizeMarketingProperties } from "../../lib/posthog-privacy"
+
+  // The hero field never fetches anything. It validates, parks the target for
+  // /scan and navigates, exactly like the Lite Check section further down.
+  //
+  // Analytics carry the CTA id and a boolean only. The typed URL is never a
+  // property, so it cannot leave this component.
+  const capture = (valid: boolean) =>
+    window.posthog?.capture(
+      "hero_lite_check_submit",
+      sanitizeMarketingProperties("hero_lite_check_submit", {
+        cta_id: "hero_lite_check_submit",
+        valid,
+      }) ?? {}
+    )
+
+  const error = () => document.querySelector<HTMLElement>("#hero-scan-error")
+  bindLiteHandoff({
+    formId: "hero-lite-form",
+    inputId: "hero-scan-url",
+    errorId: "hero-scan-error",
+    consentId: "hero-scan-authorized",
+    onClear: () => error()?.classList.add("hidden"),
+    onError: (message) => {
+      const node = error()
+      if (!node) return
+      node.textContent = message
+      node.classList.remove("hidden")
+      capture(false)
+    },
+    onSuccess: () => capture(true),
+  })
+</script>

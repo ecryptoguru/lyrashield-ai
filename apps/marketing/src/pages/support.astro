@@ -1,5 +1,6 @@
 ---
 import Base from "@layouts/Base.astro"
+import { CTA_LABEL } from "../lib/site-copy"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/support", origin).toString()
 const supportEmail = (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
@@ -50,7 +51,7 @@ const jsonLd: unknown[] = [
     </div>
 
     <section class="mt-12 flex flex-wrap gap-3 border-t border-border pt-8">
-      <a href={`${appUrl}/sign-up?source=support&cta=create_account`} class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create a free account</a>
+      <a href={`${appUrl}/sign-up?source=support&cta=create_account`} class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{CTA_LABEL.signUp}</a>
       <a href="/docs/integrations" class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg px-5 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Integration guides</a>
     </section>
   </article>

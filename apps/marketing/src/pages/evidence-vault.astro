@@ -2,6 +2,7 @@
 import Base from "@layouts/Base.astro"
 import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
+import { CTA_LABEL } from "../lib/site-copy"
 import { VIBE_SECURITY_CONTROLS } from "../../../../packages/security/src/vibe-security-controls"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -23,7 +24,7 @@ const faq = [
   },
   {
     q: "What does the Operational Evidence Vault do?",
-    a: "It creates an append-only, workspace-scoped record for each evidence-required control. You submit an attestation and any supporting files; a reviewer accepts, rejects or requests a revision; and every change creates a new immutable version rather than overwriting the last.",
+    a: "It creates an append-only, workspace-scoped record for each evidence-required control. You submit an attestation and any supporting files; a reviewer accepts, rejects or requests a revision; and every change creates a new version rather than overwriting the last.",
   },
   {
     q: "Are artifact files stored securely?",
@@ -35,7 +36,7 @@ const faq = [
   },
   {
     q: "Does this make LyraShield SOC 2 compliant, certified or adversarially robust?",
-    a: "No. LyraShield does not claim SOC 2 compliance, certification, security guarantees, AI safety testing (without a named framework) or adversarial robustness. Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate. The evidence vault supports release assurance; it does not produce those claims.",
+    a: "No. LyraShield does not claim SOC 2 compliance, certification, security guarantees, AI safety testing (without a named framework) or adversarial robustness. Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate. The evidence vault supports the launch gate; it does not produce those claims.",
   },
 ]
 
@@ -52,7 +53,7 @@ const jsonLd = [
     about: [
       "AI application security",
       "security evidence",
-      "release assurance",
+      "launch gate",
       "Vibe Security 50",
     ],
   },
@@ -250,10 +251,10 @@ const jsonLd = [
           </dd>
         </div>
         <div data-reveal>
-          <dt class="font-semibold text-text">Immutable snapshots</dt>
+          <dt class="font-semibold text-text">Checksum-bound snapshots</dt>
           <dd class="mt-2 leading-7 text-text-muted">
-            Private assurance reports freeze the current evidence state at creation
-            time; public shared reports omit it entirely.
+            A private assurance report is written once per scan and report type, so it records the
+            evidence state at creation time; public shared reports omit it entirely.
           </dd>
         </div>
       </dl>
@@ -286,7 +287,7 @@ const jsonLd = [
           class="inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg-raised px-5 text-sm font-semibold text-text transition-colors hover:border-accent/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
           data-cta-id="evidence-vault-create-account"
         >
-          Create free account
+          {CTA_LABEL.signUp}
         </a>
       </div>
     </section>

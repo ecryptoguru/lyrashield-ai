@@ -2,6 +2,7 @@
 /// <reference types="webmcp-types" />
 
 import Base from "@layouts/Base.astro"
+import { CTA_LABEL } from "../lib/site-copy"
 import { WEBMCP_CONTROLS } from "../../../../packages/security/src/webmcp/controls"
 import { WEBMCP_DETECTOR_VERSION } from "../../../../packages/security/src/webmcp/types"
 
@@ -109,7 +110,7 @@ const jsonLd = [
       <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>{answerFirst}</p>
       <div class="mt-8 flex flex-wrap gap-3" data-reveal>
         <a href={checkerUrl} class="lift inline-flex min-h-12 items-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open the free WebMCP Security Checker</a>
-        <a href={`${appUrl}/sign-up?source=webmcp`} class="lift inline-flex min-h-12 items-center rounded-lg border border-border bg-bg-raised px-6 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create a free LyraShield AI account</a>
+        <a href={`${appUrl}/sign-up?source=webmcp`} class="lift inline-flex min-h-12 items-center rounded-lg border border-border bg-bg-raised px-6 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{CTA_LABEL.signUp}</a>
       </div>
       <p class="mt-4 max-w-3xl text-sm leading-6 text-text-muted" data-reveal>
         This page exposes 1 read tool. The Security Lab exposes 2 read tools. The dashboard exposes 2 read tools and 1 prepared-mutation tool; it never acts without your click.

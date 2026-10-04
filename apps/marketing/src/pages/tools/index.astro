@@ -6,6 +6,7 @@ const appUrl =
   "https://app.lyrashieldai.com"
 import Base from "@layouts/Base.astro"
 import { tools, toolUrl } from "../../lib/tools"
+import { CTA_LABEL } from "../../lib/site-copy"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/tools", origin).toString()
 const description = `Seven free browser-local tools to review AI app launch controls, HTTP headers, exposed secrets, Supabase RLS policies, JWT sessions and WebMCP surfaces.`
@@ -78,9 +79,9 @@ const jsonLd = [
     <section class="mt-20 grid gap-8 border-y border-border py-10 lg:grid-cols-[1fr_auto] lg:items-center" data-reveal>
       <div class="max-w-3xl">
         <h2 class="text-2xl font-semibold text-text">Need an app-wide assurance record?</h2>
-        <p class="mt-4 leading-7 text-text-muted">The complete product adds authorized target scanning, SCA and secret checks, explicit coverage receipts, evidence states, fix proposals, server-owned retests, immutable reports, schedules, notifications and workspace-scoped audit history. Read the <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">evidence methodology</a> before interpreting a result.</p>
+        <p class="mt-4 leading-7 text-text-muted">The complete product adds authorized target scanning, SCA and secret checks, explicit coverage receipts, evidence states, fix proposals, server-owned retests, checksum-bound reports, schedules, notifications and workspace-scoped audit history. Read the <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">evidence methodology</a> before interpreting a result.</p>
       </div>
-      <a href={`${appUrl}/sign-up?source=tools&cta=create_account`} class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create a free account</a>
+      <a href={`${appUrl}/sign-up?source=tools&cta=create_account`} class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{CTA_LABEL.signUp}</a>
     </section>
   </section>
 </Base>

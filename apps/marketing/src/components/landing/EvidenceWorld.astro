@@ -9,7 +9,7 @@ interface Props {
 const { manifest } = Astro.props
 ---
 
-<evidence-world id="assurance-world" data-manifest={JSON.stringify(manifest)}>
+<evidence-world id="assurance-world" aria-labelledby="journey-heading" data-manifest={JSON.stringify(manifest)}>
   <div class="evidence-world__stage" aria-hidden="true">
     <div class="evidence-world__media">
       {
@@ -29,6 +29,11 @@ const { manifest } = Astro.props
       <span>ASSURANCE WORLD</span>
     </div>
   </div>
+
+  <header class="evidence-world__intro">
+    <h2 id="journey-heading">From target to verdict.</h2>
+    <p>One finding, followed through the loop.</p>
+  </header>
 
   <div class="evidence-world__chapters">
     {
@@ -50,7 +55,6 @@ const { manifest } = Astro.props
               {cardIndex === 0 && chapter.id === "evidence-state" && (
                 <ul>
                   <li><i class="state-detected" />Detected</li>
-                  <li><i class="state-verified" />Independently verified</li>
                   <li><i class="state-confirmed" />Retest-confirmed</li>
                   <li><i class="state-inconclusive" />Inconclusive</li>
                 </ul>
@@ -580,6 +584,26 @@ const { manifest } = Astro.props
       inset: auto;
       transform: none;
     }
+  }
+
+  .evidence-world__intro {
+    padding: clamp(1.5rem, 4vw, 2.5rem) 1rem 0;
+    text-align: center;
+  }
+
+  .evidence-world__intro h2 {
+    margin: 0;
+    color: #edf6fb;
+    font-family: "Bricolage Grotesque Variable", sans-serif;
+    font-size: clamp(1.6rem, 3.4vw, 2.4rem);
+    font-weight: 750;
+    letter-spacing: -0.03em;
+  }
+
+  .evidence-world__intro p {
+    margin: 0.5rem 0 0;
+    color: #91a7b8;
+    font-size: 1rem;
   }
 
   /* No-JS, reduced-motion, and Save-Data fallback. Normal-motion visitors get

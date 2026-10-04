@@ -28,12 +28,15 @@ export const LIGHTHOUSE_MINIMUM = Object.freeze({
 const MAX_ATTEMPTS = 2
 
 export function hasNoNavstart(report, diagnostic = "") {
-  if (report?.runtimeError?.code === "NO_NAVSTART") return true
+  const runtimeErrorCode = report?.runtimeError?.code
+  if (typeof runtimeErrorCode === "string" && runtimeErrorCode.length > 0) {
+    return runtimeErrorCode === "NO_NAVSTART"
+  }
   return /\bNO_NAVSTART\b/.test(diagnostic)
 }
 
 function hasValidLighthouseScore(report) {
-  if (!report || report.runtimeError) return false
+  if (!report) return false
   return Object.keys(LIGHTHOUSE_MINIMUM).some((category) => {
     const score = report.categories?.[category]?.score
     return typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 1
@@ -64,12 +67,7 @@ export function evaluateLighthouseReports(reports, origin = "https://lyrashielda
 
     for (const [category, threshold] of Object.entries(LIGHTHOUSE_MINIMUM)) {
       const score = report?.categories?.[category]?.score
-      const valid =
-        !report?.runtimeError &&
-        typeof score === "number" &&
-        Number.isFinite(score) &&
-        score >= 0 &&
-        score <= 1
+      const valid = typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 1
       const line =
         url + " " + category + ": " + (valid ? score : "missing") + " (min " + threshold + ")"
       if (!valid || score < threshold) {

@@ -9,6 +9,7 @@ const homeScan = readFileSync(
   "utf8"
 )
 const motionManifest = readFileSync(new URL("../lib/motion-manifest.ts", import.meta.url), "utf8")
+const liteHandoff = readFileSync(new URL("../lib/lite-handoff.ts", import.meta.url), "utf8")
 const toolsIndex = readFileSync(new URL("../pages/tools/index.astro", import.meta.url), "utf8")
 const toolLayout = readFileSync(new URL("../layouts/ToolLayout.astro", import.meta.url), "utf8")
 const globalStyles = readFileSync(new URL("../styles/global.css", import.meta.url), "utf8")
@@ -35,7 +36,7 @@ describe("Lite Check marketing surface", () => {
   it("routes users from a Lite result into the live authenticated app", () => {
     expect(page).toContain("PUBLIC_APP_URL")
     expect(page).toContain("Full loop · open registration")
-    expect(page).toContain("Review this app for real")
+    expect(page).toContain("CTA_LABEL.signUp")
     expect(page).toContain(
       "href={`${dashboardOrigin}/sign-up?source=lite_check&cta=review_app&from=scan&target=url`}"
     )
@@ -150,12 +151,19 @@ describe("Lite Check marketing surface", () => {
   it("starts the real Lite Check from the homepage without putting the target in the URL", () => {
     expect(home).toContain("<HomeLiteScan />")
     expect(homeScan).toContain('id="free-scan"')
-    expect(homeScan).toContain('sessionStorage.setItem("lyrashield-lite-target", target)')
-    expect(homeScan).toContain('location.assign("/scan?start=1")')
-    expect(homeScan).toContain("Enter a valid public HTTP or HTTPS URL without credentials.")
     expect(homeScan).toContain('href="/terms"')
+    // The handoff literals now live in one shared module used by both the Lite
+    // Check section and the hero field, so they are asserted there instead.
+    expect(homeScan).toContain('from "../../lib/lite-handoff"')
+    expect(liteHandoff).toContain('export const LITE_TARGET_KEY = "lyrashield-lite-target"')
+    expect(liteHandoff).toContain('export const LITE_SCAN_HREF = "/scan?start=1"')
+    expect(liteHandoff).toContain("sessionStorage.setItem(LITE_TARGET_KEY, target)")
+    expect(liteHandoff).toContain("navigate(LITE_SCAN_HREF)")
+    expect(liteHandoff).toContain("Enter a valid public HTTP or HTTPS URL without credentials.")
+    // The target must never travel with the navigation.
+    expect(liteHandoff).not.toMatch(/navigate\([^)]*target/)
+    // /scan still consumes the parked target and auto-submits.
     expect(page).toContain('sessionStorage.getItem("lyrashield-lite-target")')
     expect(page).toContain("scanForm?.requestSubmit()")
-    expect(homeScan).not.toMatch(/location\.assign\([^)]*target/)
   })
 })

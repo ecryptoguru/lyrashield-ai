@@ -1,23 +1,28 @@
+---
+import { CTA_LABEL } from "../../lib/site-copy"
+---
 <section aria-labelledby="final-cta-heading" class="px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
   <div class="mx-auto max-w-3xl rounded-2xl border border-border bg-bg-raised px-6 py-10 text-center shadow-sm sm:px-10" data-reveal-group>
     <p class="font-mono text-xs font-semibold tracking-[.18em] text-accent uppercase" data-reveal>Target → review → evidence → retest</p>
     <h2 id="final-cta-heading" data-reveal class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl">
-      Create your first release record.
+      Get a verdict on your first app.
     </h2>
     <p data-reveal class="mx-auto mt-5 max-w-2xl text-lg leading-8 text-text-muted">
-      Create a workspace, add the target you are shipping and choose the depth of review. Nothing auto-merges and missing evidence stays visible.
+      Create a workspace, add a target and choose the review depth. Nothing auto-merges and missing evidence stays visible.
     </p>
     <ol class="mt-6 flex flex-wrap items-center justify-center gap-2 text-sm text-text-muted" data-reveal aria-label="First steps">
       <li>Create workspace</li><li aria-hidden="true">→</li><li>Add target</li><li aria-hidden="true">→</li><li>Choose review</li>
     </ol>
     <div class="mt-8 flex flex-wrap items-center justify-center gap-4" data-reveal>
-      <a href="https://app.lyrashieldai.com/sign-up?source=landing_final&cta=create_account" data-cta-id="final-cta-create-account" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create account</a>
-      <a href="/methodology" data-cta-id="final-cta-methodology" class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg px-6 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Read methodology</a>
+      <a href="https://app.lyrashieldai.com/sign-up?source=landing_final&cta=create_account" data-cta-id="final-cta-create-account" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{CTA_LABEL.signUp}</a>
     </div>
+    <p class="mt-4 text-sm leading-6 text-text-muted" data-reveal>
+      <a href="/demo" data-cta-id="final-cta-demo" class="inline-flex min-h-11 items-center font-semibold text-accent underline underline-offset-4">Book a demo with the founder</a> for a walkthrough.
+    </p>
     <a
       href="/agents"
       data-cta-id="final-cta-agent-setup"
-      class="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline underline-offset-4"
+      class="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline underline-offset-4"
     >
       Prefer to work from your coding agent? View agent setup
     </a>

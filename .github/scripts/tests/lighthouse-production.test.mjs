@@ -28,15 +28,31 @@ function report(
   }
 }
 
+function reportWithoutScores(runtimeError) {
+  return {
+    finalUrl: "https://lyrashieldai.com/agents",
+    runtimeError,
+    categories: {
+      performance: { score: null },
+      accessibility: { score: null },
+      seo: { score: null },
+    },
+  }
+}
+
 test("recognizes the exact NO_NAVSTART runtime error", () => {
   assert.equal(hasNoNavstart(report(null, { code: "NO_NAVSTART" })), true)
   assert.equal(hasNoNavstart(null, "LighthouseError: NO_NAVSTART"), true)
   assert.equal(hasNoNavstart(report(null, { code: "TRACE_TIMEOUT" })), false)
+  assert.equal(
+    hasNoNavstart(report(null, { code: "PROTOCOL_TIMEOUT" }), "NO_NAVSTART in diagnostics"),
+    false
+  )
   assert.equal(hasNoNavstart(null, "navigation failed"), false)
 })
 
 test("retries a NO_NAVSTART once and never retries a second time", () => {
-  const failure = report(null, { code: "NO_NAVSTART" })
+  const failure = reportWithoutScores({ code: "NO_NAVSTART" })
   assert.equal(shouldRetryNoNavstart({ report: failure, attempt: 1 }), true)
   assert.equal(shouldRetryNoNavstart({ report: failure, attempt: 2 }), false)
 })
@@ -45,6 +61,14 @@ test("does not retry other runtime errors or real score failures", () => {
   assert.equal(
     shouldRetryNoNavstart({
       report: report(null, { code: "PROTOCOL_TIMEOUT" }),
+      attempt: 1,
+    }),
+    false
+  )
+  assert.equal(
+    shouldRetryNoNavstart({
+      report: report(null, { code: "PROTOCOL_TIMEOUT" }),
+      diagnostic: "NO_NAVSTART in diagnostics",
       attempt: 1,
     }),
     false
@@ -103,7 +127,7 @@ test("retries exactly once for NO_NAVSTART and retains the successful report", a
     invoke: async (_url, outputPath) => {
       attempts.push(outputPath)
       if (attempts.length === 1) {
-        const failed = report(null, { code: "NO_NAVSTART" })
+        const failed = reportWithoutScores({ code: "NO_NAVSTART" })
         return { report: failed, diagnostic: "NO_NAVSTART", exitCode: 1 }
       }
       return { report: report(0.98), diagnostic: "", exitCode: 0 }
@@ -158,6 +182,44 @@ test("a low but valid score is not retried and remains a gate failure", async (t
   })
   assert.equal(attempts, 1)
   assert.equal(evaluateLighthouseReports(reports).failed, true)
+})
+
+test("a finite category score with a NO_NAVSTART runtime error is retained and assessed", async (t) => {
+  const reportsDir = mkdtempSync(path.join(tmpdir(), "lyra-lighthouse-partial-"))
+  t.after(() => rmSync(reportsDir, { recursive: true, force: true }))
+  const page = LIGHTHOUSE_PAGES.find((candidate) => candidate.path === "/agents")
+  let attempts = 0
+  const reports = await collectLighthouseReports({
+    reportsDir,
+    pages: [page],
+    logger: { warn() {} },
+    invoke: async (url) => {
+      attempts += 1
+      return {
+        report: {
+          finalUrl: url,
+          runtimeError: { code: "NO_NAVSTART" },
+          categories: {
+            performance: { score: null },
+            accessibility: { score: 0.9 },
+            seo: { score: 1 },
+          },
+        },
+        diagnostic: "NO_NAVSTART",
+        exitCode: 1,
+      }
+    },
+  })
+  assert.equal(attempts, 1)
+  assert.equal(reports._agents.categories.accessibility.score, 0.9)
+  const evaluation = evaluateLighthouseReports(reports)
+  assert.equal(evaluation.failed, true)
+  assert.ok(
+    evaluation.messages.includes(
+      "FAIL https://lyrashieldai.com/agents accessibility: 0.9 (min 0.95)"
+    )
+  )
+  assert.ok(evaluation.messages.includes("ok   https://lyrashieldai.com/agents seo: 1 (min 0.95)"))
 })
 
 test("retries a thrown NO_NAVSTART instrumentation failure only once", async (t) => {
