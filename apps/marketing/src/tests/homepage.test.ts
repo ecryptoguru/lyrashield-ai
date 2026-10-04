@@ -59,7 +59,10 @@ describe("homepage journey and plan summary", () => {
 
   it("keeps the preview bounded and makes no customer-count or certification claim", () => {
     expect(page).toContain("<HeroProductFrame />")
-    expect(page).toContain("what was checked, what needs attention")
+    // The old assertion read the retired three-step block. The same point is
+    // still made on the page by the journey block and the coverage section.
+    expect(page).toContain("Missing evidence stays visible")
+    expect(page).toContain("instead of rounding up to a pass")
     expect(page).not.toMatch(/\b\d+[k+] users\b|certified|guaranteed secure/i)
   })
 })

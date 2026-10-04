@@ -15,6 +15,10 @@ const worldModule = readFileSync(
   new URL("../components/landing/evidence-world.ts", import.meta.url),
   "utf8"
 )
+const motionManifest = readFileSync(new URL("../lib/motion-manifest.ts", import.meta.url), "utf8")
+const manifestIds = [...motionManifest.matchAll(/^    id: "([a-z-]+)",$/gm)].map(
+  (match) => match[1]
+)
 const astroConfig = readFileSync(new URL("../../astro.config.mjs", import.meta.url), "utf8")
 
 /**
@@ -116,9 +120,9 @@ describe("premium assurance-world homepage", () => {
       "retest",
       "report",
     ]) {
-      expect(worldModule).toContain(`"${chapter}"`)
+      expect(manifestIds).toContain(chapter)
     }
-    expect(worldModule).toContain("Nothing auto-merges")
+    expect(motionManifest).toContain("Nothing auto-merges")
     expect(homepage).not.toMatch(/independent verification|verified fixes/i)
   })
 
