@@ -219,6 +219,8 @@ jobs:
             --env "DATABASE_DIRECT_URL=postgresql://lyrashield:lyrashield@postgres:5432/lyrashield?schema=public" \
             --env "DATABASE_SYSTEM_URL=postgresql://lyrashield:lyrashield@postgres:5432/lyrashield?schema=public" \
             --env REDIS_URL=redis://redis:6379 \
+            --env 'POLAR_PRODUCT_IDS={"pro_monthly":"fixture-worker-smoke-pro-monthly"}' \
+            --env POLAR_LOCAL_PRODUCT_IDS= \
             --env BETTER_AUTH_SECRET=dummy-ci-only-secret-not-a-real-credential-32chars \
             --env BETTER_AUTH_URL=http://127.0.0.1:3100 \
             --env NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 \

@@ -42,6 +42,11 @@ assert.match(imageJob, /version: 12\.2\.0/)
 assert.match(imageJob, /docker run --rm/)
 assert.match(imageJob, /--read-only/)
 assert.match(imageJob, /LYRASHIELD_TEST_DB_DISPOSABLE=1/)
+assert.ok(
+  imageJob.includes("--env 'POLAR_PRODUCT_IDS={\"pro_monthly\":\"fixture-worker-smoke-pro-monthly\"}'"),
+  "worker image must receive only the synthetic Polar catalog fixture"
+)
+assert.ok(imageJob.includes("--env POLAR_LOCAL_PRODUCT_IDS="))
 assert.match(imageJob, /docker network disconnect "\$network" "\$POSTGRES_CONTAINER"/)
 
 assert.match(ci, /webhook-cutover-verification\.workflow\.test\.mjs/)
@@ -50,6 +55,8 @@ assert.match(smoke, /WebhookEventTrack/)
 assert.match(smoke, /skipped_succeeded/)
 assert.match(smoke, /finally/)
 assert.match(smoke, /Refusing non-local or non-disposable integration endpoints/)
+assert.match(smoke, /fixture-worker-smoke-pro-monthly/)
+assert.match(smoke, /dispatchAttempts, 3/)
 assert.doesNotMatch(smoke, /process\.env\.(?:POLAR|RAZORPAY)|fetch\(|https?:\/\//)
 
 console.log("Webhook cutover verification workflow invariants passed.")

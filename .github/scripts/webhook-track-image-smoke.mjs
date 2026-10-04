@@ -95,9 +95,15 @@ try {
     type: "order.paid",
     data: {
       id: eventId,
-      subscription_id: "sub_disposable_fixture",
+      subscription_id: "sub_fixture_only",
       amount: 4900,
       currency: "USD",
+      product_id: "fixture-worker-smoke-pro-monthly",
+      metadata: {
+        plan: "PRO",
+        interval: "monthly",
+        isFirstPayment: true,
+      },
     },
   }
   await owner.webhookEvent.create({
