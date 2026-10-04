@@ -1,0 +1,242 @@
+name: Verify webhook production prerequisites without deployment
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/verify-webhook-production-prerequisites.yml
+      - .github/scripts/webhook-track-image-smoke.mjs
+      - .github/scripts/tests/webhook-cutover-verification.workflow.test.mjs
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webhook-production-prerequisites-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  EXPECTED_SOURCE_SHA: 86537799e615fb3c07376106b315393e81d7ae9d
+  EXPECTED_ENGINE_REVISION: 3001517530300ca5f602536bfadcbd3c95ad3039
+  WORKER_IMAGE: ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:caf33ad26c34852456579afd9bf1865825cb059e3c8941fdf9acbab74aa0587a
+
+jobs:
+  verify-timezone-receipt:
+    name: Verify signed UTC review receipt (no deployment)
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_sha == github.sha
+    runs-on: ubuntu-24.04
+    environment:
+      name: azure-production
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the exact reviewed base revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          path: product
+          persist-credentials: false
+
+      - name: Confirm checkout is the successful main CI revision
+        working-directory: product
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+
+      - name: Validate protected receipt and logical database identity
+        working-directory: product
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          MIGRATION_DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT }}
+          WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM }}
+        run: node .github/scripts/verify-webhook-timezone-evidence.mjs
+
+  verify-worker-image:
+    name: Exercise exact compatible worker image on disposable services
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/no-deployment-cutover-verification-20261004'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: lyrashield
+          POSTGRES_PASSWORD: lyrashield
+          POSTGRES_DB: lyrashield
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lyrashield -d lyrashield"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      LYRASHIELD_TEST_DB_DISPOSABLE: "1"
+      DATABASE_URL: postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public
+      DATABASE_DIRECT_URL: postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public
+      DATABASE_SYSTEM_URL: postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public
+      SHADOW_DATABASE_URL: postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public
+      REDIS_URL: redis://localhost:6379
+      BETTER_AUTH_SECRET: dummy-ci-only-secret-not-a-real-credential-32chars
+      BETTER_AUTH_URL: http://127.0.0.1:3100
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3100
+      PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
+    steps:
+      - name: Checkout exact worker source and schema revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: product
+          persist-credentials: false
+
+      - name: Checkout disposable smoke harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: harness
+          persist-credentials: false
+
+      - name: Verify the worker image source matches the reviewed base
+        working-directory: product
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          test "$BASE_SHA" = "$EXPECTED_SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+
+      - name: Setup pnpm
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          version: 12.2.0
+          install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: product/pnpm-lock.yaml
+
+      - name: Install locked dependencies and generate the matching Prisma client
+        working-directory: product
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm db:generate
+
+      - name: Apply current migrations to disposable PostgreSQL
+        working-directory: product
+        run: pnpm --filter @lyrashield/db migrate:deploy
+
+      - name: Create restricted disposable worker role
+        shell: bash
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          docker exec "$POSTGRES_CONTAINER" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE app_runtime_ci LOGIN PASSWORD 'runtime-ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS" \
+            -c "GRANT CONNECT ON DATABASE lyrashield TO app_runtime_ci" \
+            -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
+            -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('PlatformAdminElevation', 'PlatformAdminChallengeLimit', 'PlatformAdminAudit', 'billing_reconciliation_state') LOOP EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO app_runtime_ci', item.tablename); END LOOP; FOR item IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO app_runtime_ci', item.sequencename); END LOOP; END \$\$;" \
+            -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci" \
+            -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci" \
+            -c "ALTER ROLE app_runtime_ci SET timezone TO 'UTC'" \
+            -c "ALTER ROLE lyrashield SET timezone TO 'UTC'"
+          docker exec "$POSTGRES_CONTAINER" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE lyrashield SET timezone TO 'UTC'"
+
+      - name: Authenticate to GHCR for read-only digest pull
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Pull and verify the exact worker image provenance
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$WORKER_IMAGE"
+          repo_digests="$(docker image inspect "$WORKER_IMAGE" --format '{{join .RepoDigests "\n"}}')"
+          grep -Fxq "$WORKER_IMAGE" <<<"$repo_digests"
+          bash apps/worker/scripts/verify-worker-image.sh \
+            "$WORKER_IMAGE" "$EXPECTED_SOURCE_SHA" "$EXPECTED_ENGINE_REVISION"
+
+      - name: Run actual retry code from the worker image against disposable Postgres and Redis
+        shell: bash
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          REDIS_CONTAINER: ${{ job.services.redis.id }}
+        run: |
+          set -euo pipefail
+          network="webhook-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker network create "$network" >/dev/null
+          docker network connect --alias postgres "$network" "$POSTGRES_CONTAINER"
+          docker network connect --alias redis "$network" "$REDIS_CONTAINER"
+          cp harness/.github/scripts/webhook-track-image-smoke.mjs "$RUNNER_TEMP/webhook-track-image-smoke.mjs"
+          chmod 0444 "$RUNNER_TEMP/webhook-track-image-smoke.mjs"
+          docker run --rm \
+            --network "$network" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --cpus 2 --memory 2g --pids-limit 256 \
+            --mount "type=bind,src=$RUNNER_TEMP/webhook-track-image-smoke.mjs,dst=/app/apps/worker/.ci-webhook-track-image-smoke.mjs,readonly" \
+            --workdir /app/apps/worker \
+            --entrypoint /app/apps/worker/node_modules/.bin/tsx \
+            --env NODE_ENV=test \
+            --env LYRASHIELD_TEST_DB_DISPOSABLE=1 \
+            --env "DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@postgres:5432/lyrashield?schema=public" \
+            --env "DATABASE_DIRECT_URL=postgresql://lyrashield:lyrashield@postgres:5432/lyrashield?schema=public" \
+            --env "DATABASE_SYSTEM_URL=postgresql://lyrashield:lyrashield@postgres:5432/lyrashield?schema=public" \
+            --env REDIS_URL=redis://redis:6379 \
+            --env 'POLAR_PRODUCT_IDS={"pro_monthly":"fixture-worker-smoke-pro-monthly"}' \
+            --env POLAR_LOCAL_PRODUCT_IDS= \
+            --env BETTER_AUTH_SECRET=dummy-ci-only-secret-not-a-real-credential-32chars \
+            --env BETTER_AUTH_URL=http://127.0.0.1:3100 \
+            --env NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 \
+            --env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com \
+            "$WORKER_IMAGE" .ci-webhook-track-image-smoke.mjs
+
+      - name: Remove disposable service network
+        if: always()
+        shell: bash
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          REDIS_CONTAINER: ${{ job.services.redis.id }}
+        run: |
+          network="webhook-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if docker network inspect "$network" >/dev/null 2>&1; then
+            docker network disconnect "$network" "$POSTGRES_CONTAINER" || true
+            docker network disconnect "$network" "$REDIS_CONTAINER" || true
+            docker network rm "$network"
+          fi
