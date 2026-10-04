@@ -121,8 +121,8 @@ const jsonLd: unknown[] = [
       <h2 id="mission-heading" class="text-2xl font-semibold text-text" data-reveal>Our mission</h2>
       <p class="mt-5 leading-7 text-text-muted" data-reveal>
         We do not claim that a clean scan proves an app is secure. We do not claim universal
-        coverage. We record what was checked, what was verified and what remains uncertain —
-        then produce an immutable report that stakeholders can inspect. The Vibe Security 50
+        coverage. We record what was checked, what a fresh retest confirmed and what remains uncertain —
+        then produce a checksum-bound report that stakeholders can inspect. The Vibe Security 50
         framework defines 43 code/URL review controls and 7 that require operational or human evidence outside the scan,
         so you always know the boundary of what a scan can and cannot establish.
       </p>
@@ -133,7 +133,7 @@ const jsonLd: unknown[] = [
       <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
         <div data-reveal>
           <dt class="font-semibold text-text">Evidence states</dt>
-          <dd class="mt-2 leading-7 text-text-muted">Every finding carries one of four states: detected candidate, independently verified, retest-confirmed or inconclusive. A score never overrides these facts.</dd>
+          <dd class="mt-2 leading-7 text-text-muted">Every finding carries one of three shipped states: detected, retest-confirmed or inconclusive. The schema also defines a fourth state for a future separate verification step; no finding is in it today. A score never overrides these facts.</dd>
         </div>
         <div data-reveal>
           <dt class="font-semibold text-text">Coverage receipts</dt>
@@ -144,8 +144,8 @@ const jsonLd: unknown[] = [
           <dd class="mt-2 leading-7 text-text-muted">When a fix is applied, a server-owned deterministic retest checks whether the condition is actually absent — not just whether the scanner stopped reporting it.</dd>
         </div>
         <div data-reveal>
-          <dt class="font-semibold text-text">Immutable reports</dt>
-          <dd class="mt-2 leading-7 text-text-muted">Assurance reports are frozen at creation time with tamper-evident manifests. They can be shared with stakeholders without risk of silent modification.</dd>
+          <dt class="font-semibold text-text">Checksum-bound reports</dt>
+          <dd class="mt-2 leading-7 text-text-muted">An assurance report is a private snapshot written once per scan and report type, bound to a recorded sha256 manifest checksum. The checksum is verifiable, so a shared report can be checked against what was recorded at creation.</dd>
         </div>
       </dl>
     </section>
@@ -216,11 +216,11 @@ const jsonLd: unknown[] = [
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">03</span>
-          <p class="leading-7 text-text-muted"><strong class="text-text">Evidence states are not interchangeable.</strong> Detected, independently verified, retest-confirmed and inconclusive are separate states with distinct meanings. Scanner confidence alone never creates a verified state.</p>
+          <p class="leading-7 text-text-muted"><strong class="text-text">Evidence states are not interchangeable.</strong> Detected, retest-confirmed and inconclusive are separate states with distinct meanings. Scanner confidence alone never confirms a fix; only a fresh retest does.</p>
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">04</span>
-          <p class="leading-7 text-text-muted"><strong class="text-text">Fix PRs require scoped authorization.</strong> Browser execution binds a server-generated patch to explicit approval. Connected OAuth clients can run only operations within a browser-confirmed grant, checked again at execution. Nothing auto-merges.</p>
+          <p class="leading-7 text-text-muted"><strong class="text-text">Fix PRs open only after a human approves.</strong> A Fix PR carries a server-generated patch bound to that approval. Connected OAuth clients can run only operations within a browser-confirmed grant, checked again at execution. Nothing auto-merges.</p>
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">05</span>

@@ -15,8 +15,8 @@ const evidenceStates = [
     meaning: "A scanner found a signal worth reviewing. Confidence can help prioritize it, but does not prove exploitability.",
   },
   {
-    name: "Independently verified",
-    meaning: "A separate verification receipt supports the finding. Engine confidence alone never creates this state.",
+    name: "Independently verified (future step)",
+    meaning: "Defined for a future separate verification step: a separate receipt would have to support the finding. No shipped path produces this state today, so no finding is in it. Engine confidence alone never creates it.",
   },
   {
     name: "Retest-confirmed",
@@ -30,7 +30,7 @@ const evidenceStates = [
 const faq = [
   {
     q: "What is an evidence state?",
-    a: "An evidence state describes how much support a finding has. Detected, independently verified, retest-confirmed and inconclusive are separate states, not interchangeable labels.",
+    a: "An evidence state describes how much support a finding has. Detected, retest-confirmed and inconclusive are the three shipped states. They are not interchangeable labels. A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today.",
   },
   {
     q: "Does a clean or high score prove an app is secure?",
@@ -108,16 +108,17 @@ const jsonLd = [
         A security result should say what it knows—and what it does not.
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
-        An evidence state records how strongly a security finding is supported. LyraShield uses
-        four. Detected candidate means a scanner saw a signal. Independently verified means a
-        separate receipt supports it. Retest-confirmed means a server-owned retest found the
-        condition absent after a fix. Inconclusive means the evidence cannot establish the
-        condition is gone. These are never blended into a single score.
+        An evidence state records how strongly a security finding is supported. Three states ship
+        today. Detected means a scanner saw a signal. Retest-confirmed means a server-owned
+        retest found the condition absent after a fix. Inconclusive means the evidence cannot
+        establish the condition is gone. A fourth state, independently verified, is defined for a
+        future separate verification step and no finding is in it today. These are never blended
+        into a single score.
       </p>
       <div class="mt-6 rounded-xl border border-border bg-bg-raised p-5 text-sm leading-7 text-text-muted" data-reveal="fade">
         <p class="font-semibold text-text">TL;DR</p>
         <p class="mt-2">
-          Every finding carries one of four evidence states: <strong>detected candidate</strong> (a scanner signal that needs review), <strong>independently verified</strong> (a separate receipt supports it), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent) or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A score or clean result never overrides these facts.
+          Every finding carries one of three shipped evidence states: <strong>detected</strong> (a scanner signal that needs review), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent) or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today. A score or clean result never overrides these facts.
         </p>
       </div>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-07-29">July 29, 2026</time> · Maintained by LyraShield Security + Engineering</p>
@@ -126,9 +127,9 @@ const jsonLd = [
     <section aria-labelledby="record-heading" class="mt-16 border-y border-border py-12">
       <h2 id="record-heading" class="text-2xl font-semibold text-text" data-reveal>What every new scan record preserves</h2>
       <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
-        <div data-reveal><dt class="font-semibold text-text">Scope</dt><dd class="mt-2 leading-7 text-text-muted">The authorized target, available source, scan mode and immutable result-manifest checksum.</dd></div>
+        <div data-reveal><dt class="font-semibold text-text">Scope</dt><dd class="mt-2 leading-7 text-text-muted">The authorized target, available source, scan mode and the result-manifest checksum recorded with it.</dd></div>
         <div data-reveal><dt class="font-semibold text-text">Coverage</dt><dd class="mt-2 leading-7 text-text-muted">Which checks completed, were limited, were skipped or did not apply, including retained limitations.</dd></div>
-        <div data-reveal><dt class="font-semibold text-text">Provenance</dt><dd class="mt-2 leading-7 text-text-muted">Which scanner produced a candidate and whether an independent verification receipt exists.</dd></div>
+        <div data-reveal><dt class="font-semibold text-text">Provenance</dt><dd class="mt-2 leading-7 text-text-muted">Which scanner produced a candidate and, where the state applies, the coverage receipt behind it.</dd></div>
         <div data-reveal><dt class="font-semibold text-text">Outcome</dt><dd class="mt-2 leading-7 text-text-muted">The server-owned retest result and the evidence boundary behind validated or inconclusive status.</dd></div>
       </dl>
 
@@ -204,13 +205,13 @@ const jsonLd = [
         <li>It does not prove an application has no vulnerabilities.</li>
         <li>It does not imply every Vibe Security 50 control can be established by one scan.</li>
         <li>It does not replace an authorized penetration test or specialist point tool.</li>
-        <li>A Fix PR requires a server-generated patch and scoped authorization: explicit browser approval or an eligible credential's verified permission.</li>
+        <li>A Fix PR opens only after a human approves, with a server-generated patch and scoped authorization: explicit browser approval or an eligible credential's verified permission.</li>
       </ul>
     </section>
 
     <section aria-labelledby="interpret-heading" class="py-16" data-reveal-group>
       <h2 id="interpret-heading" class="text-2xl font-semibold text-text" data-reveal>How should you interpret a LyraShield AI result?</h2>
-      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected candidates from independently verified findings, then read the retest receipt and retained limitations. A LyraShield score or confidence value never replaces the underlying scope, coverage, evidence-state and retest facts.</p>
+      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected findings from retest-confirmed ones, then read the retest receipt and retained limitations. A LyraShield score or confidence value never replaces the underlying scope, coverage, evidence-state and retest facts.</p>
       <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>For a broader catalog of web application verification requirements, consult the <a href="https://owasp.org/asvs" rel="noreferrer" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">OWASP Application Security Verification Standard</a>. This reference does not imply certification or full ASVS coverage.</p>
       <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>LyraShield AI does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework) or "adversarial robustness proven." Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate that LyraShield has not yet obtained.</p>
     </section>

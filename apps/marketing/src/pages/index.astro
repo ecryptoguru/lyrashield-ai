@@ -37,11 +37,11 @@ const faqItems = [
   },
   {
     q: "What does a LyraShield result actually prove?",
-    a: "Only what the retained evidence supports. We keep detected candidates, independently verified findings, validated fixes (retest-confirmed), inconclusive retests and checks that were limited or not applicable distinct. Missing proof stays visible.",
+    a: "Only what the retained evidence supports. We keep detected findings, retest-confirmed fixes, inconclusive retests and checks that were limited or not applicable distinct. Missing proof stays visible.",
   },
   {
     q: "Does LyraShield automatically fix my code?",
-    a: "No. LyraShield records fix proposals and can stage a server-generated patch. Browser Fix PR execution requires explicit approval. A connected OAuth agent may run only the operations authorized by its browser-confirmed grant, with checks at execution. Nothing auto-merges.",
+    a: "No. LyraShield records fix proposals and can stage a server-generated patch. Fix PRs open only after a human approves, with a server-generated patch. A connected OAuth agent may run only the operations authorized by its browser-confirmed grant, with checks at execution. Nothing auto-merges.",
   },
   {
     q: "Is this a replacement for my other security scanners?",
@@ -49,7 +49,7 @@ const faqItems = [
   },
   {
     q: "What is the Operational Evidence Vault?",
-    a: "It is a private workspace where you collect, review and version proof for the seven Vibe Security 50 controls that cannot be established by a repository or URL scan: audit trails, monitoring, backup tests, sandboxing, test independence, multi-agent trust and accountable review. Accepted evidence is frozen into immutable private assurance reports; public shared reports do not include it.",
+    a: "It is a private workspace where you collect, review and version proof for the seven Vibe Security 50 controls that cannot be established by a repository or URL scan: audit trails, monitoring, backup tests, sandboxing, test independence, multi-agent trust and accountable review. Accepted evidence is frozen into a checksum-bound private assurance report; public shared reports do not include it.",
   },
   {
     q: "What is live today and what is on the roadmap?",
