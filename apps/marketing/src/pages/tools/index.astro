@@ -16,7 +16,6 @@ const faq = [
   { q: "Does a clear result mean my app is secure?", a: "No. Each tool reports a focused set of signals. A clear result does not prove the whole application is secure; it only means the specific checks did not find a signal." },
 ]
 const featuredTools = tools.filter((tool) => tool.slug === "webmcp-security-checker")
-const generalTools = tools.filter((tool) => tool.slug !== "webmcp-security-checker")
 const toolBySlug = new Map(tools.map((tool) => [tool.slug, tool] as const))
 const groups = TOOL_GROUPS.map((group) => ({
   ...group,
@@ -101,9 +100,11 @@ const jsonLd = [
         <h2 class="text-2xl font-semibold text-text">Need an app-wide assurance record?</h2>
         <p class="mt-4 leading-7 text-text-muted">The complete product adds authorized target scanning, SCA and secret checks, explicit coverage receipts, evidence states, fix proposals, server-owned retests, checksum-bound reports, schedules, notifications and workspace-scoped audit history. Read the <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">evidence methodology</a> before interpreting a result.</p>
       </div>
-      <a href={`${appUrl}/sign-up?source=tools`}
-      data-analytics-event="template_cta_click"
-      data-analytics-prop-template="tools_index" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{CTA_LABEL.signUp}</a>
+      <a
+        href={`${appUrl}/sign-up?source=tools`}
+        data-analytics-event="template_cta_click"
+        data-analytics-prop-template="tools_index"
+        class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{CTA_LABEL.signUp}</a>
     </section>
   </section>
 </Base>
