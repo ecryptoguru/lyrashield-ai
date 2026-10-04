@@ -32,8 +32,23 @@ export function hasNoNavstart(report, diagnostic = "") {
   return /\bNO_NAVSTART\b/.test(diagnostic)
 }
 
-export function shouldRetryNoNavstart({ report, diagnostic = "", attempt, maxAttempts = MAX_ATTEMPTS }) {
-  return attempt < maxAttempts && hasNoNavstart(report, diagnostic)
+function hasValidLighthouseScore(report) {
+  if (!report || report.runtimeError) return false
+  return Object.keys(LIGHTHOUSE_MINIMUM).some((category) => {
+    const score = report.categories?.[category]?.score
+    return typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 1
+  })
+}
+
+export function shouldRetryNoNavstart({
+  report,
+  diagnostic = "",
+  attempt,
+  maxAttempts = MAX_ATTEMPTS,
+}) {
+  return (
+    attempt < maxAttempts && hasNoNavstart(report, diagnostic) && !hasValidLighthouseScore(report)
+  )
 }
 
 export function evaluateLighthouseReports(reports, origin = "https://lyrashieldai.com") {
@@ -43,13 +58,20 @@ export function evaluateLighthouseReports(reports, origin = "https://lyrashielda
 
   for (const page of LIGHTHOUSE_PAGES) {
     const report = reports[page.name]
-    const url = report?.finalDisplayedUrl || report?.finalUrl || new URL(page.path, origin).toString()
+    const url =
+      report?.finalDisplayedUrl || report?.finalUrl || new URL(page.path, origin).toString()
     const cells = []
 
     for (const [category, threshold] of Object.entries(LIGHTHOUSE_MINIMUM)) {
       const score = report?.categories?.[category]?.score
-      const valid = typeof score === "number" && Number.isFinite(score)
-      const line = url + " " + category + ": " + (valid ? score : "missing") + " (min " + threshold + ")"
+      const valid =
+        !report?.runtimeError &&
+        typeof score === "number" &&
+        Number.isFinite(score) &&
+        score >= 0 &&
+        score <= 1
+      const line =
+        url + " " + category + ": " + (valid ? score : "missing") + " (min " + threshold + ")"
       if (!valid || score < threshold) {
         messages.push("FAIL " + line)
         cells.push("**" + (valid ? score : "missing") + "**")
@@ -63,7 +85,11 @@ export function evaluateLighthouseReports(reports, origin = "https://lyrashielda
     rows.push("| " + url + " | " + cells.join(" | ") + " |")
   }
 
-  return { failed, messages, summary: "## Lighthouse production scores\n\n" + rows.join("\n") + "\n" }
+  return {
+    failed,
+    messages,
+    summary: "## Lighthouse production scores\n\n" + rows.join("\n") + "\n",
+  }
 }
 
 function readReport(file) {
@@ -119,14 +145,28 @@ export async function collectLighthouseReports({
     let lastDiagnostic = ""
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-      const attemptPath = path.join(
-        attemptsDir,
-        "lyrashield-lighthouse" + page.name + ".attempt-" + attempt + ".json"
-      )
+      const attemptStem = "lyrashield-lighthouse" + page.name + ".attempt-" + attempt
+      const attemptPath = path.join(attemptsDir, attemptStem + ".json")
+      const diagnosticPath = path.join(attemptsDir, attemptStem + ".diagnostic.txt")
+      const metadataPath = path.join(attemptsDir, attemptStem + ".metadata.json")
       rmSync(attemptPath, { force: true })
-      const result = await invoke(url, attemptPath)
-      const report = result.report ?? readReport(attemptPath)
-      const diagnostic = result.diagnostic || ""
+      rmSync(diagnosticPath, { force: true })
+      rmSync(metadataPath, { force: true })
+
+      let result
+      try {
+        result = await invoke(url, attemptPath)
+      } catch (error) {
+        result = {
+          report: null,
+          diagnostic: error instanceof Error ? error.stack || error.message : String(error),
+          exitCode: 1,
+        }
+      }
+
+      const report = result?.report ?? readReport(attemptPath)
+      const diagnostic = typeof result?.diagnostic === "string" ? result.diagnostic : ""
+      const exitCode = Number.isInteger(result?.exitCode) ? result.exitCode : 1
       lastReport = report
       lastDiagnostic = diagnostic
 
@@ -134,12 +174,31 @@ export async function collectLighthouseReports({
         writeFileSync(attemptPath, JSON.stringify(report, null, 2) + "\n")
       }
 
-      if (result.exitCode !== 0) {
+      writeFileSync(diagnosticPath, diagnostic || "(no CLI diagnostic output)\n")
+      writeFileSync(
+        metadataPath,
+        JSON.stringify(
+          {
+            path: page.path,
+            url,
+            attempt,
+            maxAttempts: MAX_ATTEMPTS,
+            exitCode,
+            reportParsed: Boolean(report),
+            reportFile: existsSync(attemptPath) ? path.basename(attemptPath) : null,
+            diagnosticFile: path.basename(diagnosticPath),
+          },
+          null,
+          2
+        ) + "\n"
+      )
+
+      if (exitCode !== 0) {
         logger.warn(
           "Lighthouse invocation for " +
             page.path +
             " exited " +
-            result.exitCode +
+            exitCode +
             (diagnostic ? ": " + diagnostic.slice(0, 500) : "")
         )
       }
@@ -173,7 +232,9 @@ export async function collectLighthouseReports({
       )
       if (existsSync(lastAttempt)) copyFileSync(lastAttempt, finalPath)
     } else if (!lastReport && lastDiagnostic && !reports[page.name]) {
-      logger.warn("Last Lighthouse diagnostic for " + page.path + ": " + lastDiagnostic.slice(0, 500))
+      logger.warn(
+        "Last Lighthouse diagnostic for " + page.path + ": " + lastDiagnostic.slice(0, 500)
+      )
     }
   }
 
