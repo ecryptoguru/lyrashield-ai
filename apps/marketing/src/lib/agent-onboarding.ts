@@ -90,7 +90,7 @@ function buildClientGroups(source: AgentOnboardingClient[]): AgentOnboardingClie
 const clients = buildClients()
 
 export const agentOnboarding = {
-  title: "Release assurance for coding agents",
+  title: "Launch gate for coding agents",
   description:
     "Give your coding agent evidence-backed checks, reviewable fix proposals and a fresh retest before you ship.",
   setupHeading: "Set up and authenticate",

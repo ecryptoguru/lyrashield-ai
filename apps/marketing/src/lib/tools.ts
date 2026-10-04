@@ -29,8 +29,8 @@ export const tools = [
   },
   {
     slug: "ai-app-security-scanner",
-    title: "AI App Security Scanner",
-    seoTitle: "AI App Security Scanner | LyraShield AI",
+    title: "Local Code Scanner",
+    seoTitle: "Local Code Scanner for AI Apps | LyraShield AI",
     description:
       "Scan selected source files locally for AI-specific security signals mapped to the OWASP Top 10 for LLM Applications (2025).",
     summary:

@@ -151,9 +151,9 @@ const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "p
     end: 42,
     eyebrow: "06 / Report",
     title: "Ship one report that shows limits too.",
-    body: "Scope, coverage, findings, fixes, retest outcomes and limits become one immutable release record. Shared versions exclude repository coordinates and raw secrets.",
+    body: "Scope, coverage, findings, fixes, retest outcomes and limits become one immutable launch report. Shared versions exclude repository coordinates and raw secrets.",
     supportingCard: {
-      eyebrow: "Your first release record",
+      eyebrow: "Your first launch report",
       title: "Turn the next release into evidence your team can review.",
       body: "Create a workspace, add the target you are shipping and choose the depth of review. LyraShield keeps the resulting scope, evidence and retest outcome together.",
       primaryCta: {

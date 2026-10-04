@@ -16,7 +16,7 @@ import { CTA_LABEL } from "../lib/site-copy"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/about", origin).toString()
-const title = "About LyraShield AI — Release Assurance for AI-Built Apps"
+const title = "About LyraShield AI — Launch Gate for AI-Built Apps"
 const description =
   "LyraShield AI is built by Ankit Das, an AI/ML engineer with 16+ years across Web3, AI and application security. The mission and the approach."
 const updatedDate = "2026-09-20"
@@ -75,7 +75,7 @@ const jsonLd: unknown[] = [
     worksFor: { "@id": `${origin}/#organization` },
     knowsAbout: [
       "AI application security",
-      "release assurance",
+      "launch gate",
       "Web3 development",
       "smart contracts",
       "AI engineering",
@@ -94,7 +94,7 @@ const jsonLd: unknown[] = [
         Evidence over promises
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
-        LyraShield AI is the evidence-backed release-assurance layer for AI-built software. We
+        LyraShield AI is the evidence-backed launch gate for AI-built software. We
         believe a security result should say what it knows — and what it does not — rather than
         turning scanner confidence into a universal verdict.
       </p>
@@ -239,7 +239,7 @@ const jsonLd: unknown[] = [
         <a href={`mailto:${abuseEmail}`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">{abuseEmail}</a>.
         Registration is open in the beta &mdash;{" "}
         <a href={`${appUrl}/sign-up?source=about&cta=create_account`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">{CTA_LABEL.signUp}</a>{" "}
-        to start a release record.
+        to start a launch report.
       </p>
     </section>
 

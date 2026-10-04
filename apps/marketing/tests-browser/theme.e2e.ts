@@ -295,9 +295,7 @@ test("keeps Free tools separate from the restored desktop Resources menu", async
 
   await toolsMenu.click()
   await expect(page.getByRole("link", { name: "All free tools", exact: true })).toBeVisible()
-  await expect(
-    page.getByRole("link", { name: "AI App Security Scanner", exact: true })
-  ).toBeVisible()
+  await expect(page.getByRole("link", { name: "Local Code Scanner", exact: true })).toBeVisible()
 
   await resourcesMenu.click()
   await expect(

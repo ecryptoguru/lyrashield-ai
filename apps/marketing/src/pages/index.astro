@@ -28,12 +28,12 @@ const mediaUrl = renderHash === "local" ? "/media-local" : import.meta.env.PUBLI
 const motionManifest = createMotionMediaManifest(mediaUrl, renderHash)
 
 const description =
-  "Review the code your agents wrote and the tools your app exposes to agents. Get one shareable release record before you ship. Open beta, no card needed."
+  "Review the code your agents wrote and the tools your app exposes to agents. Get one shareable launch report before you ship. Open beta, no card needed."
 
 const faqItems = [
   {
     q: "What happens after I create an account?",
-    a: "Create a workspace, add an authorized repository, public URL or API target, then choose the review depth. LyraShield keeps the resulting scope, findings, evidence states, fix proposals and fresh retest outcomes in one release record.",
+    a: "Create a workspace, add an authorized repository, public URL or API target, then choose the review depth. LyraShield keeps the resulting scope, findings, evidence states, fix proposals and fresh retest outcomes in one launch report.",
   },
   {
     q: "What does a LyraShield result actually prove?",
@@ -45,7 +45,7 @@ const faqItems = [
   },
   {
     q: "Is this a replacement for my other security scanners?",
-    a: "No. LyraShield complements specialist scanners rather than replacing them: SCA, secrets scanning, dependency checks and repo review are coverage layers inside a wider release-assurance workflow that adds evidence states, fix proposals and retests. Specialist tools may still provide deeper coverage in their own category.",
+    a: "No. LyraShield complements specialist scanners rather than replacing them: SCA, secrets scanning, dependency checks and repo review are coverage layers inside a wider launch-gate workflow that adds evidence states, fix proposals and retests. Specialist tools may still provide deeper coverage in their own category.",
   },
   {
     q: "What is the Operational Evidence Vault?",
@@ -53,7 +53,7 @@ const faqItems = [
   },
   {
     q: "What is live today and what is on the roadmap?",
-    a: `Live today: the free Lite Check, ${tools.length} browser-local tools, the full release-assurance platform in open beta, the Operational Evidence Vault, MCP and GitHub integrations, a published CLI and a GitHub Action with a diff-aware gate and SARIF output. Registration is open; product pages describe current coverage and limits. Cloud prices are listed on /pricing, while purchase availability is shown in the authenticated product.`,
+    a: `Live today: the free Lite Check, ${tools.length} browser-local tools, the full launch-gate platform in open beta, the Operational Evidence Vault, MCP and GitHub integrations, a published CLI and a GitHub Action with a diff-aware gate and SARIF output. Registration is open; product pages describe current coverage and limits. Cloud prices are listed on /pricing, while purchase availability is shown in the authenticated product.`,
   },
   {
     q: "Do you store my codebase?",
@@ -61,7 +61,7 @@ const faqItems = [
   },
   {
     q: "How is the Lite Check different from the full review?",
-    a: "The Lite Check passively reads an authorized public URL for a bounded set of surface signals. The full platform can review repositories, URLs and APIs, retain control-level evidence, stage fix proposals, run fresh retests and produce a shareable release record.",
+    a: "The Lite Check passively reads an authorized public URL for a bounded set of surface signals. The full platform can review repositories, URLs and APIs, retain control-level evidence, stage fix proposals, run fresh retests and produce a shareable launch report.",
   },
 ]
 
@@ -70,7 +70,7 @@ const jsonLd = [
     "@context": "https://schema.org",
     "@type": "WebPage",
     "@id": `${pageUrl}#webpage`,
-    name: "Release assurance for AI-built apps",
+    name: "Launch gate for AI-built apps",
     description,
     url: pageUrl,
     inLanguage: "en-US",

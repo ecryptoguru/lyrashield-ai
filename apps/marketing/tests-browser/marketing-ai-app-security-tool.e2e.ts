@@ -15,7 +15,7 @@ export async function ask(userInput: string) {
 test.describe("AI App Security scanner tool", () => {
   test("loads the tool page and shows local privacy promise", async ({ page }) => {
     await page.goto("/tools/ai-app-security-scanner")
-    await expect(page).toHaveTitle(/AI App Security Scanner/)
+    await expect(page).toHaveTitle(/Local Code Scanner/)
     await expect(page.getByText(/Runs entirely in this browser/)).toBeVisible()
   })
 

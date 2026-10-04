@@ -31,7 +31,7 @@ test("mobile navigation reaches agent onboarding", async ({ page }) => {
   await page.getByRole("link", { name: "For agents" }).click()
   await expect(page).toHaveURL(/\/agents$/)
   await expect(
-    page.getByRole("heading", { name: /Release assurance your coding agent can act on/i })
+    page.getByRole("heading", { name: /launch gate your coding agent can act on/i })
   ).toBeVisible()
 })
 
