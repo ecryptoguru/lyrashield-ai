@@ -32,12 +32,16 @@ describe("premium assurance-world homepage", () => {
     expect(astroConfig).toContain('inlineStylesheets: "auto"')
     expect(homepage).toContain("<HomeLiteScan />")
     expect(homepage).toContain("<EvidenceWorld manifest={motionManifest} />")
-    expect(homepage.indexOf("<PremiumHero />")).toBeLessThan(homepage.indexOf('id="how-it-works"'))
-    expect(homepage.indexOf('id="how-it-works"')).toBeLessThan(
+    // Nine-block order (spec section 8): hero, what is different, Lite Check,
+    // journey, surfaces, coverage, pricing, FAQ, closing CTA.
+    expect(homepage.indexOf("<PremiumHero />")).toBeLessThan(homepage.indexOf('id="different"'))
+    expect(homepage.indexOf('id="different"')).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
+    expect(homepage.indexOf("<HomeLiteScan")).toBeLessThan(homepage.indexOf("<EvidenceWorld"))
+    expect(homepage.indexOf("<EvidenceWorld")).toBeLessThan(
       homepage.indexOf("<HeroProductFrame />")
     )
-    expect(homepage.indexOf("<HeroProductFrame />")).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
-    expect(homepage.indexOf("<HomeLiteScan")).toBeLessThan(homepage.indexOf("<EvidenceWorld"))
+    // The journey block carries the anchor the header links to.
+    expect(homepage.indexOf('id="how-it-works"')).toBeLessThan(homepage.indexOf("<EvidenceWorld"))
     expect(homepage).toContain('renderHash === "local" ? "/media-local"')
     expect(homepage.match(/cinematic-threshold--to-dark/g)).toHaveLength(3)
     expect(homepage.match(/cinematic-threshold--to-light/g)).toHaveLength(3)
@@ -97,15 +101,24 @@ describe("premium assurance-world homepage", () => {
     for (const state of states) expect(state).toContain(">Detected<")
   })
 
-  it("shows a three-step review flow in the landing decision path", () => {
-    expect(homepage).toContain('aria-labelledby="workflow-heading"')
-    expect(homepage).toContain("One review, from authorized scope to useful evidence")
-    for (const label of ["Choose scope", "Review evidence", "Decide what is next"]) {
-      expect(homepage).toContain(label)
+  it("tells the review loop through the journey block, not a static list", () => {
+    // The static three-step block retold the story the journey already tells in
+    // six chapters, so it was folded into block 4 (spec section 8).
+    expect(homepage).not.toContain("One review, from authorized scope to useful evidence")
+    expect(homepage).toContain("<EvidenceWorld manifest={motionManifest} />")
+    expect(homepage).toContain('id="how-it-works"')
+    // The six chapters still carry the loop, and the fix rule is still stated.
+    for (const chapter of [
+      "target",
+      "scan",
+      "evidence-state",
+      "fix-proposal",
+      "retest",
+      "report",
+    ]) {
+      expect(worldModule).toContain(`"${chapter}"`)
     }
-    expect(homepage).toContain(
-      "review a proposed fix, approve it explicitly and run a fresh retest"
-    )
+    expect(worldModule).toContain("Nothing auto-merges")
     expect(homepage).not.toMatch(/independent verification|verified fixes/i)
   })
 
