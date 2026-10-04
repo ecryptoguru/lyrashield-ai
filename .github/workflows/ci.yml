@@ -114,6 +114,9 @@ jobs:
 
       - name: Test webhook cutover verification workflow invariants
         run: node .github/scripts/tests/webhook-cutover-verification.workflow.test.mjs
+      - name: Test Lighthouse NO_NAVSTART retry policy
+        run: node --test .github/scripts/tests/lighthouse-production.test.mjs
+
 
       - name: Classify changed files
         id: classify
@@ -1021,70 +1024,7 @@ jobs:
 
       - name: Lighthouse production measurement
         shell: bash
-        run: |
-          # Exact CLI version keeps the live gate reproducible without adding a
-          # runtime dependency to the product workspace. The homepage alone
-          # missed regressions on the money pages, so the landing surfaces that
-          # carry acquisition traffic are measured too. Reports land in the
-          # workspace so the artifact step can retain them — /tmp does not
-          # survive the job.
-          mkdir -p lighthouse-reports
-          for path in "/" "/pricing" "/agents" "/scan" "/webmcp"; do
-            name="$(printf '%s' "$path" | tr '/' '_')"
-            # A failed invocation must not abort the loop and leave the other
-            # pages unmeasured — a page that produced no report is itself the
-            # signal to look at, and the summary marks it as missing.
-            npx --yes lighthouse@13.0.1 "https://lyrashieldai.com${path}" \
-              --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
-              --only-categories=performance,accessibility,seo \
-              --output=json \
-              --output-path="lighthouse-reports/lyrashield-lighthouse${name}.json" \
-              --quiet || echo "::warning::Lighthouse invocation failed for ${path}"
-          done
-          # shellcheck disable=SC2016
-          node -e '
-            const fs = require("node:fs")
-            const minimum = { performance: 0.8, accessibility: 0.95, seo: 0.95 }
-            const expected = ["_", "_pricing", "_agents", "_scan", "_webmcp"]
-            const files = fs
-              .readdirSync("lighthouse-reports")
-              .filter((name) => name.startsWith("lyrashield-lighthouse") && name.endsWith(".json"))
-            if (files.length === 0) throw new Error("no Lighthouse reports were produced")
-            const rows = ["| Page | performance | accessibility | seo |", "| --- | --- | --- | --- |"]
-            let failed = false
-            for (const file of files.sort()) {
-              const report = JSON.parse(fs.readFileSync(`lighthouse-reports/${file}`, "utf8"))
-              const url = report.finalDisplayedUrl || report.finalUrl || file
-              const cells = []
-              for (const [category, threshold] of Object.entries(minimum)) {
-                const score = report.categories?.[category]?.score
-                const line = `${url} ${category}: ${score ?? "missing"} (min ${threshold})`
-                if (typeof score !== "number" || score < threshold) {
-                  console.error(`FAIL ${line}`)
-                  cells.push(`**${score ?? "missing"}**`)
-                  failed = true
-                } else {
-                  console.log(`ok   ${line}`)
-                  cells.push(String(score))
-                }
-              }
-              rows.push(`| ${url} | ${cells.join(" | ")} |`)
-            }
-            for (const name of expected) {
-              if (!files.includes(`lyrashield-lighthouse${name}.json`)) {
-                console.error(`MISSING report for ${name === "_" ? "/" : name.replaceAll("_", "/")}`)
-                rows.push(`| ${name === "_" ? "/" : name.replaceAll("_", "/")} | no report | no report | no report |`)
-                failed = true
-              }
-            }
-            if (process.env.GITHUB_STEP_SUMMARY) {
-              fs.appendFileSync(
-                process.env.GITHUB_STEP_SUMMARY,
-                `## Lighthouse production scores\n\n${rows.join("\n")}\n`
-              )
-            }
-            if (failed) process.exit(1)
-          '
+        run: node .github/scripts/lighthouse-production.mjs lighthouse-reports
 
       - name: Upload Lighthouse reports
         if: always()
