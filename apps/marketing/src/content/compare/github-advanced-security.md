@@ -15,7 +15,7 @@ faq:
   - q: "When should I choose GitHub Advanced Security over LyraShield?"
     a: "Choose GHAS when you are already on GitHub and want proven, low-friction CodeQL SAST and secret scanning inline in pull requests, with governance features like delegated bypass and security campaigns. Its strength is continuous detection at scale for public repos free, check current private-repository terms on GitHub’s pricing page."
   - q: "Is LyraShield free?"
-    a: "LyraShield is live in open beta with open registration at lyrashieldai.com. Pricing will be announced as the platform matures, with some v1 features like broader compliance mappings on the near-term roadmap. That honesty matters: you can run the agentic pentest plus SCA and secrets today, but check the site for current capabilities."
+    a: "LyraShield has a free trial and self-serve paid plans. Published prices and per-tier agent-minute allowances live on the pricing page. The same catalog drives the ladder shown on this page. Some v1 features, such as broader compliance mappings, are still on the near-term roadmap."
 ---
 
 ## Core approach

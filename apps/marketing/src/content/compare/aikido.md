@@ -3,7 +3,7 @@ title: "LyraShield vs Aikido — release assurance compared"
 description: "How LyraShield AI compares to Aikido for developer-centric CI/CD security. Approach, evidence states, coverage framework and deployment model differences."
 competitor: "Aikido"
 heading: "LyraShield AI vs Aikido"
-disclaimer: "Factual comparison. [Aikido Security](https://www.aikido.dev/) is a unified security platform covering code, cloud and runtime from one interface — SAST, SCA, secrets, IaC/container scanning, CSPM, DAST, AI pentesting and runtime protection — with auto-generated fix PRs. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports and reviewed fix proposals. Aikido is a broad AppSec platform with a pentest layer; LyraShield AI is a focused release-assurance loop purpose-built for AI-generated code. Neither replaces the other."
+disclaimer: 'Factual comparison. <a href="https://www.aikido.dev/">Aikido Security</a> is a unified security platform covering code, cloud and runtime from one interface — SAST, SCA, secrets, IaC/container scanning, CSPM, DAST, AI pentesting and runtime protection — with auto-generated fix PRs. <a href="https://lyrashieldai.com/">LyraShield AI</a> is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports and reviewed fix proposals. Aikido is a broad AppSec platform with a pentest layer; LyraShield AI is a focused release-assurance loop purpose-built for AI-generated code. Neither replaces the other.'
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
@@ -76,7 +76,7 @@ faq:
 
 ---
 
-Aikido is the broad AppSec platform; LyraShield AI is the release-assurance loop for AI-built apps. [Read our comparison methodology](https://lyrashieldai.com) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
+Aikido is the broad AppSec platform; LyraShield AI is the release-assurance loop for AI-built apps. [Read our comparison methodology](/methodology) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 
 ## Methodology and scope
 

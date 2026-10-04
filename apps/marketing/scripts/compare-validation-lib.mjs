@@ -72,6 +72,18 @@ export function validateComparePage({ slug, data, body, programEntry, context = 
     if (pattern.test(text)) errors.push(`unresolved placeholder: ${label}`)
   }
 
+  // The template renders `disclaimer` with set:html, so Markdown link syntax is
+  // printed literally instead of becoming an anchor. Five pages shipped that
+  // way and the raw `[Name](url)` text was visible in the callout. The field is
+  // HTML, so require HTML anchors and reject Markdown ones.
+  const disclaimer = data.disclaimer ?? ""
+  if (/\[[^\]]*\]\([^)]*\)/.test(disclaimer)) {
+    errors.push("disclaimer must use HTML anchors, not Markdown link syntax")
+  }
+  for (const link of extractLinks(disclaimer)) {
+    if (/^http:\/\//i.test(link)) errors.push(`citation must use HTTPS: ${link}`)
+  }
+
   if (context.titles && context.titles.get(data.title) > 1) errors.push("duplicate title")
   if (context.descriptions && context.descriptions.get(data.description) > 1) {
     errors.push("duplicate description")

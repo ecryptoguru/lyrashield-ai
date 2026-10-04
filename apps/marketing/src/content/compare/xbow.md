@@ -3,7 +3,7 @@ title: "LyraShield vs XBOW — compared"
 description: "How LyraShield AI compares to XBOW for autonomous web-app pentest. Evidence states, coverage framework, deterministic retest and deployment model differences."
 competitor: "XBOW"
 heading: "LyraShield AI vs XBOW"
-disclaimer: "Factual comparison. [XBOW](https://xbow.com/) by XBOW, Inc. is an autonomous offensive security platform that uses AI agents to continuously pentest applications and APIs, independently proving exploitability with working exploits before a finding reaches your team. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop that keeps detection, verification receipts, retest outcomes and limitations distinct. Neither replaces the other — they optimize for different deliverables (XBOW: continuous exploit-proof; LyraShield AI: scoped evidence for an AI-built app release review)."
+disclaimer: 'Factual comparison. <a href="https://xbow.com/">XBOW</a> by XBOW, Inc. is an autonomous offensive security platform that uses AI agents to continuously pentest applications and APIs, independently proving exploitability with working exploits before a finding reaches your team. <a href="https://lyrashieldai.com/">LyraShield AI</a> is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop that keeps detection, verification receipts, retest outcomes and limitations distinct. Neither replaces the other — they optimize for different deliverables (XBOW: continuous exploit-proof; LyraShield AI: scoped evidence for an AI-built app release review).'
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
