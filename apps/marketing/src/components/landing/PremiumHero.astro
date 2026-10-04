@@ -656,6 +656,17 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       min-height: calc(100svh - 3.5rem);
     }
 
+    /* Flex would shrink both controls onto one line rather than wrap them, so
+       the phone layout is an explicit single column with full-width targets. */
+    .premium-hero__field-row {
+      display: grid;
+    }
+
+    .premium-hero__field-input,
+    .premium-hero__field-button {
+      width: 100%;
+    }
+
     .premium-hero__poster img {
       object-position: 58% 50%;
     }
