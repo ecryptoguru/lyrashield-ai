@@ -163,6 +163,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     color: var(--hero-cyan);
     font-size: clamp(0.78rem, 1vw, 0.95rem);
     font-weight: 650;
+    overflow-wrap: break-word;
   }
 
   h1 {
@@ -174,6 +175,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     line-height: 0.9;
     letter-spacing: -0.055em;
     text-wrap: balance;
+    overflow-wrap: break-word;
   }
 
   .premium-hero__lede {
@@ -195,6 +197,10 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     list-style: none;
   }
 
+  .premium-hero__proof li {
+    max-width: 100%;
+  }
+
   .premium-hero__proof li::before {
     margin-right: 0.45rem;
     color: var(--hero-cyan);
@@ -211,6 +217,10 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   .premium-hero__actions a {
     display: inline-flex;
     min-height: 3.25rem;
+    /* At 200% root text on a 320px viewport the label plus padding is wider
+       than the screen, so the box must be capped and the label allowed to
+       wrap. Without this the button clipped off the right edge. */
+    max-width: 100%;
     align-items: center;
     justify-content: center;
     border: 1px solid rgba(84, 214, 223, 0.42);
