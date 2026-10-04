@@ -14,7 +14,8 @@ describe("homepage journey and plan summary", () => {
       page.indexOf("<HomeLiteScan />"),
       page.indexOf("<EvidenceWorld"),
       page.indexOf("<HeroProductFrame />"),
-      page.indexOf('id="capabilities-heading"'),
+      page.indexOf('id="surfaces-heading"'),
+      page.indexOf('id="coverage-heading"'),
       page.indexOf('id="cloud-plans"'),
       page.indexOf("<Faq items={faqItems} />"),
       page.indexOf("<FinalCta />"),
@@ -22,6 +23,22 @@ describe("homepage journey and plan summary", () => {
     expect(stages.every((position) => position >= 0)).toBe(true)
     expect(stages).toEqual([...stages].sort((left, right) => left - right))
     expect(page).toContain('href="/evidence-vault"')
+    // Block 5 and 6 ids.
+    expect(page).toContain('id="surfaces-heading"')
+    expect(page).toContain('id="coverage-heading"')
+    // The tab strip is keyboard reachable and the panels are wired to it.
+    expect(page).toContain('role="tablist"')
+    expect(page).toContain("aria-selected")
+    expect(page).toContain("ArrowRight")
+    for (const surface of ["web", "cli", "action", "agents"]) {
+      expect(page).toContain(`surface-tab-${surface}`)
+      expect(page).toContain(`surface-panel-${surface}`)
+    }
+    // The CLI line and every count come from a registry, not from typed digits.
+    expect(page).toContain("cliLoginCommand")
+    expect(page).toContain("webmcpControlCount")
+    expect(page).toContain("reviewControlCount")
+    expect(page).toContain("evidenceControlCount")
     // The journey block owns the anchor the header and footer link to.
     expect(page).toContain('id="how-it-works"')
     expect(page.indexOf('id="how-it-works"')).toBeGreaterThan(page.indexOf("<HomeLiteScan />"))
