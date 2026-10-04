@@ -133,6 +133,26 @@ export function validateEmptyStateAuthorization(receipt, expected) {
       receipt.activeWriterRevisions !== 0 || receipt.inFlightHandlers !== 0) {
     throw new Error("Maintenance receipt does not prove drained work")
   }
+  const queueStates = ["wait", "active", "delayed", "prioritized", "waitingChildren", "paused"]
+  const queueNames = ["scan", "webhookTrackRetry", "fixGenerate"]
+  if (!receipt.queueCounts || typeof receipt.queueCounts !== "object" || Array.isArray(receipt.queueCounts)) {
+    throw new Error("Maintenance receipt queue snapshot is missing")
+  }
+  if (Object.keys(receipt.queueCounts).sort().join(",") !== queueNames.slice().sort().join(",")) {
+    throw new Error("Maintenance receipt does not cover every required queue")
+  }
+  for (const queueName of queueNames) {
+    const counts = receipt.queueCounts[queueName]
+    if (!counts || typeof counts !== "object" || Array.isArray(counts)) {
+      throw new Error("Maintenance receipt queue snapshot is malformed: " + queueName)
+    }
+    for (const state of queueStates) {
+      if (counts[state] !== 0) throw new Error("Maintenance receipt has non-empty queue state: " + queueName + "/" + state)
+    }
+  }
+  if (receipt.queueSchedulerCount !== 0 || receipt.repeatableJobCount !== 0) {
+    throw new Error("Maintenance receipt contains active queue schedulers")
+  }
   if (receipt.writersStopped !== true || receipt.admissionHeld !== true ||
       receipt.fallbackVerified !== true || receipt.redisContinuityVerified !== true ||
       receipt.appConnectionReadbackVerified !== true) {
@@ -152,6 +172,9 @@ export function validateEmptyStateAuthorization(receipt, expected) {
     workerDatabaseSystemUrlIdentitySha256: receipt.workerDatabaseSystemUrlIdentitySha256,
     redisIdentitySha256: receipt.redisIdentitySha256,
     queueSnapshotSha256: receipt.queueSnapshotSha256,
+    queueCounts: receipt.queueCounts,
+    queueSchedulerCount: receipt.queueSchedulerCount,
+    repeatableJobCount: receipt.repeatableJobCount,
     workerStopImageDigest: receipt.workerStopImageDigest,
     workerStopSourceSha: receipt.workerStopSourceSha,
     fallbackWorkerImageDigest: receipt.fallbackWorkerImageDigest,

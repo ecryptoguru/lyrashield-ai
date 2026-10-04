@@ -29,9 +29,25 @@ function migrationSql(migration) {
 }
 
 function requiredContext(env) {
-  if (env.WEBHOOK_EMPTY_STATE_CUTOVER !== "true") fail("Empty-state mode was not explicitly enabled")
+  const rehearsal = env.WEBHOOK_EMPTY_STATE_REHEARSAL === "true"
+  if (rehearsal) {
+    if (env.WEBHOOK_EMPTY_STATE_CUTOVER !== undefined) fail("Local rehearsal and production cutover modes cannot be combined")
+    if (env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1") fail("Local rehearsal requires an explicitly disposable database")
+  } else if (env.WEBHOOK_EMPTY_STATE_CUTOVER !== "true") fail("Empty-state mode was not explicitly enabled")
   const databaseUrl = assertMigrationUrlBinding(env)
-  const identity = canonicalSupabaseDatabaseIdentity([databaseUrl])
+  const parsedUrl = new URL(databaseUrl)
+  let identity
+  if (rehearsal) {
+    if (!["localhost", "127.0.0.1", "::1"].includes(parsedUrl.hostname) || !["", "5432"].includes(parsedUrl.port)) {
+      fail("Local rehearsal is restricted to loopback PostgreSQL")
+    }
+    identity = {
+      provider: "supabase",
+      projectRef: env.WEBHOOK_EMPTY_STATE_TEST_PROJECT_REF,
+      database: "postgres",
+      schema: "public",
+    }
+  } else identity = canonicalSupabaseDatabaseIdentity([databaseUrl])
   const identityHash = hashDatabaseIdentity(identity)
   equal(env.WEBHOOK_EMPTY_STATE_DATABASE_IDENTITY_SHA256, identityHash, "Migration database identity differs from the approved identity")
   const sourceSha = env.DEPLOY_SHA || ""

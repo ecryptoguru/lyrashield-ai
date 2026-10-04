@@ -38,6 +38,13 @@ function validReceipt(overrides = {}) {
     admissionStopValueSha256: "c".repeat(64),
     redisIdentitySha256: "d".repeat(64),
     queueSnapshotSha256: "e".repeat(64),
+    queueCounts: {
+      scan: { wait: 0, active: 0, delayed: 0, prioritized: 0, waitingChildren: 0, paused: 0 },
+      webhookTrackRetry: { wait: 0, active: 0, delayed: 0, prioritized: 0, waitingChildren: 0, paused: 0 },
+      fixGenerate: { wait: 0, active: 0, delayed: 0, prioritized: 0, waitingChildren: 0, paused: 0 },
+    },
+    queueSchedulerCount: 0,
+    repeatableJobCount: 0,
     workerStopImageDigest: "sha256:" + "1".repeat(64),
     workerStopSourceSha: "2".repeat(40),
     fallbackWorkerImageDigest: "sha256:" + "3".repeat(64),
@@ -116,8 +123,12 @@ test("accepts only a fresh, matching, drained, stopped, image-bound maintenance 
     { workerDatabaseSystemUrlIdentitySha256: "d".repeat(64) },
     { nonterminalScans: 1 },
     { pendingQueueJobs: 1 },
+    { queueSchedulerCount: 1 },
+    { repeatableJobCount: 1 },
     { activeWriterRevisions: 1 },
     { inFlightHandlers: 1 },
+    { queueCounts: { ...validReceipt().queueCounts, scan: { ...validReceipt().queueCounts.scan, wait: 1 } } },
+    { queueCounts: { scan: validReceipt().queueCounts.scan } },
     { writersStopped: false },
     { admissionHeld: false },
     { fallbackVerified: false },
@@ -146,6 +157,16 @@ test("migration runner refuses missing explicit mode and mismatched identity bef
     env: validEnvironment({ WEBHOOK_EMPTY_STATE_DATABASE_IDENTITY_SHA256: "e".repeat(64) }),
     ClientClass: NeverConnect,
   }), /differs from the approved identity/)
+  await assert.rejects(runEmptyStateMigration({
+    env: validEnvironment({
+      WEBHOOK_EMPTY_STATE_CUTOVER: undefined,
+      WEBHOOK_EMPTY_STATE_REHEARSAL: "true",
+      LYRASHIELD_TEST_DB_DISPOSABLE: "1",
+      DATABASE_DIRECT_URL: direct,
+      DATABASE_URL: direct,
+    }),
+    ClientClass: NeverConnect,
+  }), /restricted to loopback PostgreSQL/)
   assert.equal(constructed, false)
 })
 
